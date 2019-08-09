@@ -1,0 +1,19 @@
+[package]
+name = "tonic-macros"
+version = "0.1.0"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+edition = "2018"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+tonic = { path = "../tonic" }
+syn = { version = "0.15", features = ["full"] }
+quote = "0.6"
+proc-macro2 = "0.4"
+prost-build = "0.5"
+tower-service = { git = "https://github.com/tower-rs/tower", branch = "std-future" }
+
+[dev-dependencies]
+tokio = "=0.2.0-alpha.1"
