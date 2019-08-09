@@ -1,9 +1,9 @@
 #![feature(async_await)]
 
+use std::time::Duration;
+use tokio::timer::Delay;
 use tonic::{Request, Response, Status};
 use tonic_macros::grpc;
-use tokio::timer::Delay;
-use std::time::Duration;
 
 // #[derive(Debug)]
 // struct HelloRequest;
@@ -33,10 +33,46 @@ impl MyGreeter {
     }
 }
 
+use std::future::Future;
+use std::task::{Poll, Context};
+pub trait Service<'a, Request> {
+    type Response;
+    type Error;
+    type Future: Future<Output = Result<Self::Response, Self::Error>> + 'a;
+
+    fn poll_ready(&'a mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+    fn call(&'a mut self, req: Request) -> Self::Future;
+}
+
+struct Svc {
+    inner: MyGreeter,
+}
+
+impl<'a> Service<'a, tonic::Request<()>> for Svc {
+    type Response = tonic::Response<()>;
+    type Error = tonic::Status;
+    type Future = tonic::ResponseFuture<'a, Self::Response>;
+
+    fn poll_ready(
+        &'a mut self,
+        _cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        std::task::Poll::Ready(Ok(()))
+    }
+
+    fn call(&'a mut self, request: tonic::Request<()>) -> Self::Future {
+        use tonic::GrpcInnerService;
+        self.inner.call(request)
+    }
+}
+
 #[tokio::test]
 async fn grpc() {
-    let mut greeter = MyGreeter { data: "some data".into()};
+    let greeter = MyGreeter {
+        data: "some data".into(),
+    };
 
-    use tonic::GrpcInnerService;
-    greeter.call(Request::new(())).await.unwrap();
+    let mut svc = Svc { inner: greeter };
+
+    svc.call(Request::new(())).await.unwrap();
 }
