@@ -52,13 +52,43 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
     //     }
     // };
 
-    let ts = quote! {
-        impl tonic::GrpcInnerService<tonic::Request<()>> for #s {
-            type Response = tonic::Response<()>;
+    // let ts = quote! {
+    //     impl tonic::GrpcInnerService<tonic::Request<()>> for #s {
+    //         type Response = tonic::Response<()>;
 
-            fn call<'a>(&'a mut self, request: tonic::Request<()>) -> tonic::ResponseFuture<'a, Self::Response>
-                where Self: 'a {
-                Box::pin(self.#m_ident(request))
+    //         fn call<'a>(&'a mut self, request: tonic::Request<()>) -> tonic::ResponseFuture<'a, Self::Response>
+    //             where Self: 'a {
+    //             Box::pin(self.#m_ident(request))
+    //         }
+    //     }
+    // };
+
+    let ts = quote! {
+        pub struct GrpcServer {
+            inner: std::sync::Arc<#s>,
+        }
+
+        impl From<#s> for GrpcServer {
+            fn from(t: #s) -> Self {
+                Self { inner: std::sync::Arc::new(t) }
+            }
+        }
+
+        impl tower_service::Service<tonic::Request<()>> for GrpcServer {
+            type Response = tonic::Response<()>;
+            type Error = Status;
+            type Future = tonic::ResponseFuture<'static, Self::Response>;
+
+            fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+                std::task::Poll::Ready(Ok(()))
+            }
+
+            fn call(&mut self, request: tonic::Request<()>) -> tonic::ResponseFuture<'static, Self::Response> {
+                let inner = self.inner.clone();
+                Box::pin(async move {
+                    inner.#m_ident(request).await
+                })
+                //self.#m_ident(request)
             }
         }
     };
