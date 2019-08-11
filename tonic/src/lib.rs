@@ -1,5 +1,7 @@
 pub use tower_grpc::*;
 
+pub use tonic_macros::server;
+
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;

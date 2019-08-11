@@ -8,7 +8,6 @@ edition = "2018"
 proc-macro = true
 
 [dependencies]
-tonic = { path = "../tonic" }
 syn = { version = "0.15", features = ["full"] }
 quote = "0.6"
 proc-macro2 = "0.4"
@@ -17,3 +16,4 @@ tower-service = { git = "https://github.com/tower-rs/tower", branch = "std-futur
 
 [dev-dependencies]
 tokio = "=0.2.0-alpha.1"
+tonic = { path = "../tonic" }

@@ -3,7 +3,6 @@
 use std::time::Duration;
 use tokio::timer::Delay;
 use tonic::{Request, Response, Status};
-use tonic_macros::grpc;
 
 // #[derive(Debug)]
 // struct HelloRequest;
@@ -15,7 +14,7 @@ struct MyGreeter {
     data: String,
 }
 
-#[grpc(service = "proto/helloworld.proto")]
+#[tonic::server(service = "proto/helloworld.proto")]
 impl MyGreeter {
     pub async fn say_hello(&self, request: Request<()>) -> Result<Response<()>, Status> {
         println!("Got a request: {:?}", request);

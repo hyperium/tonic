@@ -1,0 +1,23 @@
+[package]
+name = "tower-h2"
+version = "0.1.0"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+futures-core-preview = "=0.3.0-alpha.17"
+futures-util-preview = "=0.3.0-alpha.17"
+bytes = "0.4"
+tokio-io = "0.2.0-alpha.1"
+tokio-executor = "0.2.0-alpha.1"
+tower-service = { git = "http://github.com/tower-rs/tower", branch = "std-future" }
+tower-util = { git = "http://github.com/tower-rs/tower", branch = "std-future" }
+h2 = { git = "https://github.com/LucioFranco/h2", branch = "lucio/tower-h2-hack" }
+http = "0.1"
+http-body = { git =  "https://github.com/hyperium/http-body", branch = "std-future" }
+log = "0.4"
+
+[dev-dependencies]
+tokio = "=0.2.0-alpha.1"
+tower-util = { git = "http://github.com/tower-rs/tower", branch = "std-future" }
+tokio-buf = "=0.2.0-alpha.1"

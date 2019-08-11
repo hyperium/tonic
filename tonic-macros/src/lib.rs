@@ -7,7 +7,7 @@ use quote::quote;
 use syn::{ImplItem, ImplItemMethod, ItemImpl, Type};
 
 #[proc_macro_attribute]
-pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
     let service = load_service(attr);
     let mut original = item.clone();
     let ItemImpl { self_ty, items, .. } = syn::parse_macro_input!(item as ItemImpl);
@@ -36,33 +36,6 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
-    // let ts = quote! {
-    //     impl<'a> tower_service::Service<tonic::Request<()>> for #s {
-    //         type Response = tonic::Response<()>;
-    //         type Error = tonic::Status;
-    //         type Future = tonic::ResponseFuture<'a, Self::Response, Self::Error>;
-
-    //         fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
-    //             std::task::Poll::Ready(Ok(()))
-    //         }
-
-    //         fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
-    //             Box::pin(self.#m_ident(request))
-    //         }
-    //     }
-    // };
-
-    // let ts = quote! {
-    //     impl tonic::GrpcInnerService<tonic::Request<()>> for #s {
-    //         type Response = tonic::Response<()>;
-
-    //         fn call<'a>(&'a mut self, request: tonic::Request<()>) -> tonic::ResponseFuture<'a, Self::Response>
-    //             where Self: 'a {
-    //             Box::pin(self.#m_ident(request))
-    //         }
-    //     }
-    // };
-
     let ts = quote! {
         pub struct GrpcServer {
             inner: std::sync::Arc<#s>,
@@ -88,7 +61,6 @@ pub fn grpc(attr: TokenStream, item: TokenStream) -> TokenStream {
                 Box::pin(async move {
                     inner.#m_ident(request).await
                 })
-                //self.#m_ident(request)
             }
         }
     };

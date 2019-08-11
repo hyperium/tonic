@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 tower-grpc = { git = "https://github.com/tower-rs/tower-grpc", branch = "std-future" }
+tonic-macros = { path = "../tonic-macros" }
