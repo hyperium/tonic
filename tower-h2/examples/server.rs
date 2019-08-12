@@ -3,10 +3,10 @@
 use futures_util::future;
 use http::{Request, Response};
 use std::task::{Context, Poll};
+use tokio::net::TcpListener;
 use tokio_buf::BufStream;
 use tower_h2::{RecvBody, Server};
 use tower_service::Service;
-use tokio::net::TcpListener;
 
 const ROOT: &'static str = "/";
 

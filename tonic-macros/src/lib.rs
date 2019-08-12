@@ -1,4 +1,5 @@
 #![feature(async_await)]
+#![recursion_limit = "256"]
 
 extern crate proc_macro;
 use proc_macro::TokenStream;
@@ -36,7 +37,12 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
     }
 
+    // let service_name = service.proto_name.clone();
+
     let ts = quote! {
+        use tonic::_codegen;
+
+        #[derive(Clone)]
         pub struct GrpcServer {
             inner: std::sync::Arc<#s>,
         }
@@ -47,20 +53,86 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        impl tower_service::Service<tonic::Request<()>> for GrpcServer {
-            type Response = tonic::Response<()>;
-            type Error = Status;
-            type Future = tonic::ResponseFuture<'static, Self::Response>;
+        impl _codegen::Service<()> for GrpcServer {
+            type Response = Self;
+            type Error = tonic::error::Never;
+            type Future = _codegen::Ready<Result<Self::Response, Self::Error>>;
 
-            fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+            fn poll_ready(&mut self, _cx: &mut _codegen::Context<'_>) -> _codegen::Poll<Result<(), Self::Error>> {
                 std::task::Poll::Ready(Ok(()))
             }
 
-            fn call(&mut self, request: tonic::Request<()>) -> tonic::ResponseFuture<'static, Self::Response> {
+            fn call(&mut self, _: ()) -> Self::Future {
+                _codegen::ok(self.clone())
+            }
+        }
+
+        impl _codegen::Service<_codegen::http::Request<()>> for GrpcServer {
+            type Response = tonic::Response<()>;
+            type Error = tonic::error::Never;
+            type Future = greeter::ResponseFuture;
+
+            fn poll_ready(&mut self, _cx: &mut _codegen::Context<'_>) -> _codegen::Poll<Result<(), Self::Error>> {
+                Ok(()).into()
+            }
+
+            fn call(&mut self, request: _codegen::http::Request<()>) -> Self::Future {
                 let inner = self.inner.clone();
-                Box::pin(async move {
-                    inner.#m_ident(request).await
-                })
+
+                match request.uri().path() {
+                    "/helloworld.Greeter/SayHello" => {
+                        // let kind = greeter::methods::SayHello(self.inner.clone());
+                        // greeter::ResponseFuture { kind: greeter::Kind::SayHello(kind) }
+                        self.inner.stream(request).await?;
+                        unimplemented!()
+                    },
+                    _ => unimplemented!("use grpc unimplemented")
+                }
+            }
+        }
+
+        // TODO: get actual service name
+        pub mod greeter {
+            use tonic::_codegen::*;
+
+            pub struct ResponseFuture {
+                pub kind: Kind,
+            }
+
+            pub enum Kind {
+                SayHello(methods::SayHello),
+            }
+
+            impl Future for ResponseFuture {
+                type Output = Result<tonic::Response<()>, tonic::error::Never>;
+
+                fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
+                    unimplemented!()
+                }
+            }
+
+            pub mod methods {
+                use tonic::_codegen::*;
+
+                pub struct SayHello(pub std::sync::Arc<super::super::#s>);
+
+                impl Service<tonic::Request<()>> for SayHello {
+                    type Response = tonic::Response<()>;
+                    type Error = tonic::Status;
+                    type Future = ResponseFuture<Self::Response>;
+
+                    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+                        Ok(()).into()
+                    }
+
+                    fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
+                        let inner = self.0.clone();
+
+                        Box::pin(async move {
+                            inner.#m_ident(request).await
+                        })
+                    }
+                }
             }
         }
     };

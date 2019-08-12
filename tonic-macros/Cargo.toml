@@ -17,3 +17,4 @@ tower-service = { git = "https://github.com/tower-rs/tower", branch = "std-futur
 [dev-dependencies]
 tokio = "=0.2.0-alpha.1"
 tonic = { path = "../tonic" }
+futures-preview = "=0.3.0-alpha.17"

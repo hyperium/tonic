@@ -1,5 +1,6 @@
 #![feature(async_await)]
 
+use futures::Stream;
 use std::time::Duration;
 use tokio::timer::Delay;
 use tonic::{Request, Response, Status};
@@ -10,7 +11,7 @@ use tonic::{Request, Response, Status};
 // struct HelloResponse;
 
 #[derive(Default, Clone)]
-struct MyGreeter {
+pub struct MyGreeter {
     data: String,
 }
 
@@ -30,13 +31,18 @@ impl MyGreeter {
 
         Ok(Response::new(()))
     }
+
+    pub async fn server_stream(&self, request: Request<()>) -> Result<impl Stream, Status> {
+        unimplemented!()
+    }
+
+    pub async fn client_stream(&self, request: Request<impl Stream>) -> Result<(), Status> {
+        unimplemented!()
+    }
 }
 
 #[tokio::test]
 async fn grpc() {
     let svc = MyGreeter::default();
-    let mut server = GrpcServer::from(svc);
-
-    use tower_service::Service;
-    server.call(tonic::Request::new(())).await.unwrap();
+    let mut _server = GrpcServer::from(svc);
 }

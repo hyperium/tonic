@@ -30,7 +30,7 @@ where
         Self {
             maker,
             builder,
-            _pd: PhantomData
+            _pd: PhantomData,
         }
     }
 
@@ -79,30 +79,30 @@ where
 }
 
 pub async fn handle_request<B>(
-        response: Response<B>,
-        mut send_response: h2::server::SendResponse<SendBuf<B::Data>>,
-    ) where
-        B: Body + Send + Unpin + 'static,
-        B::Data: Unpin,
-        B::Error: Into<Box<dyn std::error::Error>>,
-    {
-        let (parts, body) = response.into_parts();
+    response: Response<B>,
+    mut send_response: h2::server::SendResponse<SendBuf<B::Data>>,
+) where
+    B: Body + Send + Unpin + 'static,
+    B::Data: Unpin,
+    B::Error: Into<Box<dyn std::error::Error>>,
+{
+    let (parts, body) = response.into_parts();
 
-        // Check if the response is imemdiately an end-of-stream.
-        let eos = body.is_end_stream();
+    // Check if the response is imemdiately an end-of-stream.
+    let eos = body.is_end_stream();
 
-        let response = Response::from_parts(parts, ());
+    let response = Response::from_parts(parts, ());
 
-        match send_response.send_response(response, eos) {
-            Ok(sr) => {
-                if eos {
-                    return;
-                }
-
-                Flush::new(body, sr).await.unwrap();
+    match send_response.send_response(response, eos) {
+        Ok(sr) => {
+            if eos {
+                return;
             }
-            Err(e) => {
-                println!("h2 server ERROR={}", e);
-            }
+
+            Flush::new(body, sr).await.unwrap();
+        }
+        Err(e) => {
+            println!("h2 server ERROR={}", e);
         }
     }
+}
