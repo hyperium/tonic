@@ -18,6 +18,8 @@ pub use response::Response;
 pub use status::{Code, Status};
 pub use tonic_macros::server;
 
+pub(crate) use error::Error;
+
 use std::future::Future;
 use std::sync::Arc;
 

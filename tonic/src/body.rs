@@ -1,6 +1,6 @@
 use crate::{Code, Status};
 use bytes::{Bytes, IntoBuf};
-use futures_core::TryStream;
+use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
 use http::HeaderMap;
 use http_body::Body;
@@ -13,9 +13,18 @@ pub struct AsyncBody<S> {
     error: Option<Status>,
 }
 
+impl<S> AsyncBody<S>
+where
+    S: Stream<Item = Result<crate::body::BytesBuf, Status>> + Unpin,
+{
+    pub fn new(inner: S) -> Self {
+        Self { inner, error: None }
+    }
+}
+
 impl<S> Body for AsyncBody<S>
 where
-    S: TryStream<Ok = BytesBuf, Error = Status> + Unpin,
+    S: Stream<Item = Result<crate::body::BytesBuf, Status>> + Unpin,
 {
     type Data = BytesBuf;
     type Error = Status;
