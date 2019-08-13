@@ -289,6 +289,12 @@ impl From<Status> for h2::Error {
     }
 }
 
+impl From<std::io::Error> for Status {
+    fn from(_io: std::io::Error) -> Self {
+        unimplemented!()
+    }
+}
+
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(

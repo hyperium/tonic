@@ -32,13 +32,17 @@ impl MyGreeter {
         Ok(Response::new(()))
     }
 
-    pub async fn server_stream(&self, request: Request<()>) -> Result<impl Stream, Status> {
-        unimplemented!()
-    }
+    // pub async fn streaming(&self, request: Request<impl Stream>) -> Result<Response<impl Stream>, Status> {
+    //     unimplemented!()
+    // }
 
-    pub async fn client_stream(&self, request: Request<impl Stream>) -> Result<(), Status> {
-        unimplemented!()
-    }
+    // pub async fn server_stream(&self, request: Request<()>) -> Result<impl Stream, Status> {
+    //     unimplemented!()
+    // }
+
+    // pub async fn client_stream(&self, request: Request<impl Stream>) -> Result<(), Status> {
+    //     unimplemented!()
+    // }
 }
 
 #[tokio::test]

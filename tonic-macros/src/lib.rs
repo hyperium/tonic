@@ -68,9 +68,9 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
         }
 
         impl _codegen::Service<_codegen::http::Request<()>> for GrpcServer {
-            type Response = tonic::Response<()>;
+            type Response = tonic::Response<tonic::body::BoxAsyncBody>;
             type Error = tonic::error::Never;
-            type Future = greeter::ResponseFuture;
+            type Future = _codegen::ResponseFuture2<Self::Response, Self::Error>;
 
             fn poll_ready(&mut self, _cx: &mut _codegen::Context<'_>) -> _codegen::Poll<Result<(), Self::Error>> {
                 Ok(()).into()
@@ -81,57 +81,32 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
 
                 match request.uri().path() {
                     "/helloworld.Greeter/SayHello" => {
-                        // let kind = greeter::methods::SayHello(self.inner.clone());
-                        // greeter::ResponseFuture { kind: greeter::Kind::SayHello(kind) }
-                        self.inner.stream(request).await?;
+                        let inner = self.inner.clone();
+                        let fut = async move {
+                            let codec = tonic::codec::UnitCodec::default();
+                            let mut grpc = tonic::server::Grpc::new(codec);
+
+                            let response = match grpc.unary_request(request).await {
+                                Ok(request) => inner.#m_ident(request).await,
+                                Err(status) => Err(status),
+                            };
+
+                            let response = grpc.unary_response(response.unwrap())
+                                .await
+                                .map(|b| tonic::body::BoxAsyncBody::new(b));
+                                // .map(|b| tonic::body::BoxBody::map(b))
+
+                            Ok(response)
+                        };
+
+
+                        Box::pin(fut)
+                    },
+
+                    "helloworld.Greeter/SayHelloStream" => {
                         unimplemented!()
                     },
                     _ => unimplemented!("use grpc unimplemented")
-                }
-            }
-        }
-
-        // TODO: get actual service name
-        pub mod greeter {
-            use tonic::_codegen::*;
-
-            pub struct ResponseFuture {
-                pub kind: Kind,
-            }
-
-            pub enum Kind {
-                SayHello(methods::SayHello),
-            }
-
-            impl Future for ResponseFuture {
-                type Output = Result<tonic::Response<()>, tonic::error::Never>;
-
-                fn poll(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Self::Output> {
-                    unimplemented!()
-                }
-            }
-
-            pub mod methods {
-                use tonic::_codegen::*;
-
-                pub struct SayHello(pub std::sync::Arc<super::super::#s>);
-
-                impl Service<tonic::Request<()>> for SayHello {
-                    type Response = tonic::Response<()>;
-                    type Error = tonic::Status;
-                    type Future = ResponseFuture<Self::Response>;
-
-                    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-                        Ok(()).into()
-                    }
-
-                    fn call(&mut self, request: tonic::Request<()>) -> Self::Future {
-                        let inner = self.0.clone();
-
-                        Box::pin(async move {
-                            inner.#m_ident(request).await
-                        })
-                    }
                 }
             }
         }

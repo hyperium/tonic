@@ -1,16 +1,17 @@
-#![feature(async_await, type_alias_impl_trait)]
+#![feature(async_await)]
+#![recursion_limit = "256"]
 
 //! gRPC implementation
 
+pub mod body;
+pub mod codec;
 #[doc(hidden)]
 pub mod error;
 pub mod metadata;
+pub mod server;
 
-mod body;
-mod codec;
 mod request;
 mod response;
-mod server;
 mod status;
 
 pub use request::Request;
@@ -40,6 +41,8 @@ pub mod _codegen {
     pub use tower_service::Service;
     pub type ResponseFuture<T> =
         self::Pin<Box<dyn self::Future<Output = Result<T, crate::Status>> + Send + 'static>>;
+    pub type ResponseFuture2<T, E> =
+        self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
 
     pub mod http {
         pub use http::*;
