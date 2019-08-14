@@ -1,6 +1,6 @@
 use crate::{Code, Status};
 use bytes::{Bytes, IntoBuf};
-use futures_core::Stream;
+use futures_core::{Stream, TryStream};
 use futures_util::{ready, TryStreamExt};
 use http::HeaderMap;
 use http_body::Body;
@@ -51,12 +51,22 @@ pub struct BoxAsyncBody {
 }
 
 impl BoxAsyncBody {
-    pub fn new<S>(inner: S) -> Self
+    // pub fn new<S>(inner: S) -> Self
+    // where
+    //     S: Stream<Item = Result<crate::body::BytesBuf, Status>> + Send + 'static,
+    // {
+    //     Self {
+    //         inner: Box::pin(inner),
+    //         error: None,
+    //     }
+    // }
+
+    pub fn new_try<S>(inner: S) -> Self
     where
-        S: Stream<Item = Result<crate::body::BytesBuf, Status>> + Send + 'static,
+        S: TryStream<Ok = BytesBuf, Error = Status> + Send + 'static,
     {
         Self {
-            inner: Box::pin(inner),
+            inner: Box::pin(inner.into_stream()),
             error: None,
         }
     }

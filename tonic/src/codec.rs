@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 
-use crate::{body::BytesBuf, Status};
+use crate::{body::BytesBuf, Code, Status};
 use async_stream::stream;
 use bytes::{Buf, BufMut, BytesMut, IntoBuf};
 use futures_core::TryStream;
 use futures_util::{future, TryStreamExt};
 use http_body::Body;
+use prost::Message;
+use std::marker::PhantomData;
 use tokio_codec::{Decoder, Encoder};
 use tracing::{debug, trace};
 
@@ -16,14 +18,13 @@ pub trait Codec {
     type Encoder: Encoder<Item = Self::Encode, Error = Status>;
     type Decoder: Decoder<Item = Self::Decode, Error = Status>;
 
+    const CONTENT_TYPE: &'static str;
+
     fn encoder(&mut self) -> Self::Encoder;
     fn decoder(&mut self) -> Self::Decoder;
 }
 
-pub async fn encode<T, U>(
-    mut encoder: T,
-    mut source: U,
-) -> impl TryStream<Ok = BytesBuf, Error = Status>
+pub fn encode<T, U>(mut encoder: T, mut source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
 where
     T: Encoder<Error = Status>,
     U: TryStream<Ok = T::Item, Error = Status> + Unpin,
@@ -79,10 +80,10 @@ where
             } else {
                 if buf.has_remaining_mut() {
                     trace!("unexpected EOF decoding stream");
-                    // yield Err(Status::new(
-                    //     Code::Internal,
-                    //     "Unexpected EOF decoding stream.".to_string(),
-                    // ));
+                    yield Err(Status::new(
+                        Code::Internal,
+                        "Unexpected EOF decoding stream.".to_string(),
+                    ));
                 } else {
                     break;
                 }
@@ -153,6 +154,76 @@ where
     Ok(None)
 }
 
+#[derive(Debug, Clone)]
+pub struct ProstCodec<T, U> {
+    _pd: PhantomData<(T, U)>,
+}
+
+impl<T, U> ProstCodec<T, U> {
+    pub fn new() -> Self {
+        Self { _pd: PhantomData }
+    }
+}
+
+impl<T, U> Codec for ProstCodec<T, U>
+where
+    T: Message,
+    U: Message + Default,
+{
+    type Encode = T;
+    type Decode = U;
+
+    type Encoder = ProstEncoder<T>;
+    type Decoder = ProstDecoder<U>;
+
+    const CONTENT_TYPE: &'static str = "application/groc+proto";
+
+    fn encoder(&mut self) -> Self::Encoder {
+        ProstEncoder(PhantomData)
+    }
+
+    fn decoder(&mut self) -> Self::Decoder {
+        ProstDecoder(PhantomData)
+    }
+}
+
+pub struct ProstEncoder<T>(PhantomData<T>);
+
+impl<T: Message> Encoder for ProstEncoder<T> {
+    type Item = T;
+    type Error = Status;
+
+    fn encode(&mut self, item: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+        let len = item.encoded_len();
+
+        if buf.remaining_mut() < len {
+            buf.reserve(len);
+        }
+
+        item.encode(buf)
+            .map_err(|_| unreachable!("Message only errors if not enough space"))
+    }
+}
+
+pub struct ProstDecoder<U>(PhantomData<U>);
+
+impl<U: Message + Default> Decoder for ProstDecoder<U> {
+    type Item = U;
+    type Error = Status;
+
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        Message::decode(buf.take())
+            .map(Option::Some)
+            .map_err(from_decode_error)
+    }
+}
+
+fn from_decode_error(error: prost::DecodeError) -> crate::Status {
+    // Map Protobuf parse errors to an INTERNAL status code, as per
+    // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
+    crate::Status::new(crate::Code::Internal, error.to_string())
+}
+
 #[derive(Default)]
 pub struct UnitCodec;
 
@@ -162,6 +233,8 @@ impl Codec for UnitCodec {
 
     type Encoder = UnitEncoder;
     type Decoder = UnitDecoder;
+
+    const CONTENT_TYPE: &'static str = "()";
 
     fn encoder(&mut self) -> Self::Encoder {
         UnitEncoder

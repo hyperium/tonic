@@ -20,3 +20,9 @@ tower-service = { git = "https://github.com/tower-rs/tower", branch = "std-futur
 tokio-codec = "=0.2.0-alpha.1"
 async-stream = { path = "../../async-stream/async-stream" }
 http-body = { git = "https://github.com/hyperium/http-body", branch = "std-future" }
+
+[dev-dependencies]
+tokio = "=0.2.0-alpha.1"
+tokio-buf = "=0.2.0-alpha.1"
+prost-derive = "0.5"
+tower-h2 = { path = "../tower-h2" }

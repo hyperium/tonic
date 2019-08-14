@@ -1,11 +1,14 @@
 use crate::{
+    body::{BoxAsyncBody, BytesBuf},
     codec::{self, Codec},
-    Request, Status,
+    Request, Response, Status,
 };
-use futures_core::{Future, TryStream};
+use futures_core::{Future, Stream, TryStream};
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
 use std::pin::Pin;
+
+type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + 'static>>;
 
 pub struct Grpc<T> {
     codec: T,
@@ -64,13 +67,12 @@ pub trait StreamingService<RequestStream> {
     fn call(&mut self, request: Request<RequestStream>) -> Self::Future;
 }
 
-type BoxStream<T> = Pin<Box<dyn TryStream<Ok = T, Error = Status> + Send + 'static>>;
-
 impl<T> Grpc<T>
 where
     T: Codec,
     T::Decode: Unpin + 'static,
-    T::Encode: Unpin + 'static,
+    T::Encoder: Send + 'static,
+    T::Encode: Send + Unpin + 'static,
 {
     pub fn new(codec: T) -> Self {
         Self { codec }
@@ -80,7 +82,7 @@ where
         &mut self,
         mut service: S,
         req: http::Request<B>,
-    ) -> http::Response<impl TryStream<Ok = crate::body::BytesBuf, Error = Status>>
+    ) -> http::Response<BoxAsyncBody>
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
         B: Body,
@@ -91,21 +93,22 @@ where
         futures_util::pin_mut!(stream);
         let message = stream.try_next().await.unwrap().unwrap();
         let request = Request::new(message);
-        let response = service.call(request).await.unwrap();
-        let message = response.into_inner();
-        let source = stream::once(future::ok(message));
-        let body = codec::encode(self.codec.encoder(), source).await;
+        let response = service
+            .call(request)
+            .await
+            .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        http::Response::new(body)
+        self.map_response(response).map(BoxAsyncBody::new_try)
     }
 
     pub async fn server_streaming<S, B>(
         &mut self,
         mut service: S,
         req: http::Request<B>,
-    ) -> http::Response<impl TryStream<Ok = crate::body::BytesBuf, Error = Status>>
+    ) -> http::Response<BoxAsyncBody>
     where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
+        S::ResponseStream: Send + 'static,
         B: Body,
         B::Error: Into<crate::Error>,
     {
@@ -114,11 +117,9 @@ where
         futures_util::pin_mut!(stream);
         let message = stream.try_next().await.unwrap().unwrap();
         let request = Request::new(message);
-        let response = service.call(request).await.unwrap();
-        let source = response.into_inner();
-        let body = codec::encode(self.codec.encoder(), source).await;
+        let response = service.call(request).await;
 
-        http::Response::new(body)
+        self.map_response(response).map(BoxAsyncBody::new_try)
     }
 
     pub async fn client_streaming<S, B>(
@@ -135,13 +136,13 @@ where
         B::Error: Into<crate::Error> + Send,
     {
         let (_parts, body) = req.into_parts();
-        let stream = codec::decode(self.codec.decoder(), body);
+        let stream = codec::decode(self.codec.decoder(), body).into_stream();
         let stream = Box::pin(stream) as BoxStream<T::Decode>;
         let request = Request::new(stream);
         let response = service.call(request).await.unwrap();
         let message = response.into_inner();
         let source = stream::once(future::ok(message));
-        let body = codec::encode(self.codec.encoder(), source).await;
+        let body = codec::encode(self.codec.encoder(), source);
 
         http::Response::new(body)
     }
@@ -160,13 +161,55 @@ where
         B::Error: Into<crate::Error> + Send,
     {
         let (_parts, body) = req.into_parts();
-        let stream = codec::decode(self.codec.decoder(), body);
+        let stream = codec::decode(self.codec.decoder(), body).into_stream();
         let stream = Box::pin(stream) as BoxStream<T::Decode>;
         let request = Request::new(stream);
         let response = service.call(request).await.unwrap();
         let source = response.into_inner();
-        let body = codec::encode(self.codec.encoder(), source).await;
+        let body = codec::encode(self.codec.encoder(), source);
 
         http::Response::new(body)
+    }
+
+    // fn map_request<B>(&mut self, request: http::Request<B>) -> Request<B> {
+    //     Request::from_http(request.map(|b| codec::decode(self.codec.decoder(), b)))
+    // }
+
+    fn map_response<B>(
+        &mut self,
+        response: Result<crate::Response<B>, Status>,
+    ) -> http::Response<BoxStream<BytesBuf>>
+    where
+        B: TryStream<Ok = T::Encode, Error = Status> + Send + Unpin + 'static,
+    {
+        match response {
+            Ok(r) => {
+                let (mut parts, body) = r.into_http().into_parts();
+
+                // Set the content type
+                parts.headers.insert(
+                    http::header::CONTENT_TYPE,
+                    http::header::HeaderValue::from_static(T::CONTENT_TYPE),
+                );
+
+                let body = codec::encode(self.codec.encoder(), body).into_stream();
+
+                let body = Box::pin(body) as BoxStream<BytesBuf>;
+                http::Response::from_parts(parts, body)
+            }
+            Err(status) => {
+                let status = stream::once(future::err(status));
+                let body = codec::encode(self.codec.encoder(), status).into_stream();
+                let (mut parts, _body) = Response::new(()).into_http().into_parts();
+
+                parts.headers.insert(
+                    http::header::CONTENT_TYPE,
+                    http::header::HeaderValue::from_static(T::CONTENT_TYPE),
+                );
+
+                let body = Box::pin(body) as BoxStream<BytesBuf>;
+                http::Response::from_parts(parts, body)
+            }
+        }
     }
 }
