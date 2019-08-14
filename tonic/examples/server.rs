@@ -1,12 +1,16 @@
 #![feature(async_await, type_alias_impl_trait)]
 
-use std::future::Future;
-use tonic::{server::{UnaryService, Grpc}, Status, Request, Response, body};
-use tower_service::Service;
-use tower_h2::{RecvBody, Server};
-use tokio::net::TcpListener;
 use futures_util::future;
+use std::future::Future;
 use std::task::{Context, Poll};
+use tokio::net::TcpListener;
+use tonic::{
+    body,
+    server::{Grpc, UnaryService},
+    Request, Response, Status,
+};
+use tower_h2::{RecvBody, Server};
+use tower_service::Service;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct HelloRequest {
@@ -56,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-     Ok(())
+    Ok(())
 }
 
 #[derive(Debug)]

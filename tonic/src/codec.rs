@@ -35,9 +35,24 @@ where
         loop {
             match source.try_next().await {
                 Ok(Some(item)) => {
+
+
+                    buf.reserve(5);
+                    unsafe {
+                        buf.advance_mut(5);
+                    }
                     encoder.encode(item, &mut buf).map_err(drop).unwrap();
-                    let len = buf.len();
-                    yield Ok(buf.split_to(len).freeze().into_buf());
+
+                    // now that we know length, we can write the header
+                    let len = buf.len() - 5;
+                    assert!(len <= ::std::u32::MAX as usize);
+                    {
+                        let mut cursor = ::std::io::Cursor::new(&mut buf[..5]);
+                        cursor.put_u8(0); // byte must be 0, reserve doesn't auto-zero
+                        cursor.put_u32_be(len as u32);
+                    }
+
+                    yield Ok(buf.split_to(len + 5).freeze().into_buf());
                 },
                 Ok(None) => break,
                 Err(status) => yield Err(status),
@@ -105,6 +120,7 @@ where
     let mut buf = (&buf1[..]).into_buf();
 
     if let State::ReadHeader = state {
+        println!("reading header");
         if buf.remaining() < 5 {
             return Ok(None);
         }
@@ -135,9 +151,13 @@ where
     }
 
     if let State::ReadBody { len, .. } = state {
+        println!("reading body");
         if buf.remaining() < *len {
             return Ok(None);
         }
+
+        // advance past the header
+        buf1.advance(5);
 
         match decoder.decode(buf1) {
             Ok(Some(msg)) => {
