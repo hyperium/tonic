@@ -22,3 +22,6 @@ tokio = "=0.2.0-alpha.1"
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"
+
+[build-dependencies]
+tonic-build = { path = "../tonic-build" }

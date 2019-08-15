@@ -2,6 +2,7 @@
 members = [
     "tonic",
     "tonic-macros",
+    "tonic-build",
     "tonic-examples",
     "tower-h2"
 ]

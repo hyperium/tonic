@@ -5,18 +5,8 @@ use tokio::{timer::Delay, net::TcpListener};
 use tonic::{Request, Response, Status};
 use tower_h2::Server;
 
-mod proto {
-    #[derive(Clone, PartialEq, prost::Message)]
-    pub struct HelloRequest {
-        #[prost(string, tag = "1")]
-        pub name: std::string::String,
-    }
-    /// The response message containing the greetings
-    #[derive(Clone, PartialEq, prost::Message)]
-    pub struct HelloReply {
-        #[prost(string, tag = "1")]
-        pub message: std::string::String,
-    }
+pub mod hello_world {
+    include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
 }
 
 #[derive(Default, Clone)]
@@ -24,9 +14,9 @@ pub struct MyGreeter {
     data: String,
 }
 
-#[tonic::server(service = "helloworld.Greeter", proto = "proto")]
+#[tonic::server(service = "helloworld.Greeter", proto = "hello_world")]
 impl MyGreeter {
-    pub async fn say_hello(&self, request: Request<proto::HelloRequest>) -> Result<Response<proto::HelloReply>, Status> {
+    pub async fn say_hello(&self, request: Request<hello_world::HelloRequest>) -> Result<Response<hello_world::HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
         let string = &self.data;
@@ -38,7 +28,7 @@ impl MyGreeter {
 
         Delay::new(when).await;
         
-        let reply = HelloReply {
+        let reply = hello_world::HelloReply {
             message: "Zomg, it works!".into(),
         };
         Ok(Response::new(reply))
@@ -51,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bind = TcpListener::bind(&addr)?;
 
     let greeter = MyGreeter::default();
-    let mut server = Server::new(GrpcServer::new(greeter), Default::default());
+    let mut server = Server::new(GreeterServer::new(greeter), Default::default());
 
     while let Ok((sock, _addr)) = bind.accept().await {
         if let Err(e) = sock.set_nodelay(true) {

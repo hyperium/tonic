@@ -14,6 +14,7 @@ mod request;
 mod response;
 mod status;
 
+pub use body::{BoxAsyncBody, BoxBody};
 pub use request::Request;
 pub use response::Response;
 pub use status::{Code, Status};
@@ -39,9 +40,8 @@ pub mod _codegen {
     pub use std::pin::Pin;
     pub use std::task::{Context, Poll};
     pub use tower_service::Service;
-    pub type ResponseFuture<T> =
-        self::Pin<Box<dyn self::Future<Output = Result<T, crate::Status>> + Send + 'static>>;
-    pub type ResponseFuture2<T, E> =
+
+    pub type BoxFuture<T, E> =
         self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
 
     pub mod http {
