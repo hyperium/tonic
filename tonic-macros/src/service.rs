@@ -9,10 +9,15 @@ pub struct ServiceDef {
     name_str: String,
     package: String,
     proto_name: String,
+    proto_path: String,
     methods: Vec<(Method, Ident)>,
 }
 
-pub(crate) fn parse_service_impl(item: ItemImpl, mut service: Service) -> ServiceDef {
+pub(crate) fn parse_service_impl(
+    item: ItemImpl,
+    mut service: Service,
+    proto_path: String,
+) -> ServiceDef {
     let ItemImpl { self_ty, items, .. } = item;
 
     let name = if let Type::Path(t) = *self_ty {
@@ -48,6 +53,7 @@ pub(crate) fn parse_service_impl(item: ItemImpl, mut service: Service) -> Servic
         name_str: service.name,
         package: service.package,
         proto_name: service.proto_name,
+        proto_path,
         methods,
     }
 }
@@ -120,7 +126,12 @@ fn generate_methods(service: &ServiceDef) -> TokenStream {
         );
         let method_path = Lit::Str(LitStr::new(&path, Span::call_site()));
 
-        let method_stream = generate_unary(method, ident.clone(), service.name.clone());
+        let method_stream = generate_unary(
+            method,
+            ident.clone(),
+            service.name.clone(),
+            &service.proto_path,
+        );
 
         let method = quote! {
             #method_path => {
@@ -133,11 +144,17 @@ fn generate_methods(service: &ServiceDef) -> TokenStream {
     stream
 }
 
-fn generate_unary(method: &Method, method_ident: Ident, service_impl: Path) -> TokenStream {
+fn generate_unary(
+    method: &Method,
+    method_ident: Ident,
+    service_impl: Path,
+    proto_path: &str,
+) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request: Path = syn::parse_str(&format!("hello_world::{}", method.input_type)).unwrap();
-    let response: Path = syn::parse_str(&format!("hello_world::{}", method.output_type)).unwrap();
+    let request: Path = syn::parse_str(&format!("{}::{}", proto_path, method.input_type)).unwrap();
+    let response: Path =
+        syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
 
     quote! {
         struct #service_ident(pub std::sync::Arc<#service_impl>);
