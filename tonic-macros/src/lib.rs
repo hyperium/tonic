@@ -41,14 +41,15 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
 
     let ts = quote! {
         use tonic::_codegen;
+        use proto::*;
 
         #[derive(Clone)]
         pub struct GrpcServer {
             inner: std::sync::Arc<#s>,
         }
 
-        impl From<#s> for GrpcServer {
-            fn from(t: #s) -> Self {
+        impl GrpcServer {
+            fn new(t: #s) -> Self {
                 Self { inner: std::sync::Arc::new(t) }
             }
         }
@@ -67,8 +68,8 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
             }
         }
 
-        impl _codegen::Service<_codegen::http::Request<()>> for GrpcServer {
-            type Response = tonic::Response<tonic::body::BoxAsyncBody>;
+        impl _codegen::Service<_codegen::http::Request<tower_h2::RecvBody>> for GrpcServer {
+            type Response = _codegen::http::Response<tonic::body::BoxAsyncBody>;
             type Error = tonic::error::Never;
             type Future = _codegen::ResponseFuture2<Self::Response, Self::Error>;
 
@@ -76,40 +77,48 @@ pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
                 Ok(()).into()
             }
 
-            fn call(&mut self, request: _codegen::http::Request<()>) -> Self::Future {
+            fn call(&mut self, request: _codegen::http::Request<tower_h2::RecvBody>) -> Self::Future {
                 let inner = self.inner.clone();
 
                 match request.uri().path() {
                     "/helloworld.Greeter/SayHello" => {
+                        use tonic::_codegen::*;
+                        use tonic::*;
+
+                        pub struct SayHello(pub std::sync::Arc<#s>);
+
+                        impl tonic::server::UnaryService<HelloRequest> for SayHello {
+                            type Response = HelloReply;
+                            type Future = Pin<Box<dyn Future<Output = Result<Response<Self::Response>, Status>> + Send + 'static>>;
+
+                            fn call(&mut self, request: Request<HelloRequest>) -> Self::Future {
+                                let inner = self.0.clone();
+                                let fut = async move {
+                                    inner.#m_ident(request).await
+                                };
+                                Box::pin(fut)
+                            }
+                        }
+
                         let inner = self.inner.clone();
+
+
                         let fut = async move {
-                            let codec = tonic::codec::UnitCodec::default();
+                            let method = SayHello(inner);
+                            let codec = tonic::codec::ProstCodec::new();
                             let mut grpc = tonic::server::Grpc::new(codec);
-
-                            let response = match grpc.unary_request(request).await {
-                                Ok(request) => inner.#m_ident(request).await,
-                                Err(status) => Err(status),
-                            };
-
-                            let response = grpc.unary_response(response.unwrap())
-                                .await
-                                .map(|b| tonic::body::BoxAsyncBody::new(b));
-                                // .map(|b| tonic::body::BoxBody::map(b))
-
-                            Ok(response)
+                            let res = grpc.unary(method, request).await;
+                            Ok(res)
                         };
 
-
                         Box::pin(fut)
-                    },
-
-                    "helloworld.Greeter/SayHelloStream" => {
-                        unimplemented!()
                     },
                     _ => unimplemented!("use grpc unimplemented")
                 }
             }
         }
+
+
     };
 
     original.extend(TokenStream::from(ts));

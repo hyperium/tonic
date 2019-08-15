@@ -16,7 +16,6 @@ impl<T> Response<T> {
         }
     }
 
-    /// Get a reference to the message
     pub fn get_ref(&self) -> &T {
         &self.message
     }

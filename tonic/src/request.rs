@@ -40,13 +40,17 @@ impl<T> Request<T> {
         self.message
     }
 
-    /// Convert an HTTP request to a gRPC request
-    pub fn from_http(http: http::Request<T>) -> Self {
-        let (head, message) = http.into_parts();
+    pub(crate) fn from_http_parts(parts: http::request::Parts, message: T) -> Self {
         Request {
-            metadata: MetadataMap::from_headers(head.headers),
+            metadata: MetadataMap::from_headers(parts.headers),
             message,
         }
+    }
+
+    /// Convert an HTTP request to a gRPC request
+    pub fn from_http(http: http::Request<T>) -> Self {
+        let (parts, message) = http.into_parts();
+        Request::from_http_parts(parts, message)
     }
 
     pub fn into_http(self, uri: http::Uri) -> http::Request<T> {

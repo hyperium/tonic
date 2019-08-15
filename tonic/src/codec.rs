@@ -1,10 +1,8 @@
-#![allow(dead_code)]
-
 use crate::{body::BytesBuf, Code, Status};
 use async_stream::stream;
 use bytes::{Buf, BufMut, BytesMut, IntoBuf};
-use futures_core::TryStream;
-use futures_util::{future, TryStreamExt};
+use futures_core::{Stream, TryStream};
+use futures_util::{future, StreamExt};
 use http_body::Body;
 use prost::Message;
 use std::marker::PhantomData;
@@ -27,16 +25,14 @@ pub trait Codec {
 pub fn encode<T, U>(mut encoder: T, mut source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
 where
     T: Encoder<Error = Status>,
-    U: TryStream<Ok = T::Item, Error = Status> + Unpin,
+    U: Stream<Item = Result<T::Item, Status>> + Unpin,
 {
     stream! {
         let mut buf = BytesMut::with_capacity(1024);
 
         loop {
-            match source.try_next().await {
-                Ok(Some(item)) => {
-
-
+            match source.next().await {
+                Some(Ok(item)) => {
                     buf.reserve(5);
                     unsafe {
                         buf.advance_mut(5);
@@ -54,8 +50,8 @@ where
 
                     yield Ok(buf.split_to(len + 5).freeze().into_buf());
                 },
-                Ok(None) => break,
-                Err(status) => yield Err(status),
+                Some(Err(status)) => yield Err(status),
+                None => break,
             }
         }
     }
@@ -241,7 +237,7 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
 fn from_decode_error(error: prost::DecodeError) -> crate::Status {
     // Map Protobuf parse errors to an INTERNAL status code, as per
     // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
-    crate::Status::new(crate::Code::Internal, error.to_string())
+    Status::new(Code::Internal, error.to_string())
 }
 
 #[derive(Default)]
@@ -291,5 +287,4 @@ impl Decoder for UnitDecoder {
 enum State {
     ReadHeader,
     ReadBody { compression: bool, len: usize },
-    Done,
 }
