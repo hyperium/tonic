@@ -57,11 +57,14 @@ where
     }
 }
 
-pub fn decode<T, B>(mut decoder: T, mut source: B) -> impl TryStream<Ok = T::Item, Error = Status>
+pub fn decode<T, B>(
+    mut decoder: T,
+    mut source: B,
+) -> impl TryStream<Ok = T::Item, Error = Status> + 'static
 where
-    T: Decoder<Error = Status>,
+    T: Decoder<Error = Status> + 'static,
     T::Item: Unpin + 'static,
-    B: Body,
+    B: Body + 'static,
     B::Error: Into<crate::Error>,
 {
     stream! {

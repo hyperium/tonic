@@ -18,7 +18,7 @@ prost = "0.5"
 percent-encoding = "1.0.1"
 tower-service = { git = "https://github.com/tower-rs/tower", branch = "std-future" }
 tokio-codec = "=0.2.0-alpha.1"
-async-stream = { path = "../../async-stream/async-stream" }
+async-stream = "0.1.0"
 http-body = { git = "https://github.com/hyperium/http-body", branch = "std-future" }
 
 [dev-dependencies]

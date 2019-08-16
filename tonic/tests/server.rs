@@ -3,40 +3,50 @@
 use std::future::Future;
 use std::task::{Context, Poll};
 use tokio_buf::BufStream;
-use tonic::codec::UnitCodec;
+use tonic::codec::ProstCodec;
 use tonic::server::*;
 use tonic::{Request, Response, Status};
 use std::pin::Pin;
 use futures_core::Stream;
 
-type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + 'static>>;
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct HelloRequest {
+    #[prost(string, tag = "1")]
+    pub name: std::string::String,
+}
+/// The response message containing the greetings
+#[derive(Clone, PartialEq, prost::Message)]
+pub struct HelloReply {
+    #[prost(string, tag = "1")]
+    pub message: std::string::String,
+}
 
 struct SayHello;
 
-impl UnaryService<()> for SayHello {
-    type Response = ();
+impl UnaryService<HelloRequest> for SayHello {
+    type Response = HelloReply;
     type Future = impl Future<Output = Result<Response<Self::Response>, Status>>;
 
-    fn call(&mut self, _request: Request<()>) -> Self::Future {
-        async move { Ok(Response::new(())) }
+    fn call(&mut self, _request: Request<HelloRequest>) -> Self::Future {
+        async move { Ok(Response::new(HelloReply { message: "hello".into()})) }
     }
 }
 
 struct SayHelloStream;
 
 impl<S> ClientStreamingService<S> for SayHelloStream 
-where S: Stream{
-    type Response = ();
+where S: Stream<Item = Result<HelloRequest, Status>> + Unpin + Send + 'static {
+    type Response = HelloReply;
     type Future = impl Future<Output = Result<Response<Self::Response>, Status>>;
 
     fn call(&mut self, _: Request<S>) -> Self::Future {
-        async move { Ok(Response::new(())) }
+        async move { Ok(Response::new(HelloReply { message: "hello".into()})) }
     }
 }
 
 #[tokio::test]
 async fn say_hello() {
-    let codec = UnitCodec::default();
+    let codec = ProstCodec::new();
     let mut grpc = Grpc::new(codec);
 
     let request = http::Request::new(Body(Vec::new()));
