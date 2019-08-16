@@ -263,7 +263,7 @@ fn generate_client_streaming(
     // TODO: parse response stream type, if it is a concrete type then use that
     // as the ResponseStream type, if it is a impl Trait then we need to box.
     quote! {
-        struct #service_ident(pub std::sync::Arc<#service_impl>);
+        struct #service_ident ;//(pub std::sync::Arc<#service_impl>);
 
         impl<S> tonic::server::ClientStreamingService<S> for #service_ident
         where S: Stream<Item = Result<#request, Status>> + Unpin + Send + 'static {
@@ -271,12 +271,13 @@ fn generate_client_streaming(
             type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<S>) -> Self::Future {
-                let inner = self.0.clone();
-                let fut = async move {
-                    inner.#method_ident(request).await
+                // let inner = self.0.clone();
+                // let fut = async move {
+                //     inner.#method_ident(request).await
 
-                };
-                Box::pin(fut)
+                // };
+                // Box::pin(fut)
+                unimplemented!()
             }
         }
 

@@ -37,10 +37,12 @@ struct SayHelloStream;
 impl<S> ClientStreamingService<S> for SayHelloStream 
 where S: Stream<Item = Result<HelloRequest, Status>> + Unpin + Send + 'static {
     type Response = HelloReply;
-    type Future = impl Future<Output = Result<Response<Self::Response>, Status>>;
+    // type Future = impl Future<Output = Result<Response<Self::Response>, Status>>;
+    type Future = Pin<Box<dyn Future<Output = Result<Response<Self::Response>, Status>> + Send + 'static>>;
 
     fn call(&mut self, _: Request<S>) -> Self::Future {
-        async move { Ok(Response::new(HelloReply { message: "hello".into()})) }
+        let fut = async move { Ok(Response::new(HelloReply { message: "hello".into()})) };
+        Box::pin(fut)
     }
 }
 
