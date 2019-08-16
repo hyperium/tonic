@@ -6,6 +6,10 @@ use tokio_buf::BufStream;
 use tonic::codec::UnitCodec;
 use tonic::server::*;
 use tonic::{Request, Response, Status};
+use std::pin::Pin;
+use futures_core::Stream;
+
+type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + 'static>>;
 
 struct SayHello;
 
@@ -18,6 +22,18 @@ impl UnaryService<()> for SayHello {
     }
 }
 
+struct SayHelloStream;
+
+impl<S> ClientStreamingService<S> for SayHelloStream 
+where S: Stream{
+    type Response = ();
+    type Future = impl Future<Output = Result<Response<Self::Response>, Status>>;
+
+    fn call(&mut self, _: Request<S>) -> Self::Future {
+        async move { Ok(Response::new(())) }
+    }
+}
+
 #[tokio::test]
 async fn say_hello() {
     let codec = UnitCodec::default();
@@ -25,6 +41,9 @@ async fn say_hello() {
 
     let request = http::Request::new(Body(Vec::new()));
     grpc.unary(SayHello, request).await;
+
+    let request = http::Request::new(Body(Vec::new()));
+    grpc.client_streaming(SayHelloStream, request).await;
 }
 
 #[derive(Debug, Default, Clone)]

@@ -43,6 +43,8 @@ pub mod _codegen {
 
     pub type BoxFuture<T, E> =
         self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
+    pub type BoxStream<T> =
+        self::Pin<Box<dyn futures_core::Stream<Item = Result<T, crate::Status>> + Send + 'static>>;
 
     pub mod http {
         pub use http::*;

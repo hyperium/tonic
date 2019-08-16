@@ -14,6 +14,10 @@ path = "src/helloworld/server.rs"
 # name = "helloworld-client"
 # path = "src/helloworld/client.rs"
 
+[[bin]]
+name = "routeguide-server"
+path = "src/routeguide/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic" }
 tower-h2 = { path = "../tower-h2" }

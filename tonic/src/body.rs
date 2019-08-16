@@ -98,6 +98,7 @@ impl Body for BoxAsyncBody {
     }
 }
 
+// TODO: refactor this to accept an !Unpin stream
 #[derive(Debug)]
 pub struct AsyncBody<S> {
     inner: S,

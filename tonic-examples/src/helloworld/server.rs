@@ -1,7 +1,7 @@
 #![feature(async_await)]
 
 use std::time::Duration;
-use tokio::{timer::Delay, net::TcpListener};
+use tokio::{net::TcpListener, timer::Delay};
 use tonic::{Request, Response, Status};
 use tower_h2::Server;
 
@@ -16,7 +16,10 @@ pub struct MyGreeter {
 
 #[tonic::server(service = "helloworld.Greeter", proto = "hello_world")]
 impl MyGreeter {
-    pub async fn say_hello(&self, request: Request<hello_world::HelloRequest>) -> Result<Response<hello_world::HelloReply>, Status> {
+    pub async fn say_hello(
+        &self,
+        request: Request<hello_world::HelloRequest>,
+    ) -> Result<Response<hello_world::HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
         let string = &self.data;
@@ -27,7 +30,7 @@ impl MyGreeter {
         println!("My data: {:?}", string);
 
         Delay::new(when).await;
-        
+
         let reply = hello_world::HelloReply {
             message: "Zomg, it works!".into(),
         };
