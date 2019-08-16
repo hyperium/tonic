@@ -6,6 +6,7 @@ use futures_util::{future, StreamExt};
 use http_body::Body;
 use prost::Message;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use tokio_codec::{Decoder, Encoder};
 use tracing::{debug, trace};
 
@@ -20,6 +21,26 @@ pub trait Codec {
 
     fn encoder(&mut self) -> Self::Encoder;
     fn decoder(&mut self) -> Self::Decoder;
+}
+
+pub struct Streaming<T> {
+    inner: Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + 'static>>,
+}
+
+impl<T> Streaming<T> {
+    pub fn new(inner: impl Stream<Item = Result<T, Status>> + Send + 'static) -> Self {
+        let inner = Box::pin(inner);
+        Self { inner }
+    }
+}
+
+use std::task::{Context, Poll};
+impl<T> Stream for Streaming<T> {
+    type Item = Result<T, Status>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        Pin::new(&mut self.inner).poll_next(cx)
+    }
 }
 
 pub fn encode<T, U>(mut encoder: T, mut source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>

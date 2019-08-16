@@ -1,11 +1,11 @@
 use crate::{
     body::{BoxAsyncBody, BytesBuf},
-    codec::{decode, encode, Codec},
+    codec::{decode, encode, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
 use futures_core::{Stream, TryStream};
-use futures_util::{future, stream, StreamExt, TryStreamExt};
+use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
 use std::pin::Pin;
 
@@ -83,18 +83,19 @@ where
         self.map_response(response).map(BoxAsyncBody::new_try)
     }
 
+//BoxStream<T::Decode>,
     pub async fn client_streaming<S, B>(
         &mut self,
         mut service: S,
         req: http::Request<B>,
     ) -> http::Response<BoxAsyncBody>
     where
-        S: ClientStreamingService<BoxStream<T::Decode>, Response = T::Encode>,
-        T::Decode: Send,
+        S: ClientStreamingService<Streaming<T::Decode>, Response = T::Encode>,
+        T::Decode: Send + 'static,
         T::Decoder: Send + 'static,
         B: Body + Send + 'static,
-        B::Data: Send,
-        B::Error: Into<crate::Error> + Send,
+        B::Data: Send + 'static,
+        B::Error: Into<crate::Error> + Send + 'static,
     {
         let request = self.map_request_streaming(req);
         let response = service
@@ -110,7 +111,7 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxAsyncBody>
     where
-        S: StreamingService<BoxStream<T::Decode>, Response = T::Encode> + Send,
+        S: StreamingService<Streaming<T::Decode>, Response = T::Encode> + Send,
         S::ResponseStream: Send + 'static,
         B: Body + Send + 'static,
         B::Data: Send,
@@ -146,7 +147,7 @@ where
     fn map_request_streaming<B>(
         &mut self,
         request: http::Request<B>,
-    ) -> Request<BoxStream<T::Decode>>
+    ) -> Request<Streaming<T::Decode>>
     where
         B: Body + Send + 'static,
         B::Data: Send,
@@ -154,7 +155,7 @@ where
     {
         Request::from_http(
             request.map(|b| {
-                decode(self.codec.decoder(), b).into_stream().boxed() as BoxStream<T::Decode>
+                Streaming::new(decode(self.codec.decoder(), b).into_stream())
             }),
         )
     }

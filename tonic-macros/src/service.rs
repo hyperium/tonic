@@ -148,7 +148,12 @@ fn generate_methods(service: &ServiceDef) -> TokenStream {
                 &service.proto_path,
             ),
 
-            _ => unimplemented!("method type"),
+            (true, true) => generate_streaming(
+                method,
+                ident.clone(),
+                service.name.clone(),
+                &service.proto_path,
+            ),
         };
 
         let method = quote! {
@@ -228,7 +233,10 @@ fn generate_server_streaming(
             fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
                 let inner = self.0.clone();
                 let fut = async move {
-                    inner.#method_ident(request).await
+                    inner.#method_ident(request)
+                        .await
+                        .map(|r|
+                            r.map(|s| Box::pin(s) as Pin<Box<dyn Stream<Item = Result<Self::Response, Status>> + Send>>))
 
                 };
                 Box::pin(fut)
@@ -260,10 +268,8 @@ fn generate_client_streaming(
     let response: Path =
         syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
 
-    // TODO: parse response stream type, if it is a concrete type then use that
-    // as the ResponseStream type, if it is a impl Trait then we need to box.
     quote! {
-        struct #service_ident ;//(pub std::sync::Arc<#service_impl>);
+        struct #service_ident(pub std::sync::Arc<#service_impl>);
 
         impl<S> tonic::server::ClientStreamingService<S> for #service_ident
         where S: Stream<Item = Result<#request, Status>> + Unpin + Send + 'static {
@@ -271,13 +277,12 @@ fn generate_client_streaming(
             type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<S>) -> Self::Future {
-                // let inner = self.0.clone();
-                // let fut = async move {
-                //     inner.#method_ident(request).await
+                let inner = self.0.clone();
+                let fut = async move {
+                    inner.#method_ident(request).await
 
-                // };
-                // Box::pin(fut)
-                unimplemented!()
+                };
+                Box::pin(fut)
             }
         }
 
@@ -287,6 +292,54 @@ fn generate_client_streaming(
             let codec = tonic::codec::ProstCodec::new();
             let mut grpc = tonic::server::Grpc::new(codec);
             let res = grpc.client_streaming(method, req).await;
+            Ok(res)
+        };
+
+        Box::pin(fut)
+    }
+}
+
+fn generate_streaming(
+    method: &Method,
+    method_ident: Ident,
+    service_impl: Path,
+    proto_path: &str,
+) -> TokenStream {
+    let service_ident = Ident::new(&method.proto_name, Span::call_site());
+
+    let request: Path = syn::parse_str(&format!("{}::{}", proto_path, method.input_type)).unwrap();
+    let response: Path =
+        syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
+
+    // TODO: parse response stream type, if it is a concrete type then use that
+    // as the ResponseStream type, if it is a impl Trait then we need to box.
+    quote! {
+        struct #service_ident(pub std::sync::Arc<#service_impl>);
+
+        impl<S> tonic::server::StreamingService<S> for #service_ident
+        where S: Stream<Item = Result<#request, Status>> + Unpin + Send + 'static {
+            type Response = #response;
+            type ResponseStream = Pin<Box<dyn Stream<Item = Result<Self::Response, Status>> + Send>>;
+            type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
+
+            fn call(&mut self, request: tonic::Request<S>) -> Self::Future {
+                let inner = self.0.clone();
+                let fut = async move {
+                    inner.#method_ident(request).await
+                        .map(|r|
+                            r.map(|s| Box::pin(s) as Pin<Box<dyn Stream<Item = Result<Self::Response, Status>> + Send>>))
+
+                };
+                Box::pin(fut)
+            }
+        }
+
+        let inner = self.inner.clone();
+        let fut = async move {
+            let method = #service_ident(inner);
+            let codec = tonic::codec::ProstCodec::new();
+            let mut grpc = tonic::server::Grpc::new(codec);
+            let res = grpc.streaming(method, req).await;
             Ok(res)
         };
 
