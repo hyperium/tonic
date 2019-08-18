@@ -14,7 +14,7 @@ tower-service = { git = "http://github.com/tower-rs/tower", branch = "std-future
 tower-util = { git = "http://github.com/tower-rs/tower", branch = "std-future" }
 h2 = { git = "https://github.com/LucioFranco/h2", branch = "lucio/tower-h2-hack" }
 http = "0.1"
-http-body = { git =  "https://github.com/hyperium/http-body", branch = "std-future" }
+http-body = { git =  "https://github.com/hyperium/http-body", branch = "lucio/pin" }
 log = "0.4"
 
 [dev-dependencies]

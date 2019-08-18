@@ -60,7 +60,8 @@ where
                 yield Ok(item);
             }
 
-            let chunk = match future::poll_fn(|cx| source.poll_data(cx)).await {
+            // FIXME: Figure out how to verify that this is safe
+            let chunk = match future::poll_fn(|cx| unsafe { std::pin::Pin::new_unchecked(&mut source) }.poll_data(cx)).await {
                 Some(Ok(d)) => Some(d),
                 Some(Err(e)) => {
                     let err = e.into();

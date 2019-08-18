@@ -1,5 +1,5 @@
 use crate::{
-    body::{BoxAsyncBody, BytesBuf},
+    body::{BytesBuf, BoxBody},
     codec::{decode, encode, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
@@ -31,7 +31,7 @@ where
         &mut self,
         mut service: S,
         req: http::Request<B>,
-    ) -> http::Response<BoxAsyncBody>
+    ) -> http::Response<BoxBody>
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
         B: Body + Send + 'static,
@@ -45,7 +45,7 @@ where
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(Err(
                         status,
                     ))
-                    .map(BoxAsyncBody::new_try);
+                    .map(BoxBody::from_stream);
             }
         };
 
@@ -54,14 +54,14 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response).map(BoxAsyncBody::new_try)
+        self.map_response(response).map(BoxBody::from_stream)
     }
 
     pub async fn server_streaming<S, B>(
         &mut self,
         mut service: S,
         req: http::Request<B>,
-    ) -> http::Response<BoxAsyncBody>
+    ) -> http::Response<BoxBody>
     where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
         S::ResponseStream: Send + 'static,
@@ -74,13 +74,13 @@ where
             Err(status) => {
                 return self
                     .map_response::<S::ResponseStream>(Err(status))
-                    .map(BoxAsyncBody::new_try);
+                    .map(BoxBody::from_stream);
             }
         };
 
         let response = service.call(request).await;
 
-        self.map_response(response).map(BoxAsyncBody::new_try)
+        self.map_response(response).map(BoxBody::from_stream)
     }
 
     //BoxStream<T::Decode>,
@@ -88,7 +88,7 @@ where
         &mut self,
         mut service: S,
         req: http::Request<B>,
-    ) -> http::Response<BoxAsyncBody>
+    ) -> http::Response<BoxBody>
     where
         S: ClientStreamingService<Streaming<T::Decode>, Response = T::Encode>,
         T::Decode: Send + 'static,
@@ -102,14 +102,14 @@ where
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-        self.map_response(response).map(BoxAsyncBody::new_try)
+        self.map_response(response).map(BoxBody::from_stream)
     }
 
     pub async fn streaming<S, B>(
         &mut self,
         mut service: S,
         req: http::Request<B>,
-    ) -> http::Response<BoxAsyncBody>
+    ) -> http::Response<BoxBody>
     where
         S: StreamingService<Streaming<T::Decode>, Response = T::Encode> + Send,
         S::ResponseStream: Send + 'static,
@@ -119,7 +119,7 @@ where
     {
         let request = self.map_request_streaming(req);
         let response = service.call(request).await;
-        self.map_response(response).map(BoxAsyncBody::new_try)
+        self.map_response(response).map(BoxBody::from_stream)
     }
 
     async fn map_request_unary<B>(

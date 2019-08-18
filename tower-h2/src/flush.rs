@@ -13,7 +13,7 @@ where
     S: Body,
 {
     h2: SendStream<SendBuf<S::Data>>,
-    body: S,
+    body: Pin<Box<dyn Body<Data = S::Data, Error = S::Error> + Send + 'static>>,
     state: FlushState,
 }
 
@@ -32,13 +32,13 @@ enum DataOrTrailers<B> {
 
 impl<S> Flush<S>
 where
-    S: Body,
+    S: Body + Send + 'static,
     S::Error: Into<Box<dyn std::error::Error>>,
 {
     pub fn new(src: S, dst: SendStream<SendBuf<S::Data>>) -> Self {
         Flush {
             h2: dst,
-            body: src,
+            body: Box::pin(src),
             state: FlushState::Data,
         }
     }
@@ -50,7 +50,7 @@ where
         loop {
             match ready!(self.poll_body(cx)) {
                 Some(Ok(Data(buf))) => {
-                    let eos = self.body.is_end_stream();
+                    let eos = Pin::new(&mut self.body).is_end_stream();
 
                     self.h2.send_data(SendBuf::new(buf), eos)?;
 
@@ -125,7 +125,7 @@ where
                         }
                     }
 
-                    let item = match ready!(self.body.poll_data(cx)) {
+                    let item = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
                         Some(Ok(d)) => Some(d),
                         Some(Err(err)) => {
                             let err = err.into();
@@ -162,13 +162,14 @@ where
                             // before we get a RST_STREAM.
                         }
                     }
-                    let trailers = ready!(self.body.poll_trailers(cx).map_err(|err| {
-                        let err = err.into();
-                        debug!("user body error from poll_trailers: {}", err);
-                        let reason = crate::error::reason_from_dyn_error(&*err);
-                        self.h2.send_reset(reason);
-                        reason
-                    }))?;
+                    let trailers =
+                        ready!(Pin::new(&mut self.body).poll_trailers(cx).map_err(|err| {
+                            let err = err.into();
+                            debug!("user body error from poll_trailers: {}", err);
+                            let reason = crate::error::reason_from_dyn_error(&*err);
+                            self.h2.send_reset(reason);
+                            reason
+                        }))?;
                     self.state = FlushState::Done;
                     if let Some(trailers) = trailers {
                         return Some(Ok(DataOrTrailers::Trailers(trailers))).into();
@@ -182,7 +183,7 @@ where
 
 impl<S> Future for Flush<S>
 where
-    S: Body + Unpin,
+    S: Body + Send + 'static,
     S::Error: Into<Box<dyn std::error::Error>>,
 {
     type Output = Result<(), ()>;

@@ -25,7 +25,7 @@ pub fn client(attr: TokenStream) -> TokenStream {
         }
 
         impl<T> #service_ident <T>
-        where T: tonic::GrpcService<tonic::body::BoxAsyncBody>,
+        where T: tonic::GrpcService<tonic::body::BoxBody>,
               T::ResponseBody: tonic::body::Body + tonic::_codegen::HttpBody + Send + 'static,
               <T::ResponseBody as tonic::_codegen::HttpBody>::Error: Into<tonic::error::Error> + Send,
               <T::ResponseBody as tonic::_codegen::HttpBody>::Data: Send, {
@@ -35,6 +35,14 @@ pub fn client(attr: TokenStream) -> TokenStream {
             }
 
             #methods
+        }
+
+        impl<T: Clone> Clone for #service_ident <T> {
+            fn clone(&self) -> Self {
+                Self {
+                    inner: self.inner.clone(),
+                }
+            }
         }
     };
 

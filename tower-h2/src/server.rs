@@ -86,10 +86,10 @@ pub async fn handle_request<B>(
     B::Data: Unpin,
     B::Error: Into<Box<dyn std::error::Error>>,
 {
-    let (parts, body) = response.into_parts();
+    let (parts, mut body) = response.into_parts();
 
     // Check if the response is imemdiately an end-of-stream.
-    let eos = body.is_end_stream();
+    let eos = std::pin::Pin::new(&mut body).is_end_stream();
 
     let response = Response::from_parts(parts, ());
 

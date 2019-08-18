@@ -16,7 +16,7 @@ mod response;
 mod service;
 mod status;
 
-pub use body::{BoxAsyncBody, BoxBody};
+pub use body::BoxBody;
 pub use request::Request;
 pub use response::Response;
 pub use service::GrpcService;

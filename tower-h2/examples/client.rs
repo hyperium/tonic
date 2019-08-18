@@ -3,8 +3,8 @@
 use http::Request;
 use std::task::{Context, Poll};
 use tokio::net::TcpStream;
-use tokio_buf::BufStream;
 use tower_h2::Connection;
+use std::pin::Pin;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -30,11 +30,14 @@ impl From<Vec<u8>> for Body {
     }
 }
 
-impl BufStream for Body {
-    type Item = std::io::Cursor<Vec<u8>>;
+impl http_body::Body for Body {
+    type Data = std::io::Cursor<Vec<u8>>;
     type Error = std::io::Error;
 
-    fn poll_buf(&mut self, _cx: &mut Context<'_>) -> Poll<Option<Result<Self::Item, Self::Error>>> {
+    fn poll_data(
+        mut self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         if self.0.is_empty() {
             return None.into();
         }
@@ -45,5 +48,12 @@ impl BufStream for Body {
         let buf = io::Cursor::new(bytes);
 
         Some(Ok(buf)).into()
+    }
+
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
+        Ok(None).into()
     }
 }

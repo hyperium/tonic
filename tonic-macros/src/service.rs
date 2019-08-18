@@ -95,7 +95,7 @@ pub(crate) fn generate(service: ServiceDef) -> TokenStream {
         }
 
         impl Service<http::Request<tower_h2::RecvBody>> for #service_server {
-            type Response = http::Response<tonic::BoxAsyncBody>;
+            type Response = http::Response<tonic::BoxBody>;
             type Error = tonic::error::Never;
             type Future = BoxFuture<Self::Response, Self::Error>;
 

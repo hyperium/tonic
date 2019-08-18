@@ -57,10 +57,10 @@ where
     }
 
     fn call(&mut self, request: Request<B>) -> Self::Future {
-        let (parts, body) = request.into_parts();
+        let (parts, mut body) = request.into_parts();
         let request = Request::from_parts(parts, ());
 
-        let eos = body.is_end_stream();
+        let eos = Pin::new(&mut body).is_end_stream();
 
         let res = self.client.send_request(request, eos);
 

@@ -1,6 +1,7 @@
 use bytes::{Buf, Bytes, BytesMut};
 use futures_util::TryStreamExt;
 use http_body::Body;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 
 /// Allows a stream to be read from the remote.
@@ -33,11 +34,14 @@ impl Body for RecvBody {
     type Data = Data;
     type Error = h2::Error;
 
-    fn is_end_stream(&self) -> bool {
+    fn is_end_stream(self: Pin<&mut Self>) -> bool {
         self.inner.is_end_stream()
     }
 
-    fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Option<Result<Self::Data, h2::Error>>> {
+    fn poll_data(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, h2::Error>>> {
         let data = match futures_util::ready!(self.inner.try_poll_next_unpin(cx)) {
             Some(Ok(bytes)) => {
                 self.inner
@@ -54,7 +58,7 @@ impl Body for RecvBody {
     }
 
     fn poll_trailers(
-        &mut self,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<http::HeaderMap>, h2::Error>> {
         match futures_util::ready!(self.inner.poll_trailers(cx)) {

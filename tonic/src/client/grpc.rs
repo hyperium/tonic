@@ -1,5 +1,5 @@
 use crate::{
-    body::{Body, BoxAsyncBody},
+    body::{Body, BoxBody},
     codec::{decode, encode, Codec, Streaming},
     Code, GrpcService, Request, Response, Status,
 };
@@ -27,7 +27,7 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<M2>, Status>
     where
-        T: GrpcService<BoxAsyncBody>,
+        T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
         <T::ResponseBody as HttpBody>::Data: Send,
@@ -48,7 +48,7 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<M2>, Status>
     where
-        T: GrpcService<BoxAsyncBody>,
+        T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
         <T::ResponseBody as HttpBody>::Data: Send,
@@ -78,7 +78,7 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<Streaming<M2>>, Status>
     where
-        T: GrpcService<BoxAsyncBody>,
+        T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
         <T::ResponseBody as HttpBody>::Data: Send,
@@ -99,7 +99,7 @@ impl<T> Grpc<T> {
         mut codec: C,
     ) -> Result<Response<Streaming<M2>>, Status>
     where
-        T: GrpcService<BoxAsyncBody>,
+        T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
         <T::ResponseBody as HttpBody>::Data: Send,
@@ -116,8 +116,8 @@ impl<T> Grpc<T> {
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
         let request = request
-            .map(|s| encode(codec.encoder(), Box::pin(s)))
-            .map(BoxAsyncBody::new_try);
+            .map(|s| encode(codec.encoder(), Box::pin(s)).into_stream())
+            .map(BoxBody::from_stream);
 
         let mut request = request.into_http(uri);
 
@@ -153,5 +153,13 @@ impl<T> Grpc<T> {
             .map(Streaming::new);
 
         Ok(Response::from_http(response))
+    }
+}
+
+impl<T: Clone> Clone for Grpc<T> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
     }
 }
