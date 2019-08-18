@@ -1,6 +1,6 @@
 use crate::{
     body::{BoxBody, BytesBuf},
-    codec::{decode, encode, Codec, Streaming},
+    codec::{decode_request, encode, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
@@ -132,7 +132,7 @@ where
         B::Error: Into<crate::Error> + Send,
     {
         let (parts, body) = request.into_parts();
-        let stream = decode(self.codec.decoder(), body).into_stream();
+        let stream = decode_request(self.codec.decoder(), body).into_stream();
 
         futures_util::pin_mut!(stream);
 
@@ -154,7 +154,7 @@ where
         B::Error: Into<crate::Error> + Send,
     {
         Request::from_http(
-            request.map(|b| Streaming::new(decode(self.codec.decoder(), b).into_stream())),
+            request.map(|b| Streaming::new(decode_request(self.codec.decoder(), b).into_stream())),
         )
     }
 

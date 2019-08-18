@@ -1,6 +1,6 @@
 use crate::{
     body::{Body, BoxBody},
-    codec::{decode, encode, Codec, Streaming},
+    codec::{decode_response, decode_empty, encode, Codec, Streaming},
     Code, GrpcService, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -136,18 +136,29 @@ impl<T> Grpc<T> {
             .await
             .map_err(|err| Status::from_error(&*(err.into())))?;
 
-        // TODO: implement decode with status
-        let _status_code = response.status();
+        let status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());
 
-        if let Some(status) = trailers_only_status {
+        let expect_additional_trailers = if let Some(status) = trailers_only_status {
             if status.code() != Code::Ok {
                 return Err(status);
             }
-        }
+
+            true
+        } else {
+            false
+        };
 
         let response = response
-            .map(|b| decode(codec.decoder(), b).into_stream())
+            .map(|b| {
+                if expect_additional_trailers {
+                    future::Either::Left(
+                        decode_response(codec.decoder(), b, status_code).into_stream(),
+                    )
+                } else {
+                    future::Either::Right(decode_empty(codec.decoder(), b).into_stream())
+                }
+            })
             .map(Streaming::new);
 
         Ok(Response::from_http(response))

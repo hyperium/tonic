@@ -2,11 +2,51 @@ use crate::{Code, Status};
 use bytes::{Buf, BufMut, BytesMut, IntoBuf};
 use futures_core::{Stream, TryStream};
 use futures_util::future;
-// use http::StatusCode;
+use http::StatusCode;
 use http_body::Body;
 use std::pin::Pin;
 use tokio_codec::Decoder;
 use tracing::{debug, trace};
+
+pub fn decode_request<T, B>(
+    decoder: T,
+    source: B,
+) -> impl TryStream<Ok = T::Item, Error = Status> + 'static
+where
+    T: Decoder<Error = Status> + 'static,
+    T::Item: Unpin + 'static,
+    B: Body + 'static,
+    B::Error: Into<crate::Error>,
+{
+    decode(decoder, source, Direction::Request)
+}
+
+pub fn decode_response<T, B>(
+    decoder: T,
+    source: B,
+    status: StatusCode,
+) -> impl TryStream<Ok = T::Item, Error = Status> + 'static
+where
+    T: Decoder<Error = Status> + 'static,
+    T::Item: Unpin + 'static,
+    B: Body + 'static,
+    B::Error: Into<crate::Error>,
+{
+    decode(decoder, source, Direction::Response(status))
+}
+
+pub fn decode_empty<T, B>(
+    decoder: T,
+    source: B,
+) -> impl TryStream<Ok = T::Item, Error = Status> + 'static
+where
+    T: Decoder<Error = Status> + 'static,
+    T::Item: Unpin + 'static,
+    B: Body + 'static,
+    B::Error: Into<crate::Error>,
+{
+    decode(decoder, source, Direction::EmptyResponse)
+}
 
 pub struct Streaming<T> {
     inner: Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + 'static>>,
@@ -34,15 +74,16 @@ enum State {
     ReadBody { compression: bool, len: usize },
 }
 
-// enum Direction {
-//     Request,
-//     Response(StatusCode),
-//     EmptyResponse,
-// }
+enum Direction {
+    Request,
+    Response(StatusCode),
+    EmptyResponse,
+}
 
-pub fn decode<T, B>(
+fn decode<T, B>(
     mut decoder: T,
     mut source: B,
+    direction: Direction,
 ) -> impl TryStream<Ok = T::Item, Error = Status> + 'static
 where
     T: Decoder<Error = Status> + 'static,
@@ -85,8 +126,22 @@ where
                     break;
                 }
             }
+        }
 
-            // TODO: poll_trailers for Response status code
+        if let Direction::Response(status) = direction {
+            let trailer = future::poll_fn(|cx| unsafe { std::pin::Pin::new_unchecked(&mut source) }.poll_trailers(cx));
+            let trailer = match trailer.await {
+                Ok(trailer) => {
+                    crate::status::infer_grpc_status(trailer, status)?;
+                },
+                Err(e) => {
+                    let err = e.into();
+                    debug!("decoder inner trailers error: {:?}", err);
+                    let status = Status::from_error(&*err);
+                    Err(status)?;
+                },
+                Ok(None) => return,
+            };
         }
     }
 }

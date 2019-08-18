@@ -2,7 +2,7 @@ mod decode;
 mod encode;
 mod prost;
 
-pub use self::decode::{decode, Streaming};
+pub use self::decode::{decode_empty, decode_request, decode_response, Streaming};
 pub use self::encode::encode;
 pub use self::prost::ProstCodec;
 

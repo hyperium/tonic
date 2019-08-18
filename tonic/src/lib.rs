@@ -1,5 +1,5 @@
 #![feature(async_await)]
-#![recursion_limit = "256"]
+#![recursion_limit = "512"]
 
 //! gRPC implementation
 
