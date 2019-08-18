@@ -1,5 +1,4 @@
 use bytes::{Buf, Bytes, BytesMut};
-use futures_core::Stream;
 use futures_util::TryStreamExt;
 use http_body::Body;
 use std::task::{Context, Poll};

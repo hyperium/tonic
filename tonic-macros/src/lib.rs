@@ -3,11 +3,43 @@
 
 extern crate proc_macro;
 
+mod client;
 mod service;
 
 use proc_macro::TokenStream;
+use quote::quote;
 use serde::Deserialize;
 use syn::{AttributeArgs, ItemImpl};
+
+#[proc_macro]
+pub fn client(attr: TokenStream) -> TokenStream {
+    let args = syn::parse_macro_input!(attr as AttributeArgs);
+    let (service, proto_path) = load_service(args);
+
+    let service_ident = quote::format_ident!("{}Client", service.name);
+    let methods = client::generate(service, proto_path);
+
+    let output = quote! {
+        pub struct #service_ident <T> {
+            inner: tonic::client::Grpc<T>,
+        }
+
+        impl<T> #service_ident <T>
+        where T: tonic::GrpcService<tonic::body::BoxAsyncBody>,
+              T::ResponseBody: tonic::body::Body + tonic::_codegen::HttpBody + Send + 'static,
+              <T::ResponseBody as tonic::_codegen::HttpBody>::Error: Into<tonic::error::Error> + Send,
+              <T::ResponseBody as tonic::_codegen::HttpBody>::Data: Send, {
+            pub fn new(inner: T) -> Self {
+                let inner = tonic::client::Grpc::new(inner);
+                Self { inner }
+            }
+
+            #methods
+        }
+    };
+
+    TokenStream::from(output)
+}
 
 #[proc_macro_attribute]
 pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {

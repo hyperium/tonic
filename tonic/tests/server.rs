@@ -1,13 +1,13 @@
 #![feature(async_await, type_alias_impl_trait)]
 
+use futures_core::Stream;
 use std::future::Future;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_buf::BufStream;
 use tonic::codec::ProstCodec;
 use tonic::server::*;
 use tonic::{Request, Response, Status};
-use std::pin::Pin;
-use futures_core::Stream;
 
 #[derive(Clone, PartialEq, prost::Message)]
 pub struct HelloRequest {
@@ -28,20 +28,31 @@ impl UnaryService<HelloRequest> for SayHello {
     type Future = impl Future<Output = Result<Response<Self::Response>, Status>>;
 
     fn call(&mut self, _request: Request<HelloRequest>) -> Self::Future {
-        async move { Ok(Response::new(HelloReply { message: "hello".into()})) }
+        async move {
+            Ok(Response::new(HelloReply {
+                message: "hello".into(),
+            }))
+        }
     }
 }
 
 struct SayHelloStream;
 
-impl<S> ClientStreamingService<S> for SayHelloStream 
-where S: Stream<Item = Result<HelloRequest, Status>> + Unpin + Send + 'static {
+impl<S> ClientStreamingService<S> for SayHelloStream
+where
+    S: Stream<Item = Result<HelloRequest, Status>> + Unpin + Send + 'static,
+{
     type Response = HelloReply;
     // type Future = impl Future<Output = Result<Response<Self::Response>, Status>>;
-    type Future = Pin<Box<dyn Future<Output = Result<Response<Self::Response>, Status>> + Send + 'static>>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Response<Self::Response>, Status>> + Send + 'static>>;
 
     fn call(&mut self, _: Request<S>) -> Self::Future {
-        let fut = async move { Ok(Response::new(HelloReply { message: "hello".into()})) };
+        let fut = async move {
+            Ok(Response::new(HelloReply {
+                message: "hello".into(),
+            }))
+        };
         Box::pin(fut)
     }
 }

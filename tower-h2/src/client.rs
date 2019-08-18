@@ -1,6 +1,6 @@
 use crate::{buf::SendBuf, flush::Flush, recv_body::RecvBody};
 use futures_util::{future, FutureExt, TryFutureExt};
-use h2::{client::SendRequest, RecvStream};
+use h2::client::SendRequest;
 use http::{Request, Response};
 use http_body::Body;
 use std::future::Future;

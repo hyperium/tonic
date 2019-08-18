@@ -83,7 +83,7 @@ where
         self.map_response(response).map(BoxAsyncBody::new_try)
     }
 
-//BoxStream<T::Decode>,
+    //BoxStream<T::Decode>,
     pub async fn client_streaming<S, B>(
         &mut self,
         mut service: S,
@@ -154,9 +154,7 @@ where
         B::Error: Into<crate::Error> + Send,
     {
         Request::from_http(
-            request.map(|b| {
-                Streaming::new(decode(self.codec.decoder(), b).into_stream())
-            }),
+            request.map(|b| Streaming::new(decode(self.codec.decoder(), b).into_stream())),
         )
     }
 

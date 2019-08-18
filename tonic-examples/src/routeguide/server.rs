@@ -3,19 +3,22 @@
 mod data;
 
 use futures::{Stream, StreamExt};
-use tokio::{net::TcpListener, sync::{mpsc, Lock}};
-use tonic::{Request, Response, Status};
-use tower_h2::Server;
-use std::sync::Arc;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
+use std::sync::Arc;
 use std::time::Instant;
+use tokio::{
+    net::TcpListener,
+    sync::{mpsc, Lock},
+};
+use tonic::{Request, Response, Status};
+use tower_h2::Server;
 
 pub mod routeguide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
 }
 
-use routeguide::{Point, Rectangle, Feature, RouteNote, RouteSummary};
+use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
 
 #[derive(Debug)]
 pub struct RouteGuide {
@@ -51,7 +54,7 @@ impl RouteGuide {
         &self,
         request: Request<Rectangle>,
     ) -> Result<Response<mpsc::Receiver<Result<Feature, Status>>>, Status> {
-               use std::thread;
+        use std::thread;
 
         println!("ListFeatures = {:?}", request);
 
@@ -70,22 +73,20 @@ impl RouteGuide {
             println!(" /// done sending");
         });
 
-
         Ok(Response::new(rx))
     }
 
     pub async fn record_route(
         &self,
         request: Request<impl Stream<Item = Result<Point, Status>>>,
-    ) -> Result<Response<RouteSummary>, Status> 
-    {
+    ) -> Result<Response<RouteSummary>, Status> {
         println!("RecordRoute");
-        
+
         let stream = request.into_inner();
 
-        // Pin the inbound stream to the stack so that we can call next on it        
+        // Pin the inbound stream to the stack so that we can call next on it
         futures::pin_mut!(stream);
-        
+
         let mut summary = RouteSummary::default();
         let mut last_point = None;
         let now = Instant::now();
@@ -126,8 +127,6 @@ impl RouteGuide {
 
         let stream = request.into_inner();
         let mut state = self.state.clone();
-
-        
 
         let output = async_stream::try_stream! {
             futures::pin_mut!(stream);

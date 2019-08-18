@@ -4,6 +4,7 @@
 //! gRPC implementation
 
 pub mod body;
+pub mod client;
 pub mod codec;
 #[doc(hidden)]
 pub mod error;
@@ -12,13 +13,15 @@ pub mod server;
 
 mod request;
 mod response;
+mod service;
 mod status;
 
 pub use body::{BoxAsyncBody, BoxBody};
 pub use request::Request;
 pub use response::Response;
+pub use service::GrpcService;
 pub use status::{Code, Status};
-pub use tonic_macros::server;
+pub use tonic_macros::{client, server};
 
 pub(crate) use error::Error;
 
@@ -35,7 +38,9 @@ pub trait GrpcInnerService<Request> {
 #[doc(hidden)]
 
 pub mod _codegen {
+    pub use futures_core::Stream;
     pub use futures_util::future::{ok, Ready};
+    pub use http_body::Body as HttpBody;
     pub use std::future::Future;
     pub use std::pin::Pin;
     pub use std::task::{Context, Poll};

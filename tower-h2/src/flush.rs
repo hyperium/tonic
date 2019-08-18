@@ -96,7 +96,7 @@ where
                             match ready!(self.h2.poll_capacity(cx)) {
                                 Some(Ok(0)) => {}
                                 Some(Ok(_)) => break,
-                                Some(Err(e)) => return panic!("error {:?}", e),
+                                Some(Err(e)) => panic!("error {:?}", e),
                                 None => {
                                     debug!("connection closed early");
                                     // The error shouldn't really matter at this

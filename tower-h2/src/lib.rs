@@ -3,6 +3,8 @@
 #[macro_use]
 extern crate log;
 
+pub mod add_origin;
+
 mod buf;
 mod client;
 mod error;

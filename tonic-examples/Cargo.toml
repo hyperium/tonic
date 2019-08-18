@@ -10,13 +10,17 @@ edition = "2018"
 name = "helloworld-server"
 path = "src/helloworld/server.rs"
 
-# [[bin]]
-# name = "helloworld-client"
-# path = "src/helloworld/client.rs"
+[[bin]]
+name = "helloworld-client"
+path = "src/helloworld/client.rs"
 
 [[bin]]
 name = "routeguide-server"
 path = "src/routeguide/server.rs"
+
+[[bin]]
+name = "routeguide-client"
+path = "src/routeguide/client.rs"
 
 [dependencies]
 tonic = { path = "../tonic" }
@@ -29,6 +33,7 @@ bytes = "0.4"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 async-stream = "0.1"
+http = "0.1"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }

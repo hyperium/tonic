@@ -272,7 +272,7 @@ fn generate_client_streaming(
         struct #service_ident(pub std::sync::Arc<#service_impl>);
 
         impl<S> tonic::server::ClientStreamingService<S> for #service_ident
-        where S: Stream<Item = Result<#request, Status>> + Unpin + Send + 'static {
+        where S: tonic::_codegen::Stream<Item = Result<#request, Status>> + Unpin + Send + 'static {
             type Response = #response;
             type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 

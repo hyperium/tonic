@@ -1,7 +1,7 @@
 use std::fmt;
 
 #[allow(dead_code)]
-pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
+pub type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Debug)]
 #[allow(dead_code)]
