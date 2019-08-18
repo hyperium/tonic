@@ -19,7 +19,7 @@ percent-encoding = "1.0.1"
 tower-service = { git = "https://github.com/tower-rs/tower", branch = "std-future" }
 tokio-codec = "=0.2.0-alpha.1"
 async-stream = "0.1.0"
-http-body = { git = "https://github.com/hyperium/http-body", branch = "lucio/pin" }
+http-body = { git = "https://github.com/hyperium/http-body" }
 pin-project = "0.4.0-alpha.2"
 
 [dev-dependencies]

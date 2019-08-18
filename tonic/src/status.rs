@@ -75,7 +75,7 @@ impl Status {
         Status::new(code, message)
     }
 
-    // TODO: This should probably be made public eventually. Need to decide on
+    // FIXME: This should probably be made public eventually. Need to decide on
     // the exact argument type.
     #[cfg_attr(not(feature = "h2"), allow(dead_code))]
     pub(crate) fn from_error(err: &(dyn Error + 'static)) -> Status {

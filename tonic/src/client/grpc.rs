@@ -59,16 +59,14 @@ impl<T> Grpc<T> {
         M1: Send,
         M2: Send + Unpin + 'static,
     {
-        let response = self.streaming(request, path, codec).await?;
+        let (parts, mut body) = self.streaming(request, path, codec).await?.into_parts();
 
-        // TODO: use response to parts
-        let mut body = response.into_inner();
         let message = body
             .try_next()
             .await?
             .ok_or(Status::new(Code::Internal, "Missing response message."))?;
 
-        Ok(Response::new(message))
+        Ok(Response::from_parts(parts, message))
     }
 
     pub async fn server_streaming<M1, M2, C>(
@@ -127,7 +125,6 @@ impl<T> Grpc<T> {
             .insert(TE, HeaderValue::from_static("trailers"));
 
         // Set the content type
-        // TODO: Don't hard code this here
         let content_type = <C as Codec>::CONTENT_TYPE;
         request
             .headers_mut()
@@ -139,7 +136,8 @@ impl<T> Grpc<T> {
             .await
             .map_err(|err| Status::from_error(&*(err.into())))?;
 
-        let status_code = response.status();
+        // TODO: implement decode with status
+        let _status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());
 
         if let Some(status) = trailers_only_status {

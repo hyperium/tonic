@@ -4,13 +4,14 @@ use futures_core::{Stream, TryStream};
 use futures_util::StreamExt;
 use tokio_codec::Encoder;
 
-pub fn encode<T, U>(mut encoder: T, mut source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
+pub fn encode<T, U>(mut encoder: T, source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
 where
     T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>> + Unpin,
+    U: Stream<Item = Result<T::Item, Status>>,
 {
     async_stream::stream! {
         let mut buf = BytesMut::with_capacity(1024);
+        futures_util::pin_mut!(source);
 
         loop {
             match source.next().await {

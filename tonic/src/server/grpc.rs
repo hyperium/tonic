@@ -1,5 +1,5 @@
 use crate::{
-    body::{BytesBuf, BoxBody},
+    body::{BoxBody, BytesBuf},
     codec::{decode, encode, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
@@ -175,10 +175,9 @@ where
                     http::header::HeaderValue::from_static(T::CONTENT_TYPE),
                 );
 
-                // TODO: find way to pin this to the stack instead
-                let body = Box::pin(body.into_stream());
-                let body = encode(self.codec.encoder(), body).into_stream();
+                let body = encode(self.codec.encoder(), body.into_stream()).into_stream();
 
+                // FIXME: try to return impl Trait?
                 let body = Box::pin(body) as BoxStream<BytesBuf>;
                 http::Response::from_parts(parts, body)
             }

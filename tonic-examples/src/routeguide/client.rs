@@ -1,11 +1,11 @@
 #![feature(async_await)]
 
+use futures::TryStreamExt;
 use route_guide::{Point, RouteNote};
 use std::time::{Duration, Instant};
 use tokio::{net::TcpStream, timer::Interval};
 use tonic::Request;
 use tower_h2::{add_origin::AddOrigin, Connection};
-use futures::TryStreamExt;
 
 mod route_guide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));

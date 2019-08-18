@@ -1,10 +1,10 @@
 #![feature(async_await)]
 
 use http::Request;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::net::TcpStream;
 use tower_h2::Connection;
-use std::pin::Pin;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

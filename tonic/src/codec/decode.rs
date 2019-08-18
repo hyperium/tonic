@@ -2,7 +2,7 @@ use crate::{Code, Status};
 use bytes::{Buf, BufMut, BytesMut, IntoBuf};
 use futures_core::{Stream, TryStream};
 use futures_util::future;
-use http::StatusCode;
+// use http::StatusCode;
 use http_body::Body;
 use std::pin::Pin;
 use tokio_codec::Decoder;
@@ -34,11 +34,11 @@ enum State {
     ReadBody { compression: bool, len: usize },
 }
 
-enum Direction {
-    Request,
-    Response(StatusCode),
-    EmptyResponse,
-}
+// enum Direction {
+//     Request,
+//     Response(StatusCode),
+//     EmptyResponse,
+// }
 
 pub fn decode<T, B>(
     mut decoder: T,
@@ -50,14 +50,13 @@ where
     B: Body + 'static,
     B::Error: Into<crate::Error>,
 {
-    async_stream::stream! {
+    async_stream::try_stream! {
         let mut buf = BytesMut::with_capacity(1024 * 1024);
         let mut state = State::ReadHeader;
 
         loop {
-            // TODO: use try_stream! and ?
-            if let Some(item) = decode_chunk(&mut decoder, &mut buf, &mut state).unwrap() {
-                yield Ok(item);
+            if let Some(item) = decode_chunk(&mut decoder, &mut buf, &mut state)? {
+                yield item;
             }
 
             // FIXME: Figure out how to verify that this is safe
@@ -67,7 +66,7 @@ where
                     let err = e.into();
                     debug!("decoder inner stream error: {:?}", err);
                     let status = Status::from_error(&*err);
-                    yield Err(status);
+                    Err(status)?;
                     break;
                 },
                 None => None,
@@ -78,10 +77,10 @@ where
             } else {
                 if buf.has_remaining_mut() {
                     trace!("unexpected EOF decoding stream");
-                    yield Err(Status::new(
+                    Err(Status::new(
                         Code::Internal,
                         "Unexpected EOF decoding stream.".to_string(),
-                    ));
+                    ))?;
                 } else {
                     break;
                 }

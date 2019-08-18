@@ -2,9 +2,9 @@
 
 use futures_util::future;
 use http::{Request, Response};
+use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::net::TcpListener;
-use std::pin::Pin;
 use tower_h2::{RecvBody, Server};
 use tower_service::Service;
 

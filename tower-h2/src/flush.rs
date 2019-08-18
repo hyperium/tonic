@@ -90,7 +90,6 @@ where
                     self.h2.reserve_capacity(1);
 
                     if self.h2.capacity() == 0 {
-                        // TODO: The loop should not be needed once
                         // carllerche/h2#270 is fixed.
                         loop {
                             match ready!(self.h2.poll_capacity(cx)) {

@@ -40,7 +40,14 @@ impl<T> Response<T> {
         self.message
     }
 
-    #[allow(dead_code)]
+    pub(crate) fn into_parts(self) -> (MetadataMap, T) {
+        (self.metadata, self.message)
+    }
+
+    pub(crate) fn from_parts(metadata: MetadataMap, message: T) -> Self {
+        Self { metadata, message }
+    }
+
     pub(crate) fn from_http(res: http::Response<T>) -> Self {
         let (head, message) = res.into_parts();
         Response {
