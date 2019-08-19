@@ -17,6 +17,7 @@ where
     state: FlushState,
 }
 
+#[derive(Debug)]
 enum FlushState {
     Data,
     Trailers,

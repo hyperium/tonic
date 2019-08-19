@@ -20,6 +20,8 @@ pub fn client(attr: TokenStream) -> TokenStream {
     let methods = client::generate(service, proto_path);
 
     let output = quote! {
+        use tonic::_codegen::*;
+
         pub struct #service_ident <T> {
             inner: tonic::client::Grpc<T>,
         }

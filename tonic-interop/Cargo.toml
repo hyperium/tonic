@@ -1,0 +1,28 @@
+[package]
+name = "tonic-interop"
+version = "0.1.0"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+edition = "2018"
+
+[[bin]]
+name = "client"
+path = "src/bin/client.rs"
+
+[[bin]]
+name = "server"
+path = "src/bin/server.rs"
+
+[dependencies]
+tokio = "=0.2.0-alpha.1"
+tonic = { path = "../tonic" }
+prost = "0.5"
+prost-derive = "0.5"
+bytes = "0.4"
+tower-h2 = { path = "../tower-h2" }
+http = "0.1"
+
+console = "0.7"
+clap = "2.0"
+
+[build-dependencies]
+tonic-build = { path = "../tonic-build" }

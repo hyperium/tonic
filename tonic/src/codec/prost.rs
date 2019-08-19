@@ -27,7 +27,7 @@ where
     type Encoder = ProstEncoder<T>;
     type Decoder = ProstDecoder<U>;
 
-    const CONTENT_TYPE: &'static str = "application/groc+proto";
+    const CONTENT_TYPE: &'static str = "application/grpc+proto";
 
     fn encoder(&mut self) -> Self::Encoder {
         ProstEncoder(PhantomData)

@@ -1,6 +1,6 @@
 use crate::{
     body::{Body, BoxBody},
-    codec::{decode_response, decode_empty, encode, Codec, Streaming},
+    codec::{decode_empty, decode_response, encode, Codec, Streaming},
     Code, GrpcService, Request, Response, Status,
 };
 use futures_core::Stream;
