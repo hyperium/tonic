@@ -1,6 +1,6 @@
 use crate::{
     body::{Body, BoxBody},
-    codec::{decode_empty, decode_response, encode, Codec, Streaming},
+    codec::{decode_empty, decode_response, encode, Codec, EncodeBody, Streaming},
     Code, GrpcService, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -115,7 +115,8 @@ impl<T> Grpc<T> {
 
         let request = request
             .map(|s| encode(codec.encoder(), Box::pin(s)).into_stream())
-            .map(BoxBody::from_stream);
+            .map(EncodeBody::new_client)
+            .map(BoxBody::map_from);
 
         let mut request = request.into_http(uri);
 
@@ -139,14 +140,16 @@ impl<T> Grpc<T> {
         let status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());
 
+        // We do not need to check for trailers if the `grpc-status` header is present
+        // with a valid code.
         let expect_additional_trailers = if let Some(status) = trailers_only_status {
             if status.code() != Code::Ok {
                 return Err(status);
             }
 
-            true
-        } else {
             false
+        } else {
+            true
         };
 
         let response = response

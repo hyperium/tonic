@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 use std::time::Duration;
 use tokio::{net::TcpListener, timer::Delay};
 use tonic::{Request, Response, Status};

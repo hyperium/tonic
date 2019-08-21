@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 use futures_util::future;
 use http::{Request, Response};
 use std::pin::Pin;

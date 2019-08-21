@@ -20,9 +20,11 @@ prost-derive = "0.5"
 bytes = "0.4"
 tower-h2 = { path = "../tower-h2" }
 http = "0.1"
+futures-util-preview = "=0.3.0-alpha.17"
 
 console = "0.7"
 clap = "2.0"
+pretty_env_logger = "0.3"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }

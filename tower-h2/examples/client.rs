@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 use http::Request;
 use std::pin::Pin;
 use std::task::{Context, Poll};

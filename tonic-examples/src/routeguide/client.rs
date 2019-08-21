@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 use futures::TryStreamExt;
 use route_guide::{Point, RouteNote};
 use std::time::{Duration, Instant};

@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 use tokio::net::TcpStream;
 use tower_h2::{add_origin::AddOrigin, Connection};
 

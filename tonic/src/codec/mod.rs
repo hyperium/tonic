@@ -3,7 +3,7 @@ mod encode;
 mod prost;
 
 pub use self::decode::{decode_empty, decode_request, decode_response, Streaming};
-pub use self::encode::encode;
+pub use self::encode::{encode, EncodeBody};
 pub use self::prost::ProstCodec;
 
 use crate::Status;

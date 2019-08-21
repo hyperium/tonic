@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 pub mod client;
 
 pub mod pb {
@@ -8,7 +6,34 @@ pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
 }
 
-use std::fmt;
+use std::{default, fmt, iter};
+
+pub fn client_payload(size: usize) -> pb::Payload {
+    pb::Payload {
+        r#type: default::Default::default(),
+        body: iter::repeat(0u8).take(size).collect(),
+    }
+}
+
+impl pb::ResponseParameters {
+    fn with_size(size: i32) -> Self {
+        pb::ResponseParameters {
+            size,
+            ..Default::default()
+        }
+    }
+}
+
+fn response_length(response: &pb::StreamingOutputCallResponse) -> i32 {
+    match &response.payload {
+        Some(ref payload) => payload.body.len() as i32,
+        None => 0,
+    }
+}
+
+fn response_lengths(responses: &Vec<pb::StreamingOutputCallResponse>) -> Vec<i32> {
+    responses.iter().map(&response_length).collect()
+}
 
 #[derive(Debug)]
 pub enum TestAssertion {

@@ -1,7 +1,12 @@
-use crate::{body::BytesBuf, Status};
+use crate::{body::BytesBuf, Code, Status};
 use bytes::{BufMut, BytesMut, IntoBuf};
 use futures_core::{Stream, TryStream};
-use futures_util::StreamExt;
+use futures_util::{ready, StreamExt, TryStreamExt};
+use http::HeaderMap;
+use http_body::Body;
+use pin_project::pin_project;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use tokio_codec::Encoder;
 
 pub fn encode<T, U>(mut encoder: T, source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
@@ -10,7 +15,7 @@ where
     U: Stream<Item = Result<T::Item, Status>>,
 {
     async_stream::stream! {
-        let mut buf = BytesMut::with_capacity(1024);
+        let mut buf = BytesMut::with_capacity(1024 * 1024);
         futures_util::pin_mut!(source);
 
         loop {
@@ -35,6 +40,91 @@ where
                 },
                 Some(Err(status)) => yield Err(status),
                 None => break,
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
+enum Role {
+    Client,
+    Server,
+}
+
+#[pin_project]
+#[derive(Debug)]
+pub struct EncodeBody<S> {
+    #[pin]
+    inner: S,
+    error: Option<Status>,
+    role: Role,
+}
+
+impl<S> EncodeBody<S>
+where
+    S: Stream<Item = Result<crate::body::BytesBuf, Status>>,
+{
+    pub fn new_client(inner: S) -> Self {
+        Self {
+            inner,
+            error: None,
+            role: Role::Client,
+        }
+    }
+
+    pub fn new_server(inner: S) -> Self {
+        Self {
+            inner,
+            error: None,
+            role: Role::Server,
+        }
+    }
+}
+
+impl<S> Body for EncodeBody<S>
+where
+    S: Stream<Item = Result<crate::body::BytesBuf, Status>>,
+{
+    type Data = BytesBuf;
+    type Error = Status;
+
+    fn is_end_stream(&self) -> bool {
+        false
+    }
+
+    fn poll_data(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        let mut self_proj = self.project();
+        match ready!(self_proj.inner.try_poll_next_unpin(cx)) {
+            Some(Ok(d)) => Some(Ok(d)).into(),
+            Some(Err(status)) => match self_proj.role {
+                Role::Client => Some(Err(status)).into(),
+                Role::Server => {
+                    *self_proj.error = Some(status);
+                    None.into()
+                }
+            },
+            None => None.into(),
+        }
+    }
+
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<Result<Option<HeaderMap>, Status>> {
+        match self.role {
+            Role::Client => Poll::Ready(Ok(None)),
+            Role::Server => {
+                let self_proj = self.project();
+                let status = if let Some(status) = self_proj.error.take() {
+                    status
+                } else {
+                    Status::new(Code::Ok, "")
+                };
+
+                Poll::Ready(Ok(Some(status.to_header_map()?)))
             }
         }
     }

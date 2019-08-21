@@ -34,7 +34,7 @@ impl Body for RecvBody {
     type Data = Data;
     type Error = h2::Error;
 
-    fn is_end_stream(self: Pin<&mut Self>) -> bool {
+    fn is_end_stream(&self) -> bool {
         self.inner.is_end_stream()
     }
 

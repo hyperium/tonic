@@ -4,7 +4,9 @@ use futures_core::{Stream, TryStream};
 use futures_util::future;
 use http::StatusCode;
 use http_body::Body;
+use std::fmt;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use tokio_codec::Decoder;
 use tracing::{debug, trace};
 
@@ -59,12 +61,17 @@ impl<T> Streaming<T> {
     }
 }
 
-use std::task::{Context, Poll};
 impl<T> Stream for Streaming<T> {
     type Item = Result<T, Status>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.inner).poll_next(cx)
+    }
+}
+
+impl<T> fmt::Debug for Streaming<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Streaming")
     }
 }
 
@@ -92,7 +99,7 @@ where
     B::Error: Into<crate::Error>,
 {
     async_stream::try_stream! {
-        let mut buf = BytesMut::with_capacity(1024 * 1024);
+        let mut buf = BytesMut::with_capacity(1024 * 1024 * 1024);
         let mut state = State::ReadHeader;
 
         loop {
@@ -102,7 +109,9 @@ where
 
             // FIXME: Figure out how to verify that this is safe
             let chunk = match future::poll_fn(|cx| unsafe { std::pin::Pin::new_unchecked(&mut source) }.poll_data(cx)).await {
-                Some(Ok(d)) => Some(d),
+                Some(Ok(d)) => {
+                    Some(d)
+                },
                 Some(Err(e)) => {
                     let err = e.into();
                     debug!("decoder inner stream error: {:?}", err);
@@ -116,7 +125,9 @@ where
             if let Some(data) = chunk {
                 buf.put(data);
             } else {
-                if buf.has_remaining_mut() {
+                // FIXME: get BytesMut to impl `Buf` directlty?
+                let buf1 = (&buf[..]).into_buf();
+                if buf1.has_remaining() {
                     trace!("unexpected EOF decoding stream");
                     Err(Status::new(
                         Code::Internal,

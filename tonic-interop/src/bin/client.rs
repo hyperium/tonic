@@ -1,10 +1,10 @@
-#![feature(async_await)]
-
-use clap::{arg_enum, App, Arg, values_t};
+use clap::{arg_enum, values_t, App, Arg};
 use tonic_interop::client;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    pretty_env_logger::init();
+
     let matches = App::new("My Super Program")
         .version("1.0")
         .about("Does awesome things")
@@ -35,7 +35,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut test_results = Vec::new();
 
         match test_case {
-            Testcase::empty_unary => client::unary_call(&mut client, &mut test_results).await,
+            Testcase::empty_unary => client::empty_unary(&mut client, &mut test_results).await,
+            Testcase::large_unary => client::large_unary(&mut client, &mut test_results).await,
+            Testcase::client_streaming => {
+                client::client_streaming(&mut client, &mut test_results).await
+            }
+
+            Testcase::server_streaming => {
+                client::server_streaming(&mut client, &mut test_results).await
+            }
+
+            Testcase::ping_pong => client::ping_pong(&mut client, &mut test_results).await,
+            Testcase::empty_stream => client::empty_stream(&mut client, &mut test_results).await,
             _ => unimplemented!(),
         }
 

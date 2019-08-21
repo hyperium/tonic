@@ -1,4 +1,3 @@
-#![feature(async_await)]
 #![recursion_limit = "512"]
 
 //! gRPC implementation

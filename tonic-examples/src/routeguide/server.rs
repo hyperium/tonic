@@ -1,5 +1,3 @@
-#![feature(async_await)]
-
 mod data;
 
 use futures::{Stream, StreamExt};

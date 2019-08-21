@@ -1,4 +1,4 @@
-use crate::{Code, Error, Status};
+use crate::{Error, Status};
 use bytes::{Buf, Bytes, IntoBuf};
 use futures_core::Stream;
 use futures_util::{ready, TryStreamExt};
@@ -14,7 +14,7 @@ pub trait Body: sealed::Sealed {
     type Data: Buf;
     type Error: Into<Error>;
 
-    fn is_end_stream(self: Pin<&mut Self>) -> bool;
+    fn is_end_stream(&self) -> bool;
 
     fn poll_data(
         self: Pin<&mut Self>,
@@ -35,7 +35,7 @@ where
     type Data = T::Data;
     type Error = T::Error;
 
-    fn is_end_stream(self: Pin<&mut Self>) -> bool {
+    fn is_end_stream(&self) -> bool {
         HttpBody::is_end_stream(self)
     }
 
@@ -93,8 +93,8 @@ impl HttpBody for BoxBody {
     type Data = BytesBuf;
     type Error = Status;
 
-    fn is_end_stream(mut self: Pin<&mut Self>) -> bool {
-        HttpBody::is_end_stream(self.inner.as_mut())
+    fn is_end_stream(&self) -> bool {
+        HttpBody::is_end_stream(&self.inner)
     }
 
     fn poll_data(
@@ -136,6 +136,10 @@ where
     type Data = BytesBuf;
     type Error = Status;
 
+    fn is_end_stream(&self) -> bool {
+        false
+    }
+
     fn poll_data(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -155,13 +159,14 @@ where
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Option<HeaderMap>, Status>> {
-        let self_proj = self.project();
-        let status = if let Some(status) = self_proj.error.take() {
-            status
-        } else {
-            Status::new(Code::Ok, "")
-        };
+        // let self_proj = self.project();
+        // let status = if let Some(status) = self_proj.error.take() {
+        //     status
+        // } else {
+        //     Status::new(Code::Ok, "")
+        // };
 
-        Poll::Ready(Ok(Some(status.to_header_map()?)))
+        // Poll::Ready(Ok(Some(status.to_header_map()?)))
+        Poll::Ready(Ok(None))
     }
 }
