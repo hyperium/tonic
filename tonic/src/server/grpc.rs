@@ -1,15 +1,12 @@
 use crate::{
-    body::{BoxBody, BytesBuf},
-    codec::{decode_request, encode, Codec, Streaming},
+    body::BoxBody,
+    codec::{decode_request, encode_server, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
-use futures_core::{Stream, TryStream};
+use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
-use std::pin::Pin;
-
-type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + 'static>>;
 
 pub struct Grpc<T> {
     codec: T,
@@ -44,8 +41,7 @@ where
                 return self
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(Err(
                         status,
-                    ))
-                    .map(BoxBody::from_stream);
+                    ));
             }
         };
 
@@ -54,7 +50,7 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response).map(BoxBody::from_stream)
+        self.map_response(response)
     }
 
     pub async fn server_streaming<S, B>(
@@ -72,15 +68,13 @@ where
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self
-                    .map_response::<S::ResponseStream>(Err(status))
-                    .map(BoxBody::from_stream);
+                return self.map_response::<S::ResponseStream>(Err(status));
             }
         };
 
         let response = service.call(request).await;
 
-        self.map_response(response).map(BoxBody::from_stream)
+        self.map_response(response)
     }
 
     //BoxStream<T::Decode>,
@@ -102,7 +96,7 @@ where
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-        self.map_response(response).map(BoxBody::from_stream)
+        self.map_response(response)
     }
 
     pub async fn streaming<S, B>(
@@ -119,7 +113,7 @@ where
     {
         let request = self.map_request_streaming(req);
         let response = service.call(request).await;
-        self.map_response(response).map(BoxBody::from_stream)
+        self.map_response(response)
     }
 
     async fn map_request_unary<B>(
@@ -161,7 +155,7 @@ where
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
-    ) -> http::Response<BoxStream<BytesBuf>>
+    ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + 'static,
     {
@@ -175,15 +169,15 @@ where
                     http::header::HeaderValue::from_static(T::CONTENT_TYPE),
                 );
 
-                let body = encode(self.codec.encoder(), body.into_stream()).into_stream();
+                let body = encode_server(self.codec.encoder(), body.into_stream());
 
                 // FIXME: try to return impl Trait?
-                let body = Box::pin(body) as BoxStream<BytesBuf>;
-                http::Response::from_parts(parts, body)
+                // let body = Box::pin(body) as BoxStream<BytesBuf>;
+                http::Response::from_parts(parts, BoxBody::map_from(body))
             }
             Err(status) => {
                 let status = stream::once(future::err(status));
-                let body = encode(self.codec.encoder(), status).into_stream();
+                let body = encode_server(self.codec.encoder(), status);
                 let (mut parts, _body) = Response::new(()).into_http().into_parts();
 
                 parts.headers.insert(
@@ -191,8 +185,7 @@ where
                     http::header::HeaderValue::from_static(T::CONTENT_TYPE),
                 );
 
-                let body = Box::pin(body) as BoxStream<BytesBuf>;
-                http::Response::from_parts(parts, body)
+                http::Response::from_parts(parts, BoxBody::map_from(body))
             }
         }
     }

@@ -9,7 +9,31 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_codec::Encoder;
 
-pub fn encode<T, U>(mut encoder: T, source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
+pub fn encode_server<T, U>(
+    encoder: T,
+    source: U,
+) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
+where
+    T: Encoder<Error = Status>,
+    U: Stream<Item = Result<T::Item, Status>>,
+{
+    let stream = encode(encoder, source).into_stream();
+    EncodeBody::new_server(stream)
+}
+
+pub fn encode_client<T, U>(
+    encoder: T,
+    source: U,
+) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
+where
+    T: Encoder<Error = Status>,
+    U: Stream<Item = Result<T::Item, Status>>,
+{
+    let stream = encode(encoder, source).into_stream();
+    EncodeBody::new_client(stream)
+}
+
+fn encode<T, U>(mut encoder: T, source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
@@ -64,7 +88,7 @@ impl<S> EncodeBody<S>
 where
     S: Stream<Item = Result<crate::body::BytesBuf, Status>>,
 {
-    pub fn new_client(inner: S) -> Self {
+    pub(crate) fn new_client(inner: S) -> Self {
         Self {
             inner,
             error: None,
@@ -72,7 +96,7 @@ where
         }
     }
 
-    pub fn new_server(inner: S) -> Self {
+    pub(crate) fn new_server(inner: S) -> Self {
         Self {
             inner,
             error: None,

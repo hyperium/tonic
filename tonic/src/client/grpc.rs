@@ -1,6 +1,6 @@
 use crate::{
     body::{Body, BoxBody},
-    codec::{decode_empty, decode_response, encode, Codec, EncodeBody, Streaming},
+    codec::{decode_empty, decode_response, encode_client, Codec, Streaming},
     Code, GrpcService, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -114,8 +114,7 @@ impl<T> Grpc<T> {
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
         let request = request
-            .map(|s| encode(codec.encoder(), Box::pin(s)).into_stream())
-            .map(EncodeBody::new_client)
+            .map(|s| encode_client(codec.encoder(), Box::pin(s)))
             .map(BoxBody::map_from);
 
         let mut request = request.into_http(uri);
