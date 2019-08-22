@@ -59,29 +59,41 @@ pub(crate) fn parse_service_impl(
 }
 
 pub(crate) fn generate(service: ServiceDef) -> TokenStream {
-    let service_server = Ident::new(&format!("{}Server", service.name_str), Span::call_site());
-
     let service_impl = service.name.clone();
     let methods = generate_methods(&service);
+
+    let server_make_service = quote::format_ident!("{}Server", service.name_str);
+    let server_service = quote::format_ident!("{}ServerSvc", service.name_str);
 
     quote! {
         use tonic::_codegen::*;
 
         // TODO: impl debug
         #[derive(Clone)]
-        pub struct #service_server {
+        pub struct #server_make_service {
             inner: std::sync::Arc<#service_impl>,
         }
 
-        impl #service_server {
+         // TODO: impl debug
+        pub struct #server_service {
+            inner: std::sync::Arc<#service_impl>,
+        }
+
+        impl #server_make_service {
             pub fn new(t: #service_impl) -> Self {
                 let inner = std::sync::Arc::new(t);
                 Self { inner }
             }
         }
 
-        impl Service<()> for #service_server {
-            type Response = Self;
+        impl #server_service {
+            pub fn new(inner: std::sync::Arc<#service_impl>) -> Self {
+                Self { inner }
+            }
+        }
+
+        impl<T> Service<T> for #server_make_service {
+            type Response = #server_service;
             type Error = tonic::error::Never;
             type Future = Ready<Result<Self::Response, Self::Error>>;
 
@@ -89,12 +101,12 @@ pub(crate) fn generate(service: ServiceDef) -> TokenStream {
                 Poll::Ready(Ok(()))
             }
 
-            fn call(&mut self, _: ()) -> Self::Future {
-                ok(self.clone())
+            fn call(&mut self, _: T) -> Self::Future {
+                ok(#server_service ::new(self.inner.clone()))
             }
         }
 
-        impl Service<http::Request<tower_h2::RecvBody>> for #service_server {
+        impl Service<http::Request<tower_h2::RecvBody>> for #server_service {
             type Response = http::Response<tonic::BoxBody>;
             type Error = tonic::error::Never;
             type Future = BoxFuture<Self::Response, Self::Error>;
