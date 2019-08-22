@@ -81,6 +81,7 @@ enum State {
     ReadBody { compression: bool, len: usize },
 }
 
+#[derive(Debug)]
 enum Direction {
     Request,
     Response(StatusCode),
@@ -103,7 +104,11 @@ where
         let mut state = State::ReadHeader;
 
         loop {
-            if let Some(item) = decode_chunk(&mut decoder, &mut buf, &mut state)? {
+             if let Some(item) = decode_chunk(&mut decoder, &mut buf, &mut state)? {
+                // TODO: implement the ability to poll trailers when we _know_ that
+                // the comnsumer of this stream will only poll for the first message.
+                // This means we skip the poll_trailers step.
+
                 yield item;
             }
 
@@ -142,9 +147,7 @@ where
         if let Direction::Response(status) = direction {
             let trailer = future::poll_fn(|cx| unsafe { std::pin::Pin::new_unchecked(&mut source) }.poll_trailers(cx));
             let trailer = match trailer.await {
-                Ok(trailer) => {
-                    crate::status::infer_grpc_status(trailer, status)?;
-                },
+                Ok(trailer) => crate::status::infer_grpc_status(trailer, status)?,
                 Err(e) => {
                     let err = e.into();
                     debug!("decoder inner trailers error: {:?}", err);

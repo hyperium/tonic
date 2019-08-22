@@ -29,6 +29,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "127.0.0.1:10000".parse()?;
 
     let mut client = client::create(addr).await?;
+    let mut unimplemented_client = client::create_unimplemented(addr).await?;
 
     for test_case in test_cases {
         println!("{:?}:", test_case);
@@ -40,13 +41,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Testcase::client_streaming => {
                 client::client_streaming(&mut client, &mut test_results).await
             }
-
             Testcase::server_streaming => {
                 client::server_streaming(&mut client, &mut test_results).await
             }
-
             Testcase::ping_pong => client::ping_pong(&mut client, &mut test_results).await,
             Testcase::empty_stream => client::empty_stream(&mut client, &mut test_results).await,
+            Testcase::status_code_and_message => {
+                client::status_code_and_message(&mut client, &mut test_results).await
+            }
+            Testcase::special_status_message => {
+                client::special_status_message(&mut client, &mut test_results).await
+            }
+            Testcase::unimplemented_method => {
+                client::unimplemented_method(&mut client, &mut test_results).await
+            }
+            Testcase::unimplemented_service => {
+                client::unimplemented_service(&mut unimplemented_client, &mut test_results).await
+            }
+            Testcase::custom_metadata => client::custom_metadata(&mut client, &mut test_results).await,
             _ => unimplemented!(),
         }
 

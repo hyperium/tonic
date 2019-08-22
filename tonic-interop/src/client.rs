@@ -2,20 +2,25 @@ use crate::{pb::*, test_assert, TestAssertion};
 use futures_util::{future, stream, SinkExt, StreamExt};
 use std::net::SocketAddr;
 use tokio::{net::TcpStream, sync::mpsc};
-use tonic::{Request, Response};
+use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 use tower_h2::{add_origin::AddOrigin, Connection};
 
 pub type Client = TestServiceClient<AddOrigin<Connection<tonic::BoxBody>>>;
+pub type UnimplementedClient = UnimplementedServiceClient<AddOrigin<Connection<tonic::BoxBody>>>;
 
 tonic::client!(service = "grpc.testing.TestService", proto = "crate::pb");
+tonic::client!(
+    service = "grpc.testing.UnimplementedService",
+    proto = "crate::pb"
+);
 
 const LARGE_REQ_SIZE: usize = 271828;
 const LARGE_RSP_SIZE: i32 = 314159;
 const REQUEST_LENGTHS: &'static [i32] = &[27182, 8, 1828, 45904];
 const RESPONSE_LENGTHS: &'static [i32] = &[31415, 9, 2653, 58979];
-// const TEST_STATUS_MESSAGE: &'static str = "test status message";
-// const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
-//     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
+const TEST_STATUS_MESSAGE: &'static str = "test status message";
+const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
+    "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
 pub async fn create(addr: SocketAddr) -> Result<Client, Box<dyn std::error::Error>> {
     let io = TcpStream::connect(&addr).await?;
@@ -26,6 +31,19 @@ pub async fn create(addr: SocketAddr) -> Result<Client, Box<dyn std::error::Erro
     let svc = AddOrigin::new(svc, origin);
 
     Ok(TestServiceClient::new(svc))
+}
+
+pub async fn create_unimplemented(
+    addr: SocketAddr,
+) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
+    let io = TcpStream::connect(&addr).await?;
+
+    let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
+
+    let svc = Connection::handshake(io).await?;
+    let svc = AddOrigin::new(svc, origin);
+
+    Ok(UnimplementedServiceClient::new(svc))
 }
 
 pub async fn empty_unary(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
@@ -164,16 +182,6 @@ pub async fn server_streaming(client: &mut Client, assertions: &mut Vec<TestAsse
 }
 
 pub async fn ping_pong(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
-    fn make_ping_pong_request(idx: usize) -> StreamingOutputCallRequest {
-        let req_len = REQUEST_LENGTHS[idx];
-        let resp_len = RESPONSE_LENGTHS[idx];
-        StreamingOutputCallRequest {
-            response_parameters: vec![ResponseParameters::with_size(resp_len)],
-            payload: Some(crate::client_payload(req_len as usize)),
-            ..Default::default()
-        }
-    }
-
     let (mut tx, rx) = mpsc::unbounded_channel();
     tx.try_send(make_ping_pong_request(0)).unwrap();
 
@@ -248,5 +256,186 @@ pub async fn empty_stream(client: &mut Client, assertions: &mut Vec<TestAssertio
             responses.len() == 0,
             format!("responses.len()={:?}", responses.len())
         ));
+    }
+}
+
+pub async fn status_code_and_message(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+    fn validate_response<T>(result: Result<T, Status>, assertions: &mut Vec<TestAssertion>)
+    where
+        T: std::fmt::Debug,
+    {
+        assertions.push(test_assert!(
+            "call must fail with unknown status code",
+            match &result {
+                Err(status) => status.code() == Code::Unknown,
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+
+        assertions.push(test_assert!(
+            "call must respsond with expected status message",
+            match &result {
+                Err(status) => status.message() == TEST_STATUS_MESSAGE,
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+    }
+
+    let simple_req = SimpleRequest {
+        response_status: Some(EchoStatus {
+            code: 2,
+            message: TEST_STATUS_MESSAGE.to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let duplex_req = StreamingOutputCallRequest {
+        response_status: Some(EchoStatus {
+            code: 2,
+            message: TEST_STATUS_MESSAGE.to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let result = client.unary_call(Request::new(simple_req)).await;
+    validate_response(result, assertions);
+
+    let stream = stream::iter(vec![Ok(duplex_req)]);
+    let result = match client.full_duplex_call(Request::new(stream)).await {
+        Ok(response) => {
+            let stream = response.into_inner();
+            let responses = stream.collect::<Vec<_>>().await;
+            Ok(responses)
+        }
+        Err(e) => Err(e),
+    };
+
+    validate_response(result, assertions);
+}
+
+pub async fn special_status_message(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+    let req = SimpleRequest {
+        response_status: Some(EchoStatus {
+            code: 2,
+            message: SPECIAL_TEST_STATUS_MESSAGE.to_string(),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+
+    let result = client.unary_call(Request::new(req)).await;
+
+    assertions.push(test_assert!(
+        "call must fail with unknown status code",
+        match &result {
+            Err(status) => status.code() == Code::Unknown,
+            _ => false,
+        },
+        format!("result={:?}", result)
+    ));
+
+    assertions.push(test_assert!(
+        "call must respsond with expected status message",
+        match &result {
+            Err(status) => status.message() == SPECIAL_TEST_STATUS_MESSAGE,
+            _ => false,
+        },
+        format!("result={:?}", result)
+    ));
+}
+
+pub async fn unimplemented_method(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+    let result = client.unimplemented_call(Request::new(Empty {})).await;
+    assertions.push(test_assert!(
+        "call must fail with unimplemented status code",
+        match &result {
+            Err(status) => status.code() == Code::Unimplemented,
+            _ => false,
+        },
+        format!("result={:?}", result)
+    ));
+}
+
+pub async fn unimplemented_service(
+    client: &mut UnimplementedClient,
+    assertions: &mut Vec<TestAssertion>,
+) {
+    let result = client.unimplemented_call(Request::new(Empty {})).await;
+    assertions.push(test_assert!(
+        "call must fail with unimplemented status code",
+        match &result {
+            Err(status) => status.code() == Code::Unimplemented,
+            _ => false,
+        },
+        format!("result={:?}", result)
+    ));
+}
+
+pub async fn custom_metadata(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+    let key1 = "x-grpc-test-echo-initial";
+    let value1 = MetadataValue::from_str("test_initial_metadata_value").unwrap();
+    let key2 = "x-grpc-test-echo-trailing-bin";
+    let value2 = MetadataValue::from_bytes(&[0xab, 0xab, 0xab]);
+
+    let req = SimpleRequest {
+        response_type: PayloadType::Compressable as i32,
+        response_size: LARGE_RSP_SIZE,
+        payload: Some(crate::client_payload(LARGE_REQ_SIZE)),
+        ..Default::default()
+    };
+    let mut req_unary = Request::new(req);
+    req_unary.metadata_mut().insert(key1, value1.clone());
+    req_unary.metadata_mut().insert_bin(key2, value2.clone());
+
+    // TODO: custom metadata for fullduplex
+    let stream = stream::iter(vec![Ok(make_ping_pong_request(0))]);
+    let mut req_stream = Request::new(stream);
+    req_stream.metadata_mut().insert(key1, value1.clone());
+    req_stream.metadata_mut().insert_bin(key2, value2.clone());
+
+    // let response = client
+    //     .unary_call(req_unary)
+    //     .await
+    //     .expect("call should pass.");
+
+    // assertions.push(test_assert!(
+    //     "metadata string must match in unary",
+    //     response.metadata().get(key1) == Some(&value1),
+    //     format!("result={:?}", response.metadata().get(key1))
+    // ));
+    // assertions.push(test_assert!(
+    //     "metadata bin must match in unary",
+    //     response.metadata().get_bin(key2) == Some(&value2),
+    //     format!("result={:?}", response.metadata().get_bin(key1))
+    // ));
+
+    let response = client
+        .full_duplex_call(req_stream)
+        .await
+        .expect("call should pass.");
+
+    assertions.push(test_assert!(
+        "metadata string must match in unary",
+        response.metadata().get(key1) == Some(&value1),
+        format!("result={:?}", response.metadata().get(key1))
+    ));
+    assertions.push(test_assert!(
+        "metadata bin must match in unary",
+        response.metadata().get_bin(key2) == Some(&value2),
+        format!("result={:?}", response.metadata().get_bin(key1))
+    ));
+}
+
+fn make_ping_pong_request(idx: usize) -> StreamingOutputCallRequest {
+    let req_len = REQUEST_LENGTHS[idx];
+    let resp_len = RESPONSE_LENGTHS[idx];
+    StreamingOutputCallRequest {
+        response_parameters: vec![ResponseParameters::with_size(resp_len)],
+        payload: Some(crate::client_payload(req_len as usize)),
+        ..Default::default()
     }
 }
