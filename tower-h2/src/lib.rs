@@ -12,4 +12,4 @@ mod server;
 
 pub use client::Connection;
 pub use recv_body::RecvBody;
-pub use server::Server;
+pub use server::{Builder, Server};

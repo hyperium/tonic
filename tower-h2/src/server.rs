@@ -7,6 +7,8 @@ use tokio_io::{AsyncRead, AsyncWrite};
 use tower_service::Service;
 use tower_util::MakeService;
 
+pub use h2::server::Builder;
+
 pub struct Server<M, B>
 where
     M: MakeService<(), Request<RecvBody>>,

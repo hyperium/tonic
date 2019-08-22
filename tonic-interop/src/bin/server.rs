@@ -1,6 +1,6 @@
 use tokio::net::TcpListener;
 use tonic::{Code, Request, Response, Status};
-use tower_h2::Server;
+use tower_h2::{Server, Builder};
 
 pub mod pb {
     #![allow(dead_code)]
@@ -62,6 +62,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut bind = TcpListener::bind(&addr)?;
 
     let greeter = TestService::default();
+    let mut settings = Builder::default();
+    settings.initial_connection_window_size(1_000_000_000);
     let mut server = Server::new(TestServiceServer::new(greeter), Default::default());
 
     while let Ok((sock, _addr)) = bind.accept().await {
