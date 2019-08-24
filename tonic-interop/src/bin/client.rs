@@ -1,30 +1,24 @@
-use clap::{arg_enum, values_t, App, Arg};
 use tonic_interop::client;
+use structopt::{clap::arg_enum, StructOpt};
+
+#[derive(StructOpt)]
+struct Opts {
+    #[structopt(
+        long = "test_case",
+        use_delimiter = true,
+        min_values = 1,
+        raw(possible_values = r#"&Testcase::variants()"#)
+    )]
+    test_case: Vec<Testcase>
+}
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
 
-    let matches = App::new("My Super Program")
-        .version("1.0")
-        .about("Does awesome things")
-        .arg(
-            Arg::with_name("test_case")
-                .long("test_case")
-                .value_name("TESTCASE")
-                .help(
-                    "The name of the test case to execute. For example,
-                \"empty_unary\".",
-                )
-                .possible_values(&Testcase::variants())
-                .default_value("large_unary")
-                .takes_value(true)
-                .min_values(1)
-                .use_delimiter(true),
-        )
-        .get_matches();
+    let matches = Opts::from_args();
 
-    let test_cases = values_t!(matches, "test_case", Testcase).unwrap_or_else(|e| e.exit());
+    let test_cases = matches.test_case;
 
     let addr = "127.0.0.1:10000".parse()?;
 
