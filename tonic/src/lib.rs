@@ -9,10 +9,10 @@ pub mod codec;
 pub mod error;
 pub mod metadata;
 pub mod server;
+pub mod service;
 
 mod request;
 mod response;
-mod service;
 mod status;
 
 pub use body::BoxBody;
@@ -38,7 +38,7 @@ pub trait GrpcInnerService<Request> {
 
 pub mod _codegen {
     pub use futures_core::Stream;
-    pub use futures_util::future::{ok, Ready};
+    pub use futures_util::future::{ok, poll_fn, Ready};
     pub use http_body::Body as HttpBody;
     pub use std::future::Future;
     pub use std::pin::Pin;

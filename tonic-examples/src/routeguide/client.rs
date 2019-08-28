@@ -1,9 +1,12 @@
 use futures::TryStreamExt;
+use hyper::client::conn::Builder;
+use hyper::client::connect::HttpConnector;
+use hyper::client::service::{Connect, MakeService};
 use route_guide::{Point, RouteNote};
 use std::time::{Duration, Instant};
-use tokio::{net::TcpStream, timer::Interval};
+use tokio::timer::Interval;
+use tonic::service::add_origin::AddOrigin;
 use tonic::Request;
-use tower_h2::{add_origin::AddOrigin, Connection};
 
 mod route_guide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
@@ -12,12 +15,12 @@ mod route_guide {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:10000".parse()?;
-    let io = TcpStream::connect(&addr).await?;
+    let origin = http::Uri::from_static("http://[::1]:10000");
 
-    let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
+    let settings = Builder::new().http2_only(true).clone();
+    let mut maker = Connect::new(HttpConnector::new(1), settings);
 
-    let svc = Connection::handshake(io).await?;
+    let svc = maker.make_service(origin.clone()).await?;
     let svc = AddOrigin::new(svc, origin);
 
     let mut client = route_guide::RouteGuideClient::new(svc);

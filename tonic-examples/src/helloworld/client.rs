@@ -1,5 +1,7 @@
-use tokio::net::TcpStream;
-use tower_h2::{add_origin::AddOrigin, Connection};
+use hyper::client::conn::Builder;
+use hyper::client::connect::HttpConnector;
+use hyper::client::service::{Connect, MakeService};
+use tonic::service::add_origin::AddOrigin;
 
 pub mod hello_world {
     include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
@@ -8,12 +10,13 @@ pub mod hello_world {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse()?;
-    let io = TcpStream::connect(&addr).await?;
+    let origin = http::Uri::from_static("http://[::1]:50051");
 
-    let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
+    let settings = Builder::new().http2_only(true).clone();
+    let mut maker = Connect::new(HttpConnector::new(1), settings);
 
-    let svc = Connection::handshake(io).await?;
+    let svc = maker.make_service(origin.clone()).await?;
+
     let svc = AddOrigin::new(svc, origin);
 
     let mut client = hello_world::GreeterClient::new(svc);

@@ -5,5 +5,4 @@ members = [
     "tonic-build",
     "tonic-examples",
     "tonic-interop",
-    "tower-h2"
 ]

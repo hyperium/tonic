@@ -1,9 +1,10 @@
 use crate::{
     body::BoxBody,
-    codec::{decode_request, encode_server, Codec, Streaming},
+    codec::{encode_server, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
+use bytes::Bytes;
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
@@ -32,7 +33,7 @@ where
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
         B: Body + Send + 'static,
-        B::Data: Send,
+        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let request = match self.map_request_unary(req).await {
@@ -62,7 +63,7 @@ where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
         S::ResponseStream: Send + 'static,
         B: Body + Send + 'static,
-        B::Data: Send,
+        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let request = match self.map_request_unary(req).await {
@@ -88,7 +89,7 @@ where
         T::Decode: Send + 'static,
         T::Decoder: Send + 'static,
         B: Body + Send + 'static,
-        B::Data: Send + 'static,
+        B::Data: Into<Bytes> + Send + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
         let request = self.map_request_streaming(req);
@@ -108,7 +109,7 @@ where
         S: StreamingService<Streaming<T::Decode>, Response = T::Encode> + Send,
         S::ResponseStream: Send + 'static,
         B: Body + Send + 'static,
-        B::Data: Send,
+        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let request = self.map_request_streaming(req);
@@ -122,11 +123,11 @@ where
     ) -> Result<Request<T::Decode>, Status>
     where
         B: Body + Send + 'static,
-        B::Data: Send,
+        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let (parts, body) = request.into_parts();
-        let stream = decode_request(self.codec.decoder(), body).into_stream();
+        let stream = Streaming::new_request(self.codec.decoder(), body);
 
         futures_util::pin_mut!(stream);
 
@@ -144,12 +145,10 @@ where
     ) -> Request<Streaming<T::Decode>>
     where
         B: Body + Send + 'static,
-        B::Data: Send,
+        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
-        Request::from_http(
-            request.map(|b| Streaming::new(decode_request(self.codec.decoder(), b).into_stream())),
-        )
+        Request::from_http(request.map(|body| Streaming::new_request(self.codec.decoder(), body)))
     }
 
     fn map_response<B>(
@@ -173,7 +172,7 @@ where
 
                 // FIXME: try to return impl Trait?
                 // let body = Box::pin(body) as BoxStream<BytesBuf>;
-                http::Response::from_parts(parts, BoxBody::map_from(body))
+                http::Response::from_parts(parts, BoxBody::new(body))
             }
             Err(status) => {
                 let status = stream::once(future::err(status));
@@ -185,7 +184,7 @@ where
                     http::header::HeaderValue::from_static(T::CONTENT_TYPE),
                 );
 
-                http::Response::from_parts(parts, BoxBody::map_from(body))
+                http::Response::from_parts(parts, BoxBody::new(body))
             }
         }
     }

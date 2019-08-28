@@ -24,15 +24,15 @@ path = "src/routeguide/client.rs"
 
 [dependencies]
 tonic = { path = "../tonic" }
-tower-h2 = { path = "../tower-h2" }
-futures-preview = { version = "=0.3.0-alpha.17", default-features = false, features = ["alloc"]}
-tokio = "=0.2.0-alpha.1"
+hyper = { path = "../../hyper" }
+futures-preview = { version = "=0.3.0-alpha.18", default-features = false, features = ["alloc"]}
+tokio = "=0.2.0-alpha.2"
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-async-stream = "0.1"
+async-stream = { path = "../../async-stream/async-stream" }
 http = "0.1"
 
 [build-dependencies]

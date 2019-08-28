@@ -1,16 +1,13 @@
 mod data;
 
 use futures::{Stream, StreamExt};
+use hyper::Server;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::{
-    net::TcpListener,
-    sync::{mpsc, Lock},
-};
+use tokio::sync::{mpsc, Lock};
 use tonic::{Request, Response, Status};
-use tower_h2::Server;
 
 pub mod routeguide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
@@ -151,9 +148,8 @@ impl RouteGuide {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
-    let mut bind = TcpListener::bind(&addr)?;
 
-    println!("Listening on: {}", bind.local_addr()?);
+    println!("Listening on: {}", addr);
 
     let route_guide = RouteGuide {
         state: State {
@@ -162,17 +158,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             notes: Lock::new(HashMap::new()),
         },
     };
-    let mut server = Server::new(RouteGuideServer::new(route_guide), Default::default());
 
-    while let Ok((sock, _addr)) = bind.accept().await {
-        if let Err(e) = sock.set_nodelay(true) {
-            return Err(e.into());
-        }
-
-        if let Err(e) = server.serve(sock).await {
-            println!("H2 ERROR: {}", e);
-        }
-    }
+    Server::bind(&addr)
+        .http2_only(true)
+        .serve(RouteGuideServer::new(route_guide))
+        .await?;
 
     Ok(())
 }

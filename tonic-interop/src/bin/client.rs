@@ -1,5 +1,5 @@
-use tonic_interop::client;
 use structopt::{clap::arg_enum, StructOpt};
+use tonic_interop::client;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -9,7 +9,7 @@ struct Opts {
         min_values = 1,
         raw(possible_values = r#"&Testcase::variants()"#)
     )]
-    test_case: Vec<Testcase>
+    test_case: Vec<Testcase>,
 }
 
 #[tokio::main]
@@ -52,7 +52,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Testcase::unimplemented_service => {
                 client::unimplemented_service(&mut unimplemented_client, &mut test_results).await
             }
-            Testcase::custom_metadata => client::custom_metadata(&mut client, &mut test_results).await,
+            Testcase::custom_metadata => {
+                client::custom_metadata(&mut client, &mut test_results).await
+            }
             _ => unimplemented!(),
         }
 

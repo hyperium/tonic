@@ -1,7 +1,7 @@
+use hyper::Server;
 use std::time::Duration;
-use tokio::{net::TcpListener, timer::Delay};
+use tokio::timer::Delay;
 use tonic::{Request, Response, Status};
-use tower_h2::Server;
 
 pub mod hello_world {
     include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
@@ -39,20 +39,12 @@ impl MyGreeter {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
-    let mut bind = TcpListener::bind(&addr)?;
-
     let greeter = MyGreeter::default();
-    let mut server = Server::new(GreeterServer::new(greeter), Default::default());
 
-    while let Ok((sock, _addr)) = bind.accept().await {
-        if let Err(e) = sock.set_nodelay(true) {
-            return Err(e.into());
-        }
-
-        if let Err(e) = server.serve(sock).await {
-            println!("H2 ERROR: {}", e);
-        }
-    }
+    Server::bind(&addr)
+        .http2_only(true)
+        .serve(GreeterServer::new(greeter))
+        .await?;
 
     Ok(())
 }

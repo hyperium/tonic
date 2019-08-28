@@ -7,8 +7,8 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-futures-core-preview = "=0.3.0-alpha.17"
-futures-util-preview = "=0.3.0-alpha.17"
+futures-core-preview = "=0.3.0-alpha.18"
+futures-util-preview = "=0.3.0-alpha.18"
 tonic-macros = { path = "../tonic-macros" }
 tracing = "0.1"
 http = "0.1.14"
@@ -16,15 +16,9 @@ base64 = "0.10"
 bytes = "0.4.7"
 prost = "0.5"
 percent-encoding = "1.0.1"
-tower-service = { git = "https://github.com/tower-rs/tower", branch = "std-future" }
-tokio-codec = "=0.2.0-alpha.1"
-async-stream = "0.1.0"
-# http-body = { git = "https://github.com/hyperium/http-body" }
-http-body = { path = "../../http-body" }
+tower-service = "=0.3.0-alpha.1"
+tokio-codec = "=0.2.0-alpha.2"
+# async-stream = "0.1.0"
+async-stream = { path = "../../async-stream/async-stream" }
+http-body = "0.2.0-alpha.1"
 pin-project = "0.4.0-alpha.2"
-
-[dev-dependencies]
-tokio = "=0.2.0-alpha.1"
-tokio-buf = "=0.2.0-alpha.1"
-prost-derive = "0.5"
-tower-h2 = { path = "../tower-h2" }

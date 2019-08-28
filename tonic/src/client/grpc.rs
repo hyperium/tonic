@@ -1,8 +1,9 @@
 use crate::{
     body::{Body, BoxBody},
-    codec::{decode_empty, decode_response, encode_client, Codec, Streaming},
+    codec::{encode_client, Codec, Streaming},
     Code, GrpcService, Request, Response, Status,
 };
+use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::{future, stream, TryStreamExt};
 use http::{
@@ -20,6 +21,23 @@ impl<T> Grpc<T> {
         Self { inner }
     }
 
+    pub async fn ready(&mut self) -> Result<(), Status>
+    where
+        T: GrpcService<BoxBody>,
+        T::ResponseBody: Body + HttpBody + Send + 'static,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
+        <T::ResponseBody as HttpBody>::Data: Send,
+    {
+        futures_util::future::poll_fn(|cx| self.inner.poll_ready(cx))
+            .await
+            .map_err(|e| {
+                Status::new(
+                    Code::Unknown,
+                    format!("Unexpected connection error: {}", e.into()),
+                )
+            })
+    }
+
     pub async fn unary<M1, M2, C>(
         &mut self,
         request: Request<M1>,
@@ -30,7 +48,7 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Send,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
         C::Decoder: Send + 'static,
@@ -51,7 +69,7 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Send,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
         S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
@@ -59,7 +77,9 @@ impl<T> Grpc<T> {
         M1: Send,
         M2: Send + Unpin + 'static,
     {
-        let (parts, mut body) = self.streaming(request, path, codec).await?.into_parts();
+        let (parts, body) = self.streaming(request, path, codec).await?.into_parts();
+
+        futures_util::pin_mut!(body);
 
         let message = body
             .try_next()
@@ -79,7 +99,7 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Send,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
         C::Decoder: Send + 'static,
@@ -100,7 +120,7 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Send,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
         S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
@@ -115,7 +135,7 @@ impl<T> Grpc<T> {
 
         let request = request
             .map(|s| encode_client(codec.encoder(), Box::pin(s)))
-            .map(BoxBody::map_from);
+            .map(BoxBody::new);
 
         let mut request = request.into_http(uri);
 
@@ -151,17 +171,13 @@ impl<T> Grpc<T> {
             true
         };
 
-        let response = response
-            .map(|b| {
-                if expect_additional_trailers {
-                    future::Either::Left(
-                        decode_response(codec.decoder(), b, status_code).into_stream(),
-                    )
-                } else {
-                    future::Either::Right(decode_empty(codec.decoder(), b).into_stream())
-                }
-            })
-            .map(Streaming::new);
+        let response = response.map(|body| {
+            if expect_additional_trailers {
+                Streaming::new_response(codec.decoder(), body, status_code)
+            } else {
+                Streaming::new_empty(codec.decoder(), body)
+            }
+        });
 
         Ok(Response::from_http(response))
     }

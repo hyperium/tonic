@@ -1,6 +1,5 @@
-use tokio::net::TcpListener;
+use hyper::Server;
 use tonic::{Code, Request, Response, Status};
-use tower_h2::{Server, Builder};
 
 pub mod pb {
     #![allow(dead_code)]
@@ -18,8 +17,8 @@ pub struct TestService {
 
 #[tonic::server(service = "grpc.testing.TestService", proto = "pb")]
 impl TestService {
-    pub async fn empty_call(&self, request: Request<Empty>) -> Result<Response<Empty>, Status> {
-        println!("empty_call; REQUEST={:?}", request);
+    pub async fn empty_call(&self, _request: Request<Empty>) -> Result<Response<Empty>, Status> {
+        println!("empty_call");
         Ok(Response::new(Empty {}))
     }
 
@@ -27,7 +26,7 @@ impl TestService {
         &self,
         request: Request<SimpleRequest>,
     ) -> Result<Response<SimpleResponse>, Status> {
-        println!("unary_call; REQUEST={:?}", request);
+        println!("unary_call");
 
         let req = request.into_inner();
 
@@ -59,23 +58,13 @@ impl TestService {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     pretty_env_logger::init();
     let addr = "127.0.0.1:10000".parse().unwrap();
-    let mut bind = TcpListener::bind(&addr)?;
 
     let greeter = TestService::default();
-    let mut settings = Builder::default();
-    settings.initial_connection_window_size(1_000_000_000);
-    let mut server = Server::new(TestServiceServer::new(greeter), Default::default());
 
-    while let Ok((sock, _addr)) = bind.accept().await {
-        println!("new connection");
-        if let Err(e) = sock.set_nodelay(true) {
-            return Err(e.into());
-        }
-
-        if let Err(e) = server.serve(sock).await {
-            println!("H2 ERROR: {}", e);
-        }
-    }
+    Server::bind(&addr)
+        .http2_only(true)
+        .serve(TestServiceServer::new(greeter))
+        .await?;
 
     Ok(())
 }

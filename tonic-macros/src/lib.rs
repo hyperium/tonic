@@ -29,10 +29,14 @@ pub fn client(attr: TokenStream) -> TokenStream {
         where T: tonic::GrpcService<tonic::body::BoxBody>,
               T::ResponseBody: tonic::body::Body + tonic::_codegen::HttpBody + Send + 'static,
               <T::ResponseBody as tonic::_codegen::HttpBody>::Error: Into<tonic::error::Error> + Send,
-              <T::ResponseBody as tonic::_codegen::HttpBody>::Data: Send, {
+              <T::ResponseBody as tonic::_codegen::HttpBody>::Data: Into<bytes::Bytes> + Send, {
             pub fn new(inner: T) -> Self {
                 let inner = tonic::client::Grpc::new(inner);
                 Self { inner }
+            }
+
+            pub async fn ready(&mut self) -> Result<(), tonic::Status> {
+                self.inner.ready().await
             }
 
             #methods

@@ -1,12 +1,15 @@
 use crate::{pb::*, test_assert, TestAssertion};
 use futures_util::{future, stream, SinkExt, StreamExt};
+use hyper::client::conn::{Builder, SendRequest};
+use hyper::client::connect::HttpConnector;
+use hyper::client::service::{Connect, MakeService};
 use std::net::SocketAddr;
-use tokio::{net::TcpStream, sync::mpsc};
+use tokio::sync::mpsc;
+use tonic::service::add_origin::AddOrigin;
 use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
-use tower_h2::{add_origin::AddOrigin, Connection};
 
-pub type Client = TestServiceClient<AddOrigin<Connection<tonic::BoxBody>>>;
-pub type UnimplementedClient = UnimplementedServiceClient<AddOrigin<Connection<tonic::BoxBody>>>;
+pub type Client = TestServiceClient<AddOrigin<SendRequest<tonic::BoxBody>>>;
+pub type UnimplementedClient = UnimplementedServiceClient<AddOrigin<SendRequest<tonic::BoxBody>>>;
 
 tonic::client!(service = "grpc.testing.TestService", proto = "crate::pb");
 tonic::client!(
@@ -23,11 +26,12 @@ const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
 pub async fn create(addr: SocketAddr) -> Result<Client, Box<dyn std::error::Error>> {
-    let io = TcpStream::connect(&addr).await?;
-
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
-    let svc = Connection::handshake(io).await?;
+    let settings = Builder::new().http2_only(true).clone();
+    let mut maker = Connect::new(HttpConnector::new(1), settings);
+
+    let svc = maker.make_service(origin.clone()).await?;
     let svc = AddOrigin::new(svc, origin);
 
     Ok(TestServiceClient::new(svc))
@@ -36,11 +40,12 @@ pub async fn create(addr: SocketAddr) -> Result<Client, Box<dyn std::error::Erro
 pub async fn create_unimplemented(
     addr: SocketAddr,
 ) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
-    let io = TcpStream::connect(&addr).await?;
-
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
-    let svc = Connection::handshake(io).await?;
+    let settings = Builder::new().http2_only(true).clone();
+    let mut maker = Connect::new(HttpConnector::new(1), settings);
+
+    let svc = maker.make_service(origin.clone()).await?;
     let svc = AddOrigin::new(svc, origin);
 
     Ok(UnimplementedServiceClient::new(svc))
