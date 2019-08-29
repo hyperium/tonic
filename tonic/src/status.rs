@@ -312,7 +312,7 @@ impl Error for Status {}
 /// Take the `Status` value from `trailers` if it is available, else from `status_code`.
 ///
 pub(crate) fn infer_grpc_status(
-    trailers: Option<HeaderMap>,
+    trailers: Option<&HeaderMap>,
     status_code: http::StatusCode,
 ) -> Result<(), Status> {
     if let Some(trailers) = trailers {

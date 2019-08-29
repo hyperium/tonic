@@ -418,6 +418,7 @@ pub async fn custom_metadata(client: &mut Client, assertions: &mut Vec<TestAsser
     //     format!("result={:?}", response.metadata().get_bin(key1))
     // ));
 
+
     let response = client
         .full_duplex_call(req_stream)
         .await
@@ -428,10 +429,17 @@ pub async fn custom_metadata(client: &mut Client, assertions: &mut Vec<TestAsser
         response.metadata().get(key1) == Some(&value1),
         format!("result={:?}", response.metadata().get(key1))
     ));
+
+    let mut stream = response.into_inner();
+
+    // while let Some(_) = stream.next().await {}
+
+    let trailers = stream.trailers().await.unwrap().unwrap();
+
     assertions.push(test_assert!(
         "metadata bin must match in unary",
-        response.metadata().get_bin(key2) == Some(&value2),
-        format!("result={:?}", response.metadata().get_bin(key1))
+        trailers.get_bin(key2) == Some(&value2),
+        format!("result={:?}", trailers.get_bin(key1))
     ));
 }
 

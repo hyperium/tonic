@@ -19,6 +19,7 @@ pub struct Streaming<T> {
     state: State,
     direction: Direction,
     buf: BytesMut,
+    trailers: Option<MetadataMap>,
 }
 
 impl<T> Unpin for Streaming<T> {}
@@ -44,14 +45,7 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
-        Self {
-            decoder: Box::new(decoder),
-            body: BoxBody::map_from(body),
-            state: State::ReadHeader,
-            direction: Direction::Response(status_code),
-            // FIXME: update this with a reasonable size
-            buf: BytesMut::with_capacity(1024 * 1024),
-        }
+        Self::new(decoder, body, Direction::Response(status_code))
     }
 
     pub fn new_empty<B, D>(decoder: D, body: B) -> Self
@@ -61,17 +55,19 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
-        Self {
-            decoder: Box::new(decoder),
-            body: BoxBody::map_from(body),
-            state: State::ReadHeader,
-            direction: Direction::EmptyResponse,
-            // FIXME: update this with a reasonable size
-            buf: BytesMut::with_capacity(1024 * 1024),
-        }
+        Self::new(decoder, body, Direction::EmptyResponse)
     }
 
     pub fn new_request<B, D>(decoder: D, body: B) -> Self
+    where
+        B: Body + Send + 'static,
+        B::Data: Into<Bytes>,
+        B::Error: Into<crate::Error>,
+        D: Decoder<Item = T, Error = Status> + Send + 'static,
+    {
+        Self::new(decoder, body, Direction::Request)
+    }
+    fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
     where
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
@@ -82,23 +78,45 @@ impl<T> Streaming<T> {
             decoder: Box::new(decoder),
             body: BoxBody::map_from(body),
             state: State::ReadHeader,
-            direction: Direction::Request,
+            direction,
             // FIXME: update this with a reasonable size
             buf: BytesMut::with_capacity(1024 * 1024),
+            trailers: None,
         }
     }
 }
 
 impl<T> Streaming<T> {
-    // pub async fn message(&mut self) -> Option<Result<T::Item, Status>> {
-    //     future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await
-    // }
+    pub async fn message(&mut self) -> Option<Result<T, Status>> {
+        future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await
+    }
 
-    pub async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
+    pub async fn trailers(mut self) -> Result<Option<MetadataMap>, Status> {
+        // Shortcut to see if we already pulled the trailers in the stream step
+        // we need to do that so that the stream can error on trailing grpc-status
+        if let Some(trailers) = self.trailers {
+            return Ok(Some(trailers));
+        }
+
+        // To fetch the trailers we must clear the body and drop it.
+        while let Some(res) = self.message().await {
+            res?;
+        }
+
+        // Since we call poll_trailers internally on poll_next we need to
+        // check if it got cached again.
+        if let Some(trailers) = self.trailers {
+            return Ok(Some(trailers));
+        }
+
+
+        // Trailers were not caught during poll_next and thus lets poll for
+        // them manually.
         let map =
             future::poll_fn(|cx| unsafe { Pin::new_unchecked(&mut self.body) }.poll_trailers(cx))
                 .await
                 .map_err(|e| Status::from_error(&e))?;
+
         Ok(map.map(MetadataMap::from_headers))
     }
 
@@ -205,8 +223,10 @@ impl<T> Stream for Streaming<T> {
         if let Direction::Response(status) = self.direction {
             match ready!(unsafe { Pin::new_unchecked(&mut self.body) }.poll_trailers(cx)) {
                 Ok(trailer) => {
-                    if let Err(e) = crate::status::infer_grpc_status(trailer, status) {
+                    if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
                         return Some(Err(e)).into();
+                    } else {
+                        self.trailers = trailer.map(MetadataMap::from_headers);
                     }
                 }
                 Err(e) => {
