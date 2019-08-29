@@ -136,7 +136,14 @@ where
             .await?
             .ok_or(Status::new(Code::Internal, "Missing request message."))?;
 
-        Ok(Request::from_http_parts(parts, message))
+
+        let mut req = Request::from_http_parts(parts, message);
+
+        if let Some(trailers) = stream.trailers().await? {
+            req.metadata_mut().merge(trailers);
+        }
+
+        Ok(req)
     }
 
     fn map_request_streaming<B>(
@@ -170,8 +177,6 @@ where
 
                 let body = encode_server(self.codec.encoder(), body.into_stream());
 
-                // FIXME: try to return impl Trait?
-                // let body = Box::pin(body) as BoxStream<BytesBuf>;
                 http::Response::from_parts(parts, BoxBody::new(body))
             }
             Err(status) => {

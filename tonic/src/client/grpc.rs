@@ -77,7 +77,7 @@ impl<T> Grpc<T> {
         M1: Send,
         M2: Send + Unpin + 'static,
     {
-        let (parts, body) = self.streaming(request, path, codec).await?.into_parts();
+        let (mut parts, body) = self.streaming(request, path, codec).await?.into_parts();
 
         futures_util::pin_mut!(body);
 
@@ -85,6 +85,10 @@ impl<T> Grpc<T> {
             .try_next()
             .await?
             .ok_or(Status::new(Code::Internal, "Missing response message."))?;
+
+        if let Some(trailers) = body.trailers().await? {
+            parts.merge(trailers);
+        }
 
         Ok(Response::from_parts(parts, message))
     }

@@ -402,22 +402,21 @@ pub async fn custom_metadata(client: &mut Client, assertions: &mut Vec<TestAsser
     req_stream.metadata_mut().insert(key1, value1.clone());
     req_stream.metadata_mut().insert_bin(key2, value2.clone());
 
-    // let response = client
-    //     .unary_call(req_unary)
-    //     .await
-    //     .expect("call should pass.");
+    let response = client
+        .unary_call(req_unary)
+        .await
+        .expect("call should pass.");
 
-    // assertions.push(test_assert!(
-    //     "metadata string must match in unary",
-    //     response.metadata().get(key1) == Some(&value1),
-    //     format!("result={:?}", response.metadata().get(key1))
-    // ));
-    // assertions.push(test_assert!(
-    //     "metadata bin must match in unary",
-    //     response.metadata().get_bin(key2) == Some(&value2),
-    //     format!("result={:?}", response.metadata().get_bin(key1))
-    // ));
-
+    assertions.push(test_assert!(
+        "metadata string must match in unary",
+        response.metadata().get(key1) == Some(&value1),
+        format!("result={:?}", response.metadata().get(key1))
+    ));
+    assertions.push(test_assert!(
+        "metadata bin must match in unary",
+        response.metadata().get_bin(key2) == Some(&value2),
+        format!("result={:?}", response.metadata().get_bin(key1))
+    ));
 
     let response = client
         .full_duplex_call(req_stream)
@@ -431,8 +430,6 @@ pub async fn custom_metadata(client: &mut Client, assertions: &mut Vec<TestAsser
     ));
 
     let mut stream = response.into_inner();
-
-    // while let Some(_) = stream.next().await {}
 
     let trailers = stream.trailers().await.unwrap().unwrap();
 

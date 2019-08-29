@@ -1181,6 +1181,10 @@ impl MetadataMap {
     {
         key.remove(self)
     }
+
+    pub(crate) fn merge(&mut self, other: MetadataMap) {
+        self.headers.extend(other.headers);
+    }
 }
 
 // ===== impl Iter =====

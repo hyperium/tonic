@@ -91,10 +91,10 @@ impl<T> Streaming<T> {
         future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await
     }
 
-    pub async fn trailers(mut self) -> Result<Option<MetadataMap>, Status> {
+    pub async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
         // Shortcut to see if we already pulled the trailers in the stream step
         // we need to do that so that the stream can error on trailing grpc-status
-        if let Some(trailers) = self.trailers {
+        if let Some(trailers) = self.trailers.take() {
             return Ok(Some(trailers));
         }
 
@@ -105,10 +105,9 @@ impl<T> Streaming<T> {
 
         // Since we call poll_trailers internally on poll_next we need to
         // check if it got cached again.
-        if let Some(trailers) = self.trailers {
+        if let Some(trailers) = self.trailers.take() {
             return Ok(Some(trailers));
         }
-
 
         // Trailers were not caught during poll_next and thus lets poll for
         // them manually.
