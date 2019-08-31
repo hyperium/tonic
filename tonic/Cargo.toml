@@ -24,6 +24,9 @@ http-body = "0.2.0-alpha.1"
 pin-project = "0.4.0-alpha.2"
 hyper = { git = "https://github.com/hyperium/hyper", optional = true}
 
+# tower
+tower-reconnect = { path = "../../tower/tower-reconnect", optional = true }
+
 [features]
 default = ["transport"]
-transport = ["hyper"]
+transport = ["hyper", "tower-reconnect"]

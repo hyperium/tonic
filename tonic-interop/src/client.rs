@@ -25,7 +25,7 @@ const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
 pub async fn create(addr: SocketAddr) -> Result<TestClient, Box<dyn std::error::Error>> {
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
-    let svc = Client::connect(origin).await?;
+    let svc = Client::connect(origin)?;
 
     Ok(TestServiceClient::new(svc))
 }
@@ -35,7 +35,7 @@ pub async fn create_unimplemented(
 ) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
-    let svc = Client::connect(origin).await?;
+    let svc = Client::connect(origin)?;
 
     Ok(UnimplementedServiceClient::new(svc))
 }

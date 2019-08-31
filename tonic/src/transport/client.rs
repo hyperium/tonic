@@ -1,68 +1,62 @@
 use crate::{
     body::BoxBody,
-    service::{AddOrigin, GrpcService},
+    service::{AddOrigin, BoxService, GrpcService},
 };
+use futures_util::try_future::{MapErr, TryFutureExt};
 use http::Uri;
-use hyper::client::conn;
-use hyper::{Request, Response};
-use std::task::{Context, Poll};
-use tower_service::Service;
 use hyper::client::conn::Builder;
 use hyper::client::connect::HttpConnector;
-use hyper::client::service::{Connect, MakeService};
+use hyper::client::service::Connect;
+use hyper::{Request, Response};
+use std::future::Future;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
-//type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-type BoxService = Box<
-    dyn GrpcService<
-            BoxBody,
-            ResponseBody = hyper::Body,
-            Error = hyper::Error,
-            Future = conn::ResponseFuture, //BoxFuture<'static, Result<Response<hyper::Body>, hyper::Error>>,
-        > + Send
-        + 'static,
->;
-
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 // #[derive/(Clone)]
 pub struct Client {
-    svc: BoxService,
+    svc: Box<
+        dyn GrpcService<
+                BoxBody,
+                ResponseBody = hyper::Body,
+                Error = crate::Error,
+                Future = BoxFuture<'static, Result<Response<hyper::Body>, crate::Error>>,
+            > + Send
+            + 'static,
+    >,
 }
 
 impl Client {
-    pub async fn connect(addr: Uri) -> Result<Self, hyper::Error> {
+    pub fn connect(addr: Uri) -> Result<Self, super::Error> {
         let settings = Builder::new().http2_only(true).clone();
-        let mut maker = Connect::new(HttpConnector::new(), settings);
+        let maker = Connect::new(HttpConnector::new(), settings);
+        let svc = tower_reconnect::Reconnect::new(maker, addr.clone());
 
-        maker.make_service(addr.clone()).await.map(|svc| Self::new(addr, svc))
-    }
+        let svc = AddOrigin::new(svc, addr);
+        let svc = BoxService::new(svc);
 
-    fn new<S>(addr: Uri, service: S) -> Self
-    where
-        S: Service<
-                Request<BoxBody>,
-                Response = Response<hyper::Body>,
-                Error = hyper::Error,
-                Future = conn::ResponseFuture, //BoxFuture<'static, Result<Response<hyper::Body>, hyper::Error>>,
-            > + Send
-            + 'static,
-    {
-        let svc = AddOrigin::new(service, addr);
-
-        Self { svc: Box::new(svc) }
+        Ok(Self { svc: Box::new(svc) })
     }
 }
 
 impl GrpcService<BoxBody> for Client {
     type ResponseBody = hyper::Body;
-    type Error = hyper::Error;
+    type Error = super::Error;
 
-    // type Future = BoxFuture<'static, Result<Response<Self::ResponseBody>, Self::Error>>;
-    type Future = conn::ResponseFuture;
+    type Future = MapErr<
+        BoxFuture<'static, Result<Response<Self::ResponseBody>, crate::Error>>,
+        fn(crate::Error) -> super::Error,
+    >;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.svc.poll_ready(cx)
+        self.svc
+            .poll_ready(cx)
+            .map_err(|e| super::Error::from((super::ErrorKind::Client, e)))
     }
 
     fn call(&mut self, request: Request<BoxBody>) -> Self::Future {
-        self.svc.call(request)
+        self.svc
+            .call(request)
+            .map_err(|e| super::Error::from((super::ErrorKind::Client, e)))
     }
 }

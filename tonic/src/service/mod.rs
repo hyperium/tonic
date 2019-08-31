@@ -1,7 +1,9 @@
 // TODO: make this private again
 pub mod add_origin;
+mod boxed;
 
 pub use self::add_origin::AddOrigin;
+pub use self::boxed::BoxService;
 
 use crate::body::Body;
 use http::{Request, Response};

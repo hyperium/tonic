@@ -1,7 +1,4 @@
 use futures::TryStreamExt;
-use hyper::client::conn::Builder;
-use hyper::client::connect::HttpConnector;
-use hyper::client::service::{Connect, MakeService};
 use route_guide::{Point, RouteNote};
 use std::time::{Duration, Instant};
 use tokio::timer::Interval;
@@ -16,7 +13,7 @@ mod route_guide {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = http::Uri::from_static("http://[::1]:10000");
 
-    let svc = Client::connect(origin).await?;
+    let svc = Client::connect(origin)?;
     let mut client = route_guide::RouteGuideClient::new(svc);
 
     let start = Instant::now();
