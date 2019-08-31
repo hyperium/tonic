@@ -1,4 +1,5 @@
 mod client;
+mod openssl;
 mod tls;
 
 pub use self::client::Client;

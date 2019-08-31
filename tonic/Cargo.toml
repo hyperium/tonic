@@ -27,6 +27,8 @@ hyper = { git = "https://github.com/hyperium/hyper", optional = true}
 tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
 tower-make = "=0.1.0-alpha.2"
 tokio-rustls = { path = "../../tokio-rustls", optional = true }
+tokio-openssl = "=0.4.0-alpha.4"
+openssl = "*"
 tower-reconnect = { path = "../../tower/tower-reconnect", optional = true }
 tower-buffer = { path = "../../tower/tower-buffer", optional = true }
 

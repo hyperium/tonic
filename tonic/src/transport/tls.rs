@@ -9,7 +9,10 @@ use std::{
 };
 use tokio::{fs, net::TcpStream};
 use tokio_rustls::{
-    client::TlsStream, rustls::{ClientConfig, Session}, webpki::DNSNameRef, TlsConnector as RustlsConnector,
+    client::TlsStream,
+    rustls::{ClientConfig, Session},
+    webpki::DNSNameRef,
+    TlsConnector as RustlsConnector,
 };
 use tower_make::MakeConnection;
 use tower_service::Service;
@@ -24,7 +27,9 @@ pub struct TlsConnector {
 
 impl TlsConnector {
     pub async fn load<P: AsRef<Path>>(ca: P) -> Result<Self, super::Error> {
-        let pem = fs::read(ca).await.map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))?;
+        let pem = fs::read(ca)
+            .await
+            .map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))?;
         Ok(TlsConnector::new(pem))
     }
 
@@ -54,12 +59,13 @@ impl Service<Uri> for TlsConnector {
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        MakeConnection::poll_ready(&mut self.http, cx).map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))
+        MakeConnection::poll_ready(&mut self.http, cx)
+            .map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
         let auth = uri.authority_part().unwrap();
-        let dns = DNSNameRef::try_from_ascii_str("foo.test.google.fr")//auth.host())
+        let dns = DNSNameRef::try_from_ascii_str("foo.test.google.fr") //auth.host())
             .unwrap()
             .to_owned();
         let config = self.config.clone();

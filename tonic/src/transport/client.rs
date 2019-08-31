@@ -49,7 +49,8 @@ impl Client {
     pub async fn connect_with_tls<P: AsRef<Path>>(addr: Uri, ca: P) -> Result<Self, super::Error> {
         let settings = Builder::new().http2_only(true).clone();
 
-        let tls_connector = TlsConnector::load(ca).await?;
+        // let tls_connector = TlsConnector::load(ca).await?;
+        let tls_connector = super::openssl::TlsConnector::load(ca).await?;
 
         let maker = Connect::new(tls_connector, settings);
         let svc = tower_reconnect::Reconnect::new(maker, addr.clone());
