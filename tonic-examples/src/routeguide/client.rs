@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = http::Uri::from_static("http://[::1]:10000");
 
     let settings = Builder::new().http2_only(true).clone();
-    let mut maker = Connect::new(HttpConnector::new(1), settings);
+    let mut maker = Connect::new(HttpConnector::new(), settings);
 
     let svc = maker.make_service(origin.clone()).await?;
     let svc = AddOrigin::new(svc, origin);

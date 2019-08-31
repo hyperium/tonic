@@ -24,9 +24,9 @@ path = "src/routeguide/client.rs"
 
 [dependencies]
 tonic = { path = "../tonic" }
-hyper = { path = "../../hyper" }
+hyper = { git = "https://github.com/hyperium/hyper" }
 futures-preview = { version = "=0.3.0-alpha.18", default-features = false, features = ["alloc"]}
-tokio = "=0.2.0-alpha.2"
+tokio = "=0.2.0-alpha.4"
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"

@@ -22,12 +22,7 @@ impl MyGreeter {
 
         let string = &self.data;
 
-        let when = tokio::clock::now() + Duration::from_millis(100);
-        Delay::new(when).await;
-
         println!("My data: {:?}", string);
-
-        Delay::new(when).await;
 
         let reply = hello_world::HelloReply {
             message: "Zomg, it works!".into(),

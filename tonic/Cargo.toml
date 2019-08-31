@@ -17,7 +17,7 @@ bytes = "0.4.7"
 prost = "0.5"
 percent-encoding = "1.0.1"
 tower-service = "=0.3.0-alpha.1"
-tokio-codec = "=0.2.0-alpha.2"
+tokio-codec = "=0.2.0-alpha.4"
 # async-stream = "0.1.0"
 async-stream = { path = "../../async-stream/async-stream" }
 http-body = "0.2.0-alpha.1"

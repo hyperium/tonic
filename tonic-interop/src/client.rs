@@ -29,7 +29,7 @@ pub async fn create(addr: SocketAddr) -> Result<Client, Box<dyn std::error::Erro
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
     let settings = Builder::new().http2_only(true).clone();
-    let mut maker = Connect::new(HttpConnector::new(1), settings);
+    let mut maker = Connect::new(HttpConnector::new(), settings);
 
     let svc = maker.make_service(origin.clone()).await?;
     let svc = AddOrigin::new(svc, origin);
@@ -43,7 +43,7 @@ pub async fn create_unimplemented(
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
     let settings = Builder::new().http2_only(true).clone();
-    let mut maker = Connect::new(HttpConnector::new(1), settings);
+    let mut maker = Connect::new(HttpConnector::new(), settings);
 
     let svc = maker.make_service(origin.clone()).await?;
     let svc = AddOrigin::new(svc, origin);
