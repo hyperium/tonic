@@ -136,7 +136,6 @@ where
             .await?
             .ok_or(Status::new(Code::Internal, "Missing request message."))?;
 
-
         let mut req = Request::from_http_parts(parts, message);
 
         if let Some(trailers) = stream.trailers().await? {

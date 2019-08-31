@@ -1,4 +1,5 @@
 mod client;
+mod tls;
 
 pub use self::client::Client;
 
@@ -12,7 +13,7 @@ pub struct Error {
 #[derive(Debug)]
 pub(crate) enum ErrorKind {
     Client,
-    // Server,
+    UnableToNegotiateH2, // Server,
 }
 
 impl From<ErrorKind> for Error {

@@ -2,7 +2,7 @@ use futures::TryStreamExt;
 use route_guide::{Point, RouteNote};
 use std::time::{Duration, Instant};
 use tokio::timer::Interval;
-use tonic::{Request, transport::Client};
+use tonic::{transport::Client, Request};
 
 mod route_guide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));

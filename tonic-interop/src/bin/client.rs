@@ -16,15 +16,17 @@ struct Opts {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let sub = tracing_fmt::FmtSubscriber::builder().finish();
     tracing::subscriber::set_global_default(sub).unwrap();
+    let _ = tracing_log::LogTracer::init();
 
     let matches = Opts::from_args();
 
     let test_cases = matches.test_case;
 
-    let addr = "127.0.0.1:10000".parse()?;
+    let addr = "localhost:8080";
+    let origin = http::Uri::from_shared(format!("https://{}", addr).into()).unwrap();
 
-    let mut client = client::create(addr).await?;
-    let mut unimplemented_client = client::create_unimplemented(addr).await?;
+    let mut client = client::create(origin.clone()).await?;
+    let mut unimplemented_client = client::create_unimplemented(origin).await?;
 
     for test_case in test_cases {
         println!("{:?}:", test_case);

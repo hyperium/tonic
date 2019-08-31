@@ -1,9 +1,8 @@
 use crate::{pb::*, test_assert, TestAssertion};
 use futures_util::{future, stream, SinkExt, StreamExt};
-use std::net::SocketAddr;
 use tokio::sync::mpsc;
-use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 use tonic::transport::Client;
+use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 
 pub type TestClient = TestServiceClient<Client>;
 pub type UnimplementedClient = UnimplementedServiceClient<Client>;
@@ -22,19 +21,15 @@ const TEST_STATUS_MESSAGE: &'static str = "test status message";
 const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
-pub async fn create(addr: SocketAddr) -> Result<TestClient, Box<dyn std::error::Error>> {
-    let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
-
-    let svc = Client::connect(origin)?;
+pub async fn create(origin: http::Uri) -> Result<TestClient, Box<dyn std::error::Error>> {
+    let svc = Client::connect_with_tls(origin, "tonic-interop/data/ca.pem").await?;
 
     Ok(TestServiceClient::new(svc))
 }
 
 pub async fn create_unimplemented(
-    addr: SocketAddr,
+    origin: http::Uri,
 ) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
-    let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
-
     let svc = Client::connect(origin)?;
 
     Ok(UnimplementedServiceClient::new(svc))

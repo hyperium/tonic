@@ -18,16 +18,24 @@ prost = "0.5"
 percent-encoding = "1.0.1"
 tower-service = "=0.3.0-alpha.1"
 tokio-codec = "=0.2.0-alpha.4"
-# async-stream = "0.1.0"
-async-stream = { path = "../../async-stream/async-stream" }
+async-stream = { git = "https://github.com/tokio-rs/async-stream" }
 http-body = "0.2.0-alpha.1"
 pin-project = "0.4.0-alpha.2"
-hyper = { git = "https://github.com/hyperium/hyper", optional = true}
 
-# tower
+# optional
+hyper = { git = "https://github.com/hyperium/hyper", optional = true}
+tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
+tower-make = "=0.1.0-alpha.2"
+tokio-rustls = { path = "../../tokio-rustls", optional = true }
 tower-reconnect = { path = "../../tower/tower-reconnect", optional = true }
 tower-buffer = { path = "../../tower/tower-buffer", optional = true }
 
 [features]
 default = ["transport"]
-transport = ["hyper", "tower-reconnect", "tower-buffer"]
+transport = [
+    "hyper",
+    "tower-reconnect",
+    "tower-buffer",
+    "tokio",
+    "tokio-rustls",
+]

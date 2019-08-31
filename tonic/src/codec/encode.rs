@@ -117,7 +117,7 @@ where
     }
 
     fn poll_data(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         let mut self_proj = self.project();
@@ -135,7 +135,7 @@ where
     }
 
     fn poll_trailers(
-        self: Pin<&mut Self>,
+        mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Option<HeaderMap>, Status>> {
         match self.role {

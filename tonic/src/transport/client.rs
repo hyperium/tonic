@@ -1,3 +1,4 @@
+use super::tls::TlsConnector;
 use crate::{
     body::BoxBody,
     service::{AddOrigin, BoxService, GrpcService},
@@ -9,6 +10,7 @@ use hyper::client::connect::HttpConnector;
 use hyper::client::service::Connect;
 use hyper::{Request, Response};
 use std::future::Future;
+use std::path::Path;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower_buffer::{future::ResponseFuture, Buffer};
@@ -34,6 +36,22 @@ impl Client {
     pub fn connect(addr: Uri) -> Result<Self, super::Error> {
         let settings = Builder::new().http2_only(true).clone();
         let maker = Connect::new(HttpConnector::new(), settings);
+        let svc = tower_reconnect::Reconnect::new(maker, addr.clone());
+
+        let svc = AddOrigin::new(svc, addr);
+        let svc = BoxService::new(svc);
+
+        let svc = Buffer::new(Box::new(svc) as Inner, 100);
+
+        Ok(Self { svc })
+    }
+
+    pub async fn connect_with_tls<P: AsRef<Path>>(addr: Uri, ca: P) -> Result<Self, super::Error> {
+        let settings = Builder::new().http2_only(true).clone();
+
+        let tls_connector = TlsConnector::load(ca).await?;
+
+        let maker = Connect::new(tls_connector, settings);
         let svc = tower_reconnect::Reconnect::new(maker, addr.clone());
 
         let svc = AddOrigin::new(svc, addr);

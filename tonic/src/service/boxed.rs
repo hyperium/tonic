@@ -24,7 +24,6 @@ where
     type Response = S::Response;
     type Error = S::Error;
 
-    // type Future = BoxFuture<'static, Result<Response<Self::ResponseBody>, Self::Error>>;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
