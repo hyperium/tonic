@@ -1,6 +1,4 @@
 use hyper::Server;
-use std::time::Duration;
-use tokio::timer::Delay;
 use tonic::{Request, Response, Status};
 
 pub mod hello_world {

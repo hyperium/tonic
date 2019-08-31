@@ -1,15 +1,12 @@
 use crate::{pb::*, test_assert, TestAssertion};
 use futures_util::{future, stream, SinkExt, StreamExt};
-use hyper::client::conn::{Builder, SendRequest};
-use hyper::client::connect::HttpConnector;
-use hyper::client::service::{Connect, MakeService};
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
-use tonic::service::add_origin::AddOrigin;
 use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
+use tonic::transport::Client;
 
-pub type Client = TestServiceClient<AddOrigin<SendRequest<tonic::BoxBody>>>;
-pub type UnimplementedClient = UnimplementedServiceClient<AddOrigin<SendRequest<tonic::BoxBody>>>;
+pub type TestClient = TestServiceClient<Client>;
+pub type UnimplementedClient = UnimplementedServiceClient<Client>;
 
 tonic::client!(service = "grpc.testing.TestService", proto = "crate::pb");
 tonic::client!(
@@ -25,14 +22,10 @@ const TEST_STATUS_MESSAGE: &'static str = "test status message";
 const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
-pub async fn create(addr: SocketAddr) -> Result<Client, Box<dyn std::error::Error>> {
+pub async fn create(addr: SocketAddr) -> Result<TestClient, Box<dyn std::error::Error>> {
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
-    let settings = Builder::new().http2_only(true).clone();
-    let mut maker = Connect::new(HttpConnector::new(), settings);
-
-    let svc = maker.make_service(origin.clone()).await?;
-    let svc = AddOrigin::new(svc, origin);
+    let svc = Client::connect(origin).await?;
 
     Ok(TestServiceClient::new(svc))
 }
@@ -42,16 +35,12 @@ pub async fn create_unimplemented(
 ) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
-    let settings = Builder::new().http2_only(true).clone();
-    let mut maker = Connect::new(HttpConnector::new(), settings);
-
-    let svc = maker.make_service(origin.clone()).await?;
-    let svc = AddOrigin::new(svc, origin);
+    let svc = Client::connect(origin).await?;
 
     Ok(UnimplementedServiceClient::new(svc))
 }
 
-pub async fn empty_unary(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn empty_unary(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let result = client.empty_call(Request::new(Empty {})).await;
 
     assertions.push(test_assert!(
@@ -70,7 +59,7 @@ pub async fn empty_unary(client: &mut Client, assertions: &mut Vec<TestAssertion
     }
 }
 
-pub async fn large_unary(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn large_unary(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     use std::mem;
     let payload = crate::client_payload(LARGE_REQ_SIZE);
     let req = SimpleRequest {
@@ -114,7 +103,7 @@ pub async fn large_unary(client: &mut Client, assertions: &mut Vec<TestAssertion
 //     client.
 // }
 
-pub async fn client_streaming(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn client_streaming(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let requests = REQUEST_LENGTHS
         .iter()
         .map(|len| StreamingInputCallRequest {
@@ -144,7 +133,7 @@ pub async fn client_streaming(client: &mut Client, assertions: &mut Vec<TestAsse
     }
 }
 
-pub async fn server_streaming(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn server_streaming(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let req = StreamingOutputCallRequest {
         response_parameters: RESPONSE_LENGTHS
             .iter()
@@ -186,7 +175,7 @@ pub async fn server_streaming(client: &mut Client, assertions: &mut Vec<TestAsse
     }
 }
 
-pub async fn ping_pong(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let (mut tx, rx) = mpsc::unbounded_channel();
     tx.try_send(make_ping_pong_request(0)).unwrap();
 
@@ -243,7 +232,7 @@ pub async fn ping_pong(client: &mut Client, assertions: &mut Vec<TestAssertion>)
     }
 }
 
-pub async fn empty_stream(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn empty_stream(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let stream = stream::iter(Vec::new());
     let result = client.full_duplex_call(Request::new(stream)).await;
 
@@ -264,7 +253,7 @@ pub async fn empty_stream(client: &mut Client, assertions: &mut Vec<TestAssertio
     }
 }
 
-pub async fn status_code_and_message(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     fn validate_response<T>(result: Result<T, Status>, assertions: &mut Vec<TestAssertion>)
     where
         T: std::fmt::Debug,
@@ -322,7 +311,7 @@ pub async fn status_code_and_message(client: &mut Client, assertions: &mut Vec<T
     validate_response(result, assertions);
 }
 
-pub async fn special_status_message(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn special_status_message(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let req = SimpleRequest {
         response_status: Some(EchoStatus {
             code: 2,
@@ -353,7 +342,7 @@ pub async fn special_status_message(client: &mut Client, assertions: &mut Vec<Te
     ));
 }
 
-pub async fn unimplemented_method(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn unimplemented_method(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let result = client.unimplemented_call(Request::new(Empty {})).await;
     assertions.push(test_assert!(
         "call must fail with unimplemented status code",
@@ -380,7 +369,7 @@ pub async fn unimplemented_service(
     ));
 }
 
-pub async fn custom_metadata(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
+pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let key1 = "x-grpc-test-echo-initial";
     let value1 = MetadataValue::from_str("test_initial_metadata_value").unwrap();
     let key2 = "x-grpc-test-echo-trailing-bin";

@@ -1,4 +1,7 @@
+// TODO: make this private again
 pub mod add_origin;
+
+pub use self::add_origin::AddOrigin;
 
 use crate::body::Body;
 use http::{Request, Response};

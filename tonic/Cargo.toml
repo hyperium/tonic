@@ -22,3 +22,8 @@ tokio-codec = "=0.2.0-alpha.4"
 async-stream = { path = "../../async-stream/async-stream" }
 http-body = "0.2.0-alpha.1"
 pin-project = "0.4.0-alpha.2"
+hyper = { git = "https://github.com/hyperium/hyper", optional = true}
+
+[features]
+default = ["transport"]
+transport = ["hyper"]

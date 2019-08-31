@@ -11,6 +11,9 @@ pub mod metadata;
 pub mod server;
 pub mod service;
 
+#[cfg(feature = "transport")]
+pub mod transport;
+
 mod request;
 mod response;
 mod status;

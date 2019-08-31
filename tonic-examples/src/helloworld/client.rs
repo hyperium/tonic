@@ -1,7 +1,4 @@
-use hyper::client::conn::Builder;
-use hyper::client::connect::HttpConnector;
-use hyper::client::service::{Connect, MakeService};
-use tonic::service::add_origin::AddOrigin;
+use tonic::transport::Client;
 
 pub mod hello_world {
     include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
@@ -12,12 +9,7 @@ pub mod hello_world {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = http::Uri::from_static("http://[::1]:50051");
 
-    let settings = Builder::new().http2_only(true).clone();
-    let mut maker = Connect::new(HttpConnector::new(), settings);
-
-    let svc = maker.make_service(origin.clone()).await?;
-
-    let svc = AddOrigin::new(svc, origin);
+    let svc = Client::connect(origin).await?;
 
     let mut client = hello_world::GreeterClient::new(svc);
 
