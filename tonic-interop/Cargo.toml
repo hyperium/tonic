@@ -25,6 +25,8 @@ hyper = { git = "https://github.com/hyperium/hyper" }
 console = "0.7"
 structopt = "0.2"
 pretty_env_logger = "0.3"
+tracing-fmt = "0.0.1-alpha.1"
+tracing = "0.1"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }

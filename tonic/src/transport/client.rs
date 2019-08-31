@@ -11,19 +11,23 @@ use hyper::{Request, Response};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tower_buffer::{future::ResponseFuture, Buffer};
+use tower_service::Service;
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-// #[derive/(Clone)]
+type Inner = Box<
+    dyn Service<
+            Request<BoxBody>,
+            Response = Response<hyper::Body>,
+            Error = crate::Error,
+            Future = BoxFuture<'static, Result<Response<hyper::Body>, crate::Error>>,
+        > + Send
+        + 'static,
+>;
+
+#[derive(Clone)]
 pub struct Client {
-    svc: Box<
-        dyn GrpcService<
-                BoxBody,
-                ResponseBody = hyper::Body,
-                Error = crate::Error,
-                Future = BoxFuture<'static, Result<Response<hyper::Body>, crate::Error>>,
-            > + Send
-            + 'static,
-    >,
+    svc: Buffer<Inner, Request<BoxBody>>,
 }
 
 impl Client {
@@ -35,7 +39,9 @@ impl Client {
         let svc = AddOrigin::new(svc, addr);
         let svc = BoxService::new(svc);
 
-        Ok(Self { svc: Box::new(svc) })
+        let svc = Buffer::new(Box::new(svc) as Inner, 100);
+
+        Ok(Self { svc })
     }
 }
 
@@ -44,19 +50,17 @@ impl GrpcService<BoxBody> for Client {
     type Error = super::Error;
 
     type Future = MapErr<
-        BoxFuture<'static, Result<Response<Self::ResponseBody>, crate::Error>>,
+        ResponseFuture<BoxFuture<'static, Result<Response<Self::ResponseBody>, crate::Error>>>,
         fn(crate::Error) -> super::Error,
     >;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.svc
-            .poll_ready(cx)
+        GrpcService::poll_ready(&mut self.svc, cx)
             .map_err(|e| super::Error::from((super::ErrorKind::Client, e)))
     }
 
     fn call(&mut self, request: Request<BoxBody>) -> Self::Future {
-        self.svc
-            .call(request)
+        GrpcService::call(&mut self.svc, request)
             .map_err(|e| super::Error::from((super::ErrorKind::Client, e)))
     }
 }

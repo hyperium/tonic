@@ -26,7 +26,8 @@ hyper = { git = "https://github.com/hyperium/hyper", optional = true}
 
 # tower
 tower-reconnect = { path = "../../tower/tower-reconnect", optional = true }
+tower-buffer = { path = "../../tower/tower-buffer", optional = true }
 
 [features]
 default = ["transport"]
-transport = ["hyper", "tower-reconnect"]
+transport = ["hyper", "tower-reconnect", "tower-buffer"]
