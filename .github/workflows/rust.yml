@@ -13,6 +13,8 @@ jobs:
       with:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@master
+    - name: Install rustfmt
+      run: rustup component add rustfmt
     - name: Run fmt
       run: cargo fmt -- --check
     - name: Run check
