@@ -1,6 +1,6 @@
 use structopt::{clap::arg_enum, StructOpt};
-use tonic_interop::client;
 use tonic::transport::Channel;
+use tonic_interop::client;
 
 #[derive(StructOpt)]
 struct Opts {

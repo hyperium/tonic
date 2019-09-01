@@ -1,4 +1,4 @@
-name: Test Rust project
+name: Tonic gRPC
 on: [push]
 jobs:
   test:
