@@ -32,7 +32,7 @@ prost-derive = "0.5"
 bytes = "0.4"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-async-stream = { path = "../../async-stream/async-stream" }
+async-stream = { git = "https://github.com/tokio-rs/async-stream" }
 http = "0.1"
 
 [build-dependencies]
