@@ -3,7 +3,13 @@
 set -eu
 set -o pipefail
 
-SERVER="tonic-interop/bin/darwin/server"
+case "$OSTYPE" in
+  darwin*)  OS="darwin" ;;
+  linux*)   OS="linux" ;;
+  *)        exit 2 ;;
+esac
+
+SERVER="tonic-interop/bin/server_${OS}_amd64"
 
 # run the test server
 ./"${SERVER}" &

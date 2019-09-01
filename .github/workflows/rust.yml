@@ -5,7 +5,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [macOS-latest]
+        os: [ubuntu-latest, macOS-latest]
         rust: [nightly]
 
     steps:
@@ -13,7 +13,11 @@ jobs:
       with:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@master
+    - name: Run fmt
+      run: cargo fmt -- --check
+    - name: Run check
+      run: cargo check --all --all-features --all-targets
     - name: Run tests
-      run: cargo test --all --verbose
+      run: cargo test --all
     - name: Run interop tests
       run: ./tonic-interop/test.sh
