@@ -1,15 +1,19 @@
-name: Rust
-
+name: Test Rust project
 on: [push]
-
 jobs:
-  build:
-
-    runs-on: ubuntu-latest
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macOS-latest]
+        rust: [nightly]
 
     steps:
-    - uses: actions/checkout@v1
-    - name: Build
-      run: cargo build --verbose
+    - uses: hecrj/setup-rust-action@master
+      with:
+        rust-version: ${{ matrix.rust }}
+    - uses: actions/checkout@master
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --all --verbose
+    - name: Run interop tests
+      run: ./tonic-interop/test.sh
