@@ -22,8 +22,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let test_cases = matches.test_case;
 
-    let addr = "localhost:8080";
-    let origin = http::Uri::from_shared(format!("https://{}", addr).into()).unwrap();
+    let addr = "localhost:10000";
+    let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
     let mut client = client::create(origin.clone()).await?;
     let mut unimplemented_client = client::create_unimplemented(origin).await?;

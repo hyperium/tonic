@@ -17,7 +17,7 @@ use tokio_rustls::{
 use tower_make::MakeConnection;
 use tower_service::Service;
 
-const ALPN_H2: &str = "h2";
+const ALPN_H2: &str = "\x02h2";
 
 #[derive(Clone)]
 pub struct TlsConnector {
@@ -26,14 +26,7 @@ pub struct TlsConnector {
 }
 
 impl TlsConnector {
-    pub async fn load<P: AsRef<Path>>(ca: P) -> Result<Self, super::Error> {
-        let pem = fs::read(ca)
-            .await
-            .map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))?;
-        Ok(TlsConnector::new(pem))
-    }
-
-    fn new(ca: Vec<u8>) -> Self {
+    pub fn new(ca: Vec<u8>, domain: String) -> Self {
         let mut buf = std::io::Cursor::new(ca);
 
         let mut config = ClientConfig::new();

@@ -1,33 +1,33 @@
 use http::Uri;
 use hyper::client::connect::HttpConnector;
-use openssl::ssl::{ConnectConfiguration, SslConnector, SslMethod};
+use openssl::ssl::{SslConnector, SslMethod};
+use openssl::x509::X509;
 use std::{
     future::Future,
-    path::Path,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
-use tokio::{fs, net::TcpStream};
+use tokio::net::TcpStream;
 use tokio_openssl::{connect, SslStream};
 use tower_make::MakeConnection;
 use tower_service::Service;
-
-const ALPN_H2: &str = "h2";
 
 #[derive(Clone)]
 pub struct TlsConnector {
     http: HttpConnector,
     config: SslConnector,
+    domain: String,
 }
 
 impl TlsConnector {
-    pub async fn load<P: AsRef<Path>>(ca: P) -> Result<Self, super::Error> {
+    pub fn new(ca: Vec<u8>, domain: String) -> Result<Self, super::Error> {
         let mut config = SslConnector::builder(SslMethod::tls()).unwrap();
 
-        config.set_alpn_protos(ALPN_H2.as_bytes()).unwrap();
+        config.set_alpn_protos(b"\x02h2").unwrap();
 
-        config.set_ca_file(ca).unwrap();
+        let ca = X509::from_pem(&ca[..]).unwrap();
+
+        config.cert_store_mut().add_cert(ca).unwrap();
 
         let config = config.build();
 
@@ -37,6 +37,7 @@ impl TlsConnector {
         Ok(Self {
             http,
             config,
+            domain,
         })
     }
 }
@@ -56,10 +57,10 @@ impl Service<Uri> for TlsConnector {
     fn call(&mut self, uri: Uri) -> Self::Future {
         let config = self.config.configure().unwrap();
         let tcp = self.http.make_connection(uri.clone());
+        let domain = self.domain.clone();
 
         let fut = async move {
             let io = tcp.await.unwrap();
-            let domain = "foo.test.google.fr";
             let tls = connect(config, &domain, io).await.unwrap();
             Ok(tls)
         };

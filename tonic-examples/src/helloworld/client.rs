@@ -9,7 +9,7 @@ pub mod hello_world {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = http::Uri::from_static("http://[::1]:50051");
 
-    let svc = Client::connect(origin)?;
+    let svc = Client::builder().build(origin)?;
 
     let mut client = hello_world::GreeterClient::new(svc);
 

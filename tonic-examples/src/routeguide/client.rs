@@ -13,7 +13,7 @@ mod route_guide {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = http::Uri::from_static("http://[::1]:10000");
 
-    let svc = Client::connect(origin)?;
+    let svc = Client::builder().build(origin)?;
     let mut client = route_guide::RouteGuideClient::new(svc);
 
     let start = Instant::now();

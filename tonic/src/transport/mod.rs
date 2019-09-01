@@ -1,6 +1,8 @@
 mod client;
+#[cfg(feature = "openssl-1")]
 mod openssl;
-mod tls;
+#[cfg(feature = "rustls")]
+mod rustls;
 
 pub use self::client::Client;
 
@@ -14,7 +16,7 @@ pub struct Error {
 #[derive(Debug)]
 pub(crate) enum ErrorKind {
     Client,
-    UnableToNegotiateH2, // Server,
+    // Server,
 }
 
 impl From<ErrorKind> for Error {

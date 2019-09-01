@@ -22,7 +22,12 @@ const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
 pub async fn create(origin: http::Uri) -> Result<TestClient, Box<dyn std::error::Error>> {
-    let svc = Client::connect_with_tls(origin, "tonic-interop/data/ca.pem").await?;
+    let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
+
+    let svc = Client::builder()
+        .tls(ca)
+        .tls_override_domain("foo.test.google.fr")
+        .build(origin)?;
 
     Ok(TestServiceClient::new(svc))
 }
@@ -30,7 +35,12 @@ pub async fn create(origin: http::Uri) -> Result<TestClient, Box<dyn std::error:
 pub async fn create_unimplemented(
     origin: http::Uri,
 ) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
-    let svc = Client::connect(origin)?;
+    let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
+
+    let svc = Client::builder()
+        .tls(ca)
+        .tls_override_domain("foo.test.google.fr")
+        .build(origin)?;
 
     Ok(UnimplementedServiceClient::new(svc))
 }

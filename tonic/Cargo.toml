@@ -26,11 +26,15 @@ pin-project = "0.4.0-alpha.2"
 hyper = { git = "https://github.com/hyperium/hyper", optional = true}
 tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
 tower-make = "=0.1.0-alpha.2"
-tokio-rustls = { path = "../../tokio-rustls", optional = true }
-tokio-openssl = "=0.4.0-alpha.4"
-openssl = "*"
 tower-reconnect = { path = "../../tower/tower-reconnect", optional = true }
 tower-buffer = { path = "../../tower/tower-buffer", optional = true }
+
+# openssl
+tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }
+openssl = { version = "0.10", optional = true }
+
+# rustls
+tokio-rustls = { path = "../../tokio-rustls", optional = true }
 
 [features]
 default = ["transport"]
@@ -39,5 +43,7 @@ transport = [
     "tower-reconnect",
     "tower-buffer",
     "tokio",
-    "tokio-rustls",
+    "openssl-1",
 ]
+openssl-1 = ["openssl", "tokio-openssl"]
+rustls = ["tokio-rustls"]
