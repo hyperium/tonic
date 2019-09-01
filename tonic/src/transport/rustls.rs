@@ -2,12 +2,11 @@ use http::Uri;
 use hyper::client::connect::HttpConnector;
 use std::{
     future::Future,
-    path::Path,
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
 };
-use tokio::{fs, net::TcpStream};
+use tokio::net::TcpStream;
 use tokio_rustls::{
     client::TlsStream,
     rustls::{ClientConfig, Session},
@@ -17,15 +16,17 @@ use tokio_rustls::{
 use tower_make::MakeConnection;
 use tower_service::Service;
 
-const ALPN_H2: &str = "\x02h2";
+const ALPN_H2: &str = "h2";
 
 #[derive(Clone)]
 pub struct TlsConnector {
     http: HttpConnector,
     config: Arc<ClientConfig>,
+    domain: String,
 }
 
 impl TlsConnector {
+    #[cfg_attr(feature = "openssl-1", allow(dead_code))]
     pub fn new(ca: Vec<u8>, domain: String) -> Self {
         let mut buf = std::io::Cursor::new(ca);
 
@@ -40,6 +41,7 @@ impl TlsConnector {
         Self {
             http,
             config: Arc::new(config),
+            domain,
         }
     }
 }
@@ -57,8 +59,7 @@ impl Service<Uri> for TlsConnector {
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        let auth = uri.authority_part().unwrap();
-        let dns = DNSNameRef::try_from_ascii_str("foo.test.google.fr") //auth.host())
+        let dns = DNSNameRef::try_from_ascii_str(self.domain.as_str())
             .unwrap()
             .to_owned();
         let config = self.config.clone();
@@ -73,10 +74,7 @@ impl Service<Uri> for TlsConnector {
             RustlsConnector::from(config)
                 .connect(dns.as_ref(), io)
                 .await
-                .map_err(|e| {
-                    println!("TLS ERROR={:?}", e);
-                    super::Error::from((super::ErrorKind::Client, e.into()))
-                })
+                .map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))
                 .and_then(|conn| {
                     let (_, session) = conn.get_ref();
                     let negotiated_protocol = session.get_alpn_protocol();
@@ -84,7 +82,7 @@ impl Service<Uri> for TlsConnector {
                     if Some(ALPN_H2.as_bytes()) == negotiated_protocol.as_ref().map(|x| &**x) {
                         Ok(conn)
                     } else {
-                        Err(super::Error::from(super::ErrorKind::UnableToNegotiateH2).into())
+                        Err(super::Error::from(super::ErrorKind::Client).into())
                     }
                 })
         };

@@ -12,6 +12,8 @@ use tokio_openssl::{connect, SslStream};
 use tower_make::MakeConnection;
 use tower_service::Service;
 
+const ALPN_H2: &[u8] = b"\x02h2";
+
 #[derive(Clone)]
 pub struct TlsConnector {
     http: HttpConnector,
@@ -23,7 +25,7 @@ impl TlsConnector {
     pub fn new(ca: Vec<u8>, domain: String) -> Result<Self, super::Error> {
         let mut config = SslConnector::builder(SslMethod::tls()).unwrap();
 
-        config.set_alpn_protos(b"\x06h2").unwrap();
+        config.set_alpn_protos(ALPN_H2).unwrap();
 
         let ca = X509::from_pem(&ca[..]).unwrap();
 
