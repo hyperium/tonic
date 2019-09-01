@@ -1,5 +1,6 @@
 use structopt::{clap::arg_enum, StructOpt};
 use tonic_interop::client;
+use tonic::transport::Channel;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -25,8 +26,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "localhost:10000";
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
-    let mut client = client::create(origin.clone()).await?;
-    let mut unimplemented_client = client::create_unimplemented(origin).await?;
+    let channel = Channel::builder()
+        // .tls(ca)
+        // .tls_override_domain("foo.test.google.fr")
+        .build(origin)?;
+
+    let mut client = client::TestClient::new(channel.clone());
+    let mut unimplemented_client = client::UnimplementedClient::new(channel);
+
+    let mut failures = Vec::new();
 
     for test_case in test_cases {
         println!("{:?}:", test_case);
@@ -63,7 +71,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         for result in test_results {
             println!("  {}", result);
+
+            if result.is_failed() {
+                failures.push(result);
+            }
         }
+    }
+
+    if !failures.is_empty() {
+        println!("{} tests failed", failures.len());
+        std::process::exit(1);
     }
 
     Ok(())

@@ -27,12 +27,12 @@ tower-make = "=0.1.0-alpha.2"
 tower-reconnect = { path = "../../tower/tower-reconnect", optional = true }
 tower-buffer = { path = "../../tower/tower-buffer", optional = true }
 
-# openssl
+# openssl 
 tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }
 openssl = { version = "0.10", optional = true }
 
 # rustls
-tokio-rustls = { path = "../../tokio-rustls", optional = true }
+tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
 
 [features]
 default = ["transport"]

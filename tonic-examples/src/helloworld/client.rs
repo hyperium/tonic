@@ -1,4 +1,4 @@
-use tonic::transport::Client;
+use tonic::transport::Channel;
 
 pub mod hello_world {
     include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
@@ -9,7 +9,7 @@ pub mod hello_world {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = http::Uri::from_static("http://[::1]:50051");
 
-    let svc = Client::builder().build(origin)?;
+    let svc = Channel::builder().build(origin)?;
 
     let mut client = hello_world::GreeterClient::new(svc);
 

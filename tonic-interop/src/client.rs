@@ -1,11 +1,11 @@
 use crate::{pb::*, test_assert, TestAssertion};
 use futures_util::{future, stream, SinkExt, StreamExt};
 use tokio::sync::mpsc;
-use tonic::transport::Client;
+use tonic::transport::Channel;
 use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 
-pub type TestClient = TestServiceClient<Client>;
-pub type UnimplementedClient = UnimplementedServiceClient<Client>;
+pub type TestClient = TestServiceClient<Channel>;
+pub type UnimplementedClient = UnimplementedServiceClient<Channel>;
 
 tonic::client!(service = "grpc.testing.TestService", proto = "crate::pb");
 tonic::client!(
@@ -22,11 +22,11 @@ const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
 pub async fn create(origin: http::Uri) -> Result<TestClient, Box<dyn std::error::Error>> {
-    let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
+    // let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
 
-    let svc = Client::builder()
-        .tls(ca)
-        .tls_override_domain("foo.test.google.fr")
+    let svc = Channel::builder()
+        // .tls(ca)
+        // .tls_override_domain("foo.test.google.fr")
         .build(origin)?;
 
     Ok(TestServiceClient::new(svc))
@@ -35,11 +35,11 @@ pub async fn create(origin: http::Uri) -> Result<TestClient, Box<dyn std::error:
 pub async fn create_unimplemented(
     origin: http::Uri,
 ) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
-    let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
+    // let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
 
-    let svc = Client::builder()
-        .tls(ca)
-        .tls_override_domain("foo.test.google.fr")
+    let svc = Channel::builder()
+        // .tls(ca)
+        // .tls_override_domain("foo.test.google.fr")
         .build(origin)?;
 
     Ok(UnimplementedServiceClient::new(svc))

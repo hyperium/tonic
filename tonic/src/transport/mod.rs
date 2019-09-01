@@ -1,10 +1,10 @@
-mod client;
+mod channel;
 #[cfg(feature = "openssl-1")]
 mod openssl;
 #[cfg(feature = "rustls")]
 mod rustls;
 
-pub use self::client::Client;
+pub use self::channel::Channel;
 
 use std::{error, fmt};
 

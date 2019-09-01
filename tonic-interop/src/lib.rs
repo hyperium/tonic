@@ -47,6 +47,15 @@ pub enum TestAssertion {
     },
 }
 
+impl TestAssertion {
+    pub fn is_failed(&self) -> bool {
+        match self {
+            TestAssertion::Failed { .. } => true,
+            _ => false,
+        }
+    }
+}
+
 impl fmt::Display for TestAssertion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         use console::{style, Emoji};

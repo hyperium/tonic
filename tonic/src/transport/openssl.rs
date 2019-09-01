@@ -23,7 +23,7 @@ impl TlsConnector {
     pub fn new(ca: Vec<u8>, domain: String) -> Result<Self, super::Error> {
         let mut config = SslConnector::builder(SslMethod::tls()).unwrap();
 
-        config.set_alpn_protos(b"\x02h2").unwrap();
+        config.set_alpn_protos(b"\x06h2").unwrap();
 
         let ca = X509::from_pem(&ca[..]).unwrap();
 
