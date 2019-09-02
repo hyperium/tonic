@@ -13,7 +13,7 @@ struct Opts {
     test_case: Vec<Testcase>,
 
     #[structopt(long)]
-    use_tls: bool
+    use_tls: bool,
 }
 
 #[tokio::main]
@@ -36,8 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Endpoint::from(origin)
     };
 
-    let channel = Channel::builder()
-        .connect(endpoint)?;
+    let channel = Channel::builder().connect(endpoint)?;
 
     let mut client = client::TestClient::new(channel.clone());
     let mut unimplemented_client = client::UnimplementedClient::new(channel);
