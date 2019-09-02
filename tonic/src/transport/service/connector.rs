@@ -1,4 +1,5 @@
 use super::io::BoxedIo;
+use crate::transport::tls::{Cert, TlsAcceptor};
 use http::Uri;
 use hyper::client::connect::HttpConnector;
 use std::future::Future;
@@ -11,13 +12,21 @@ type ConnectFuture = <HttpConnector as MakeConnection<Uri>>::Future;
 
 pub struct Connector {
     http: HttpConnector,
+    tls: Option<TlsAcceptor>,
 }
 
 impl Connector {
-    pub fn new() -> Self {
-        Self {
-            http: HttpConnector::new(),
-        }
+    pub fn new(cert: Option<Cert>) -> Result<Self, crate::Error> {
+        let mut http = HttpConnector::new();
+        http.enforce_http(false);
+
+        let tls = if let Some(cert) = cert {
+            Some(TlsAcceptor::new(cert)?)
+        } else {
+            None
+        };
+
+        Ok(Self { http, tls })
     }
 }
 
@@ -33,16 +42,23 @@ impl Service<Uri> for Connector {
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        let connect_fut = MakeConnection::make_connection(&mut self.http, uri);
+        let io = MakeConnection::make_connection(&mut self.http, uri);
+        let tls = self.tls.clone();
 
-        Box::pin(connect(connect_fut))
+        Box::pin(connect(io, tls))
     }
 }
 
-async fn connect(connect: ConnectFuture) -> Result<BoxedIo, crate::Error> {
+async fn connect(
+    connect: ConnectFuture,
+    tls: Option<TlsAcceptor>,
+) -> Result<BoxedIo, crate::Error> {
     let io = connect.await?;
 
-    // TODO: build tls based on creds and features
-
-    Ok(BoxedIo::new(io))
+    if let Some(tls) = tls {
+        let conn = tls.connect(io).await?;
+        Ok(BoxedIo::new(conn))
+    } else {
+        Ok(BoxedIo::new(io))
+    }
 }

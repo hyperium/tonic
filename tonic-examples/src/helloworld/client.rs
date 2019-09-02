@@ -8,9 +8,8 @@ pub mod hello_world {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = vec![
-        http::Uri::from_static("http://[::1]:50051"),
-        http::Uri::from_static("http://[::1]:50051"),
-        http::Uri::from_static("http://[::1]:50051"),
+        http::Uri::from_static("http://[::1]:50051").into(),
+
     ];
 
     let svc = Channel::builder().balance_list(origin)?;

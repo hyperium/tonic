@@ -43,7 +43,7 @@ transport = [
     "hyper",
     "tower",
     "tokio",
-    "openssl-1",
+    "native-tls",
 ]
 tower = [
     "tower-reconnect",
@@ -52,5 +52,5 @@ tower = [
     "tower-load",
     "tower-discover"
 ]
-openssl-1 = ["openssl", "tokio-openssl"]
+native-tls = ["openssl", "tokio-openssl"]
 rustls = ["tokio-rustls"]

@@ -1,5 +1,5 @@
 use super::{add_origin::AddOrigin, connector::Connector};
-use crate::body::BoxBody;
+use crate::{transport::Endpoint, BoxBody};
 use http::{Request, Response, Uri};
 use hyper::client::conn::Builder;
 use hyper::client::service::Connect as HyperConnect;
@@ -15,14 +15,15 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(uri: Uri) -> Self {
-        let connector = Connector::new();
+    pub fn new(mut endpoint: Endpoint) -> Result<Self, crate::Error> {
+        let connector = Connector::new(endpoint.take_cert())?;
+
         let settings = Builder::new().http2_only(true).clone();
         let connect = HyperConnect::new(connector, settings);
-        let reconnect = Reconnect::new(connect, uri.clone());
-        let inner = AddOrigin::new(reconnect, uri);
+        let reconnect = Reconnect::new(connect, endpoint.uri().clone());
+        let inner = AddOrigin::new(reconnect, endpoint.uri().clone());
 
-        Self { inner }
+        Ok(Self { inner })
     }
 }
 

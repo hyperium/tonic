@@ -1,11 +1,10 @@
 mod channel;
-#[cfg(feature = "openssl-1")]
-mod openssl;
-#[cfg(feature = "rustls")]
-mod rustls;
+mod endpoint;
 mod service;
+mod tls;
 
 pub use self::channel::Channel;
+pub use self::endpoint::Endpoint;
 
 use std::{error, fmt};
 

@@ -1,17 +1,17 @@
 use super::connect::Connection;
-use http::Uri;
+use crate::transport::Endpoint;
 use std::collections::VecDeque;
 use std::task::{Context, Poll};
 use tower_discover::{Change, Discover};
 
 #[derive(Debug)]
 pub struct ServiceList {
-    list: VecDeque<Uri>,
+    list: VecDeque<Endpoint>,
     i: usize,
 }
 
 impl ServiceList {
-    pub fn new(list: Vec<Uri>) -> Self {
+    pub fn new(list: Vec<Endpoint>) -> Self {
         Self {
             list: list.into(),
             i: 0,
@@ -22,18 +22,21 @@ impl ServiceList {
 impl Discover for ServiceList {
     type Key = usize;
     type Service = Connection;
-    type Error = hyper::Error;
+    type Error = crate::Error;
 
     fn poll(
         &mut self,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Change<Self::Key, Self::Service>, Self::Error>> {
         match self.list.pop_front() {
-            Some(uri) => {
+            Some(endpoint) => {
                 let i = self.i;
                 self.i += 1;
-                let service = Connection::new(uri);
-                Poll::Ready(Ok(Change::Insert(i, service)))
+
+                match Connection::new(endpoint) {
+                    Ok(svc) => Poll::Ready(Ok(Change::Insert(i, svc))),
+                    Err(e) => Poll::Ready(Err(e)),
+                }
             }
             None => Poll::Pending,
         }

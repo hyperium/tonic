@@ -1,15 +1,17 @@
-use super::service::{AddOrigin, BoxService, ServiceList};
+use super::{
+    service::{BoxService, Connection, ServiceList},
+    Endpoint,
+};
 use crate::{BoxBody, GrpcService};
 use futures_util::try_future::{MapErr, TryFutureExt};
 use http::Uri;
-use hyper::client::conn;
-use hyper::client::connect::HttpConnector;
-use hyper::client::service::Connect;
 use hyper::{Request, Response};
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use tower_balance::p2c::Balance;
 use tower_buffer::{future::ResponseFuture, Buffer};
+use tower_discover::Discover;
 use tower_service::Service;
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
@@ -89,20 +91,26 @@ impl Builder {
         self
     }
 
-    pub fn balance_list(&mut self, list: Vec<Uri>) -> Result<Channel, super::Error> {
+    pub fn balance_list(&mut self, list: Vec<Endpoint>) -> Result<Channel, super::Error> {
         let discover = ServiceList::new(list);
-        let svc = tower_balance::p2c::Balance::from_entropy(discover);
+        self.balance(discover)
+    }
+
+    fn balance<D>(&mut self, discover: D) -> Result<Channel, super::Error>
+    where
+        D: Discover<Service = Connection> + Send + 'static,
+        D::Error: Into<crate::Error>,
+        D::Key: Send + Clone,
+    {
+        let svc = Balance::from_entropy(discover);
+
         let svc = BoxService::new(svc);
         let svc = Buffer::new(Box::new(svc) as Inner, 100);
+
         Ok(Channel { svc })
     }
 
-    // pub fn balance<D: Discover>(&mut self, discover: D) -> &mut Self<D> {
-    //     self.balance = Some(discover);
-    //     self
-    // }
-
-    pub fn build<T>(&self, uri: T) -> Result<Channel, super::Error>
+    pub fn build<T>(&mut self, uri: T) -> Result<Channel, super::Error>
     where
         Uri: http::HttpTryFrom<T>,
     {
@@ -111,41 +119,6 @@ impl Builder {
             Err(e) => panic!("Invalid uri: {}", e.into()),
         };
 
-        let settings = conn::Builder::new().http2_only(true).clone();
-
-        let svc = if let Some(ca) = &self.ca {
-            let domain = self
-                .override_domain
-                .clone()
-                .unwrap_or_else(|| uri.to_string());
-
-            #[cfg(not(any(feature = "openssl-1", feature = "rustls")))]
-            unreachable!("tls configured when no tls implementation feature was selected!");
-
-            #[cfg(feature = "openssl-1")]
-            let connector = super::openssl::TlsConnector::new(ca.clone(), domain)?;
-
-            #[cfg(feature = "rustls")]
-            #[cfg(not(feature = "openssl-1"))]
-            let connector = super::openssl::TlsConnector::new(ca.clone(), domain)?;
-
-            let maker = Connect::new(connector, settings);
-            let svc = tower_reconnect::Reconnect::new(maker, uri.clone());
-
-            let svc = AddOrigin::new(svc, uri);
-            let svc = BoxService::new(svc);
-            Buffer::new(Box::new(svc) as Inner, 100)
-        } else {
-            let connector = HttpConnector::new();
-            let maker = Connect::new(connector, settings);
-            let svc = tower_reconnect::Reconnect::new(maker, uri.clone());
-
-            let svc = AddOrigin::new(svc, uri);
-
-            let svc = BoxService::new(svc);
-            Buffer::new(Box::new(svc) as Inner, 100)
-        };
-
-        Ok(Channel { svc })
+        self.balance_list(vec![uri.into()])
     }
 }
