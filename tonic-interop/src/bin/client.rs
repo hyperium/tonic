@@ -1,5 +1,5 @@
 use structopt::{clap::arg_enum, StructOpt};
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Endpoint};
 use tonic_interop::client;
 
 #[derive(StructOpt)]
@@ -11,6 +11,9 @@ struct Opts {
         raw(possible_values = r#"&Testcase::variants()"#)
     )]
     test_case: Vec<Testcase>,
+
+    #[structopt(long)]
+    use_tls: bool
 }
 
 #[tokio::main]
@@ -26,10 +29,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "localhost:10000";
     let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
 
+    let endpoint = if matches.use_tls {
+        let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
+        Endpoint::with_pem(origin, ca, Some("foo.test.google.fr".into()))
+    } else {
+        Endpoint::from(origin)
+    };
+
     let channel = Channel::builder()
-        // .tls(ca)
-        // .tls_override_domain("foo.test.google.fr")
-        .build(origin)?;
+        .connect(endpoint)?;
 
     let mut client = client::TestClient::new(channel.clone());
     let mut unimplemented_client = client::UnimplementedClient::new(channel);

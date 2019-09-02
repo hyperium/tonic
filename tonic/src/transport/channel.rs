@@ -74,18 +74,6 @@ impl Builder {
         }
     }
 
-    #[cfg(any(feature = "openssl-1", feature = "rustls"))]
-    pub fn tls(&mut self, ca: Vec<u8>) -> &mut Self {
-        self.ca = Some(ca);
-        self
-    }
-
-    #[cfg(any(feature = "openssl-1", feature = "rustls"))]
-    pub fn tls_override_domain<D: AsRef<str>>(&mut self, domain: D) -> &mut Self {
-        self.override_domain = Some(domain.as_ref().into());
-        self
-    }
-
     pub fn buffer(&mut self, size: usize) -> &mut Self {
         self.buffer_size = size;
         self
@@ -108,6 +96,10 @@ impl Builder {
         let svc = Buffer::new(Box::new(svc) as Inner, 100);
 
         Ok(Channel { svc })
+    }
+
+    pub fn connect(&mut self, endpoint: Endpoint) -> Result<Channel, super::Error> {
+        self.balance_list(vec![endpoint])
     }
 
     pub fn build<T>(&mut self, uri: T) -> Result<Channel, super::Error>

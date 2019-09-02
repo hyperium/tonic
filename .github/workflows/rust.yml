@@ -21,5 +21,7 @@ jobs:
       run: cargo check --all --all-features --all-targets
     - name: Run tests
       run: cargo test --all
-    - name: Run interop tests
+    - name: Run interop tests without tls
       run: ./tonic-interop/test.sh
+    - name: Run interop tests with tls
+      run: ./tonic-interop/test.sh --use_tls
