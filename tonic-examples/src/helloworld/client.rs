@@ -7,9 +7,13 @@ pub mod hello_world {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let origin = http::Uri::from_static("http://[::1]:50051");
+    let origin = vec![
+        http::Uri::from_static("http://[::1]:50051"),
+        http::Uri::from_static("http://[::1]:50051"),
+        http::Uri::from_static("http://[::1]:50051"),
+    ];
 
-    let svc = Channel::builder().build(origin)?;
+    let svc = Channel::builder().balance_list(origin)?;
 
     let mut client = hello_world::GreeterClient::new(svc);
 

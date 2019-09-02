@@ -1,6 +1,6 @@
 use crate::{
     body::BoxBody,
-    service::{AddOrigin, BoxService, GrpcService},
+    service::{AddOrigin, BoxService, GrpcService, ServiceList},
 };
 use futures_util::try_future::{MapErr, TryFutureExt};
 use http::Uri;
@@ -57,10 +57,11 @@ impl GrpcService<BoxBody> for Channel {
 }
 
 #[derive(Debug)]
-pub struct Builder {
+pub struct Builder<D = ServiceList> {
     ca: Option<Vec<u8>>,
     override_domain: Option<String>,
     buffer_size: usize,
+    balance: Option<D>,
 }
 
 impl Builder {
@@ -69,6 +70,7 @@ impl Builder {
             ca: None,
             override_domain: None,
             buffer_size: 1024,
+            balance: None,
         }
     }
 
@@ -88,6 +90,19 @@ impl Builder {
         self.buffer_size = size;
         self
     }
+
+    pub fn balance_list(&mut self, list: Vec<Uri>) -> Result<Channel, super::Error> {
+        let discover = ServiceList::new(list);
+        let svc = tower_balance::p2c::Balance::from_entropy(discover);
+        let svc = BoxService::new(svc);
+        let svc = Buffer::new(Box::new(svc) as Inner, 100);
+        Ok(Channel { svc })
+    }
+
+    // pub fn balance<D: Discover>(&mut self, discover: D) -> &mut Self<D> {
+    //     self.balance = Some(discover);
+    //     self
+    // }
 
     pub fn build<T>(&self, uri: T) -> Result<Channel, super::Error>
     where
@@ -128,6 +143,7 @@ impl Builder {
             let svc = tower_reconnect::Reconnect::new(maker, uri.clone());
 
             let svc = AddOrigin::new(svc, uri);
+
             let svc = BoxService::new(svc);
             Buffer::new(Box::new(svc) as Inner, 100)
         };

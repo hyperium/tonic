@@ -18,7 +18,7 @@ tower-service = "=0.3.0-alpha.1"
 tokio-codec = "=0.2.0-alpha.4"
 async-stream = { git = "https://github.com/tokio-rs/async-stream" }
 http-body = "0.2.0-alpha.1"
-pin-project = "0.4.0-alpha.2"
+pin-project = "0.4.0-alpha.7"
 
 # optional
 hyper = { git = "https://github.com/hyperium/hyper", optional = true}
@@ -26,6 +26,9 @@ tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp
 tower-make = "=0.1.0-alpha.2"
 tower-reconnect = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-reconnect-buffer", optional = true }
 tower-buffer = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-reconnect-buffer", optional = true }
+tower-balance = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-balance", optional = true }
+tower-load = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-balance", optional = true }
+tower-discover = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-balance", optional = true }
 
 # openssl
 tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }
@@ -38,10 +41,16 @@ tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
 default = ["transport"]
 transport = [
     "hyper",
-    "tower-reconnect",
-    "tower-buffer",
+    "tower",
     "tokio",
     "openssl-1",
+]
+tower = [
+    "tower-reconnect",
+    "tower-buffer",
+    "tower-balance",
+    "tower-load",
+    "tower-discover"
 ]
 openssl-1 = ["openssl", "tokio-openssl"]
 rustls = ["tokio-rustls"]
