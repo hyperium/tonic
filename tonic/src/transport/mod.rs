@@ -3,6 +3,7 @@ mod channel;
 mod openssl;
 #[cfg(feature = "rustls")]
 mod rustls;
+mod service;
 
 pub use self::channel::Channel;
 

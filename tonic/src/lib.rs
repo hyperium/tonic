@@ -9,7 +9,6 @@ pub mod codec;
 pub mod error;
 pub mod metadata;
 pub mod server;
-pub mod service;
 
 #[cfg(feature = "transport")]
 pub mod transport;
@@ -21,20 +20,46 @@ mod status;
 pub use body::BoxBody;
 pub use request::Request;
 pub use response::Response;
-pub use service::GrpcService;
 pub use status::{Code, Status};
 pub use tonic_macros::{client, server};
 
 pub(crate) use error::Error;
 
+use crate::body::Body;
+use http_body::Body as HttpBody;
 use std::future::Future;
-use std::sync::Arc;
+use std::task::{Context, Poll};
+use tower_service::Service;
 
-pub trait GrpcInnerService<Request> {
-    type Response;
-    type Future: Future<Output = Result<Self::Response, Status>>;
+pub trait GrpcService<ReqBody> {
+    type ResponseBody: Body + HttpBody;
+    type Error: Into<crate::Error>;
 
-    fn call(self: Arc<Self>, request: Request) -> Self::Future;
+    type Future: Future<Output = Result<http::Response<Self::ResponseBody>, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>>;
+
+    fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future;
+}
+
+impl<T, ReqBody, ResBody> GrpcService<ReqBody> for T
+where
+    T: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
+    T::Error: Into<crate::Error>,
+    ResBody: Body + HttpBody,
+    <ResBody as HttpBody>::Error: Into<crate::Error>,
+{
+    type ResponseBody = ResBody;
+    type Error = T::Error;
+    type Future = T::Future;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Service::poll_ready(self, cx)
+    }
+
+    fn call(&mut self, request: http::Request<ReqBody>) -> Self::Future {
+        Service::call(self, request)
+    }
 }
 
 #[doc(hidden)]

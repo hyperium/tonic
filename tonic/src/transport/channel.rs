@@ -1,7 +1,5 @@
-use crate::{
-    body::BoxBody,
-    service::{AddOrigin, BoxService, GrpcService, ServiceList},
-};
+use super::service::{AddOrigin, BoxService, ServiceList};
+use crate::{BoxBody, GrpcService};
 use futures_util::try_future::{MapErr, TryFutureExt};
 use http::Uri;
 use hyper::client::conn;
