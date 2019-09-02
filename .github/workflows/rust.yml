@@ -18,7 +18,9 @@ jobs:
     - name: Run fmt
       run: cargo fmt -- --check
     - name: Run check
-      run: cargo check --all --all-features --all-targets
+      run: cargo check --all
+    - name: Run check with no default features
+      run: cargo check --all --no-default-features
     - name: Run tests
       run: cargo test --all
     - name: Run interop tests without tls
