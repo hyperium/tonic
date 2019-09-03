@@ -3,14 +3,17 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 
-pub(super) trait Io: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
+pub(in crate::transport) trait Io:
+    AsyncRead + AsyncWrite + Send + Unpin + 'static
+{
+}
 
 impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 
 pub struct BoxedIo(Pin<Box<dyn Io>>);
 
 impl BoxedIo {
-    pub(super) fn new<I: Io>(io: I) -> Self {
+    pub(in crate::transport) fn new<I: Io>(io: I) -> Self {
         BoxedIo(Box::pin(io))
     }
 }

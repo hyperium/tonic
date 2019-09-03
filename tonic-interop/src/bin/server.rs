@@ -1,4 +1,5 @@
-use hyper::Server;
+use structopt::StructOpt;
+use tonic::transport::Server;
 use tonic::{Code, Request, Response, Status};
 
 pub mod pb {
@@ -54,17 +55,30 @@ impl TestService {
     }
 }
 
+#[derive(StructOpt)]
+struct Opts {
+    #[structopt(long)]
+    use_tls: bool,
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let matches = Opts::from_args();
+
     pretty_env_logger::init();
     let addr = "127.0.0.1:10000".parse().unwrap();
 
     let greeter = TestService::default();
 
-    Server::bind(&addr)
-        .http2_only(true)
-        .serve(TestServiceServer::new(greeter))
-        .await?;
+    let mut builder = Server::builder();
+
+    if matches.use_tls {
+        let ca = tokio::fs::read("tonic-interop/data/server1.pem").await?;
+        let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
+        builder.tls(ca, key);
+    }
+
+    builder.serve(addr, TestServiceServer::new(greeter)).await?;
 
     Ok(())
 }

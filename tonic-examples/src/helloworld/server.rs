@@ -1,4 +1,4 @@
-use hyper::Server;
+use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
 pub mod hello_world {
@@ -34,9 +34,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
-    Server::bind(&addr)
-        .http2_only(true)
-        .serve(GreeterServer::new(greeter))
+    Server::builder()
+        .serve(addr, GreeterServer::new(greeter))
         .await?;
 
     Ok(())

@@ -1,5 +1,5 @@
 use super::io::BoxedIo;
-use crate::transport::tls::{Cert, TlsAcceptor};
+use crate::transport::tls::{Cert, TlsConnector};
 use http::Uri;
 use hyper::client::connect::HttpConnector;
 use std::future::Future;
@@ -12,7 +12,7 @@ type ConnectFuture = <HttpConnector as MakeConnection<Uri>>::Future;
 
 pub struct Connector {
     http: HttpConnector,
-    tls: Option<TlsAcceptor>,
+    tls: Option<TlsConnector>,
 }
 
 impl Connector {
@@ -21,7 +21,7 @@ impl Connector {
         http.enforce_http(false);
 
         let tls = if let Some(cert) = cert {
-            Some(TlsAcceptor::new(cert)?)
+            Some(TlsConnector::new(cert)?)
         } else {
             None
         };
@@ -51,7 +51,7 @@ impl Service<Uri> for Connector {
 
 async fn connect(
     connect: ConnectFuture,
-    tls: Option<TlsAcceptor>,
+    tls: Option<TlsConnector>,
 ) -> Result<BoxedIo, crate::Error> {
     let io = connect.await?;
 

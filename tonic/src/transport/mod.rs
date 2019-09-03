@@ -1,10 +1,12 @@
 mod channel;
 mod endpoint;
+mod server;
 mod service;
 mod tls;
 
 pub use self::channel::Channel;
 pub use self::endpoint::Endpoint;
+pub use self::server::Server;
 
 use std::{error, fmt};
 

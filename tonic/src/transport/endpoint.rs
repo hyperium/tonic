@@ -13,7 +13,11 @@ impl Endpoint {
 
         Self {
             uri,
-            cert: Some(Cert { ca, domain }),
+            cert: Some(Cert {
+                ca,
+                domain,
+                key: None,
+            }),
         }
     }
 
