@@ -55,6 +55,7 @@ impl TlsAcceptor {
 
         let mut config = SslAcceptor::mozilla_modern(SslMethod::tls())?;
 
+        config.set_alpn_protos(ALPN_H2)?;
         config.set_private_key(&key)?;
         config.set_certificate(&ca)?;
 

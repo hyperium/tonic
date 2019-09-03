@@ -12,8 +12,12 @@ esac
 ARG="${1:-""}"
 SERVER="tonic-interop/bin/server_${OS}_amd64"
 
+# TLS_CA="tonic-interop/data/ca.pem"
+TLS_CRT="tonic-interop/data/server1.pem"
+TLS_KEY="tonic-interop/data/server1.key"
+
 # run the test server
-./"${SERVER}" $ARG &
+./"${SERVER}" $ARG --tls_cert_file $TLS_CRT --tls_key_file $TLS_KEY &
 SERVER_PID=$!
 echo ":; started grpc-go test server."
 
