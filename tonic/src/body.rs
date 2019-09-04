@@ -1,3 +1,8 @@
+//! HTTP specific body utilities.
+//!
+//! This module contains traits and helper types to work with http bodies. Most
+//! of the types in this module are based around [`http_body::Body`].
+
 use crate::{Error, Status};
 use bytes::{Buf, Bytes, IntoBuf};
 use http_body::Body as HttpBody;
@@ -9,17 +14,29 @@ use std::{
 
 pub(crate) type BytesBuf = <Bytes as IntoBuf>::Buf;
 
+/// A trait alias for [`http_body::Body`].
 pub trait Body: sealed::Sealed {
+    /// The body data type.
     type Data: Buf;
+    /// The errors produced from the body.
     type Error: Into<Error>;
 
+    /// Check if the stream is over or not.
+    ///
+    /// Reference [`http_body::Body::is_end_stream`].
     fn is_end_stream(&self) -> bool;
 
+    /// Poll for more data from the body.
+    ///
+    /// Reference [`http_body::Body::poll_data`].
     fn poll_data(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>>;
 
+    /// Poll for the trailing headers.
+    ///
+    /// Reference [`http_body::Body::poll_trailers`].
     fn poll_trailers(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
@@ -164,7 +181,7 @@ where
 }
 
 impl fmt::Debug for BoxBody {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BoxBody").finish()
     }
 }

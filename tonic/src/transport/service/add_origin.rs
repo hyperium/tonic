@@ -3,13 +3,13 @@ use std::task::{Context, Poll};
 use tower_service::Service;
 
 #[derive(Debug)]
-pub struct AddOrigin<T> {
+pub(crate) struct AddOrigin<T> {
     inner: T,
     origin: Uri,
 }
 
 impl<T> AddOrigin<T> {
-    pub fn new(inner: T, origin: Uri) -> Self {
+    pub(crate) fn new(inner: T, origin: Uri) -> Self {
         Self { inner, origin }
     }
 }

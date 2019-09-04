@@ -1,4 +1,4 @@
-use super::{add_origin::AddOrigin, connector::Connector};
+use super::{AddOrigin, Connector};
 use crate::{transport::Endpoint, BoxBody};
 use http::{Request, Response, Uri};
 use hyper::client::conn::Builder;
@@ -56,7 +56,7 @@ impl Load for Connection {
 }
 
 impl fmt::Debug for Connection {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Connection").finish()
     }
 }

@@ -54,7 +54,7 @@ impl<T> Request<T> {
         Request::from_http_parts(parts, message)
     }
 
-    pub fn into_http(self, uri: http::Uri) -> http::Request<T> {
+    pub(crate) fn into_http(self, uri: http::Uri) -> http::Request<T> {
         let mut request = http::Request::new(self.message);
 
         *request.version_mut() = http::Version::HTTP_2;
@@ -65,6 +65,7 @@ impl<T> Request<T> {
         request
     }
 
+    #[doc(hidden)]
     pub fn map<F, U>(self, f: F) -> Request<U>
     where
         F: FnOnce(T) -> U,

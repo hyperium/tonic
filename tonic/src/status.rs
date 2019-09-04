@@ -21,6 +21,7 @@ pub struct Status {
 
 /// gRPC status codes used by `Status`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[allow(missing_docs)]
 pub enum Code {
     Ok = 0,
     Cancelled = 1,

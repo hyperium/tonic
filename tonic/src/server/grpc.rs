@@ -61,7 +61,7 @@ where
         self.map_response(response)
     }
 
-    // Handle a server side streaming request.
+    /// Handle a server side streaming request.
     pub async fn server_streaming<S, B>(
         &mut self,
         mut service: S,
@@ -202,7 +202,7 @@ where
 }
 
 impl<T> fmt::Debug for Grpc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Grpc").finish()
     }
 }

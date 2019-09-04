@@ -16,6 +16,7 @@ impl<T> Response<T> {
         }
     }
 
+    /// Get a immutable reference to `T`.
     pub fn get_ref(&self) -> &T {
         &self.message
     }
@@ -56,7 +57,7 @@ impl<T> Response<T> {
         }
     }
 
-    pub fn into_http(self) -> http::Response<T> {
+    pub(crate) fn into_http(self) -> http::Response<T> {
         let mut res = http::Response::new(self.message);
 
         *res.version_mut() = http::Version::HTTP_2;
@@ -65,6 +66,7 @@ impl<T> Response<T> {
         res
     }
 
+    #[doc(hidden)]
     pub fn map<F, U>(self, f: F) -> Response<U>
     where
         F: FnOnce(T) -> U,

@@ -6,12 +6,12 @@ use std::{
 use tower_service::Service;
 
 #[derive(Debug, Clone)]
-pub struct BoxService<S> {
+pub(crate) struct BoxService<S> {
     inner: S,
 }
 
 impl<S> BoxService<S> {
-    pub fn new(inner: S) -> Self {
+    pub(crate) fn new(inner: S) -> Self {
         Self { inner }
     }
 }

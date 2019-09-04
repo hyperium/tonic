@@ -203,7 +203,7 @@ impl<T: Clone> Clone for Grpc<T> {
 }
 
 impl<T> fmt::Debug for Grpc<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Grpc").finish()
     }
 }

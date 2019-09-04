@@ -9,7 +9,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_codec::Encoder;
 
-pub fn encode_server<T, U>(
+pub(crate) fn encode_server<T, U>(
     encoder: T,
     source: U,
 ) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
@@ -21,7 +21,7 @@ where
     EncodeBody::new_server(stream)
 }
 
-pub fn encode_client<T, U>(
+pub(crate) fn encode_client<T, U>(
     encoder: T,
     source: U,
 ) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
@@ -77,7 +77,7 @@ enum Role {
 
 #[pin_project]
 #[derive(Debug)]
-pub struct EncodeBody<S> {
+pub(crate) struct EncodeBody<S> {
     #[pin]
     inner: S,
     error: Option<Status>,

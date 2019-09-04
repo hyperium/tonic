@@ -10,7 +10,7 @@ pub(in crate::transport) trait Io:
 
 impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 
-pub struct BoxedIo(Pin<Box<dyn Io>>);
+pub(crate) struct BoxedIo(Pin<Box<dyn Io>>);
 
 impl BoxedIo {
     pub(in crate::transport) fn new<I: Io>(io: I) -> Self {

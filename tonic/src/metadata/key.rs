@@ -28,7 +28,9 @@ pub struct InvalidMetadataKey {
     _priv: (),
 }
 
+/// An ascii metadata key.
 pub type AsciiMetadataKey = MetadataKey<Ascii>;
+/// A binary metadata key.
 pub type BinaryMetadataKey = MetadataKey<Binary>;
 
 impl<VE: ValueEncoding> MetadataKey<VE> {
@@ -175,6 +177,7 @@ impl<VE: ValueEncoding> fmt::Display for MetadataKey<VE> {
 }
 
 impl InvalidMetadataKey {
+    #[doc(hidden)]
     pub fn new() -> InvalidMetadataKey {
         InvalidMetadataKey { _priv: () }
     }

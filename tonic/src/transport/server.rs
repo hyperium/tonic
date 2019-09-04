@@ -94,7 +94,7 @@ fn incoming(
 
 // TODO: add custom tracing here
 #[derive(Debug)]
-pub struct Svc<S>(S);
+pub(crate) struct Svc<S>(S);
 
 impl<S> Service<Request<Body>> for Svc<S>
 where
@@ -113,7 +113,7 @@ where
     }
 }
 
-pub struct MakeSvc<M>(M);
+pub(crate) struct MakeSvc<M>(M);
 
 impl<M, S, T> Service<T> for MakeSvc<M>
 where

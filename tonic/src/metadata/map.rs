@@ -1,6 +1,6 @@
-pub use self::as_encoding_agnostic_metadata_key::AsEncodingAgnosticMetadataKey;
-pub use self::as_metadata_key::AsMetadataKey;
-pub use self::into_metadata_key::IntoMetadataKey;
+pub(crate) use self::as_encoding_agnostic_metadata_key::AsEncodingAgnosticMetadataKey;
+pub(crate) use self::as_metadata_key::AsMetadataKey;
+pub(crate) use self::into_metadata_key::IntoMetadataKey;
 
 use super::encoding::{Ascii, Binary, ValueEncoding};
 use super::key::{InvalidMetadataKey, MetadataKey};
@@ -49,7 +49,9 @@ pub struct Iter<'a> {
 /// to either an ascii or a binary ("*-bin") key.
 #[derive(Debug)]
 pub enum KeyAndValueRef<'a> {
+    /// An ascii metadata key and value.
     Ascii(&'a MetadataKey<Ascii>, &'a MetadataValue<Ascii>),
+    /// A binary metadata key and value.
     Binary(&'a MetadataKey<Binary>, &'a MetadataValue<Binary>),
 }
 
@@ -57,7 +59,9 @@ pub enum KeyAndValueRef<'a> {
 /// to either an ascii or a binary ("*-bin") key.
 #[derive(Debug)]
 pub enum KeyAndMutValueRef<'a> {
+    /// An ascii metadata key and value.
     Ascii(&'a MetadataKey<Ascii>, &'a mut MetadataValue<Ascii>),
+    /// A binary metadata key and value.
     Binary(&'a MetadataKey<Binary>, &'a mut MetadataValue<Binary>),
 }
 
@@ -90,7 +94,9 @@ pub struct Keys<'a> {
 /// to either an ascii or a binary ("*-bin") key.
 #[derive(Debug)]
 pub enum KeyRef<'a> {
+    /// An ascii metadata key and value.
     Ascii(&'a MetadataKey<Ascii>),
+    /// A binary metadata key and value.
     Binary(&'a MetadataKey<Binary>),
 }
 
@@ -109,7 +115,9 @@ pub struct Values<'a> {
 /// to either an ascii or a binary ("*-bin" key) value.
 #[derive(Debug)]
 pub enum ValueRef<'a> {
+    /// An ascii metadata key and value.
     Ascii(&'a MetadataValue<Ascii>),
+    /// A binary metadata key and value.
     Binary(&'a MetadataValue<Binary>),
 }
 
@@ -127,7 +135,9 @@ pub struct ValuesMut<'a> {
 /// to either an ascii or a binary ("*-bin" key) value.
 #[derive(Debug)]
 pub enum ValueRefMut<'a> {
+    /// An ascii metadata key and value.
     Ascii(&'a mut MetadataValue<Ascii>),
+    /// A binary metadata key and value.
     Binary(&'a mut MetadataValue<Binary>),
 }
 

@@ -33,7 +33,9 @@ pub struct ToStrError {
     _priv: (),
 }
 
+/// An ascii metadata value.
 pub type AsciiMetadataValue = MetadataValue<Ascii>;
+/// A binary metadata value.
 pub type BinaryMetadataValue = MetadataValue<Binary>;
 
 impl<VE: ValueEncoding> MetadataValue<VE> {

@@ -10,13 +10,13 @@ use tower_service::Service;
 
 type ConnectFuture = <HttpConnector as MakeConnection<Uri>>::Future;
 
-pub struct Connector {
+pub(crate) struct Connector {
     http: HttpConnector,
     tls: Option<TlsConnector>,
 }
 
 impl Connector {
-    pub fn new(cert: Option<Cert>) -> Result<Self, crate::Error> {
+    pub(crate) fn new(cert: Option<Cert>) -> Result<Self, crate::Error> {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
 

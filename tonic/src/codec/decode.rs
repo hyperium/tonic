@@ -90,10 +90,16 @@ impl<T> Streaming<T> {
 }
 
 impl<T> Streaming<T> {
+    /// Fetch the next message from this stream.
     pub async fn message(&mut self) -> Option<Result<T, Status>> {
         future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await
     }
 
+    /// Fetch the trailing metadata.
+    ///
+    /// This will drain the stream of all its messages to recieve the trailing
+    /// metadata. If [`Streaming::message`] returns `None` then this function
+    /// will not need to poll for trailers since the body was totally consumed.
     pub async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
         // Shortcut to see if we already pulled the trailers in the stream step
         // we need to do that so that the stream can error on trailing grpc-status
@@ -243,7 +249,7 @@ impl<T> Stream for Streaming<T> {
 }
 
 impl<T> fmt::Debug for Streaming<T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Streaming").finish()
     }
 }

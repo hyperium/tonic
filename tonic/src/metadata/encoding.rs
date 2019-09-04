@@ -52,8 +52,10 @@ pub trait ValueEncoding: Clone + Eq + PartialEq + Hash + self::value_encoding::S
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[doc(hidden)]
 pub enum Ascii {}
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[doc(hidden)]
 pub enum Binary {}
 
 // ===== impl ValueEncoding =====

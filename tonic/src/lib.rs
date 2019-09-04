@@ -1,5 +1,10 @@
 #![recursion_limit = "512"]
-#![warn(missing_debug_implementations)]
+#![warn(
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    unreachable_pub
+)]
 
 //! gRPC implementation
 

@@ -1,3 +1,6 @@
+// TODO: write transport docs.
+#![allow(missing_docs)]
+
 mod channel;
 mod endpoint;
 mod server;
@@ -40,7 +43,7 @@ impl From<(ErrorKind, crate::Error)> for Error {
 }
 
 impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut f = f.debug_tuple("Error");
         f.field(&self.kind);
         if let Some(source) = &self.source {
@@ -51,7 +54,7 @@ impl fmt::Debug for Error {
 }
 
 impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Some(source) = &self.source {
             write!(f, "{}: {}", self.kind, source)
         } else {
@@ -69,7 +72,7 @@ impl error::Error for Error {
 }
 
 impl fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self)
     }
 }

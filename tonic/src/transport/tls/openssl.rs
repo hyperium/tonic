@@ -7,16 +7,16 @@ use tokio_openssl::SslStream;
 
 const ALPN_H2: &[u8] = b"\x02h2";
 
-pub type TlsStream = SslStream<TcpStream>;
+pub(crate) type TlsStream = SslStream<TcpStream>;
 
 #[derive(Clone)]
-pub struct TlsConnector {
+pub(crate) struct TlsConnector {
     config: SslConnector,
     domain: Arc<String>,
 }
 
 impl TlsConnector {
-    pub fn new(cert: Cert) -> Result<Self, crate::Error> {
+    pub(crate) fn new(cert: Cert) -> Result<Self, crate::Error> {
         let Cert { ca, domain, .. } = cert;
         let mut config = SslConnector::builder(SslMethod::tls()).unwrap();
 
@@ -34,7 +34,7 @@ impl TlsConnector {
         })
     }
 
-    pub async fn connect(&self, io: TcpStream) -> Result<TlsStream, crate::Error> {
+    pub(crate) async fn connect(&self, io: TcpStream) -> Result<TlsStream, crate::Error> {
         let config = self.config.configure()?;
         let tls = tokio_openssl::connect(config, &self.domain, io).await?;
         Ok(tls)
@@ -42,12 +42,12 @@ impl TlsConnector {
 }
 
 #[derive(Clone)]
-pub struct TlsAcceptor {
+pub(crate) struct TlsAcceptor {
     config: SslAcceptor,
 }
 
 impl TlsAcceptor {
-    pub fn new(cert: Cert) -> Result<Self, crate::Error> {
+    pub(crate) fn new(cert: Cert) -> Result<Self, crate::Error> {
         let Cert { ca, key, .. } = cert;
 
         let key = PKey::private_key_from_pem(&key.unwrap()[..])?;
@@ -64,7 +64,7 @@ impl TlsAcceptor {
         })
     }
 
-    pub async fn connect(&self, io: TcpStream) -> Result<TlsStream, crate::Error> {
+    pub(crate) async fn connect(&self, io: TcpStream) -> Result<TlsStream, crate::Error> {
         let config = self.config.clone();
         let tls = tokio_openssl::accept(&config, io).await?;
         Ok(tls)

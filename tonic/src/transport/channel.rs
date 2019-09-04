@@ -119,7 +119,7 @@ impl Builder {
 }
 
 impl fmt::Debug for Channel {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Channel").finish()
     }
 }
