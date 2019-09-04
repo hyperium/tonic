@@ -8,7 +8,7 @@ const GRPC_STATUS_HEADER_CODE: &str = "grpc-status";
 const GRPC_STATUS_MESSAGE_HEADER: &str = "grpc-message";
 const GRPC_STATUS_DETAILS_HEADER: &str = "grpc-status-details-bin";
 
-/// A gRPC "status" describing the result of an RPC call.
+/// A gRPC status describing the result of an RPC call.
 #[derive(Clone)]
 pub struct Status {
     /// The gRPC status code, found in the `grpc-status` header.
@@ -19,7 +19,11 @@ pub struct Status {
     details: Bytes,
 }
 
-/// gRPC status codes used by `Status`.
+/// gRPC status codes used by [`Status`].
+///
+/// These variants match the [gRPC status codes].
+///
+/// [gRPC status codes]: https://github.com/grpc/grpc/blob/master/doc/statuscodes.md#status-codes-and-their-use-in-grpc
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[allow(missing_docs)]
 pub enum Code {

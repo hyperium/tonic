@@ -1,5 +1,6 @@
-// TODO: write transport docs.
 #![allow(missing_docs)]
+
+//! TODO: write transport docs.
 
 mod channel;
 mod endpoint;

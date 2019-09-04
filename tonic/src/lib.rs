@@ -5,8 +5,30 @@
     rust_2018_idioms,
     unreachable_pub
 )]
+#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 
-//! gRPC implementation
+//! A rust implementation of [gRPC], a high performance, open source, general
+//! RPC framework that puts mobile and HTTP/2 first.
+//!
+//! [tonic] is a gRPC over HTTP2 implementation focused on **high
+//! performance**, **interoperability**, and **flexibility**. This library was
+//! created to have first class support of async/await.
+//!
+//! # Examples
+//!
+//! Examples can be found in the [`tonic-examples`] crate.
+//!
+//! # Generic implementation
+//!
+//! TODO: write generic implementation docs
+//!
+//! # Transport
+//!
+//! TODO: write transport docs
+//!
+//! [gRPC]: https://grpc.io
+//! [tonic]: https://github.com/hyperium/tonic
+//! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples/src
 
 pub mod body;
 pub mod client;
