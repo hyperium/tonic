@@ -1,11 +1,11 @@
-name: Tonic gRPC
+name: test
 on: [push]
 jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest]
+        os: [ubuntu-latest]
         rust: [nightly]
 
     steps:
@@ -23,7 +23,3 @@ jobs:
       run: cargo check --all --no-default-features
     - name: Run tests
       run: cargo test --all
-    - name: Run interop tests
-      run: ./tonic-interop/test.sh
-    - name: Run interop tests with tls
-      run: ./tonic-interop/test.sh --use_tls
