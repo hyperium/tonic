@@ -1,12 +1,12 @@
 mod data;
 
 use futures::{Stream, StreamExt};
-use hyper::Server;
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{mpsc, Lock};
+use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
 pub mod routeguide {
@@ -159,9 +159,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
-    Server::bind(&addr)
-        .http2_only(true)
-        .serve(RouteGuideServer::new(route_guide))
+    Server::builder()
+        .serve(addr, RouteGuideServer::new(route_guide))
         .await?;
 
     Ok(())

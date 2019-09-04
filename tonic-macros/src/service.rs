@@ -106,7 +106,7 @@ pub(crate) fn generate(service: ServiceDef) -> TokenStream {
             }
         }
 
-        impl Service<http::Request<hyper::Body>> for #server_service {
+        impl Service<http::Request<tonic::_codegen::HyperBody>> for #server_service {
             type Response = http::Response<tonic::BoxBody>;
             type Error = tonic::error::Never;
             type Future = BoxFuture<Self::Response, Self::Error>;
@@ -115,7 +115,7 @@ pub(crate) fn generate(service: ServiceDef) -> TokenStream {
                 Poll::Ready(Ok(()))
             }
 
-            fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+            fn call(&mut self, req: http::Request<tonic::_codegen::HyperBody>) -> Self::Future {
                 let inner = self.inner.clone();
 
                 match req.uri().path() {

@@ -1,14 +1,22 @@
 use crate::{
-    body::BoxBody,
     codec::{encode_server, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
-    Code, Request, Response, Status,
+    BoxBody, Code, Request, Response, Status,
 };
 use bytes::Bytes;
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
 
+/// A gRPC Server handler.
+///
+/// This will wrap some inner [`Codec`] and provide utilities to handle
+/// inbound unary, client side streaming, server side streaming, and
+/// bi-directional streaming.
+///
+/// Each request handler method accepts some service that implements the
+/// corresponding service trait and a http request that contains some body that
+/// implements some [`Body`].
 pub struct Grpc<T> {
     codec: T,
 }
@@ -21,10 +29,12 @@ where
     T::Encoder: Send + 'static,
     T::Encode: Send + Unpin + 'static,
 {
+    /// Creates a new gRPC client with the provided [`Codec`].
     pub fn new(codec: T) -> Self {
         Self { codec }
     }
 
+    /// Handle a single unary gRPC request.
     pub async fn unary<S, B>(
         &mut self,
         mut service: S,
@@ -54,6 +64,7 @@ where
         self.map_response(response)
     }
 
+    // Handle a server side streaming request.
     pub async fn server_streaming<S, B>(
         &mut self,
         mut service: S,
@@ -78,7 +89,7 @@ where
         self.map_response(response)
     }
 
-    //BoxStream<T::Decode>,
+    /// Handle a client side streaming gRPC request.
     pub async fn client_streaming<S, B>(
         &mut self,
         mut service: S,
@@ -100,6 +111,7 @@ where
         self.map_response(response)
     }
 
+    /// Handle a bi-directional streaming gRPC request.
     pub async fn streaming<S, B>(
         &mut self,
         mut service: S,

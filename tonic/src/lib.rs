@@ -37,6 +37,9 @@ pub mod _codegen {
     pub use std::task::{Context, Poll};
     pub use tower_service::Service;
 
+    #[cfg(feature = "transport")]
+    pub use hyper::Body as HyperBody;
+
     pub type BoxFuture<T, E> =
         self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
     pub type BoxStream<T> =
