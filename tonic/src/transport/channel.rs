@@ -6,9 +6,12 @@ use crate::{client::GrpcService, BoxBody};
 use futures_util::try_future::{MapErr, TryFutureExt};
 use http::Uri;
 use hyper::{Request, Response};
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    fmt,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tower_balance::p2c::Balance;
 use tower_buffer::{future::ResponseFuture, Buffer};
 use tower_discover::Discover;
@@ -112,5 +115,11 @@ impl Builder {
         };
 
         self.balance_list(vec![uri.into()])
+    }
+}
+
+impl fmt::Debug for Channel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Channel").finish()
     }
 }

@@ -12,6 +12,7 @@ use std::task::{Context, Poll};
 use tower_make::MakeService;
 use tower_service::Service;
 
+#[derive(Debug)]
 pub struct Server {}
 
 impl Server {
@@ -20,6 +21,7 @@ impl Server {
     }
 }
 
+#[derive(Debug)]
 pub struct Builder {
     tls: Option<(Vec<u8>, Vec<u8>)>,
 }

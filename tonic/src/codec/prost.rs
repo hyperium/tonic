@@ -40,6 +40,7 @@ where
 }
 
 /// A [`Encoder`] that knows how to encode `T`.
+#[derive(Debug, Clone)]
 pub struct ProstEncoder<T>(PhantomData<T>);
 
 impl<T: Message> Encoder for ProstEncoder<T> {
@@ -59,6 +60,7 @@ impl<T: Message> Encoder for ProstEncoder<T> {
 }
 
 /// A [`Decoder`] that knows how to decode `U`.
+#[derive(Debug, Clone)]
 pub struct ProstDecoder<U>(PhantomData<U>);
 
 impl<U: Message + Default> Decoder for ProstDecoder<U> {

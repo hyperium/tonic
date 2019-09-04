@@ -1,10 +1,13 @@
 use crate::{Error, Status};
 use bytes::{Buf, Bytes, IntoBuf};
 use http_body::Body as HttpBody;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    fmt,
+    pin::Pin,
+    task::{Context, Poll},
+};
 
-pub type BytesBuf = <Bytes as IntoBuf>::Buf;
+pub(crate) type BytesBuf = <Bytes as IntoBuf>::Buf;
 
 pub trait Body: sealed::Sealed {
     type Data: Buf;
@@ -61,6 +64,7 @@ mod sealed {
     pub trait Sealed {}
 }
 
+/// A type erased http body.
 pub struct BoxBody {
     inner: Pin<Box<dyn Body<Data = BytesBuf, Error = Status> + Send + 'static>>,
 }
@@ -156,5 +160,11 @@ where
 
         let v = futures_util::ready!(v).map_err(|e| Status::from_error(&*e.into()));
         Poll::Ready(v)
+    }
+}
+
+impl fmt::Debug for BoxBody {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("BoxBody").finish()
     }
 }

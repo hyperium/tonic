@@ -1,4 +1,5 @@
 #![recursion_limit = "512"]
+#![warn(missing_debug_implementations)]
 
 //! gRPC implementation
 
@@ -17,7 +18,7 @@ mod request;
 mod response;
 mod status;
 
-#[doc(inline)]
+#[doc(inline, hidden)]
 pub use body::BoxBody;
 pub use request::Request;
 pub use response::Response;
@@ -27,7 +28,6 @@ pub use tonic_macros::{client, server};
 pub(crate) use error::Error;
 
 #[doc(hidden)]
-
 pub mod _codegen {
     pub use futures_core::Stream;
     pub use futures_util::future::{ok, poll_fn, Ready};

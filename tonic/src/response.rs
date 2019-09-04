@@ -75,7 +75,4 @@ impl<T> Response<T> {
             message,
         }
     }
-
-    // pub fn metadata()
-    // pub fn metadata_bin()
 }

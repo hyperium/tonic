@@ -3,9 +3,12 @@ use crate::{transport::Endpoint, BoxBody};
 use http::{Request, Response, Uri};
 use hyper::client::conn::Builder;
 use hyper::client::service::Connect as HyperConnect;
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    fmt,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tower_load::Load;
 use tower_reconnect::Reconnect;
 use tower_service::Service;
@@ -49,5 +52,11 @@ impl Load for Connection {
 
     fn load(&self) -> Self::Metric {
         0
+    }
+}
+
+impl fmt::Debug for Connection {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Connection").finish()
     }
 }

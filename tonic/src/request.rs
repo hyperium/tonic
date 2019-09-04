@@ -1,5 +1,6 @@
 use crate::metadata::MetadataMap;
 
+/// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
 pub struct Request<T> {
     metadata: MetadataMap,

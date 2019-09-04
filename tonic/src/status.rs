@@ -1,8 +1,5 @@
-#![allow(dead_code)]
-
 use bytes::Bytes;
-use http::header::HeaderValue;
-use http::{self, HeaderMap};
+use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, EncodeSet, DEFAULT_ENCODE_SET};
 use std::{error::Error, fmt};
 use tracing::{debug, trace, warn};
@@ -60,22 +57,7 @@ impl Status {
         }
     }
 
-    // Deprecated: this constructor encourages creating statuses with no
-    // message, hurting later debugging.
-    #[doc(hidden)]
-    #[deprecated(note = "use State::new")]
-    pub fn with_code(code: Code) -> Status {
-        Status::new(code, String::new())
-    }
-
-    // Deprecated: this constructor is overly long.
-    #[doc(hidden)]
-    #[deprecated(note = "use State::new")]
-    pub fn with_code_and_message(code: Code, message: String) -> Status {
-        Status::new(code, message)
-    }
-
-    // FIXME: This should probably be made public eventually. Need to decide on
+    // TODO: This should probably be made public eventually. Need to decide on
     // the exact argument type.
     #[cfg_attr(not(feature = "h2"), allow(dead_code))]
     pub(crate) fn from_error(err: &(dyn Error + 'static)) -> Status {
@@ -107,6 +89,7 @@ impl Status {
         None
     }
 
+    // TODO: bubble this into `transport` and expose generic http2 reasons.
     #[cfg(feature = "h2")]
     fn from_h2_error(err: &h2::Error) -> Status {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors
@@ -192,18 +175,6 @@ impl Status {
 
     /// Get the opaque error details of this `Status`.
     pub fn details(&self) -> &[u8] {
-        &self.details
-    }
-
-    #[doc(hidden)]
-    #[deprecated(note = "use Status::message")]
-    pub fn error_message(&self) -> &str {
-        &self.message
-    }
-
-    #[doc(hidden)]
-    #[deprecated(note = "use Status::details")]
-    pub fn binary_error_details(&self) -> &Bytes {
         &self.details
     }
 
@@ -409,7 +380,6 @@ impl Code {
         }
     }
 
-    #[allow(dead_code)]
     fn parse_err() -> Code {
         trace!("error parsing grpc-status");
         Code::Unknown
