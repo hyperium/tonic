@@ -1,11 +1,15 @@
 use super::Decoder;
-use crate::{Code, Status, BoxBody, metadata::MetadataMap};
+use crate::{metadata::MetadataMap, BoxBody, Code, Status};
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
 use http_body::Body;
-use std::{fmt, pin::Pin, task::{Context, Poll}};
+use std::{
+    fmt,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tracing::{debug, trace};
 
 /// Streaming requests and responses.
@@ -110,10 +114,9 @@ impl<T> Streaming<T> {
 
         // Trailers were not caught during poll_next and thus lets poll for
         // them manually.
-        let map =
-            future::poll_fn(|cx| Pin::new(&mut self.body).poll_trailers(cx))
-                .await
-                .map_err(|e| Status::from_error(&e))?;
+        let map = future::poll_fn(|cx| Pin::new(&mut self.body).poll_trailers(cx))
+            .await
+            .map_err(|e| Status::from_error(&e))?;
 
         Ok(map.map(MetadataMap::from_headers))
     }
