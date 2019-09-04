@@ -43,6 +43,7 @@ impl Service<Request<BoxBody>> for Connection {
 
     fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
         let fut = self.inner.call(req);
+        // TODO: we dont need to box here if we have too
         Box::pin(fut)
     }
 }
