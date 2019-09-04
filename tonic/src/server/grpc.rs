@@ -7,6 +7,7 @@ use bytes::Bytes;
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
+use std::fmt;
 
 /// A gRPC Server handler.
 ///
@@ -24,10 +25,6 @@ pub struct Grpc<T> {
 impl<T> Grpc<T>
 where
     T: Codec,
-    T::Decoder: Send + 'static,
-    T::Decode: Send + Unpin + 'static,
-    T::Encoder: Send + 'static,
-    T::Encode: Send + Unpin + 'static,
 {
     /// Creates a new gRPC client with the provided [`Codec`].
     pub fn new(codec: T) -> Self {
@@ -97,8 +94,6 @@ where
     ) -> http::Response<BoxBody>
     where
         S: ClientStreamingService<Streaming<T::Decode>, Response = T::Encode>,
-        T::Decode: Send + 'static,
-        T::Decoder: Send + 'static,
         B: Body + Send + 'static,
         B::Data: Into<Bytes> + Send + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
@@ -203,5 +198,11 @@ where
                 http::Response::from_parts(parts, BoxBody::new(body))
             }
         }
+    }
+}
+
+impl<T> fmt::Debug for Grpc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Grpc").finish()
     }
 }

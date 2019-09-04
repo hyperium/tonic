@@ -1,4 +1,4 @@
-//! gRPC over HTTP2 server implementation.
+//! gRPC server implementation.
 //!
 //! This module contains the low level components to build a gRPC server. It
 //! provides a codec agnostic gRPC server handler.

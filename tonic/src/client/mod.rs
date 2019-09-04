@@ -1,4 +1,4 @@
-//! gRPC over HTTP2 client implementation.
+//! gRPC client implementation.
 //!
 //! This module contains the low level components to build a gRPC client. It
 //! provides a codec agnostic gRPC client dispatcher and a decorated tower

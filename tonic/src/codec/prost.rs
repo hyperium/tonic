@@ -1,16 +1,17 @@
-use super::Codec;
+use super::{Codec, Decoder, Encoder};
 use crate::{Code, Status};
 use bytes::{BufMut, BytesMut};
 use prost::Message;
 use std::marker::PhantomData;
-use tokio_codec::{Decoder, Encoder};
 
+/// A [`Codec`] that implements `application/grpc+proto` via the prost library..
 #[derive(Debug, Clone)]
 pub struct ProstCodec<T, U> {
     _pd: PhantomData<(T, U)>,
 }
 
 impl<T, U> ProstCodec<T, U> {
+    /// Create a new codec that knows how to encode `T` and decode `U`.
     pub fn new() -> Self {
         Self { _pd: PhantomData }
     }
@@ -18,8 +19,8 @@ impl<T, U> ProstCodec<T, U> {
 
 impl<T, U> Codec for ProstCodec<T, U>
 where
-    T: Message,
-    U: Message + Default,
+    T: Message + Send + 'static,
+    U: Message + Default + Send + 'static,
 {
     type Encode = T;
     type Decode = U;
@@ -38,6 +39,7 @@ where
     }
 }
 
+/// A [`Encoder`] that knows how to encode `T`.
 pub struct ProstEncoder<T>(PhantomData<T>);
 
 impl<T: Message> Encoder for ProstEncoder<T> {
@@ -56,6 +58,7 @@ impl<T: Message> Encoder for ProstEncoder<T> {
     }
 }
 
+/// A [`Decoder`] that knows how to decode `U`.
 pub struct ProstDecoder<U>(PhantomData<U>);
 
 impl<U: Message + Default> Decoder for ProstDecoder<U> {

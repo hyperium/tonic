@@ -1,18 +1,17 @@
 use super::Decoder;
-use crate::body::BoxBody;
-use crate::metadata::MetadataMap;
-use crate::{Code, Status};
+use crate::{Code, Status, BoxBody, metadata::MetadataMap};
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
 use http_body::Body;
-use std::fmt;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{fmt, pin::Pin, task::{Context, Poll}};
 use tracing::{debug, trace};
 
-// #[derive(Debug)]
+/// Streaming requests and responses.
+///
+/// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
+/// to fetch the message stream and trailing metadata
 pub struct Streaming<T> {
     decoder: Box<dyn Decoder<Item = T, Error = Status> + Send + 'static>,
     body: BoxBody,
@@ -38,7 +37,7 @@ enum Direction {
 }
 
 impl<T> Streaming<T> {
-    pub fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
+    pub(crate) fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
     where
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
@@ -48,7 +47,7 @@ impl<T> Streaming<T> {
         Self::new(decoder, body, Direction::Response(status_code))
     }
 
-    pub fn new_empty<B, D>(decoder: D, body: B) -> Self
+    pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
@@ -58,7 +57,7 @@ impl<T> Streaming<T> {
         Self::new(decoder, body, Direction::EmptyResponse)
     }
 
-    pub fn new_request<B, D>(decoder: D, body: B) -> Self
+    pub(crate) fn new_request<B, D>(decoder: D, body: B) -> Self
     where
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
@@ -112,7 +111,7 @@ impl<T> Streaming<T> {
         // Trailers were not caught during poll_next and thus lets poll for
         // them manually.
         let map =
-            future::poll_fn(|cx| unsafe { Pin::new_unchecked(&mut self.body) }.poll_trailers(cx))
+            future::poll_fn(|cx| Pin::new(&mut self.body).poll_trailers(cx))
                 .await
                 .map_err(|e| Status::from_error(&e))?;
 
@@ -189,8 +188,7 @@ impl<T> Stream for Streaming<T> {
                 None => (),
             }
 
-            // FIXME: Figure out how to verify that this is safe
-            let chunk = match ready!(unsafe { Pin::new_unchecked(&mut self.body) }.poll_data(cx)) {
+            let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
                 Some(Ok(d)) => Some(d),
                 Some(Err(e)) => {
                     let err: crate::Error = e.into();
@@ -205,7 +203,7 @@ impl<T> Stream for Streaming<T> {
             if let Some(data) = chunk {
                 self.buf.put(data);
             } else {
-                // FIXME: get BytesMut to impl `Buf` directlty?
+                // TODO: get BytesMut to impl `Buf` directlty?
                 let buf1 = (&self.buf[..]).into_buf();
                 if buf1.has_remaining() {
                     trace!("unexpected EOF decoding stream");
@@ -220,7 +218,7 @@ impl<T> Stream for Streaming<T> {
         }
 
         if let Direction::Response(status) = self.direction {
-            match ready!(unsafe { Pin::new_unchecked(&mut self.body) }.poll_trailers(cx)) {
+            match ready!(Pin::new(&mut self.body).poll_trailers(cx)) {
                 Ok(trailer) => {
                     if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
                         return Some(Err(e)).into();
@@ -243,6 +241,6 @@ impl<T> Stream for Streaming<T> {
 
 impl<T> fmt::Debug for Streaming<T> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "Streaming")
+        f.debug_struct("Streaming").finish()
     }
 }

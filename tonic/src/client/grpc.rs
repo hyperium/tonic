@@ -62,10 +62,8 @@ impl<T> Grpc<T> {
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
-        C::Encoder: Send + 'static,
-        C::Decoder: Send + 'static,
         M1: Send + 'static,
-    {
+        M2: Send + 'static    {
         let request = request.map(|m| stream::once(future::ok(m)));
         self.client_streaming(request, path, codec).await
     }
@@ -84,9 +82,8 @@ impl<T> Grpc<T> {
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
-        C::Encoder: Send + 'static,
-        C::Decoder: Send + 'static,
-        M1: Send,
+        M1: Send + 'static,
+        M2: Send + 'static
     {
         let (mut parts, body) = self.streaming(request, path, codec).await?.into_parts();
 
@@ -117,9 +114,8 @@ impl<T> Grpc<T> {
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
-        C::Encoder: Send + 'static,
-        C::Decoder: Send + 'static,
         M1: Send + 'static,
+        M2: Send + 'static
     {
         let request = request.map(|m| stream::once(future::ok(m)));
         self.streaming(request, path, codec).await
@@ -139,9 +135,8 @@ impl<T> Grpc<T> {
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
-        C::Encoder: Send + 'static,
-        C::Decoder: Send + 'static,
-        M1: Send,
+        M1: Send + 'static,
+        M2: Send + 'static
     {
         let mut parts = Parts::default();
         parts.path_and_query = Some(path);

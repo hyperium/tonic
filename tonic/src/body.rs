@@ -96,7 +96,6 @@ impl HttpBody for BoxBody {
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {
-        // Body::is_end_stream(&self.inner)
         self.inner.is_end_stream()
     }
 
