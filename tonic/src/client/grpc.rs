@@ -1,7 +1,8 @@
 use crate::{
     body::{Body, BoxBody},
+    client::GrpcService,
     codec::{encode_client, Codec, Streaming},
-    Code, GrpcService, Request, Response, Status,
+    Code, Request, Response, Status,
 };
 use bytes::Bytes;
 use futures_core::Stream;
@@ -11,33 +12,44 @@ use http::{
     uri::{Parts, PathAndQuery, Uri},
 };
 use http_body::Body as HttpBody;
+use std::fmt;
 
+/// A gRPC client dispatcher.
+///
+/// This will wrap some inner [`GrpcService`] and will encode/decode
+/// messages via the provided codec.
+///
+/// Each request method takes a [`Request`], a [`PathAndQuery`], and a
+/// [`Codec`]. The request contains the message to send via the
+/// [`Codec::encoder`]. The path determines the fully qualified path
+/// that will be appened to the outgoing uri. The path must follow
+/// the convetions explained in the [gRPC protocol definition] under `Path →`. An
+/// example of this path could look like `/greeter.Greeter/SayHello`.
+///
+/// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
     inner: T,
 }
 
 impl<T> Grpc<T> {
+    /// Creates a new gRPC client with the provided [`GrpcService`].
     pub fn new(inner: T) -> Self {
         Self { inner }
     }
 
-    pub async fn ready(&mut self) -> Result<(), Status>
+    /// Check if the inner [`GrpcService`] is able to accept a  new request.
+    ///
+    /// This will call [`GrpcService::poll_ready`] until it returns ready or
+    /// an error. If this returns ready the inner [`GrpcService`] is ready to
+    /// accept one more request.
+    pub async fn ready(&mut self) -> Result<(), T::Error>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Send,
     {
-        futures_util::future::poll_fn(|cx| self.inner.poll_ready(cx))
-            .await
-            .map_err(|e| {
-                Status::new(
-                    Code::Unknown,
-                    format!("Unexpected connection error: {}", e.into()),
-                )
-            })
+        future::poll_fn(|cx| self.inner.poll_ready(cx)).await
     }
 
+    /// Send a single unary gRPC request.
     pub async fn unary<M1, M2, C>(
         &mut self,
         request: Request<M1>,
@@ -47,18 +59,18 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
         C::Decoder: Send + 'static,
         M1: Send + 'static,
-        M2: Send + Unpin + 'static,
     {
         let request = request.map(|m| stream::once(future::ok(m)));
         self.client_streaming(request, path, codec).await
     }
 
+    /// Send a client side streaming gRPC request.
     pub async fn client_streaming<S, M1, M2, C>(
         &mut self,
         request: Request<S>,
@@ -68,14 +80,13 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
         C::Decoder: Send + 'static,
         M1: Send,
-        M2: Send + Unpin + 'static,
     {
         let (mut parts, body) = self.streaming(request, path, codec).await?.into_parts();
 
@@ -93,6 +104,7 @@ impl<T> Grpc<T> {
         Ok(Response::from_parts(parts, message))
     }
 
+    /// Send a server side streaming gRPC request.
     pub async fn server_streaming<M1, M2, C>(
         &mut self,
         request: Request<M1>,
@@ -102,18 +114,18 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
         C::Decoder: Send + 'static,
         M1: Send + 'static,
-        M2: Send + Unpin + 'static,
     {
         let request = request.map(|m| stream::once(future::ok(m)));
         self.streaming(request, path, codec).await
     }
 
+    /// Send a bi-directional streaming gRPC request.
     pub async fn streaming<S, M1, M2, C>(
         &mut self,
         request: Request<S>,
@@ -123,14 +135,13 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error> + Send,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes> + Send,
+        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         C::Encoder: Send + 'static,
         C::Decoder: Send + 'static,
         M1: Send,
-        M2: Send + Unpin + 'static,
     {
         let mut parts = Parts::default();
         parts.path_and_query = Some(path);
@@ -138,7 +149,7 @@ impl<T> Grpc<T> {
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
         let request = request
-            .map(|s| encode_client(codec.encoder(), Box::pin(s)))
+            .map(|s| encode_client(codec.encoder(), s))
             .map(BoxBody::new);
 
         let mut request = request.into_http(uri);
@@ -192,5 +203,11 @@ impl<T: Clone> Clone for Grpc<T> {
         Self {
             inner: self.inner.clone(),
         }
+    }
+}
+
+impl<T> fmt::Debug for Grpc<T> {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("Grpc").finish()
     }
 }

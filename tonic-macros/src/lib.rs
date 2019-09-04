@@ -26,8 +26,9 @@ pub fn client(attr: TokenStream) -> TokenStream {
         }
 
         impl<T> #service_ident <T>
-        where T: tonic::GrpcService<tonic::body::BoxBody>,
+        where T: tonic::client::GrpcService<tonic::BoxBody>,
               T::ResponseBody: tonic::body::Body + tonic::_codegen::HttpBody + Send + 'static,
+              T::Error: Into<tonic::error::Error>,
               <T::ResponseBody as tonic::_codegen::HttpBody>::Error: Into<tonic::error::Error> + Send,
               <T::ResponseBody as tonic::_codegen::HttpBody>::Data: Into<bytes::Bytes> + Send, {
             pub fn new(inner: T) -> Self {
@@ -36,7 +37,9 @@ pub fn client(attr: TokenStream) -> TokenStream {
             }
 
             pub async fn ready(&mut self) -> Result<(), tonic::Status> {
-                self.inner.ready().await
+                self.inner.ready().await.map_err(|e| {
+                    tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+                })
             }
 
             #methods

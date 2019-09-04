@@ -33,7 +33,7 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
     quote! {
         pub async fn #ident (&mut self, request: tonic::Request<#request>)
             -> Result<tonic::Response<#response>, tonic::Status> {
-           self.inner.ready().await?;
+           self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.unary(request, path, codec).await
@@ -49,7 +49,7 @@ fn generate_server_streaming(method: &Method, proto: &str, path: String) -> Toke
     quote! {
         pub async fn #ident (&mut self, request: tonic::Request<#request>)
             -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
-           self.inner.ready().await?;
+           self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.server_streaming(request, path, codec).await
@@ -67,7 +67,7 @@ fn generate_client_streaming(method: &Method, proto: &str, path: String) -> Toke
             -> Result<tonic::Response<#response>, tonic::Status>
             where S: tonic::_codegen::Stream<Item = Result<#request, tonic::Status>> + Send + 'static,
         {
-           self.inner.ready().await?;
+           self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
            let request = request.map(|s| Box::pin(s));
@@ -86,7 +86,7 @@ fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream
             -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status>
             where S: tonic::_codegen::Stream<Item = Result<#request, tonic::Status>> + Send + 'static,
         {
-           self.inner.ready().await?;
+           self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
            let request = request.map(|s| Box::pin(s));

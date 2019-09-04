@@ -2,7 +2,7 @@ use super::{
     service::{BoxService, Connection, ServiceList},
     Endpoint,
 };
-use crate::{BoxBody, GrpcService};
+use crate::{client::GrpcService, BoxBody};
 use futures_util::try_future::{MapErr, TryFutureExt};
 use http::Uri;
 use hyper::{Request, Response};
