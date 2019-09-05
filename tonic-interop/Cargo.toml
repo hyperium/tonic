@@ -20,7 +20,6 @@ prost-derive = "0.5"
 bytes = "0.4"
 http = "0.1"
 futures-util-preview = "=0.3.0-alpha.18"
-hyper = { git = "https://github.com/hyperium/hyper" }
 
 console = "0.7"
 structopt = "0.2"

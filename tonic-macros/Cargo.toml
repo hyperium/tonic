@@ -13,8 +13,3 @@ quote = "1.0"
 proc-macro2 = "1.0"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-
-[dev-dependencies]
-tokio = "=0.2.0-alpha.4"
-tonic = { path = "../tonic" }
-futures-preview = "=0.3.0-alpha.18"
