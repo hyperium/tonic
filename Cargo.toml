@@ -3,5 +3,5 @@ members = [
     "tonic",
     "tonic-build",
     "tonic-examples",
-    # "tonic-interop",
+    "tonic-interop",
 ]

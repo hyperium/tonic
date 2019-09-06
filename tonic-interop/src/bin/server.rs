@@ -1,12 +1,11 @@
 use structopt::StructOpt;
-use tonic::transport::Server;
-use tonic::{Code, Request, Response, Status};
+use tonic::{Code, Request, Response, Status, Server};
+use std::pin::Pin;
 
 pub mod pb {
     #![allow(dead_code)]
     #![allow(unused_imports)]
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
-    tonic::client!(service = "grpc.testing.TestService", proto = "self");
 }
 
 use pb::*;
@@ -16,17 +15,21 @@ pub struct TestService {
     data: String,
 }
 
-#[tonic::server(service = "grpc.testing.TestService", proto = "pb")]
-impl TestService {
-    pub async fn empty_call(&self, _request: Request<Empty>) -> Result<Response<Empty>, Status> {
+type Result<T> = std::result::Result<Response<T>, Status>;
+type Streaming<T> = Request<tonic::Streaming<T>>;
+type Stream<T> = Pin<Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+
+#[tonic::async_trait]
+impl pb::TestService for TestService {
+    async fn empty_call(&self, _request: Request<Empty>) -> Result<Empty> {
         println!("empty_call");
         Ok(Response::new(Empty {}))
     }
 
-    pub async fn unary_call(
+    async fn unary_call(
         &self,
         request: Request<SimpleRequest>,
-    ) -> Result<Response<SimpleResponse>, Status> {
+    ) -> Result<SimpleResponse> {
         println!("unary_call");
 
         let req = request.into_inner();
@@ -53,6 +56,36 @@ impl TestService {
 
         Ok(Response::new(res))
     }
+
+    async fn cacheable_unary_call(&self, _: Request<SimpleRequest>) -> Result<SimpleResponse> {
+        unimplemented!()
+    }
+
+    type StreamingOutputCallStream = Stream<StreamingOutputCallResponse>;
+
+    async fn streaming_output_call(&self, _: Request<StreamingOutputCallRequest>) -> Result<Self::StreamingOutputCallStream> {
+        unimplemented!()
+    }
+
+    async fn streaming_input_call(&self, _: Streaming<StreamingInputCallRequest>) -> Result<StreamingInputCallResponse> {
+        unimplemented!()
+    }
+
+    type FullDuplexCallStream = Stream<StreamingOutputCallResponse>;
+
+    async fn full_duplex_call(&self, _: Streaming<StreamingOutputCallRequest>) -> Result<Self::FullDuplexCallStream> {
+        unimplemented!()
+    }
+
+    type HalfDuplexCallStream = Stream<StreamingOutputCallResponse>;
+
+    async fn half_duplex_call(&self, _: Streaming<StreamingOutputCallRequest>) -> Result<Self::HalfDuplexCallStream> {
+        unimplemented!()
+    }
+
+    async fn unimplemented_call(&self, _: Request<Empty>) -> Result<Empty> {
+        unimplemented!()
+    }
 }
 
 #[derive(StructOpt)]
@@ -62,7 +95,7 @@ struct Opts {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let matches = Opts::from_args();
 
     pretty_env_logger::init();

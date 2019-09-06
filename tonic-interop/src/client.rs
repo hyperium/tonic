@@ -7,12 +7,6 @@ use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 pub type TestClient = TestServiceClient<Channel>;
 pub type UnimplementedClient = UnimplementedServiceClient<Channel>;
 
-tonic::client!(service = "grpc.testing.TestService", proto = "crate::pb");
-tonic::client!(
-    service = "grpc.testing.UnimplementedService",
-    proto = "crate::pb"
-);
-
 const LARGE_REQ_SIZE: usize = 271828;
 const LARGE_RSP_SIZE: i32 = 314159;
 const REQUEST_LENGTHS: &'static [i32] = &[27182, 8, 1828, 45904];
