@@ -1,9 +1,9 @@
-use crate::pb::*;
+use crate::pb::{self, *};
 use std::pin::Pin;
 use tonic::{Code, Request, Response, Status};
 
-pub fn create() -> TestServiceServer<TestService> {
-    TestServiceServer::new(TestService {
+pub fn create() -> pb::server::TestServiceServer<TestService> {
+    server::TestServiceServer::new(TestService {
         data: String::new(),
     })
 }
@@ -19,7 +19,7 @@ type Stream<T> =
     Pin<Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
 
 #[tonic::async_trait]
-impl crate::pb::TestService for TestService {
+impl pb::server::TestService for TestService {
     async fn empty_call(&self, _request: Request<Empty>) -> Result<Empty> {
         println!("empty_call");
         Ok(Response::new(Empty {}))

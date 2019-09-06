@@ -321,12 +321,10 @@ fn generate_streaming(
 
     let response_stream = quote::format_ident!("{}Stream", method.proto_name);
 
-    // TODO: parse response stream type, if it is a concrete type then use that
-    // as the ResponseStream type, if it is a impl Trait then we need to box.
     quote! {
-        struct #service_ident<T: #server_trait >(pub std::sync::Arc<T>);
+        struct #service_ident<T: #server_trait>(pub std::sync::Arc<T>);
 
-        impl<T: #server_trait > tonic::server::StreamingService<#request> for #service_ident <T>
+        impl<T: #server_trait> tonic::server::StreamingService<#request> for #service_ident <T>
         {
             type Response = #response;
             type ResponseStream = T::#response_stream;

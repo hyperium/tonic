@@ -14,7 +14,7 @@ pub mod routeguide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
 }
 
-use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
+use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
 
 #[derive(Debug)]
 pub struct RouteGuide {
@@ -28,7 +28,7 @@ struct State {
 }
 
 #[tonic::async_trait]
-impl routeguide::RouteGuide for RouteGuide {
+impl server::RouteGuide for RouteGuide {
     async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
         println!("GetFeature = {:?}", request);
 
@@ -168,7 +168,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
-    let svc = routeguide::RouteGuideServer::new(route_guide);
+    let svc = server::RouteGuideServer::new(route_guide);
 
     Server::builder().serve(addr, svc).await?;
 

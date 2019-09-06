@@ -4,17 +4,22 @@ pub mod hello_world {
     include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
 }
 
+use hello_world::{
+    server::{Greeter, GreeterServer},
+    HelloReply, HelloRequest,
+};
+
 #[derive(Default)]
 pub struct MyGreeter {
     data: String,
 }
 
 #[tonic::async_trait]
-impl hello_world::Greeter for MyGreeter {
+impl Greeter for MyGreeter {
     async fn say_hello(
         &self,
-        request: Request<hello_world::HelloRequest>,
-    ) -> Result<Response<hello_world::HelloReply>, Status> {
+        request: Request<HelloRequest>,
+    ) -> Result<Response<HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
         let string = &self.data;
@@ -34,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let greeter = MyGreeter::default();
 
     Server::builder()
-        .serve(addr, hello_world::GreeterServer::new(greeter))
+        .serve(addr, GreeterServer::new(greeter))
         .await?;
 
     Ok(())
