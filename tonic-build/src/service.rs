@@ -12,37 +12,34 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
     let generated_trait = generate_trait(service, proto_path, server_trait.clone());
 
     quote! {
-        use tonic::_codegen::*;
-
         #generated_trait
 
-        // TODO: impl debug
-        #[derive(Clone)]
-        pub struct #server_make_service <T: #server_trait > {
-            inner: std::sync::Arc<T>,
+        #[derive(Clone, Debug)]
+        pub struct #server_make_service<T: #server_trait> {
+            inner: Arc<T>,
         }
 
-         // TODO: impl debug
-        pub struct #server_service <T: #server_trait > {
-            inner: std::sync::Arc<T>,
+        #[derive(Clone, Debug)]
+        pub struct #server_service<T: #server_trait> {
+            inner: Arc<T>,
         }
 
-        impl<T: #server_trait > #server_make_service <T> {
+        impl<T: #server_trait> #server_make_service<T> {
             pub fn new(inner: T) -> Self {
-                let inner = std::sync::Arc::new(inner);
+                let inner = Arc::new(inner);
                 Self { inner }
             }
         }
 
-        impl<T: #server_trait > #server_service <T> {
-            pub fn new(inner: std::sync::Arc<T>) -> Self {
+        impl<T: #server_trait> #server_service<T> {
+            pub fn new(inner: Arc<T>) -> Self {
                 Self { inner }
             }
         }
 
-        impl<T: #server_trait , R> Service<R> for #server_make_service <T> {
-            type Response = #server_service <T>;
-            type Error = tonic::error::Never;
+        impl<T: #server_trait, R> Service<R> for #server_make_service<T> {
+            type Response = #server_service<T>;
+            type Error = Never;
             type Future = Ready<Result<Self::Response, Self::Error>>;
 
             fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -50,25 +47,26 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
             }
 
             fn call(&mut self, _: R) -> Self::Future {
-                ok(#server_service ::new(self.inner.clone()))
+                ok(#server_service::new(self.inner.clone()))
             }
         }
 
-        impl<T: #server_trait > Service<http::Request<tonic::_codegen::HyperBody>> for #server_service <T> {
+        impl<T: #server_trait> Service<http::Request<HyperBody>> for #server_service<T> {
             type Response = http::Response<tonic::BoxBody>;
-            type Error = tonic::error::Never;
+            type Error = Never;
             type Future = BoxFuture<Self::Response, Self::Error>;
 
             fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
                 Poll::Ready(Ok(()))
             }
 
-            fn call(&mut self, req: http::Request<tonic::_codegen::HyperBody>) -> Self::Future {
+            fn call(&mut self, req: http::Request<HyperBody>) -> Self::Future {
                 let inner = self.inner.clone();
 
                 match req.uri().path() {
                     #methods
 
+                    // TODO: implement grpc unimplemented for server
                     _ => unimplemented!("use grpc unimplemented"),
                 }
             }
@@ -83,7 +81,6 @@ fn generate_trait(service: &Service, proto_path: &str, server_trait: Ident) -> T
         #[async_trait]
         pub trait #server_trait : Send + Sync + 'static {
             #methods
-
         }
     }
 }
@@ -101,13 +98,13 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
         let method = match (method.client_streaming, method.server_streaming) {
             (false, false) => {
                 quote! {
-                    async fn #name (&self, request: tonic::Request<#req_message>)
+                    async fn #name(&self, request: tonic::Request<#req_message>)
                         -> Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (true, false) => {
                 quote! {
-                    async fn #name (&self, request: tonic::Request<tonic::Streaming<#req_message>>)
+                    async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
                         -> Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
@@ -115,9 +112,9 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
                 let stream = quote::format_ident!("{}Stream", method.proto_name);
 
                 quote! {
-                    type #stream: Stream<Item = Result<#res_message, tonic::Status>> + Unpin + Send + 'static;
+                    type #stream: Stream<Item = Result<#res_message, tonic::Status>>  + Send + 'static;
 
-                    async fn #name (&self, request: tonic::Request<#req_message>)
+                    async fn #name(&self, request: tonic::Request<#req_message>)
                         -> Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
@@ -125,9 +122,9 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
                 let stream = quote::format_ident!("{}Stream", method.proto_name);
 
                 quote! {
-                    type #stream: Stream<Item = Result<#res_message, tonic::Status>> + Unpin + Send + 'static;
+                    type #stream: Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
 
-                    async fn #name (&self, request: tonic::Request<tonic::Streaming<#req_message>>)
+                    async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
                         -> Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
@@ -188,9 +185,9 @@ fn generate_unary(
         syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
 
     quote! {
-        struct #service_ident <T: #server_trait >(pub std::sync::Arc<T>);
+        struct #service_ident<T: #server_trait >(pub Arc<T>);
 
-        impl<T: #server_trait > tonic::server::UnaryService<#request> for #service_ident <T> {
+        impl<T: #server_trait> tonic::server::UnaryService<#request> for #service_ident<T> {
             type Response = #response;
             type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
@@ -231,12 +228,10 @@ fn generate_server_streaming(
 
     let response_stream = quote::format_ident!("{}Stream", method.proto_name);
 
-    // TODO: parse response stream type, if it is a concrete type then use that
-    // as the ResponseStream type, if it is a impl Trait then we need to box.
     quote! {
-        struct #service_ident <T: #server_trait >(pub std::sync::Arc<T>);
+        struct #service_ident<T: #server_trait >(pub Arc<T>);
 
-        impl<T: #server_trait > tonic::server::ServerStreamingService<#request> for #service_ident <T> {
+        impl<T: #server_trait> tonic::server::ServerStreamingService<#request> for #service_ident<T> {
             type Response = #response;
             type ResponseStream = T::#response_stream;
             type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
@@ -277,9 +272,9 @@ fn generate_client_streaming(
         syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
 
     quote! {
-        struct #service_ident<T: #server_trait >(pub std::sync::Arc<T>);
+        struct #service_ident<T: #server_trait >(pub Arc<T>);
 
-        impl<T: #server_trait> tonic::server::ClientStreamingService<#request> for #service_ident <T>
+        impl<T: #server_trait> tonic::server::ClientStreamingService<#request> for #service_ident<T>
         {
             type Response = #response;
             type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
@@ -322,9 +317,9 @@ fn generate_streaming(
     let response_stream = quote::format_ident!("{}Stream", method.proto_name);
 
     quote! {
-        struct #service_ident<T: #server_trait>(pub std::sync::Arc<T>);
+        struct #service_ident<T: #server_trait>(pub Arc<T>);
 
-        impl<T: #server_trait> tonic::server::StreamingService<#request> for #service_ident <T>
+        impl<T: #server_trait> tonic::server::StreamingService<#request> for #service_ident<T>
         {
             type Response = #response;
             type ResponseStream = T::#response_stream;

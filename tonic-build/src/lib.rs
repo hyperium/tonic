@@ -1,3 +1,18 @@
+//! `tonic-build` compiles `proto` files via `prost` and generates service stubs
+//! and proto definitiones for use with `tonic`.
+//!
+//! # Examples
+//!
+//! ```rust,no_run
+//! fn main() {
+//!    tonic_build::compile_protos(
+//!        &["proto/helloworld/helloworld.proto"],
+//!        &["proto/helloworld"],
+//!        "helloworld",
+//!    )
+//!    .unwrap();
+//! }
+
 use proc_macro2::TokenStream;
 use prost_build::Config;
 use std::{io, path, path::Path, process::Command};
@@ -72,12 +87,14 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let service = quote::quote! {
                 pub mod client {
                     #![allow(unused_variables, dead_code, missing_docs)]
+                    use tonic::codegen::*;
 
                     #clients
                 }
 
                 pub mod server {
                     #![allow(unused_variables, dead_code, missing_docs)]
+                    use tonic::codegen::*;
 
                     #servers
                 }
