@@ -28,6 +28,7 @@ where
     compile_protos_with_out_dir(protos, includes, package, out_dir.as_str())
 }
 
+#[allow(unused_variables)]
 pub fn compile_protos_with_out_dir<P: AsRef<Path>>(
     protos: &[P],
     includes: &[P],
@@ -40,6 +41,7 @@ pub fn compile_protos_with_out_dir<P: AsRef<Path>>(
     config.out_dir(out_dir.as_ref());
     config.compile_protos(protos, includes)?;
 
+    #[cfg(feature = "rustfmt")]
     fmt(
         out_dir.as_ref().to_str().expect("Execpted utf8 out_dir"),
         &format!("{}.rs", package),
@@ -48,6 +50,7 @@ pub fn compile_protos_with_out_dir<P: AsRef<Path>>(
     Ok(())
 }
 
+#[cfg(feature = "rustfmt")]
 fn fmt(out_dir: &str, file: &str) {
     let out = Command::new("rustfmt")
         .arg("--emit")
