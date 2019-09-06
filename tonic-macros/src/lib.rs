@@ -57,19 +57,15 @@ pub fn client(attr: TokenStream) -> TokenStream {
     TokenStream::from(output)
 }
 
-#[proc_macro_attribute]
-pub fn server(attr: TokenStream, item: TokenStream) -> TokenStream {
-    let mut original = item.clone();
-    let item = syn::parse_macro_input!(item as ItemImpl);
+#[proc_macro]
+pub fn server(attr: TokenStream) -> TokenStream {
     let args = syn::parse_macro_input!(attr as AttributeArgs);
 
     let (service, proto_path) = load_service(args);
 
-    let service_def = service::parse_service_impl(item, service, proto_path);
-    let output = service::generate(service_def);
+    let output = service::generate(service, &proto_path);
 
-    original.extend(TokenStream::from(output));
-    original
+    TokenStream::from(output)
 }
 
 fn load_service(attr: AttributeArgs) -> (Service, String) {

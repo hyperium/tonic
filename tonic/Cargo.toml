@@ -19,6 +19,7 @@ tokio-codec = "=0.2.0-alpha.4"
 async-stream = { git = "https://github.com/tokio-rs/async-stream" }
 http-body = "0.2.0-alpha.1"
 pin-project = "=0.4.0-alpha.7"
+async-trait = "0.1"
 
 # optional
 hyper = { version = "=0.13.0-alpha.1", optional = true }

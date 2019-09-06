@@ -51,11 +51,17 @@ pub use request::Request;
 pub use response::Response;
 pub use status::{Code, Status};
 pub use tonic_macros::{client, server};
+#[doc(inline)]
+pub use transport::{Channel, Server};
 
 pub(crate) use error::Error;
 
 #[doc(hidden)]
+pub use async_trait::async_trait as server_trait;
+
+#[doc(hidden)]
 pub mod _codegen {
+    pub use async_trait::async_trait;
     pub use futures_core::Stream;
     pub use futures_util::future::{ok, poll_fn, Ready};
     pub use http_body::Body as HttpBody;
