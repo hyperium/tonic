@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [[bin]]
 name = "helloworld-server"
 path = "src/helloworld/server.rs"
@@ -14,9 +12,9 @@ path = "src/helloworld/server.rs"
 name = "helloworld-client"
 path = "src/helloworld/client.rs"
 
-# [[bin]]
-# name = "routeguide-server"
-# path = "src/routeguide/server.rs"
+[[bin]]
+name = "routeguide-server"
+path = "src/routeguide/server.rs"
 
 [[bin]]
 name = "routeguide-client"

@@ -1,4 +1,4 @@
-use crate::{Request, Response, Status};
+use crate::{Request, Response, Status, Streaming};
 use futures_core::Stream;
 use std::future::Future;
 use tower_service::Service;
@@ -66,7 +66,7 @@ where
 ///
 /// Existing tower_service::Service implementations with the correct form will
 /// automatically implement `ClientStreamingService`.
-pub trait ClientStreamingService<RequestStream> {
+pub trait ClientStreamingService<R> {
     /// Protobuf response message type
     type Response;
 
@@ -74,18 +74,17 @@ pub trait ClientStreamingService<RequestStream> {
     type Future: Future<Output = Result<Response<Self::Response>, Status>>;
 
     /// Call the service
-    fn call(&mut self, request: Request<RequestStream>) -> Self::Future;
+    fn call(&mut self, request: Request<Streaming<R>>) -> Self::Future;
 }
 
-impl<T, M1, M2, S> ClientStreamingService<S> for T
+impl<T, M1, M2> ClientStreamingService<M1> for T
 where
-    T: Service<Request<S>, Response = Response<M2>, Error = crate::Status>,
-    S: Stream<Item = Result<M1, crate::Status>>,
+    T: Service<Request<Streaming<M1>>, Response = Response<M2>, Error = crate::Status>,
 {
     type Response = M2;
     type Future = T::Future;
 
-    fn call(&mut self, request: Request<S>) -> Self::Future {
+    fn call(&mut self, request: Request<Streaming<M1>>) -> Self::Future {
         Service::call(self, request)
     }
 }
@@ -94,7 +93,7 @@ where
 ///
 /// Existing tower_service::Service implementations with the correct form will
 /// automatically implement `StreamingService`.
-pub trait StreamingService<RequestStream> {
+pub trait StreamingService<R> {
     /// Protobuf response message type
     type Response;
 
@@ -105,20 +104,19 @@ pub trait StreamingService<RequestStream> {
     type Future: Future<Output = Result<Response<Self::ResponseStream>, Status>>;
 
     /// Call the service
-    fn call(&mut self, request: Request<RequestStream>) -> Self::Future;
+    fn call(&mut self, request: Request<Streaming<R>>) -> Self::Future;
 }
 
-impl<T, S1, S2, M1, M2> StreamingService<S1> for T
+impl<T, S, M1, M2> StreamingService<M1> for T
 where
-    T: Service<Request<S1>, Response = Response<S2>, Error = crate::Status>,
-    S1: Stream<Item = Result<M1, crate::Status>>,
-    S2: Stream<Item = Result<M2, crate::Status>>,
+    T: Service<Request<Streaming<M1>>, Response = Response<S>, Error = crate::Status>,
+    S: Stream<Item = Result<M2, crate::Status>>,
 {
     type Response = M2;
-    type ResponseStream = S2;
+    type ResponseStream = S;
     type Future = T::Future;
 
-    fn call(&mut self, request: Request<S1>) -> Self::Future {
+    fn call(&mut self, request: Request<Streaming<M1>>) -> Self::Future {
         Service::call(self, request)
     }
 }

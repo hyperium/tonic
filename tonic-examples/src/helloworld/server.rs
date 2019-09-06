@@ -1,18 +1,20 @@
-use tonic::{Request, Response, Status, Server};
+use tonic::{Request, Response, Server, Status};
 
 pub mod hello_world {
     include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
-    tonic::server!(service = "helloworld.Greeter", proto = "self");
 }
 
-#[derive(Default, Clone)]
+#[derive(Default)]
 pub struct MyGreeter {
     data: String,
 }
 
-#[tonic::server_trait]
+#[tonic::async_trait]
 impl hello_world::Greeter for MyGreeter {
-    async fn say_hello(self, request: Request<hello_world::HelloRequest>) ->  Result<Response<hello_world::HelloReply>, Status> {
+    async fn say_hello(
+        &self,
+        request: Request<hello_world::HelloRequest>,
+    ) -> Result<Response<hello_world::HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
         let string = &self.data;

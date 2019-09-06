@@ -1,9 +1,50 @@
-use super::{Method, Service};
 use proc_macro2::TokenStream;
+use prost_build::{Method, Service};
 use quote::{format_ident, quote};
 use syn::Path;
 
-pub(crate) fn generate(service: Service, proto: String) -> TokenStream {
+pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
+    let service_ident = quote::format_ident!("{}Client", service.name);
+    let methods = generate_methods(service, proto);
+
+    quote! {
+        use tonic::_codegen::*;
+
+        pub struct #service_ident <T> {
+            inner: tonic::client::Grpc<T>,
+        }
+
+        impl<T> #service_ident <T>
+        where T: tonic::client::GrpcService<tonic::BoxBody>,
+              T::ResponseBody: tonic::body::Body + tonic::_codegen::HttpBody + Send + 'static,
+              T::Error: Into<tonic::error::Error>,
+              <T::ResponseBody as tonic::_codegen::HttpBody>::Error: Into<tonic::error::Error> + Send,
+              <T::ResponseBody as tonic::_codegen::HttpBody>::Data: Into<bytes::Bytes> + Send, {
+            pub fn new(inner: T) -> Self {
+                let inner = tonic::client::Grpc::new(inner);
+                Self { inner }
+            }
+
+            pub async fn ready(&mut self) -> Result<(), tonic::Status> {
+                self.inner.ready().await.map_err(|e| {
+                    tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+                })
+            }
+
+            #methods
+        }
+
+        impl<T: Clone> Clone for #service_ident <T> {
+            fn clone(&self) -> Self {
+                Self {
+                    inner: self.inner.clone(),
+                }
+            }
+        }
+    }
+}
+
+fn generate_methods(service: &Service, proto: &str) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for method in &service.methods {

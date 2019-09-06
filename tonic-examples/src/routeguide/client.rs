@@ -6,7 +6,6 @@ use tonic::{transport::Channel, Request};
 
 mod route_guide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
-    tonic::client!(service = "routeguide.RouteGuide", proto = "self");
 }
 
 #[tokio::main]

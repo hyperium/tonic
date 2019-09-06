@@ -45,19 +45,18 @@ mod request;
 mod response;
 mod status;
 
+pub use async_trait::async_trait;
 #[doc(inline, hidden)]
 pub use body::BoxBody;
+#[doc(inline)]
+pub use codec::Streaming;
 pub use request::Request;
 pub use response::Response;
 pub use status::{Code, Status};
-pub use tonic_macros::{client, server};
 #[doc(inline)]
 pub use transport::{Channel, Server};
 
 pub(crate) use error::Error;
-
-#[doc(hidden)]
-pub use async_trait::async_trait as server_trait;
 
 #[doc(hidden)]
 pub mod _codegen {

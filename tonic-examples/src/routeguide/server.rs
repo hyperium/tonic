@@ -8,6 +8,7 @@ use std::time::Instant;
 use tokio::sync::{mpsc, Lock};
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
+use std::pin::Pin;
 
 pub mod routeguide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
@@ -26,9 +27,9 @@ struct State {
     notes: Lock<HashMap<Point, Vec<RouteNote>>>,
 }
 
-#[tonic::server(service = "routeguide.RouteGuide", proto = "routeguide")]
-impl RouteGuide {
-    pub async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
+#[tonic::async_trait]
+impl routeguide::RouteGuide for RouteGuide {
+    async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
         println!("GetFeature = {:?}", request);
 
         for feature in &self.state.features[..] {
@@ -45,10 +46,12 @@ impl RouteGuide {
         Ok(response)
     }
 
-    pub async fn list_features(
+    type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+
+    async fn list_features(
         &self,
         request: Request<Rectangle>,
-    ) -> Result<Response<mpsc::Receiver<Result<Feature, Status>>>, Status> {
+    ) -> Result<Response<Self::ListFeaturesStream>, Status> {
         use std::thread;
 
         println!("ListFeatures = {:?}", request);
@@ -71,9 +74,9 @@ impl RouteGuide {
         Ok(Response::new(rx))
     }
 
-    pub async fn record_route(
+    async fn record_route(
         &self,
-        request: Request<impl Stream<Item = Result<Point, Status>>>,
+        request: Request<tonic::Streaming<Point>>,
     ) -> Result<Response<RouteSummary>, Status> {
         println!("RecordRoute");
 
@@ -114,10 +117,12 @@ impl RouteGuide {
         Ok(Response::new(summary))
     }
 
-    pub async fn route_chat(
+    type RouteChatStream = Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>>;
+
+    async fn route_chat(
         &self,
-        request: Request<impl Stream<Item = Result<RouteNote, Status>> + Send + 'static>,
-    ) -> Result<Response<impl Stream<Item = Result<RouteNote, Status>> + Send>, Status> {
+        request: Request<tonic::Streaming<RouteNote>>,
+    ) -> Result<Response<Self::RouteChatStream>, Status> {
         println!("RouteChat");
 
         let stream = request.into_inner();
@@ -141,7 +146,8 @@ impl RouteGuide {
             }
         };
 
-        Ok(Response::new(output))
+        // TODO: Clean this up
+        Ok(Response::new(Box::pin(output) as Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>>))
     }
 }
 
@@ -159,8 +165,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
+    let svc = routeguide::RouteGuideServer::new(route_guide);
+
     Server::builder()
-        .serve(addr, RouteGuideServer::new(route_guide))
+        .serve(addr, svc)
         .await?;
 
     Ok(())

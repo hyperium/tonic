@@ -93,7 +93,7 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: ClientStreamingService<Streaming<T::Decode>, Response = T::Encode>,
+        S: ClientStreamingService<T::Decode, Response = T::Encode>,
         B: Body + Send + 'static,
         B::Data: Into<Bytes> + Send + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
@@ -113,7 +113,7 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: StreamingService<Streaming<T::Decode>, Response = T::Encode> + Send,
+        S: StreamingService<T::Decode, Response = T::Encode> + Send,
         S::ResponseStream: Send + 'static,
         B: Body + Send + 'static,
         B::Data: Into<Bytes> + Send,

@@ -7,7 +7,6 @@ edition = "2018"
 [dependencies]
 futures-core-preview = "=0.3.0-alpha.18"
 futures-util-preview = "=0.3.0-alpha.18"
-tonic-macros = { path = "../tonic-macros" }
 tracing = "0.1"
 http = "0.1.14"
 base64 = "0.10"

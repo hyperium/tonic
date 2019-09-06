@@ -2,7 +2,6 @@ use tonic::transport::Channel;
 
 pub mod hello_world {
     include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
-    tonic::client!(service = "helloworld.Greeter", proto = "self");
 }
 
 #[tokio::main]

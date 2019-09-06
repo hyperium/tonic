@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "tonic",
-    "tonic-macros",
     "tonic-build",
     "tonic-examples",
     # "tonic-interop",
