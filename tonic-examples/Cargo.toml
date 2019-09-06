@@ -33,4 +33,4 @@ async-stream = { git = "https://github.com/tokio-rs/async-stream" }
 http = "0.1"
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build", features = ["rustfmt"] }
+tonic-build = { path = "../tonic-build" }
