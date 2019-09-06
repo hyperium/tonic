@@ -1,14 +1,7 @@
 use structopt::StructOpt;
 use tonic::{Code, Request, Response, Status, Server};
 use std::pin::Pin;
-
-pub mod pb {
-    #![allow(dead_code)]
-    #![allow(unused_imports)]
-    include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
-}
-
-use pb::*;
+use tonic_interop::pb::*;
 
 #[derive(Default, Clone)]
 pub struct TestService {
@@ -20,7 +13,7 @@ type Streaming<T> = Request<tonic::Streaming<T>>;
 type Stream<T> = Pin<Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
 
 #[tonic::async_trait]
-impl pb::TestService for TestService {
+impl tonic_interop::pb::TestService for TestService {
     async fn empty_call(&self, _request: Request<Empty>) -> Result<Empty> {
         println!("empty_call");
         Ok(Response::new(Empty {}))
@@ -46,8 +39,8 @@ impl pb::TestService for TestService {
             return Err(status);
         };
 
-        let res = pb::SimpleResponse {
-            payload: Some(pb::Payload {
+        let res = SimpleResponse {
+            payload: Some(Payload {
                 body: vec![0; res_size],
                 ..Default::default()
             }),
