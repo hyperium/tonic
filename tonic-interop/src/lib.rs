@@ -1,4 +1,5 @@
 pub mod client;
+pub mod server;
 
 pub mod pb {
     #![allow(dead_code)]
