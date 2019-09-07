@@ -15,7 +15,9 @@
 
 use proc_macro2::TokenStream;
 use prost_build::Config;
-use std::{io, path, path::Path, process::Command};
+#[cfg(feature = "rustfmt")]
+use std::process::Command;
+use std::{io, path, path::Path};
 
 mod client;
 mod service;

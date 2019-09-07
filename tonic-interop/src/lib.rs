@@ -1,3 +1,5 @@
+#![recursion_limit = "256"]
+
 pub mod client;
 pub mod server;
 
@@ -10,6 +12,13 @@ pub mod pb {
 use std::{default, fmt, iter};
 
 pub fn client_payload(size: usize) -> pb::Payload {
+    pb::Payload {
+        r#type: default::Default::default(),
+        body: iter::repeat(0u8).take(size).collect(),
+    }
+}
+
+pub fn server_payload(size: usize) -> pb::Payload {
     pb::Payload {
         r#type: default::Default::default(),
         body: iter::repeat(0u8).take(size).collect(),

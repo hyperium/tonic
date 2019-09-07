@@ -21,6 +21,7 @@ bytes = "0.4"
 http = "0.1"
 futures-core-preview = "=0.3.0-alpha.18"
 futures-util-preview = "=0.3.0-alpha.18"
+async-stream = { git = "https://github.com/tokio-rs/async-stream" }
 
 console = "0.7"
 structopt = "0.2"

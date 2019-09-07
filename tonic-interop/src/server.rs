@@ -1,5 +1,8 @@
 use crate::pb::{self, *};
+use async_stream::try_stream;
+use futures_util::TryStreamExt;
 use std::pin::Pin;
+use std::time::{Duration, Instant};
 use tonic::{Code, Request, Response, Status};
 
 pub fn create() -> pb::server::TestServiceServer<TestService> {
@@ -21,13 +24,10 @@ type Stream<T> =
 #[tonic::async_trait]
 impl pb::server::TestService for TestService {
     async fn empty_call(&self, _request: Request<Empty>) -> Result<Empty> {
-        println!("empty_call");
         Ok(Response::new(Empty {}))
     }
 
     async fn unary_call(&self, request: Request<SimpleRequest>) -> Result<SimpleResponse> {
-        println!("unary_call");
-
         let req = request.into_inner();
 
         if let Some(echo_status) = req.response_status {
@@ -61,25 +61,72 @@ impl pb::server::TestService for TestService {
 
     async fn streaming_output_call(
         &self,
-        _: Request<StreamingOutputCallRequest>,
+        req: Request<StreamingOutputCallRequest>,
     ) -> Result<Self::StreamingOutputCallStream> {
-        unimplemented!()
+        let StreamingOutputCallRequest {
+            response_parameters,
+            ..
+        } = req.into_inner();
+
+        let stream = try_stream! {
+            for param in response_parameters {
+                let deadline = Instant::now() + Duration::from_micros(param.interval_us as u64);
+                tokio::timer::delay(deadline).await;
+
+                let payload = crate::server_payload(param.size as usize);
+                yield StreamingOutputCallResponse { payload: Some(payload) };
+            }
+        };
+
+        Ok(Response::new(
+            Box::pin(stream) as Self::StreamingOutputCallStream
+        ))
     }
 
     async fn streaming_input_call(
         &self,
-        _: Streaming<StreamingInputCallRequest>,
+        req: Streaming<StreamingInputCallRequest>,
     ) -> Result<StreamingInputCallResponse> {
-        unimplemented!()
+        let mut stream = req.into_inner();
+
+        let mut aggregated_payload_size = 0 as i32;
+        while let Some(msg) = stream.try_next().await? {
+            aggregated_payload_size += msg.payload.unwrap().body.len() as i32;
+        }
+
+        let res = StreamingInputCallResponse {
+            aggregated_payload_size,
+        };
+
+        Ok(Response::new(res))
     }
 
     type FullDuplexCallStream = Stream<StreamingOutputCallResponse>;
 
     async fn full_duplex_call(
         &self,
-        _: Streaming<StreamingOutputCallRequest>,
+        req: Streaming<StreamingOutputCallRequest>,
     ) -> Result<Self::FullDuplexCallStream> {
-        unimplemented!()
+        let mut stream = req.into_inner();
+
+        let stream = try_stream! {
+            while let Some(msg) = stream.try_next().await? {
+                if let Some(echo_status) = msg.response_status {
+                    let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
+                     Err(status)?;
+                }
+
+                for param in msg.response_parameters {
+                    let deadline = Instant::now() + Duration::from_micros(param.interval_us as u64);
+                    tokio::timer::delay(deadline).await;
+
+                    let payload = crate::server_payload(param.size as usize);
+                    yield StreamingOutputCallResponse { payload: Some(payload) };
+                }
+            }
+        };
+
+        Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
     }
 
     type HalfDuplexCallStream = Stream<StreamingOutputCallResponse>;
