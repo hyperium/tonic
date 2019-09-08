@@ -1,6 +1,6 @@
 use crate::pb::{self, *};
 use async_stream::try_stream;
-use futures_util::TryStreamExt;
+use futures_util::{TryStreamExt, StreamExt, stream};
 use std::pin::Pin;
 use std::time::{Duration, Instant};
 use tonic::{Code, Request, Response, Status};
@@ -109,24 +109,37 @@ impl pb::server::TestService for TestService {
     ) -> Result<Self::FullDuplexCallStream> {
         let mut stream = req.into_inner();
 
-        let stream = try_stream! {
-            while let Some(msg) = stream.try_next().await? {
-                if let Some(echo_status) = msg.response_status {
-                    let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
-                     Err(status)?;
-                }
-
-                for param in msg.response_parameters {
-                    let deadline = Instant::now() + Duration::from_micros(param.interval_us as u64);
-                    tokio::timer::delay(deadline).await;
-
-                    let payload = crate::server_payload(param.size as usize);
-                    yield StreamingOutputCallResponse { payload: Some(payload) };
-                }
+        if let Some(first_msg) = stream.message().await? {
+            if let Some(echo_status) = first_msg.response_status {
+                let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
+                return Err(status);
             }
-        };
 
-        Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
+            let single_message = stream::iter(vec![Ok(first_msg)]);
+            let mut stream = single_message.chain(stream);
+
+            let stream = try_stream! {
+                while let Some(msg) = stream.try_next().await? {
+                    if let Some(echo_status) = msg.response_status {
+                        let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
+                        Err(status)?;
+                    }
+
+                    for param in msg.response_parameters {
+                        let deadline = Instant::now() + Duration::from_micros(param.interval_us as u64);
+                        tokio::timer::delay(deadline).await;
+
+                        let payload = crate::server_payload(param.size as usize);
+                        yield StreamingOutputCallResponse { payload: Some(payload) };
+                    }
+                }
+            };
+
+            Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
+        } else {
+            let stream = stream::empty();
+            Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
+        }
     }
 
     type HalfDuplexCallStream = Stream<StreamingOutputCallResponse>;

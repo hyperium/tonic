@@ -186,8 +186,6 @@ where
                 http::Response::from_parts(parts, BoxBody::new(body))
             }
             Err(status) => {
-                let status = stream::once(future::err(status));
-                let body = encode_server(self.codec.encoder(), status);
                 let (mut parts, _body) = Response::new(()).into_http().into_parts();
 
                 parts.headers.insert(
@@ -195,7 +193,9 @@ where
                     http::header::HeaderValue::from_static(T::CONTENT_TYPE),
                 );
 
-                http::Response::from_parts(parts, BoxBody::new(body))
+                status.add_header(&mut parts.headers).unwrap();
+
+                http::Response::from_parts(parts, BoxBody::empty())
             }
         }
     }

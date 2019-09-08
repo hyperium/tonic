@@ -110,6 +110,13 @@ impl BoxBody {
             inner: Box::pin(MapBody(inner)),
         }
     }
+
+    /// Create a new `BoxBody` that is empty.
+    pub fn empty() -> Self {
+        BoxBody {
+            inner: Box::pin(EmptyBody::default()),
+        }
+    }
 }
 
 impl HttpBody for BoxBody {
@@ -183,5 +190,33 @@ where
 impl fmt::Debug for BoxBody {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("BoxBody").finish()
+    }
+}
+
+#[derive(Debug, Default)]
+struct EmptyBody {
+    _p: (),
+}
+
+impl HttpBody for EmptyBody {
+    type Data = BytesBuf;
+    type Error = Status;
+
+    fn is_end_stream(&self) -> bool {
+        true
+    }
+
+    fn poll_data(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        Poll::Ready(None)
+    }
+
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
+        Poll::Ready(Ok(None))
     }
 }

@@ -91,8 +91,12 @@ impl<T> Streaming<T> {
 
 impl<T> Streaming<T> {
     /// Fetch the next message from this stream.
-    pub async fn message(&mut self) -> Option<Result<T, Status>> {
-        future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await
+    pub async fn message(&mut self) -> Result<Option<T>, Status> {
+        match future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await {
+            Some(Ok(m)) => Ok(Some(m)),
+            Some(Err(e)) => Err(e),
+            None => Ok(None),
+        }
     }
 
     /// Fetch the trailing metadata.
@@ -108,9 +112,7 @@ impl<T> Streaming<T> {
         }
 
         // To fetch the trailers we must clear the body and drop it.
-        while let Some(res) = self.message().await {
-            res?;
-        }
+        while let Some(res) = self.message().await? {}
 
         // Since we call poll_trailers internally on poll_next we need to
         // check if it got cached again.
