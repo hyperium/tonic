@@ -35,7 +35,7 @@ unimplemented_service,custom_metadata $ARG
 echo ":; killing test server"; kill ${SERVER_PID};
 
 # run the test server
-./target/debug/server & #$ARG --tls_cert_file $TLS_CRT --tls_key_file $TLS_KEY &
+./target/debug/server $ARG &
 SERVER_PID=$!
 echo ":; started tonic test server."
 
