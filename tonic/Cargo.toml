@@ -1,6 +1,6 @@
 [package]
 name = "tonic"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 
@@ -15,20 +15,21 @@ prost = "0.5"
 percent-encoding = "1.0.1"
 tower-service = "=0.3.0-alpha.1"
 tokio-codec = "=0.2.0-alpha.4"
-async-stream = { git = "https://github.com/tokio-rs/async-stream" }
+async-stream = "0.1.1"
 http-body = "0.2.0-alpha.1"
-pin-project = "=0.4.0-alpha.7"
+pin-project = "=0.4.0-alpha.11"
 async-trait = "0.1"
 
 # optional
-hyper = { version = "=0.13.0-alpha.1", optional = true }
+# hyper = { version = "=0.13.0-alpha.1", optional = true }
+hyper = { git = "https://github.com/hyperium/hyper", features = ["unstable-stream"], optional = true }
 tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
 tower-make = "=0.1.0-alpha.2"
-tower-reconnect = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-reconnect-buffer", optional = true }
-tower-buffer = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-reconnect-buffer", optional = true }
-tower-balance = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-balance", optional = true }
-tower-load = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-balance", optional = true }
-tower-discover = { git = "https://github.com/tower-rs/tower", branch = "lucio/update-balance", optional = true }
+tower-reconnect = { version = "0.3.0-alpha.1", optional = true }
+tower-buffer = { version = "0.3.0-alpha.1", optional = true }
+tower-balance =  { version = "0.3.0-alpha.1", optional = true }
+tower-load = { version = "0.3.0-alpha.1", optional = true }
+tower-discover = { version = "0.3.0-alpha.1", optional = true }
 
 # openssl
 tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }

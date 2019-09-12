@@ -89,7 +89,7 @@ impl Builder {
 
     fn balance<D>(&mut self, discover: D) -> Result<Channel, super::Error>
     where
-        D: Discover<Service = Connection> + Send + 'static,
+        D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
         D::Key: Send + Clone,
     {

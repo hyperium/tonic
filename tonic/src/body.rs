@@ -210,6 +210,7 @@ impl HttpBody for EmptyBody {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        drop(cx);
         Poll::Ready(None)
     }
 
@@ -217,6 +218,7 @@ impl HttpBody for EmptyBody {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
+        drop(cx);
         Poll::Ready(Ok(None))
     }
 }

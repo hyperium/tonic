@@ -1,10 +1,12 @@
-#![recursion_limit = "512"]
+#![recursion_limit = "256"]
 #![warn(
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
     unreachable_pub
 )]
+#![doc(html_logo_url = "file:///Users/lucio/Downloads/tonic_bubbles_with_word_bigger.svg")]
+#![doc(html_root_url = "https://docs.rs/tonic/0.1.0")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 
 //! A rust implementation of [gRPC], a high performance, open source, general

@@ -3,12 +3,12 @@ use super::{
     tls::{Cert, TlsAcceptor},
 };
 use crate::BoxBody;
-use futures_util::{try_future::MapOk, TryFutureExt, TryStreamExt};
+use futures_core::Stream;
+use futures_util::{try_future::MapOk, TryFutureExt, TryStreamExt, ready};
 use http::{Request, Response};
-use hyper::server::conn;
+use hyper::server::{conn, accept::Accept};
 use hyper::Body;
-use std::net::SocketAddr;
-use std::task::{Context, Poll};
+use std::{net::SocketAddr, task::{Context, Poll}, pin::Pin};
 use tower_make::MakeService;
 use tower_service::Service;
 
@@ -48,8 +48,6 @@ impl Builder {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error>,
     {
-        let tcp = conn::AddrIncoming::bind(&addr).unwrap();
-
         let tls = if let Some(tls) = self.tls {
             let cert = Cert {
                 ca: tls.0,
@@ -62,7 +60,7 @@ impl Builder {
             None
         };
 
-        let incoming = incoming(tcp, tls);
+        let incoming = hyper::server::accept::from_stream(incoming(addr, tls));
 
         let svc = MakeSvc(svc);
 
@@ -77,11 +75,13 @@ impl Builder {
 }
 
 fn incoming(
-    mut tcp: conn::AddrIncoming,
+    addr: SocketAddr,
     tls: Option<TlsAcceptor>,
 ) -> impl futures_core::Stream<Item = Result<BoxedIo, crate::Error>> {
     async_stream::try_stream! {
-        while let Some(stream) = tcp.try_next().await.map_err(Into::into)? {
+        let mut tcp = TcpIncoming::bind(addr)?;
+
+        while let Some(stream) = tcp.try_next().await? {
             if let Some(tls) = &tls {
                 let io = tls.connect(stream.into_inner()).await?;
                 yield BoxedIo::new(io);
@@ -92,9 +92,36 @@ fn incoming(
     }
 }
 
+#[derive(Debug)]
+struct TcpIncoming {
+    inner: conn::AddrIncoming,
+}
+
+impl TcpIncoming {
+    fn bind(addr: SocketAddr) -> Result<Self, crate::Error> {
+        let inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
+
+        Ok(Self {
+            inner,
+        })
+    }
+}
+
+impl Stream for TcpIncoming {
+    type Item = Result<conn::AddrStream, crate::Error>;
+
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match ready!(Accept::poll_accept(Pin::new(&mut self.inner), cx)) {
+            Some(Ok(s)) => Poll::Ready(Some(Ok(s))),
+            Some(Err(e)) => Poll::Ready(Some(Err(e.into()))),
+            None => Poll::Ready(None),
+        }
+    }
+}
+
 // TODO: add custom tracing here
 #[derive(Debug)]
-pub(crate) struct Svc<S>(S);
+struct Svc<S>(S);
 
 impl<S> Service<Request<Body>> for Svc<S>
 where
@@ -113,7 +140,7 @@ where
     }
 }
 
-pub(crate) struct MakeSvc<M>(M);
+struct MakeSvc<M>(M);
 
 impl<M, S, T> Service<T> for MakeSvc<M>
 where

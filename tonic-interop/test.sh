@@ -9,6 +9,8 @@ case "$OSTYPE" in
   *)        exit 2 ;;
 esac
 
+cargo build -p tonic-interop --bins
+
 ARG="${1:-""}"
 SERVER="tonic-interop/bin/server_${OS}_amd64"
 
@@ -25,7 +27,7 @@ echo ":; started grpc-go test server."
 # regardless of why (errors, SIGTERM, etc).
 trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
- cargo run -p tonic-interop --bin client -- \
+./target/debug/client \
  --test_case=empty_unary,large_unary,client_streaming,server_streaming,ping_pong,\
 empty_stream,status_code_and_message,special_status_message,unimplemented_method,\
 unimplemented_service,custom_metadata $ARG
@@ -41,7 +43,7 @@ echo ":; started tonic test server."
 # regardless of why (errors, SIGTERM, etc).
 trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
-cargo run -p tonic-interop --bin client -- \
+./target/debug/client \
 --test_case=empty_unary,large_unary,client_streaming,server_streaming,ping_pong,\
 empty_stream,status_code_and_message,special_status_message $ARG
 # unimplemented_method,unimplemented_service,custom_metadata

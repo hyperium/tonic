@@ -10,6 +10,7 @@
 mod imp;
 
 use tokio::net::TcpStream;
+use std::fmt;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Cert {
@@ -34,6 +35,12 @@ impl TlsConnector {
     }
 }
 
+impl fmt::Debug for TlsConnector {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TlsConnector").finish()
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct TlsAcceptor {
     inner: imp::TlsAcceptor,
@@ -47,5 +54,11 @@ impl TlsAcceptor {
 
     pub(crate) async fn connect(&self, io: TcpStream) -> Result<imp::TlsStream, crate::Error> {
         self.inner.connect(io).await
+    }
+}
+
+impl fmt::Debug for TlsAcceptor {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TlsAcceptor").finish()
     }
 }

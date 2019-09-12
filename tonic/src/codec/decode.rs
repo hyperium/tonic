@@ -112,7 +112,7 @@ impl<T> Streaming<T> {
         }
 
         // To fetch the trailers we must clear the body and drop it.
-        while let Some(res) = self.message().await? {}
+        while let Some(_) = self.message().await? {}
 
         // Since we call poll_trailers internally on poll_next we need to
         // check if it got cached again.

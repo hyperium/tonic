@@ -1,6 +1,7 @@
 use super::connect::Connection;
 use crate::transport::Endpoint;
 use std::collections::VecDeque;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower_discover::{Change, Discover};
 
@@ -24,8 +25,8 @@ impl Discover for ServiceList {
     type Service = Connection;
     type Error = crate::Error;
 
-    fn poll(
-        &mut self,
+    fn poll_discover(
+        mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Change<Self::Key, Self::Service>, Self::Error>> {
         match self.list.pop_front() {
