@@ -62,6 +62,15 @@ impl Status {
         }
     }
 
+    /// Create a new `Unimplemented` status with the associated message.
+    pub fn unimplemented(message: impl Into<String>) -> Status {
+        Status {
+            code: Code::Unimplemented,
+            message: message.into(),
+            details: Bytes::new(),
+        }
+    }
+
     // TODO: This should probably be made public eventually. Need to decide on
     // the exact argument type.
     #[cfg_attr(not(feature = "h2"), allow(dead_code))]

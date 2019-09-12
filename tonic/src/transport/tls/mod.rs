@@ -9,8 +9,8 @@
 #[path = "openssl.rs"]
 mod imp;
 
-use tokio::net::TcpStream;
 use std::fmt;
+use tokio::net::TcpStream;
 
 #[derive(Debug, Clone)]
 pub(crate) struct Cert {

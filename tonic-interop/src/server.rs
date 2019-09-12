@@ -152,6 +152,6 @@ impl pb::server::TestService for TestService {
     }
 
     async fn unimplemented_call(&self, _: Request<Empty>) -> Result<Empty> {
-        unimplemented!()
+        Err(Status::unimplemented(""))
     }
 }

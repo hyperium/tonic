@@ -4,11 +4,15 @@ use super::{
 };
 use crate::BoxBody;
 use futures_core::Stream;
-use futures_util::{try_future::MapOk, TryFutureExt, TryStreamExt, ready};
+use futures_util::{ready, try_future::MapOk, TryFutureExt, TryStreamExt};
 use http::{Request, Response};
-use hyper::server::{conn, accept::Accept};
+use hyper::server::{accept::Accept, conn};
 use hyper::Body;
-use std::{net::SocketAddr, task::{Context, Poll}, pin::Pin};
+use std::{
+    net::SocketAddr,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tower_make::MakeService;
 use tower_service::Service;
 
@@ -101,9 +105,7 @@ impl TcpIncoming {
     fn bind(addr: SocketAddr) -> Result<Self, crate::Error> {
         let inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
 
-        Ok(Self {
-            inner,
-        })
+        Ok(Self { inner })
     }
 }
 
