@@ -19,9 +19,7 @@ struct Opts {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let sub = tracing_fmt::FmtSubscriber::builder().finish();
-    tracing::subscriber::set_global_default(sub).unwrap();
-    let _ = tracing_log::LogTracer::init();
+    tonic_interop::trace_init();
 
     let matches = Opts::from_args();
 

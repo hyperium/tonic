@@ -10,12 +10,9 @@ struct Opts {
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    let matches = Opts::from_args();
+    tonic_interop::trace_init();
 
-    // let sub = tracing_fmt::FmtSubscriber::builder().finish();
-    // tracing::subscriber::set_global_default(sub).unwrap();
-    // let _ = tracing_log::LogTracer::init();
-    pretty_env_logger::init();
+    let matches = Opts::from_args();
 
     let addr = "127.0.0.1:10000".parse().unwrap();
 
