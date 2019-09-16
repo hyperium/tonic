@@ -4,6 +4,7 @@ mod connect;
 mod connector;
 mod discover;
 mod io;
+mod layer;
 
 pub(crate) use self::add_origin::AddOrigin;
 pub(crate) use self::boxed::BoxService;

@@ -3,7 +3,7 @@ use crate::transport::Endpoint;
 use std::collections::VecDeque;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tower_discover::{Change, Discover};
+use tower::discover::{Change, Discover};
 
 #[derive(Debug)]
 pub struct ServiceList {

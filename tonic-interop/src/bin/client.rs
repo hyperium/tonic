@@ -1,5 +1,6 @@
+use std::time::Duration;
 use structopt::{clap::arg_enum, StructOpt};
-use tonic::transport::{Channel, Endpoint};
+use tonic::transport::Endpoint;
 use tonic_interop::client;
 
 #[derive(StructOpt)]
@@ -26,17 +27,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let test_cases = matches.test_case;
 
-    let addr = "localhost:10000";
-    let origin = http::Uri::from_shared(format!("http://{}", addr).into()).unwrap();
+    let mut endpoint = Endpoint::from_static("http://localhost:10000")
+        .timeout(Duration::from_secs(5))
+        .concurrency_limit(30)
+        .clone();
 
-    let endpoint = if matches.use_tls {
+    if matches.use_tls {
         let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-        Endpoint::with_pem(origin, ca, Some("foo.test.google.fr".into()))
-    } else {
-        Endpoint::from(origin)
-    };
+        endpoint.tls_cert(ca, Some("foo.test.google.fr".into()));
+    }
 
-    let channel = Channel::builder().connect(endpoint)?;
+    let channel = endpoint.channel()?;
 
     let mut client = client::TestClient::new(channel.clone());
     let mut unimplemented_client = client::UnimplementedClient::new(channel);

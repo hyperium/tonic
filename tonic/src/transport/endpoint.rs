@@ -1,37 +1,58 @@
-use super::tls::Cert;
-use http::uri::Uri;
+use super::{channel::Channel, tls::Cert};
+use bytes::Bytes;
+use http::uri::{InvalidUriBytes, Uri};
+use std::time::Duration;
 
 #[derive(Debug, Clone)]
 pub struct Endpoint {
-    uri: Uri,
-    cert: Option<Cert>,
+    pub(super) uri: Uri,
+    pub(super) timeout: Option<Duration>,
+    pub(super) concurrency_limit: Option<usize>,
+    pub(super) cert: Option<Cert>,
 }
 
 impl Endpoint {
-    pub fn with_pem(uri: Uri, ca: Vec<u8>, domain: Option<String>) -> Self {
-        let domain = domain.unwrap_or_else(|| uri.clone().to_string());
-
-        Self {
-            uri,
-            cert: Some(Cert {
-                ca,
-                domain,
-                key: None,
-            }),
-        }
+    pub fn from_static(s: &'static str) -> Self {
+        let uri = Uri::from_static(s);
+        Self::from(uri)
     }
 
-    pub(crate) fn uri(&self) -> &Uri {
-        &self.uri
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUriBytes> {
+        let uri = Uri::from_shared(s.into())?;
+        Ok(Self::from(uri))
     }
 
-    pub(crate) fn take_cert(&mut self) -> Option<Cert> {
-        self.cert.take()
+    pub fn timeout(&mut self, dur: Duration) -> &mut Self {
+        self.timeout = Some(dur);
+        self
+    }
+
+    pub fn concurrency_limit(&mut self, limit: usize) -> &mut Self {
+        self.concurrency_limit = Some(limit);
+        self
+    }
+
+    pub fn tls_cert(&mut self, ca: Vec<u8>, domain: Option<String>) -> &mut Self {
+        self.cert = Some(Cert {
+            ca,
+            domain: domain.unwrap_or_else(|| self.uri.clone().to_string()),
+            key: None,
+        });
+        self
+    }
+
+    pub fn channel(&self) -> Result<Channel, super::Error> {
+        Channel::builder().connect(self.clone())
     }
 }
 
 impl From<Uri> for Endpoint {
     fn from(uri: Uri) -> Self {
-        Self { uri, cert: None }
+        Self {
+            uri,
+            concurrency_limit: None,
+            timeout: None,
+            cert: None,
+        }
     }
 }

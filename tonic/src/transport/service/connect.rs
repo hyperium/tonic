@@ -1,6 +1,5 @@
-use super::{AddOrigin, Connector};
+use super::{layer::ServiceBuilderExt, AddOrigin, Connector};
 use crate::{transport::Endpoint, BoxBody};
-use http::{Request, Response, Uri};
 use hyper::client::conn::Builder;
 use hyper::client::service::Connect as HyperConnect;
 use std::{
@@ -9,29 +8,50 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tower::{
+    layer::Layer, limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer,
+    util::BoxService, ServiceBuilder,
+};
 use tower_load::Load;
 use tower_reconnect::Reconnect;
 use tower_service::Service;
 
+type Request = http::Request<BoxBody>;
+type Response = http::Response<hyper::Body>;
+
 pub struct Connection {
-    inner: AddOrigin<Reconnect<HyperConnect<Connector, BoxBody, Uri>, Uri>>,
+    // inner: AddOrigin<Reconnect<HyperConnect<Connector, BoxBody, Uri>, Uri>>,
+    inner: BoxService<Request, Response, crate::Error>,
 }
 
 impl Connection {
     pub fn new(mut endpoint: Endpoint) -> Result<Self, crate::Error> {
-        let connector = Connector::new(endpoint.take_cert())?;
+        let connector = Connector::new(endpoint.cert.take())?;
 
         let settings = Builder::new().http2_only(true).clone();
-        let connect = HyperConnect::new(connector, settings);
-        let reconnect = Reconnect::new(connect, endpoint.uri().clone());
-        let inner = AddOrigin::new(reconnect, endpoint.uri().clone());
 
-        Ok(Self { inner })
+        let stack = ServiceBuilder::new()
+            .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
+            .optional_layer(endpoint.timeout.map(|t| TimeoutLayer::new(t)))
+            .optional_layer(
+                endpoint
+                    .concurrency_limit
+                    .map(|l| ConcurrencyLimitLayer::new(l)),
+            )
+            .into_inner();
+
+        let conn = Reconnect::new(HyperConnect::new(connector, settings), endpoint.uri.clone());
+
+        let inner = stack.layer(conn);
+
+        Ok(Self {
+            inner: BoxService::new(inner),
+        })
     }
 }
 
-impl Service<Request<BoxBody>> for Connection {
-    type Response = Response<hyper::Body>;
+impl Service<Request> for Connection {
+    type Response = Response;
     type Error = crate::Error;
 
     type Future =
@@ -41,10 +61,8 @@ impl Service<Request<BoxBody>> for Connection {
         Service::poll_ready(&mut self.inner, cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
-        let fut = self.inner.call(req);
-        // TODO: we dont need to box here if we have too
-        Box::pin(fut)
+    fn call(&mut self, req: Request) -> Self::Future {
+        self.inner.call(req)
     }
 }
 

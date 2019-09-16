@@ -12,9 +12,9 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tower::buffer::{future::ResponseFuture, Buffer};
+use tower::discover::Discover;
 use tower_balance::p2c::Balance;
-use tower_buffer::{future::ResponseFuture, Buffer};
-use tower_discover::Discover;
 use tower_service::Service;
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;

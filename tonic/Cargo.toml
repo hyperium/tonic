@@ -24,12 +24,11 @@ async-trait = "0.1"
 # hyper = { version = "=0.13.0-alpha.1", optional = true }
 hyper = { git = "https://github.com/hyperium/hyper", features = ["unstable-stream"], optional = true }
 tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
+tower = { version = "=0.3.0-alpha.1a", optional = true}
 tower-make = "=0.1.0-alpha.2"
-tower-reconnect = { version = "0.3.0-alpha.1", optional = true }
-tower-buffer = { version = "0.3.0-alpha.1", optional = true }
-tower-balance =  { version = "0.3.0-alpha.1", optional = true }
-tower-load = { version = "0.3.0-alpha.1", optional = true }
-tower-discover = { version = "0.3.0-alpha.1", optional = true }
+tower-reconnect = { version = "=0.3.0-alpha.1", optional = true }
+tower-balance =  { version = "=0.3.0-alpha.1", optional = true }
+tower-load = { version = "=0.3.0-alpha.1", optional = true }
 
 # openssl
 tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }
@@ -42,16 +41,15 @@ tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
 default = ["transport"]
 transport = [
     "hyper",
-    "tower",
+    "tower-1",
     "tokio",
     "native-tls",
 ]
-tower = [
+tower-1 = [
+    "tower",
     "tower-reconnect",
-    "tower-buffer",
     "tower-balance",
     "tower-load",
-    "tower-discover"
 ]
 native-tls = ["openssl", "tokio-openssl"]
 # rustls = ["tokio-rustls"]
