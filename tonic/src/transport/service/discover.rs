@@ -1,4 +1,4 @@
-use super::connect::Connection;
+use super::connection::Connection;
 use crate::transport::Endpoint;
 use std::collections::VecDeque;
 use std::pin::Pin;

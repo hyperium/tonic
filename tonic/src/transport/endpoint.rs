@@ -8,6 +8,7 @@ pub struct Endpoint {
     pub(super) uri: Uri,
     pub(super) timeout: Option<Duration>,
     pub(super) concurrency_limit: Option<usize>,
+    pub(super) rate_limit: Option<(u64, Duration)>,
     pub(super) cert: Option<Cert>,
 }
 
@@ -32,6 +33,11 @@ impl Endpoint {
         self
     }
 
+    pub fn rate_limit(&mut self, limit: u64, duration: Duration) -> &mut Self {
+        self.rate_limit = Some((limit, duration));
+        self
+    }
+
     pub fn tls_cert(&mut self, ca: Vec<u8>, domain: Option<String>) -> &mut Self {
         self.cert = Some(Cert {
             ca,
@@ -40,6 +46,8 @@ impl Endpoint {
         });
         self
     }
+
+    // pub fn metadata_interceptor(f: impl Fn(MetadataMap) ->)
 
     pub fn channel(&self) -> Result<Channel, super::Error> {
         Channel::builder().connect(self.clone())
@@ -51,6 +59,7 @@ impl From<Uri> for Endpoint {
         Self {
             uri,
             concurrency_limit: None,
+            rate_limit: None,
             timeout: None,
             cert: None,
         }

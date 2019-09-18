@@ -9,18 +9,20 @@ use std::{
     task::{Context, Poll},
 };
 use tower::{
-    layer::Layer, limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer,
-    util::BoxService, ServiceBuilder,
+    layer::Layer,
+    limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
+    timeout::TimeoutLayer,
+    util::BoxService,
+    ServiceBuilder,
 };
 use tower_load::Load;
 use tower_reconnect::Reconnect;
 use tower_service::Service;
 
-type Request = http::Request<BoxBody>;
-type Response = http::Response<hyper::Body>;
+pub(crate) type Request = http::Request<BoxBody>;
+pub(crate) type Response = http::Response<hyper::Body>;
 
 pub struct Connection {
-    // inner: AddOrigin<Reconnect<HyperConnect<Connector, BoxBody, Uri>, Uri>>,
     inner: BoxService<Request, Response, crate::Error>,
 }
 
@@ -38,6 +40,7 @@ impl Connection {
                     .concurrency_limit
                     .map(|l| ConcurrencyLimitLayer::new(l)),
             )
+            .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
         let conn = Reconnect::new(HyperConnect::new(connector, settings), endpoint.uri.clone());
