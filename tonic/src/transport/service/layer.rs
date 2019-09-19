@@ -41,6 +41,10 @@ impl<L> ServiceBuilderExt<L> for ServiceBuilder<L> {
     }
 }
 
+pub(crate) fn layer_fn<F>(f: F) -> LayerFn<F> {
+    LayerFn(f)
+}
+
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LayerFn<F>(F);
 

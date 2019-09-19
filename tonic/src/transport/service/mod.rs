@@ -12,3 +12,4 @@ pub(crate) use self::connection::Connection;
 pub(crate) use self::connector::Connector;
 pub(crate) use self::discover::ServiceList;
 pub(crate) use self::io::BoxedIo;
+pub(crate) use self::layer::layer_fn;
