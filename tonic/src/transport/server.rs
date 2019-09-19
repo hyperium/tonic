@@ -1,5 +1,5 @@
 use super::{
-    service::{BoxedIo, layer_fn},
+    service::{layer_fn, BoxedIo},
     tls::{Cert, TlsAcceptor},
 };
 use crate::BoxBody;
@@ -10,17 +10,17 @@ use hyper::server::{accept::Accept, conn};
 use hyper::Body;
 use std::sync::Arc;
 use std::{
+    fmt,
+    future::Future,
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
-    fmt,
-    future::Future
 };
+use tower::layer::util::Stack;
 use tower::layer::Layer;
+use tower::util::Either;
 use tower_make::MakeService;
 use tower_service::Service;
-use tower::layer::util::Stack;
-use tower::util::Either;
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
@@ -55,8 +55,8 @@ impl Builder {
 
     pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
     where
-        F: Fn(&mut BoxService, Request<Body>) -> Out  + Send + Sync + 'static,
-        Out: Future<Output = Result<Response<BoxBody>, crate::Error>> + Send + 'static
+        F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,
+        Out: Future<Output = Result<Response<BoxBody>, crate::Error>> + Send + 'static,
     {
         let f = Arc::new(f);
         let interceptor = layer_fn(move |mut s| {
@@ -162,7 +162,7 @@ struct Svc<S>(S);
 impl<S> Service<Request<Body>> for Svc<S>
 where
     S: Service<Request<Body>, Response = Response<BoxBody>>,
-    S::Error: Into<crate::Error>
+    S::Error: Into<crate::Error>,
 {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
@@ -193,7 +193,8 @@ where
 {
     type Response = Either<Svc<S>, BoxService>;
     type Error = crate::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future =
+        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         MakeService::poll_ready(&mut self.inner, cx).map_err(Into::into)
