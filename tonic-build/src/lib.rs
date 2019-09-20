@@ -2,15 +2,23 @@
 //! and proto definitiones for use with `tonic`.
 //!
 //! # Examples
-//!
+//! Simple
 //! ```rust,no_run
 //! fn main() {
-//!    tonic_build::compile_protos(
-//!        &["proto/helloworld/helloworld.proto"],
-//!        &["proto/helloworld"],
-//!        "helloworld",
-//!    )
-//!    .unwrap();
+//!    tonic_build::compile_protos().unwrap();
+//! }
+//!
+//! Configuration
+//! ```rust,no_run
+//! fn main() {
+//!    tonic_build::configure()
+//!         .build_server(false)
+//!         .compile(
+//!             &["proto/helloworld/helloworld.proto"],
+//!             &["proto/helloworld"],
+//!             "helloworld",
+//!         )
+//!         .unwrap();
 //! }
 
 use proc_macro2::TokenStream;
@@ -75,7 +83,7 @@ impl Builder {
     }
 }
 
-/// Configure tonic-build code generation. 
+/// Configure tonic-build code generation.
 /// Use `compile_protos` instead if you don't need to tweak anything.
 pub fn configure() -> Builder {
     Builder {
@@ -87,13 +95,29 @@ pub fn configure() -> Builder {
 
 /// Easy .proto compiling. Use `configure` instead if you need more options.
 pub fn compile_protos() -> io::Result<()> {
-    unimplemented!()
-    
+    use std::ffi::OsStr;
+    use walkdir::WalkDir;
+
+    let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+
+    for proto_entry in WalkDir::new(&dir)
+        .into_iter()
+        .filter_map(Result::ok)
+        .filter(|e| e.path().extension() == Some(OsStr::new("proto")))
+    {
+        println!("proto {:?}", proto_entry);
+        //println!();
+    }
+
+    panic!("WIP");
+
     /*let proto_path = Path::new("proto");
     let protos = Vec::new();
     let includes = Vec::new();
 
     self::configure().compile()*/
+
+    Ok(())
 }
 
 #[cfg(feature = "rustfmt")]

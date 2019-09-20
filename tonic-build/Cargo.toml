@@ -11,7 +11,7 @@ prost-build = "0.5"
 syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1.0"
-
+walkdir = "2"
 
 [features]
 rustfmt = []
