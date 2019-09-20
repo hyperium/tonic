@@ -61,8 +61,8 @@ impl Builder {
     ) -> io::Result<()> {
         let mut config = Config::new();
 
-        config.service_generator(Box::new(ServiceGenerator::new(self.clone())));
-        config.out_dir(self.out_dir);
+        config.out_dir(self.out_dir.clone());
+        config.service_generator(Box::new(ServiceGenerator::new(self)));
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
