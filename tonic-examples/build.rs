@@ -1,5 +1,8 @@
 fn main() {
-    tonic_build::compile_protos(
+
+    tonic_build::compile_protos().unwrap();
+
+    /*tonic_build::compile_protos(
         &["proto/helloworld/helloworld.proto"],
         &["proto/helloworld"],
         "helloworld",
@@ -11,5 +14,5 @@ fn main() {
         &["proto/routeguide"],
         "routeguide",
     )
-    .unwrap();
+    .unwrap();*/
 }
