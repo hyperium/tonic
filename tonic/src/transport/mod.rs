@@ -11,6 +11,7 @@ mod tls;
 pub use self::channel::Channel;
 pub use self::endpoint::Endpoint;
 pub use self::server::Server;
+pub use hyper::Body;
 
 use std::{error, fmt};
 

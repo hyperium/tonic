@@ -28,6 +28,10 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
         impl<T: #server_trait> #server_make_service<T> {
             pub fn new(inner: T) -> Self {
                 let inner = Arc::new(inner);
+                Self::from_shared(inner)
+            }
+
+            pub fn from_shared(inner: Arc<T>) -> Self {
                 Self { inner }
             }
         }

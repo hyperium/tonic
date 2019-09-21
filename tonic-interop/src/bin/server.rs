@@ -21,8 +21,6 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let addr = "127.0.0.1:10000".parse().unwrap();
 
-    let test_service = server::create();
-
     let mut builder = Server::builder();
 
     if matches.use_tls {
@@ -59,7 +57,106 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         }
     });
 
-    builder.serve(addr, test_service).await?;
+    builder
+        .serve(
+            addr,
+            router::Router {
+                test_service: std::sync::Arc::new(server::TestService),
+                unimplemented_service: std::sync::Arc::new(server::UnimplementedService),
+            },
+        )
+        .await?;
 
     Ok(())
+}
+
+mod router {
+    use futures_util::future;
+    use http::{Request, Response};
+    use std::sync::Arc;
+    use std::{
+        future::Future,
+        pin::Pin,
+        task::{Context, Poll},
+    };
+    use tonic::{body::BoxBody, transport::Body};
+    use tonic_interop::server::{
+        TestService, TestServiceServer, UnimplementedService, UnimplementedServiceServer,
+    };
+    use tower::Service;
+
+    #[derive(Clone)]
+    pub struct Router {
+        pub test_service: Arc<TestService>,
+        pub unimplemented_service: Arc<UnimplementedService>,
+    }
+
+    impl Service<()> for Router {
+        type Response = Router;
+        type Error = Never;
+        type Future = future::Ready<Result<Self::Response, Self::Error>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Ok(()).into()
+        }
+
+        fn call(&mut self, _req: ()) -> Self::Future {
+            future::ok(self.clone())
+        }
+    }
+
+    impl Service<Request<Body>> for Router {
+        type Response = Response<BoxBody>;
+        type Error = Never;
+        type Future =
+            Pin<Box<dyn Future<Output = Result<Response<BoxBody>, Never>> + Send + 'static>>;
+
+        fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+            Ok(()).into()
+        }
+
+        fn call(&mut self, req: Request<Body>) -> Self::Future {
+            let mut segments = req.uri().path().split("/");
+            segments.next();
+            let service = segments.next().unwrap();
+
+            match service {
+                "grpc.testing.TestService" => {
+                    let me = self.clone();
+                    Box::pin(async move {
+                        let mut svc = TestServiceServer::from_shared(me.test_service);
+                        let mut svc = svc.call(()).await.unwrap();
+
+                        let res = svc.call(req).await.unwrap();
+                        Ok(res)
+                    })
+                }
+
+                "grpc.testing.UnimplementedService" => {
+                    let me = self.clone();
+                    Box::pin(async move {
+                        let mut svc =
+                            UnimplementedServiceServer::from_shared(me.unimplemented_service);
+                        let mut svc = svc.call(()).await.unwrap();
+
+                        let res = svc.call(req).await.unwrap();
+                        Ok(res)
+                    })
+                }
+
+                _ => unimplemented!(),
+            }
+        }
+    }
+
+    #[derive(Debug)]
+    pub enum Never {}
+
+    impl std::fmt::Display for Never {
+        fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            match *self {}
+        }
+    }
+
+    impl std::error::Error for Never {}
 }
