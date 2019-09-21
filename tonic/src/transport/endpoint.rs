@@ -1,7 +1,7 @@
 use super::{channel::Channel, tls::Cert};
 use bytes::Bytes;
 use http::uri::{InvalidUriBytes, Uri};
-use std::time::Duration;
+use std::{convert::TryFrom, time::Duration};
 
 #[derive(Debug, Clone)]
 pub struct Endpoint {
@@ -65,3 +65,38 @@ impl From<Uri> for Endpoint {
         }
     }
 }
+
+impl TryFrom<Bytes> for Endpoint {
+    type Error = InvalidUriBytes;
+
+    fn try_from(t: Bytes) -> Result<Self, Self::Error> {
+        Self::from_shared(t)
+    }
+}
+
+impl TryFrom<String> for Endpoint {
+    type Error = InvalidUriBytes;
+
+    fn try_from(t: String) -> Result<Self, Self::Error> {
+        Self::from_shared(t.into_bytes())
+    }
+}
+
+impl TryFrom<&'static str> for Endpoint {
+    type Error = Never;
+
+    fn try_from(t: &'static str) -> Result<Self, Self::Error> {
+        Ok(Self::from_static(t))
+    }
+}
+
+#[derive(Debug)]
+pub enum Never {}
+
+impl std::fmt::Display for Never {
+    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {}
+    }
+}
+
+impl std::error::Error for Never {}

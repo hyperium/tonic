@@ -7,6 +7,7 @@ use futures_util::try_future::{MapErr, TryFutureExt};
 use http::Uri;
 use hyper::{Request, Response};
 use std::{
+    convert::TryInto,
     fmt,
     future::Future,
     pin::Pin,
@@ -107,12 +108,12 @@ impl Builder {
 
     pub fn build<T>(&mut self, uri: T) -> Result<Channel, super::Error>
     where
-        Uri: http::HttpTryFrom<T>,
+        T: TryInto<Endpoint>,
+        T::Error: Into<crate::Error>,
     {
-        let uri: Uri = match http::HttpTryFrom::try_from(uri) {
-            Ok(u) => u,
-            Err(e) => panic!("Invalid uri: {}", e.into()),
-        };
+        let uri = uri
+            .try_into()
+            .map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))?;
 
         self.balance_list(vec![uri.into()])
     }

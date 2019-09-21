@@ -7,10 +7,14 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name);
     let methods = generate_methods(service, proto);
 
+    let connect = generate_connect(&service_ident);
+
     quote! {
         pub struct #service_ident<T> {
             inner: tonic::client::Grpc<T>,
         }
+
+        #connect
 
         impl<T> #service_ident<T>
         where T: tonic::client::GrpcService<tonic::body::BoxBody>,
@@ -40,6 +44,26 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
             }
         }
     }
+}
+
+#[cfg(feature = "transport")]
+fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
+    quote! {
+        impl #service_ident<tonic::transport::Channel> {
+            pub fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
+            where
+                D: std::convert::TryInto<tonic::transport::Endpoint>,
+                D::Error: Into<StdError>,
+            {
+                tonic::transport::Channel::builder().build(dst).map(|c| Self::new(c))
+            }
+        }
+    }
+}
+
+#[cfg(not(feature = "transport"))]
+fn generate_connect() -> TokenStream {
+    TokenStream::new()
 }
 
 fn generate_methods(service: &Service, proto: &str) -> TokenStream {

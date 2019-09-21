@@ -1,7 +1,8 @@
 use crate::{
+    body::BoxBody,
     codec::{encode_server, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
-    body::BoxBody, Code, Request, Response, Status,
+    Code, Request, Response, Status,
 };
 use bytes::Bytes;
 use futures_core::TryStream;

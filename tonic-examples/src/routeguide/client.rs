@@ -2,7 +2,7 @@ use futures::TryStreamExt;
 use route_guide::{Point, RouteNote};
 use std::time::{Duration, Instant};
 use tokio::timer::Interval;
-use tonic::{transport::Channel, Request};
+use tonic::Request;
 
 mod route_guide {
     include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
@@ -12,10 +12,7 @@ use route_guide::client::RouteGuideClient;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let origin = http::Uri::from_static("http://[::1]:10000");
-
-    let svc = Channel::builder().build(origin)?;
-    let mut client = RouteGuideClient::new(svc);
+    let mut client = RouteGuideClient::connect("http://[::1]:10000")?;
 
     let start = Instant::now();
 
