@@ -52,19 +52,17 @@ impl server::RouteGuide for RouteGuide {
         &self,
         request: Request<Rectangle>,
     ) -> Result<Response<Self::ListFeaturesStream>, Status> {
-        use std::thread;
-
         println!("ListFeatures = {:?}", request);
 
         let (mut tx, rx) = mpsc::channel(4);
 
         let state = self.state.clone();
 
-        thread::spawn(move || {
+        tokio::spawn(async move {
             for feature in &state.features[..] {
                 if in_range(feature.location.as_ref().unwrap(), request.get_ref()) {
                     println!("  => send {:?}", feature);
-                    tx.try_send(Ok(feature.clone())).unwrap();
+                    tx.send(Ok(feature.clone())).await.unwrap();
                 }
             }
 
