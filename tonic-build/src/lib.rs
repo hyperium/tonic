@@ -61,8 +61,9 @@ impl Builder {
     }
 
     /// Set the output directory to generate code to.
+    ///
     /// Defaults to the `OUT_DIR` environment variable.
-    pub fn out_dir<P: AsRef<Path>>(mut self, out_dir: impl AsRef<Path>) -> Self {
+    pub fn out_dir(mut self, out_dir: impl AsRef<Path>) -> Self {
         self.out_dir = out_dir.as_ref().to_path_buf();
         self
     }
@@ -92,6 +93,7 @@ impl Builder {
 }
 
 /// Configure tonic-build code generation.
+///
 /// Use [`compile_protos`] instead if you don't need to tweak anything.
 pub fn configure() -> Builder {
     Builder {
@@ -101,7 +103,7 @@ pub fn configure() -> Builder {
     }
 }
 
-/// Simple .proto compiling. Use [`configure`] instead if you need more options.
+/// Simple `.proto` compiling. Use [`configure`] instead if you need more options.
 ///
 /// This method will walk the `proto` folder in the same directory as Cargo.toml.
 /// If a .proto file is found, it's parent folder will be the include directory for that proto file.
@@ -118,7 +120,6 @@ pub fn configure() -> Builder {
 ///
 /// For the above example, two files will be generated.
 /// One for the helloworld.proto file and another for routeguide.proto file.
-///
 pub fn compile_protos() -> io::Result<()> {
     for proto_entry in WalkDir::new("proto")
         .into_iter()
