@@ -126,10 +126,19 @@ pub fn compile_protos() -> io::Result<()> {
         .filter(|e| e.path().extension() == Some(OsStr::new("proto")))
     {
         let protos = &[proto_entry.path()];
-        let package = proto_entry.path().file_stem().unwrap().to_str().unwrap();
-        let includes = &[proto_entry.path().parent().unwrap()];
+        let package = proto_entry
+            .path()
+            .file_stem()
+            .expect("file should have a stem if it has an extension")
+            .to_str()
+            .expect("expected valid ASCII file stem");
 
-        self::configure().compile(protos, includes, package)?;
+        let includes: Vec<&Path> = match proto_entry.path().parent() {
+            Some(ref parent) => vec![parent],
+            None => vec![],
+        };
+
+        self::configure().compile(protos, &includes, package)?;
     }
 
     Ok(())
