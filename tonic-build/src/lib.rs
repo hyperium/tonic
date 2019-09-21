@@ -98,24 +98,19 @@ pub fn compile_protos() -> io::Result<()> {
     use std::ffi::OsStr;
     use walkdir::WalkDir;
 
-    let dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-
-    for proto_entry in WalkDir::new(&dir)
+    for proto_entry in WalkDir::new("proto")
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| e.path().extension() == Some(OsStr::new("proto")))
     {
         println!("proto {:?}", proto_entry);
-        //println!();
+        
+        let protos = &[proto_entry.path()];
+        let package = proto_entry.path().file_stem().unwrap().to_str().unwrap();
+        let includes = &[proto_entry.path().parent().unwrap()];
+
+        self::configure().compile(protos, includes, package)?;
     }
-
-    panic!("WIP");
-
-    /*let proto_path = Path::new("proto");
-    let protos = Vec::new();
-    let includes = Vec::new();
-
-    self::configure().compile()*/
 
     Ok(())
 }
