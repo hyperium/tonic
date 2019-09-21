@@ -1,5 +1,5 @@
 name: interop
-on: [push]
+on: [push,pr]
 jobs:
   test:
     runs-on: ${{ matrix.os }}
