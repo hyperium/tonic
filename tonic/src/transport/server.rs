@@ -84,7 +84,7 @@ impl Builder {
                 domain: String::new(),
             };
 
-            Some(TlsAcceptor::new(cert).unwrap())
+            Some(TlsAcceptor::new(cert).map_err(map_err)?)
         } else {
             None
         };
@@ -100,10 +100,14 @@ impl Builder {
             .http2_only(true)
             .serve(svc)
             .await
-            .unwrap();
+            .map_err(map_err)?;
 
         Ok(())
     }
+}
+
+fn map_err(e: impl Into<crate::Error>) -> super::Error {
+    (super::ErrorKind::Server, e.into()).into()
 }
 
 impl fmt::Debug for Builder {
@@ -201,10 +205,9 @@ where
     }
 
     fn call(&mut self, _: T) -> Self::Future {
-        // self.inner.make_service(()).map_ok(|s| Svc(s))
         let interceptor = self.interceptor.clone();
-        // self.inner.make_service(()).map_ok(|s| intercept.layer(BoxService::new(Svc(s))))
         let make = self.inner.make_service(());
+
         Box::pin(async move {
             let svc = make.await.map_err(Into::into)?;
 
