@@ -69,7 +69,7 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    #[allow(unused_variables)]
+    #[cfg_attr(not(feature = "rustfmt"), allow(unused_variables))]
     pub fn compile<P: AsRef<Path>>(
         self,
         protos: &[P],
