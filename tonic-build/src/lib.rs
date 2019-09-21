@@ -125,8 +125,6 @@ pub fn compile_protos() -> io::Result<()> {
         .filter_map(Result::ok)
         .filter(|e| e.path().extension() == Some(OsStr::new("proto")))
     {
-        println!("proto {:?}", proto_entry);
-
         let protos = &[proto_entry.path()];
         let package = proto_entry.path().file_stem().unwrap().to_str().unwrap();
         let includes = &[proto_entry.path().parent().unwrap()];
