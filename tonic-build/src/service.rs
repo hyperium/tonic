@@ -67,7 +67,7 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
                     #methods
 
                     // TODO: implement grpc unimplemented for server
-                    _ => Err(tonic::Status::unimplemented("")),
+                    _ => unimplemented!(),
                 }
             }
         }

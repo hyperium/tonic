@@ -1,9 +1,11 @@
 use structopt::StructOpt;
 use tonic::Server;
-use tonic_interop::server;
+use tonic_interop::{server, MergeTrailers};
 // TODO: move GrpcService out of client since it can be used for the
 // server too.
 use tonic::client::GrpcService;
+use tonic::body::BoxBody;
+use http::header::HeaderName;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -30,12 +32,24 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     }
 
     builder.interceptor_fn(|svc, req| {
-        println!("INBOUND REQUEST={:?}", req);
+        let echo_header = req.headers().get("x-grpc-test-echo-initial").map(Clone::clone);
+
+        let echo_trailer = req
+            .headers()
+            .get("x-grpc-test-echo-trailing-bin")
+            .map(Clone::clone)
+            .map(|v| (HeaderName::from_static("x-grpc-test-echo-trailing-bin"), v));
+
         let call = svc.call(req);
+
         async move {
-            let res = call.await?;
-            println!("OUTBOUND RESPONSE={:?}", res);
-            Ok(res)
+            let mut res = call.await?;
+
+            if let Some(echo_header) = echo_header {
+                res.headers_mut().insert("x-grpc-test-echo-initial", echo_header);
+            }
+
+            Ok(res.map(|b| MergeTrailers::new(b, echo_trailer)).map(BoxBody::new))
         }
     });
 
