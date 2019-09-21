@@ -3,12 +3,15 @@
 //!
 //! # Examples
 //! Simple
+//!
 //! ```rust,no_run
 //! fn main() {
-//!    tonic_build::compile_protos().unwrap();
+//!     tonic_build::compile_protos().unwrap();
 //! }
+//! ```
 //!
 //! Configuration
+//!
 //! ```rust,no_run
 //! fn main() {
 //!    tonic_build::configure()
@@ -20,17 +23,22 @@
 //!         )
 //!         .unwrap();
 //! }
+//! ```
 
 use proc_macro2::TokenStream;
 use prost_build::Config;
+use walkdir::WalkDir;
+
+use std::ffi::OsStr;
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
-use std::{io, path, path::Path};
+use std::{
+    io,
+    path::{Path, PathBuf},
+};
 
 mod client;
 mod service;
-
-use std::path::PathBuf;
 
 #[derive(Clone)]
 pub struct Builder {
@@ -41,20 +49,20 @@ pub struct Builder {
 
 impl Builder {
     /// Enable or disable gRPC client code generation.
-    pub fn build_client(&mut self, enable: bool) -> &mut Self {
+    pub fn build_client(mut self, enable: bool) -> Self {
         self.build_client = enable;
         self
     }
 
     /// Enable or disable gRPC server code generation.
-    pub fn build_server(&mut self, enable: bool) -> &mut Self {
+    pub fn build_server(mut self, enable: bool) -> Self {
         self.build_server = enable;
         self
     }
 
     /// Set the output directory to generate code to.
     /// Defaults to the `OUT_DIR` environment variable.
-    pub fn out_dir<P: AsRef<Path>>(&mut self, out_dir: impl AsRef<Path>) -> &mut Self {
+    pub fn out_dir<P: AsRef<Path>>(mut self, out_dir: impl AsRef<Path>) -> Self {
         self.out_dir = out_dir.as_ref().to_path_buf();
         self
     }
@@ -84,7 +92,7 @@ impl Builder {
 }
 
 /// Configure tonic-build code generation.
-/// Use `compile_protos` instead if you don't need to tweak anything.
+/// Use [`compile_protos`] instead if you don't need to tweak anything.
 pub fn configure() -> Builder {
     Builder {
         build_client: true,
@@ -93,18 +101,32 @@ pub fn configure() -> Builder {
     }
 }
 
-/// Easy .proto compiling. Use `configure` instead if you need more options.
+/// Simple .proto compiling. Use [`configure`] instead if you need more options.
+///
+/// This method will walk the `proto` folder in the same directory as Cargo.toml.
+/// If a .proto file is found, it's parent folder will be the include directory for that proto file.
+/// The package name for a given file will be the name of the file.
+///
+/// # Example
+/// ```text
+/// proto
+/// ├── helloworld
+/// │   └── helloworld.proto
+/// └── routeguide
+///     └── route_guide.proto
+/// ```
+///
+/// For the above example, two .proto files will be generated.
+/// One for the helloworld.proto file and another for routeguide.proto file.
+///
 pub fn compile_protos() -> io::Result<()> {
-    use std::ffi::OsStr;
-    use walkdir::WalkDir;
-
     for proto_entry in WalkDir::new("proto")
         .into_iter()
         .filter_map(Result::ok)
         .filter(|e| e.path().extension() == Some(OsStr::new("proto")))
     {
         println!("proto {:?}", proto_entry);
-        
+
         let protos = &[proto_entry.path()];
         let package = proto_entry.path().file_stem().unwrap().to_str().unwrap();
         let includes = &[proto_entry.path().parent().unwrap()];
