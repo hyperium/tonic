@@ -46,8 +46,6 @@ mod response;
 mod status;
 
 pub use async_trait::async_trait;
-#[doc(inline, hidden)]
-pub use body::BoxBody;
 #[doc(inline)]
 pub use codec::Streaming;
 pub use request::Request;

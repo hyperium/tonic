@@ -53,7 +53,7 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
         }
 
         impl<T: #server_trait> Service<http::Request<HyperBody>> for #server_service<T> {
-            type Response = http::Response<tonic::BoxBody>;
+            type Response = http::Response<tonic::body::BoxBody>;
             type Error = Never;
             type Future = BoxFuture<Self::Response, Self::Error>;
 

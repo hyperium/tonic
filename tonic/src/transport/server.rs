@@ -2,7 +2,7 @@ use super::{
     service::{layer_fn, BoxedIo},
     tls::{Cert, TlsAcceptor},
 };
-use crate::BoxBody;
+use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{ready, try_future::MapErr, TryFutureExt, TryStreamExt};
 use http::{Request, Response};

@@ -1,5 +1,5 @@
 use super::{layer::ServiceBuilderExt, AddOrigin, Connector};
-use crate::{transport::Endpoint, BoxBody};
+use crate::{body::BoxBody, transport::Endpoint};
 use hyper::client::conn::Builder;
 use hyper::client::service::Connect as HyperConnect;
 use std::{

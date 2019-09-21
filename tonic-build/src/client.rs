@@ -13,7 +13,7 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
         }
 
         impl<T> #service_ident<T>
-        where T: tonic::client::GrpcService<tonic::BoxBody>,
+        where T: tonic::client::GrpcService<tonic::body::BoxBody>,
               T::ResponseBody: Body + HttpBody + Send + 'static,
               T::Error: Into<StdError>,
               <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send,
