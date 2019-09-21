@@ -20,6 +20,7 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
         }
 
         #[derive(Clone, Debug)]
+        #[doc(hidden)]
         pub struct #server_service<T: #server_trait> {
             inner: Arc<T>,
         }
