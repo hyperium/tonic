@@ -116,7 +116,7 @@ pub fn configure() -> Builder {
 ///     └── route_guide.proto
 /// ```
 ///
-/// For the above example, two .proto files will be generated.
+/// For the above example, two files will be generated.
 /// One for the helloworld.proto file and another for routeguide.proto file.
 ///
 pub fn compile_protos() -> io::Result<()> {
