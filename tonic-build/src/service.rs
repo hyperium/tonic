@@ -214,7 +214,6 @@ fn generate_unary(
             Ok(res)
         };
 
-        // TODO: implement this future manually
         Box::pin(fut)
     }
 }

@@ -38,6 +38,7 @@ impl Server {
 pub struct Builder {
     tls: Option<(Vec<u8>, Vec<u8>)>,
     interceptor: Option<Interceptor>,
+    // concurrency_limit: Option<usize>,
 }
 
 impl Builder {
@@ -50,7 +51,10 @@ impl Builder {
         self
     }
 
+    // FIXME: add server side layering ability
     // pub fn concurrency_limit(&mut self, limit: usize) -> &mut Self {
+    //     self.concurrency_limit = Some(limit);
+    //     self
     // }
 
     pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
