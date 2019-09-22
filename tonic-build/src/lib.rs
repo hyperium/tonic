@@ -6,7 +6,7 @@
 //!
 //! ```rust,no_run
 //! fn main() {
-//!     tonic_build::compile_protos().unwrap();
+//!     tonic_build::compile_protos("proto/service.proto").unwrap();
 //! }
 //! ```
 //!
@@ -27,9 +27,7 @@
 
 use proc_macro2::TokenStream;
 use prost_build::Config;
-use walkdir::WalkDir;
 
-use std::ffi::OsStr;
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
 use std::{
@@ -105,42 +103,23 @@ pub fn configure() -> Builder {
 
 /// Simple `.proto` compiling. Use [`configure`] instead if you need more options.
 ///
-/// This method will walk the `proto` folder in the same directory as Cargo.toml.
-/// If a .proto file is found, it's parent folder will be the include directory for that proto file.
-/// The package name for a given file will be the name of the file.
-///
-/// # Example
-/// ```text
-/// proto
-/// ├── helloworld
-/// │   └── helloworld.proto
-/// └── routeguide
-///     └── route_guide.proto
-/// ```
-///
-/// For the above example, two files will be generated.
-/// One for the helloworld.proto file and another for routeguide.proto file.
-pub fn compile_protos() -> io::Result<()> {
-    for proto_entry in WalkDir::new("proto")
-        .into_iter()
-        .filter_map(Result::ok)
-        .filter(|e| e.path().extension() == Some(OsStr::new("proto")))
-    {
-        let protos = &[proto_entry.path()];
-        let package = proto_entry
-            .path()
-            .file_stem()
-            .expect("file should have a stem if it has an extension")
-            .to_str()
-            .expect("expected valid ASCII file stem");
+/// The include directory will be the parent folder of the specified path.
+/// The package name will be the filename without the extension.
+pub fn compile_protos(proto_path: impl AsRef<Path>) -> io::Result<()> {
+    let proto_path: &Path = proto_path.as_ref();
 
-        let includes: Vec<&Path> = match proto_entry.path().parent() {
-            Some(ref parent) => vec![parent],
-            None => vec![],
-        };
+    let package = proto_path
+        .file_stem()
+        .expect("file should have a stem if it has an extension")
+        .to_str()
+        .expect("expected valid utf-8 filename");
 
-        self::configure().compile(protos, &includes, package)?;
-    }
+    // directory the main .proto file resides in
+    let proto_dir = proto_path
+        .parent()
+        .expect("proto file should reside in a directory");
+
+    self::configure().compile(&[proto_path], &[proto_dir], package)?;
 
     Ok(())
 }
