@@ -1,11 +1,8 @@
 fn main() {
-    let files = &["proto/grpc/testing/test.proto"];
-    let dirs = &["proto/grpc/testing"];
+    let proto = "proto/grpc/testing/test.proto";
 
-    tonic_build::compile_protos(files, dirs, "grpc.testing").unwrap();
+    tonic_build::compile_protos(proto).unwrap();
 
     // prevent needing to rebuild if files (or deps) haven't changed
-    for file in files {
-        println!("cargo:rerun-if-changed={}", file);
-    }
+    println!("cargo:rerun-if-changed={}", proto);
 }
