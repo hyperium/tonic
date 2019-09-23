@@ -9,6 +9,12 @@ pub struct Request<T> {
 
 impl<T> Request<T> {
     /// Create a new gRPC request
+    ///
+    /// ```ignore
+    /// let request = tonic::Request::new(HelloRequest {
+    ///    name: "hello".into(),
+    /// });
+    /// ```
     pub fn new(message: T) -> Self {
         Request {
             metadata: MetadataMap::new(),
@@ -49,6 +55,14 @@ impl<T> Request<T> {
     }
 
     /// Convert an HTTP request to a gRPC request
+    ///
+    /// ```rust
+    /// let request = http::Request::post("http://localhost:8080/Greeter/SayHello")
+    ///    .body(())
+    ///    .unwrap();
+    ///
+    /// Request::from_http(request);
+    /// ```
     pub fn from_http(http: http::Request<T>) -> Self {
         let (parts, message) = http.into_parts();
         Request::from_http_parts(parts, message)
