@@ -25,15 +25,27 @@ use tower_service::Service;
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
 
+/// A default batteries included `transport` server.
+///
+/// This is a wrapper around [`hyper::Server`] and provides an easy builder
+/// pattern style [`Builder`]. This builder exposes easy configuration parameters
+/// for providing a fully featured http2 based gRPC server. This should provide
+/// a very good out of the box http2 server for use with tonic but is also a
+/// reference implementation that should be a good starting point for anyone
+/// wanting to create a more complex and/or specific implementation.
 #[derive(Debug)]
-pub struct Server {}
+pub struct Server {
+    _p: ()
+}
 
 impl Server {
+    /// Create a new [`Builder`] that can configure a Server.
     pub fn builder() -> Builder {
         Builder::new()
     }
 }
 
+///
 #[derive(Default)]
 pub struct Builder {
     tls: Option<(Vec<u8>, Vec<u8>)>,
@@ -46,6 +58,7 @@ impl Builder {
         Default::default()
     }
 
+    /// Add a tls cert.
     pub fn tls(&mut self, pem: Vec<u8>, key: Vec<u8>) -> &mut Self {
         self.tls = Some((pem, key));
         self

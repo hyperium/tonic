@@ -28,12 +28,17 @@ type Inner = Box<
         + 'static,
 >;
 
+/// A default batteries included `transport` channel.
+///
+/// This provides a fully featured http2 gRPC client based on [`hyper::Client`]
+/// and `tower` services.
 #[derive(Clone)]
 pub struct Channel {
     svc: Buffer<Inner, Request<BoxBody>>,
 }
 
 impl Channel {
+    /// Create a [`Builder`] that can create a [`Channel`].
     pub fn builder() -> Builder {
         Builder::new()
     }
@@ -77,6 +82,8 @@ impl Builder {
         }
     }
 
+    /// Set the buffer size for when the inner client applies back pressure and
+    /// can no longer accept requests. Defaults to `1024`.
     pub fn buffer(&mut self, size: usize) -> &mut Self {
         self.buffer_size = size;
         self

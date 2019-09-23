@@ -2,10 +2,11 @@
 
 //! TODO: write transport docs.
 
-mod channel;
+pub mod channel;
+pub mod server;
+
 mod endpoint;
 mod error;
-mod server;
 mod service;
 mod tls;
 
