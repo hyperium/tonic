@@ -59,7 +59,7 @@ impl<T> Request<T> {
     ///
     /// ```rust
     /// # use tonic::Request;
-    /// # fn main() -> Option<()> {
+    /// # fn main() -> http::Result<()> {
     /// let request = http::Request::post("http://localhost:8080/Greeter/SayHello")
     ///    .body(())?;
     ///
