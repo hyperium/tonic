@@ -20,6 +20,11 @@
 //!
 //! Examples can be found in the [`tonic-examples`] crate.
 //!
+//! # Feature Flags
+//!
+//! - `transport`: Enables the fully featured, batteries included client and server
+//! implementaiton based on [`hyper`], [`tower`] and [`tokio`].
+//!
 //! # Generic implementation
 //!
 //! TODO: write generic implementation docs
@@ -45,7 +50,10 @@ mod request;
 mod response;
 mod status;
 
+/// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
+#[cfg(feature = "codegen")]
 pub use async_trait::async_trait;
+
 #[doc(inline)]
 pub use codec::Streaming;
 pub use request::Request;
@@ -55,4 +63,5 @@ pub use status::{Code, Status};
 pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[doc(hidden)]
+#[cfg(feature = "codegen")]
 pub mod codegen;
