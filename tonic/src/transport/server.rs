@@ -35,7 +35,7 @@ type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync
 /// wanting to create a more complex and/or specific implementation.
 #[derive(Debug)]
 pub struct Server {
-    _p: ()
+    _p: (),
 }
 
 impl Server {
