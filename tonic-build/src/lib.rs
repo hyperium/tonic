@@ -68,12 +68,7 @@ impl Builder {
 
     /// Compile the .proto files and execute code generation.
     #[cfg_attr(not(feature = "rustfmt"), allow(unused_variables))]
-    pub fn compile<P: AsRef<Path>>(
-        self,
-        protos: &[P],
-        includes: &[P],
-        package: &str,
-    ) -> io::Result<()> {
+    pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
 
         let out_dir = self
@@ -86,10 +81,7 @@ impl Builder {
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
-        fmt(
-            out_dir.to_str().expect("Expected utf8 out_dir"),
-            &format!("{}.rs", package),
-        );
+        fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
 
         Ok(())
     }
@@ -113,35 +105,34 @@ pub fn configure() -> Builder {
 pub fn compile_protos(proto_path: impl AsRef<Path>) -> io::Result<()> {
     let proto_path: &Path = proto_path.as_ref();
 
-    let package = proto_path
-        .file_stem()
-        .expect("file should have a stem if it has an extension")
-        .to_str()
-        .expect("expected valid utf-8 filename");
-
     // directory the main .proto file resides in
     let proto_dir = proto_path
         .parent()
         .expect("proto file should reside in a directory");
 
-    self::configure().compile(&[proto_path], &[proto_dir], package)?;
+    self::configure().compile(&[proto_path], &[proto_dir])?;
 
     Ok(())
 }
 
 #[cfg(feature = "rustfmt")]
-fn fmt(out_dir: &str, file: &str) {
-    let out = Command::new("rustfmt")
-        .arg("--emit")
-        .arg("files")
-        .arg("--edition")
-        .arg("2018")
-        .arg(format!("{}/{}", out_dir, file))
-        .output()
-        .unwrap();
+fn fmt(out_dir: &str) {
+    let dir = std::fs::read_dir(out_dir).unwrap();
 
-    println!("out: {:?}", out);
-    assert!(out.status.success());
+    for entry in dir {
+        let file = entry.unwrap().file_name().into_string().unwrap();
+        let out = Command::new("rustfmt")
+            .arg("--emit")
+            .arg("files")
+            .arg("--edition")
+            .arg("2018")
+            .arg(format!("{}/{}", out_dir, file))
+            .output()
+            .unwrap();
+
+        println!("out: {:?}", out);
+        assert!(out.status.success());
+    }
 }
 
 pub struct ServiceGenerator {
