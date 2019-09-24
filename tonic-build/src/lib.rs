@@ -18,8 +18,7 @@
 //!         .build_server(false)
 //!         .compile(
 //!             &["proto/helloworld/helloworld.proto"],
-//!             &["proto/helloworld"],
-//!             "helloworld",
+//!             &["helloworld"],
 //!         )
 //!         .unwrap();
 //! }
