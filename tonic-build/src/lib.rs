@@ -42,7 +42,7 @@ mod service;
 pub struct Builder {
     build_client: bool,
     build_server: bool,
-    out_dir: PathBuf,
+    out_dir: Option<PathBuf>,
 }
 
 impl Builder {
@@ -62,7 +62,7 @@ impl Builder {
     ///
     /// Defaults to the `OUT_DIR` environment variable.
     pub fn out_dir(mut self, out_dir: impl AsRef<Path>) -> Self {
-        self.out_dir = out_dir.as_ref().to_path_buf();
+        self.out_dir = Some(out_dir.as_ref().to_path_buf());
         self
     }
 
@@ -76,13 +76,18 @@ impl Builder {
     ) -> io::Result<()> {
         let mut config = Config::new();
 
-        config.out_dir(self.out_dir.clone());
+        let out_dir = self
+            .out_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(std::env::var("OUT_DIR").unwrap()));
+
+        config.out_dir(out_dir.clone());
         config.service_generator(Box::new(ServiceGenerator::new(self)));
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
         fmt(
-            out_dir.as_ref().to_str().expect("Execpted utf8 out_dir"),
+            out_dir.to_str().expect("Expected utf8 out_dir"),
             &format!("{}.rs", package),
         );
 
@@ -97,7 +102,7 @@ pub fn configure() -> Builder {
     Builder {
         build_client: true,
         build_server: true,
-        out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
+        out_dir: None,
     }
 }
 
