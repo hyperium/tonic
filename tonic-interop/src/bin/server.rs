@@ -1,5 +1,5 @@
 use structopt::StructOpt;
-use tonic::Server;
+use tonic::transport::{Identity, Server};
 use tonic_interop::{server, MergeTrailers};
 // TODO: move GrpcService out of client since it can be used for the
 // server too.
@@ -24,9 +24,11 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut builder = Server::builder();
 
     if matches.use_tls {
-        let ca = tokio::fs::read("tonic-interop/data/server1.pem").await?;
+        let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
         let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
-        builder.tls(ca, key);
+
+        let identity = Identity::from_pem(cert, key);
+        builder.openssl_tls(identity);
     }
 
     builder.interceptor_fn(|svc, req| {

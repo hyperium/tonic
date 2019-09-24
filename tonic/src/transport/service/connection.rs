@@ -1,4 +1,4 @@
-use super::{layer::ServiceBuilderExt, AddOrigin, Connector};
+use super::{connector, layer::ServiceBuilderExt, AddOrigin};
 use crate::{body::BoxBody, transport::Endpoint};
 use hyper::client::conn::Builder;
 use hyper::client::service::Connect as HyperConnect;
@@ -27,8 +27,12 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(mut endpoint: Endpoint) -> Result<Self, crate::Error> {
-        let connector = Connector::new(endpoint.cert.take())?;
+    pub fn new(endpoint: Endpoint) -> Result<Self, crate::Error> {
+        #[cfg(feature = "tls")]
+        let connector = connector(endpoint.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = connector();
 
         let settings = Builder::new().http2_only(true).clone();
 

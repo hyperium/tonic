@@ -32,7 +32,7 @@ tower-load = { version = "=0.3.0-alpha.1", optional = true }
 
 # openssl
 tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }
-openssl = { version = "0.10", optional = true }
+openssl1 = { package = "openssl", version = "0.10", optional = true }
 
 # rustls
 tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
@@ -43,7 +43,6 @@ transport = [
     "hyper",
     "tower-1",
     "tokio",
-    "native-tls",
 ]
 tower-1 = [
     "tower",
@@ -51,5 +50,6 @@ tower-1 = [
     "tower-balance",
     "tower-load",
 ]
-native-tls = ["openssl", "tokio-openssl"]
-# rustls = ["tokio-rustls"]
+openssl = ["openssl1", "tokio-openssl", "tls"]
+rustls = ["tokio-rustls", "tls"]
+tls = []

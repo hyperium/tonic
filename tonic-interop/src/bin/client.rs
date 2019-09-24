@@ -1,6 +1,6 @@
 use std::time::Duration;
 use structopt::{clap::arg_enum, StructOpt};
-use tonic::transport::Endpoint;
+use tonic::transport::{Certificate, Endpoint};
 use tonic_interop::client;
 
 #[derive(StructOpt)]
@@ -31,8 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .clone();
 
     if matches.use_tls {
-        let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-        endpoint.tls_cert(ca, Some("foo.test.google.fr".into()));
+        let pem = tokio::fs::read("tonic-interop/data/ca.pem").await?;
+        let ca = Certificate::from_pem(pem);
+        endpoint.openssl_tls(ca, Some("foo.test.google.fr".into()));
     }
 
     let channel = endpoint.channel()?;

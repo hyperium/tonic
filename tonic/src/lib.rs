@@ -51,8 +51,6 @@ pub use codec::Streaming;
 pub use request::Request;
 pub use response::Response;
 pub use status::{Code, Status};
-#[doc(inline)]
-pub use transport::{Channel, Server};
 
 pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 

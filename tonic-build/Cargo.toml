@@ -14,5 +14,6 @@ proc-macro2 = "1.0"
 
 [features]
 default = ["transport"]
-rustfmt = []
+# TODO: reenable this feature
+# rustfmt = []
 transport = []

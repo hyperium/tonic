@@ -1,4 +1,6 @@
-use super::{channel::Channel, tls::Cert};
+use super::channel::Channel;
+#[cfg(feature = "tls")]
+use super::{service::TlsConnector, tls::Certificate};
 use bytes::Bytes;
 use http::uri::{InvalidUriBytes, Uri};
 use std::{convert::TryFrom, time::Duration};
@@ -9,7 +11,8 @@ pub struct Endpoint {
     pub(super) timeout: Option<Duration>,
     pub(super) concurrency_limit: Option<usize>,
     pub(super) rate_limit: Option<(u64, Duration)>,
-    pub(super) cert: Option<Cert>,
+    #[cfg(feature = "tls")]
+    pub(super) tls: Option<TlsConnector>,
 }
 
 impl Endpoint {
@@ -38,12 +41,19 @@ impl Endpoint {
         self
     }
 
-    pub fn tls_cert(&mut self, ca: Vec<u8>, domain: Option<String>) -> &mut Self {
-        self.cert = Some(Cert {
-            ca,
-            domain: domain.unwrap_or_else(|| self.uri.clone().to_string()),
-            key: None,
-        });
+    #[cfg(feature = "openssl")]
+    pub fn openssl_tls(&mut self, ca: Certificate, domain: Option<String>) -> &mut Self {
+        let domain = domain.unwrap_or_else(|| self.uri.clone().to_string());
+        let tls = TlsConnector::new_with_openssl(ca, domain).unwrap();
+        self.tls = Some(tls);
+        self
+    }
+
+    #[cfg(feature = "rustls")]
+    pub fn rustls_tls(&mut self, ca: Certificate, domain: Option<String>) -> &mut Self {
+        let domain = domain.unwrap_or_else(|| self.uri.clone().to_string());
+        let tls = TlsConnector::new_with_rustls(ca, domain).unwrap();
+        self.tls = Some(tls);
         self
     }
 
@@ -61,7 +71,8 @@ impl From<Uri> for Endpoint {
             concurrency_limit: None,
             rate_limit: None,
             timeout: None,
-            cert: None,
+            #[cfg(feature = "tls")]
+            tls: None,
         }
     }
 }

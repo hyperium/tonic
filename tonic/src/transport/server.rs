@@ -1,19 +1,18 @@
-use super::{
-    service::{layer_fn, BoxedIo},
-    tls::{Cert, TlsAcceptor},
-};
+use super::service::{layer_fn, BoxedIo};
+#[cfg(feature = "tls")]
+use super::{service::TlsAcceptor, tls::Identity};
 use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{ready, try_future::MapErr, TryFutureExt, TryStreamExt};
 use http::{Request, Response};
 use hyper::server::{accept::Accept, conn};
 use hyper::Body;
-use std::sync::Arc;
 use std::{
     fmt,
     future::Future,
     net::SocketAddr,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 use tower::layer::util::Stack;
@@ -48,9 +47,10 @@ impl Server {
 ///
 #[derive(Default)]
 pub struct Builder {
-    tls: Option<(Vec<u8>, Vec<u8>)>,
     interceptor: Option<Interceptor>,
     // concurrency_limit: Option<usize>,
+    #[cfg(feature = "tls")]
+    tls: Option<TlsAcceptor>,
 }
 
 impl Builder {
@@ -59,8 +59,17 @@ impl Builder {
     }
 
     /// Add a tls cert.
-    pub fn tls(&mut self, pem: Vec<u8>, key: Vec<u8>) -> &mut Self {
-        self.tls = Some((pem, key));
+    #[cfg(feature = "openssl")]
+    pub fn openssl_tls(&mut self, identity: Identity) -> &mut Self {
+        let acceptor = TlsAcceptor::new_with_openssl(identity).unwrap();
+        self.tls = Some(acceptor);
+        self
+    }
+
+    #[cfg(feature = "rustls")]
+    pub fn rustls_tls(&mut self, identity: Identity) -> &mut Self {
+        let acceptor = TlsAcceptor::new_with_rustls(identity).unwrap();
+        self.tls = Some(acceptor);
         self
     }
 
@@ -94,23 +103,28 @@ impl Builder {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let tls = if let Some(tls) = self.tls {
-            let cert = Cert {
-                ca: tls.0,
-                key: Some(tls.1),
-                domain: String::new(),
-            };
+        let interceptor = self.interceptor.clone();
 
-            Some(TlsAcceptor::new(cert).map_err(map_err)?)
-        } else {
-            None
-        };
+        let incoming = hyper::server::accept::from_stream(async_stream::try_stream! {
+            let mut tcp = TcpIncoming::bind(addr)?;
 
-        let incoming = hyper::server::accept::from_stream(incoming(addr, tls));
+            while let Some(stream) = tcp.try_next().await? {
+                #[cfg(feature = "tls")]
+                {
+                    if let Some(tls) = &self.tls {
+                        let io = tls.connect(stream.into_inner()).await?;
+                        yield BoxedIo::new(io);
+                        continue;
+                    }
+                }
+
+                yield BoxedIo::new(stream);
+            }
+        });
 
         let svc = MakeSvc {
             inner: svc,
-            interceptor: self.interceptor.clone(),
+            interceptor,
         };
 
         hyper::Server::builder(incoming)
@@ -130,24 +144,6 @@ fn map_err(e: impl Into<crate::Error>) -> super::Error {
 impl fmt::Debug for Builder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Builder").finish()
-    }
-}
-
-fn incoming(
-    addr: SocketAddr,
-    tls: Option<TlsAcceptor>,
-) -> impl futures_core::Stream<Item = Result<BoxedIo, crate::Error>> {
-    async_stream::try_stream! {
-        let mut tcp = TcpIncoming::bind(addr)?;
-
-        while let Some(stream) = tcp.try_next().await? {
-            if let Some(tls) = &tls {
-                let io = tls.connect(stream.into_inner()).await?;
-                yield BoxedIo::new(io);
-            } else {
-                yield BoxedIo::new(stream);
-            }
-        }
     }
 }
 
