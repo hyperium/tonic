@@ -5,23 +5,23 @@
 //! Simple
 //!
 //! ```rust,no_run
-//! fn main() {
-//!     tonic_build::compile_protos("proto/service.proto").unwrap();
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     tonic_build::compile_protos("proto/service.proto")?;
+//!     Ok(())
 //! }
 //! ```
 //!
 //! Configuration
 //!
 //! ```rust,no_run
-//! fn main() {
+//! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!    tonic_build::configure()
 //!         .build_server(false)
 //!         .compile(
 //!             &["proto/helloworld/helloworld.proto"],
 //!             &["proto/helloworld"],
-//!             "helloworld",
-//!         )
-//!         .unwrap();
+//!         )?;
+//!    Ok(())
 //! }
 //! ```
 
