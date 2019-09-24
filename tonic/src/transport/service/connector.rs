@@ -1,5 +1,6 @@
 use super::io::BoxedIo;
-use crate::transport::tls::{Cert, TlsConnector};
+#[cfg(feature = "tls")]
+use super::tls::TlsConnector;
 use http::Uri;
 use hyper::client::connect::HttpConnector;
 use std::future::Future;
@@ -8,25 +9,31 @@ use std::task::{Context, Poll};
 use tower_make::MakeConnection;
 use tower_service::Service;
 
-type ConnectFuture = <HttpConnector as MakeConnection<Uri>>::Future;
+#[cfg(not(feature = "tls"))]
+pub(crate) fn connector() -> HttpConnector {
+    let mut http = HttpConnector::new();
+    http.enforce_http(false);
+    http
+}
+
+#[cfg(feature = "tls")]
+pub(crate) fn connector(tls: Option<TlsConnector>) -> Connector {
+    Connector::new(tls)
+}
 
 pub(crate) struct Connector {
     http: HttpConnector,
+    #[cfg(feature = "tls")]
     tls: Option<TlsConnector>,
 }
 
 impl Connector {
-    pub(crate) fn new(cert: Option<Cert>) -> Result<Self, crate::Error> {
+    #[cfg(feature = "tls")]
+    pub(crate) fn new(tls: Option<TlsConnector>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
 
-        let tls = if let Some(cert) = cert {
-            Some(TlsConnector::new(cert)?)
-        } else {
-            None
-        };
-
-        Ok(Self { http, tls })
+        Self { http, tls }
     }
 }
 
@@ -42,23 +49,23 @@ impl Service<Uri> for Connector {
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        let io = MakeConnection::make_connection(&mut self.http, uri);
+        let connect = MakeConnection::make_connection(&mut self.http, uri);
+
+        #[cfg(feature = "tls")]
         let tls = self.tls.clone();
 
-        Box::pin(connect(io, tls))
-    }
-}
+        Box::pin(async move {
+            let io = connect.await?;
 
-async fn connect(
-    connect: ConnectFuture,
-    tls: Option<TlsConnector>,
-) -> Result<BoxedIo, crate::Error> {
-    let io = connect.await?;
+            #[cfg(feature = "tls")]
+            {
+                if let Some(tls) = tls {
+                    let conn = tls.connect(io).await?;
+                    return Ok(BoxedIo::new(conn));
+                }
+            }
 
-    if let Some(tls) = tls {
-        let conn = tls.connect(io).await?;
-        Ok(BoxedIo::new(conn))
-    } else {
-        Ok(BoxedIo::new(io))
+            Ok(BoxedIo::new(io))
+        })
     }
 }

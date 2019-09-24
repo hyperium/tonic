@@ -42,7 +42,7 @@ mod service;
 pub struct Builder {
     build_client: bool,
     build_server: bool,
-    out_dir: PathBuf,
+    out_dir: Option<PathBuf>,
 }
 
 impl Builder {
@@ -62,29 +62,26 @@ impl Builder {
     ///
     /// Defaults to the `OUT_DIR` environment variable.
     pub fn out_dir(mut self, out_dir: impl AsRef<Path>) -> Self {
-        self.out_dir = out_dir.as_ref().to_path_buf();
+        self.out_dir = Some(out_dir.as_ref().to_path_buf());
         self
     }
 
     /// Compile the .proto files and execute code generation.
     #[cfg_attr(not(feature = "rustfmt"), allow(unused_variables))]
-    pub fn compile<P: AsRef<Path>>(
-        self,
-        protos: &[P],
-        includes: &[P],
-        package: &str,
-    ) -> io::Result<()> {
+    pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
 
-        config.out_dir(self.out_dir.clone());
+        let out_dir = self
+            .out_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(std::env::var("OUT_DIR").unwrap()));
+
+        config.out_dir(out_dir.clone());
         config.service_generator(Box::new(ServiceGenerator::new(self)));
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
-        fmt(
-            out_dir.as_ref().to_str().expect("Execpted utf8 out_dir"),
-            &format!("{}.rs", package),
-        );
+        fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
 
         Ok(())
     }
@@ -97,7 +94,7 @@ pub fn configure() -> Builder {
     Builder {
         build_client: true,
         build_server: true,
-        out_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
+        out_dir: None,
     }
 }
 
@@ -108,35 +105,34 @@ pub fn configure() -> Builder {
 pub fn compile_protos(proto_path: impl AsRef<Path>) -> io::Result<()> {
     let proto_path: &Path = proto_path.as_ref();
 
-    let package = proto_path
-        .file_stem()
-        .expect("file should have a stem if it has an extension")
-        .to_str()
-        .expect("expected valid utf-8 filename");
-
     // directory the main .proto file resides in
     let proto_dir = proto_path
         .parent()
         .expect("proto file should reside in a directory");
 
-    self::configure().compile(&[proto_path], &[proto_dir], package)?;
+    self::configure().compile(&[proto_path], &[proto_dir])?;
 
     Ok(())
 }
 
 #[cfg(feature = "rustfmt")]
-fn fmt(out_dir: &str, file: &str) {
-    let out = Command::new("rustfmt")
-        .arg("--emit")
-        .arg("files")
-        .arg("--edition")
-        .arg("2018")
-        .arg(format!("{}/{}", out_dir, file))
-        .output()
-        .unwrap();
+fn fmt(out_dir: &str) {
+    let dir = std::fs::read_dir(out_dir).unwrap();
 
-    println!("out: {:?}", out);
-    assert!(out.status.success());
+    for entry in dir {
+        let file = entry.unwrap().file_name().into_string().unwrap();
+        let out = Command::new("rustfmt")
+            .arg("--emit")
+            .arg("files")
+            .arg("--edition")
+            .arg("2018")
+            .arg(format!("{}/{}", out_dir, file))
+            .output()
+            .unwrap();
+
+        println!("out: {:?}", out);
+        assert!(out.status.success());
+    }
 }
 
 pub struct ServiceGenerator {

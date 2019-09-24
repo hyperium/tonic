@@ -1,19 +1,18 @@
-use super::{
-    service::{layer_fn, BoxedIo},
-    tls::{Cert, TlsAcceptor},
-};
+use super::service::{layer_fn, BoxedIo};
+#[cfg(feature = "tls")]
+use super::{service::TlsAcceptor, tls::Identity};
 use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{ready, try_future::MapErr, TryFutureExt, TryStreamExt};
 use http::{Request, Response};
 use hyper::server::{accept::Accept, conn};
 use hyper::Body;
-use std::sync::Arc;
 use std::{
     fmt,
     future::Future,
     net::SocketAddr,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
 use tower::layer::util::Stack;
@@ -25,19 +24,33 @@ use tower_service::Service;
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
 
+/// A default batteries included `transport` server.
+///
+/// This is a wrapper around [`hyper::Server`] and provides an easy builder
+/// pattern style [`Builder`]. This builder exposes easy configuration parameters
+/// for providing a fully featured http2 based gRPC server. This should provide
+/// a very good out of the box http2 server for use with tonic but is also a
+/// reference implementation that should be a good starting point for anyone
+/// wanting to create a more complex and/or specific implementation.
 #[derive(Debug)]
-pub struct Server {}
+pub struct Server {
+    _p: (),
+}
 
 impl Server {
+    /// Create a new [`Builder`] that can configure a Server.
     pub fn builder() -> Builder {
         Builder::new()
     }
 }
 
+///
 #[derive(Default)]
 pub struct Builder {
-    tls: Option<(Vec<u8>, Vec<u8>)>,
     interceptor: Option<Interceptor>,
+    // concurrency_limit: Option<usize>,
+    #[cfg(feature = "tls")]
+    tls: Option<TlsAcceptor>,
 }
 
 impl Builder {
@@ -45,12 +58,25 @@ impl Builder {
         Default::default()
     }
 
-    pub fn tls(&mut self, pem: Vec<u8>, key: Vec<u8>) -> &mut Self {
-        self.tls = Some((pem, key));
+    /// Add a tls cert.
+    #[cfg(feature = "openssl")]
+    pub fn openssl_tls(&mut self, identity: Identity) -> &mut Self {
+        let acceptor = TlsAcceptor::new_with_openssl(identity).unwrap();
+        self.tls = Some(acceptor);
         self
     }
 
+    #[cfg(feature = "rustls")]
+    pub fn rustls_tls(&mut self, identity: Identity) -> &mut Self {
+        let acceptor = TlsAcceptor::new_with_rustls(identity).unwrap();
+        self.tls = Some(acceptor);
+        self
+    }
+
+    // FIXME: add server side layering ability
     // pub fn concurrency_limit(&mut self, limit: usize) -> &mut Self {
+    //     self.concurrency_limit = Some(limit);
+    //     self
     // }
 
     /// Intercept the execution of gRPC methods.
@@ -78,56 +104,47 @@ impl Builder {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let tls = if let Some(tls) = self.tls {
-            let cert = Cert {
-                ca: tls.0,
-                key: Some(tls.1),
-                domain: String::new(),
-            };
+        let interceptor = self.interceptor.clone();
 
-            Some(TlsAcceptor::new(cert).unwrap())
-        } else {
-            None
-        };
+        let incoming = hyper::server::accept::from_stream(async_stream::try_stream! {
+            let mut tcp = TcpIncoming::bind(addr)?;
 
-        let incoming = hyper::server::accept::from_stream(incoming(addr, tls));
+            while let Some(stream) = tcp.try_next().await? {
+                #[cfg(feature = "tls")]
+                {
+                    if let Some(tls) = &self.tls {
+                        let io = tls.connect(stream.into_inner()).await?;
+                        yield BoxedIo::new(io);
+                        continue;
+                    }
+                }
+
+                yield BoxedIo::new(stream);
+            }
+        });
 
         let svc = MakeSvc {
             inner: svc,
-            interceptor: self.interceptor.clone(),
+            interceptor,
         };
 
         hyper::Server::builder(incoming)
             .http2_only(true)
             .serve(svc)
             .await
-            .unwrap();
+            .map_err(map_err)?;
 
         Ok(())
     }
 }
 
+fn map_err(e: impl Into<crate::Error>) -> super::Error {
+    (super::ErrorKind::Server, e.into()).into()
+}
+
 impl fmt::Debug for Builder {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Builder").finish()
-    }
-}
-
-fn incoming(
-    addr: SocketAddr,
-    tls: Option<TlsAcceptor>,
-) -> impl futures_core::Stream<Item = Result<BoxedIo, crate::Error>> {
-    async_stream::try_stream! {
-        let mut tcp = TcpIncoming::bind(addr)?;
-
-        while let Some(stream) = tcp.try_next().await? {
-            if let Some(tls) = &tls {
-                let io = tls.connect(stream.into_inner()).await?;
-                yield BoxedIo::new(io);
-            } else {
-                yield BoxedIo::new(stream);
-            }
-        }
     }
 }
 
@@ -202,10 +219,9 @@ where
     }
 
     fn call(&mut self, _: T) -> Self::Future {
-        // self.inner.make_service(()).map_ok(|s| Svc(s))
         let interceptor = self.interceptor.clone();
-        // self.inner.make_service(()).map_ok(|s| intercept.layer(BoxService::new(Svc(s))))
         let make = self.inner.make_service(());
+
         Box::pin(async move {
             let svc = make.await.map_err(Into::into)?;
 
