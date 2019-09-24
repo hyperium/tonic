@@ -53,6 +53,7 @@ impl Builder {
     // pub fn concurrency_limit(&mut self, limit: usize) -> &mut Self {
     // }
 
+    /// Intercept the execution of gRPC methods.
     pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,

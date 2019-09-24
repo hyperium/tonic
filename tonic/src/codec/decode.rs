@@ -96,7 +96,7 @@ impl<T> Streaming<T> {
     /// # use tonic::Status;
     /// # use std::fmt::Debug;
     /// # async fn next_message_ex<T>(mut request: Streaming<T>) -> Result<(), Status>
-    /// # where T: Debug 
+    /// # where T: Debug
     /// # {
     /// if let Some(next_message) = request.message().await? {
     ///     println!("{:?}", next_message);

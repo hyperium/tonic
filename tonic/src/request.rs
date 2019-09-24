@@ -11,7 +11,8 @@ impl<T> Request<T> {
     /// Create a new gRPC request
     ///
     /// ```ignore
-    /// let request = tonic::Request::new(HelloRequest {
+    /// # use tonic::Request;
+    /// let request = Request::new(HelloRequest {
     ///    name: "hello".into(),
     /// });
     /// ```
@@ -57,11 +58,13 @@ impl<T> Request<T> {
     /// Convert an HTTP request to a gRPC request
     ///
     /// ```rust
+    /// # use tonic::Request;
+    /// # fn main() -> Option<()> {
     /// let request = http::Request::post("http://localhost:8080/Greeter/SayHello")
-    ///    .body(())
-    ///    .unwrap();
+    ///    .body(())?;
     ///
     /// Request::from_http(request);
+    /// # }
     /// ```
     pub fn from_http(http: http::Request<T>) -> Self {
         let (parts, message) = http.into_parts();

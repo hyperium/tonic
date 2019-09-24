@@ -8,9 +8,9 @@ mod server;
 mod service;
 mod tls;
 
-pub use self::channel::Channel;
+pub use self::channel::{Channel, Builder as ChannelBuilder};
 pub use self::endpoint::Endpoint;
-pub use self::server::Server;
+pub use self::server::{Server, Builder as ServerBuilder};
 pub use hyper::Body;
 
 use std::{error, fmt};
