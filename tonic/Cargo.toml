@@ -22,7 +22,7 @@ async-trait = "0.1"
 
 # optional
 # hyper = { version = "=0.13.0-alpha.1", optional = true }
-hyper = { git = "https://github.com/hyperium/hyper", features = ["unstable-stream"], optional = true }
+hyper = { git = "https://github.com/hyperium/hyper", features = ["unstable-stream"], optional = true, rev = "2b0405c48c10bca7893c30ea960ac20a41a8578f" }
 tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
 tower = { version = "=0.3.0-alpha.1a", optional = true}
 tower-make = "=0.1.0-alpha.2"
