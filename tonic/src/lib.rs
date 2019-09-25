@@ -24,6 +24,9 @@
 //!
 //! - `transport`: Enables the fully featured, batteries included client and server
 //! implementaiton based on [`hyper`], [`tower`] and [`tokio`].
+//! - `codegen`: Enables all the required exports and optional dependencies required
+//! for [`tonic-build`].
+//!
 //!
 //! # Generic implementation
 //!
