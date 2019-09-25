@@ -1,20 +1,22 @@
-//! gRPC encoding and decoding.
+//! Generic encoding and decoding.
 //!
 //! This module contains the generic `Codec` trait and a protobuf codec
 //! based on prost.
 
 mod decode;
 mod encode;
+#[cfg(feature = "prost")]
 mod prost;
 
 pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
+#[cfg(feature = "prost")]
 pub use self::prost::ProstCodec;
 pub use tokio_codec::{Decoder, Encoder};
 
 use crate::Status;
 
-/// Triat that knows how to encode and decode gRPC messages.
+/// Trait that knows how to encode and decode gRPC messages.
 pub trait Codec {
     /// The encodable message.
     type Encode: Send + 'static;

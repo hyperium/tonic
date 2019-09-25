@@ -30,13 +30,14 @@
 //! enabled by default.
 //! - `rustls`: Enables the `ruslts` based tls options for the `transport` feature`. Not
 //! enabled by default.
+//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //!
 //! # Structure
 //!
 //! ## Generic implementation
 //!
 //! The main goal of [`tonic`] is to provide a generic gRPC implementation over http2.0
-//! framing. This means at the lowest level this library provides the ability to 
+//! framing. This means at the lowest level this library provides the ability to
 //!
 //! TODO: write generic implementation docs
 //!

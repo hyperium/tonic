@@ -11,13 +11,16 @@ tracing = "0.1"
 http = "0.1.14"
 base64 = "0.10"
 bytes = "0.4.7"
-prost = "0.5"
+
 percent-encoding = "1.0.1"
 tower-service = "=0.3.0-alpha.1"
 tokio-codec = "=0.2.0-alpha.4"
 async-stream = "0.1.1"
 http-body = "0.2.0-alpha.1"
 pin-project = "=0.4.0-alpha.11"
+
+# prost
+prost = { version = "0.5", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
@@ -39,7 +42,7 @@ openssl1 = { package = "openssl", version = "0.10", optional = true }
 tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
 
 [features]
-default = ["transport", "codegen"]
+default = ["transport", "codegen", "prost"]
 codegen = ["async-trait"]
 transport = [
     "hyper",
