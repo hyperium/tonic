@@ -1,5 +1,4 @@
-//! The metadata module contains data structures and utilities for handling
-//! gRPC custom metadata.
+//! Contains data structures and utilities for handling gRPC custom metadata.
 
 mod encoding;
 mod key;
