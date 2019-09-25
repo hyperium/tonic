@@ -23,12 +23,20 @@
 //! # Feature Flags
 //!
 //! - `transport`: Enables the fully featured, batteries included client and server
-//! implementaiton based on [`hyper`], [`tower`] and [`tokio`].
+//! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
-//! for [`tonic-build`].
+//! for [`tonic-build`]. Enabled by default.
+//! - `openssl`: Enables the `openssl` based tls options for the `transport` feature`. Not
+//! enabled by default.
+//! - `rustls`: Enables the `ruslts` based tls options for the `transport` feature`. Not
+//! enabled by default.
 //!
+//! # Structure
 //!
-//! # Generic implementation
+//! ## Generic implementation
+//!
+//! The main goal of [`tonic`] is to provide a generic gRPC implementation over http2.0
+//! framing. This means at the lowest level this library provides the ability to 
 //!
 //! TODO: write generic implementation docs
 //!
