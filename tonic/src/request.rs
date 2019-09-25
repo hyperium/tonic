@@ -8,12 +8,17 @@ pub struct Request<T> {
 }
 
 impl<T> Request<T> {
-    /// Create a new gRPC request
+    /// Create a new gRPC request.
     ///
-    /// ```ignore
+    /// ```rust
     /// # use tonic::Request;
-    /// let request = Request::new(HelloRequest {
-    ///    name: "hello".into(),
+    /// # #[derive(Clone, PartialEq, ::prost::Message)]
+    /// # pub struct HelloRequest {
+    /// #   #[prost(string, tag = "1")]
+    /// #   pub name: std::string::String,
+    /// # }
+    /// Request::new(HelloRequest {
+    ///    name: "Bob".into(),
     /// });
     /// ```
     pub fn new(message: T) -> Self {
@@ -56,17 +61,6 @@ impl<T> Request<T> {
     }
 
     /// Convert an HTTP request to a gRPC request
-    ///
-    /// ```rust
-    /// # use tonic::Request;
-    /// # fn main() -> http::Result<()> {
-    /// let request = http::Request::post("http://localhost:8080/Greeter/SayHello")
-    ///    .body(())?;
-    ///
-    /// Request::from_http(request);
-    /// # Ok(())
-    /// # }
-    /// ```
     pub fn from_http(http: http::Request<T>) -> Self {
         let (parts, message) = http.into_parts();
         Request::from_http_parts(parts, message)

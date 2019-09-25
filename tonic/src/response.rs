@@ -10,13 +10,17 @@ pub struct Response<T> {
 impl<T> Response<T> {
     /// Create a new gRPC response.
     ///
-    /// ```ignore
+    /// ```rust
+    /// # use tonic::Response;
+    /// # #[derive(Clone, PartialEq, ::prost::Message)]
+    /// # pub struct HelloReply {
+    /// #   #[prost(string, tag = "1")]
+    /// #   pub message: std::string::String,
+    /// # }
     /// # let name = "";
-    /// let reply = hello_world::HelloReply {
+    /// Response::new(HelloReply {
     ///     message: format!("Hello, {}!", name).into(),
-    /// };
-    ///
-    /// Response::new(reply);
+    /// });
     /// ```
     pub fn new(message: T) -> Self {
         Response {
