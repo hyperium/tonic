@@ -1,3 +1,4 @@
+use crate::generate_doc_comments;
 use proc_macro2::{Span, TokenStream};
 use prost_build::{Method, Service};
 use quote::quote;
@@ -10,10 +11,12 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
     let server_service = quote::format_ident!("{}ServerSvc", service.name);
     let server_trait = quote::format_ident!("{}", service.name);
     let generated_trait = generate_trait(service, proto_path, server_trait.clone());
+    let service_doc = generate_doc_comments(&service.comments.leading);
 
     quote! {
         #generated_trait
 
+        #service_doc
         #[derive(Clone, Debug)]
         pub struct #server_make_service<T: #server_trait> {
             inner: Arc<T>,
