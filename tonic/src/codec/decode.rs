@@ -101,7 +101,7 @@ impl<T> Streaming<T> {
 
     /// Fetch the trailing metadata.
     ///
-    /// This will drain the stream of all its messages to recieve the trailing
+    /// This will drain the stream of all its messages to receive the trailing
     /// metadata. If [`Streaming::message`] returns `None` then this function
     /// will not need to poll for trailers since the body was totally consumed.
     pub async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
@@ -192,7 +192,7 @@ impl<T> Stream for Streaming<T> {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             // TODO: implement the ability to poll trailers when we _know_ that
-            // the comnsumer of this stream will only poll for the first message.
+            // the consumer of this stream will only poll for the first message.
             // This means we skip the poll_trailers step.
             match self.decode_chunk()? {
                 Some(item) => return Poll::Ready(Some(Ok(item))),
