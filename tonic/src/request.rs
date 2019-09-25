@@ -12,10 +12,8 @@ impl<T> Request<T> {
     ///
     /// ```rust
     /// # use tonic::Request;
-    /// # #[derive(Clone, PartialEq, ::prost::Message)]
     /// # pub struct HelloRequest {
-    /// #   #[prost(string, tag = "1")]
-    /// #   pub name: std::string::String,
+    /// #   pub name: String,
     /// # }
     /// Request::new(HelloRequest {
     ///    name: "Bob".into(),

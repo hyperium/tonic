@@ -12,10 +12,8 @@ impl<T> Response<T> {
     ///
     /// ```rust
     /// # use tonic::Response;
-    /// # #[derive(Clone, PartialEq, ::prost::Message)]
     /// # pub struct HelloReply {
-    /// #   #[prost(string, tag = "1")]
-    /// #   pub message: std::string::String,
+    /// #   pub message: String,
     /// # }
     /// # let name = "";
     /// Response::new(HelloReply {
