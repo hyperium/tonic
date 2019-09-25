@@ -22,8 +22,8 @@ use std::fmt;
 /// Each request method takes a [`Request`], a [`PathAndQuery`], and a
 /// [`Codec`]. The request contains the message to send via the
 /// [`Codec::encoder`]. The path determines the fully qualified path
-/// that will be appened to the outgoing uri. The path must follow
-/// the convetions explained in the [gRPC protocol definition] under `Path →`. An
+/// that will be append to the outgoing uri. The path must follow
+/// the conventions explained in the [gRPC protocol definition] under `Path →`. An
 /// example of this path could look like `/greeter.Greeter/SayHello`.
 ///
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests

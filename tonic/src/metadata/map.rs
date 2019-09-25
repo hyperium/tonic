@@ -217,7 +217,7 @@ impl MetadataMap {
 
     /// Convert an HTTP HeaderMap to a MetadataMap
     pub fn from_headers(headers: http::HeaderMap) -> Self {
-        MetadataMap { headers: headers }
+        MetadataMap { headers }
     }
 
     /// Convert a MetadataMap into a HTTP HeaderMap
