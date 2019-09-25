@@ -63,12 +63,6 @@ impl Status {
     }
 
     /// Create a new `Unimplemented` status with the associated message.
-    ///
-    /// ```rust
-    /// # use tonic::Status;
-    /// #
-    /// Status::unimplemented("Not yet implemented!");
-    /// ```
     pub fn unimplemented(message: impl Into<String>) -> Status {
         Status {
             code: Code::Unimplemented,

@@ -92,8 +92,7 @@ impl<T> Streaming<T> {
 impl<T> Streaming<T> {
     /// Fetch the next message from this stream.
     /// ```rust
-    /// # use tonic::Streaming;
-    /// # use tonic::Status;
+    /// # use tonic::{Streaming, Status};
     /// # use std::fmt::Debug;
     /// # async fn next_message_ex<T>(mut request: Streaming<T>) -> Result<(), Status>
     /// # where T: Debug
@@ -119,8 +118,7 @@ impl<T> Streaming<T> {
     /// will not need to poll for trailers since the body was totally consumed.
     ///    
     /// ```rust
-    /// # use tonic::Streaming;
-    /// # use tonic::Status;
+    /// # use tonic::{Streaming, Status};
     /// # async fn trailers_ex<T>(mut request: Streaming<T>) -> Result<(), Status> {
     /// if let Some(metadata) = request.trailers().await? {
     ///     println!("{:?}", metadata);

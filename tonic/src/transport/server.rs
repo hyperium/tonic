@@ -80,38 +80,6 @@ impl Builder {
     // }
 
     /// Intercept the execution of gRPC methods.
-    /// 
-    /// # Example
-    /// Authentication interceptor that checks that requests have a valid auth token.
-    /// ```rust
-    /// # use tonic::transport::server::Builder;
-    /// # use tonic::client::GrpcService;
-    /// # use http::header::AUTHORIZATION;
-    /// # use tonic::Status;
-    /// # use tonic::Code;
-    /// #
-    /// # 
-    /// 
-    /// async fn interceptor(service: &mut BoxService, req: Request<Body>) -> Result<Response<BoxBody>, crate::Error> {
-    ///     return service.call(req).await;
-    /// } 
-    /// 
-    /// Builder::default().interceptor_fn(interceptor);
-    ///     
-    /// /*    async move {
-    ///         /*if let Some(auth) = request.headers().get(AUTHORIZATION) {
-    ///             if auth != "Bearer: password123" {
-    ///                 return Err(Box::new(Status::new(Code::Unauthenticated, "Invalid auth token")));
-    ///             }
-    ///         } else {
-    ///             return Err(Box::new(Status::new(Code::Unauthenticated, "Authorization required")));
-    ///         }*/
-    /// 
-    ///         // auth success, simply call the service.
-    ///         service.call(request).await
-    ///     }
-    /// });*/
-    /// ```
     pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,

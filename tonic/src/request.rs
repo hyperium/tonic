@@ -64,6 +64,7 @@ impl<T> Request<T> {
     ///    .body(())?;
     ///
     /// Request::from_http(request);
+    /// # Ok(())
     /// # }
     /// ```
     pub fn from_http(http: http::Request<T>) -> Self {
