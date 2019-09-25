@@ -8,7 +8,17 @@ pub struct Request<T> {
 }
 
 impl<T> Request<T> {
-    /// Create a new gRPC request
+    /// Create a new gRPC request.
+    ///
+    /// ```rust
+    /// # use tonic::Request;
+    /// # pub struct HelloRequest {
+    /// #   pub name: String,
+    /// # }
+    /// Request::new(HelloRequest {
+    ///    name: "Bob".into(),
+    /// });
+    /// ```
     pub fn new(message: T) -> Self {
         Request {
             metadata: MetadataMap::new(),

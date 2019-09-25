@@ -79,6 +79,7 @@ impl Builder {
     //     self
     // }
 
+    /// Intercept the execution of gRPC methods.
     pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,
