@@ -91,6 +91,18 @@ impl<T> Streaming<T> {
 
 impl<T> Streaming<T> {
     /// Fetch the next message from this stream.
+    /// ```rust
+    /// # use tonic::{Streaming, Status};
+    /// # use std::fmt::Debug;
+    /// # async fn next_message_ex<T>(mut request: Streaming<T>) -> Result<(), Status>
+    /// # where T: Debug
+    /// # {
+    /// if let Some(next_message) = request.message().await? {
+    ///     println!("{:?}", next_message);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn message(&mut self) -> Result<Option<T>, Status> {
         match future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await {
             Some(Ok(m)) => Ok(Some(m)),
@@ -104,6 +116,16 @@ impl<T> Streaming<T> {
     /// This will drain the stream of all its messages to receive the trailing
     /// metadata. If [`Streaming::message`] returns `None` then this function
     /// will not need to poll for trailers since the body was totally consumed.
+    ///    
+    /// ```rust
+    /// # use tonic::{Streaming, Status};
+    /// # async fn trailers_ex<T>(mut request: Streaming<T>) -> Result<(), Status> {
+    /// if let Some(metadata) = request.trailers().await? {
+    ///     println!("{:?}", metadata);
+    /// }
+    /// # Ok(())
+    /// # }
+    /// ```
     pub async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
         // Shortcut to see if we already pulled the trailers in the stream step
         // we need to do that so that the stream can error on trailing grpc-status

@@ -9,6 +9,17 @@ pub struct Response<T> {
 
 impl<T> Response<T> {
     /// Create a new gRPC response.
+    ///
+    /// ```rust
+    /// # use tonic::Response;
+    /// # pub struct HelloReply {
+    /// #   pub message: String,
+    /// # }
+    /// # let name = "";
+    /// Response::new(HelloReply {
+    ///     message: format!("Hello, {}!", name).into(),
+    /// });
+    /// ```
     pub fn new(message: T) -> Self {
         Response {
             metadata: MetadataMap::new(),

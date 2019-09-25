@@ -67,7 +67,6 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    #[cfg_attr(not(feature = "rustfmt"), allow(unused_variables))]
     pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
 
