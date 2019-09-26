@@ -9,6 +9,8 @@
 
 mod grpc;
 mod service;
+mod message;
 
 pub use self::grpc::Grpc;
+pub use self::message::{IntoRequest, Message};
 pub use self::service::GrpcService;
