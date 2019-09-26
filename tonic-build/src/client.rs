@@ -52,7 +52,6 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
 
 #[cfg(feature = "transport")]
 fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
-    
     let doc_example = format!("let client = {}::connect(\"http://[::1]:50051\")?;", service_ident);
     let doc_example = generate_doc_comment(&doc_example);
 
