@@ -1,10 +1,21 @@
 use crate::metadata::MetadataMap;
 
+/// Marker trait for types that can be converted into
+/// requests.
+pub trait Message: std::fmt::Debug {}
+
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
 pub struct Request<T> {
     metadata: MetadataMap,
     message: T,
+}
+
+#[allow(missing_docs)]
+pub trait IntoRequest {
+    type Message: Message;
+
+    fn into_request(self) -> Request<Self::Message>;
 }
 
 impl<T> Request<T> {
@@ -86,5 +97,21 @@ impl<T> Request<T> {
             metadata: self.metadata,
             message,
         }
+    }
+}
+
+impl<T: Message> IntoRequest for T {
+    type Message = T;
+
+    fn into_request(self) -> Request<T> {
+        Request::new(self)
+    }
+}
+
+impl<T: Message> IntoRequest for Request<T> {
+    type Message = T;
+
+    fn into_request(self) -> Request<T> {
+        self
     }
 }

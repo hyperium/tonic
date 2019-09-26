@@ -103,7 +103,7 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
             &mut self,
             message: M,
         ) -> Result<tonic::Response<#response>, tonic::Status>
-        where M: tonic::client::IntoRequest<Message = #request>,
+        where M: tonic::IntoRequest<Message = #request>,
         {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();

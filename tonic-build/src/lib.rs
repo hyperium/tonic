@@ -168,7 +168,6 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 
             let impls = generate_message_implementations(&service);
             self.message_impls.extend(impls);
-
         }
     }
 
@@ -249,9 +248,8 @@ fn generate_message_implementations(service: &prost_build::Service) -> TokenStre
         .fold(TokenStream::new(), |mut stream, input| {
             let request: syn::Type = syn::parse_str(&input).unwrap();
             stream.extend(quote::quote! {
-               impl tonic::client::Message for #request {}
+               impl tonic::Message for #request {}
             });
             stream
         })
 }
-
