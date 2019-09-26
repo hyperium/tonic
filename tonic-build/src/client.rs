@@ -1,3 +1,4 @@
+use crate::generate_doc_comments;
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
 use quote::{format_ident, quote};
@@ -8,8 +9,10 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
     let methods = generate_methods(service, proto);
 
     let connect = generate_connect(&service_ident);
+    let service_doc = generate_doc_comments(&service.comments.leading);
 
     quote! {
+        #service_doc
         pub struct #service_ident<T> {
             inner: tonic::client::Grpc<T>,
         }
@@ -74,6 +77,8 @@ fn generate_methods(service: &Service, proto: &str) -> TokenStream {
             "/{}.{}/{}",
             service.package, service.proto_name, method.proto_name
         );
+
+        stream.extend(generate_doc_comments(&method.comments.leading));
 
         let method = match (method.client_streaming, method.server_streaming) {
             (false, false) => generate_unary(method, &proto, path),
