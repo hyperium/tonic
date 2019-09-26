@@ -25,8 +25,9 @@
 //! }
 //! ```
 
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, Delimiter, Group, Ident, Literal, Punct, Spacing, Span};
 use prost_build::Config;
+use quote::TokenStreamExt;
 
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
@@ -198,4 +199,29 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             buf.push_str(&code);
         }
     }
+}
+
+// Generate a singular line of a doc comment
+fn generate_doc_comment(comment: &str, stream: &mut TokenStream) {
+    let mut doc_stream = TokenStream::new();
+
+    doc_stream.append(Ident::new("doc", Span::call_site()));
+    doc_stream.append(Punct::new('=', Spacing::Alone));
+    doc_stream.append(Literal::string(&comment));
+
+    let group = Group::new(Delimiter::Bracket, doc_stream);
+
+    stream.append(Punct::new('#', Spacing::Alone));
+    stream.append(group);
+}
+
+// Generate a larger doc comment composed of many lines of doc comments
+fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
+    let mut stream = TokenStream::new();
+
+    for comment in comments {
+        generate_doc_comment(comment.as_ref(), &mut stream);
+    }
+
+    stream
 }
