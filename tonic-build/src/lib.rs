@@ -25,7 +25,7 @@
 //! }
 //! ```
 
-use proc_macro2::{TokenStream, Delimiter, Group, Ident, Literal, Punct, Spacing, Span};
+use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use prost_build::Config;
 use quote::TokenStreamExt;
 
