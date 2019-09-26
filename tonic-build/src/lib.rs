@@ -25,8 +25,9 @@
 //! }
 //! ```
 
-use proc_macro2::TokenStream;
+use proc_macro2::{TokenStream, Delimiter, Group, Ident, Literal, Punct, Spacing, Span};
 use prost_build::Config;
+use quote::TokenStreamExt;
 
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
@@ -202,9 +203,6 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 
 // Generate a singular line of a doc comment
 fn generate_doc_comment(comment: &str, stream: &mut TokenStream) {
-    use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span};
-    use quote::TokenStreamExt;
-
     let mut doc_stream = TokenStream::new();
 
     doc_stream.append(Ident::new("doc", Span::call_site()));
