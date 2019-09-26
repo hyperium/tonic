@@ -171,6 +171,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let clients = &self.clients;
 
             let client_service = quote::quote! {
+                /// Generated client implementations.
                 pub mod client {
                     #![allow(unused_variables, dead_code, missing_docs)]
                     use tonic::codegen::*;
@@ -187,6 +188,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let servers = &self.servers;
 
             let server_service = quote::quote! {
+                /// Generated server implementations.
                 pub mod server {
                     #![allow(unused_variables, dead_code, missing_docs)]
                     use tonic::codegen::*;
@@ -202,7 +204,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 }
 
 // Generate a singular line of a doc comment
-fn generate_doc_comment(comment: &str, stream: &mut TokenStream) {
+fn generate_doc_comment(comment: &str) -> TokenStream {
     let mut doc_stream = TokenStream::new();
 
     doc_stream.append(Ident::new("doc", Span::call_site()));
@@ -211,8 +213,10 @@ fn generate_doc_comment(comment: &str, stream: &mut TokenStream) {
 
     let group = Group::new(Delimiter::Bracket, doc_stream);
 
+    let mut stream = TokenStream::new();
     stream.append(Punct::new('#', Spacing::Alone));
     stream.append(group);
+    stream
 }
 
 // Generate a larger doc comment composed of many lines of doc comments
@@ -220,7 +224,7 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for comment in comments {
-        generate_doc_comment(comment.as_ref(), &mut stream);
+        stream.extend(generate_doc_comment(comment.as_ref()));
     }
 
     stream
