@@ -171,6 +171,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let clients = &self.clients;
 
             let client_service = quote::quote! {
+                /// Generated client implementations.
                 pub mod client {
                     #![allow(unused_variables, dead_code, missing_docs)]
                     use tonic::codegen::*;
@@ -187,6 +188,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let servers = &self.servers;
 
             let server_service = quote::quote! {
+                /// Generated server implementations.
                 pub mod server {
                     #![allow(unused_variables, dead_code, missing_docs)]
                     use tonic::codegen::*;
