@@ -1,4 +1,4 @@
-use crate::generate_doc_comments;
+use crate::{generate_doc_comments, generate_doc_comment};
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
 use quote::{format_ident, quote};
@@ -54,7 +54,7 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
 fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
     
     let doc_example = format!("let client = {}::connect(\"http://[::1]:50051\")?;", service_ident);
-    let doc_example = generate_doc_comments(&[doc_example]);
+    let doc_example = generate_doc_comment(&doc_example);
 
     quote! {
         impl #service_ident<tonic::transport::Channel> {
