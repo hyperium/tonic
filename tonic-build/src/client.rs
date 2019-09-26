@@ -1,4 +1,4 @@
-use crate::generate_doc_comments;
+use crate::{generate_doc_comment, generate_doc_comments};
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
 use quote::{format_ident, quote};
@@ -30,6 +30,7 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
                 Self { inner }
             }
 
+            /// Check if the service is ready.
             pub async fn ready(&mut self) -> Result<(), tonic::Status> {
                 self.inner.ready().await.map_err(|e| {
                     tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
@@ -51,8 +52,19 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
 
 #[cfg(feature = "transport")]
 fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
+    let doc_example = format!(
+        "let client = {}::connect(\"http://[::1]:50051\")?;",
+        service_ident
+    );
+    let doc_example = generate_doc_comment(&doc_example);
+
     quote! {
         impl #service_ident<tonic::transport::Channel> {
+            /// Attempt to create a new client by connecting to a given endpoint.
+            ///
+            /// ```rust,no_run
+            #doc_example
+            /// ```
             pub fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
             where
                 D: std::convert::TryInto<tonic::transport::Endpoint>,
