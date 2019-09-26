@@ -8,8 +8,8 @@
 //! for the gRPC service. Thusly, they are a bit cumbersome to use by hand.
 
 mod grpc;
-mod service;
 mod message;
+mod service;
 
 pub use self::grpc::Grpc;
 pub use self::message::{IntoRequest, Message};
