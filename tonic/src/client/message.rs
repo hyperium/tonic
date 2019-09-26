@@ -4,8 +4,6 @@ use crate::Request;
 
 pub trait Message: std::fmt::Debug {}
 
-impl<T: prost::Message> Message for T {}
-
 pub trait IntoRequest {
     type Message: Message;
 
