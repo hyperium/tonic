@@ -94,12 +94,16 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
     let response: Path = syn::parse_str(&format!("{}::{}", proto, method.output_type)).unwrap();
 
     quote! {
-        pub async fn #ident(&mut self, request: tonic::Request<#request>)
-            -> Result<tonic::Response<#response>, tonic::Status> {
+        pub async fn #ident<M>(
+            &mut self,
+            message: M,
+        ) -> Result<tonic::Response<#response>, tonic::Status>
+        where M: tonic::client::IntoRequest<Message = #request>,
+        {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.unary(request, path, codec).await
+           self.inner.unary(message.into_request(), path, codec).await
         }
     }
 }
