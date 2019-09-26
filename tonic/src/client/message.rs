@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use crate::Request;
 
 pub trait Message: std::fmt::Debug {}
