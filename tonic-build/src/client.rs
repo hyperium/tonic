@@ -58,7 +58,7 @@ fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
 
     quote! {
         impl #service_ident<tonic::transport::Channel> {
-            /// Attempt to connect to a given endpoint.
+            /// Attempt to create a new client by connecting to a given endpoint.
             ///
             /// ```rust
             #doc_example

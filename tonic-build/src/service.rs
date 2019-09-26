@@ -12,6 +12,7 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
     let server_trait = quote::format_ident!("{}", service.name);
     let generated_trait = generate_trait(service, proto_path, server_trait.clone());
     let service_doc = generate_doc_comments(&service.comments.leading);
+    let server_new_doc = generate_doc_comment(&format!("Create a new {} from a type that implements {}.", server_make_service, server_trait));
 
     quote! {
         #generated_trait
@@ -29,6 +30,7 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
         }
 
         impl<T: #server_trait> #server_make_service<T> {
+            #server_new_doc
             pub fn new(inner: T) -> Self {
                 let inner = Arc::new(inner);
                 Self::from_shared(inner)
