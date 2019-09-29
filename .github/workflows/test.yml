@@ -28,4 +28,4 @@ jobs:
     - name: Check with transport w/ rustls
       run: cargo check -p tonic --features rustls
     - name: Run tests
-      run: cargo test --all
+      run: cargo test --all --all-features

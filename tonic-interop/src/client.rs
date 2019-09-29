@@ -15,30 +15,6 @@ const TEST_STATUS_MESSAGE: &'static str = "test status message";
 const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
-pub async fn create(origin: http::Uri) -> Result<TestClient, Box<dyn std::error::Error>> {
-    // let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-
-    let svc = Channel::builder()
-        // .tls(ca)
-        // .tls_override_domain("foo.test.google.fr")
-        .build(origin)?;
-
-    Ok(TestServiceClient::new(svc))
-}
-
-pub async fn create_unimplemented(
-    origin: http::Uri,
-) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
-    // let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-
-    let svc = Channel::builder()
-        // .tls(ca)
-        // .tls_override_domain("foo.test.google.fr")
-        .build(origin)?;
-
-    Ok(UnimplementedServiceClient::new(svc))
-}
-
 pub async fn empty_unary(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let result = client.empty_call(Request::new(Empty {})).await;
 

@@ -22,12 +22,12 @@ use tower_service::Service;
 pub(crate) type Request = http::Request<BoxBody>;
 pub(crate) type Response = http::Response<hyper::Body>;
 
-pub struct Connection {
+pub(crate) struct Connection {
     inner: BoxService<Request, Response, crate::Error>,
 }
 
 impl Connection {
-    pub fn new(endpoint: Endpoint) -> Result<Self, crate::Error> {
+    pub(crate) fn new(endpoint: Endpoint) -> Self {
         #[cfg(feature = "tls")]
         let connector = connector(endpoint.tls.clone());
 
@@ -51,9 +51,9 @@ impl Connection {
 
         let inner = stack.layer(conn);
 
-        Ok(Self {
+        Self {
             inner: BoxService::new(inner),
-        })
+        }
     }
 }
 
