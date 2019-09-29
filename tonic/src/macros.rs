@@ -1,7 +1,7 @@
 #[doc(hidden)]
 #[macro_export]
 macro_rules! include_helper {
-    ($include: ident, $ending: literal) => {
+    ($include: ident, $ending:tt) => {
         include!(concat!(
             env!("OUT_DIR"),
             concat!("/", stringify!($include), $ending)
@@ -9,7 +9,7 @@ macro_rules! include_helper {
     };
 }
 
-/// Include both the generated proto server and client.
+/// Includes generated proto server and client modules.
 ///
 /// Optionally, a second argument can be provided to rename the included module.
 ///
@@ -37,7 +37,10 @@ macro_rules! include_proto {
     };
 }
 
-/// Include the generated proto client only.
+/// Include a generated proto client module.
+///
+/// This shouldn't be used alongside `include_server!` as shared items will conflict.
+/// In that case, use `include_proto!` instead.
 ///
 /// Optionally, a second argument can be provided to rename the included module.
 ///
@@ -63,7 +66,10 @@ macro_rules! include_client {
     };
 }
 
-/// Include the generated proto server only.
+/// Include a generated proto server module.
+///
+/// This shouldn't be used alongside `include_client!` as shared items will conflict.
+/// In that case, use `include_proto!` instead.
 ///
 /// Optionally, a second argument can be provided to rename the included module.
 ///
