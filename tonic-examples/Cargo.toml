@@ -20,6 +20,22 @@ path = "src/routeguide/server.rs"
 name = "routeguide-client"
 path = "src/routeguide/client.rs"
 
+[[bin]]
+name = "authentication-client"
+path = "src/authentication/client.rs"
+
+[[bin]]
+name = "authentication-server"
+path = "src/authentication/server.rs"
+
+[[bin]]
+name = "load-balance-client"
+path = "src/load_balance/client.rs"
+
+[[bin]]
+name = "load-balance-server"
+path = "src/load_balance/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic" }
 futures-preview = { version = "=0.3.0-alpha.18", default-features = false, features = ["alloc"]}
@@ -31,6 +47,7 @@ serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 async-stream = "0.1.1"
 http = "0.1"
+tower = "0.3.0-alpha.1a"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }
