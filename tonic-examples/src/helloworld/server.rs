@@ -1,6 +1,8 @@
-use tonic::{include_server, transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Status};
 
-include_server!(helloworld, hello_world);
+pub mod hello_world {
+    tonic::include_server!("helloworld");
+}
 
 use hello_world::{
     server::{Greeter, GreeterServer},

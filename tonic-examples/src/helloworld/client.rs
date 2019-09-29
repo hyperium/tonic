@@ -1,6 +1,6 @@
-use tonic::include_client;
-
-include_client!(helloworld, hello_world);
+pub mod hello_world {
+    tonic::include_client!("helloworld");
+}
 
 use hello_world::{client::GreeterClient, HelloRequest};
 
