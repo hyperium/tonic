@@ -75,6 +75,7 @@ pub mod server;
 #[cfg(feature = "transport")]
 pub mod transport;
 
+mod macros;
 mod request;
 mod response;
 mod status;
@@ -94,5 +95,3 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 #[doc(hidden)]
 #[cfg(feature = "codegen")]
 pub mod codegen;
-
-mod macros;
