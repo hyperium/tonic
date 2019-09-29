@@ -15,9 +15,9 @@ macro_rules! include_helper {
 ///
 /// # Example
 /// ```rust,no_run
-/// use tonic::include_proto;
-///
-/// include_proto!(helloworld, hello_world);
+/// pub mod hello_world {
+///    tonic::include_proto!("helloworld");
+/// }
 /// ```
 #[macro_export]
 macro_rules! include_proto {
@@ -37,9 +37,9 @@ macro_rules! include_proto {
 ///
 /// # Example
 /// ```rust,no_run
-/// use tonic::include_client;
-///
-/// include_client!(helloworld, hello_world);
+/// pub mod hello_world {
+///    tonic::include_client!("helloworld");
+/// }
 /// ```
 #[macro_export]
 macro_rules! include_client {
@@ -54,13 +54,11 @@ macro_rules! include_client {
 /// This shouldn't be used alongside `include_client!` as shared items will conflict.
 /// In that case, use `include_proto!` instead.
 ///
-/// Optionally, a second argument can be provided to rename the included module.
-///
 /// # Example
 /// ```rust,no_run
-/// use tonic::include_server;
-///
-/// include_server!(helloworld, hello_world);
+/// pub mod hello_world {
+///    tonic::include_server!("helloworld");
+/// }
 /// ```
 #[macro_export]
 macro_rules! include_server {
