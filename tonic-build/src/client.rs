@@ -61,10 +61,6 @@ fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
     quote! {
         impl #service_ident<tonic::transport::Channel> {
             /// Attempt to create a new client by connecting to a given endpoint.
-            ///
-            /// ```rust,no_run
-            #doc_example
-            /// ```
             pub fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
             where
                 D: std::convert::TryInto<tonic::transport::Endpoint>,
