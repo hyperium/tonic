@@ -9,7 +9,7 @@ macro_rules! include_helper {
     };
 }
 
-/// Includes generated proto server and client modules.
+/// Includes generated proto server and client items.
 ///
 /// # Example
 /// ```rust,no_run
@@ -26,7 +26,7 @@ macro_rules! include_proto {
     };
 }
 
-/// Include a generated proto client module.
+/// Include a generated proto client items.
 ///
 /// This shouldn't be used alongside `include_server!` as shared items will conflict.
 /// In that case, use `include_proto!` instead.
@@ -45,7 +45,7 @@ macro_rules! include_client {
     };
 }
 
-/// Include a generated proto server module.
+/// Include a generated proto server items.
 ///
 /// This shouldn't be used alongside `include_client!` as shared items will conflict.
 /// In that case, use `include_proto!` instead.
