@@ -9,6 +9,16 @@ macro_rules! include_helper {
     };
 }
 
+/// Include both the generated proto server and client.
+///
+/// Optionally, a second argument can be provided to rename the included module.
+///
+/// # Example
+/// ```rust,no_run
+/// use tonic::include_proto;
+///
+/// include_proto!(helloworld, hello_world);
+/// ```
 #[macro_export]
 macro_rules! include_proto {
     ($name: ident) => {
@@ -27,6 +37,16 @@ macro_rules! include_proto {
     };
 }
 
+/// Include the generated proto client only.
+///
+/// Optionally, a second argument can be provided to rename the included module.
+///
+/// # Example
+/// ```rust,no_run
+/// use tonic::include_client;
+///
+/// include_client!(helloworld, hello_world);
+/// ```
 #[macro_export]
 macro_rules! include_client {
     ($name: ident) => {
@@ -43,6 +63,16 @@ macro_rules! include_client {
     };
 }
 
+/// Include the generated proto server only.
+///
+/// Optionally, a second argument can be provided to rename the included module.
+///
+/// # Example
+/// ```rust,no_run
+/// use tonic::include_server;
+///
+/// include_server!(helloworld, hello_world);
+/// ```
 #[macro_export]
 macro_rules! include_server {
     ($name: ident) => {
