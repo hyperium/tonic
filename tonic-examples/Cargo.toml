@@ -36,8 +36,16 @@ path = "src/load_balance/client.rs"
 name = "load-balance-server"
 path = "src/load_balance/server.rs"
 
+[[bin]]
+name = "tls-client"
+path = "src/tls/client.rs"
+
+[[bin]]
+name = "tls-server"
+path = "src/tls/server.rs"
+
 [dependencies]
-tonic = { path = "../tonic" }
+tonic = { path = "../tonic", features = ["rustls"] }
 futures-preview = { version = "=0.3.0-alpha.18", default-features = false, features = ["alloc"]}
 tokio = "=0.2.0-alpha.4"
 prost = "0.5"
