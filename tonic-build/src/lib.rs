@@ -68,13 +68,14 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
+    pub fn compile<P: AsRef<Path>>(mut self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
 
-        let out_dir = self
-            .out_dir
-            .clone()
-            .unwrap_or_else(|| PathBuf::from(std::env::var("OUT_DIR").unwrap()));
+        if self.out_dir.is_none() {
+            self.out_dir = Some(PathBuf::from(std::env::var("OUT_DIR").unwrap()));
+        }
+
+        let out_dir = self.out_dir.clone().unwrap();
 
         config.out_dir(out_dir.clone());
         config.service_generator(Box::new(ServiceGenerator::new(self)));
@@ -139,6 +140,7 @@ pub struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
+    package: Option<String>,
 }
 
 impl ServiceGenerator {
@@ -147,6 +149,7 @@ impl ServiceGenerator {
             builder,
             clients: TokenStream::default(),
             servers: TokenStream::default(),
+            package: None,
         }
     }
 }
@@ -154,6 +157,10 @@ impl ServiceGenerator {
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
         let path = "super";
+
+        println!("{:#?}", service);
+
+        self.package = Some(service.package.clone());
 
         if self.builder.build_server {
             let server = service::generate(&service, path);
@@ -166,7 +173,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         }
     }
 
-    fn finalize(&mut self, buf: &mut String) {
+    fn finalize(&mut self, _buf: &mut String) {
         if self.builder.build_client && !self.clients.is_empty() {
             let clients = &self.clients;
 
@@ -181,7 +188,17 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             };
 
             let code = format!("{}", client_service);
-            buf.push_str(&code);
+            //buf.push_str(&code);
+
+            
+
+            let mut out_file = self.builder.out_dir.clone().unwrap();
+            out_file.push(format!("{}_client.rs", self.package.as_ref().unwrap()));
+
+            println!("{:?}", out_file);
+            //panic!();
+            
+            std::fs::write(out_file, code).unwrap();
         }
 
         if self.builder.build_server && !self.servers.is_empty() {
@@ -198,7 +215,13 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             };
 
             let code = format!("{}", server_service);
-            buf.push_str(&code);
+            
+            let mut out_file = self.builder.out_dir.clone().unwrap();
+            out_file.push(format!("{}_server.rs", self.package.as_ref().unwrap()));
+
+            println!("{:?}", out_file);
+            
+            std::fs::write(out_file, code).unwrap();
         }
     }
 }
