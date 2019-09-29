@@ -1,8 +1,6 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Status, include_server};
 
-pub mod hello_world {
-    include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
-}
+include_server!(helloworld, hello_world);
 
 use hello_world::{
     server::{Greeter, GreeterServer},

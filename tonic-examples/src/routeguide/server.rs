@@ -8,11 +8,9 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{mpsc, Lock};
 use tonic::transport::Server;
-use tonic::{Request, Response, Status};
+use tonic::{Request, Response, Status, include_server};
 
-pub mod routeguide {
-    include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
-}
+include_server!(routeguide);
 
 use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
 

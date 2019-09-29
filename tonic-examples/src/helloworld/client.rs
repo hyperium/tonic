@@ -1,6 +1,7 @@
-pub mod hello_world {
-    include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
-}
+
+use tonic::include_client;
+
+include_client!(helloworld, hello_world);
 
 use hello_world::{client::GreeterClient, HelloRequest};
 

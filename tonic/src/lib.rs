@@ -94,3 +94,5 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 #[doc(hidden)]
 #[cfg(feature = "codegen")]
 pub mod codegen;
+
+mod macros;
