@@ -1,4 +1,3 @@
-
 use tonic::include_client;
 
 include_client!(helloworld, hello_world);

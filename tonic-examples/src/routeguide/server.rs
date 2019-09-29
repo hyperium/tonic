@@ -8,7 +8,7 @@ use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{mpsc, Lock};
 use tonic::transport::Server;
-use tonic::{Request, Response, Status, include_server};
+use tonic::{include_server, Request, Response, Status};
 
 include_server!(routeguide);
 

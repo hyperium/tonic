@@ -190,14 +190,12 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let code = format!("{}", client_service);
             //buf.push_str(&code);
 
-            
-
             let mut out_file = self.builder.out_dir.clone().unwrap();
             out_file.push(format!("{}_client.rs", self.package.as_ref().unwrap()));
 
             println!("{:?}", out_file);
             //panic!();
-            
+
             std::fs::write(out_file, code).unwrap();
         }
 
@@ -215,12 +213,12 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             };
 
             let code = format!("{}", server_service);
-            
+
             let mut out_file = self.builder.out_dir.clone().unwrap();
             out_file.push(format!("{}_server.rs", self.package.as_ref().unwrap()));
 
             println!("{:?}", out_file);
-            
+
             std::fs::write(out_file, code).unwrap();
         }
     }

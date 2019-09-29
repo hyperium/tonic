@@ -2,7 +2,7 @@ use futures::TryStreamExt;
 use route_guide::{Point, RouteNote};
 use std::time::{Duration, Instant};
 use tokio::timer::Interval;
-use tonic::{Request, include_client};
+use tonic::{include_client, Request};
 
 include_client!(routeguide, route_guide);
 

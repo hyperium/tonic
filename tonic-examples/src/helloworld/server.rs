@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Request, Response, Status, include_server};
+use tonic::{include_server, transport::Server, Request, Response, Status};
 
 include_server!(helloworld, hello_world);
 
