@@ -5,7 +5,9 @@
     rust_2018_idioms,
     unreachable_pub
 )]
-#![doc(html_logo_url = "https://github.com/")]
+#![doc(
+    html_logo_url = "https://raw.githubusercontent.com/LucioFranco/tonic/master/.github/assets/tonic_docs.svg?token=ABL5YXJBV6OYQ6N2YQMMGIK5TJL6O"
+)]
 #![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.1")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 
