@@ -11,8 +11,6 @@ macro_rules! include_helper {
 
 /// Includes generated proto server and client modules.
 ///
-/// Optionally, a second argument can be provided to rename the included module.
-///
 /// # Example
 /// ```rust,no_run
 /// pub mod hello_world {
@@ -32,8 +30,6 @@ macro_rules! include_proto {
 ///
 /// This shouldn't be used alongside `include_server!` as shared items will conflict.
 /// In that case, use `include_proto!` instead.
-///
-/// Optionally, a second argument can be provided to rename the included module.
 ///
 /// # Example
 /// ```rust,no_run
