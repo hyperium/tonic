@@ -158,8 +158,6 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
         let path = "super";
 
-        println!("{:#?}", service);
-
         self.package = Some(service.package.clone());
 
         if self.builder.build_server {
