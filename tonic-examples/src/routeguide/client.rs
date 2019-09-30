@@ -5,7 +5,7 @@ use tokio::timer::Interval;
 use tonic::Request;
 
 pub mod route_guide {
-    tonic::include_client!("routeguide");
+    tonic::include_proto!("routeguide");
 }
 
 use route_guide::client::RouteGuideClient;

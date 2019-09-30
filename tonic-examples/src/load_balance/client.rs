@@ -1,5 +1,5 @@
 pub mod pb {
-    include!(concat!(env!("OUT_DIR"), "/grpc.examples.echo.rs"));
+    tonic::include_proto!("grpc.examples.echo");
 }
 
 use pb::{client::EchoClient, EchoRequest};
@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut client = EchoClient::new(channel);
 
-    for _ in 0..12 {
+    for _ in 0..12usize {
         let request = tonic::Request::new(EchoRequest {
             message: "hello".into(),
         });

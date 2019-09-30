@@ -11,7 +11,7 @@ use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
 pub mod routeguide {
-    tonic::include_server!("routeguide");
+    tonic::include_proto!("routeguide");
 }
 
 use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};

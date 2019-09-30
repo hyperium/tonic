@@ -1,5 +1,5 @@
 pub mod pb {
-    include!(concat!(env!("OUT_DIR"), "/grpc.examples.echo.rs"));
+    tonic::include_proto!("/grpc.examples.echo");
 }
 
 use pb::{EchoRequest, EchoResponse};

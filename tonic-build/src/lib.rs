@@ -171,7 +171,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         }
     }
 
-    fn finalize(&mut self, _buf: &mut String) {
+    fn finalize(&mut self, buf: &mut String) {
         if self.builder.build_client && !self.clients.is_empty() {
             let clients = &self.clients;
 
@@ -186,11 +186,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             };
 
             let code = format!("{}", client_service);
-
-            let mut out_file = self.builder.out_dir.clone().unwrap();
-            out_file.push(format!("{}_client.rs", self.package.as_ref().unwrap()));
-
-            std::fs::write(out_file, code).unwrap();
+            buf.push_str(&code);
         }
 
         if self.builder.build_server && !self.servers.is_empty() {
@@ -207,11 +203,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             };
 
             let code = format!("{}", server_service);
-
-            let mut out_file = self.builder.out_dir.clone().unwrap();
-            out_file.push(format!("{}_server.rs", self.package.as_ref().unwrap()));
-
-            std::fs::write(out_file, code).unwrap();
+            buf.push_str(&code);
         }
     }
 }
