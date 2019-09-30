@@ -3,7 +3,7 @@ use crate::transport::{Certificate, Identity};
 #[cfg(feature = "openssl")]
 use openssl1::{
     pkey::PKey,
-    ssl::{SslAcceptor, SslConnector, SslMethod, select_next_proto, AlpnError},
+    ssl::{select_next_proto, AlpnError, SslAcceptor, SslConnector, SslMethod},
     x509::X509,
 };
 use std::{fmt, sync::Arc};
