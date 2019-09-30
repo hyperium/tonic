@@ -34,3 +34,7 @@ impl std::fmt::Display for Never {
 }
 
 impl std::error::Error for Never {}
+
+pub use prost::*;
+pub use prost_derive::*;
+pub use bytes::*;
