@@ -1,4 +1,4 @@
-<p align="center" style="height:80%;">
+<p align="center" style="width:60%;">
   <img src="https://github.com/LucioFranco/tonic/raw/master/.github/assets/tonic_ghbanner.png" alt="Vector">
 </p>
 
