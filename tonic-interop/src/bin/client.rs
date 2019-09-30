@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         endpoint.openssl_tls(ca, Some("foo.test.google.fr".into()));
     }
 
-    let channel = endpoint.channel()?;
+    let channel = endpoint.channel();
 
     let mut client = client::TestClient::new(channel.clone());
     let mut unimplemented_client = client::UnimplementedClient::new(channel);

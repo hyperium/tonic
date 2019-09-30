@@ -1,32 +1,33 @@
+//! Client implementation and builder.
+
 use super::{
-    service::{BoxService, Connection, ServiceList},
+    service::{Connection, ServiceList},
     Endpoint,
 };
 use crate::{body::BoxBody, client::GrpcService};
-use futures_util::try_future::{MapErr, TryFutureExt};
-use hyper::{Request, Response};
+use bytes::Bytes;
+use http::{
+    uri::{InvalidUriBytes, Uri},
+    Request, Response,
+};
 use std::{
-    convert::TryInto,
     fmt,
     future::Future,
     pin::Pin,
+    sync::Arc,
     task::{Context, Poll},
 };
-use tower::buffer::{future::ResponseFuture, Buffer};
-use tower::discover::Discover;
+use tower::{
+    buffer::{self, Buffer},
+    discover::Discover,
+    util::{BoxService, Either},
+    Service,
+};
 use tower_balance::p2c::Balance;
-use tower_service::Service;
 
-type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-type Inner = Box<
-    dyn Service<
-            Request<BoxBody>,
-            Response = Response<hyper::Body>,
-            Error = crate::Error,
-            Future = BoxFuture<'static, Result<Response<hyper::Body>, crate::Error>>,
-        > + Send
-        + 'static,
->;
+type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
+
+const DEFAULT_BUFFER_SIZE: usize = 1024;
 
 /// A default batteries included `transport` channel.
 ///
@@ -34,67 +35,87 @@ type Inner = Box<
 /// and `tower` services.
 #[derive(Clone)]
 pub struct Channel {
-    svc: Buffer<Inner, Request<BoxBody>>,
+    svc: Buffer<Svc, Request<BoxBody>>,
+    interceptor_headers: Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
+}
+
+/// A future that resolves to an HTTP response.
+///
+/// This is returned by the `Service::call` on [`Channel`].
+pub struct ResponseFuture {
+    inner: buffer::future::ResponseFuture<<Svc as Service<Request<BoxBody>>>::Future>,
 }
 
 impl Channel {
-    /// Create a [`Builder`] that can create a [`Channel`].
-    pub fn builder() -> Builder {
-        Builder::new()
-    }
-}
-
-impl GrpcService<BoxBody> for Channel {
-    type ResponseBody = hyper::Body;
-    type Error = super::Error;
-
-    type Future = MapErr<
-        ResponseFuture<BoxFuture<'static, Result<Response<Self::ResponseBody>, crate::Error>>>,
-        fn(crate::Error) -> super::Error,
-    >;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        GrpcService::poll_ready(&mut self.svc, cx)
-            .map_err(|e| super::Error::from((super::ErrorKind::Client, e)))
+    /// Create a [`Endpoint`] builder that can create a [`Channel`]'s.
+    pub fn builder(uri: Uri) -> Endpoint {
+        Endpoint::from(uri)
     }
 
-    fn call(&mut self, request: Request<BoxBody>) -> Self::Future {
-        GrpcService::call(&mut self.svc, request)
-            .map_err(|e| super::Error::from((super::ErrorKind::Client, e)))
+    /// Create an `Endpoint` from a static string.
+    ///
+    /// ```
+    /// # use tonic::transport::Channel;
+    /// Channel::from_static("https://example.com");
+    /// ```
+    pub fn from_static(s: &'static str) -> Endpoint {
+        let uri = Uri::from_static(s);
+        Self::builder(uri)
     }
-}
 
-#[derive(Debug)]
-pub struct Builder<D = ServiceList> {
-    ca: Option<Vec<u8>>,
-    override_domain: Option<String>,
-    buffer_size: usize,
-    balance: Option<D>,
-}
+    /// Create an `Endpoint` from shared bytes.
+    ///
+    /// ```
+    /// # use tonic::transport::Channel;
+    /// Channel::from_shared("https://example.com");
+    /// ```
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Endpoint, InvalidUriBytes> {
+        let uri = Uri::from_shared(s.into())?;
+        Ok(Self::builder(uri))
+    }
 
-impl Builder {
-    fn new() -> Self {
-        Self {
-            ca: None,
-            override_domain: None,
-            buffer_size: 1024,
-            balance: None,
+    /// Balance a list of [`Endpoint`]'s.
+    ///
+    /// This creates a [`Channel`] that will load balance accross all the
+    /// provided endpoints.
+    pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
+        let list = list.collect::<Vec<_>>();
+
+        let buffer_size = list
+            .iter()
+            .next()
+            .and_then(|e| e.buffer_size)
+            .unwrap_or(DEFAULT_BUFFER_SIZE);
+
+        let interceptor_headers = list
+            .iter()
+            .next()
+            .and_then(|e| e.interceptor_headers.clone());
+
+        let discover = ServiceList::new(list);
+
+        Self::balance(discover, buffer_size, interceptor_headers)
+    }
+
+    pub(crate) fn connect(endpoint: Endpoint) -> Self {
+        let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
+        let interceptor_headers = endpoint.interceptor_headers.clone();
+
+        let svc = Connection::new(endpoint);
+
+        let svc = Buffer::new(Either::A(svc), buffer_size);
+
+        Channel {
+            svc,
+            interceptor_headers,
         }
     }
 
-    /// Set the buffer size for when the inner client applies back pressure and
-    /// can no longer accept requests. Defaults to `1024`.
-    pub fn buffer(&mut self, size: usize) -> &mut Self {
-        self.buffer_size = size;
-        self
-    }
-
-    pub fn balance_list(&mut self, list: Vec<Endpoint>) -> Result<Channel, super::Error> {
-        let discover = ServiceList::new(list);
-        self.balance(discover)
-    }
-
-    fn balance<D>(&mut self, discover: D) -> Result<Channel, super::Error>
+    pub(crate) fn balance<D>(
+        discover: D,
+        buffer_size: usize,
+        interceptor_headers: Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
+    ) -> Self
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
@@ -103,30 +124,53 @@ impl Builder {
         let svc = Balance::from_entropy(discover);
 
         let svc = BoxService::new(svc);
-        let svc = Buffer::new(Box::new(svc) as Inner, 100);
+        let svc = Buffer::new(Either::B(svc), buffer_size);
 
-        Ok(Channel { svc })
+        Channel {
+            svc,
+            interceptor_headers,
+        }
+    }
+}
+
+impl GrpcService<BoxBody> for Channel {
+    type ResponseBody = hyper::Body;
+    type Error = super::Error;
+    type Future = ResponseFuture;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        GrpcService::poll_ready(&mut self.svc, cx)
+            .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))
     }
 
-    pub fn connect(&mut self, endpoint: Endpoint) -> Result<Channel, super::Error> {
-        self.balance_list(vec![endpoint])
+    fn call(&mut self, mut request: Request<BoxBody>) -> Self::Future {
+        if let Some(interceptor) = self.interceptor_headers.clone() {
+            interceptor(request.headers_mut());
+        }
+
+        let inner = GrpcService::call(&mut self.svc, request);
+        ResponseFuture { inner }
     }
+}
 
-    pub fn build<T>(&mut self, uri: T) -> Result<Channel, super::Error>
-    where
-        T: TryInto<Endpoint>,
-        T::Error: Into<crate::Error>,
-    {
-        let uri = uri
-            .try_into()
-            .map_err(|e| super::Error::from((super::ErrorKind::Client, e.into())))?;
+impl Future for ResponseFuture {
+    type Output = Result<Response<hyper::Body>, super::Error>;
 
-        self.balance_list(vec![uri.into()])
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let val = futures_util::ready!(Pin::new(&mut self.inner).poll(cx))
+            .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))?;
+        Ok(val).into()
     }
 }
 
 impl fmt::Debug for Channel {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Channel").finish()
+    }
+}
+
+impl fmt::Debug for ResponseFuture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResponseFuture").finish()
     }
 }

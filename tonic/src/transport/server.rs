@@ -1,12 +1,16 @@
-use super::service::{layer_fn, BoxedIo};
+//! Server implementation and builder.
+
+use super::service::{layer_fn, BoxedIo, ServiceBuilderExt};
 #[cfg(feature = "tls")]
 use super::{service::TlsAcceptor, tls::Identity};
 use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{ready, try_future::MapErr, TryFutureExt, TryStreamExt};
 use http::{Request, Response};
-use hyper::server::{accept::Accept, conn};
-use hyper::Body;
+use hyper::{
+    server::{accept::Accept, conn},
+    Body,
+};
 use std::{
     fmt,
     future::Future,
@@ -14,12 +18,16 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
+    // time::Duration,
 };
-use tower::layer::util::Stack;
-use tower::layer::Layer;
-use tower::util::Either;
+use tower::{
+    layer::{util::Stack, Layer},
+    limit::concurrency::ConcurrencyLimitLayer,
+    // timeout::TimeoutLayer,
+    Service,
+    ServiceBuilder,
+};
 use tower_make::MakeService;
-use tower_service::Service;
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
@@ -27,38 +35,43 @@ type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync
 /// A default batteries included `transport` server.
 ///
 /// This is a wrapper around [`hyper::Server`] and provides an easy builder
-/// pattern style [`Builder`]. This builder exposes easy configuration parameters
+/// pattern style builder [`Server`]. This builder exposes easy configuration parameters
 /// for providing a fully featured http2 based gRPC server. This should provide
 /// a very good out of the box http2 server for use with tonic but is also a
 /// reference implementation that should be a good starting point for anyone
 /// wanting to create a more complex and/or specific implementation.
-#[derive(Debug)]
+#[derive(Default, Clone)]
 pub struct Server {
-    _p: (),
-}
-
-impl Server {
-    /// Create a new [`Builder`] that can configure a Server.
-    pub fn builder() -> Builder {
-        Builder::new()
-    }
-}
-
-///
-#[derive(Default)]
-pub struct Builder {
     interceptor: Option<Interceptor>,
-    // concurrency_limit: Option<usize>,
+    concurrency_limit: Option<usize>,
+    // timeout: Option<Duration>,
     #[cfg(feature = "tls")]
     tls: Option<TlsAcceptor>,
 }
 
-impl Builder {
-    fn new() -> Self {
+impl Server {
+    /// Create a new server builder that can configure a [`Server`].
+    pub fn builder() -> Self {
         Default::default()
     }
+}
 
-    /// Add a tls cert.
+impl Server {
+    /// Set the [`Identity`] of this server using `openssl`.
+    ///
+    /// ```no_run
+    /// # use tonic::transport::{Identity, Server};
+    /// # fn dothing() -> Result<(),  Box<dyn std::error::Error>> {
+    /// # let mut builder = Server::builder();
+    /// let cert = std::fs::read_to_string("server.pem")?;
+    /// let key = std::fs::read_to_string("server.key")?;
+    ///
+    /// let identity = Identity::from_pem(&cert, &key);
+    ///
+    /// builder.openssl_tls(identity);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[cfg(feature = "openssl")]
     pub fn openssl_tls(&mut self, identity: Identity) -> &mut Self {
         let acceptor = TlsAcceptor::new_with_openssl(identity).unwrap();
@@ -66,6 +79,21 @@ impl Builder {
         self
     }
 
+    /// Set the [`Identity`] of this server using `rustls`.
+    ///
+    /// ```no_run
+    /// # use tonic::transport::{Identity, Server};
+    /// # fn dothing() -> Result<(), Box<dyn std::error::Error>> {
+    /// # let mut builder = Server::builder();
+    /// let cert = std::fs::read_to_string("server.pem")?;
+    /// let key = std::fs::read_to_string("server.key")?;
+    ///
+    /// let identity = Identity::from_pem(&cert, &key);
+    ///
+    /// builder.rustls_tls(identity);
+    /// # Ok(())
+    /// # }
+    /// ```
     #[cfg(feature = "rustls")]
     pub fn rustls_tls(&mut self, identity: Identity) -> &mut Self {
         let acceptor = TlsAcceptor::new_with_rustls(identity).unwrap();
@@ -73,13 +101,37 @@ impl Builder {
         self
     }
 
-    // FIXME: add server side layering ability
-    // pub fn concurrency_limit(&mut self, limit: usize) -> &mut Self {
-    //     self.concurrency_limit = Some(limit);
+    /// Set the concurrency limit applied to on requests inbound per connection.
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// # let mut builder = Server::builder();
+    /// builder.concurrency_limit_per_connection(32);
+    /// ```
+    pub fn concurrency_limit_per_connection(&mut self, limit: usize) -> &mut Self {
+        self.concurrency_limit = Some(limit);
+        self
+    }
+
+    // FIXME: tower-timeout currentlly uses `From` instead of `Into` for the error
+    // so our services do not align.
+    // pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
+    //     self.timeout = Some(timeout);
     //     self
     // }
 
     /// Intercept the execution of gRPC methods.
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// # let mut builder = Server::builder();
+    /// builder.interceptor_fn(|svc, req| {
+    ///     println!("request={:?}", req);
+    ///     svc.call(req)
+    /// });
+    /// ```
     pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
     where
         F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,
@@ -95,6 +147,8 @@ impl Builder {
         self
     }
 
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on [`tokio`]'s default executor.
     pub async fn serve<M, S>(self, addr: SocketAddr, svc: M) -> Result<(), super::Error>
     where
         M: Service<(), Response = S>,
@@ -105,6 +159,8 @@ impl Builder {
         S::Error: Into<crate::Error> + Send,
     {
         let interceptor = self.interceptor.clone();
+        let concurrency_limit = self.concurrency_limit.clone();
+        // let timeout = self.timeout.clone();
 
         let incoming = hyper::server::accept::from_stream(async_stream::try_stream! {
             let mut tcp = TcpIncoming::bind(addr)?;
@@ -126,6 +182,8 @@ impl Builder {
         let svc = MakeSvc {
             inner: svc,
             interceptor,
+            concurrency_limit,
+            // timeout,
         };
 
         hyper::Server::builder(incoming)
@@ -139,10 +197,10 @@ impl Builder {
 }
 
 fn map_err(e: impl Into<crate::Error>) -> super::Error {
-    (super::ErrorKind::Server, e.into()).into()
+    super::Error::from_source(super::ErrorKind::Server, e.into())
 }
 
-impl fmt::Debug for Builder {
+impl fmt::Debug for Server {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Builder").finish()
     }
@@ -173,7 +231,6 @@ impl Stream for TcpIncoming {
     }
 }
 
-// TODO: add custom tracing here
 #[derive(Debug)]
 struct Svc<S>(S);
 
@@ -197,6 +254,8 @@ where
 
 struct MakeSvc<M> {
     interceptor: Option<Interceptor>,
+    concurrency_limit: Option<usize>,
+    // timeout: Option<Duration>,
     inner: M,
 }
 
@@ -209,7 +268,7 @@ where
     S::Future: Send + 'static,
     S::Error: Into<crate::Error> + Send,
 {
-    type Response = Either<Svc<S>, BoxService>;
+    type Response = BoxService;
     type Error = crate::Error;
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
@@ -221,16 +280,25 @@ where
     fn call(&mut self, _: T) -> Self::Future {
         let interceptor = self.interceptor.clone();
         let make = self.inner.make_service(());
+        let concurrency_limit = self.concurrency_limit.clone();
+        // let timeout = self.timeout.clone();
 
         Box::pin(async move {
             let svc = make.await.map_err(Into::into)?;
 
-            if let Some(interceptor) = interceptor {
+            let svc = ServiceBuilder::new()
+                .optional_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
+                // .optional_layer(timeout.map(TimeoutLayer::new))
+                .service(svc);
+
+            let svc = if let Some(interceptor) = interceptor {
                 let layered = interceptor.layer(BoxService::new(Svc(svc)));
-                Ok(Either::B(layered))
+                BoxService::new(Svc(layered))
             } else {
-                Ok(Either::A(Svc(svc)))
-            }
+                BoxService::new(Svc(svc))
+            };
+
+            Ok(svc)
         })
     }
 }
