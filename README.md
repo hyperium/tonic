@@ -17,7 +17,7 @@ implementation and any encoding via a set of generic traits. The HTTP/2 implemen
 which is a fast HTTP/1.1 and HTTP/2 client and server built on top of the robust [`tokio`] stack. The codegen
 contains the tools to build clients and servers from [`protobuf`] definitions.
 
-### Features
+## Features
 
 - Bi-directional streaming
 - High performance async io
