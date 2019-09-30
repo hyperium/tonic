@@ -8,10 +8,10 @@
 /// ```
 #[macro_export]
 macro_rules! include_proto {
-    ($name: tt) => {
+    ($package: tt) => {
         include!(concat!(
             env!("OUT_DIR"),
-            concat!("/", $name, ".rs")
+            concat!("/", $package, ".rs")
         ));
     };
 }
