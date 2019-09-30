@@ -169,6 +169,8 @@ terms or conditions.
 [`protobuf`]: https://developers.google.com/protocol-buffers
 [`rustls`]: https://github.com/ctz/rustls
 [`openssl`]: https://www.openssl.org/
+[`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples
+[`tonic-interop`]: https://github.com/hyperium/tonic/tree/master/tonic-interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/tonic-examples
 [Website]: https://tokio.rs
 [Docs]: https://docs.rs/tonic
