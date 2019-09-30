@@ -24,7 +24,7 @@ keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 
 [features]
 default = ["transport", "codegen"]
-codegen = ["async-trait", "prost", "prost-derive", "bytes"]
+codegen = ["async-trait", "prost", "prost-derive"]
 transport = [
     "hyper",
     "tokio",
@@ -38,6 +38,7 @@ rustls = ["tokio-rustls", "tls"]
 tls = []
 
 [dependencies]
+bytes = "0.4"
 futures-core-preview = "=0.3.0-alpha.18"
 futures-util-preview = "=0.3.0-alpha.18"
 tracing = "0.1"
@@ -57,7 +58,6 @@ prost-derive = { version = "0.5", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
-bytes = {version = "0.4", optional = true}
 
 # transport
 hyper = { git = "https://github.com/hyperium/hyper", features = ["unstable-stream"], optional = true, rev = "2b0405c48c10bca7893c30ea960ac20a41a8578f" }
