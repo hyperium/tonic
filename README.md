@@ -45,7 +45,8 @@ may be a good resource as it shows examples of many of the gRPC features.
 feature. To install the beta simply follow the commands below:
 
 ```bash
-$ rustup install beta && rustup component add rustfmt --toolchain beta
+$ rustup install beta
+$ rustup component add rustfmt --toolchain beta
 $ cargo +beta build
 ```
 
