@@ -1,4 +1,4 @@
-# Contributing to Tracing
+# Contributing to Tonic
 
 :balloon: Thanks for your help improving the project! We are so happy to have
 you!
