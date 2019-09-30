@@ -144,7 +144,6 @@ impl server::RouteGuide for RouteGuide {
             }
         };
 
-        // TODO: Clean this up
         Ok(Response::new(Box::pin(output)
             as Pin<
                 Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>,

@@ -4,7 +4,10 @@ pub mod pb {
 
 use pb::{EchoRequest, EchoResponse};
 use std::collections::VecDeque;
-use tonic::{transport::{Server, Identity}, Request, Response, Status, Streaming};
+use tonic::{
+    transport::{Identity, Server},
+    Request, Response, Status, Streaming,
+};
 
 type EchoResult<T> = Result<Response<T>, Status>;
 type Stream = VecDeque<Result<EchoResponse, Status>>;

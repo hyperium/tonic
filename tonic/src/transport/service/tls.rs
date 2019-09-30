@@ -10,10 +10,12 @@ use std::{fmt, sync::Arc};
 use tokio::net::TcpStream;
 #[cfg(feature = "rustls")]
 use tokio_rustls::{
-    rustls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig},
+    rustls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig, Session},
     webpki::DNSNameRef,
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
+#[allow(unused_import)]
+use tracing::trace;
 
 /// h2 alpn in wire format for openssl.
 #[cfg(feature = "openssl")]
@@ -27,6 +29,12 @@ pub(crate) struct Cert {
     pub(crate) ca: Vec<u8>,
     pub(crate) key: Option<Vec<u8>>,
     pub(crate) domain: String,
+}
+
+#[derive(Debug)]
+enum TlsError {
+    #[allow(dead_code)]
+    H2NotNegotiated,
 }
 
 #[derive(Clone)]
@@ -80,7 +88,6 @@ impl TlsConnector {
         })
     }
 
-    // TODO: Write an either tlsstream to avoid this box
     pub(crate) async fn connect(&self, io: TcpStream) -> Result<BoxedIo, crate::Error> {
         let tls_io = match &self.inner {
             #[cfg(feature = "openssl")]
@@ -88,7 +95,12 @@ impl TlsConnector {
                 let config = connector.configure()?;
                 let tls = tokio_openssl::connect(config, &self.domain, io).await?;
 
-                // TODO: check that we actually got an h2 stream
+                // FIXME: alpn returned from interop server is not working
+                // match tls.ssl().selected_alpn_protocol() {
+                //     Some(b) if b == b"h2" => trace!("HTTP/2 succesfully negotiated."),
+                //     _ => return Err(TlsError::H2NotNegotiated.into()),
+                // };
+
                 BoxedIo::new(tls)
             }
             #[cfg(feature = "rustls")]
@@ -101,7 +113,12 @@ impl TlsConnector {
                     .connect(dns.as_ref(), io)
                     .await?;
 
-                // TODO: check that we actually got an h2 stream
+                let (_, session) = io.get_ref();
+
+                match session.get_alpn_protocol() {
+                    Some(b) if b == b"h2" => (),
+                    _ => return Err(TlsError::H2NotNegotiated.into()),
+                };
 
                 BoxedIo::new(io)
             }
@@ -190,6 +207,11 @@ impl TlsAcceptor {
             #[cfg(feature = "openssl")]
             Acceptor::Openssl(acceptor) => {
                 let tls = tokio_openssl::accept(&acceptor, io).await?;
+
+                // let ssl = tls.ssl();
+
+                // ssl.set_alpn_protos(ALPN_H2_WIRE);
+
                 BoxedIo::new(tls)
             }
 
@@ -226,3 +248,13 @@ impl fmt::Debug for TlsAcceptor {
             .finish()
     }
 }
+
+impl fmt::Display for TlsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TlsError::H2NotNegotiated => write!(f, "HTTP/2 was not negotiated."),
+        }
+    }
+}
+
+impl std::error::Error for TlsError {}

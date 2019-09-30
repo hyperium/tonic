@@ -1,11 +1,9 @@
-use structopt::StructOpt;
-use tonic::transport::{Identity, Server};
-use tonic_interop::{server, MergeTrailers};
-// TODO: move GrpcService out of client since it can be used for the
-// server too.
 use http::header::HeaderName;
+use structopt::StructOpt;
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
+use tonic::transport::{Identity, Server};
+use tonic_interop::{server, MergeTrailers};
 
 #[derive(StructOpt)]
 struct Opts {

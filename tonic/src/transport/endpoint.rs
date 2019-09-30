@@ -27,7 +27,7 @@ pub struct Endpoint {
 }
 
 impl Endpoint {
-    // TODO: determine if we want to expose this or not. This is really
+    // FIXME: determine if we want to expose this or not. This is really
     // just used in codegen for a shortcut.
     #[doc(hidden)]
     pub fn new<D>(dst: D) -> Result<Self, super::Error>

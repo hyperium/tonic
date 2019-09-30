@@ -142,7 +142,6 @@ impl pb::server::TestService for TestService {
         &self,
         _: Streaming<StreamingOutputCallRequest>,
     ) -> Result<Self::HalfDuplexCallStream> {
-        // TODO: implement half duplex
         Err(Status::unimplemented("TODO"))
     }
 
