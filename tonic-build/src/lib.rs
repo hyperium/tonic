@@ -68,14 +68,13 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    pub fn compile<P: AsRef<Path>>(mut self, protos: &[P], includes: &[P]) -> io::Result<()> {
+    pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
 
-        if self.out_dir.is_none() {
-            self.out_dir = Some(PathBuf::from(std::env::var("OUT_DIR").unwrap()));
-        }
-
-        let out_dir = self.out_dir.clone().unwrap();
+        let out_dir = self
+            .out_dir
+            .clone()
+            .unwrap_or_else(|| PathBuf::from(std::env::var("OUT_DIR").unwrap()));
 
         config.out_dir(out_dir.clone());
         config.service_generator(Box::new(ServiceGenerator::new(self)));
@@ -140,7 +139,6 @@ pub struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
-    package: Option<String>,
 }
 
 impl ServiceGenerator {
@@ -149,7 +147,6 @@ impl ServiceGenerator {
             builder,
             clients: TokenStream::default(),
             servers: TokenStream::default(),
-            package: None,
         }
     }
 }
@@ -157,8 +154,6 @@ impl ServiceGenerator {
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
         let path = "super";
-
-        self.package = Some(service.package.clone());
 
         if self.builder.build_server {
             let server = service::generate(&service, path);
