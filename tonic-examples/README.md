@@ -71,12 +71,3 @@ $ cargo run --bin tls-client
 ```bash
 $ cargo run --bin tls-server
 
-
-### Notes
-
-These are the dependencies you **requrie** in order to build protobuf
-definitions and ensure that the generated code compiles:
-
-* [prost](https://crates.io/crates/prost)
-* [prost-derive](https://crates.io/crates/prost-derive)
-* [bytes](https://crates.io/crates/prost-derive)
