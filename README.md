@@ -8,7 +8,7 @@ RPC framework that puts mobile and HTTP/2 first.
 [`tonic`] is a gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility. This library was created to have first class support of async/await and to act as a core building block for production systems written in Rust.
 
 [![Crates.io](https://img.shields.io/crates/v/tonic)](https://crates.io/crates/tonic)
-[![Documentation](https://docs.rs/tonic/badge.svg)](https://docs.rs/tracing)
+[![Documentation](https://docs.rs/tonic/badge.svg)](https://docs.rs/tonic)
 [![Crates.io](https://img.shields.io/crates/l/tonic)](LICENSE)
 
 
@@ -144,7 +144,7 @@ implementation.
 ## Contributing
 
 :balloon: Thanks for your help improving the project! We are so happy to have
-you! We have a [contributing guide][guide] to help you get involved in the Tracing
+you! We have a [contributing guide][guide] to help you get involved in the Tonic
 project.
 
 [guide]: CONTRIBUTING.md
@@ -156,7 +156,7 @@ This project is licensed under the [MIT license](LICENSE).
 ### Contribution
 
 Unless you explicitly state otherwise, any contribution intentionally submitted
-for inclusion in Tracing by you, shall be licensed as MIT, without any additional
+for inclusion in Tonic by you, shall be licensed as MIT, without any additional
 terms or conditions.
 
 

@@ -388,7 +388,7 @@ each other, releasing new versions to crates.io can involve some complexities.
 When releasing a new version of a crate, follow these steps:
 
 1. **Ensure that the release crate has no path dependencies.** When the HEAD
-   version of a Tracing crate requires unreleased changes in another Tracing crate,
+   version of a Tonic crate requires unreleased changes in another Tonic crate,
    the crates.io dependency on the second crate will be replaced with a path
    dependency. Crates with path dependencies cannot be published, so before
    publishing the dependent crate, any path dependencies must also be published.

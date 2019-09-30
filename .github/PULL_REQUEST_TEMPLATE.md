@@ -4,7 +4,7 @@ the requirements below.
 
 Bug fixes and new features should include tests.
 
-Contributors guide: https://github.com/tokio-rs/tracing/blob/master/CONTRIBUTING.md
+Contributors guide: https://github.com/hyperium/tonic/blob/master/CONTRIBUTING.md
 -->
 
 ## Motivation

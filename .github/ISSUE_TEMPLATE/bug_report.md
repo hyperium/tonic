@@ -34,7 +34,7 @@ Output of `uname -a` (UNIX), or version and 32 or 64-bit (Windows)
 ### Crates
 
 <!--
-If known, please specify the affected tracing crates. Otherwise, delete this
+If known, please specify the affected tonic crates. Otherwise, delete this
 section.
 -->
 
