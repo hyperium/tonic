@@ -3,7 +3,7 @@ use crate::transport::{Certificate, Identity};
 #[cfg(feature = "openssl")]
 use openssl1::{
     pkey::PKey,
-    ssl::{SslAcceptor, SslConnector, SslMethod},
+    ssl::{SslAcceptor, SslConnector, SslMethod, select_next_proto, AlpnError},
     x509::X509,
 };
 use std::{fmt, sync::Arc};
@@ -14,7 +14,6 @@ use tokio_rustls::{
     webpki::DNSNameRef,
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
-#[allow(unused_import)]
 use tracing::trace;
 
 /// h2 alpn in wire format for openssl.
@@ -95,11 +94,10 @@ impl TlsConnector {
                 let config = connector.configure()?;
                 let tls = tokio_openssl::connect(config, &self.domain, io).await?;
 
-                // FIXME: alpn returned from interop server is not working
-                // match tls.ssl().selected_alpn_protocol() {
-                //     Some(b) if b == b"h2" => trace!("HTTP/2 succesfully negotiated."),
-                //     _ => return Err(TlsError::H2NotNegotiated.into()),
-                // };
+                match tls.ssl().selected_alpn_protocol() {
+                    Some(b) if b == b"h2" => trace!("HTTP/2 succesfully negotiated."),
+                    _ => return Err(TlsError::H2NotNegotiated.into()),
+                };
 
                 BoxedIo::new(tls)
             }
@@ -171,9 +169,12 @@ impl TlsAcceptor {
 
         let mut config = SslAcceptor::mozilla_modern(SslMethod::tls())?;
 
-        config.set_alpn_protos(ALPN_H2_WIRE)?;
         config.set_private_key(&key)?;
         config.set_certificate(&cert)?;
+        config.set_alpn_protos(ALPN_H2_WIRE)?;
+        config.set_alpn_select_callback(|_ssl, alpn| {
+            select_next_proto(ALPN_H2_WIRE, alpn).ok_or(AlpnError::NOACK)
+        });
 
         Ok(Self {
             inner: Acceptor::Openssl(config.build()),
@@ -207,11 +208,6 @@ impl TlsAcceptor {
             #[cfg(feature = "openssl")]
             Acceptor::Openssl(acceptor) => {
                 let tls = tokio_openssl::accept(&acceptor, io).await?;
-
-                // let ssl = tls.ssl();
-
-                // ssl.set_alpn_protos(ALPN_H2_WIRE);
-
                 BoxedIo::new(tls)
             }
 
@@ -219,7 +215,6 @@ impl TlsAcceptor {
             Acceptor::Rustls(config) => {
                 let acceptor = RustlsAcceptor::from(config.clone());
                 let tls = acceptor.accept(io).await?;
-
                 BoxedIo::new(tls)
             }
 

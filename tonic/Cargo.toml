@@ -1,9 +1,26 @@
 [package]
 name = "tonic"
+# When releasing to crates.io:
+# - Remove path dependencies
+# - Update html_root_url.
+# - Update doc url
+#   - Cargo.toml
+#   - README.md
+# - Update CHANGELOG.md.
+# - Create "v0.1.x" git tag.
 version = "0.1.0-alpha.1"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 license = "MIT"
+documentation = "https://docs.rs/tonic/0.1.0-alpha.1/tonic/"
+repository = "https://github.com/hyperium/tonic"
+homepage = "https://tokio.rs"
+description = """
+A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
+"""
+readme = "README.md"
+categories = ["web-programming", "network-programming", "asynchronous"]
+keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 
 [features]
 default = ["transport", "codegen", "prost"]
