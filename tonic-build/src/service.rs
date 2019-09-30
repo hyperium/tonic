@@ -1,3 +1,4 @@
+use crate::{generate_doc_comment, generate_doc_comments};
 use proc_macro2::{Span, TokenStream};
 use prost_build::{Method, Service};
 use quote::quote;
@@ -10,10 +11,16 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
     let server_service = quote::format_ident!("{}ServerSvc", service.name);
     let server_trait = quote::format_ident!("{}", service.name);
     let generated_trait = generate_trait(service, proto_path, server_trait.clone());
+    let service_doc = generate_doc_comments(&service.comments.leading);
+    let server_new_doc = generate_doc_comment(&format!(
+        "Create a new {} from a type that implements {}.",
+        server_make_service, server_trait
+    ));
 
     quote! {
         #generated_trait
 
+        #service_doc
         #[derive(Clone, Debug)]
         pub struct #server_make_service<T: #server_trait> {
             inner: Arc<T>,
@@ -26,6 +33,7 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
         }
 
         impl<T: #server_trait> #server_make_service<T> {
+            #server_new_doc
             pub fn new(inner: T) -> Self {
                 let inner = Arc::new(inner);
                 Self::from_shared(inner)
@@ -81,8 +89,13 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
 
 fn generate_trait(service: &Service, proto_path: &str, server_trait: Ident) -> TokenStream {
     let methods = generate_trait_methods(service, proto_path);
+    let trait_doc = generate_doc_comment(&format!(
+        "Generated trait containing gRPC methods that should be implemented for use with {}Server.",
+        service.name
+    ));
 
     quote! {
+        #trait_doc
         #[async_trait]
         pub trait #server_trait : Send + Sync + 'static {
             #methods
@@ -100,35 +113,51 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
         let res_message: Path =
             syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
 
+        let method_doc = generate_doc_comments(&method.comments.leading);
+
         let method = match (method.client_streaming, method.server_streaming) {
             (false, false) => {
                 quote! {
+                    #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
                         -> Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (true, false) => {
                 quote! {
+                    #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
                         -> Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (false, true) => {
                 let stream = quote::format_ident!("{}Stream", method.proto_name);
+                let stream_doc = generate_doc_comment(&format!(
+                    "Server streaming response type for the {} method.",
+                    method.proto_name
+                ));
 
                 quote! {
+                    #stream_doc
                     type #stream: Stream<Item = Result<#res_message, tonic::Status>>  + Send + 'static;
 
+                    #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
                         -> Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
             (true, true) => {
                 let stream = quote::format_ident!("{}Stream", method.proto_name);
+                let stream_doc = generate_doc_comment(&format!(
+                    "Server streaming response type for the {} method.",
+                    method.proto_name
+                ));
 
                 quote! {
+                    #stream_doc
                     type #stream: Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
 
+                    #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
                         -> Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
