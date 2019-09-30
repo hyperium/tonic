@@ -1,5 +1,5 @@
-<p align="center" style="width:60%;">
-  <img src="https://github.com/LucioFranco/tonic/raw/master/.github/assets/tonic_ghbanner.png" alt="Vector">
+<p align="center">
+  <img src="https://github.com/LucioFranco/tonic/raw/master/.github/assets/tonic_ghbanner.png" alt="Vector" style="width:60%;">
 </p>
 
 A rust implementation of [gRPC], a high performance, open source, general
