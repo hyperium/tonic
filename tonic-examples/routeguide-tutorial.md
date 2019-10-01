@@ -39,7 +39,7 @@ To run the sample code and walk through the tutorial, the only prerequisite is R
 Clone or download tonic's repository:
 
 ```shell 
-git clone https://github.com/LucioFranco/tonic.git
+git clone https://github.com/hyperium/tonic.git
 ```
 
 Change your current directory to tonic's repository root:
@@ -90,7 +90,7 @@ $ mkdir proto && touch proto/route_guide.proto
 You can see the complete `.proto` file in
 [tonic-examples/proto/routeguide/route_guide.proto][routeguide-proto].
 
-[routeguide-proto]: https://github.com/LucioFranco/tonic/blob/master/tonic-examples/proto/routeguide/route_guide.proto
+[routeguide-proto]: https://github.com/hyperium/tonic/blob/master/tonic-examples/proto/routeguide/route_guide.proto
 
 To define a service, you specify a named `service` in your `.proto` file:
 
@@ -172,16 +172,16 @@ Edit `Cargo.toml` to add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = { path = "../tonic/tonic" } # TODO: update once there is a released version
-futures-preview = { version = "=0.3.0-alpha.18", default-features = false, features = ["alloc"]}
-tokio = "=0.2.0-alpha.4"
+tonic = "0.1.0-alpha.1"
+futures-preview = { version = "0.3.0-alpha.19", default-features = false, features = ["alloc"]}
+tokio = "0.2.0-alpha.6"
 prost = "0.5"
 bytes = "0.4"
 serde_json = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
-tonic-build = { path = "../tonic/tonic-build" } # TODO: update to released version
+tonic-build = "0.1.0-alpha.1"
 ```
 
 Create a `build.rs` file at the root of your crate:
