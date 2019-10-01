@@ -57,8 +57,8 @@ http = "0.1"
 tower = "0.3.0-alpha.1a"
 
 # Required for routeguide
-serde = { version = "0.1", features = ["derive"] }
-serde_json = "0.1"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }
