@@ -142,7 +142,7 @@ impl Server {
             let f = f.clone();
             tower::service_fn(move |req| f(&mut s, req))
         });
-        let layer = Stack::new(interceptor, layer_fn(|s| BoxService::new(s)));
+        let layer = Stack::new(interceptor, layer_fn(BoxService::new));
         self.interceptor = Some(Arc::new(layer));
         self
     }
@@ -159,7 +159,7 @@ impl Server {
         S::Error: Into<crate::Error> + Send,
     {
         let interceptor = self.interceptor.clone();
-        let concurrency_limit = self.concurrency_limit.clone();
+        let concurrency_limit = self.concurrency_limit;
         // let timeout = self.timeout.clone();
 
         let incoming = hyper::server::accept::from_stream(async_stream::try_stream! {
@@ -280,7 +280,7 @@ where
     fn call(&mut self, _: T) -> Self::Future {
         let interceptor = self.interceptor.clone();
         let make = self.inner.make_service(());
-        let concurrency_limit = self.concurrency_limit.clone();
+        let concurrency_limit = self.concurrency_limit;
         // let timeout = self.timeout.clone();
 
         Box::pin(async move {

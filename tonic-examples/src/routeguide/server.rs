@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{mpsc, Lock};
+use tokio::sync::{mpsc, Mutex};
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
@@ -24,7 +24,7 @@ pub struct RouteGuide {
 #[derive(Debug, Clone)]
 struct State {
     features: Arc<Vec<Feature>>,
-    notes: Lock<HashMap<Point, Vec<RouteNote>>>,
+    notes: Arc<Mutex<HashMap<Point, Vec<RouteNote>>>>,
 }
 
 #[tonic::async_trait]
@@ -161,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state: State {
             // Load data file
             features: Arc::new(data::load()),
-            notes: Lock::new(HashMap::new()),
+            notes: Arc::new(Mutex::new(HashMap::new())),
         },
     };
 

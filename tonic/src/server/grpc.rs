@@ -142,7 +142,7 @@ where
         let message = stream
             .try_next()
             .await?
-            .ok_or(Status::new(Code::Internal, "Missing request message."))?;
+            .ok_or_else(|| Status::new(Code::Internal, "Missing request message."))?;
 
         let mut req = Request::from_http_parts(parts, message);
 

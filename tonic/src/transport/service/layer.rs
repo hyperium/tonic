@@ -30,7 +30,7 @@ impl<L> ServiceBuilderExt<L> for ServiceBuilder<L> {
         F: Fn(S) -> Out,
     {
         let layer = OptionalLayer {
-            inner: f.map(|f| LayerFn(f)),
+            inner: f.map(LayerFn),
         };
 
         self.layer(layer)

@@ -93,7 +93,7 @@ impl<T> Grpc<T> {
         let message = body
             .try_next()
             .await?
-            .ok_or(Status::new(Code::Internal, "Missing response message."))?;
+            .ok_or_else(|| Status::new(Code::Internal, "Missing response message."))?;
 
         if let Some(trailers) = body.trailers().await? {
             parts.merge(trailers);
