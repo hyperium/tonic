@@ -178,7 +178,7 @@ tokio = "0.2.0-alpha.6"
 prost = "0.5"
 bytes = "0.4"
 serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
+#serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.1.0-alpha.1"
@@ -237,13 +237,13 @@ The generated code is placed inside our target directory, in a location defined 
 environment variable that is set by cargo. For our example, this means you can find the generated
 code in a path similar to `target/debug/build/routeguide/out/routeguide.rs`.
 
-You can read more about the `OUT_DIR` variable in the [cargo book][cargo-book].
+You can learn more about `build.rs` the `OUT_DIR` environment variable in the [cargo book][cargo-book].
 
 We can bring this code into scope like this:
 
 ```rust
 pub mod routeguide {
-    include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
+    tonic::include_proto!("routeguide");
 }
 
 use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
@@ -292,32 +292,255 @@ impl server::RouteGuide for RouteGuide {
 
 [async-trait]: https://github.com/dtolnay/async-trait
 
-#### Simple RPC
+### Adding state 
+There are two pieces of state our service needs to access: an immutable list of features and a
+a mutable map from points to route notes.
 
+When thinking about state, it is important to consider that:
+ 
+- Tonic will run our server in a multi-threaded Tokio executor
+- The `server::RouteGuide` trait has `Send + Sync + 'static` bounds 
+
+This in one way to represent our state:
+
+```rust
+#[derive(Debug)]
+pub struct RouteGuide {
+    state: State,
+}
+
+#[derive(Debug, Clone)]
+struct State {
+    features: Arc<Vec<Feature>>,
+    notes: Arc<Mutex<HashMap<Point, Vec<RouteNote>>>>,
+}
+```
+
+We also need to implement `Hash` and `Eq` for `Point` so we can use `point` values as map keys.
+
+```rust
+impl Hash for Point {
+    fn hash<H>(&self, state: &mut H)
+    where
+        H: Hasher,
+    {
+        self.latitude.hash(state);
+        self.longitude.hash(state);
+    }
+}
+
+impl Eq for Point {}
+
+```
+
+
+#### Simple RPC
+Let's look at the simplest method first, `get_feature`, which just gets a `Point` from the client
+and tries to find a feature associated with that location. If it finds one, it is returned to the
+client wrapped in a `tonic::Response`. If it can't find one, it returns an empty Feature.
+
+```rust
+async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
+    for feature in &self.state.features[..] {
+        if feature.location.as_ref() == Some(request.get_ref()) {
+            return Ok(Response::new(feature.clone()));
+        }
+    }
+
+    let response = Response::new(Feature {
+        name: "".to_string(),
+        location: None,
+    });
+
+    Ok(response)
+}
+```
+
+The method is passed a `tonic::Request` that contains the client's `Point` protocol buffer. It 
+returns a `Result` with a `Feature` protocol buffer wrapped in a `tonic::Response` or a
+tonic::Status, representing an error.
 
 #### Server-side streaming RPC
+Now let's look at one of our streaming RPCs. `list_features` is a server-side streaming RPC, so we
+need to send back multiple `Feature`s to our client.
+
+```rust
+    type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+
+    async fn list_features(
+        &self,
+        request: Request<Rectangle>,
+    ) -> Result<Response<Self::ListFeaturesStream>, Status> {
+        let (mut tx, rx) = mpsc::channel(4);
+
+        let state = self.state.clone();
+
+        tokio::spawn(async move {
+            for feature in &state.features[..] {
+                if in_range(feature.location.as_ref().unwrap(), request.get_ref()) {
+                    println!("  => send {:?}", feature);
+                    tx.send(Ok(feature.clone())).await.unwrap();
+                }
+            }
+        });
+
+        Ok(Response::new(rx))
+    }
+```
+
+Similar to the `get_feature` method, `list_features`  `tonic::Request<T>`  where T is in this case a
+`Rectangle`. This time, however, we need to return a stream of values, rather than a single one. 
+
+TODO: finish description
 
 #### Client-side streaming RPC
+Now let's look at something a little more complicated: the client-side streaming method 
+`record_route`, where we get a stream of `Point`s from the client and return a single `RouteSummary` 
+with information about their trip. As you can see, this time the method receives a 
+`tonic::Request<tonic::Streaming<Point>>` 
+
+```rust
+async fn record_route(
+    &self,
+    request: Request<tonic::Streaming<Point>>,
+) -> Result<Response<RouteSummary>, Status> {
+    let stream = request.into_inner();
+    futures::pin_mut!(stream);
+
+    let mut summary = RouteSummary::default();
+    let mut last_point = None;
+    let now = Instant::now();
+
+    while let Some(point) = stream.next().await {
+        let point = point?;
+        summary.point_count += 1;
+
+        for feature in &self.state.features[..] {
+            if feature.location.as_ref() == Some(&point) {
+                summary.feature_count += 1;
+            }
+        }
+
+        if let Some(ref last_point) = last_point {
+            summary.distance += calc_distance(last_point, &point);
+        }
+
+        last_point = Some(point);
+    }
+
+    summary.elapsed_time = now.elapsed().as_secs() as i32;
+
+    Ok(Response::new(summary))
+}
+```
 
 #### Bidirectional streaming RPC
+Finally, let's look at our bidirectional streaming RPC `route_chat`.
+```rust
+async fn route_chat(
+    &self,
+    request: Request<tonic::Streaming<RouteNote>>,
+) -> Result<Response<Self::RouteChatStream>, Status> {
+    println!("RouteChat");
+
+    let stream = request.into_inner();
+    let mut state = self.state.clone();
+
+    let output = async_stream::try_stream! {
+        futures::pin_mut!(stream);
+
+        while let Some(note) = stream.next().await {
+            let note = note?;
+
+            let location = note.location.clone().unwrap();
+
+            let mut notes = state.notes.lock().await;
+            let notes = notes.entry(location).or_insert(vec![]);
+            notes.push(note);
+
+            for note in notes {
+                yield note.clone();
+            }
+        }
+    };
+
+    Ok(Response::new(Box::pin(output)
+        as Pin<
+            Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>,
+        >))
+    }
+}
+```
 
 ### Starting the server
+
+Once we've implemented all our methods, we also need to start up a gRPC server so that clients can
+actually use our service. The following snippet shows how we do this for our `RouteGuide` service:
+
+```rust
+let addr = "[::1]:10000".parse().unwrap();
+
+let route_guide = RouteGuide {
+    state: State {
+        features: Arc::new(data::load()),
+        notes: Lock::new(HashMap::new()),
+    },
+};
+
+let svc = server::RouteGuideServer::new(route_guide);
+Server::builder().serve(addr, svc).await?;
+```
+
+To build and start a server, we:
+
+1. Specify the socket address to use to listen for client requests using `let addr = "[::1]:10000".parse().unwrap();`.
+2. Create an instance of the gRPC server `RouteGuide {...}`.
+3. Register our service implementation with the gRPC server `RouteGuideServer::new(...)`.
+4. Call `Server::builder().serve(...)`  to do a blocking wait until the process is killed.
 
 
 <a name="client"></a>
 ## Creating the client
 
-### Creating a stub
+In this section, we'll look at creating a Rust client for our `RouteGuide` service. You can see our
+complete example client code in TODO
+
+### Creating a client
+
+To call service methods, we first need to create a gRPC *client* to communicate with the server. 
+We create this by passing the server's URL  to `RouteGuideClient::connect` as follows:
 
 ### Calling service methods
+Now let's look at how we call our service methods. Note that in Tonic, RPCs are asynchronous, 
+which means that the RPC call needs to be awaited.
 
 #### Simple RPC
+Calling the simple RPC `GetFeature` is nearly as straightforward as calling a local method.
+
+```rust
+let response = client
+    .get_feature(Request::new(Point {
+        latitude: 409146138,
+        longitude: -746188906,
+    }))
+    .await?;
+```
+As you can see, we call the method on the client we got earlier. In our method parameters we create 
+and populate a request protocol buffer object (in our case `Point`). If the call doesn't return an
+error, then we can read the response information from the server from the first return value.
 
 #### Server-side streaming RPC
 
-#### Client-side streaming RPC
+Here's where we call the server-side streaming method `list_features`, which returns a stream of
+geographical `Feature`s. 
+
+```rust
+```
 
 #### Bidirectional streaming RPC
+
+```rust
+```
 
 ## Try it out!
 
