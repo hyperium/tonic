@@ -268,7 +268,7 @@ impl server::RouteGuide for RouteGuide {
     ) -> Result<Response<Self::ListFeaturesStream>, Status> {
         unimplemented!()
     }
-
+    
     async fn record_route(
         &self,
         _request: Request<tonic::Streaming<Point>>,
@@ -543,6 +543,10 @@ geographical `Feature`s.
 ```
 
 ## Try it out!
+
+### Run the server
+
+### Run the client
 
 ## Appendix
 ### tonic-build configuration
