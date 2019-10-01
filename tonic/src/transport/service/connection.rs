@@ -39,11 +39,7 @@ impl Connection {
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
             .optional_layer(endpoint.timeout.map(TimeoutLayer::new))
-            .optional_layer(
-                endpoint
-                    .concurrency_limit
-                    .map(ConcurrencyLimitLayer::new),
-            )
+            .optional_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
             .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
