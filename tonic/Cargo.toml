@@ -39,18 +39,18 @@ tls = []
 
 [dependencies]
 bytes = "0.4"
-futures-core-preview = "=0.3.0-alpha.18"
-futures-util-preview = "=0.3.0-alpha.18"
+futures-core-preview = "=0.3.0-alpha.19"
+futures-util-preview = "=0.3.0-alpha.19"
 tracing = "0.1"
 http = "0.1.14"
 base64 = "0.10"
 
 percent-encoding = "1.0.1"
-tower-service = "=0.3.0-alpha.1"
-tokio-codec = "=0.2.0-alpha.4"
-async-stream = "0.1.1"
-http-body = "0.2.0-alpha.1"
-pin-project = "=0.4.0-alpha.11"
+tower-service = "=0.3.0-alpha.2"
+tokio-codec = "=0.2.0-alpha.6"
+async-stream = "0.1.2"
+http-body = "0.2.0-alpha.3"
+pin-project = "^0.4"
 
 # prost
 prost = { version = "0.5", optional = true }
@@ -60,17 +60,17 @@ prost-derive = { version = "0.5", optional = true }
 async-trait = { version = "0.1.13", optional = true }
 
 # transport
-hyper = { git = "https://github.com/hyperium/hyper", features = ["unstable-stream"], optional = true, rev = "2b0405c48c10bca7893c30ea960ac20a41a8578f" }
-tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
-tower = { version = "=0.3.0-alpha.1a", optional = true}
-tower-make = "=0.1.0-alpha.2"
-tower-reconnect = { version = "=0.3.0-alpha.1", optional = true }
-tower-balance =  { version = "=0.3.0-alpha.1", optional = true }
-tower-load = { version = "=0.3.0-alpha.1", optional = true }
+hyper = { version = "0.13.0-alpha.3", features = ["unstable-stream"], optional = true }
+tokio = { version = "=0.2.0-alpha.6", default-features = false, features = ["tcp"], optional = true }
+tower = { version = "=0.3.0-alpha.2", optional = true}
+tower-make = "=0.3.0-alpha.2a"
+tower-reconnect = { version = "=0.3.0-alpha.2", optional = true }
+tower-balance =  { version = "=0.3.0-alpha.2", optional = true }
+tower-load = { version = "=0.3.0-alpha.2", optional = true }
 
 # openssl
-tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }
+tokio-openssl = { version = "=0.4.0-alpha.6", optional = true }
 openssl1 = { package = "openssl", version = "0.10", optional = true }
 
 # rustls
-tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
+tokio-rustls = { version = "0.12.0-alpha.4", optional = true }
