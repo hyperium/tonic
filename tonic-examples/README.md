@@ -70,4 +70,15 @@ $ cargo run --bin tls-client
 
 ```bash
 $ cargo run --bin tls-server
+```
+
+
+### Notes:
+
+If you are using the `codegen` feature, then the following dependencies are
+**required**:
+
+* [bytes](https://crates.io/crates/bytes)
+* [prost](https://crates.io/crates/prost)
+* [prost-derive](https://crates.io/crates/prost-derive)
 
