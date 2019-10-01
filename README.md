@@ -35,9 +35,7 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 Examples can be found in [`tonic-examples`] and for more complex scenarios [`tonic-interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
-### Examples
-
-#### Rust Version
+### Rust Version
 
 `tonic` currently works on rust `1.39-beta` and above as it requires support for the `async_await`
 feature. To install the beta simply follow the commands below:
@@ -46,6 +44,20 @@ feature. To install the beta simply follow the commands below:
 $ rustup install beta
 $ rustup component add rustfmt --toolchain beta
 $ cargo +beta build
+```
+
+### Examples
+
+<details>
+  <summary>Helloworld</summary>
+
+#### `Cargo.toml`
+
+```toml
+tonic = "*"
+bytes = "0.4"
+prost = "0.5"
+prost-derive = "0.5"
 ```
 
 #### Protobuf
@@ -67,6 +79,14 @@ message HelloRequest {
 // The response message containing the greetings
 message HelloReply {
   string message = 1;
+}
+```
+
+#### `build.rs`
+
+```rust
+fn main() {
+    tonic_build::compile_protos("proto/helloworld/helloworld.proto").unwrap();
 }
 ```
 
@@ -145,6 +165,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+</details>
 
 ## Getting Help
 
