@@ -150,7 +150,7 @@ impl self::value_encoding::Sealed for Binary {
         if decoded_a.is_ok() && decoded_b.is_ok() {
             decoded_a.unwrap() == decoded_b.unwrap()
         } else {
-            !decoded_a.is_ok() && !decoded_b.is_ok()
+            decoded_a.is_err() && decoded_b.is_err()
         }
     }
 
