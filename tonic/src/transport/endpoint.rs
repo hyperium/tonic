@@ -5,13 +5,15 @@ use bytes::Bytes;
 use http::uri::{InvalidUriBytes, Uri};
 use std::{
     convert::{TryFrom, TryInto},
+    fmt,
+    sync::Arc,
     time::Duration,
 };
 
 /// Channel builder.
 ///
 /// This struct is used to build and configure HTTP/2 channels.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Endpoint {
     pub(super) uri: Uri,
     pub(super) timeout: Option<Duration>,
@@ -20,10 +22,12 @@ pub struct Endpoint {
     #[cfg(feature = "tls")]
     pub(super) tls: Option<TlsConnector>,
     pub(super) buffer_size: Option<usize>,
+    pub(super) interceptor_headers:
+        Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
 }
 
 impl Endpoint {
-    // TODO: determine if we want to expose this or not. This is really
+    // FIXME: determine if we want to expose this or not. This is really
     // just used in codegen for a shortcut.
     #[doc(hidden)]
     pub fn new<D>(dst: D) -> Result<Self, super::Error>
@@ -141,6 +145,15 @@ impl Endpoint {
         self
     }
 
+    /// Intercept outbound HTTP Request headers;
+    pub fn intercept_headers<F>(&mut self, f: F) -> &mut Self
+    where
+        F: Fn(&mut http::HeaderMap) + Send + Sync + 'static,
+    {
+        self.interceptor_headers = Some(Arc::new(f));
+        self
+    }
+
     /// Create a channel from this config.
     pub fn channel(&self) -> Channel {
         Channel::connect(self.clone())
@@ -157,6 +170,7 @@ impl From<Uri> for Endpoint {
             #[cfg(feature = "tls")]
             tls: None,
             buffer_size: None,
+            interceptor_headers: None,
         }
     }
 }
@@ -195,3 +209,9 @@ impl std::fmt::Display for Never {
 }
 
 impl std::error::Error for Never {}
+
+impl fmt::Debug for Endpoint {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Endpoint").finish()
+    }
+}

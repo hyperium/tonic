@@ -3,17 +3,18 @@ use crate::transport::{Certificate, Identity};
 #[cfg(feature = "openssl")]
 use openssl1::{
     pkey::PKey,
-    ssl::{SslAcceptor, SslConnector, SslMethod},
+    ssl::{select_next_proto, AlpnError, SslAcceptor, SslConnector, SslMethod},
     x509::X509,
 };
 use std::{fmt, sync::Arc};
 use tokio::net::TcpStream;
 #[cfg(feature = "rustls")]
 use tokio_rustls::{
-    rustls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig},
+    rustls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig, Session},
     webpki::DNSNameRef,
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
+use tracing::trace;
 
 /// h2 alpn in wire format for openssl.
 #[cfg(feature = "openssl")]
@@ -27,6 +28,12 @@ pub(crate) struct Cert {
     pub(crate) ca: Vec<u8>,
     pub(crate) key: Option<Vec<u8>>,
     pub(crate) domain: String,
+}
+
+#[derive(Debug)]
+enum TlsError {
+    #[allow(dead_code)]
+    H2NotNegotiated,
 }
 
 #[derive(Clone)]
@@ -80,7 +87,6 @@ impl TlsConnector {
         })
     }
 
-    // TODO: Write an either tlsstream to avoid this box
     pub(crate) async fn connect(&self, io: TcpStream) -> Result<BoxedIo, crate::Error> {
         let tls_io = match &self.inner {
             #[cfg(feature = "openssl")]
@@ -88,7 +94,11 @@ impl TlsConnector {
                 let config = connector.configure()?;
                 let tls = tokio_openssl::connect(config, &self.domain, io).await?;
 
-                // TODO: check that we actually got an h2 stream
+                match tls.ssl().selected_alpn_protocol() {
+                    Some(b) if b == b"h2" => trace!("HTTP/2 succesfully negotiated."),
+                    _ => return Err(TlsError::H2NotNegotiated.into()),
+                };
+
                 BoxedIo::new(tls)
             }
             #[cfg(feature = "rustls")]
@@ -101,7 +111,12 @@ impl TlsConnector {
                     .connect(dns.as_ref(), io)
                     .await?;
 
-                // TODO: check that we actually got an h2 stream
+                let (_, session) = io.get_ref();
+
+                match session.get_alpn_protocol() {
+                    Some(b) if b == b"h2" => (),
+                    _ => return Err(TlsError::H2NotNegotiated.into()),
+                };
 
                 BoxedIo::new(io)
             }
@@ -154,9 +169,12 @@ impl TlsAcceptor {
 
         let mut config = SslAcceptor::mozilla_modern(SslMethod::tls())?;
 
-        config.set_alpn_protos(ALPN_H2_WIRE)?;
         config.set_private_key(&key)?;
         config.set_certificate(&cert)?;
+        config.set_alpn_protos(ALPN_H2_WIRE)?;
+        config.set_alpn_select_callback(|_ssl, alpn| {
+            select_next_proto(ALPN_H2_WIRE, alpn).ok_or(AlpnError::NOACK)
+        });
 
         Ok(Self {
             inner: Acceptor::Openssl(config.build()),
@@ -197,7 +215,6 @@ impl TlsAcceptor {
             Acceptor::Rustls(config) => {
                 let acceptor = RustlsAcceptor::from(config.clone());
                 let tls = acceptor.accept(io).await?;
-
                 BoxedIo::new(tls)
             }
 
@@ -226,3 +243,13 @@ impl fmt::Debug for TlsAcceptor {
             .finish()
     }
 }
+
+impl fmt::Display for TlsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TlsError::H2NotNegotiated => write!(f, "HTTP/2 was not negotiated."),
+        }
+    }
+}
+
+impl std::error::Error for TlsError {}

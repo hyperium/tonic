@@ -116,7 +116,7 @@ impl<T> Streaming<T> {
     /// This will drain the stream of all its messages to receive the trailing
     /// metadata. If [`Streaming::message`] returns `None` then this function
     /// will not need to poll for trailers since the body was totally consumed.
-    ///    
+    ///
     /// ```rust
     /// # use tonic::{Streaming, Status};
     /// # async fn trailers_ex<T>(mut request: Streaming<T>) -> Result<(), Status> {
@@ -213,7 +213,7 @@ impl<T> Stream for Streaming<T> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            // TODO: implement the ability to poll trailers when we _know_ that
+            // FIXME: implement the ability to poll trailers when we _know_ that
             // the consumer of this stream will only poll for the first message.
             // This means we skip the poll_trailers step.
             match self.decode_chunk()? {
@@ -236,7 +236,7 @@ impl<T> Stream for Streaming<T> {
             if let Some(data) = chunk {
                 self.buf.put(data);
             } else {
-                // TODO: get BytesMut to impl `Buf` directlty?
+                // FIXME: improve buf usage.
                 let buf1 = (&self.buf[..]).into_buf();
                 if buf1.has_remaining() {
                     trace!("unexpected EOF decoding stream");

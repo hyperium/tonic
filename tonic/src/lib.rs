@@ -77,6 +77,7 @@ pub mod server;
 #[cfg(feature = "transport")]
 pub mod transport;
 
+mod macros;
 mod request;
 mod response;
 mod status;

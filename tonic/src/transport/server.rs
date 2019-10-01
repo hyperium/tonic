@@ -231,7 +231,6 @@ impl Stream for TcpIncoming {
     }
 }
 
-// TODO: add custom tracing here
 #[derive(Debug)]
 struct Svc<S>(S);
 

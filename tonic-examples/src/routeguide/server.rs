@@ -11,7 +11,7 @@ use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
 pub mod routeguide {
-    include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
+    tonic::include_proto!("routeguide");
 }
 
 use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
@@ -144,7 +144,6 @@ impl server::RouteGuide for RouteGuide {
             }
         };
 
-        // TODO: Clean this up
         Ok(Response::new(Box::pin(output)
             as Pin<
                 Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>,

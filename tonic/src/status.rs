@@ -71,8 +71,6 @@ impl Status {
         }
     }
 
-    // TODO: This should probably be made public eventually. Need to decide on
-    // the exact argument type.
     #[cfg_attr(not(feature = "h2"), allow(dead_code))]
     pub(crate) fn from_error(err: &(dyn Error + 'static)) -> Status {
         Status::try_from_error(err).unwrap_or_else(|| Status::new(Code::Unknown, err.to_string()))
@@ -103,7 +101,7 @@ impl Status {
         None
     }
 
-    // TODO: bubble this into `transport` and expose generic http2 reasons.
+    // FIXME: bubble this into `transport` and expose generic http2 reasons.
     #[cfg(feature = "h2")]
     fn from_h2_error(err: &h2::Error) -> Status {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors

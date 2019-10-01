@@ -170,7 +170,6 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
         loop {
             match response.next().await {
                 Some(result) => {
-                    // TODO: what to do with this result?
                     responses.push(result.unwrap());
                     if responses.len() == REQUEST_LENGTHS.len() {
                         drop(tx);
@@ -360,7 +359,6 @@ pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestA
     req_unary.metadata_mut().insert(key1, value1.clone());
     req_unary.metadata_mut().insert_bin(key2, value2.clone());
 
-    // TODO: custom metadata for fullduplex
     let stream = stream::iter(vec![Ok(make_ping_pong_request(0))]);
     let mut req_stream = Request::new(stream);
     req_stream.metadata_mut().insert(key1, value1.clone());
