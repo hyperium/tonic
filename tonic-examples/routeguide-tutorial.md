@@ -531,9 +531,6 @@ error, then we can read the response information from the server from the first 
 
 #### Server-side streaming RPC
 
-Here's where we call the server-side streaming method `list_features`, which returns a stream of
-geographical `Feature`s. 
-
 ```rust
 ```
 
