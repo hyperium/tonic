@@ -1,0 +1,75 @@
+name: CI
+on: [push]
+jobs:
+  check:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        rust: [beta]
+
+    env:
+      RUSTFLAGS: "-D warnings"
+
+    steps:
+    - uses: hecrj/setup-rust-action@master
+      with:
+        rust-version: ${{ matrix.rust }}
+    - uses: actions/checkout@master
+    - name: Install rustfmt
+      run: rustup component add rustfmt
+    - name: Check fmt
+      run: cargo fmt -- --check
+    - name: Check all
+      run: cargo check --all
+    - name: Check with no default features
+      run: cargo check -p tonic --no-default-features
+    - name: Check with transport no tls
+      run: cargo check -p tonic
+    - name: Check with transport w/ openssl
+      run: cargo check -p tonic --features openssl
+    - name: Check with transport w/ rustls
+      run: cargo check -p tonic --features rustls
+
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest]
+        rust: [beta]
+
+    env:
+      RUSTFLAGS: "-D warnings"
+    
+    steps:
+    - uses: hecrj/setup-rust-action@master
+      with:
+        rust-version: ${{ matrix.rust }}
+    - name: Install rustfmt
+      run: rustup component add rustfmt
+    - uses: actions/checkout@master
+    - name: Run tests
+      run: cargo test --all --all-features
+
+  interop:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+        rust: [beta]
+
+    env:
+      RUSTFLAGS: "-D warnings"
+    
+    steps:
+    - uses: hecrj/setup-rust-action@master
+      with:
+        rust-version: ${{ matrix.rust }}
+    - uses: actions/checkout@master
+    - name: Install rustfmt
+      run: rustup component add rustfmt
+    - name: Run interop tests
+      run: ./tonic-interop/test.sh
+    - name: Run interop tests with tls
+      run: ./tonic-interop/test.sh --use_tls
+
