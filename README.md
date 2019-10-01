@@ -48,6 +48,28 @@ $ rustup component add rustfmt --toolchain beta
 $ cargo +beta build
 ```
 
+#### Protobuf
+
+```protobuf
+package helloworld;
+
+// The greeting service definition.
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+  string name = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+  string message = 1;
+}
+```
+
 #### Client
 
 ```rust
