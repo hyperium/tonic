@@ -15,6 +15,7 @@ use std::{cmp, fmt};
 /// `MetadataValue` is used as the [`MetadataMap`] value.
 ///
 /// [`HeaderMap`]: struct.HeaderMap.html
+/// [`MetadataMap`]: struct.MetadataMap.html
 #[derive(Clone, Hash)]
 #[repr(transparent)]
 pub struct MetadataValue<VE: ValueEncoding> {

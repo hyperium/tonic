@@ -4,10 +4,13 @@ use std::future::Future;
 use std::task::{Context, Poll};
 use tower_service::Service;
 
-/// Definition of the gRPC trait alias for [`tower_service::Service`].
+/// Definition of the gRPC trait alias for [`tower_service`].
 ///
 /// This trait enforces that all tower services provided to [`Grpc`] implements
 /// the correct traits.
+///
+/// [`Grpc`]: ../client/struct.Grpc.html
+/// [`tower_service`]: https://docs.rs/tower-service
 pub trait GrpcService<ReqBody> {
     /// Responses body given by the service.
     type ResponseBody: Body + HttpBody;

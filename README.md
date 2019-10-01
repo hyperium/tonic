@@ -217,6 +217,6 @@ terms or conditions.
 [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples
 [`tonic-interop`]: https://github.com/hyperium/tonic/tree/master/tonic-interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/tonic-examples
-[Website]: https://tokio.rs
+[Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
 [Chat]: https://discord.gg/6yGkFeN
