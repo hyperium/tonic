@@ -36,18 +36,18 @@ To run the sample code and walk through the tutorial, the only prerequisite is R
  
 ## Running the example
 
-Clone or download tonic's repository:
+Clone or download Tonic's repository:
 
 ```shell 
 git clone https://github.com/hyperium/tonic.git
 ```
 
-Change your current directory to tonic's repository root:
+Change your current directory to Tonic's repository root:
 ```shell
 $ cd tonic
 ```
 
-Tonic uses rustfmt to tidy up the code it generates, make sure it's installed.
+Tonic uses `rustfmt` to tidy up the code it generates, make sure it's installed.
 
 ```shell
 $ rustup component add rustfmt
@@ -63,7 +63,7 @@ In a separate shell, run the client
 $ cargo run --bin routeguide-client
 ```
 
-**Note:** Prior to rust's 1.39 release, tonic may be pinned to a specific toolchain version.
+**Note:** Prior to rust's 1.39 release, Tonic may be pinned to a specific toolchain version.
 
 ## Project setup
 
@@ -104,8 +104,8 @@ Then you define `rpc` methods inside your service definition, specifying their r
 types. gRPC lets you define four kinds of service method, all of which are used in the `RouteGuide`
 service:
 
-- A *simple RPC* where the client sends a request to the server using the stub and waits for a 
-response to come back, just like a normal function call.
+- A *simple RPC* where the client sends a request to the server and waits for a response to come 
+back, just like a normal function call.
 ```proto
    // Obtains the feature at a given position.
    rpc GetFeature(Point) returns (Feature) {}
@@ -124,17 +124,17 @@ placing the `stream` keyword before the *response* type.
 ```
 
 - A *client-side streaming RPC* where the client writes a sequence of messages and sends them to 
-the server, again using a provided stream. Once the client has finished writing the messages, 
-it waits for the server to read them all and return its response. You specify a client-side 
-streaming method by placing the `stream` keyword before the *request* type.
+the server. Once the client has finished writing the messages, it waits for the server to read them
+all and return its response. You specify a client-side streaming method by placing the `stream`
+keyword before the *request* type.
 ```proto
   // Accepts a stream of Points on a route being traversed, returning a
   // RouteSummary when traversal is completed.
   rpc RecordRoute(stream Point) returns (RouteSummary) {}
 ```
 
-- A *bidirectional streaming RPC* where both sides send a sequence of messages using a read-write 
-stream. The two streams operate independently, so clients and servers can read and write in whatever
+- A *bidirectional streaming RPC* where both sides send a sequence of messages. The two streams
+operate independently, so clients and servers can read and write in whatever
 order they like: for example, the server could wait to receive all the client messages before 
 writing its responses, or it could alternately read a message then write a message, or some other
 combination of reads and writes. The order of messages in each stream is preserved. You specify
@@ -221,7 +221,7 @@ There are two parts to making our `RouteGuide` service do its job:
 You can find our example `RouteGuide` server in 
 [tonic-examples/src/routeguide/server.rs][routeguide-server]
 
-[routeguide-server]: https://github.com/LucioFranco/tonic/blob/master/tonic-examples/src/routeguide/server.rs
+[routeguide-server]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/server.rs
 
 ### Implementing the server::RouteGuide trait
 
