@@ -1,5 +1,11 @@
 name: CI
-on: [push]
+
+on:
+  push:
+    branches:
+    - master
+  pull_request: {}
+
 jobs:
   check:
     runs-on: ${{ matrix.os }}
@@ -40,7 +46,7 @@ jobs:
 
     env:
       RUSTFLAGS: "-D warnings"
-    
+
     steps:
     - uses: hecrj/setup-rust-action@master
       with:
@@ -60,7 +66,7 @@ jobs:
 
     env:
       RUSTFLAGS: "-D warnings"
-    
+
     steps:
     - uses: hecrj/setup-rust-action@master
       with:
