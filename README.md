@@ -182,7 +182,10 @@ question.  Last, if that doesn't work, try opening an [issue] with the question.
 
 - [`tonic`](https://github.com/hyperium/tonic/tree/master/tonic): Generic gRPC and HTTP/2 client/server
 implementation.
-- [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic): [`prost`] based service codegen.
+- [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic-build): [`prost`] based service codegen.
+- [`tonic-examples`](https://github.com/hyperium/tonic/tree/master/tonic-examples): Example gRPC implementations showing off
+tls, load balancing and bi-directional streaming.
+- [`tonic-interop`](https://github.com/hyperium/tonic/tree/master/tonic-interop): Interop tests implementation.
 
 ## Contributing
 
