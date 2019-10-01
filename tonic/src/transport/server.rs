@@ -73,6 +73,7 @@ impl Server {
     /// # }
     /// ```
     #[cfg(feature = "openssl")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "openssl")))]
     pub fn openssl_tls(&mut self, identity: Identity) -> &mut Self {
         let acceptor = TlsAcceptor::new_with_openssl(identity).unwrap();
         self.tls = Some(acceptor);
@@ -95,6 +96,7 @@ impl Server {
     /// # }
     /// ```
     #[cfg(feature = "rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn rustls_tls(&mut self, identity: Identity) -> &mut Self {
         let acceptor = TlsAcceptor::new_with_rustls(identity).unwrap();
         self.tls = Some(acceptor);
