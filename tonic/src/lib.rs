@@ -66,7 +66,7 @@
     unreachable_pub
 )]
 #![doc(
-    html_logo_url = "https://github.com/LucioFranco/tonic/raw/master/.github/assets/tonic-docs.png"
+    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
 )]
 #![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.1")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
