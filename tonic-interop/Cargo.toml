@@ -13,17 +13,17 @@ name = "server"
 path = "src/bin/server.rs"
 
 [dependencies]
-tokio = "=0.2.0-alpha.4"
+tokio = "=0.2.0-alpha.6"
 tonic = { path = "../tonic", features = ["openssl"] }
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"
 http = "0.1"
-futures-core-preview = "=0.3.0-alpha.18"
-futures-util-preview = "=0.3.0-alpha.18"
-async-stream = "0.1.1"
-tower = "0.3.0-alpha.1a"
-http-body = "0.2.0-alpha.1"
+futures-core-preview = "=0.3.0-alpha.19"
+futures-util-preview = "=0.3.0-alpha.19"
+async-stream = "0.1.2"
+tower = "0.3.0-alpha.2"
+http-body = "0.2.0-alpha.2"
 
 console = "0.7"
 structopt = "0.2"
