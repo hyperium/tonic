@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="https://github.com/LucioFranco/tonic/raw/master/.github/assets/tonic-banner.svg" alt="Vector" style="width:60%;">
-</p>
+![](https://github.com/LucioFranco/tonic/raw/master/.github/assets/tonic-banner.svg?sanitize=true)
 
 A rust implementation of [gRPC], a high performance, open source, general
 RPC framework that puts mobile and HTTP/2 first.
