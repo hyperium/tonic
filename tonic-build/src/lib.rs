@@ -1,6 +1,23 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
 //! and proto definitiones for use with `tonic`.
 //!
+//! # Features
+//!
+//! `tonic-build` only comes with one `rustfmt` feature which enables the usage of
+//! the `rustfmt` binary to format the generated code. This is enabled by default.
+//!
+//! # Required dependencies
+//!
+//! ```toml
+//! [dependencies]
+//! bytes = <bytes-version>
+//! tonic = <tonic-version>
+//! prost = <prost-version>
+//!
+//! [build-dependencies]
+//! tonic-build = <tonic-version>
+//! ```
+//!
 //! # Examples
 //! Simple
 //!

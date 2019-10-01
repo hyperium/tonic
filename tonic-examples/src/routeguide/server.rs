@@ -124,7 +124,7 @@ impl server::RouteGuide for RouteGuide {
         println!("RouteChat");
 
         let stream = request.into_inner();
-        let mut state = self.state.clone();
+        let state = self.state.clone();
 
         let output = async_stream::try_stream! {
             futures::pin_mut!(stream);
