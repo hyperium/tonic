@@ -326,11 +326,7 @@ You can find our example json data in [tonic-examples/data/route_guide_db.json][
 the corresponding `data` module to load and deserialize it in
 [tonic-examples/routeguide/data.rs][data-module]
 
-Lastly, we need to implement `Hash` and `Eq` for `Point` so we can use `point` values as map keys.
-
-[route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
-[data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
-
+In order to use `point` values as map keys, we need to implement `Hash` and `Eq` for `Point`: 
 
 ```rust
 impl Hash for Point {
@@ -346,6 +342,21 @@ impl Hash for Point {
 impl Eq for Point {}
 
 ```
+
+Lastly, we need to implement the `in_range` and `calc_distance` helper functions. You can find 
+them in [tonic-examples/src/routeguide/server.rs][in-range-fn] 
+
+[route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
+[data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
+[in-range-fn]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/server.rs#L188
+
+#### Request and Response types
+All our service methods receive a `tonic::Request<T>` and return a
+`Result<tonic::Response<T>, tonic::Status>`. The concrete type of `T` depends on how our methods
+are declared in our *service* `.proto` definition. It can be one of two things:
+
+- A single value, e.g `Point`, `Widget`, `Vec<Rectangle>`
+- A stream of values, e.g. a type that implements `Stream<Item = Result<Widget, tonic::Status>>`
 
 
 #### Simple RPC
@@ -398,8 +409,12 @@ async fn list_features(
 }
 ```
 
-Similar to `get_feature`, `list_features`'s input is a simple message type. A `Rectangle` in this
-case. This time, however, we need to return a stream of values, rather than a single one. 
+Like `get_feature`, `list_features`'s input is a single message. A `Rectangle` in this
+case. This time, however, we need to return a stream of values, rather than a single one.
+We create a channel and move the `Sink` into a new asynchronous task where we perform our
+lookup, sending the features that satisfy our constraints into the channel.
+
+The `Stream` half of the channel is returned to the caller, wrapped in a `tonic::Response`.
 
 
 #### Client-side streaming RPC
@@ -443,15 +458,22 @@ async fn record_route(
 }
 ```
 
+`record_route` is conceptually simple: we get a stream of `Points` and fold it into a `RouteSummary`.
+In other words, we build a summary value as we process each `Point` in our stream, one by one.
+When there are no more `Points` in our stream, we return the `RouteSummary` wrapped in a 
+`tonic::Response`
+
 #### Bidirectional streaming RPC
-Finally, let's look at our bidirectional streaming RPC `route_chat`.
+Finally, let's look at our bidirectional streaming RPC `route_chat`, which receives a stream
+of `RouteNote`s and returns  a stream of `RouteNote`s.
+
 ```rust
+type RouteChatStream = Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>>;
+
 async fn route_chat(
     &self,
     request: Request<tonic::Streaming<RouteNote>>,
 ) -> Result<Response<Self::RouteChatStream>, Status> {
-    println!("RouteChat");
-
     let stream = request.into_inner();
     let mut state = self.state.clone();
 
@@ -481,10 +503,17 @@ async fn route_chat(
 }
 ```
 
+`route_chat` uses the [async-stream][async-stream] crate to perform an asynchronous transformation
+from one (input) stream to another (output) stream. As the input is processed, each value is
+inserted into the notes map, yielding a clone of the original `RouteNote`. The resulting stream
+of notes is then returned to the caller. Neat.
+
+[async-stream]: https://github.com/tokio-rs/async-stream
+
 ### Starting the server
 
 Once we've implemented all our methods, we also need to start up a gRPC server so that clients can
-actually use our service. The following snippet shows how we do this for our `RouteGuide` service:
+actually use our service. This is how our `main` function looks like:
 
 ```rust
 #[tokio::main]
@@ -506,13 +535,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-To build and start a server, we:
+To handle requests, `Tonic` uses [Tower][tower] and [hyper][hyper] internally. What this means,
+among other things, is that we have a flexible and composable stack we can build on top of. We can,
+for example, add an [interceptor][authentication-example] or implement [routing][router-example]
 
-1. Specify the socket address to use to listen for client requests 
-2. Create an instance of the gRPC server `RouteGuide {...}`, populating our state
-3. Register our service implementation with the gRPC server `RouteGuideServer::new(...)`.
-4. Call `Server::builder().serve(...)`  to do a blocking wait until the process is killed.
 
+[tower]: https://github.com/tower-rs
+[hyper]: https://github.com/hyperium/hyper
+[authentication-example]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/authentication/server.rs#L54
+[router-example]: https://github.com/hyperium/tonic/blob/master/tonic-interop/src/bin/server.rs#L73
 
 <a name="client"></a>
 ## Creating the client
