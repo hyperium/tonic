@@ -59,7 +59,7 @@
 
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use prost_build::Config;
-use quote::TokenStreamExt;
+use quote::{ToTokens, TokenStreamExt};
 
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
@@ -77,6 +77,8 @@ pub struct Builder {
     build_client: bool,
     build_server: bool,
     out_dir: Option<PathBuf>,
+    #[cfg(feature = "rustfmt")]
+    format: bool,
 }
 
 impl Builder {
@@ -92,6 +94,13 @@ impl Builder {
         self
     }
 
+    /// Enable the output to be formated by rustfmt.
+    #[cfg(feature = "rustfmt")]
+    pub fn format(mut self, run: bool) -> Self {
+        self.format = run;
+        self
+    }
+
     /// Set the output directory to generate code to.
     ///
     /// Defaults to the `OUT_DIR` environment variable.
@@ -104,6 +113,9 @@ impl Builder {
     pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
 
+        #[cfg(feature = "rustfmt")]
+        let format = self.format;
+
         let out_dir = self
             .out_dir
             .clone()
@@ -114,7 +126,11 @@ impl Builder {
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
-        fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+        {
+            if format {
+                fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+            }
+        }
 
         Ok(())
     }
@@ -128,6 +144,8 @@ pub fn configure() -> Builder {
         build_client: true,
         build_server: true,
         out_dir: None,
+        #[cfg(feature = "rustfmt")]
+        format: true,
     }
 }
 
@@ -261,4 +279,15 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     }
 
     stream
+}
+
+fn replace_wellknown(proto_path: &str, output: &str) -> TokenStream {
+    // TODO: detect more wellknown protobuf types
+    // https://github.com/danburkert/prost/blob/master/prost-types/src/protobuf.rs
+    match output {
+        "()" => quote::quote! { () },
+        _ => syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, output))
+            .unwrap()
+            .to_token_stream(),
+    }
 }

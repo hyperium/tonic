@@ -18,7 +18,7 @@ homepage = "https://github.com/hyperium/tonic"
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-readme = "README.md"
+readme = "../README.md"
 categories = ["web-programming", "network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 
@@ -40,7 +40,7 @@ tls = []
 [dependencies]
 bytes = "0.4"
 futures-core-preview = "=0.3.0-alpha.19"
-futures-util-preview = "=0.3.0-alpha.19"
+futures-util-preview = { version = "=0.3.0-alpha.19", default-features = false }
 tracing = "0.1"
 http = "0.1.14"
 base64 = "0.10"
