@@ -349,9 +349,9 @@ impl Eq for Point {}
 
 
 #### Simple RPC
-Let's look at the simplest method first, `get_feature`, which just gets a `Point` from the client
-and tries to find a feature associated with that location. If it finds one, it is returned to the
-client wrapped in a `tonic::Response`. If it can't find one, it returns an empty Feature.
+Let's look at the simplest method first, `get_feature`, which just gets a `tonic::Request<Point>` 
+from the client and tries to find a feature at the location represented by the given `Point`.
+If no feature is found, it returns an empty one.
 
 ```rust
 async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
@@ -370,42 +370,37 @@ async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>
 }
 ```
 
-The method is passed a `tonic::Request` that contains the client's `Point` protocol buffer. It 
-returns a `Result` with a `Feature` protocol buffer wrapped in a `tonic::Response` or a
-tonic::Status, representing an error.
 
 #### Server-side streaming RPC
 Now let's look at one of our streaming RPCs. `list_features` is a server-side streaming RPC, so we
 need to send back multiple `Feature`s to our client.
 
 ```rust
-    type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
 
-    async fn list_features(
-        &self,
-        request: Request<Rectangle>,
-    ) -> Result<Response<Self::ListFeaturesStream>, Status> {
-        let (mut tx, rx) = mpsc::channel(4);
+async fn list_features(
+    &self,
+    request: Request<Rectangle>,
+) -> Result<Response<Self::ListFeaturesStream>, Status> {
+    let (mut tx, rx) = mpsc::channel(4);
 
-        let state = self.state.clone();
+    let state = self.state.clone();
 
-        tokio::spawn(async move {
-            for feature in &state.features[..] {
-                if in_range(feature.location.as_ref().unwrap(), request.get_ref()) {
-                    println!("  => send {:?}", feature);
-                    tx.send(Ok(feature.clone())).await.unwrap();
-                }
+    tokio::spawn(async move {
+        for feature in &state.features[..] {
+            if in_range(feature.location.as_ref().unwrap(), request.get_ref()) {
+                tx.send(Ok(feature.clone())).await.unwrap();
             }
-        });
+        }
+    });
 
-        Ok(Response::new(rx))
-    }
+    Ok(Response::new(rx))
+}
 ```
 
-Similar to the `get_feature` method, `list_features`  `tonic::Request<T>`  where T is in this case a
-`Rectangle`. This time, however, we need to return a stream of values, rather than a single one. 
+Similar to `get_feature`, `list_features`'s input is a simple message type. A `Rectangle` in this
+case. This time, however, we need to return a stream of values, rather than a single one. 
 
-TODO: finish description
 
 #### Client-side streaming RPC
 Now let's look at something a little more complicated: the client-side streaming method 
@@ -492,23 +487,29 @@ Once we've implemented all our methods, we also need to start up a gRPC server s
 actually use our service. The following snippet shows how we do this for our `RouteGuide` service:
 
 ```rust
-let addr = "[::1]:10000".parse().unwrap();
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let addr = "[::1]:10000".parse().unwrap();
 
-let route_guide = RouteGuide {
-    state: State {
-        features: Arc::new(data::load()),
-        notes: Lock::new(HashMap::new()),
-    },
-};
+    let route_guide = RouteGuide {
+        state: State {
+            features: Arc::new(data::load()),
+            notes: Arc::new(Mutex::new(HashMap::new())),
+        },
+    };
 
-let svc = server::RouteGuideServer::new(route_guide);
-Server::builder().serve(addr, svc).await?;
+    let svc = server::RouteGuideServer::new(route_guide);
+
+    Server::builder().serve(addr, svc).await?;
+
+    Ok(())
+}
 ```
 
 To build and start a server, we:
 
-1. Specify the socket address to use to listen for client requests using `let addr = "[::1]:10000".parse().unwrap();`.
-2. Create an instance of the gRPC server `RouteGuide {...}`.
+1. Specify the socket address to use to listen for client requests 
+2. Create an instance of the gRPC server `RouteGuide {...}`, populating our  state
 3. Register our service implementation with the gRPC server `RouteGuideServer::new(...)`.
 4. Call `Server::builder().serve(...)`  to do a blocking wait until the process is killed.
 
