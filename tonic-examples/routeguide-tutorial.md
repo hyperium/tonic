@@ -509,7 +509,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 To build and start a server, we:
 
 1. Specify the socket address to use to listen for client requests 
-2. Create an instance of the gRPC server `RouteGuide {...}`, populating our  state
+2. Create an instance of the gRPC server `RouteGuide {...}`, populating our state
 3. Register our service implementation with the gRPC server `RouteGuideServer::new(...)`.
 4. Call `Server::builder().serve(...)`  to do a blocking wait until the process is killed.
 
@@ -553,13 +553,7 @@ and populate a request protocol buffer object (in our case `Point`), and wrap it
 
 #### Server-side streaming RPC
 
-```rust
-```
-
 #### Bidirectional streaming RPC
-
-```rust
-```
 
 ## Try it out!
 
@@ -569,4 +563,4 @@ and populate a request protocol buffer object (in our case `Point`), and wrap it
 
 ## Appendix
 ### tonic-build configuration
-### Well known Types
+### Well Known Types
