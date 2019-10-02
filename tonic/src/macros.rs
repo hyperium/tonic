@@ -4,7 +4,7 @@
 ///
 /// ```rust,ignore
 /// mod pb {
-///     tonic::include_proto("hellworld");
+///     tonic::include_proto("helloworld");
 /// }
 /// ```
 #[macro_export]
