@@ -3,8 +3,9 @@
 //!
 //! # Features
 //!
-//! `tonic-build` only comes with one `rustfmt` feature which enables the usage of
-//! the `rustfmt` binary to format the generated code. This is enabled by default.
+//! - `rustfmt`: This feature enables the use of `rustfmt` to format the output code
+//! this makes the code readable and the error messages nice. This requires that `rustfmt`
+//! is installed. This is enabled by default.
 //!
 //! # Required dependencies
 //!
@@ -42,6 +43,20 @@
 //! }
 //! ```
 
+#![recursion_limit = "256"]
+#![warn(
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    unreachable_pub
+)]
+#![doc(
+    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
+)]
+#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.1")]
+#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
+
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use prost_build::Config;
 use quote::TokenStreamExt;
@@ -56,7 +71,8 @@ use std::{
 mod client;
 mod service;
 
-#[derive(Clone)]
+/// Service generator builder.
+#[derive(Debug, Clone)]
 pub struct Builder {
     build_client: bool,
     build_server: bool,
@@ -152,7 +168,7 @@ fn fmt(out_dir: &str) {
     }
 }
 
-pub struct ServiceGenerator {
+struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,

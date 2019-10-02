@@ -1,8 +1,18 @@
 [package]
 name = "tonic-build"
-version = "0.1.0"
+version = "0.1.0-alpha.1"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
+documentation = "https://docs.rs/tonic/0.1.0-alpha.1/tonic/"
+repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/hyperium/tonic"
+description = """
+Codegen module of `tonic` gRPC implementation.
+"""
+readme = "README.md"
+categories = ["network-programming", "asynchronous"]
+keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
+
 
 [dependencies]
 prost-build = "0.5"

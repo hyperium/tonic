@@ -48,15 +48,18 @@
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
 //! [`tokio`]: https://docs.rs/tokio
+//! [`prost`]: https://docs.rs/prost
 //! [`hyper`]: https://docs.rs/hyper
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
-//! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples/src
+//! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
 //! [`Server`]: transport/struct.Server.html
 //! [`rustls`]: https://docs.rs/rustls
 //! [`openssl`]: https://www.openssl.org
+//! [`client`]: client/index.html
+//! [`transport`]: transport/index.html
 
 #![recursion_limit = "256"]
 #![warn(
