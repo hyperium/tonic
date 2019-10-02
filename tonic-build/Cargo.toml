@@ -17,7 +17,7 @@ keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
 
 [dependencies]
 prost-build = "0.5"
-syn = { version = "1.0", features = ["full"]}
+syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1.0"
 
