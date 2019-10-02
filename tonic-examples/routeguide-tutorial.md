@@ -292,16 +292,14 @@ impl server::RouteGuide for RouteGuide {
 
 [async-trait]: https://github.com/dtolnay/async-trait
 
-### Adding state 
+### Server state
 There are two pieces of state our service needs to access: an immutable list of features and a
-a mutable map from points to route notes.
+mutable map from points to route notes.
 
-When thinking about state, it is important to consider that:
- 
-- Tonic will run our server in a multi-threaded Tokio executor
-- The `server::RouteGuide` trait has `Send + Sync + 'static` bounds 
+When designing our state shape, we must consider that our server will run in a multi-threaded Tokio
+executor and that the `server::RouteGuide` trait has `Send + Sync + 'static` bounds.
 
-This in one way to represent our state:
+This in one way we can represent our state:
 
 ```rust
 #[derive(Debug)]
@@ -316,7 +314,29 @@ struct State {
 }
 ```
 
-We also need to implement `Hash` and `Eq` for `Point` so we can use `point` values as map keys.
+When our server boots, we are going to deserialize our features vector from a json file.
+Create the data file and some helper code to read and deserialize our features.
+
+```shell
+$ mkdir data && touch data/route_guide_db.json
+$ touch src/data.rs
+```
+
+You can find our example `RouteGuide` server in 
+[tonic-examples/src/routeguide/server.rs][routeguide-server]
+
+
+You can find our example json data in [tonic-examples/data/route_guide_db.json][route-guide-db] and
+the corresponding `data` module to load and deserialize it in
+[tonic-examples/routeguide/data.rs][data-module]
+
+Lastly, we need to implement `Hash` and `Eq` for `Point` so we can use `point` values as map keys.
+
+[route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
+[data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
+
+Lastly, we need to implement `Hash` and `Eq` for `Point` so we can use `point` values as map keys.
+
 
 ```rust
 impl Hash for Point {
