@@ -1,0 +1,7 @@
+syntax = "proto3";
+package empty;
+import "google/protobuf/empty.proto";
+
+service Admin {
+  rpc EmptyCall(google.protobuf.Empty) returns (google.protobuf.Empty);
+}
