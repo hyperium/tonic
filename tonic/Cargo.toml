@@ -14,7 +14,7 @@ edition = "2018"
 license = "MIT"
 documentation = "https://docs.rs/tonic/0.1.0-alpha.1/tonic/"
 repository = "https://github.com/hyperium/tonic"
-homepage = "https://tokio.rs"
+homepage = "https://github.com/hyperium/tonic"
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
