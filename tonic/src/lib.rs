@@ -1,16 +1,3 @@
-#![recursion_limit = "256"]
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
-#![doc(
-    html_logo_url = "https://raw.githubusercontent.com/LucioFranco/tonic/master/.github/assets/tonic_docs.svg?token=ABL5YXJBV6OYQ6N2YQMMGIK5TJL6O"
-)]
-#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.1")]
-#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-
 //! A Rust implementation of [gRPC], a high performance, open source, general
 //! RPC framework that puts mobile and HTTP/2 first.
 //!
@@ -60,6 +47,9 @@
 //!
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
+//! [`tokio`]: https://docs.rs/tokio
+//! [`hyper`]: https://docs.rs/hyper
+//! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
 //! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples/src
 //! [`Codec`]: codec/trait.Codec.html
@@ -68,6 +58,21 @@
 //! [`rustls`]: https://docs.rs/rustls
 //! [`openssl`]: https://www.openssl.org
 
+#![recursion_limit = "256"]
+#![warn(
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    unreachable_pub
+)]
+#![doc(
+    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
+)]
+#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.1")]
+#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
+
 pub mod body;
 pub mod client;
 pub mod codec;
@@ -75,6 +80,7 @@ pub mod metadata;
 pub mod server;
 
 #[cfg(feature = "transport")]
+#[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 pub mod transport;
 
 mod macros;
@@ -84,6 +90,7 @@ mod status;
 
 /// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
 #[cfg(feature = "codegen")]
+#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub use async_trait::async_trait;
 
 #[doc(inline)]
@@ -96,4 +103,5 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[doc(hidden)]
 #[cfg(feature = "codegen")]
+#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;
