@@ -518,12 +518,19 @@ To build and start a server, we:
 ## Creating the client
 
 In this section, we'll look at creating a Rust client for our `RouteGuide` service. You can see our
-complete example client code in TODO
+complete example client code in [tonic-examples/src/routeguide/client.rs][routeguide-client]
+
+
+[routeguide-client]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/client.rs
 
 ### Creating a client
 
 To call service methods, we first need to create a gRPC *client* to communicate with the server. 
-We create this by passing the server's URL  to `RouteGuideClient::connect` as follows:
+Creating a client is as simple as:
+
+```rust
+let mut client = RouteGuideClient::connect("http://[::1]:10000")?;
+```
 
 ### Calling service methods
 Now let's look at how we call our service methods. Note that in Tonic, RPCs are asynchronous, 
@@ -541,8 +548,8 @@ let response = client
     .await?;
 ```
 As you can see, we call the method on the client we got earlier. In our method parameters we create 
-and populate a request protocol buffer object (in our case `Point`). If the call doesn't return an
-error, then we can read the response information from the server from the first return value.
+and populate a request protocol buffer object (in our case `Point`), and wrap it in a
+`tonic::Request`
 
 #### Server-side streaming RPC
 
