@@ -11,6 +11,7 @@ mod prost;
 pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
 #[cfg(feature = "prost")]
+#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
 pub use tokio_codec::{Decoder, Encoder};
 

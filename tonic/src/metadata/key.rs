@@ -13,6 +13,7 @@ use super::encoding::{Ascii, Binary, ValueEncoding};
 /// `MetadataKey` is used as the [`MetadataMap`] key.
 ///
 /// [`HeaderMap`]: struct.HeaderMap.html
+/// [`MetadataMap`]: struct.MetadataMap.html
 #[derive(Clone, Eq, PartialEq, Hash)]
 #[repr(transparent)]
 pub struct MetadataKey<VE: ValueEncoding> {

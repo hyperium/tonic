@@ -101,6 +101,12 @@ impl Endpoint {
         self
     }
 
+    /// Enable TLS and apply the CA as the root certificate.
+    ///
+    /// Providing an optional domain to override. If `None` is passed to this
+    /// the TLS implementation will use the `Uri` that was used to create the
+    /// `Endpoint` builder.
+    ///
     /// ```no_run
     /// # use tonic::transport::{Certificate, Endpoint};
     /// # fn dothing() -> Result<(), Box<dyn std::error::Error>> {
@@ -114,6 +120,7 @@ impl Endpoint {
     /// # }
     /// ```
     #[cfg(feature = "openssl")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "openssl")))]
     pub fn openssl_tls(&mut self, ca: Certificate, domain: impl Into<Option<String>>) -> &mut Self {
         let domain = domain
             .into()
@@ -123,6 +130,12 @@ impl Endpoint {
         self
     }
 
+    /// Enable TLS and apply the CA as the root certificate.
+    ///
+    /// Providing an optional domain to override. If `None` is passed to this
+    /// the TLS implementation will use the `Uri` that was used to create the
+    /// `Endpoint` builder.
+    ///
     /// ```no_run
     /// # use tonic::transport::{Certificate, Endpoint};
     /// # fn dothing() -> Result<(), Box<dyn std::error::Error>> {
@@ -136,6 +149,7 @@ impl Endpoint {
     /// # }
     /// ```
     #[cfg(feature = "rustls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
     pub fn rustls_tls(&mut self, ca: Certificate, domain: impl Into<Option<String>>) -> &mut Self {
         let domain = domain
             .into()

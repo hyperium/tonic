@@ -1,6 +1,4 @@
-<p align="center">
-  <img src="https://github.com/LucioFranco/tonic/raw/master/.github/assets/tonic_ghbanner.png" alt="Vector" style="width:60%;">
-</p>
+![](https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-banner.svg?sanitize=true)
 
 A rust implementation of [gRPC], a high performance, open source, general
 RPC framework that puts mobile and HTTP/2 first.
@@ -37,9 +35,7 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 Examples can be found in [`tonic-examples`] and for more complex scenarios [`tonic-interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
-### Examples
-
-#### Rust Version
+### Rust Version
 
 `tonic` currently works on rust `1.39-beta` and above as it requires support for the `async_await`
 feature. To install the beta simply follow the commands below:
@@ -48,6 +44,50 @@ feature. To install the beta simply follow the commands below:
 $ rustup install beta
 $ rustup component add rustfmt --toolchain beta
 $ cargo +beta build
+```
+
+### Examples
+
+<details>
+  <summary>Helloworld</summary>
+
+#### `Cargo.toml`
+
+```toml
+tonic = "*"
+bytes = "0.4"
+prost = "0.5"
+prost-derive = "0.5"
+```
+
+#### Protobuf
+
+```protobuf
+package helloworld;
+
+// The greeting service definition.
+service Greeter {
+  // Sends a greeting
+  rpc SayHello (HelloRequest) returns (HelloReply) {}
+}
+
+// The request message containing the user's name.
+message HelloRequest {
+  string name = 1;
+}
+
+// The response message containing the greetings
+message HelloReply {
+  string message = 1;
+}
+```
+
+#### `build.rs`
+
+```rust
+fn main() {
+    tonic_build::compile_protos("proto/helloworld/helloworld.proto").unwrap();
+}
 ```
 
 #### Client
@@ -126,6 +166,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+</details>
+
 ## Getting Help
 
 First, see if the answer to your question can be found in the API documentation.
@@ -140,7 +182,10 @@ question.  Last, if that doesn't work, try opening an [issue] with the question.
 
 - [`tonic`](https://github.com/hyperium/tonic/tree/master/tonic): Generic gRPC and HTTP/2 client/server
 implementation.
-- [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic): [`prost`] based service codegen.
+- [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic-build): [`prost`] based service codegen.
+- [`tonic-examples`](https://github.com/hyperium/tonic/tree/master/tonic-examples): Example gRPC implementations showing off
+tls, load balancing and bi-directional streaming.
+- [`tonic-interop`](https://github.com/hyperium/tonic/tree/master/tonic-interop): Interop tests implementation.
 
 ## Contributing
 
@@ -172,6 +217,6 @@ terms or conditions.
 [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples
 [`tonic-interop`]: https://github.com/hyperium/tonic/tree/master/tonic-interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/tonic-examples
-[Website]: https://tokio.rs
+[Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
 [Chat]: https://discord.gg/6yGkFeN

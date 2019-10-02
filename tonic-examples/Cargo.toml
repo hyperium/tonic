@@ -48,7 +48,6 @@ path = "src/tls/server.rs"
 tonic = { path = "../tonic", features = ["rustls"] }
 bytes = "0.4"
 prost = "0.5"
-prost-derive = "0.5"
 
 tokio = "=0.2.0-alpha.6"
 futures-preview = { version = "=0.3.0-alpha.19", default-features = false, features = ["alloc"]}
