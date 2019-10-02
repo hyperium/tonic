@@ -178,7 +178,7 @@ tokio = "0.2.0-alpha.6"
 prost = "0.5"
 bytes = "0.4"
 serde_json = "1.0"
-#serde = { version = "1.0", features = ["derive"] }
+serde = { version = "1.0", features = ["derive"] }
 
 [build-dependencies]
 tonic-build = "0.1.0-alpha.1"
@@ -315,16 +315,12 @@ struct State {
 ```
 
 When our server boots, we are going to deserialize our features vector from a json file.
-Create the data file and some helper code to read and deserialize our features.
+Create the data file and a helper module to read and deserialize our features.
 
 ```shell
 $ mkdir data && touch data/route_guide_db.json
 $ touch src/data.rs
 ```
-
-You can find our example `RouteGuide` server in 
-[tonic-examples/src/routeguide/server.rs][routeguide-server]
-
 
 You can find our example json data in [tonic-examples/data/route_guide_db.json][route-guide-db] and
 the corresponding `data` module to load and deserialize it in
@@ -334,8 +330,6 @@ Lastly, we need to implement `Hash` and `Eq` for `Point` so we can use `point` v
 
 [route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
 [data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
-
-Lastly, we need to implement `Hash` and `Eq` for `Point` so we can use `point` values as map keys.
 
 
 ```rust
