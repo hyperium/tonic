@@ -69,7 +69,7 @@ use std::{
 };
 
 mod client;
-mod service;
+mod server;
 
 /// Service generator builder.
 #[derive(Debug, Clone)]
@@ -207,7 +207,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         let path = "super";
 
         if self.builder.build_server {
-            let server = service::generate(&service, path);
+            let server = server::generate(&service, path);
             self.servers.extend(server);
         }
 
