@@ -1,7 +1,7 @@
 # gRPC Basics: Tonic
 
 This tutorial, adapted from [grpc-go][grpc-go], provides a basic introduction to working with gRPC
-and tonic. By walking through this example you'll learn how to:
+and Tonic. By walking through this example you'll learn how to:
 
 - Define a service in a `.proto` file.
 - Generate server and client code.
@@ -64,6 +64,9 @@ $ cargo run --bin routeguide-client
 ```
 
 **Note:** Prior to rust's 1.39 release, Tonic may be pinned to a specific toolchain version.
+Consult the project's [readme][tonic-readme] for the latest info.
+
+[tonic-readme]: https://github.com/hyperium/tonic#getting-started
 
 ## Project setup
 
@@ -219,7 +222,7 @@ There are two parts to making our `RouteGuide` service do its job:
 - Running a gRPC server to listen for requests from clients.
 
 You can find our example `RouteGuide` server in 
-[tonic-examples/src/routeguide/server.rs][routeguide-server]
+[tonic-examples/src/routeguide/server.rs][routeguide-server].
 
 [routeguide-server]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/server.rs
 
@@ -237,9 +240,10 @@ The generated code is placed inside our target directory, in a location defined 
 environment variable that is set by cargo. For our example, this means you can find the generated
 code in a path similar to `target/debug/build/routeguide/out/routeguide.rs`.
 
-You can learn more about `build.rs` the `OUT_DIR` environment variable in the [cargo book][cargo-book].
+You can learn more about `build.rs` and the `OUT_DIR` environment variable in the
+[cargo book][cargo-book].
 
-We can bring this code into scope like this:
+We can use Tonic's `include_proto` macro to bring the generated code into scope:
 
 ```rust
 pub mod routeguide {
@@ -249,9 +253,12 @@ pub mod routeguide {
 use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
 ```
 
+**Note**: The token passed to the `include_proto` macro (in our case "routeguide") is the name of
+the package declared in in our `.proto` file, not a filename, e.g "routeguide.rs".
+
 [cargo-book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 
-Now we are ready to stub out our service:
+We are now we are ready to stub out our service implementation:
 
 ```rust
 #[tonic::async_trait]
@@ -324,9 +331,9 @@ $ touch src/data.rs
 
 You can find our example json data in [tonic-examples/data/route_guide_db.json][route-guide-db] and
 the corresponding `data` module to load and deserialize it in
-[tonic-examples/routeguide/data.rs][data-module]
+[tonic-examples/routeguide/data.rs][data-module].
 
-In order to use `point` values as map keys, we need to implement `Hash` and `Eq` for `Point`: 
+Next, we need to implement `Hash` and `Eq` for `Point`, so we can use point values as map keys:
 
 ```rust
 impl Hash for Point {
@@ -343,8 +350,9 @@ impl Eq for Point {}
 
 ```
 
-Lastly, we need to implement the `in_range` and `calc_distance` helper functions. You can find 
-them in [tonic-examples/src/routeguide/server.rs][in-range-fn] 
+Lastly, we need wo helper functions: `in_range` and `calc_distance`. We will need them when
+performing feature lookups. You can find them in
+[tonic-examples/src/routeguide/server.rs][in-range-fn].
 
 [route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
 [data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
