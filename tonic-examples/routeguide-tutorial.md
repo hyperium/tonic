@@ -556,27 +556,53 @@ for example, add an [interceptor][authentication-example] or implement [routing]
 <a name="client"></a>
 ## Creating the client
 
-In this section, we'll look at creating a Rust client for our `RouteGuide` service. You can see our
-complete example client code in [tonic-examples/src/routeguide/client.rs][routeguide-client]
+In this section, we'll look at creating a Tonic client for our `RouteGuide` service. You can see our
+complete example client code in [tonic-examples/src/routeguide/client.rs][routeguide-client].
 
+Our crate will have two binary targets: `routeguide-client` and `routeguide-server`. We need to
+edit our `Cargo.toml` accordingly:
+
+```toml
+[[bin]]
+name = "routeguide-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "routeguide-client"
+path = "src/client.rs"
+```
+
+Next, rename `main.rs` to `server.rs` and create a new file `client.rs`.
+
+```shell
+$ mv src/main.rs src/server.rs
+$ touch src/client.rs
+```
+
+To call service methods, we first need to create a gRPC *client* to communicate with the server. 
+
+```rust
+pub mod route_guide {
+    tonic::include_proto!("routeguide");
+}
+
+use route_guide::client::RouteGuideClient;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut client = RouteGuideClient::connect("http://[::1]:10000")?;
+}
+```
 
 [routeguide-client]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/client.rs
 
-### Creating a client
-
-To call service methods, we first need to create a gRPC *client* to communicate with the server. 
-Creating a client is as simple as:
-
-```rust
-let mut client = RouteGuideClient::connect("http://[::1]:10000")?;
-```
 
 ### Calling service methods
 Now let's look at how we call our service methods. Note that in Tonic, RPCs are asynchronous, 
-which means that the RPC call needs to be awaited.
+which means that the RPC call needs to be `awaited`.
 
 #### Simple RPC
-Calling the simple RPC `GetFeature` is nearly as straightforward as calling a local method.
+Calling the simple RPC `GetFeature` is as straightforward as calling a local method.
 
 ```rust
 let response = client
@@ -586,9 +612,7 @@ let response = client
     }))
     .await?;
 ```
-As you can see, we call the method on the client we got earlier. In our method parameters we create 
-and populate a request protocol buffer object (in our case `Point`), and wrap it in a
-`tonic::Request`
+We call the `get_feature` client, passing a `Point` value wrapped in a `tonic::Request`.
 
 #### Server-side streaming RPC
 
@@ -597,9 +621,16 @@ and populate a request protocol buffer object (in our case `Point`), and wrap it
 ## Try it out!
 
 ### Run the server
+```shell
+$ cargo run --bin routeguide-server
+```
 
 ### Run the client
+```shell
+$ cargo run --bin routeguide-client
+```
 
 ## Appendix
 ### tonic-build configuration
 ### Well Known Types
+
