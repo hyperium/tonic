@@ -1,12 +1,16 @@
-use super::{prost::{ProstDecoder, ProstEncoder}, Streaming, encode_server};
+use super::{
+    encode_server,
+    prost::{ProstDecoder, ProstEncoder},
+    Streaming,
+};
 use crate::Status;
-use bytes::{Bytes, Buf, IntoBuf, BytesMut, BufMut};
-use prost::Message;
+use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use http_body::Body;
+use prost::Message;
 use std::{
+    io::Cursor,
     pin::Pin,
     task::{Context, Poll},
-    io::Cursor,
 };
 
 #[derive(Clone, PartialEq, prost::Message)]
