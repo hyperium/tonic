@@ -9,9 +9,9 @@
 /// ```
 ///
 /// # Note:
-/// **This only works if the tonic-build output directory has been unmodified**. 
+/// **This only works if the tonic-build output directory has been unmodified**.
 /// The default output directory is set to the [`OUT_DIR`] environment variable.
-/// If the output directory has been modified, the following pattern may be used 
+/// If the output directory has been modified, the following pattern may be used
 /// instead of this macro.
 ///
 /// ```rust,ignore
