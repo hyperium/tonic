@@ -47,6 +47,9 @@ pub struct Server {
     // timeout: Option<Duration>,
     #[cfg(feature = "tls")]
     tls: Option<TlsAcceptor>,
+    init_stream_window_size: Option<u32>,
+    init_connection_window_size: Option<u32>,
+    max_concurrent_streams: Option<u32>,
 }
 
 impl Server {
@@ -123,6 +126,36 @@ impl Server {
     //     self
     // }
 
+    /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
+    /// stream-level flow control.
+    ///
+    /// Default is 65,535
+    ///
+    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    pub fn initial_stream_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_stream_window_size = sz.into();
+        self
+    }
+
+    /// Sets the max connection-level flow control for HTTP2
+    ///
+    /// Default is 65,535
+    pub fn initial_connection_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_connection_window_size = sz.into();
+        self
+    }
+
+    /// Sets the [`SETTINGS_MAX_CONCURRENT_STREAMS`][spec] option for HTTP2
+    /// connections.
+    ///
+    /// Default is no limit (`None`).
+    ///
+    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_MAX_CONCURRENT_STREAMS
+    pub fn max_concurrent_streams(&mut self, max: impl Into<Option<u32>>) -> &mut Self {
+        self.max_concurrent_streams = max.into();
+        self
+    }
+
     /// Intercept the execution of gRPC methods.
     ///
     /// ```
@@ -162,6 +195,9 @@ impl Server {
     {
         let interceptor = self.interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
+        let init_connection_window_size = self.init_connection_window_size;
+        let init_stream_window_size = self.init_stream_window_size;
+        let max_concurrent_streams = self.max_concurrent_streams;
         // let timeout = self.timeout.clone();
 
         let incoming = hyper::server::accept::from_stream(async_stream::try_stream! {
@@ -190,6 +226,9 @@ impl Server {
 
         hyper::Server::builder(incoming)
             .http2_only(true)
+            .http2_initial_connection_window_size(init_connection_window_size)
+            .http2_initial_stream_window_size(init_stream_window_size)
+            .http2_max_concurrent_streams(max_concurrent_streams)
             .serve(svc)
             .await
             .map_err(map_err)?;

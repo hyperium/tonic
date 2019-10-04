@@ -34,7 +34,11 @@ impl Connection {
         #[cfg(not(feature = "tls"))]
         let connector = connector();
 
-        let settings = Builder::new().http2_only(true).clone();
+        let settings = Builder::new()
+            .http2_initial_stream_window_size(endpoint.init_stream_window_size)
+            .http2_initial_connection_window_size(endpoint.init_connection_window_size)
+            .http2_only(true)
+            .clone();
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))

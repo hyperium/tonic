@@ -24,6 +24,8 @@ pub struct Endpoint {
     pub(super) buffer_size: Option<usize>,
     pub(super) interceptor_headers:
         Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
+    pub(super) init_stream_window_size: Option<u32>,
+    pub(super) init_connection_window_size: Option<u32>,
 }
 
 impl Endpoint {
@@ -98,6 +100,25 @@ impl Endpoint {
     /// ```
     pub fn rate_limit(&mut self, limit: u64, duration: Duration) -> &mut Self {
         self.rate_limit = Some((limit, duration));
+        self
+    }
+
+    /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
+    /// stream-level flow control.
+    ///
+    /// Default is 65,535
+    ///
+    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    pub fn initial_stream_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_stream_window_size = sz.into();
+        self
+    }
+
+    /// Sets the max connection-level flow control for HTTP2
+    ///
+    /// Default is 65,535
+    pub fn initial_connection_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_connection_window_size = sz.into();
         self
     }
 
@@ -185,6 +206,8 @@ impl From<Uri> for Endpoint {
             tls: None,
             buffer_size: None,
             interceptor_headers: None,
+            init_stream_window_size: None,
+            init_connection_window_size: None,
         }
     }
 }
