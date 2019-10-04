@@ -4,7 +4,7 @@
 ///
 /// ```rust,ignore
 /// mod pb {
-///     tonic::include_proto("helloworld");
+///     tonic::include_proto!("helloworld");
 /// }
 /// ```
 ///
@@ -22,7 +22,7 @@
 /// You can also use a custom environment variable using the following pattern.
 /// ```rust,ignore
 /// mod pb {
-///     include!(concat!(env!("PROTOBUFS"), concat!("/helloworld.rs")));
+///     include!(concat!(env!("PROTOBUFS"), "/helloworld.rs"));
 /// }
 /// ```
 ///
