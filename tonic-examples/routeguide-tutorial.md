@@ -621,7 +621,7 @@ client
     .await?;
 ```
 We call the `get_feature` client method, passing a single `Point` value wrapped in a
-`tonic::Request`. We get a `Result<tonic::Response<Feature>, tonic::Status>' back.
+`tonic::Request`. We get a `Result<tonic::Response<Feature>, tonic::Status>` back.
 
 #### Server-side streaming RPC
 Here's where we call the server-side streaming method `list_features`, which returns a stream of 
