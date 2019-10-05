@@ -1,18 +1,18 @@
 # gRPC Basics: Tonic
 
-This tutorial, adapted from [grpc-go][grpc-go], provides a basic introduction to working with gRPC
+This tutorial, adapted from [grpc-go], provides a basic introduction to working with gRPC
 and Tonic. By walking through this example you'll learn how to:
 
 - Define a service in a `.proto` file.
 - Generate server and client code.
 - Write a simple client and server for your service.
 
-It assumes you are familiar with [protocol buffers][protobuf] and Rust. Note that the example in
+It assumes you are familiar with [protocol buffers] and Rust. Note that the example in
 this tutorial uses the proto3 version of the protocol buffers language, you can find out more in the 
 [proto3 language guide][proto3]. 
 
 [grpc-go]: https://github.com/grpc/grpc-go/blob/master/examples/gotutorial.md
-[protobuf]: https://developers.google.com/protocol-buffers/docs/overview 
+[protocol buffers]: https://developers.google.com/protocol-buffers/docs/overview 
 [proto3]: https://developers.google.com/protocol-buffers/docs/proto3
 
 ## Why use gRPC?
@@ -30,7 +30,7 @@ protocol buffers, including efficient serialization, a simple IDL, and easy inte
 ## Prerequisites
 
 To run the sample code and walk through the tutorial, the only prerequisite is Rust itself. 
-[rustup][rustup] is a convenient tool to install it, if you haven't already.
+[rustup] is a convenient tool to install it, if you haven't already.
 
 [rustup]: https://rustup.rs
  
@@ -64,9 +64,9 @@ $ cargo run --bin routeguide-client
 ```
 
 **Note:** Prior to rust's 1.39 release, Tonic may be pinned to a specific toolchain version.
-Consult the project's [readme][tonic-readme] for the latest info.
+Consult the project's [readme] for the latest info.
 
-[tonic-readme]: https://github.com/hyperium/tonic#getting-started
+[readme]: https://github.com/hyperium/tonic#getting-started
 
 ## Project setup
 
@@ -81,10 +81,9 @@ $ cd routeguide
 ## Defining the service
 
 Our first step is to define the gRPC *service* and the method *request* and *response* types using 
-[protocol buffers][protobuf]. We will keep our `.proto` files in a directory in our crate's root.
+[protocol buffers]. We will keep our `.proto` files in a directory in our crate's root.
 Note that Tonic does not really care where our `.proto` definitions live. We will see how to use
-different code generation configuration later in the tutorial.
-
+different [code generation configuration](#tonic-build) later in the tutorial.
 
 ```shell
 $ mkdir proto && touch proto/route_guide.proto
@@ -92,8 +91,6 @@ $ mkdir proto && touch proto/route_guide.proto
 
 You can see the complete `.proto` file in
 [tonic-examples/proto/routeguide/route_guide.proto][routeguide-proto].
-
-[routeguide-proto]: https://github.com/hyperium/tonic/blob/master/tonic-examples/proto/routeguide/route_guide.proto
 
 To define a service, you specify a named `service` in your `.proto` file:
 
@@ -161,6 +158,7 @@ message Point {
 }
 ```
 
+[routeguide-proto]: https://github.com/hyperium/tonic/blob/master/tonic-examples/proto/routeguide/route_guide.proto
 
 ## Generating client and server code
 
@@ -168,7 +166,7 @@ Tonic can be configured to generate code as part cargo's normal build process. T
 convenient because once we've set everything up, there is no extra step to keep the generated code
 and our `.proto` definitions in sync.
 
-Behind the scenes, Tonic uses [PROST!][prost] to handle protocol buffer serialization and code
+Behind the scenes, Tonic uses [PROST!] to handle protocol buffer serialization and code
 generation.
 
 Edit `Cargo.toml` and add all the dependencies we'll need for this example:
@@ -181,6 +179,7 @@ futures-preview = { version = "0.3.0-alpha.19", default-features = false, featur
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 prost = "0.5"
+rand = "0.7.2"
 tokio = "0.2.0-alpha.6"
 tonic = "0.1.0-alpha.1"
 
@@ -197,8 +196,6 @@ fn main() {
 }
 ```
 
-[prost]: https://github.com/danburkert/prost
-
 ```shell
 $ cargo build
 ```
@@ -211,6 +208,8 @@ That's it. The generated code contains:
 
 If your are curious as to where the generated files are, keep reading. The mystery will be revealed.
 We can now move on to the fun part.
+
+[PROST!]: https://github.com/danburkert/prost
 
 ## Creating the server
 
@@ -242,8 +241,7 @@ The generated code is placed inside our target directory, in a location defined 
 environment variable that is set by cargo. For our example, this means you can find the generated
 code in a path similar to `target/debug/build/routeguide/out/routeguide.rs`.
 
-You can learn more about `build.rs` and the `OUT_DIR` environment variable in the
-[cargo book][cargo-book].
+You can learn more about `build.rs` and the `OUT_DIR` environment variable in the [cargo book].
 
 We can use Tonic's `include_proto` macro to bring the generated code into scope:
 
@@ -257,8 +255,6 @@ use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
 
 **Note**: The token passed to the `include_proto` macro (in our case "routeguide") is the name of
 the package declared in in our `.proto` file, not a filename, e.g "routeguide.rs".
-
-[cargo-book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 
 With this in place, we can stub out our service implementation:
 
@@ -297,8 +293,9 @@ impl server::RouteGuide for RouteGuide {
 ```
 
 **Note**: The `tonic::async_trait` attribute macro adds support for async functions in traits. It
-uses [async-trait][async-trait] internally.
+uses [async-trait] internally.
 
+[cargo book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 [async-trait]: https://github.com/dtolnay/async-trait
 
 ### Server state
@@ -334,6 +331,9 @@ $ touch src/data.rs
 You can find our example json data in [tonic-examples/data/route_guide_db.json][route-guide-db] and
 the corresponding `data` module to load and deserialize it in
 [tonic-examples/routeguide/data.rs][data-module].
+
+**Note** If you are following along, you'll need to change the data file's path  from
+`tonic-examples/data/route_guide_db.json` to `data/route_guide_db.json`.
 
 Next, we need to implement `Hash` and `Eq` for `Point`, so we can use point values as map keys:
 
@@ -511,7 +511,7 @@ async fn route_chat(
 }
 ```
 
-`route_chat` uses the [async-stream][async-stream] crate to perform an asynchronous transformation
+`route_chat` uses the [async-stream] crate to perform an asynchronous transformation
 from one (input) stream to another (output) stream. As the input is processed, each value is
 inserted into the notes map, yielding a clone of the original `RouteNote`. The resulting stream
 is then returned to the caller. Neat.
@@ -543,13 +543,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-To handle requests, `Tonic` uses [Tower][tower] and [hyper][hyper] internally. What this means,
+To handle requests, `Tonic` uses [Tower] and [hyper] internally. What this means,
 among other things, is that we have a flexible and composable stack we can build on top of. We can,
 for example, add an [interceptor][authentication-example] or implement [routing][router-example].
 In the future, Tonic will include higher level support for routing and interceptors.
 
 
-[tower]: https://github.com/tower-rs
+[Tower]: https://github.com/tower-rs
 [hyper]: https://github.com/hyperium/hyper
 [authentication-example]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/authentication/server.rs#L54
 [router-example]: https://github.com/hyperium/tonic/blob/master/tonic-interop/src/bin/server.rs#L73
@@ -620,18 +620,30 @@ client
     }))
     .await?;
 ```
-We call the `get_feature` client method, passing a `Point` value wrapped in a `tonic::Request`.
+We call the `get_feature` client method, passing a single `Point` value wrapped in a
+`tonic::Request`. We get a `Result<tonic::Response<Feature>, tonic::Status>' back.
 
 #### Server-side streaming RPC
 Here's where we call the server-side streaming method `list_features`, which returns a stream of 
 geographical `Feature`s. 
 
 ```rust
-async fn print_features(
-    rect: Rectangle,
-    client: &mut RouteGuideClient<Channel>,
-) -> Result<(), Box<dyn Error>> {
-    let mut stream = client.list_features(Request::new(rect)).await?.into_inner();
+async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
+    let rectangle = Rectangle {
+        lo: Some(Point {
+            latitude: 400000000,
+            longitude: -750000000,
+        }),
+        hi: Some(Point {
+            latitude: 420000000,
+            longitude: -730000000,
+        }),
+    };
+    
+    let mut stream = client
+        .list_features(Request::new(rectangle))
+        .await?
+        .into_inner();
 
     while let Some(feature) = stream.try_next().await? {
         println!("NOTE = {:?}", feature);
@@ -649,11 +661,42 @@ responses to a response protocol buffer object (in this case a `Feature`) until 
 messages. 
 
 #### Client-side streaming RPC
+The client-side streaming method `record_route` takes a stream of `Point`s and returns a single
+`RouteSummary` value. 
+
+```rust
+async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
+    let mut rng = rand::thread_rng();
+    let point_count = rng.gen_range(2, 100);
+
+    let mut points = vec![];
+    for _ in 0..=point_count {
+        points.push(Ok(random_point(&mut rng)))
+    }
+
+    println!("Traversing {} points", points.len());
+    let request = Request::new(stream::iter(points));
+
+    match client.record_route(request).await {
+        Ok(response) => println!("SUMMARY: {:?}", response.into_inner()),
+        Err(e) => println!("something went wrong: {:?}", e),
+    }
+
+    Ok(())
+}
+```
+We build a vector of a random number of `Result<Point>` values (between 2 and 100) and then convert
+it into a `Stream` using the `futures::stream::iter` function. The resulting stream is then
+wrapped in a `tonic::Request`.
+We then match on the returned `Result`, printing the `RouteSummary` or an error.
+
 
 #### Bidirectional streaming RPC
 
+Finally, let's look at our bidirectional streaming RPC. The `route_chat` method takes a stream
+of `RouteNotes` and returns either another stream of `RouteNotes` or an error.
 ```rust
-async fn route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
+async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
     let outbound = async_stream::try_stream! {
@@ -683,8 +726,11 @@ async fn route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dy
 
     Ok(())
 }
-
 ```
+In this case, we use the [async-stream] crate to generate our outbound stream, yielding 
+`RouteNote` values in one second intervals. We then iterate over the stream returned by
+the server, printing each value in the stream.
+
 ## Try it out!
 
 ### Run the server
@@ -696,3 +742,43 @@ $ cargo run --bin routeguide-server
 ```shell
 $ cargo run --bin routeguide-client
 ```
+
+## Appendix
+
+<a name="tonic-build"></a>
+### tonic_build configuration
+
+Tonic's default code generation configuration is convenient for self contained examples and small
+projects. However, there are some cases when we need a slightly different workflow. For example:
+
+- When building rust clients and servers in different crates.
+- When building a rust client or server (or both) as part of a larger, multi-language.
+project.
+
+In general, whenever we want to keep our `.proto` definitions in a central place and generate
+code for different crates or different languages, the default configuration is not enough.
+
+Luckily, `tonic_build` can be configured to fit whatever workflow we need. Here are just two
+possibilities:
+
+1)  We can keep our `.proto` definitions in a separate crate and generate our code on demand, as
+opposed to at build time, placing the resulting modules wherever we need them. 
+
+`main.rs`
+
+```rust
+fn main() {
+    tonic_build::configure()
+        .build_client(false)
+        .out_dir("another_crate/src/pb")
+        .compile(&["path/my_proto.proto"], &["path"])
+        .expect("failed to compile protos");
+}
+``` 
+
+On `cargo run`, this will generate code for the client only, and place the resulting file in
+`another_crate/src/pb`.
+
+2) Similarly, we could also keep the `.proto` definitions in a separate crate and then use that
+crate as a direct dependency wherever we need it. 
+ 
