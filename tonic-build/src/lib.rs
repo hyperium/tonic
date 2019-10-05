@@ -58,7 +58,7 @@
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
-use prost_build::Config;
+use prost_build::{Config, Method};
 use quote::{ToTokens, TokenStreamExt};
 
 #[cfg(feature = "rustfmt")]
@@ -281,13 +281,22 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     stream
 }
 
-fn replace_wellknown(proto_path: &str, output: &str) -> TokenStream {
-    // TODO: detect more wellknown protobuf types
-    // https://github.com/danburkert/prost/blob/master/prost-types/src/protobuf.rs
-    match output {
-        "()" => quote::quote! { () },
-        _ => syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, output))
+fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenStream) {
+    let request = if method.input_proto_type.starts_with(".google.protobuf") {
+        method.input_type.parse::<TokenStream>().unwrap()
+    } else {
+        syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.input_type))
             .unwrap()
-            .to_token_stream(),
-    }
+            .to_token_stream()
+    };
+
+    let response = if method.output_proto_type.starts_with(".google.protobuf") {
+        method.input_type.parse::<TokenStream>().unwrap()
+    } else {
+        syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.output_type))
+            .unwrap()
+            .to_token_stream()
+    };
+
+    (request, response)
 }
