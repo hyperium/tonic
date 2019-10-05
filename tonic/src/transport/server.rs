@@ -207,7 +207,10 @@ impl Server {
                 #[cfg(feature = "tls")]
                 {
                     if let Some(tls) = &self.tls {
-                        let io = tls.connect(stream.into_inner()).await?;
+                        let io = match tls.connect(stream.into_inner()).await {
+                            Ok(io) => io,
+                            Err(_) => continue,
+                        };
                         yield BoxedIo::new(io);
                         continue;
                     }
