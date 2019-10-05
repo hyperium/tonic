@@ -598,7 +598,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 Same as in the server implementation, we start by bringing our generated code into scope. We then
-create a client in our main function, passing the server's full URL to 'RouteGuideClient::connect`.
+create a client in our main function, passing the server's full URL to `RouteGuideClient::connect`.
 Our client is now ready to make service calls. Note that client is mutable, this is because it needs
 to manage internal state.
 
