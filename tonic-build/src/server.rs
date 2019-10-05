@@ -114,8 +114,7 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
     for method in &service.methods {
         let name = quote::format_ident!("{}", method.name);
 
-        let req_message = crate::replace_wellknown(proto_path, &method.input_type);
-        let res_message = crate::replace_wellknown(proto_path, &method.output_type);
+        let (req_message, res_message) = crate::replace_wellknown(proto_path, &method);
 
         let method_doc = generate_doc_comments(&method.comments.leading);
 
@@ -226,8 +225,7 @@ fn generate_unary(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request = crate::replace_wellknown(proto_path, &method.input_type);
-    let response = crate::replace_wellknown(proto_path, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -266,8 +264,7 @@ fn generate_server_streaming(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request = crate::replace_wellknown(proto_path, &method.input_type);
-    let response = crate::replace_wellknown(proto_path, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     let response_stream = quote::format_ident!("{}Stream", method.proto_name);
 
@@ -310,8 +307,7 @@ fn generate_client_streaming(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request = crate::replace_wellknown(proto_path, &method.input_type);
-    let response = crate::replace_wellknown(proto_path, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -352,8 +348,7 @@ fn generate_streaming(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request = crate::replace_wellknown(proto_path, &method.input_type);
-    let response = crate::replace_wellknown(proto_path, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     let response_stream = quote::format_ident!("{}Stream", method.proto_name);
 

@@ -96,8 +96,7 @@ fn generate_methods(service: &Service, proto: &str) -> TokenStream {
 
 fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
-    let request = crate::replace_wellknown(proto, &method.input_type);
-    let response = crate::replace_wellknown(proto, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident(&mut self, request: tonic::Request<#request>)
@@ -113,8 +112,7 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
 fn generate_server_streaming(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
 
-    let request = crate::replace_wellknown(proto, &method.input_type);
-    let response = crate::replace_wellknown(proto, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident(&mut self, request: tonic::Request<#request>)
@@ -130,8 +128,7 @@ fn generate_server_streaming(method: &Method, proto: &str, path: String) -> Toke
 fn generate_client_streaming(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
 
-    let request = crate::replace_wellknown(proto, &method.input_type);
-    let response = crate::replace_wellknown(proto, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
@@ -149,8 +146,7 @@ fn generate_client_streaming(method: &Method, proto: &str, path: String) -> Toke
 fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
 
-    let request = crate::replace_wellknown(proto, &method.input_type);
-    let response = crate::replace_wellknown(proto, &method.output_type);
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
