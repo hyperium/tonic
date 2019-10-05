@@ -39,7 +39,7 @@ To run the sample code and walk through the tutorial, the only prerequisite is R
 Clone or download Tonic's repository:
 
 ```shell 
-git clone https://github.com/hyperium/tonic.git
+$ git clone https://github.com/hyperium/tonic.git
 ```
 
 Change your current directory to Tonic's repository root:
@@ -171,17 +171,18 @@ and our `.proto` definitions in sync.
 Behind the scenes, Tonic uses [PROST!][prost] to handle protocol buffer serialization and code
 generation.
 
-Edit `Cargo.toml` to add all the dependencies we'll need for this example:
+Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.1.0-alpha.1"
-futures-preview = { version = "0.3.0-alpha.19", default-features = false, features = ["alloc"]}
-tokio = "0.2.0-alpha.6"
-prost = "0.5"
+async-stream = "0.1.2"
 bytes = "0.4"
-serde_json = "1.0"
+futures-preview = { version = "0.3.0-alpha.19", default-features = false, features = ["alloc"]}
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+prost = "0.5"
+tokio = "0.2.0-alpha.6"
+tonic = "0.1.0-alpha.1"
 
 [build-dependencies]
 tonic-build = "0.1.0-alpha.1"
@@ -191,7 +192,8 @@ Create a `build.rs` file at the root of your crate:
 
 ```rust
 fn main() {
-    tonic_build::compile_protos("proto/route_guide.proto").unwrap();
+    tonic_build::compile_protos("proto/route_guide.proto")
+        .unwrap_or_else(|e| panic!("Failed to compile protos {:?}", e));
 }
 ```
 
@@ -235,7 +237,7 @@ We can start by defining a struct to represent our service, we can do this on `m
 struct RouteGuide;
 ```
 
-We now need to implement the `server::RouteGuide` trait that is generated in our build step.
+Next, we need to implement the `server::RouteGuide` trait that is generated in our build step.
 The generated code is placed inside our target directory, in a location defined by the `OUT_DIR`
 environment variable that is set by cargo. For our example, this means you can find the generated
 code in a path similar to `target/debug/build/routeguide/out/routeguide.rs`.
@@ -258,7 +260,7 @@ the package declared in in our `.proto` file, not a filename, e.g "routeguide.rs
 
 [cargo-book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 
-We are now we are ready to stub out our service implementation:
+With this in place, we can stub out our service implementation:
 
 ```rust
 #[tonic::async_trait]
@@ -294,8 +296,8 @@ impl server::RouteGuide for RouteGuide {
 }
 ```
 
-**Note**: The `tonic::async_trait` attribute macro adds support for async fn in traits. It uses
-[async-trait][async-trait] internally.
+**Note**: The `tonic::async_trait` attribute macro adds support for async functions in traits. It
+uses [async-trait][async-trait] internally.
 
 [async-trait]: https://github.com/dtolnay/async-trait
 
@@ -350,9 +352,8 @@ impl Eq for Point {}
 
 ```
 
-Lastly, we need wo helper functions: `in_range` and `calc_distance`. We will need them when
-performing feature lookups. You can find them in
-[tonic-examples/src/routeguide/server.rs][in-range-fn].
+Lastly, we need two helper functions: `in_range` and `calc_distance`. We'll use them when performing
+feature lookups. You can find them in [tonic-examples/src/routeguide/server.rs][in-range-fn].
 
 [route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
 [data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
@@ -361,16 +362,15 @@ performing feature lookups. You can find them in
 #### Request and Response types
 All our service methods receive a `tonic::Request<T>` and return a
 `Result<tonic::Response<T>, tonic::Status>`. The concrete type of `T` depends on how our methods
-are declared in our *service* `.proto` definition. It can be one of two things:
+are declared in our *service* `.proto` definition. It can be either:
 
-- A single value, e.g `Point`, `Widget`, `Vec<Rectangle>`
-- A stream of values, e.g. a type that implements `Stream<Item = Result<Widget, tonic::Status>>`
-
+- A single value, e.g `Point`, `Vec<Rectangle>`
+- A stream of values, e.g. `impl Stream<Item = Result<Feature, tonic::Status>>`
 
 #### Simple RPC
 Let's look at the simplest method first, `get_feature`, which just gets a `tonic::Request<Point>` 
-from the client and tries to find a feature at the location represented by the given `Point`.
-If no feature is found, it returns an empty one.
+from the client and tries to find a feature at the given `Point`. If no feature is found, it returns
+an empty one.
 
 ```rust
 async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
@@ -417,10 +417,10 @@ async fn list_features(
 }
 ```
 
-Like `get_feature`, `list_features`'s input is a single message. A `Rectangle` in this
+Like `get_feature`, `list_features`'s input is a single message, a `Rectangle` in this
 case. This time, however, we need to return a stream of values, rather than a single one.
-We create a channel and move the `Sink` into a new asynchronous task where we perform our
-lookup, sending the features that satisfy our constraints into the channel.
+We create a channel and spawn a new asynchronous task where we perform a lookup, sending
+the features that satisfy our constraints into the channel. 
 
 The `Stream` half of the channel is returned to the caller, wrapped in a `tonic::Response`.
 
@@ -429,7 +429,7 @@ The `Stream` half of the channel is returned to the caller, wrapped in a `tonic:
 Now let's look at something a little more complicated: the client-side streaming method 
 `record_route`, where we get a stream of `Point`s from the client and return a single `RouteSummary` 
 with information about their trip. As you can see, this time the method receives a 
-`tonic::Request<tonic::Streaming<Point>>` 
+`tonic::Request<tonic::Streaming<Point>>`. 
 
 ```rust
 async fn record_route(
@@ -507,14 +507,14 @@ async fn route_chat(
         as Pin<
             Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>,
         >))
-    }
+    
 }
 ```
 
 `route_chat` uses the [async-stream][async-stream] crate to perform an asynchronous transformation
 from one (input) stream to another (output) stream. As the input is processed, each value is
 inserted into the notes map, yielding a clone of the original `RouteNote`. The resulting stream
-of notes is then returned to the caller. Neat.
+is then returned to the caller. Neat.
 
 [async-stream]: https://github.com/tokio-rs/async-stream
 
@@ -545,7 +545,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 To handle requests, `Tonic` uses [Tower][tower] and [hyper][hyper] internally. What this means,
 among other things, is that we have a flexible and composable stack we can build on top of. We can,
-for example, add an [interceptor][authentication-example] or implement [routing][router-example]
+for example, add an [interceptor][authentication-example] or implement [routing][router-example].
+In the future, Tonic will include higher level support for routing and interceptors.
 
 
 [tower]: https://github.com/tower-rs
@@ -572,7 +573,7 @@ name = "routeguide-client"
 path = "src/client.rs"
 ```
 
-Next, rename `main.rs` to `server.rs` and create a new file `client.rs`.
+Rename `main.rs` to `server.rs` and create a new file `client.rs`.
 
 ```shell
 $ mv src/main.rs src/server.rs
@@ -586,13 +587,20 @@ pub mod route_guide {
     tonic::include_proto!("routeguide");
 }
 
-use route_guide::client::RouteGuideClient;
+use route_guide::{client::RouteGuideClient, Point, Rectangle, RouteNote};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = RouteGuideClient::connect("http://[::1]:10000")?;
+    
+     Ok(())
 }
 ```
+
+Same as in the server implementation, we start by bringing our generated code into scope. We then
+create a client in our main function, passing the server's full URL to 'RouteGuideClient::connect`.
+Our client is now ready to make service calls. Note that client is mutable, this is because it needs
+to manage internal state.
 
 [routeguide-client]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/client.rs
 
@@ -602,22 +610,81 @@ Now let's look at how we call our service methods. Note that in Tonic, RPCs are 
 which means that the RPC call needs to be `awaited`.
 
 #### Simple RPC
-Calling the simple RPC `GetFeature` is as straightforward as calling a local method.
+Calling the simple RPC `get_feature` is as straightforward as calling a local method.
 
 ```rust
-let response = client
+client
     .get_feature(Request::new(Point {
         latitude: 409146138,
         longitude: -746188906,
     }))
     .await?;
 ```
-We call the `get_feature` client, passing a `Point` value wrapped in a `tonic::Request`.
+We call the `get_feature` client method, passing a `Point` value wrapped in a `tonic::Request`.
 
 #### Server-side streaming RPC
+Here's where we call the server-side streaming method `list_features`, which returns a stream of 
+geographical `Feature`s. 
+
+```rust
+async fn print_features(
+    rect: Rectangle,
+    client: &mut RouteGuideClient<Channel>,
+) -> Result<(), Box<dyn Error>> {
+    let mut stream = client.list_features(Request::new(rect)).await?.into_inner();
+
+    while let Some(feature) = stream.try_next().await? {
+        println!("NOTE = {:?}", feature);
+    }
+
+    Ok(())
+}
+```
+
+As in the simple RPC, we pass a single value request. However, instead of getting a 
+single value back, we get a stream of `Features`. 
+
+We use the `TryStreamExt`'s `try_next()` method to repeatedly read in the server's
+responses to a response protocol buffer object (in this case a `Feature`) until there are no more
+messages. 
+
+#### Client-side streaming RPC
 
 #### Bidirectional streaming RPC
 
+```rust
+async fn route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
+    let start = Instant::now();
+
+    let outbound = async_stream::try_stream! {
+        let mut interval = Interval::new_interval(Duration::from_secs(1));
+
+        while let Some(time) = interval.next().await {
+            let elapsed = time.duration_since(start);
+            let note = RouteNote {
+                location: Some(Point {
+                    latitude: 409146138 + elapsed.as_secs() as i32,
+                    longitude: -746188906,
+                }),
+                message: format!("at {:?}", elapsed),
+            };
+
+            yield note;
+        }
+    };
+
+    let request = Request::new(outbound);
+    let response = client.route_chat(request).await?;
+    let mut inbound = response.into_inner();
+
+    while let Some(note) = inbound.try_next().await? {
+        println!("NOTE = {:?}", note);
+    }
+
+    Ok(())
+}
+
+```
 ## Try it out!
 
 ### Run the server
@@ -629,8 +696,3 @@ $ cargo run --bin routeguide-server
 ```shell
 $ cargo run --bin routeguide-client
 ```
-
-## Appendix
-### tonic-build configuration
-### Well Known Types
-

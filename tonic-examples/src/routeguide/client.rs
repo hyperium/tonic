@@ -12,16 +12,6 @@ pub mod route_guide {
 
 use route_guide::client::RouteGuideClient;
 
-async fn print_feature(
-    point: Point,
-    client: &mut RouteGuideClient<Channel>,
-) -> Result<(), Box<dyn Error>> {
-    let response = client.get_feature(Request::new(point)).await?;
-    println!("FEATURE = {:?}", response);
-
-    Ok(())
-}
-
 async fn print_features(
     rect: Rectangle,
     client: &mut RouteGuideClient<Channel>,
@@ -70,12 +60,14 @@ async fn route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dy
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = RouteGuideClient::connect("http://[::1]:10000")?;
 
-    let point = Point {
-        latitude: 409146138,
-        longitude: -746188906,
-    };
+    let response = client
+        .get_feature(Request::new(Point {
+            latitude: 409146138,
+            longitude: -746188906,
+        }))
+        .await?;
 
-    print_feature(point, &mut client).await?;
+    println!("RESPONSE = {:?}", response);
 
     let rectangle = Rectangle {
         lo: Some(Point {
