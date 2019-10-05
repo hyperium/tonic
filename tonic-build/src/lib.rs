@@ -291,7 +291,7 @@ fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenSt
     };
 
     let response = if method.output_proto_type.starts_with(".google.protobuf") {
-        method.input_type.parse::<TokenStream>().unwrap()
+        method.output_type.parse::<TokenStream>().unwrap()
     } else {
         syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.output_type))
             .unwrap()
