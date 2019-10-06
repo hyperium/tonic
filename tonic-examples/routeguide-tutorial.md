@@ -261,6 +261,13 @@ the package declared in in our `.proto` file, not a filename, e.g "routeguide.rs
 With this in place, we can stub out our service implementation:
 
 ```rust
+use tonic::{Request, Response, Status};
+use tokio::sync::mpsc;
+use std::pin::Pin;
+use futures::Stream;
+```
+
+```rust
 #[tonic::async_trait]
 impl server::RouteGuide for RouteGuide {
     async fn get_feature(&self, _request: Request<Point>) -> Result<Response<Feature>, Status> {
@@ -312,6 +319,12 @@ executor and that the `server::RouteGuide` trait has `Send + Sync + 'static` bou
 This in one way we can represent our state:
 
 ```rust
+use tokio::sync::Mutex;
+use std::sync::Arc;
+use std::collections::HashMap;
+```
+
+```rust
 #[derive(Debug)]
 pub struct RouteGuide {
     state: State,
@@ -342,6 +355,10 @@ the corresponding `data` module to load and deserialize it in
 `tonic-examples/data/route_guide_db.json` to `data/route_guide_db.json`.
 
 Next, we need to implement `Hash` and `Eq` for `Point`, so we can use point values as map keys:
+
+```rust
+use std::hash::{Hasher, Hash};
+```
 
 ```rust
 impl Hash for Point {
@@ -439,6 +456,11 @@ with information about their trip. As you can see, this time the method receives
 `tonic::Request<tonic::Streaming<Point>>`. 
 
 ```rust
+use std::time::Instant;
+use futures::StreamExt;
+```
+
+```rust
 async fn record_route(
     &self,
     request: Request<tonic::Streaming<Point>>,
@@ -532,6 +554,11 @@ to be fixed soon.
 
 Once we've implemented all our methods, we also need to start up a gRPC server so that clients can
 actually use our service. This is how our `main` function looks like:
+
+```rust
+mod data;
+use tonic::transport::Server;
+```
 
 ```rust
 #[tokio::main]
