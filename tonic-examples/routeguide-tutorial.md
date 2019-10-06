@@ -7,7 +7,7 @@ and Tonic. By walking through this example you'll learn how to:
 - Generate server and client code.
 - Write a simple client and server for your service.
 
-It assumes you are familiar with [protocol buffers] and Rust. Note that the example in
+It assumes you are familiar with [protocol buffers] and basic Rust. Note that the example in
 this tutorial uses the proto3 version of the protocol buffers language, you can find out more in the 
 [proto3 language guide][proto3]. 
 
@@ -47,11 +47,15 @@ Change your current directory to Tonic's repository root:
 $ cd tonic
 ```
 
-Tonic uses `rustfmt` to tidy up the code it generates, make sure it's installed.
+Tonic uses `rustfmt` to tidy up the code it generates, so we'll make sure it's installed.
 
 ```shell
 $ rustup component add rustfmt
 ```
+
+**Note** Prior to rust's 1.39 release, Tonic may be pinned to a specific toolchain version. Running
+the above command may first download and install a different toolchain. Check the project's [readme]
+for the latest requirements.
 
 Run the server
 ```shell
@@ -63,8 +67,6 @@ In a separate shell, run the client
 $ cargo run --bin routeguide-client
 ```
 
-**Note:** Prior to rust's 1.39 release, Tonic may be pinned to a specific toolchain version.
-Consult the project's [readme] for the latest info.
 
 [readme]: https://github.com/hyperium/tonic#getting-started
 
@@ -293,10 +295,12 @@ impl server::RouteGuide for RouteGuide {
 ```
 
 **Note**: The `tonic::async_trait` attribute macro adds support for async functions in traits. It
-uses [async-trait] internally.
+uses [async-trait] internally. You can learn more about `async fn` in traits in the [async book]. 
+
 
 [cargo book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 [async-trait]: https://github.com/dtolnay/async-trait
+[async book]: https://rust-lang.github.io/async-book/07_workarounds/06_async_in_traits.html
 
 ### Server state
 There are two pieces of state our service needs to access: an immutable list of features and a
@@ -320,6 +324,8 @@ struct State {
 }
 ```
 
+**Note:** we are using `tokio::sync::Mutex` here, not `std::sync::Mutex`.
+
 When our server boots, we are going to deserialize our features vector from a json file.
 Create the data file and a helper module to read and deserialize our features.
 
@@ -332,7 +338,7 @@ You can find our example json data in [tonic-examples/data/route_guide_db.json][
 the corresponding `data` module to load and deserialize it in
 [tonic-examples/routeguide/data.rs][data-module].
 
-**Note** If you are following along, you'll need to change the data file's path  from
+**Note:** If you are following along, you'll need to change the data file's path  from
 `tonic-examples/data/route_guide_db.json` to `data/route_guide_db.json`.
 
 Next, we need to implement `Hash` and `Eq` for `Point`, so we can use point values as map keys:
@@ -352,8 +358,9 @@ impl Eq for Point {}
 
 ```
 
-Lastly, we need two helper functions: `in_range` and `calc_distance`. We'll use them when performing
-feature lookups. You can find them in [tonic-examples/src/routeguide/server.rs][in-range-fn].
+Lastly, we need implement two helper functions: `in_range` and `calc_distance`. We'll use them
+when performing feature lookups. You can find them in
+[tonic-examples/src/routeguide/server.rs][in-range-fn].
 
 [route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
 [data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
@@ -364,8 +371,8 @@ All our service methods receive a `tonic::Request<T>` and return a
 `Result<tonic::Response<T>, tonic::Status>`. The concrete type of `T` depends on how our methods
 are declared in our *service* `.proto` definition. It can be either:
 
-- A single value, e.g `Point`, `Vec<Rectangle>`
-- A stream of values, e.g. `impl Stream<Item = Result<Feature, tonic::Status>>`
+- A single value, e.g `Point`, `Rectangle`, or even a message type that includes a repeated field.
+- A stream of values, e.g. `impl Stream<Item = Result<Feature, tonic::Status>>`.
 
 #### Simple RPC
 Let's look at the simplest method first, `get_feature`, which just gets a `tonic::Request<Point>` 
@@ -469,7 +476,7 @@ async fn record_route(
 `record_route` is conceptually simple: we get a stream of `Points` and fold it into a `RouteSummary`.
 In other words, we build a summary value as we process each `Point` in our stream, one by one.
 When there are no more `Points` in our stream, we return the `RouteSummary` wrapped in a 
-`tonic::Response`
+`tonic::Response`.
 
 #### Bidirectional streaming RPC
 Finally, let's look at our bidirectional streaming RPC `route_chat`, which receives a stream
@@ -516,6 +523,9 @@ from one (input) stream to another (output) stream. As the input is processed, e
 inserted into the notes map, yielding a clone of the original `RouteNote`. The resulting stream
 is then returned to the caller. Neat.
 
+**Note**: The funky `as` cast is needed due to a limitation in the rust compiler. This is expected
+to be fixed soon.
+
 [async-stream]: https://github.com/tokio-rs/async-stream
 
 ### Starting the server
@@ -546,7 +556,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 To handle requests, `Tonic` uses [Tower] and [hyper] internally. What this means,
 among other things, is that we have a flexible and composable stack we can build on top of. We can,
 for example, add an [interceptor][authentication-example] or implement [routing][router-example].
-In the future, Tonic will include higher level support for routing and interceptors.
+In the future, Tonic may include higher level support for routing and interceptors.
 
 
 [Tower]: https://github.com/tower-rs
