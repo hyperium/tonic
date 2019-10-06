@@ -54,10 +54,14 @@ $ cargo +beta build
 #### `Cargo.toml`
 
 ```toml
+[dependencies]
 tonic = "*"
 bytes = "0.4"
 prost = "0.5"
 prost-derive = "0.5"
+
+[build-dependencies]
+tonic-build = "*"
 ```
 
 #### Protobuf
