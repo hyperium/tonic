@@ -1,0 +1,39 @@
+[package]
+name = "tonic-benches"
+version = "0.1.0"
+authors = ["John Douglas <blittable.bits@gmail.com>"]
+edition = "2018"
+
+[[bench]]
+name = "serialization"
+path = "serialization.rs"
+harness= false
+
+[[bin]]
+name = "pb_build"
+path = "build.rs"
+
+[dependencies]
+tonic = { path = "../tonic", features = ["rustls"] }
+bytes = "0.4"
+prost = "0.5"
+rand = "0.7.2"
+
+tokio = "=0.2.0-alpha.6"
+futures-preview = { version = "=0.3.0-alpha.19", default-features = false, features = ["alloc"]}
+async-stream = "0.1.2"
+http = "0.1"
+tower = "=0.3.0-alpha.2"
+tonic-build = { path = "../tonic-build" }
+
+[dev-dependencies]
+criterion = "0.3.0"
+
+[build-dependencies]
+tonic = { path = "../tonic", features = ["rustls"] }
+tonic-build = { path = "../tonic-build" }
+tokio = "=0.2.0-alpha.6"
+futures-preview = { version = "=0.3.0-alpha.19", default-features = false, features = ["alloc"]}
+async-stream = "0.1.2"
+http = "0.1"
+tower = "=0.3.0-alpha.2"
