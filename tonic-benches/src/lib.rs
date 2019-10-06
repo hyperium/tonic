@@ -5,9 +5,7 @@ pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
 
-use hello_world::{
-    HelloRequest,
-};
+use hello_world::HelloRequest;
 
 //Assess the impact of Rnd
 pub fn just_random(string_size: usize) -> Result<(), Box<dyn std::error::Error>> {
@@ -27,11 +25,10 @@ pub fn load(string_size: usize) -> Result<(), Box<dyn std::error::Error>> {
 
     //One element POC / HelloRequest
     let _request = tonic::Request::new(HelloRequest {
-    name: _rand_name.into(),
+        name: _rand_name.into(),
     });
 
     Ok(())
 }
-
 
 //Build out more complex benchmarks with alt protobufs
