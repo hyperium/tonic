@@ -609,26 +609,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Same as in the server implementation, we start by bringing our generated code into scope. We then
 create a client in our main function, passing the server's full URL to `RouteGuideClient::connect`.
-Our client is now ready to make service calls. Note that client is mutable, this is because it needs
-to manage internal state.
+Our client is now ready to make service calls. Note that `client` is mutable, this is because it
+needs to manage internal state.
 
 [routeguide-client]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/client.rs
 
 
 ### Calling service methods
 Now let's look at how we call our service methods. Note that in Tonic, RPCs are asynchronous, 
-which means that the RPC call needs to be `awaited`.
+which means that RPC calls need to be `.await`ed.
 
 #### Simple RPC
-Calling the simple RPC `get_feature` is as straightforward as calling a local method.
+Calling the simple RPC `get_feature` is as straightforward as calling a local method:
 
 ```rust
-client
+use tonic::Request;
+```
+
+```rust
+let response = client
     .get_feature(Request::new(Point {
         latitude: 409146138,
         longitude: -746188906,
     }))
     .await?;
+    
+println!("RESPONSE = {:?}", response);
 ```
 We call the `get_feature` client method, passing a single `Point` value wrapped in a
 `tonic::Request`. We get a `Result<tonic::Response<Feature>, tonic::Status>` back.
@@ -636,6 +642,12 @@ We call the `get_feature` client method, passing a single `Point` value wrapped 
 #### Server-side streaming RPC
 Here's where we call the server-side streaming method `list_features`, which returns a stream of 
 geographical `Feature`s. 
+
+```rust
+use futures::TryStreamExt;
+use tonic::transport::Channel;
+use std::error::Error;
+```
 
 ```rust
 async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
@@ -666,18 +678,24 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
 As in the simple RPC, we pass a single value request. However, instead of getting a 
 single value back, we get a stream of `Features`. 
 
-We use the `TryStreamExt`'s `try_next()` method to repeatedly read in the server's
-responses to a response protocol buffer object (in this case a `Feature`) until there are no more
-messages. 
+We use the the `try_next()` method from `futures::TryStreamExt` trait to repeatedly read in the
+server's responses to a response protocol buffer object (in this case a `Feature`) until there are
+no more messages left in the stream.
 
 #### Client-side streaming RPC
 The client-side streaming method `record_route` takes a stream of `Point`s and returns a single
 `RouteSummary` value. 
 
 ```rust
+use rand::rngs::ThreadRng;
+use rand::Rng;
+use futures::stream;
+```
+
+```rust
 async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let mut rng = rand::thread_rng();
-    let point_count = rng.gen_range(2, 100);
+    let point_count: i32 = rng.gen_range(2, 100);
 
     let mut points = vec![];
     for _ in 0..=point_count {
@@ -695,16 +713,34 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
     Ok(())
 }
 ```
+
+```rust
+fn random_point(rng: &mut ThreadRng) -> Point {
+    let latitude = (rng.gen_range(0, 180) - 90) * 10_000_000;
+    let longitude = (rng.gen_range(0, 360) - 180) * 10_000_000;
+    Point {
+        latitude,
+        longitude,
+    }
+}
+```
+
 We build a vector of a random number of `Result<Point>` values (between 2 and 100) and then convert
-it into a `Stream` using the `futures::stream::iter` function. The resulting stream is then
-wrapped in a `tonic::Request`.
-We then match on the returned `Result`, printing the `RouteSummary` or an error.
+it into a `Stream` using the `futures::stream::iter` function. This is a cheap an easy way to get
+a stream suitable for passing into our service method. The resulting stream is then wrapped in a
+`tonic::Request`.
 
 
 #### Bidirectional streaming RPC
 
 Finally, let's look at our bidirectional streaming RPC. The `route_chat` method takes a stream
 of `RouteNotes` and returns either another stream of `RouteNotes` or an error.
+
+```rust
+use std::time::{Duration, Instant};
+use tokio::timer::Interval;
+```
+
 ```rust
 async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
@@ -762,10 +798,11 @@ Tonic's default code generation configuration is convenient for self contained e
 projects. However, there are some cases when we need a slightly different workflow. For example:
 
 - When building rust clients and servers in different crates.
-- When building a rust client or server (or both) as part of a larger, multi-language.
-project.
+- When building a rust client or server (or both) as part of a larger, multi-language project.
+- When we want editor support for the generate code and our editor does not index the generated
+files in the default location.
 
-In general, whenever we want to keep our `.proto` definitions in a central place and generate
+More generally, whenever we want to keep our `.proto` definitions in a central place and generate
 code for different crates or different languages, the default configuration is not enough.
 
 Luckily, `tonic_build` can be configured to fit whatever workflow we need. Here are just two
