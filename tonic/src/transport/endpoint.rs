@@ -1,6 +1,9 @@
 use super::channel::Channel;
 #[cfg(feature = "tls")]
-use super::{service::TlsConnector, tls::Certificate};
+use super::{
+    service::TlsConnector,
+    tls::{Certificate, TlsProvider},
+};
 use bytes::Bytes;
 use http::uri::{InvalidUriBytes, Uri};
 use std::{
@@ -24,6 +27,8 @@ pub struct Endpoint {
     pub(super) buffer_size: Option<usize>,
     pub(super) interceptor_headers:
         Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
+    pub(super) init_stream_window_size: Option<u32>,
+    pub(super) init_connection_window_size: Option<u32>,
 }
 
 impl Endpoint {
@@ -101,61 +106,22 @@ impl Endpoint {
         self
     }
 
-    /// Enable TLS and apply the CA as the root certificate.
+    /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
+    /// stream-level flow control.
     ///
-    /// Providing an optional domain to override. If `None` is passed to this
-    /// the TLS implementation will use the `Uri` that was used to create the
-    /// `Endpoint` builder.
+    /// Default is 65,535
     ///
-    /// ```no_run
-    /// # use tonic::transport::{Certificate, Endpoint};
-    /// # fn dothing() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut builder = Endpoint::from_static("https://example.com");
-    /// let ca = std::fs::read_to_string("ca.pem")?;
-    ///
-    /// let ca = Certificate::from_pem(ca);
-    ///
-    /// builder.openssl_tls(ca, "example.com".to_string());
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[cfg(feature = "openssl")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "openssl")))]
-    pub fn openssl_tls(&mut self, ca: Certificate, domain: impl Into<Option<String>>) -> &mut Self {
-        let domain = domain
-            .into()
-            .unwrap_or_else(|| self.uri.clone().to_string());
-        let tls = TlsConnector::new_with_openssl(ca, domain).unwrap();
-        self.tls = Some(tls);
+    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    pub fn initial_stream_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_stream_window_size = sz.into();
         self
     }
 
-    /// Enable TLS and apply the CA as the root certificate.
+    /// Sets the max connection-level flow control for HTTP2
     ///
-    /// Providing an optional domain to override. If `None` is passed to this
-    /// the TLS implementation will use the `Uri` that was used to create the
-    /// `Endpoint` builder.
-    ///
-    /// ```no_run
-    /// # use tonic::transport::{Certificate, Endpoint};
-    /// # fn dothing() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut builder = Endpoint::from_static("https://example.com");
-    /// let ca = std::fs::read_to_string("ca.pem")?;
-    ///
-    /// let ca = Certificate::from_pem(ca);
-    ///
-    /// builder.rustls_tls(ca, "example.com".to_string());
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[cfg(feature = "rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
-    pub fn rustls_tls(&mut self, ca: Certificate, domain: impl Into<Option<String>>) -> &mut Self {
-        let domain = domain
-            .into()
-            .unwrap_or_else(|| self.uri.clone().to_string());
-        let tls = TlsConnector::new_with_rustls(ca, domain).unwrap();
-        self.tls = Some(tls);
+    /// Default is 65,535
+    pub fn initial_connection_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_connection_window_size = sz.into();
         self
     }
 
@@ -165,6 +131,13 @@ impl Endpoint {
         F: Fn(&mut http::HeaderMap) + Send + Sync + 'static,
     {
         self.interceptor_headers = Some(Arc::new(f));
+        self
+    }
+
+    /// Configures TLS for the endpoint.
+    #[cfg(feature = "tls")]
+    pub fn tls_config(&mut self, tls_config: &ClientTlsConfig) -> &mut Self {
+        self.tls = Some(tls_config.tls_connector(self.uri.clone()).unwrap());
         self
     }
 
@@ -185,6 +158,8 @@ impl From<Uri> for Endpoint {
             tls: None,
             buffer_size: None,
             interceptor_headers: None,
+            init_stream_window_size: None,
+            init_connection_window_size: None,
         }
     }
 }
@@ -227,5 +202,106 @@ impl std::error::Error for Never {}
 impl fmt::Debug for Endpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Endpoint").finish()
+    }
+}
+
+/// Configures TLS settings for endpoints.
+#[cfg(feature = "tls")]
+#[derive(Clone)]
+pub struct ClientTlsConfig {
+    provider: TlsProvider,
+    domain: Option<String>,
+    cert: Option<Certificate>,
+    #[cfg(feature = "openssl")]
+    openssl_raw: Option<openssl1::ssl::SslConnector>,
+    #[cfg(feature = "rustls")]
+    rustls_raw: Option<tokio_rustls::rustls::ClientConfig>,
+}
+
+#[cfg(feature = "tls")]
+impl fmt::Debug for ClientTlsConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ClientTlsConfig")
+            .field("provider", &self.provider)
+            .finish()
+    }
+}
+
+#[cfg(feature = "tls")]
+impl ClientTlsConfig {
+    /// Creates a new `ClientTlsConfig` using OpenSSL.
+    #[cfg(feature = "openssl")]
+    pub fn with_openssl() -> Self {
+        Self::new(TlsProvider::OpenSsl)
+    }
+
+    /// Creates a new `ClientTlsConfig` using Rustls.
+    #[cfg(feature = "rustls")]
+    pub fn with_rustls() -> Self {
+        Self::new(TlsProvider::Rustls)
+    }
+
+    fn new(provider: TlsProvider) -> Self {
+        ClientTlsConfig {
+            provider,
+            domain: None,
+            cert: None,
+            #[cfg(feature = "openssl")]
+            openssl_raw: None,
+            #[cfg(feature = "rustls")]
+            rustls_raw: None,
+        }
+    }
+
+    /// Sets the domain name against which to verify the server's TLS certificate.
+    pub fn domain_name(&mut self, domain_name: impl Into<String>) -> &mut Self {
+        self.domain = Some(domain_name.into());
+        self
+    }
+
+    /// Sets the CA Certificate against which to verify the server's TLS certificate.
+    pub fn ca_certificate(&mut self, ca_certificate: Certificate) -> &mut Self {
+        self.cert = Some(ca_certificate);
+        self
+    }
+
+    /// Use options specified by the given `SslConnector` to configure TLS.
+    ///
+    /// This overrides all other TLS options set via other means.
+    #[cfg(feature = "openssl")]
+    pub fn openssl_connector(&mut self, connector: openssl1::ssl::SslConnector) -> &mut Self {
+        self.openssl_raw = Some(connector);
+        self
+    }
+
+    /// Use options specified by the given `ClientConfig` to configure TLS.
+    ///
+    /// This overrides all other TLS options set via other means.
+    #[cfg(feature = "rustls")]
+    pub fn rustls_client_config(
+        &mut self,
+        config: tokio_rustls::rustls::ClientConfig,
+    ) -> &mut Self {
+        self.rustls_raw = Some(config);
+        self
+    }
+
+    fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
+        let domain = match &self.domain {
+            None => uri.to_string(),
+            Some(domain) => domain.clone(),
+        };
+        match self.provider {
+            #[cfg(feature = "openssl")]
+            TlsProvider::OpenSsl => match &self.openssl_raw {
+                None => TlsConnector::new_with_openssl_cert(self.cert.clone(), domain),
+                Some(r) => TlsConnector::new_with_openssl_raw(r.clone(), domain),
+            },
+            #[cfg(feature = "rustls")]
+            TlsProvider::Rustls => match &self.rustls_raw {
+                None => TlsConnector::new_with_rustls_cert(self.cert.clone(), domain),
+                Some(c) => TlsConnector::new_with_rustls_raw(c.clone(), domain),
+            },
+        }
     }
 }

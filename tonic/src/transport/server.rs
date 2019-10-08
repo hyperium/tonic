@@ -2,7 +2,10 @@
 
 use super::service::{layer_fn, BoxedIo, ServiceBuilderExt};
 #[cfg(feature = "tls")]
-use super::{service::TlsAcceptor, tls::Identity};
+use super::{
+    service::TlsAcceptor,
+    tls::{Identity, TlsProvider},
+};
 use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{ready, try_future::MapErr, TryFutureExt, TryStreamExt};
@@ -28,6 +31,8 @@ use tower::{
     ServiceBuilder,
 };
 use tower_make::MakeService;
+#[cfg(feature = "tls")]
+use tracing::error;
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
@@ -47,6 +52,9 @@ pub struct Server {
     // timeout: Option<Duration>,
     #[cfg(feature = "tls")]
     tls: Option<TlsAcceptor>,
+    init_stream_window_size: Option<u32>,
+    init_connection_window_size: Option<u32>,
+    max_concurrent_streams: Option<u32>,
 }
 
 impl Server {
@@ -57,49 +65,10 @@ impl Server {
 }
 
 impl Server {
-    /// Set the [`Identity`] of this server using `openssl`.
-    ///
-    /// ```no_run
-    /// # use tonic::transport::{Identity, Server};
-    /// # fn dothing() -> Result<(),  Box<dyn std::error::Error>> {
-    /// # let mut builder = Server::builder();
-    /// let cert = std::fs::read_to_string("server.pem")?;
-    /// let key = std::fs::read_to_string("server.key")?;
-    ///
-    /// let identity = Identity::from_pem(&cert, &key);
-    ///
-    /// builder.openssl_tls(identity);
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[cfg(feature = "openssl")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "openssl")))]
-    pub fn openssl_tls(&mut self, identity: Identity) -> &mut Self {
-        let acceptor = TlsAcceptor::new_with_openssl(identity).unwrap();
-        self.tls = Some(acceptor);
-        self
-    }
-
-    /// Set the [`Identity`] of this server using `rustls`.
-    ///
-    /// ```no_run
-    /// # use tonic::transport::{Identity, Server};
-    /// # fn dothing() -> Result<(), Box<dyn std::error::Error>> {
-    /// # let mut builder = Server::builder();
-    /// let cert = std::fs::read_to_string("server.pem")?;
-    /// let key = std::fs::read_to_string("server.key")?;
-    ///
-    /// let identity = Identity::from_pem(&cert, &key);
-    ///
-    /// builder.rustls_tls(identity);
-    /// # Ok(())
-    /// # }
-    /// ```
-    #[cfg(feature = "rustls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "rustls")))]
-    pub fn rustls_tls(&mut self, identity: Identity) -> &mut Self {
-        let acceptor = TlsAcceptor::new_with_rustls(identity).unwrap();
-        self.tls = Some(acceptor);
+    /// Configure TLS for this server.
+    #[cfg(feature = "tls")]
+    pub fn tls_config(&mut self, tls_config: &ServerTlsConfig) -> &mut Self {
+        self.tls = Some(tls_config.tls_acceptor().unwrap());
         self
     }
 
@@ -122,6 +91,36 @@ impl Server {
     //     self.timeout = Some(timeout);
     //     self
     // }
+
+    /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
+    /// stream-level flow control.
+    ///
+    /// Default is 65,535
+    ///
+    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    pub fn initial_stream_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_stream_window_size = sz.into();
+        self
+    }
+
+    /// Sets the max connection-level flow control for HTTP2
+    ///
+    /// Default is 65,535
+    pub fn initial_connection_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
+        self.init_connection_window_size = sz.into();
+        self
+    }
+
+    /// Sets the [`SETTINGS_MAX_CONCURRENT_STREAMS`][spec] option for HTTP2
+    /// connections.
+    ///
+    /// Default is no limit (`None`).
+    ///
+    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_MAX_CONCURRENT_STREAMS
+    pub fn max_concurrent_streams(&mut self, max: impl Into<Option<u32>>) -> &mut Self {
+        self.max_concurrent_streams = max.into();
+        self
+    }
 
     /// Intercept the execution of gRPC methods.
     ///
@@ -162,6 +161,9 @@ impl Server {
     {
         let interceptor = self.interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
+        let init_connection_window_size = self.init_connection_window_size;
+        let init_stream_window_size = self.init_stream_window_size;
+        let max_concurrent_streams = self.max_concurrent_streams;
         // let timeout = self.timeout.clone();
 
         let incoming = hyper::server::accept::from_stream(async_stream::try_stream! {
@@ -171,7 +173,13 @@ impl Server {
                 #[cfg(feature = "tls")]
                 {
                     if let Some(tls) = &self.tls {
-                        let io = tls.connect(stream.into_inner()).await?;
+                        let io = match tls.connect(stream.into_inner()).await {
+                            Ok(io) => io,
+                            Err(error) => {
+                                error!(message = "Unable to accept incoming connection.", %error);
+                                continue
+                            },
+                        };
                         yield BoxedIo::new(io);
                         continue;
                     }
@@ -190,6 +198,9 @@ impl Server {
 
         hyper::Server::builder(incoming)
             .http2_only(true)
+            .http2_initial_connection_window_size(init_connection_window_size)
+            .http2_initial_stream_window_size(init_stream_window_size)
+            .http2_max_concurrent_streams(max_concurrent_streams)
             .serve(svc)
             .await
             .map_err(map_err)?;
@@ -205,6 +216,97 @@ fn map_err(e: impl Into<crate::Error>) -> super::Error {
 impl fmt::Debug for Server {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Builder").finish()
+    }
+}
+
+/// Configures TLS settings for servers.
+#[cfg(feature = "tls")]
+#[derive(Clone)]
+pub struct ServerTlsConfig {
+    provider: TlsProvider,
+    identity: Option<Identity>,
+    #[cfg(feature = "openssl")]
+    openssl_raw: Option<openssl1::ssl::SslAcceptor>,
+    #[cfg(feature = "rustls")]
+    rustls_raw: Option<tokio_rustls::rustls::ServerConfig>,
+}
+
+#[cfg(feature = "tls")]
+impl fmt::Debug for ServerTlsConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ServerTlsConfig")
+            .field("provider", &self.provider)
+            .finish()
+    }
+}
+
+#[cfg(feature = "tls")]
+impl ServerTlsConfig {
+    /// Creates a new `ServerTlsConfig` using OpenSSL.
+    #[cfg(feature = "openssl")]
+    pub fn with_openssl() -> Self {
+        Self::new(TlsProvider::OpenSsl)
+    }
+
+    /// Creates a new `ServerTlsConfig` using Rustls.
+    #[cfg(feature = "rustls")]
+    pub fn with_rustls() -> Self {
+        Self::new(TlsProvider::Rustls)
+    }
+
+    /// Creates a new `ServerTlsConfig` backed by the specified provider. Enable the `openssl` or
+    /// `rustls` features of the `tonic` crate to use OpenSSL or Rustls respectively.
+    fn new(provider: TlsProvider) -> Self {
+        ServerTlsConfig {
+            provider,
+            identity: None,
+            #[cfg(feature = "openssl")]
+            openssl_raw: None,
+            #[cfg(feature = "rustls")]
+            rustls_raw: None,
+        }
+    }
+
+    /// Sets the [`Identity`] of the server.
+    pub fn identity(&mut self, identity: Identity) -> &mut Self {
+        self.identity = Some(identity);
+        self
+    }
+
+    /// Use options specified by the given `SslAcceptor` to configure TLS.
+    ///
+    /// This overrides all other TLS options set via other means.
+    #[cfg(feature = "openssl")]
+    pub fn openssl_connector(&mut self, acceptor: openssl1::ssl::SslAcceptor) -> &mut Self {
+        self.openssl_raw = Some(acceptor);
+        self
+    }
+
+    /// Use options specified by the given `ServerConfig` to configure TLS.
+    ///
+    /// This overrides all other TLS options set via other means.
+    #[cfg(feature = "rustls")]
+    pub fn rustls_client_config(
+        &mut self,
+        config: tokio_rustls::rustls::ServerConfig,
+    ) -> &mut Self {
+        self.rustls_raw = Some(config);
+        self
+    }
+
+    fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::Error> {
+        match self.provider {
+            #[cfg(feature = "openssl")]
+            TlsProvider::OpenSsl => match &self.openssl_raw {
+                None => TlsAcceptor::new_with_openssl_identity(self.identity.clone().unwrap()),
+                Some(acceptor) => TlsAcceptor::new_with_openssl_raw(acceptor.clone()),
+            },
+            #[cfg(feature = "rustls")]
+            TlsProvider::Rustls => match &self.rustls_raw {
+                None => TlsAcceptor::new_with_rustls_identity(self.identity.clone().unwrap()),
+                Some(config) => TlsAcceptor::new_with_rustls_raw(config.clone()),
+            },
+        }
     }
 }
 
