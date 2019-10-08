@@ -4,14 +4,12 @@ version = "0.1.0"
 authors = ["John Douglas <blittable.bits@gmail.com>"]
 edition = "2018"
 
+build = "build.rs"
+
 [[bench]]
 name = "serialization"
-path = "serialization.rs"
-harness= false
-
-[[bin]]
-name = "pb_build"
-path = "build.rs"
+path = "benches/serialization.rs"
+harness= false 
 
 [dependencies]
 tonic = { path = "../tonic", features = ["rustls"] }

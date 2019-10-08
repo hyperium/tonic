@@ -14,7 +14,6 @@ fn build_protobufs(proto_root: &'static str) {
 }
 
 fn process_entries<F>(f: &DirEntry) {
-    println!("Entry: {:?}", f);
     tonic_build::compile_protos(f.path()).unwrap();
 }
 
