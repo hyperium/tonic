@@ -2,7 +2,7 @@ use http::header::HeaderName;
 use structopt::StructOpt;
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
-use tonic::transport::{Identity, Server};
+use tonic::transport::{Identity, Server, ServerTlsConfig};
 use tonic_interop::{server, MergeTrailers};
 
 #[derive(StructOpt)]
@@ -26,7 +26,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
 
         let identity = Identity::from_pem(cert, key);
-        builder.openssl_tls(identity);
+        builder.tls_config(ServerTlsConfig::with_openssl().identity(identity));
     }
 
     builder.interceptor_fn(|svc, req| {

@@ -56,35 +56,60 @@ enum Connector {
 
 impl TlsConnector {
     #[cfg(feature = "openssl")]
-    pub(crate) fn new_with_openssl(
-        cert: Certificate,
+    pub(crate) fn new_with_openssl_cert(
+        cert: Option<Certificate>,
         domain: String,
     ) -> Result<Self, crate::Error> {
         let mut config = SslConnector::builder(SslMethod::tls())?;
-
         config.set_alpn_protos(ALPN_H2_WIRE)?;
 
-        let ca = X509::from_pem(&cert.pem[..])?;
-
-        config.cert_store_mut().add_cert(ca)?;
-
-        let config = config.build();
+        if let Some(cert) = cert {
+            let ca = X509::from_pem(&cert.pem[..])?;
+            config.cert_store_mut().add_cert(ca)?;
+        }
 
         Ok(Self {
-            inner: Connector::Openssl(config),
+            inner: Connector::Openssl(config.build()),
+            domain: Arc::new(domain),
+        })
+    }
+
+    #[cfg(feature = "openssl")]
+    pub(crate) fn new_with_openssl_raw(
+        ssl_connector: openssl1::ssl::SslConnector,
+        domain: String,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            inner: Connector::Openssl(ssl_connector),
             domain: Arc::new(domain),
         })
     }
 
     #[cfg(feature = "rustls")]
-    pub(crate) fn new_with_rustls(cert: Certificate, domain: String) -> Result<Self, crate::Error> {
-        let mut buf = std::io::Cursor::new(&cert.pem[..]);
-
+    pub(crate) fn new_with_rustls_cert(
+        cert: Option<Certificate>,
+        domain: String,
+    ) -> Result<Self, crate::Error> {
         let mut config = ClientConfig::new();
-
-        config.root_store.add_pem_file(&mut buf).unwrap();
         config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
 
+        if cert.is_some() {
+            let cert = cert.unwrap();
+            let mut buf = std::io::Cursor::new(&cert.pem[..]);
+            config.root_store.add_pem_file(&mut buf).unwrap();
+        }
+
+        Ok(Self {
+            inner: Connector::Rustls(Arc::new(config)),
+            domain: Arc::new(domain),
+        })
+    }
+
+    #[cfg(feature = "rustls")]
+    pub(crate) fn new_with_rustls_raw(
+        config: tokio_rustls::rustls::ClientConfig,
+        domain: String,
+    ) -> Result<Self, crate::Error> {
         Ok(Self {
             inner: Connector::Rustls(Arc::new(config)),
             domain: Arc::new(domain),
@@ -167,7 +192,7 @@ enum Acceptor {
 
 impl TlsAcceptor {
     #[cfg(feature = "openssl")]
-    pub(crate) fn new_with_openssl(identity: Identity) -> Result<Self, crate::Error> {
+    pub(crate) fn new_with_openssl_identity(identity: Identity) -> Result<Self, crate::Error> {
         let key = PKey::private_key_from_pem(&identity.key[..])?;
         let cert = X509::from_pem(&identity.cert.pem[..])?;
 
@@ -182,6 +207,15 @@ impl TlsAcceptor {
 
         Ok(Self {
             inner: Acceptor::Openssl(config.build()),
+        })
+    }
+
+    #[cfg(feature = "openssl")]
+    pub(crate) fn new_with_openssl_raw(
+        acceptor: openssl1::ssl::SslAcceptor,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            inner: Acceptor::Openssl(acceptor),
         })
     }
 
@@ -209,7 +243,7 @@ impl TlsAcceptor {
     }
 
     #[cfg(feature = "rustls")]
-    pub(crate) fn new_with_rustls(identity: Identity) -> Result<Self, crate::Error> {
+    pub(crate) fn new_with_rustls_identity(identity: Identity) -> Result<Self, crate::Error> {
         let cert = {
             let mut cert = std::io::Cursor::new(&identity.cert.pem[..]);
             match pemfile::certs(&mut cert) {
@@ -233,6 +267,15 @@ impl TlsAcceptor {
         config.set_single_cert(cert, key)?;
         config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
 
+        Ok(Self {
+            inner: Acceptor::Rustls(Arc::new(config)),
+        })
+    }
+
+    #[cfg(feature = "rustls")]
+    pub(crate) fn new_with_rustls_raw(
+        config: tokio_rustls::rustls::ServerConfig,
+    ) -> Result<Self, crate::Error> {
         Ok(Self {
             inner: Acceptor::Rustls(Arc::new(config)),
         })
