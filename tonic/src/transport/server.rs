@@ -28,6 +28,8 @@ use tower::{
     ServiceBuilder,
 };
 use tower_make::MakeService;
+#[cfg(feature = "tls")]
+use tracing::error;
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
@@ -207,7 +209,13 @@ impl Server {
                 #[cfg(feature = "tls")]
                 {
                     if let Some(tls) = &self.tls {
-                        let io = tls.connect(stream.into_inner()).await?;
+                        let io = match tls.connect(stream.into_inner()).await {
+                            Ok(io) => io,
+                            Err(error) => {
+                                error!(message = "Unable to accept incoming connection.", %error);
+                                continue
+                            },
+                        };
                         yield BoxedIo::new(io);
                         continue;
                     }
