@@ -84,8 +84,7 @@ pub async fn client_streaming(client: &mut TestClient, assertions: &mut Vec<Test
         .map(|len| StreamingInputCallRequest {
             payload: Some(crate::client_payload(*len as usize)),
             ..Default::default()
-        })
-        .map(|v| Ok(v));
+        });
 
     let stream = stream::iter(requests);
 
@@ -155,7 +154,7 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
     tx.try_send(make_ping_pong_request(0)).unwrap();
 
     let result = client
-        .full_duplex_call(Request::new(rx.map(|s| Ok(s))))
+        .full_duplex_call(Request::new(rx))
         .await;
 
     assertions.push(test_assert!(
@@ -272,7 +271,7 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
     let result = client.unary_call(Request::new(simple_req)).await;
     validate_response(result, assertions);
 
-    let stream = stream::iter(vec![Ok(duplex_req)]);
+    let stream = stream::iter(vec![duplex_req]);
     let result = match client.full_duplex_call(Request::new(stream)).await {
         Ok(response) => {
             let stream = response.into_inner();
@@ -359,7 +358,7 @@ pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestA
     req_unary.metadata_mut().insert(key1, value1.clone());
     req_unary.metadata_mut().insert_bin(key2, value2.clone());
 
-    let stream = stream::iter(vec![Ok(make_ping_pong_request(0))]);
+    let stream = stream::iter(vec![make_ping_pong_request(0)]);
     let mut req_stream = Request::new(stream);
     req_stream.metadata_mut().insert(key1, value1.clone());
     req_stream.metadata_mut().insert_bin(key2, value2.clone());
