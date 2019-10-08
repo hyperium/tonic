@@ -76,6 +76,8 @@ mod server;
 pub struct Builder {
     build_client: bool,
     build_server: bool,
+    field_attributes: Vec<(String, String)>,
+    type_attributes: Vec<(String, String)>,
     out_dir: Option<PathBuf>,
     #[cfg(feature = "rustfmt")]
     format: bool,
@@ -109,6 +111,24 @@ impl Builder {
         self
     }
 
+    /// Add additional attribute to matched messages, enums, and one-offs.
+    ///
+    /// Passed directly to `prost_build::Config.field_attribute`.
+    pub fn field_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.field_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
+    /// Add additional attribute to matched messages, enums, and one-offs.
+    ///
+    /// Passed directly to `prost_build::Config.type_attribute`.
+    pub fn type_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.type_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
@@ -122,7 +142,14 @@ impl Builder {
             .unwrap_or_else(|| PathBuf::from(std::env::var("OUT_DIR").unwrap()));
 
         config.out_dir(out_dir.clone());
+        for (path, attr) in self.field_attributes.iter() {
+            config.field_attribute(path, attr);
+        }
+        for (path, attr) in self.type_attributes.iter() {
+            config.type_attribute(path, attr);
+        }
         config.service_generator(Box::new(ServiceGenerator::new(self)));
+
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
@@ -144,6 +171,8 @@ pub fn configure() -> Builder {
         build_client: true,
         build_server: true,
         out_dir: None,
+        field_attributes: Vec::new(),
+        type_attributes: Vec::new(),
         #[cfg(feature = "rustfmt")]
         format: true,
     }
