@@ -5,7 +5,7 @@ pub mod pb {
 use pb::{EchoRequest, EchoResponse};
 use std::collections::VecDeque;
 use tonic::{
-    transport::{Identity, Server},
+    transport::{Identity, Server, ServerTlsConfig},
     Request, Response, Status, Streaming,
 };
 
@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = EchoServer::default();
 
     Server::builder()
-        .rustls_tls(identity)
+        .tls_config(ServerTlsConfig::with_rustls().identity(identity))
         .clone()
         .serve(addr, pb::server::EchoServer::new(server))
         .await?;

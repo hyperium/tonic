@@ -1,3 +1,14 @@
+/// Selects a library to provide TLS.
+#[derive(Clone, Debug)]
+pub(crate) enum TlsProvider {
+    /// Use OpenSSL for TLS.
+    #[cfg(feature = "openssl")]
+    OpenSsl,
+    /// Use OpenSSL for TLS.
+    #[cfg(feature = "rustls")]
+    Rustls,
+}
+
 /// Represents a X509 certificate.
 #[derive(Debug, Clone)]
 pub struct Certificate {
