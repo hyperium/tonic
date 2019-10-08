@@ -79,12 +79,10 @@ pub async fn large_unary(client: &mut TestClient, assertions: &mut Vec<TestAsser
 // }
 
 pub async fn client_streaming(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
-    let requests = REQUEST_LENGTHS
-        .iter()
-        .map(|len| StreamingInputCallRequest {
-            payload: Some(crate::client_payload(*len as usize)),
-            ..Default::default()
-        });
+    let requests = REQUEST_LENGTHS.iter().map(|len| StreamingInputCallRequest {
+        payload: Some(crate::client_payload(*len as usize)),
+        ..Default::default()
+    });
 
     let stream = stream::iter(requests);
 
@@ -153,9 +151,7 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
     let (mut tx, rx) = mpsc::unbounded_channel();
     tx.try_send(make_ping_pong_request(0)).unwrap();
 
-    let result = client
-        .full_duplex_call(Request::new(rx))
-        .await;
+    let result = client.full_duplex_call(Request::new(rx)).await;
 
     assertions.push(test_assert!(
         "call must be successful",
