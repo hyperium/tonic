@@ -14,10 +14,10 @@ RPC framework that puts mobile and HTTP/2 first.
 
 ## Overview
 
-[`tonic`] is composed of three main components the generic gRPC implementation, the high performance HTTP/2
+[`tonic`] is composed of three main components: the generic gRPC implementation, the high performance HTTP/2
 implementation and the codegen powered by [`prost`]. The generic implementation can support any HTTP/2
-implementation and any encoding via a set of generic traits. The HTTP/2 implementation is based on [`hyper`]
-which is a fast HTTP/1.1 and HTTP/2 client and server built on top of the robust [`tokio`] stack. The codegen
+implementation and any encoding via a set of generic traits. The HTTP/2 implementation is based on [`hyper`],
+a fast HTTP/1.1 and HTTP/2 client and server built on top of the robust [`tokio`] stack. The codegen
 contains the tools to build clients and servers from [`protobuf`] definitions.
 
 ## Features
@@ -54,10 +54,14 @@ $ cargo +beta build
 #### `Cargo.toml`
 
 ```toml
+[dependencies]
 tonic = "*"
 bytes = "0.4"
 prost = "0.5"
 prost-derive = "0.5"
+
+[build-dependencies]
+tonic-build = "*"
 ```
 
 #### Protobuf
@@ -173,7 +177,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 First, see if the answer to your question can be found in the API documentation.
 If the answer is not there, there is an active community in
 the [Tonic Discord channel][chat]. We would be happy to try to answer your
-question.  Last, if that doesn't work, try opening an [issue] with the question.
+question. If that doesn't work, try opening an [issue] with the question.
 
 [chat]: https://discord.gg/6yGkFeN
 [issue]: https://github.com/hyperium/tonic/issues/new
