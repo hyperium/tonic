@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package wellknown;
+
+import "google/protobuf/empty.proto";
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/any.proto";
+
+service Admin {
+  rpc EmptyCall(google.protobuf.Empty) returns (google.protobuf.Empty);
+  rpc StringCall(google.protobuf.StringValue) returns (google.protobuf.Empty);
+  rpc AnyCall(google.protobuf.Any) returns (google.protobuf.Empty);
+}

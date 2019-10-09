@@ -20,17 +20,44 @@ path = "src/routeguide/server.rs"
 name = "routeguide-client"
 path = "src/routeguide/client.rs"
 
+[[bin]]
+name = "authentication-client"
+path = "src/authentication/client.rs"
+
+[[bin]]
+name = "authentication-server"
+path = "src/authentication/server.rs"
+
+[[bin]]
+name = "load-balance-client"
+path = "src/load_balance/client.rs"
+
+[[bin]]
+name = "load-balance-server"
+path = "src/load_balance/server.rs"
+
+[[bin]]
+name = "tls-client"
+path = "src/tls/client.rs"
+
+[[bin]]
+name = "tls-server"
+path = "src/tls/server.rs"
+
 [dependencies]
-tonic = { path = "../tonic" }
-futures-preview = { version = "=0.3.0-alpha.18", default-features = false, features = ["alloc"]}
-tokio = "=0.2.0-alpha.4"
-prost = "0.5"
-prost-derive = "0.5"
+tonic = { path = "../tonic", features = ["rustls"] }
 bytes = "0.4"
-serde_json = "1.0"
-serde = { version = "1.0", features = ["derive"] }
-async-stream = "0.1.1"
+prost = "0.5"
+
+tokio = "=0.2.0-alpha.6"
+futures-preview = { version = "=0.3.0-alpha.19", default-features = false, features = ["alloc"]}
+async-stream = "0.1.2"
 http = "0.1"
+tower = "=0.3.0-alpha.2"
+
+# Required for routeguide
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }

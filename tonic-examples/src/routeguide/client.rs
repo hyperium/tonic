@@ -4,8 +4,8 @@ use std::time::{Duration, Instant};
 use tokio::timer::Interval;
 use tonic::Request;
 
-mod route_guide {
-    include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
+pub mod route_guide {
+    tonic::include_proto!("routeguide");
 }
 
 use route_guide::client::RouteGuideClient;

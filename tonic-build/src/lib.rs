@@ -1,6 +1,24 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
 //! and proto definitiones for use with `tonic`.
 //!
+//! # Features
+//!
+//! - `rustfmt`: This feature enables the use of `rustfmt` to format the output code
+//! this makes the code readable and the error messages nice. This requires that `rustfmt`
+//! is installed. This is enabled by default.
+//!
+//! # Required dependencies
+//!
+//! ```toml
+//! [dependencies]
+//! bytes = <bytes-version>
+//! tonic = <tonic-version>
+//! prost = <prost-version>
+//!
+//! [build-dependencies]
+//! tonic-build = <tonic-version>
+//! ```
+//!
 //! # Examples
 //! Simple
 //!
@@ -25,9 +43,23 @@
 //! }
 //! ```
 
+#![recursion_limit = "256"]
+#![warn(
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    unreachable_pub
+)]
+#![doc(
+    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
+)]
+#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.2")]
+#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
+
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
-use prost_build::Config;
-use quote::TokenStreamExt;
+use prost_build::{Config, Method};
+use quote::{ToTokens, TokenStreamExt};
 
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
@@ -37,13 +69,16 @@ use std::{
 };
 
 mod client;
-mod service;
+mod server;
 
-#[derive(Clone)]
+/// Service generator builder.
+#[derive(Debug, Clone)]
 pub struct Builder {
     build_client: bool,
     build_server: bool,
     out_dir: Option<PathBuf>,
+    #[cfg(feature = "rustfmt")]
+    format: bool,
 }
 
 impl Builder {
@@ -59,6 +94,13 @@ impl Builder {
         self
     }
 
+    /// Enable the output to be formated by rustfmt.
+    #[cfg(feature = "rustfmt")]
+    pub fn format(mut self, run: bool) -> Self {
+        self.format = run;
+        self
+    }
+
     /// Set the output directory to generate code to.
     ///
     /// Defaults to the `OUT_DIR` environment variable.
@@ -71,6 +113,9 @@ impl Builder {
     pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
 
+        #[cfg(feature = "rustfmt")]
+        let format = self.format;
+
         let out_dir = self
             .out_dir
             .clone()
@@ -81,7 +126,11 @@ impl Builder {
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
-        fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+        {
+            if format {
+                fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+            }
+        }
 
         Ok(())
     }
@@ -95,6 +144,8 @@ pub fn configure() -> Builder {
         build_client: true,
         build_server: true,
         out_dir: None,
+        #[cfg(feature = "rustfmt")]
+        format: true,
     }
 }
 
@@ -135,7 +186,7 @@ fn fmt(out_dir: &str) {
     }
 }
 
-pub struct ServiceGenerator {
+struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
@@ -156,7 +207,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         let path = "super";
 
         if self.builder.build_server {
-            let server = service::generate(&service, path);
+            let server = server::generate(&service, path);
             self.servers.extend(server);
         }
 
@@ -228,4 +279,24 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     }
 
     stream
+}
+
+fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenStream) {
+    let request = if method.input_proto_type.starts_with(".google.protobuf") {
+        method.input_type.parse::<TokenStream>().unwrap()
+    } else {
+        syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.input_type))
+            .unwrap()
+            .to_token_stream()
+    };
+
+    let response = if method.output_proto_type.starts_with(".google.protobuf") {
+        method.output_type.parse::<TokenStream>().unwrap()
+    } else {
+        syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.output_type))
+            .unwrap()
+            .to_token_stream()
+    };
+
+    (request, response)
 }

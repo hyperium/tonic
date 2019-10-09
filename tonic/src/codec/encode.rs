@@ -9,6 +9,8 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_codec::Encoder;
 
+const BUFFER_SIZE: usize = 8 * 1024;
+
 pub(crate) fn encode_server<T, U>(
     encoder: T,
     source: U,
@@ -39,7 +41,7 @@ where
     U: Stream<Item = Result<T::Item, Status>>,
 {
     async_stream::stream! {
-        let mut buf = BytesMut::with_capacity(1024 * 1024);
+        let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
         futures_util::pin_mut!(source);
 
         loop {
@@ -117,7 +119,7 @@ where
     }
 
     fn poll_data(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
         let mut self_proj = self.project();
@@ -135,7 +137,7 @@ where
     }
 
     fn poll_trailers(
-        mut self: Pin<&mut Self>,
+        self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Option<HeaderMap>, Status>> {
         match self.role {

@@ -1265,7 +1265,7 @@ impl<'a, VE: ValueEncoding> Iterator for ValueDrain<'a, VE> {
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
-            .map(|value| MetadataValue::unchecked_from_header_value(value))
+            .map(MetadataValue::unchecked_from_header_value)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

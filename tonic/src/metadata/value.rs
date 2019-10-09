@@ -15,6 +15,7 @@ use std::{cmp, fmt};
 /// `MetadataValue` is used as the [`MetadataMap`] value.
 ///
 /// [`HeaderMap`]: struct.HeaderMap.html
+/// [`MetadataMap`]: struct.MetadataMap.html
 #[derive(Clone, Hash)]
 #[repr(transparent)]
 pub struct MetadataValue<VE: ValueEncoding> {
@@ -362,7 +363,7 @@ impl MetadataValue<Ascii> {
     /// assert_eq!(val.to_str().unwrap(), "hello");
     /// ```
     pub fn to_str(&self) -> Result<&str, ToStrError> {
-        return self.inner.to_str().map_err(|_| ToStrError::new());
+        self.inner.to_str().map_err(|_| ToStrError::new())
     }
 
     /// Converts a `MetadataValue` to a byte slice. For Binary values, use
@@ -628,7 +629,7 @@ impl<VE: ValueEncoding> PartialOrd<MetadataValue<VE>> for [u8] {
 impl<VE: ValueEncoding> PartialEq<String> for MetadataValue<VE> {
     #[inline]
     fn eq(&self, other: &String) -> bool {
-        *self == &other[..]
+        *self == other[..]
     }
 }
 

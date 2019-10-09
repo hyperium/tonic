@@ -22,28 +22,28 @@ use tower_service::Service;
 pub(crate) type Request = http::Request<BoxBody>;
 pub(crate) type Response = http::Response<hyper::Body>;
 
-pub struct Connection {
+pub(crate) struct Connection {
     inner: BoxService<Request, Response, crate::Error>,
 }
 
 impl Connection {
-    pub fn new(endpoint: Endpoint) -> Result<Self, crate::Error> {
+    pub(crate) fn new(endpoint: Endpoint) -> Self {
         #[cfg(feature = "tls")]
         let connector = connector(endpoint.tls.clone());
 
         #[cfg(not(feature = "tls"))]
         let connector = connector();
 
-        let settings = Builder::new().http2_only(true).clone();
+        let settings = Builder::new()
+            .http2_initial_stream_window_size(endpoint.init_stream_window_size)
+            .http2_initial_connection_window_size(endpoint.init_connection_window_size)
+            .http2_only(true)
+            .clone();
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
-            .optional_layer(endpoint.timeout.map(|t| TimeoutLayer::new(t)))
-            .optional_layer(
-                endpoint
-                    .concurrency_limit
-                    .map(|l| ConcurrencyLimitLayer::new(l)),
-            )
+            .optional_layer(endpoint.timeout.map(TimeoutLayer::new))
+            .optional_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
             .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
@@ -51,9 +51,9 @@ impl Connection {
 
         let inner = stack.layer(conn);
 
-        Ok(Self {
+        Self {
             inner: BoxService::new(inner),
-        })
+        }
     }
 }
 

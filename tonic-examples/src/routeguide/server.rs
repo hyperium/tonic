@@ -6,12 +6,12 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{mpsc, Lock};
+use tokio::sync::{mpsc, Mutex};
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
 pub mod routeguide {
-    include!(concat!(env!("OUT_DIR"), "/routeguide.rs"));
+    tonic::include_proto!("routeguide");
 }
 
 use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
@@ -24,7 +24,7 @@ pub struct RouteGuide {
 #[derive(Debug, Clone)]
 struct State {
     features: Arc<Vec<Feature>>,
-    notes: Lock<HashMap<Point, Vec<RouteNote>>>,
+    notes: Arc<Mutex<HashMap<Point, Vec<RouteNote>>>>,
 }
 
 #[tonic::async_trait]
@@ -124,7 +124,7 @@ impl server::RouteGuide for RouteGuide {
         println!("RouteChat");
 
         let stream = request.into_inner();
-        let mut state = self.state.clone();
+        let state = self.state.clone();
 
         let output = async_stream::try_stream! {
             futures::pin_mut!(stream);
@@ -144,7 +144,6 @@ impl server::RouteGuide for RouteGuide {
             }
         };
 
-        // TODO: Clean this up
         Ok(Response::new(Box::pin(output)
             as Pin<
                 Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>,
@@ -162,7 +161,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         state: State {
             // Load data file
             features: Arc::new(data::load()),
-            notes: Lock::new(HashMap::new()),
+            notes: Arc::new(Mutex::new(HashMap::new())),
         },
     };
 

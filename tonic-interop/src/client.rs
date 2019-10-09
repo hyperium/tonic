@@ -15,30 +15,6 @@ const TEST_STATUS_MESSAGE: &'static str = "test status message";
 const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
-pub async fn create(origin: http::Uri) -> Result<TestClient, Box<dyn std::error::Error>> {
-    // let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-
-    let svc = Channel::builder()
-        // .tls(ca)
-        // .tls_override_domain("foo.test.google.fr")
-        .build(origin)?;
-
-    Ok(TestServiceClient::new(svc))
-}
-
-pub async fn create_unimplemented(
-    origin: http::Uri,
-) -> Result<UnimplementedClient, Box<dyn std::error::Error>> {
-    // let ca = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-
-    let svc = Channel::builder()
-        // .tls(ca)
-        // .tls_override_domain("foo.test.google.fr")
-        .build(origin)?;
-
-    Ok(UnimplementedServiceClient::new(svc))
-}
-
 pub async fn empty_unary(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let result = client.empty_call(Request::new(Empty {})).await;
 
@@ -194,7 +170,6 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
         loop {
             match response.next().await {
                 Some(result) => {
-                    // TODO: what to do with this result?
                     responses.push(result.unwrap());
                     if responses.len() == REQUEST_LENGTHS.len() {
                         drop(tx);
@@ -384,7 +359,6 @@ pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestA
     req_unary.metadata_mut().insert(key1, value1.clone());
     req_unary.metadata_mut().insert_bin(key2, value2.clone());
 
-    // TODO: custom metadata for fullduplex
     let stream = stream::iter(vec![Ok(make_ping_pong_request(0))]);
     let mut req_stream = Request::new(stream);
     req_stream.metadata_mut().insert(key1, value1.clone());

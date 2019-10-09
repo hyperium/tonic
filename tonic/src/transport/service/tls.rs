@@ -3,17 +3,18 @@ use crate::transport::{Certificate, Identity};
 #[cfg(feature = "openssl")]
 use openssl1::{
     pkey::PKey,
-    ssl::{SslAcceptor, SslConnector, SslMethod},
+    ssl::{select_next_proto, AlpnError, SslAcceptor, SslConnector, SslMethod},
     x509::X509,
 };
 use std::{fmt, sync::Arc};
 use tokio::net::TcpStream;
 #[cfg(feature = "rustls")]
 use tokio_rustls::{
-    rustls::{internal::pemfile, ClientConfig, NoClientAuth, ServerConfig},
+    rustls::{internal::pemfile, ClientConfig, NoClientAuth, PrivateKey, ServerConfig, Session},
     webpki::DNSNameRef,
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
+use tracing::trace;
 
 /// h2 alpn in wire format for openssl.
 #[cfg(feature = "openssl")]
@@ -27,6 +28,16 @@ pub(crate) struct Cert {
     pub(crate) ca: Vec<u8>,
     pub(crate) key: Option<Vec<u8>>,
     pub(crate) domain: String,
+}
+
+#[derive(Debug)]
+enum TlsError {
+    #[allow(dead_code)]
+    H2NotNegotiated,
+    #[cfg(feature = "rustls")]
+    CertificateParseError,
+    #[cfg(feature = "rustls")]
+    PrivateKeyParseError,
 }
 
 #[derive(Clone)]
@@ -45,34 +56,48 @@ enum Connector {
 
 impl TlsConnector {
     #[cfg(feature = "openssl")]
-    pub(crate) fn new_with_openssl(
-        cert: Certificate,
+    pub(crate) fn new_with_openssl_cert(
+        cert: Option<Certificate>,
         domain: String,
     ) -> Result<Self, crate::Error> {
         let mut config = SslConnector::builder(SslMethod::tls())?;
-
         config.set_alpn_protos(ALPN_H2_WIRE)?;
 
-        let ca = X509::from_pem(&cert.pem[..])?;
-
-        config.cert_store_mut().add_cert(ca)?;
-
-        let config = config.build();
+        if let Some(cert) = cert {
+            let ca = X509::from_pem(&cert.pem[..])?;
+            config.cert_store_mut().add_cert(ca)?;
+        }
 
         Ok(Self {
-            inner: Connector::Openssl(config),
+            inner: Connector::Openssl(config.build()),
+            domain: Arc::new(domain),
+        })
+    }
+
+    #[cfg(feature = "openssl")]
+    pub(crate) fn new_with_openssl_raw(
+        ssl_connector: openssl1::ssl::SslConnector,
+        domain: String,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            inner: Connector::Openssl(ssl_connector),
             domain: Arc::new(domain),
         })
     }
 
     #[cfg(feature = "rustls")]
-    pub(crate) fn new_with_rustls(cert: Certificate, domain: String) -> Result<Self, crate::Error> {
-        let mut buf = std::io::Cursor::new(&cert.pem[..]);
-
+    pub(crate) fn new_with_rustls_cert(
+        cert: Option<Certificate>,
+        domain: String,
+    ) -> Result<Self, crate::Error> {
         let mut config = ClientConfig::new();
-
-        config.root_store.add_pem_file(&mut buf).unwrap();
         config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
+
+        if cert.is_some() {
+            let cert = cert.unwrap();
+            let mut buf = std::io::Cursor::new(&cert.pem[..]);
+            config.root_store.add_pem_file(&mut buf).unwrap();
+        }
 
         Ok(Self {
             inner: Connector::Rustls(Arc::new(config)),
@@ -80,7 +105,17 @@ impl TlsConnector {
         })
     }
 
-    // TODO: Write an either tlsstream to avoid this box
+    #[cfg(feature = "rustls")]
+    pub(crate) fn new_with_rustls_raw(
+        config: tokio_rustls::rustls::ClientConfig,
+        domain: String,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            inner: Connector::Rustls(Arc::new(config)),
+            domain: Arc::new(domain),
+        })
+    }
+
     pub(crate) async fn connect(&self, io: TcpStream) -> Result<BoxedIo, crate::Error> {
         let tls_io = match &self.inner {
             #[cfg(feature = "openssl")]
@@ -88,7 +123,11 @@ impl TlsConnector {
                 let config = connector.configure()?;
                 let tls = tokio_openssl::connect(config, &self.domain, io).await?;
 
-                // TODO: check that we actually got an h2 stream
+                match tls.ssl().selected_alpn_protocol() {
+                    Some(b) if b == b"h2" => trace!("HTTP/2 succesfully negotiated."),
+                    _ => return Err(TlsError::H2NotNegotiated.into()),
+                };
+
                 BoxedIo::new(tls)
             }
             #[cfg(feature = "rustls")]
@@ -101,7 +140,12 @@ impl TlsConnector {
                     .connect(dns.as_ref(), io)
                     .await?;
 
-                // TODO: check that we actually got an h2 stream
+                let (_, session) = io.get_ref();
+
+                match session.get_alpn_protocol() {
+                    Some(b) if b == b"h2" => (),
+                    _ => return Err(TlsError::H2NotNegotiated.into()),
+                };
 
                 BoxedIo::new(io)
             }
@@ -148,31 +192,74 @@ enum Acceptor {
 
 impl TlsAcceptor {
     #[cfg(feature = "openssl")]
-    pub(crate) fn new_with_openssl(identity: Identity) -> Result<Self, crate::Error> {
+    pub(crate) fn new_with_openssl_identity(identity: Identity) -> Result<Self, crate::Error> {
         let key = PKey::private_key_from_pem(&identity.key[..])?;
         let cert = X509::from_pem(&identity.cert.pem[..])?;
 
         let mut config = SslAcceptor::mozilla_modern(SslMethod::tls())?;
 
-        config.set_alpn_protos(ALPN_H2_WIRE)?;
         config.set_private_key(&key)?;
         config.set_certificate(&cert)?;
+        config.set_alpn_protos(ALPN_H2_WIRE)?;
+        config.set_alpn_select_callback(|_ssl, alpn| {
+            select_next_proto(ALPN_H2_WIRE, alpn).ok_or(AlpnError::NOACK)
+        });
 
         Ok(Self {
             inner: Acceptor::Openssl(config.build()),
         })
     }
 
+    #[cfg(feature = "openssl")]
+    pub(crate) fn new_with_openssl_raw(
+        acceptor: openssl1::ssl::SslAcceptor,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            inner: Acceptor::Openssl(acceptor),
+        })
+    }
+
     #[cfg(feature = "rustls")]
-    pub(crate) fn new_with_rustls(identity: Identity) -> Result<Self, crate::Error> {
+    fn load_rustls_private_key(
+        mut cursor: std::io::Cursor<&[u8]>,
+    ) -> Result<PrivateKey, crate::Error> {
+        // First attempt to load the private key assuming it is PKCS8-encoded
+        if let Ok(mut keys) = pemfile::pkcs8_private_keys(&mut cursor) {
+            if keys.len() > 0 {
+                return Ok(keys.remove(0));
+            }
+        }
+
+        // If it not, try loading the private key as an RSA key
+        cursor.set_position(0);
+        if let Ok(mut keys) = pemfile::rsa_private_keys(&mut cursor) {
+            if keys.len() > 0 {
+                return Ok(keys.remove(0));
+            }
+        }
+
+        // Otherwise we have a Private Key parsing problem
+        Err(Box::new(TlsError::PrivateKeyParseError))
+    }
+
+    #[cfg(feature = "rustls")]
+    pub(crate) fn new_with_rustls_identity(identity: Identity) -> Result<Self, crate::Error> {
         let cert = {
             let mut cert = std::io::Cursor::new(&identity.cert.pem[..]);
-            pemfile::certs(&mut cert).unwrap()
+            match pemfile::certs(&mut cert) {
+                Ok(certs) => certs,
+                Err(_) => return Err(Box::new(TlsError::CertificateParseError)),
+            }
         };
 
         let key = {
-            let mut key = std::io::Cursor::new(&identity.key[..]);
-            pemfile::pkcs8_private_keys(&mut key).unwrap().remove(0)
+            let key = std::io::Cursor::new(&identity.key[..]);
+            match Self::load_rustls_private_key(key) {
+                Ok(key) => key,
+                Err(e) => {
+                    return Err(e);
+                }
+            }
         };
 
         let mut config = ServerConfig::new(NoClientAuth::new());
@@ -180,6 +267,15 @@ impl TlsAcceptor {
         config.set_single_cert(cert, key)?;
         config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
 
+        Ok(Self {
+            inner: Acceptor::Rustls(Arc::new(config)),
+        })
+    }
+
+    #[cfg(feature = "rustls")]
+    pub(crate) fn new_with_rustls_raw(
+        config: tokio_rustls::rustls::ServerConfig,
+    ) -> Result<Self, crate::Error> {
         Ok(Self {
             inner: Acceptor::Rustls(Arc::new(config)),
         })
@@ -197,7 +293,6 @@ impl TlsAcceptor {
             Acceptor::Rustls(config) => {
                 let acceptor = RustlsAcceptor::from(config.clone());
                 let tls = acceptor.accept(io).await?;
-
                 BoxedIo::new(tls)
             }
 
@@ -226,3 +321,20 @@ impl fmt::Debug for TlsAcceptor {
             .finish()
     }
 }
+
+impl fmt::Display for TlsError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            TlsError::H2NotNegotiated => write!(f, "HTTP/2 was not negotiated."),
+            #[cfg(feature = "rustls")]
+            TlsError::CertificateParseError => write!(f, "Error parsing TLS certificate."),
+            #[cfg(feature = "rustls")]
+            TlsError::PrivateKeyParseError => write!(
+                f,
+                "Error parsing TLS private key - no RSA or PKCS8-encoded keys found."
+            ),
+        }
+    }
+}
+
+impl std::error::Error for TlsError {}

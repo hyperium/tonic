@@ -6,13 +6,13 @@ use std::task::{Context, Poll};
 use tower::discover::{Change, Discover};
 
 #[derive(Debug)]
-pub struct ServiceList {
+pub(crate) struct ServiceList {
     list: VecDeque<Endpoint>,
     i: usize,
 }
 
 impl ServiceList {
-    pub fn new(list: Vec<Endpoint>) -> Self {
+    pub(crate) fn new(list: Vec<Endpoint>) -> Self {
         Self {
             list: list.into(),
             i: 0,
@@ -34,10 +34,10 @@ impl Discover for ServiceList {
                 let i = self.i;
                 self.i += 1;
 
-                match Connection::new(endpoint) {
-                    Ok(svc) => Poll::Ready(Ok(Change::Insert(i, svc))),
-                    Err(e) => Poll::Ready(Err(e)),
-                }
+                let svc = Connection::new(endpoint);
+                let change = Ok(Change::Insert(i, svc));
+
+                Poll::Ready(change)
             }
             None => Poll::Pending,
         }

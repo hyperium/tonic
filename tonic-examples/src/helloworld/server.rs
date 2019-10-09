@@ -1,7 +1,7 @@
 use tonic::{transport::Server, Request, Response, Status};
 
 pub mod hello_world {
-    include!(concat!(env!("OUT_DIR"), "/helloworld.rs"));
+    tonic::include_proto!("helloworld");
 }
 
 use hello_world::{

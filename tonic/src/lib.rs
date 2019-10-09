@@ -1,14 +1,3 @@
-#![recursion_limit = "256"]
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
-#![doc(html_logo_url = "file:///Users/lucio/Downloads/tonic_bubbles_with_word_bigger.svg")]
-#![doc(html_root_url = "https://docs.rs/tonic/0.1.0")]
-#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-
 //! A Rust implementation of [gRPC], a high performance, open source, general
 //! RPC framework that puts mobile and HTTP/2 first.
 //!
@@ -58,13 +47,34 @@
 //!
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
+//! [`tokio`]: https://docs.rs/tokio
+//! [`prost`]: https://docs.rs/prost
+//! [`hyper`]: https://docs.rs/hyper
+//! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
-//! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples/src
+//! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
 //! [`Server`]: transport/struct.Server.html
 //! [`rustls`]: https://docs.rs/rustls
 //! [`openssl`]: https://www.openssl.org
+//! [`client`]: client/index.html
+//! [`transport`]: transport/index.html
+
+#![recursion_limit = "256"]
+#![warn(
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    unreachable_pub
+)]
+#![doc(
+    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
+)]
+#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.2")]
+#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod body;
 pub mod client;
@@ -73,14 +83,17 @@ pub mod metadata;
 pub mod server;
 
 #[cfg(feature = "transport")]
+#[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 pub mod transport;
 
+mod macros;
 mod request;
 mod response;
 mod status;
 
 /// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
 #[cfg(feature = "codegen")]
+#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub use async_trait::async_trait;
 
 #[doc(inline)]
@@ -93,4 +106,5 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[doc(hidden)]
 #[cfg(feature = "codegen")]
+#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;

@@ -2,7 +2,7 @@ use crate::{generate_doc_comment, generate_doc_comments};
 use proc_macro2::{Span, TokenStream};
 use prost_build::{Method, Service};
 use quote::quote;
-use syn::{Ident, Lit, LitStr, Path};
+use syn::{Ident, Lit, LitStr};
 
 pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
     let methods = generate_methods(&service, proto_path);
@@ -79,8 +79,13 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
                 match req.uri().path() {
                     #methods
 
-                    // TODO: implement grpc unimplemented for server
-                    _ => unimplemented!(),
+                    _ => Box::pin(async move {
+                         Ok(http::Response::builder()
+                            .status(200)
+                            .header("grpc-status", "12")
+                            .body(tonic::body::BoxBody::empty())
+                            .unwrap())
+                    }),
                 }
             }
         }
@@ -108,10 +113,8 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
 
     for method in &service.methods {
         let name = quote::format_ident!("{}", method.name);
-        let req_message: Path =
-            syn::parse_str(&format!("{}::{}", proto_path, method.input_type)).unwrap();
-        let res_message: Path =
-            syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
+
+        let (req_message, res_message) = crate::replace_wellknown(proto_path, &method);
 
         let method_doc = generate_doc_comments(&method.comments.leading);
 
@@ -120,14 +123,18 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status>;
+                        -> Result<tonic::Response<#res_message>, tonic::Status> {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
                 }
             }
             (true, false) => {
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status>;
+                        -> Result<tonic::Response<#res_message>, tonic::Status> {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
                 }
             }
             (false, true) => {
@@ -143,7 +150,9 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
+                        -> Result<tonic::Response<Self::#stream>, tonic::Status> {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
                 }
             }
             (true, true) => {
@@ -159,7 +168,9 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
+                        -> Result<tonic::Response<Self::#stream>, tonic::Status> {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
                 }
             }
         };
@@ -214,9 +225,7 @@ fn generate_unary(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request: Path = syn::parse_str(&format!("{}::{}", proto_path, method.input_type)).unwrap();
-    let response: Path =
-        syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -255,9 +264,7 @@ fn generate_server_streaming(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request: Path = syn::parse_str(&format!("{}::{}", proto_path, method.input_type)).unwrap();
-    let response: Path =
-        syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     let response_stream = quote::format_ident!("{}Stream", method.proto_name);
 
@@ -300,9 +307,7 @@ fn generate_client_streaming(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request: Path = syn::parse_str(&format!("{}::{}", proto_path, method.input_type)).unwrap();
-    let response: Path =
-        syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -343,9 +348,7 @@ fn generate_streaming(
 ) -> TokenStream {
     let service_ident = Ident::new(&method.proto_name, Span::call_site());
 
-    let request: Path = syn::parse_str(&format!("{}::{}", proto_path, method.input_type)).unwrap();
-    let response: Path =
-        syn::parse_str(&format!("{}::{}", proto_path, method.output_type)).unwrap();
+    let (request, response) = crate::replace_wellknown(proto_path, &method);
 
     let response_stream = quote::format_ident!("{}Stream", method.proto_name);
 

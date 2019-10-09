@@ -1,12 +1,30 @@
 [package]
 name = "tonic"
-version = "0.1.0-alpha.1"
+# When releasing to crates.io:
+# - Remove path dependencies
+# - Update html_root_url.
+# - Update doc url
+#   - Cargo.toml
+#   - README.md
+# - Update CHANGELOG.md.
+# - Create "v0.1.x" git tag.
+version = "0.1.0-alpha.2"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
+license = "MIT"
+documentation = "https://docs.rs/tonic/0.1.0-alpha.1/tonic/"
+repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/hyperium/tonic"
+description = """
+A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
+"""
+readme = "../README.md"
+categories = ["web-programming", "network-programming", "asynchronous"]
+keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 
 [features]
-default = ["transport", "codegen", "prost"]
-codegen = ["async-trait"]
+default = ["transport", "codegen"]
+codegen = ["async-trait", "prost", "prost-derive"]
 transport = [
     "hyper",
     "tokio",
@@ -20,38 +38,43 @@ rustls = ["tokio-rustls", "tls"]
 tls = []
 
 [dependencies]
-futures-core-preview = "=0.3.0-alpha.18"
-futures-util-preview = "=0.3.0-alpha.18"
+bytes = "0.4"
+futures-core-preview = "=0.3.0-alpha.19"
+futures-util-preview = { version = "=0.3.0-alpha.19", default-features = false }
 tracing = "0.1"
 http = "0.1.14"
 base64 = "0.10"
-bytes = "0.4.7"
 
 percent-encoding = "1.0.1"
-tower-service = "=0.3.0-alpha.1"
-tokio-codec = "=0.2.0-alpha.4"
-async-stream = "0.1.1"
-http-body = "0.2.0-alpha.1"
-pin-project = "=0.4.0-alpha.11"
+tower-service = "=0.3.0-alpha.2"
+tokio-codec = "=0.2.0-alpha.6"
+async-stream = "0.1.2"
+http-body = "=0.2.0-alpha.2"
+pin-project = "^0.4"
 
 # prost
 prost = { version = "0.5", optional = true }
+prost-derive = { version = "0.5", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
 
 # transport
-hyper = { git = "https://github.com/hyperium/hyper", features = ["unstable-stream"], optional = true, rev = "2b0405c48c10bca7893c30ea960ac20a41a8578f" }
-tokio = { version = "=0.2.0-alpha.4", default-features = false, features = ["tcp"], optional = true }
-tower = { version = "=0.3.0-alpha.1a", optional = true}
-tower-make = "=0.1.0-alpha.2"
-tower-reconnect = { version = "=0.3.0-alpha.1", optional = true }
-tower-balance =  { version = "=0.3.0-alpha.1", optional = true }
-tower-load = { version = "=0.3.0-alpha.1", optional = true }
+hyper = { version = "=0.13.0-alpha.3", features = ["unstable-stream"], optional = true }
+tokio = { version = "=0.2.0-alpha.6", default-features = false, features = ["tcp"], optional = true }
+tower = { version = "=0.3.0-alpha.2", optional = true}
+tower-make = "=0.3.0-alpha.2a"
+tower-reconnect = { version = "=0.3.0-alpha.2", optional = true }
+tower-balance =  { version = "=0.3.0-alpha.2", optional = true }
+tower-load = { version = "=0.3.0-alpha.2", optional = true }
 
 # openssl
-tokio-openssl = { version = "=0.4.0-alpha.4", optional = true }
+tokio-openssl = { version = "=0.4.0-alpha.6", optional = true }
 openssl1 = { package = "openssl", version = "0.10", optional = true }
 
 # rustls
-tokio-rustls = { version = "0.12.0-alpha.2", optional = true }
+tokio-rustls = { version = "=0.12.0-alpha.4", optional = true }
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]

@@ -1,32 +1,24 @@
 use std::{error, fmt};
 
+/// Error's that originate from the client or server;
 pub struct Error {
     kind: ErrorKind,
     source: Option<crate::Error>,
+}
+
+impl Error {
+    pub(crate) fn from_source(kind: ErrorKind, source: crate::Error) -> Self {
+        Self {
+            kind,
+            source: Some(source),
+        }
+    }
 }
 
 #[derive(Debug)]
 pub(crate) enum ErrorKind {
     Client,
     Server,
-}
-
-impl From<ErrorKind> for Error {
-    fn from(t: ErrorKind) -> Self {
-        Self {
-            kind: t,
-            source: None,
-        }
-    }
-}
-
-impl From<(ErrorKind, crate::Error)> for Error {
-    fn from(t: (ErrorKind, crate::Error)) -> Self {
-        Self {
-            kind: t.0,
-            source: Some(t.1),
-        }
-    }
 }
 
 impl fmt::Debug for Error {
