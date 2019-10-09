@@ -23,7 +23,7 @@ futures-core-preview = "=0.3.0-alpha.19"
 futures-util-preview = "=0.3.0-alpha.19"
 async-stream = "0.1.2"
 tower = "=0.3.0-alpha.2"
-http-body = "=0.2.0-alpha.2"
+http-body = "=0.2.0-alpha.3"
 
 console = "0.7"
 structopt = "0.2"
