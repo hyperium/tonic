@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("FEATURE = {:?}", response);
 
-    let outbound = async_stream::try_stream! {
+    let outbound = async_stream::stream! {
         let mut interval =  Interval::new_interval(Duration::from_secs(1));
 
         while let Some(time) = interval.next().await {
