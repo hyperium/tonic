@@ -1,4 +1,46 @@
 use crate::metadata::MetadataMap;
+use futures_core::Stream;
+
+#[doc(hidden)]
+pub trait IntoRequest {
+    type Message;
+
+    fn into_request(self) -> Request<Self::Message>;
+}
+
+#[doc(hidden)]
+pub trait IntoStreamingRequest {
+    type Stream: Stream<Item = Self::Message> + Send + 'static;
+    type Message;
+
+    fn into_streaming_request(self) -> Request<Self::Stream>;
+}
+
+impl<T: IntoRequest> IntoRequest for Request<T> {
+    type Message = T;
+
+    fn into_request(self) -> Request<T> {
+        self
+    }
+}
+
+impl<T: Stream + Send + 'static> IntoStreamingRequest for Request<T> {
+    type Stream = T;
+    type Message = T::Item;
+
+    fn into_streaming_request(self) -> Self {
+        self
+    }
+}
+
+impl<T: Stream + Send + 'static> IntoStreamingRequest for T {
+    type Stream = T;
+    type Message = T::Item;
+
+    fn into_streaming_request(self) -> Request<Self> {
+        Request::new(self)
+    }
+}
 
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
