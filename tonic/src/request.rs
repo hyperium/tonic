@@ -1,9 +1,12 @@
 use crate::metadata::MetadataMap;
 use futures_core::Stream;
 
+/// A marker trait that should be implemented for all input messages.
+pub trait RequestMessage {}
+
 #[doc(hidden)]
 pub trait IntoRequest {
-    type Message;
+    type Message: RequestMessage;
 
     fn into_request(self) -> Request<Self::Message>;
 }
@@ -11,35 +14,9 @@ pub trait IntoRequest {
 #[doc(hidden)]
 pub trait IntoStreamingRequest {
     type Stream: Stream<Item = Self::Message> + Send + 'static;
-    type Message;
+    type Message: RequestMessage;
 
     fn into_streaming_request(self) -> Request<Self::Stream>;
-}
-
-impl<T: IntoRequest> IntoRequest for Request<T> {
-    type Message = T;
-
-    fn into_request(self) -> Request<T> {
-        self
-    }
-}
-
-impl<T: Stream + Send + 'static> IntoStreamingRequest for Request<T> {
-    type Stream = T;
-    type Message = T::Item;
-
-    fn into_streaming_request(self) -> Self {
-        self
-    }
-}
-
-impl<T: Stream + Send + 'static> IntoStreamingRequest for T {
-    type Stream = T;
-    type Message = T::Item;
-
-    fn into_streaming_request(self) -> Request<Self> {
-        Request::new(self)
-    }
 }
 
 /// A gRPC request and metadata from an RPC call.
@@ -128,5 +105,47 @@ impl<T> Request<T> {
             metadata: self.metadata,
             message,
         }
+    }
+}
+
+impl<T: RequestMessage> IntoRequest for T {
+    type Message = Self;
+
+    fn into_request(self) -> Request<T> {
+        Request::new(self)
+    }
+}
+
+impl<T: RequestMessage> IntoRequest for Request<T> {
+    type Message = T;
+
+    fn into_request(self) -> Request<T> {
+        self
+    }
+}
+
+impl<T> IntoStreamingRequest for Request<T>
+where
+    T: Stream + Send + 'static,
+    T::Item: RequestMessage,
+{
+    type Stream = T;
+    type Message = T::Item;
+
+    fn into_streaming_request(self) -> Self {
+        self
+    }
+}
+
+impl<T> IntoStreamingRequest for T
+where
+    T: Stream + Send + 'static,
+    T::Item: RequestMessage,
+{
+    type Stream = T;
+    type Message = T::Item;
+
+    fn into_streaming_request(self) -> Request<Self> {
+        Request::new(self)
     }
 }

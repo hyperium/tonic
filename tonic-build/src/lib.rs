@@ -350,14 +350,7 @@ fn generate_into_request_implementations(service: &prost_build::Service) -> Toke
         .iter()
         .fold(TokenStream::new(), |mut stream, input| {
             let request: syn::Type = syn::parse_str(&input).unwrap();
-            stream.extend(quote::quote! {
-                impl tonic::IntoRequest for #request {
-                    type Message = Self;
-                    fn into_request(self) -> tonic::Request<Self::Message> {
-                        tonic::Request::new(self)
-                    }
-                }
-            });
+            stream.extend(quote::quote!(impl tonic::RequestMessage for #request {}));
             stream
         })
 }
