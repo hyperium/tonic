@@ -29,9 +29,9 @@ pub(crate) fn encode_client<T, U>(
 ) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
 where
     T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
+    U: Stream<Item = T::Item>,
 {
-    let stream = encode(encoder, source).into_stream();
+    let stream = encode(encoder, source.map(|x| Ok(x))).into_stream();
     EncodeBody::new_client(stream)
 }
 

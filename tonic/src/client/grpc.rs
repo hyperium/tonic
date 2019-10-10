@@ -65,7 +65,7 @@ impl<T> Grpc<T> {
         M1: Send + 'static,
         M2: Send + 'static,
     {
-        let request = request.map(|m| stream::once(future::ok(m)));
+        let request = request.map(|m| stream::once(future::ready(m)));
         self.client_streaming(request, path, codec).await
     }
 
@@ -81,7 +81,7 @@ impl<T> Grpc<T> {
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
-        S: Stream<Item = Result<M1, Status>> + Send + 'static,
+        S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + 'static,
         M2: Send + 'static,
@@ -118,7 +118,7 @@ impl<T> Grpc<T> {
         M1: Send + 'static,
         M2: Send + 'static,
     {
-        let request = request.map(|m| stream::once(future::ok(m)));
+        let request = request.map(|m| stream::once(future::ready(m)));
         self.streaming(request, path, codec).await
     }
 
@@ -134,7 +134,7 @@ impl<T> Grpc<T> {
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        S: Stream<Item = Result<M1, Status>> + Send + 'static,
+        S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + 'static,
         M2: Send + 'static,
