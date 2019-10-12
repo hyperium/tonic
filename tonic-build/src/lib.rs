@@ -219,7 +219,7 @@ struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
-    into_request_impls: TokenStream,
+    request_message_impls: TokenStream,
 }
 
 impl ServiceGenerator {
@@ -228,7 +228,7 @@ impl ServiceGenerator {
             builder,
             clients: TokenStream::default(),
             servers: TokenStream::default(),
-            into_request_impls: TokenStream::default(),
+            request_message_impls: TokenStream::default(),
         }
     }
 }
@@ -246,18 +246,18 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let client = client::generate(&service, path);
             self.clients.extend(client);
 
-            let tokens = generate_into_request_implementations(&service);
-            self.into_request_impls.extend(tokens);
+            let tokens = generate_request_message_implementations(&service);
+            self.request_message_impls.extend(tokens);
         }
     }
 
     fn finalize(&mut self, buf: &mut String) {
         if self.builder.build_client && !self.clients.is_empty() {
             let clients = &self.clients;
-            let into_request_impls = &self.into_request_impls;
+            let trait_impls = &self.request_message_impls;
 
             let client_service = quote::quote! {
-                #into_request_impls
+                #trait_impls
                 /// Generated client implementations.
                 pub mod client {
                     #![allow(unused_variables, dead_code, missing_docs)]
@@ -337,7 +337,7 @@ fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenSt
     (request, response)
 }
 
-fn generate_into_request_implementations(service: &prost_build::Service) -> TokenStream {
+fn generate_request_message_implementations(service: &prost_build::Service) -> TokenStream {
     use std::collections::HashSet;
 
     service
