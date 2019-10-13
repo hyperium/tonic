@@ -183,10 +183,10 @@ serde_json = "1.0"
 prost = "0.5"
 rand = "0.7.2"
 tokio = "0.2.0-alpha.6"
-tonic = "0.1.0-alpha.2"
+tonic = "0.1.0-alpha.3"
 
 [build-dependencies]
-tonic-build = "0.1.0-alpha.2"
+tonic-build = "0.1.0-alpha.3"
 ```
 
 Create a `build.rs` file at the root of your crate:
@@ -310,37 +310,17 @@ uses [async-trait] internally. You can learn more about `async fn` in traits in 
 [async book]: https://rust-lang.github.io/async-book/07_workarounds/06_async_in_traits.html
 
 ### Server state
-There are two pieces of state our service needs to access: an immutable list of features and a
-mutable map from points to route notes.
-
-When designing our state shape, we must consider that our server will run in a multi-threaded Tokio
-executor and that the `server::RouteGuide` trait has `Send + Sync + 'static` bounds.
-
-This in one way we can represent our state:
-
-```rust
-use tokio::sync::Mutex;
-use std::sync::Arc;
-use std::collections::HashMap;
-```
+Our service needs access to an immutable list of features. When the server starts, we are going to
+deserialize them from a json file and keep them around as our only piece of shared state:
 
 ```rust
 #[derive(Debug)]
 pub struct RouteGuide {
-    state: State,
-}
-
-#[derive(Debug, Clone)]
-struct State {
     features: Arc<Vec<Feature>>,
-    notes: Arc<Mutex<HashMap<Point, Vec<RouteNote>>>>,
 }
 ```
 
-**Note:** we are using `tokio::sync::Mutex` here, not `std::sync::Mutex`.
-
-When our server boots, we are going to deserialize our features vector from a json file.
-Create the data file and a helper module to read and deserialize our features.
+Create the json data file and a helper module to read and deserialize our features.
 
 ```shell
 $ mkdir data && touch data/route_guide_db.json
@@ -398,7 +378,7 @@ an empty one.
 
 ```rust
 async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
-    for feature in &self.state.features[..] {
+    for feature in &self.features[..] {
         if feature.location.as_ref() == Some(request.get_ref()) {
             return Ok(Response::new(feature.clone()));
         }
@@ -426,11 +406,10 @@ async fn list_features(
     request: Request<Rectangle>,
 ) -> Result<Response<Self::ListFeaturesStream>, Status> {
     let (mut tx, rx) = mpsc::channel(4);
-
-    let state = self.state.clone();
+    let features = self.features.clone();
 
     tokio::spawn(async move {
-        for feature in &state.features[..] {
+        for feature in &features[..] {
             if in_range(feature.location.as_ref().unwrap(), request.get_ref()) {
                 tx.send(Ok(feature.clone())).await.unwrap();
             }
@@ -476,7 +455,7 @@ async fn record_route(
         let point = point?;
         summary.point_count += 1;
 
-        for feature in &self.state.features[..] {
+        for feature in &self.features[..] {
             if feature.location.as_ref() == Some(&point) {
                 summary.feature_count += 1;
             }
@@ -511,9 +490,9 @@ async fn route_chat(
     &self,
     request: Request<tonic::Streaming<RouteNote>>,
 ) -> Result<Response<Self::RouteChatStream>, Status> {
+    let mut notes = HashMap::new();
     let stream = request.into_inner();
-    let mut state = self.state.clone();
-
+    
     let output = async_stream::try_stream! {
         futures::pin_mut!(stream);
 
@@ -522,11 +501,10 @@ async fn route_chat(
 
             let location = note.location.clone().unwrap();
 
-            let mut notes = state.notes.lock().await;
-            let notes = notes.entry(location).or_insert(vec![]);
-            notes.push(note);
+            let location_notes = notes.entry(location).or_insert(vec![]);
+            location_notes.push(note);
 
-            for note in notes {
+            for note in location_notes {
                 yield note.clone();
             }
         }
@@ -566,10 +544,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
 
     let route_guide = RouteGuide {
-        state: State {
-            features: Arc::new(data::load()),
-            notes: Arc::new(Mutex::new(HashMap::new())),
-        },
+        features: Arc::new(data::load()),
     };
 
     let svc = server::RouteGuideServer::new(route_guide);
