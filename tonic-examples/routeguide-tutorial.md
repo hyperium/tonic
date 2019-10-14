@@ -67,6 +67,15 @@ In a separate shell, run the client
 $ cargo run --bin routeguide-client
 ```
 
+You should see some logging output flying past really quickly on both terminal windows. On the
+shell where you ran the client binary, you should see the output of the bidirectional streaming rpc,
+printing 1 line per second: 
+
+        NOTE = RouteNote { location: Some(Point { latitude: 409146139, longitude: -746188906 }), message: "at 1.000319208s" }
+       
+If you scroll up you should see the output of the other 3 request types: simple rpc, server-side
+streaming and client-side streaming.
+
 
 [readme]: https://github.com/hyperium/tonic#getting-started
 
@@ -208,8 +217,8 @@ That's it. The generated code contains:
 - A service trait we'll need to implement: `server::RouteGuide`.
 - A client type we'll use to call the server: `client::RouteGuideClient<T>`.
 
-If your are curious as to where the generated files are, keep reading. The mystery will be revealed.
-We can now move on to the fun part.
+If your are curious as to where the generated files are, keep reading. The mystery will be revealed
+soon! We can now move on to the fun part.
 
 [PROST!]: https://github.com/danburkert/prost
 
