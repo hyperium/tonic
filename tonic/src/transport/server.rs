@@ -5,6 +5,7 @@ use super::service::{layer_fn, BoxedIo, ServiceBuilderExt};
 use super::{
     service::TlsAcceptor,
     tls::{Identity, TlsProvider},
+    Certificate,
 };
 use crate::body::BoxBody;
 use futures_core::Stream;
@@ -225,6 +226,7 @@ impl fmt::Debug for Server {
 pub struct ServerTlsConfig {
     provider: TlsProvider,
     identity: Option<Identity>,
+    client_ca_root: Option<Certificate>,
     #[cfg(feature = "openssl")]
     openssl_raw: Option<openssl1::ssl::SslAcceptor>,
     #[cfg(feature = "rustls")]
@@ -260,6 +262,7 @@ impl ServerTlsConfig {
         ServerTlsConfig {
             provider,
             identity: None,
+            client_ca_root: None,
             #[cfg(feature = "openssl")]
             openssl_raw: None,
             #[cfg(feature = "rustls")]
@@ -270,6 +273,12 @@ impl ServerTlsConfig {
     /// Sets the [`Identity`] of the server.
     pub fn identity(&mut self, identity: Identity) -> &mut Self {
         self.identity = Some(identity);
+        self
+    }
+
+    /// Sets a certificate against which to validate client TLS certificates.
+    pub fn client_ca_root(&mut self, cert: Certificate) -> &mut Self {
+        self.client_ca_root = Some(cert);
         self
     }
 
@@ -298,12 +307,18 @@ impl ServerTlsConfig {
         match self.provider {
             #[cfg(feature = "openssl")]
             TlsProvider::OpenSsl => match &self.openssl_raw {
-                None => TlsAcceptor::new_with_openssl_identity(self.identity.clone().unwrap()),
+                None => TlsAcceptor::new_with_openssl_identity(
+                    self.identity.clone().unwrap(),
+                    self.client_ca_root.clone(),
+                ),
                 Some(acceptor) => TlsAcceptor::new_with_openssl_raw(acceptor.clone()),
             },
             #[cfg(feature = "rustls")]
             TlsProvider::Rustls => match &self.rustls_raw {
-                None => TlsAcceptor::new_with_rustls_identity(self.identity.clone().unwrap()),
+                None => TlsAcceptor::new_with_rustls_identity(
+                    self.identity.clone().unwrap(),
+                    self.client_ca_root.clone(),
+                ),
                 Some(config) => TlsAcceptor::new_with_rustls_raw(config.clone()),
             },
         }
