@@ -1,5 +1,4 @@
-/target/
-/tonic-examples/target/
+target/
 **/*.rs.bk
 Cargo.lock
 tags
