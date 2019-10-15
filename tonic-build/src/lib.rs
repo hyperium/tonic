@@ -64,6 +64,7 @@ use quote::{ToTokens, TokenStreamExt};
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
 use std::{
+    collections::HashSet,
     io,
     path::{Path, PathBuf},
 };
@@ -219,6 +220,7 @@ struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
+    seen_input_types: HashSet<String>,
     request_message_impls: TokenStream,
 }
 
@@ -228,6 +230,7 @@ impl ServiceGenerator {
             builder,
             clients: TokenStream::default(),
             servers: TokenStream::default(),
+            seen_input_types: HashSet::new(),
             request_message_impls: TokenStream::default(),
         }
     }
@@ -246,7 +249,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let client = client::generate(&service, path);
             self.clients.extend(client);
 
-            let tokens = generate_request_message_implementations(&service);
+            let tokens = generate_request_message_impls(&service, &mut self.seen_input_types);
             self.request_message_impls.extend(tokens);
         }
     }
@@ -337,20 +340,30 @@ fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenSt
     (request, response)
 }
 
-fn generate_request_message_implementations(service: &prost_build::Service) -> TokenStream {
-    use std::collections::HashSet;
-
-    service
+fn generate_request_message_impls(
+    service: &prost_build::Service,
+    seen_input_types: &mut HashSet<String>,
+) -> TokenStream {
+    let service_input_types = service
         .methods
         .iter()
         .fold(HashSet::new(), |mut set, method| {
             set.insert(method.input_type.clone());
             set
-        })
-        .iter()
-        .fold(TokenStream::new(), |mut stream, input| {
+        });
+
+    let tokens = service_input_types.difference(seen_input_types).fold(
+        TokenStream::new(),
+        |mut stream, input| {
             let request: syn::Type = syn::parse_str(&input).unwrap();
             stream.extend(quote::quote!(impl tonic::RequestMessage for #request {}));
             stream
-        })
+        },
+    );
+
+    for input in service_input_types {
+        seen_input_types.insert(input.to_owned());
+    }
+
+    tokens
 }
