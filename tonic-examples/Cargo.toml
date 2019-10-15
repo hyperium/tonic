@@ -44,6 +44,14 @@ path = "src/tls/client.rs"
 name = "tls-server"
 path = "src/tls/server.rs"
 
+[[bin]]
+name = "blob-client"
+path = "src/blobservice/client.rs"
+
+[[bin]]
+name = "blob-server"
+path = "src/blobservice/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["rustls"] }
 bytes = "0.4"
@@ -54,6 +62,8 @@ futures-preview = { version = "=0.3.0-alpha.19", default-features = false, featu
 async-stream = "0.1.2"
 http = "0.1"
 tower = "=0.3.0-alpha.2"
+env_logger = "*"
+log = "*"
 
 # Required for routeguide
 serde = { version = "1.0", features = ["derive"] }
