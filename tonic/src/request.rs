@@ -1,7 +1,14 @@
 use crate::metadata::MetadataMap;
 use futures_core::Stream;
 
-/// A marker trait that should be implemented for all input messages.
+/// A gRPC request and metadata from an RPC call.
+#[derive(Debug)]
+pub struct Request<T> {
+    metadata: MetadataMap,
+    message: T,
+}
+
+#[doc(hidden)]
 pub trait RequestMessage {}
 
 #[doc(hidden)]
@@ -17,13 +24,6 @@ pub trait IntoStreamingRequest {
     type Message: RequestMessage;
 
     fn into_streaming_request(self) -> Request<Self::Stream>;
-}
-
-/// A gRPC request and metadata from an RPC call.
-#[derive(Debug)]
-pub struct Request<T> {
-    metadata: MetadataMap,
-    message: T,
 }
 
 impl<T> Request<T> {
