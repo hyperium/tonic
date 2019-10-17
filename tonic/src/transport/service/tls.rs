@@ -1,4 +1,4 @@
-use super::io::BoxedIo;
+use super::io::{ServerIo, ClientIo};
 use crate::transport::{Certificate, Identity};
 #[cfg(feature = "openssl")]
 use openssl1::{
@@ -129,7 +129,7 @@ impl TlsConnector {
         })
     }
 
-    pub(crate) async fn connect(&self, io: TcpStream) -> Result<BoxedIo, crate::Error> {
+    pub(crate) async fn connect(&self, io: TcpStream) -> Result<ClientIo, crate::Error> {
         let tls_io = match &self.inner {
             #[cfg(feature = "openssl")]
             Connector::Openssl(connector) => {
@@ -141,7 +141,7 @@ impl TlsConnector {
                     _ => return Err(TlsError::H2NotNegotiated.into()),
                 };
 
-                BoxedIo::new(tls)
+                ClientIo::new(tls)
             }
             #[cfg(feature = "rustls")]
             Connector::Rustls(config) => {
@@ -160,7 +160,7 @@ impl TlsConnector {
                     _ => return Err(TlsError::H2NotNegotiated.into()),
                 };
 
-                BoxedIo::new(io)
+                ClientIo::new(io)
             }
 
             #[allow(unreachable_patterns)]
@@ -285,19 +285,60 @@ impl TlsAcceptor {
         })
     }
 
-    pub(crate) async fn connect(&self, io: TcpStream) -> Result<BoxedIo, crate::Error> {
+    #[cfg(not(feature = "tls_client_identity"))]
+    pub(crate) async fn connect(&self, io: TcpStream) -> Result<ServerIo, crate::Error> {
         let io = match &self.inner {
             #[cfg(feature = "openssl")]
             Acceptor::Openssl(acceptor) => {
                 let tls = tokio_openssl::accept(&acceptor, io).await?;
-                BoxedIo::new(tls)
+                ServerIo::new(tls)
             }
 
             #[cfg(feature = "rustls")]
             Acceptor::Rustls(config) => {
                 let acceptor = RustlsAcceptor::from(config.clone());
                 let tls = acceptor.accept(io).await?;
-                BoxedIo::new(tls)
+                ServerIo::new(tls)
+            }
+
+            #[allow(unreachable_patterns)]
+            _ => unreachable!("Reached a tls config point with neither feature enabled!"),
+        };
+
+        Ok(io)
+    }
+
+    #[cfg(feature = "tls_client_identity")]
+    pub(crate) async fn connect(&self, io: TcpStream) -> Result<ServerIo, crate::Error> {
+        let io = match &self.inner {
+            #[cfg(feature = "openssl")]
+            Acceptor::Openssl(acceptor) => {
+                let tls = tokio_openssl::accept(&acceptor, io).await?;
+                match tls.ssl().peer_certificate() {
+                    None => ServerIo::new(tls, None),
+                    Some(cert) => {
+                        if let Some(entry) = cert.subject_name().entries().nth(0) {
+                            //TODO(jen20) handle errors here
+                            ServerIo::new(tls, Some(entry.data().as_utf8().unwrap().to_string()))
+                        } else {
+                            //TODO(jen20) cert issue here? Return error
+                            ServerIo::new(tls, None)
+                        }
+                    }
+                }
+            }
+
+            #[cfg(feature = "rustls")]
+            Acceptor::Rustls(config) => {
+                let acceptor = RustlsAcceptor::from(config.clone());
+                let tls = acceptor.accept(io).await?;
+
+                let (_, session) = tls.get_ref();
+                if let Some(client_cert) = session.get_peer_certificates() {
+                    //TODO(jen20)
+                }
+
+                ServerIo::new(tls, None)
             }
 
             #[allow(unreachable_patterns)]

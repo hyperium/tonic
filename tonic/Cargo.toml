@@ -35,6 +35,7 @@ transport = [
 ]
 openssl = ["openssl1", "tokio-openssl", "tls"]
 rustls = ["tokio-rustls", "tls"]
+tls_client_identity = ["x509-parser"]
 tls = []
 
 [[bench]]
@@ -82,6 +83,9 @@ openssl1 = { package = "openssl", version = "0.10", optional = true }
 
 # rustls
 tokio-rustls = { version = "=0.12.0-alpha.4", optional = true }
+
+# tls client identity
+x509-parser = { version = "0.6", optional = true }
 
 [package.metadata.docs.rs]
 all-features = true

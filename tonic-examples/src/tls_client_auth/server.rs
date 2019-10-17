@@ -7,6 +7,7 @@ use std::collections::VecDeque;
 use pb::{EchoRequest, EchoResponse};
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status};
+use tower::Service;
 
 type EchoResult<T> = Result<Response<T>, Status>;
 type Stream = VecDeque<Result<EchoResponse, Status>>;
@@ -37,13 +38,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let server = EchoServer::default();
 
-    let tls = ServerTlsConfig::with_rustls()
+    let tls = ServerTlsConfig::with_openssl()
         .identity(server_identity)
         .client_ca_root(client_ca_cert)
         .clone();
 
     Server::builder()
         .tls_config(&tls)
+        .interceptor_fn(|svc, req| {
+            let x = req.extensions().get::<Option<String>>();
+            println!("Interceptor identity: {:?}", x);
+            svc.call(req)
+        })
         .clone()
         .serve(addr, pb::server::EchoServer::new(server))
         .await?;

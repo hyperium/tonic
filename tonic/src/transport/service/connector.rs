@@ -1,13 +1,14 @@
-use super::io::BoxedIo;
+use super::io::ClientIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
 use hyper::client::connect::HttpConnector;
+use tower_make::MakeConnection;
+use tower_service::Service;
+
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tower_make::MakeConnection;
-use tower_service::Service;
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn connector() -> HttpConnector {
@@ -38,7 +39,7 @@ impl Connector {
 }
 
 impl Service<Uri> for Connector {
-    type Response = BoxedIo;
+    type Response = ClientIo;
     type Error = crate::Error;
 
     type Future =
@@ -61,11 +62,11 @@ impl Service<Uri> for Connector {
             {
                 if let Some(tls) = tls {
                     let conn = tls.connect(io).await?;
-                    return Ok(BoxedIo::new(conn));
+                    return Ok(ClientIo::new(conn));
                 }
             }
 
-            Ok(BoxedIo::new(io))
+            Ok(ClientIo::new(io))
         })
     }
 }

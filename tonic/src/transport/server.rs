@@ -1,6 +1,6 @@
 //! Server implementation and builder.
 
-use super::service::{layer_fn, BoxedIo, ServiceBuilderExt};
+use super::service::{layer_fn, ServerIo, ServiceBuilderExt};
 #[cfg(feature = "tls")]
 use super::{
     service::TlsAcceptor,
@@ -36,7 +36,7 @@ use tower_make::MakeService;
 use tracing::error;
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
-type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
+type Interceptor = Arc<dyn Layer<BoxService, Service=BoxService> + Send + Sync + 'static>;
 
 /// A default batteries included `transport` server.
 ///
@@ -135,9 +135,9 @@ impl Server {
     /// });
     /// ```
     pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
-    where
-        F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,
-        Out: Future<Output = Result<Response<BoxBody>, crate::Error>> + Send + 'static,
+        where
+            F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,
+            Out: Future<Output=Result<Response<BoxBody>, crate::Error>> + Send + 'static,
     {
         let f = Arc::new(f);
         let interceptor = layer_fn(move |mut s| {
@@ -152,13 +152,13 @@ impl Server {
     /// Consume this [`Server`] creating a future that will execute the server
     /// on [`tokio`]'s default executor.
     pub async fn serve<M, S>(self, addr: SocketAddr, svc: M) -> Result<(), super::Error>
-    where
-        M: Service<(), Response = S>,
-        M::Error: Into<crate::Error> + Send + 'static,
-        M::Future: Send + 'static,
-        S: Service<Request<Body>, Response = Response<BoxBody>> + Send + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
+        where
+            M: Service<(), Response=S>,
+            M::Error: Into<crate::Error> + Send + 'static,
+            M::Future: Send + 'static,
+            S: Service<Request<Body>, Response=Response<BoxBody>> + Send + 'static,
+            S::Future: Send + 'static,
+            S::Error: Into<crate::Error> + Send,
     {
         let interceptor = self.interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
@@ -181,12 +181,13 @@ impl Server {
                                 continue
                             },
                         };
-                        yield BoxedIo::new(io);
+
+                        yield io;
                         continue;
                     }
                 }
 
-                yield BoxedIo::new(stream);
+                yield ServerIo::new(stream);
             }
         });
 
@@ -350,24 +351,61 @@ impl Stream for TcpIncoming {
     }
 }
 
+//#[derive(Debug)]
+//struct Svc<S>(S, Option<String>);
+
 #[derive(Debug)]
-struct Svc<S>(S);
+struct Svc<S> where
+    S: Service<Request<Body>, Response=Response<BoxBody>>,
+    S::Error: Into<crate::Error>,
+{
+    inner: S,
+    #[cfg(feature = "tls_client_identity")]
+    client_identity: Option<String>,
+}
+
+impl<S> Svc<S> where
+    S: Service<Request<Body>, Response=Response<BoxBody>>,
+    S::Error: Into<crate::Error>,
+{
+    #[cfg(not(feature = "tls_client_identity"))]
+    pub(crate) fn new(inner: S) -> Self {
+        Svc {
+            inner,
+        }
+    }
+
+    #[cfg(feature = "tls_client_identity")]
+    pub(crate) fn new(inner: S, client_identity: Option<String>) -> Self {
+        Svc {
+            inner,
+            client_identity,
+        }
+    }
+}
 
 impl<S> Service<Request<Body>> for Svc<S>
-where
-    S: Service<Request<Body>, Response = Response<BoxBody>>,
-    S::Error: Into<crate::Error>,
+    where
+        S: Service<Request<Body>, Response=Response<BoxBody>>,
+        S::Error: Into<crate::Error>,
 {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = MapErr<S::Future, fn(S::Error) -> crate::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
+    #[cfg(not(feature = "tls_client_identity"))]
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        self.0.call(req).map_err(|e| e.into())
+        self.inner.call(req).map_err(|e| e.into())
+    }
+
+    #[cfg(feature = "tls_client_identity")]
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        req.extensions_mut().insert(self.client_identity.clone());
+        self.inner.call(req).map_err(|e| e.into())
     }
 }
 
@@ -378,25 +416,52 @@ struct MakeSvc<M> {
     inner: M,
 }
 
-impl<M, S, T> Service<T> for MakeSvc<M>
-where
-    M: Service<(), Response = S>,
-    M::Error: Into<crate::Error> + Send,
-    M::Future: Send + 'static,
-    S: Service<Request<Body>, Response = Response<BoxBody>> + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<crate::Error> + Send,
+impl<M, S> Service<&ServerIo> for MakeSvc<M>
+    where
+        M: Service<(), Response=S>,
+        M::Error: Into<crate::Error> + Send,
+        M::Future: Send + 'static,
+        S: Service<Request<Body>, Response=Response<BoxBody>> + Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
 {
     type Response = BoxService;
     type Error = crate::Error;
     type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    Pin<Box<dyn Future<Output=Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         MakeService::poll_ready(&mut self.inner, cx).map_err(Into::into)
     }
 
-    fn call(&mut self, _: T) -> Self::Future {
+    #[cfg(feature = "tls_client_identity")]
+    fn call(&mut self, server_io: &ServerIo) -> Self::Future {
+        let interceptor = self.interceptor.clone();
+        let make = self.inner.make_service(());
+        let concurrency_limit = self.concurrency_limit;
+        let client_identity = server_io.client_identity.clone();
+        // let timeout = self.timeout.clone();
+
+        Box::pin(async move {
+            let svc = make.await.map_err(Into::into)?;
+            let svc = ServiceBuilder::new()
+                .optional_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
+                // .optional_layer(timeout.map(TimeoutLayer::new))
+                .service(svc);
+
+            let svc = if let Some(interceptor) = interceptor {
+                let layered = interceptor.layer(BoxService::new(Svc::new(svc, None)));
+                BoxService::new(Svc::new(layered, client_identity))
+            } else {
+                BoxService::new(Svc::new(svc, None))
+            };
+
+            Ok(svc)
+        })
+    }
+
+    #[cfg(not(feature = "tls_client_identity"))]
+    fn call(&mut self, _: &ServerIo) -> Self::Future {
         let interceptor = self.interceptor.clone();
         let make = self.inner.make_service(());
         let concurrency_limit = self.concurrency_limit;
@@ -404,17 +469,16 @@ where
 
         Box::pin(async move {
             let svc = make.await.map_err(Into::into)?;
-
             let svc = ServiceBuilder::new()
                 .optional_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
                 // .optional_layer(timeout.map(TimeoutLayer::new))
                 .service(svc);
 
             let svc = if let Some(interceptor) = interceptor {
-                let layered = interceptor.layer(BoxService::new(Svc(svc)));
-                BoxService::new(Svc(layered))
+                let layered = interceptor.layer(BoxService::new(Svc::new(svc)));
+                BoxService::new(Svc::new(layered))
             } else {
-                BoxService::new(Svc(svc))
+                BoxService::new(Svc::new(svc))
             };
 
             Ok(svc)
