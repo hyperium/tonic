@@ -286,7 +286,7 @@ impl ServerTlsConfig {
     ///
     /// This overrides all other TLS options set via other means.
     #[cfg(feature = "rustls")]
-    pub fn rustls_client_config(
+    pub fn rustls_server_config(
         &mut self,
         config: tokio_rustls::rustls::ServerConfig,
     ) -> &mut Self {
