@@ -221,7 +221,7 @@ struct ServiceGenerator {
     clients: TokenStream,
     servers: TokenStream,
     seen_input_types: HashSet<String>,
-    request_message_impls: TokenStream,
+    into_request_impls: TokenStream,
 }
 
 impl ServiceGenerator {
@@ -231,7 +231,7 @@ impl ServiceGenerator {
             clients: TokenStream::default(),
             servers: TokenStream::default(),
             seen_input_types: HashSet::new(),
-            request_message_impls: TokenStream::default(),
+            into_request_impls: TokenStream::default(),
         }
     }
 }
@@ -249,15 +249,15 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let client = client::generate(&service, path);
             self.clients.extend(client);
 
-            let tokens = generate_request_message_impls(&service, &mut self.seen_input_types);
-            self.request_message_impls.extend(tokens);
+            let tokens = generate_into_request_impls(&service, &mut self.seen_input_types);
+            self.into_request_impls.extend(tokens);
         }
     }
 
     fn finalize(&mut self, buf: &mut String) {
         if self.builder.build_client && !self.clients.is_empty() {
             let clients = &self.clients;
-            let trait_impls = &self.request_message_impls;
+            let trait_impls = &self.into_request_impls;
 
             let client_service = quote::quote! {
                 #trait_impls
@@ -340,7 +340,7 @@ fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenSt
     (request, response)
 }
 
-fn generate_request_message_impls(
+fn generate_into_request_impls(
     service: &prost_build::Service,
     seen_input_types: &mut HashSet<String>,
 ) -> TokenStream {
@@ -352,11 +352,22 @@ fn generate_request_message_impls(
             set
         });
 
-    let tokens = service_input_types.difference(seen_input_types).fold(
+    let token_stream = service_input_types.difference(seen_input_types).fold(
         TokenStream::new(),
         |mut stream, input| {
             let request: syn::Type = syn::parse_str(&input).unwrap();
-            stream.extend(quote::quote!(impl tonic::RequestMessage for #request {}));
+
+            let trait_impl = quote::quote! {
+                impl tonic::IntoRequest for #request {
+                    type Message = Self;
+
+                    fn into_request(self) -> tonic::Request<Self> {
+                        tonic::Request::new(self)
+                    }
+                }
+            };
+
+            stream.extend(trait_impl);
             stream
         },
     );
@@ -365,5 +376,5 @@ fn generate_request_message_impls(
         seen_input_types.insert(input.to_owned());
     }
 
-    tokens
+    token_stream
 }

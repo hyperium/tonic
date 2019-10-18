@@ -8,12 +8,9 @@ pub struct Request<T> {
     message: T,
 }
 
-#[doc(hidden)]
-pub trait RequestMessage {}
-
-#[doc(hidden)]
+/// A trait that is implemented for all RPC request request types.
 pub trait IntoRequest {
-    type Message: RequestMessage;
+    type Message;
 
     fn into_request(self) -> Request<Self::Message>;
 }
@@ -21,7 +18,7 @@ pub trait IntoRequest {
 #[doc(hidden)]
 pub trait IntoStreamingRequest {
     type Stream: Stream<Item = Self::Message> + Send + 'static;
-    type Message: RequestMessage;
+    type Message;
 
     fn into_streaming_request(self) -> Request<Self::Stream>;
 }
@@ -108,15 +105,7 @@ impl<T> Request<T> {
     }
 }
 
-impl<T: RequestMessage> IntoRequest for T {
-    type Message = Self;
-
-    fn into_request(self) -> Request<T> {
-        Request::new(self)
-    }
-}
-
-impl<T: RequestMessage> IntoRequest for Request<T> {
+impl<T> IntoRequest for Request<T> {
     type Message = T;
 
     fn into_request(self) -> Request<T> {
@@ -127,7 +116,6 @@ impl<T: RequestMessage> IntoRequest for Request<T> {
 impl<T> IntoStreamingRequest for Request<T>
 where
     T: Stream + Send + 'static,
-    T::Item: RequestMessage,
 {
     type Stream = T;
     type Message = T::Item;
@@ -140,7 +128,6 @@ where
 impl<T> IntoStreamingRequest for T
 where
     T: Stream + Send + 'static,
-    T::Item: RequestMessage,
 {
     type Stream = T;
     type Message = T::Item;
