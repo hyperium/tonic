@@ -1,4 +1,4 @@
-use futures::{stream, TryStreamExt};
+use futures::stream;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use route_guide::{Point, Rectangle, RouteNote};
@@ -31,7 +31,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         .await?
         .into_inner();
 
-    while let Some(feature) = stream.try_next().await? {
+    while let Some(feature) = stream.message().await? {
         println!("NOTE = {:?}", feature);
     }
 
@@ -82,7 +82,7 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
     let response = client.route_chat(request).await?;
     let mut inbound = response.into_inner();
 
-    while let Some(note) = inbound.try_next().await? {
+    while let Some(note) = inbound.message().await? {
         println!("NOTE = {:?}", note);
     }
 
