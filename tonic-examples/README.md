@@ -21,7 +21,7 @@ $ cargo run --bin helloworld-server
 ### Client
 
 ```bash
-$ cargo run --bin routegide-client
+$ cargo run --bin routeguide-client
 ```
 
 ### Server

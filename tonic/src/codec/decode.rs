@@ -12,6 +12,8 @@ use std::{
 };
 use tracing::{debug, trace};
 
+const BUFFER_SIZE: usize = 8 * 1024;
+
 /// Streaming requests and responses.
 ///
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
@@ -70,6 +72,7 @@ impl<T> Streaming<T> {
     {
         Self::new(decoder, body, Direction::Request)
     }
+
     fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
     where
         B: Body + Send + 'static,
@@ -82,8 +85,7 @@ impl<T> Streaming<T> {
             body: BoxBody::map_from(body),
             state: State::ReadHeader,
             direction,
-            // FIXME: update this with a reasonable size
-            buf: BytesMut::with_capacity(1024 * 1024),
+            buf: BytesMut::with_capacity(BUFFER_SIZE),
             trailers: None,
         }
     }
@@ -234,6 +236,16 @@ impl<T> Stream for Streaming<T> {
             };
 
             if let Some(data) = chunk {
+                if data.remaining() > self.buf.remaining_mut() {
+                    let amt = if data.remaining() > BUFFER_SIZE {
+                        data.remaining()
+                    } else {
+                        BUFFER_SIZE
+                    };
+
+                    self.buf.reserve(amt);
+                }
+
                 self.buf.put(data);
             } else {
                 // FIXME: improve buf usage.

@@ -3,8 +3,9 @@
 //!
 //! # Features
 //!
-//! `tonic-build` only comes with one `rustfmt` feature which enables the usage of
-//! the `rustfmt` binary to format the generated code. This is enabled by default.
+//! - `rustfmt`: This feature enables the use of `rustfmt` to format the output code
+//! this makes the code readable and the error messages nice. This requires that `rustfmt`
+//! is installed. This is enabled by default.
 //!
 //! # Required dependencies
 //!
@@ -42,9 +43,23 @@
 //! }
 //! ```
 
+#![recursion_limit = "256"]
+#![warn(
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    unreachable_pub
+)]
+#![doc(
+    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
+)]
+#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.3")]
+#![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
+#![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
+
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
-use prost_build::Config;
-use quote::TokenStreamExt;
+use prost_build::{Config, Method};
+use quote::{ToTokens, TokenStreamExt};
 
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
@@ -54,13 +69,18 @@ use std::{
 };
 
 mod client;
-mod service;
+mod server;
 
-#[derive(Clone)]
+/// Service generator builder.
+#[derive(Debug, Clone)]
 pub struct Builder {
     build_client: bool,
     build_server: bool,
+    field_attributes: Vec<(String, String)>,
+    type_attributes: Vec<(String, String)>,
     out_dir: Option<PathBuf>,
+    #[cfg(feature = "rustfmt")]
+    format: bool,
 }
 
 impl Builder {
@@ -76,6 +96,13 @@ impl Builder {
         self
     }
 
+    /// Enable the output to be formated by rustfmt.
+    #[cfg(feature = "rustfmt")]
+    pub fn format(mut self, run: bool) -> Self {
+        self.format = run;
+        self
+    }
+
     /// Set the output directory to generate code to.
     ///
     /// Defaults to the `OUT_DIR` environment variable.
@@ -84,9 +111,30 @@ impl Builder {
         self
     }
 
+    /// Add additional attribute to matched messages, enums, and one-offs.
+    ///
+    /// Passed directly to `prost_build::Config.field_attribute`.
+    pub fn field_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.field_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
+    /// Add additional attribute to matched messages, enums, and one-offs.
+    ///
+    /// Passed directly to `prost_build::Config.type_attribute`.
+    pub fn type_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.type_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let mut config = Config::new();
+
+        #[cfg(feature = "rustfmt")]
+        let format = self.format;
 
         let out_dir = self
             .out_dir
@@ -94,11 +142,22 @@ impl Builder {
             .unwrap_or_else(|| PathBuf::from(std::env::var("OUT_DIR").unwrap()));
 
         config.out_dir(out_dir.clone());
+        for (path, attr) in self.field_attributes.iter() {
+            config.field_attribute(path, attr);
+        }
+        for (path, attr) in self.type_attributes.iter() {
+            config.type_attribute(path, attr);
+        }
         config.service_generator(Box::new(ServiceGenerator::new(self)));
+
         config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
-        fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+        {
+            if format {
+                fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+            }
+        }
 
         Ok(())
     }
@@ -112,6 +171,10 @@ pub fn configure() -> Builder {
         build_client: true,
         build_server: true,
         out_dir: None,
+        field_attributes: Vec::new(),
+        type_attributes: Vec::new(),
+        #[cfg(feature = "rustfmt")]
+        format: true,
     }
 }
 
@@ -152,7 +215,7 @@ fn fmt(out_dir: &str) {
     }
 }
 
-pub struct ServiceGenerator {
+struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
@@ -173,7 +236,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         let path = "super";
 
         if self.builder.build_server {
-            let server = service::generate(&service, path);
+            let server = server::generate(&service, path);
             self.servers.extend(server);
         }
 
@@ -245,4 +308,24 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     }
 
     stream
+}
+
+fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenStream) {
+    let request = if method.input_proto_type.starts_with(".google.protobuf") {
+        method.input_type.parse::<TokenStream>().unwrap()
+    } else {
+        syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.input_type))
+            .unwrap()
+            .to_token_stream()
+    };
+
+    let response = if method.output_proto_type.starts_with(".google.protobuf") {
+        method.output_type.parse::<TokenStream>().unwrap()
+    } else {
+        syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.output_type))
+            .unwrap()
+            .to_token_stream()
+    };
+
+    (request, response)
 }

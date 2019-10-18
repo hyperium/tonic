@@ -2,7 +2,6 @@ use crate::generate_doc_comments;
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
 use quote::{format_ident, quote};
-use syn::Path;
 
 pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name);
@@ -97,8 +96,7 @@ fn generate_methods(service: &Service, proto: &str) -> TokenStream {
 
 fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
-    let request: Path = syn::parse_str(&format!("{}::{}", proto, method.input_type)).unwrap();
-    let response: Path = syn::parse_str(&format!("{}::{}", proto, method.output_type)).unwrap();
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident(&mut self, request: tonic::Request<#request>)
@@ -113,8 +111,8 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
 
 fn generate_server_streaming(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
-    let request: Path = syn::parse_str(&format!("{}::{}", proto, method.input_type)).unwrap();
-    let response: Path = syn::parse_str(&format!("{}::{}", proto, method.output_type)).unwrap();
+
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident(&mut self, request: tonic::Request<#request>)
@@ -129,13 +127,13 @@ fn generate_server_streaming(method: &Method, proto: &str, path: String) -> Toke
 
 fn generate_client_streaming(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
-    let request: Path = syn::parse_str(&format!("{}::{}", proto, method.input_type)).unwrap();
-    let response: Path = syn::parse_str(&format!("{}::{}", proto, method.output_type)).unwrap();
+
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
             -> Result<tonic::Response<#response>, tonic::Status>
-            where S: Stream<Item = Result<#request, tonic::Status>> + Send + 'static,
+            where S: Stream<Item = #request> + Send + 'static,
         {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
@@ -147,13 +145,13 @@ fn generate_client_streaming(method: &Method, proto: &str, path: String) -> Toke
 
 fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream {
     let ident = format_ident!("{}", method.name);
-    let request: Path = syn::parse_str(&format!("{}::{}", proto, method.input_type)).unwrap();
-    let response: Path = syn::parse_str(&format!("{}::{}", proto, method.output_type)).unwrap();
+
+    let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
         pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
             -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status>
-            where S: Stream<Item = Result<#request, tonic::Status>> + Send + 'static,
+            where S: Stream<Item = #request> + Send + 'static,
         {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();

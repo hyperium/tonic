@@ -8,6 +8,9 @@ mod encode;
 #[cfg(feature = "prost")]
 mod prost;
 
+#[cfg(test)]
+mod tests;
+
 pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
 #[cfg(feature = "prost")]

@@ -44,7 +44,7 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 
     let mut points = vec![];
     for _ in 0..=point_count {
-        points.push(Ok(random_point(&mut rng)))
+        points.push(random_point(&mut rng))
     }
 
     println!("Traversing {} points", points.len());
@@ -61,7 +61,7 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let start = Instant::now();
 
-    let outbound = async_stream::try_stream! {
+    let outbound = async_stream::stream! {
         let mut interval = Interval::new_interval(Duration::from_secs(1));
 
         while let Some(time) = interval.next().await {
