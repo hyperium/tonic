@@ -10,8 +10,10 @@ pub struct Request<T> {
 
 /// A trait that is implemented for all RPC request request types.
 pub trait IntoRequest {
+    /// The RPC request type
     type Message;
 
+    /// Wrap `Message` in a `tonic::Request`
     fn into_request(self) -> Request<Self::Message>;
 }
 
