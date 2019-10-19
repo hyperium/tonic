@@ -6,7 +6,7 @@ use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
@@ -18,13 +18,7 @@ use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
 
 #[derive(Debug)]
 pub struct RouteGuide {
-    state: State,
-}
-
-#[derive(Debug, Clone)]
-struct State {
     features: Arc<Vec<Feature>>,
-    notes: Arc<Mutex<HashMap<Point, Vec<RouteNote>>>>,
 }
 
 #[tonic::async_trait]
@@ -32,7 +26,7 @@ impl server::RouteGuide for RouteGuide {
     async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
         println!("GetFeature = {:?}", request);
 
-        for feature in &self.state.features[..] {
+        for feature in &self.features[..] {
             if feature.location.as_ref() == Some(request.get_ref()) {
                 return Ok(Response::new(feature.clone()));
             }
@@ -55,11 +49,10 @@ impl server::RouteGuide for RouteGuide {
         println!("ListFeatures = {:?}", request);
 
         let (mut tx, rx) = mpsc::channel(4);
-
-        let state = self.state.clone();
+        let features = self.features.clone();
 
         tokio::spawn(async move {
-            for feature in &state.features[..] {
+            for feature in &features[..] {
                 if in_range(feature.location.as_ref().unwrap(), request.get_ref()) {
                     println!("  => send {:?}", feature);
                     tx.send(Ok(feature.clone())).await.unwrap();
@@ -96,7 +89,7 @@ impl server::RouteGuide for RouteGuide {
             summary.point_count += 1;
 
             // Find features
-            for feature in &self.state.features[..] {
+            for feature in &self.features[..] {
                 if feature.location.as_ref() == Some(&point) {
                     summary.feature_count += 1;
                 }
@@ -123,8 +116,8 @@ impl server::RouteGuide for RouteGuide {
     ) -> Result<Response<Self::RouteChatStream>, Status> {
         println!("RouteChat");
 
+        let mut notes = HashMap::new();
         let stream = request.into_inner();
-        let state = self.state.clone();
 
         let output = async_stream::try_stream! {
             futures::pin_mut!(stream);
@@ -134,11 +127,10 @@ impl server::RouteGuide for RouteGuide {
 
                 let location = note.location.clone().unwrap();
 
-                let mut notes = state.notes.lock().await;
-                let notes = notes.entry(location).or_insert(vec![]);
-                notes.push(note);
+                let location_notes = notes.entry(location).or_insert(vec![]);
+                location_notes.push(note);
 
-                for note in notes {
+                for note in location_notes {
                     yield note.clone();
                 }
             }
@@ -158,11 +150,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Listening on: {}", addr);
 
     let route_guide = RouteGuide {
-        state: State {
-            // Load data file
-            features: Arc::new(data::load()),
-            notes: Arc::new(Mutex::new(HashMap::new())),
-        },
+        features: Arc::new(data::load()),
     };
 
     let svc = server::RouteGuideServer::new(route_guide);

@@ -54,6 +54,8 @@ $ cargo +beta build
 #### `Cargo.toml`
 
 ```toml
+edition = "2018"
+
 [dependencies]
 tonic = "*"
 bytes = "0.4"
