@@ -35,7 +35,10 @@ impl<T> Unpin for Streaming<T> {}
 #[derive(Debug)]
 enum State {
     ReadHeader,
-    ReadBody { compression: bool, len: usize },
+    ReadBody {
+        is_compressed: bool,
+        message_length: usize,
+    },
 }
 
 #[derive(Debug)]
@@ -183,16 +186,24 @@ impl<T> Streaming<T> {
                     ));
                 }
             };
-            let len = buf.get_u32_be() as usize;
 
+            // consume the length of the message
+            let message_length = buf.get_u32_be() as usize;
+
+            // now it's time to read the body
             self.state = State::ReadBody {
-                compression: is_compressed,
-                len,
+                is_compressed,
+                message_length,
             }
         }
 
-        if let State::ReadBody { len, .. } = &self.state {
-            if buf.remaining() < *len {
+        ///////////////////////////
+        // read the message body //
+        ///////////////////////////
+        if let State::ReadBody { message_length, .. } = self.state {
+            // if we haven't read the entire message in then we need to wait for more data
+            let bytes_left_to_decode = buf.remaining();
+            if bytes_left_to_decode < message_length {
                 return Ok(None);
             }
 
