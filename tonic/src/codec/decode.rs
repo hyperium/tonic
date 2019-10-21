@@ -19,7 +19,7 @@ const BUFFER_SIZE: usize = 8 * 1024;
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
 /// to fetch the message stream and trailing metadata
 pub struct Streaming<T> {
-    decoder: Box<dyn Decoder<Item = T, Error = Status> + Send + 'static>,
+    decoder: Box<dyn Decoder<Item = T, Error = Status> + Sync + Send + 'static>,
     body: BoxBody,
     state: State,
     direction: Direction,
@@ -48,7 +48,7 @@ impl<T> Streaming<T> {
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,
     {
         Self::new(decoder, body, Direction::Response(status_code))
     }
@@ -58,7 +58,7 @@ impl<T> Streaming<T> {
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,
     {
         Self::new(decoder, body, Direction::EmptyResponse)
     }
@@ -68,7 +68,7 @@ impl<T> Streaming<T> {
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,
     {
         Self::new(decoder, body, Direction::Request)
     }
@@ -78,7 +78,7 @@ impl<T> Streaming<T> {
         B: Body + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,
     {
         Self {
             decoder: Box::new(decoder),
