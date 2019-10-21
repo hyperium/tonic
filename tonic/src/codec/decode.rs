@@ -247,9 +247,10 @@ impl<T> Stream for Streaming<T> {
             // FIXME: implement the ability to poll trailers when we _know_ that
             // the consumer of this stream will only poll for the first message.
             // This means we skip the poll_trailers step.
-            match self.decode_chunk()? {
-                Some(item) => return Poll::Ready(Some(Ok(item))),
-                None => (),
+
+            // if we're able to decode a chunk then the future is complete
+            if let Some(item) = self.decode_chunk()? {
+                return Poll::Ready(Some(Ok(item)));
             }
 
             let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
