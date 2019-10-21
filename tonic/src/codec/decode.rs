@@ -207,6 +207,18 @@ impl<T> Streaming<T> {
                 return Ok(None);
             }
 
+            let bytes_allocd_for_decoding = self.buf.len();
+            // It's possible to read enough data to decode the body, but not enough to decode the
+            // body _and_ the tonic header. If that's the case, then read more data.
+            let min_bytes_needed_to_decode = message_length + HEADER_SIZE;
+            if bytes_allocd_for_decoding < min_bytes_needed_to_decode {
+                return Ok(None);
+            }
+
+            // self.buf must always contain at least the length of the message number of bytes +
+            // the number of bytes in the tonic header
+            assert!(bytes_allocd_for_decoding >= min_bytes_needed_to_decode);
+
             // advance past the header
             self.buf.advance(HEADER_SIZE);
 
