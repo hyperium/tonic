@@ -194,7 +194,9 @@ impl fmt::Debug for BoxBody {
 }
 
 #[derive(Debug, Default)]
-struct EmptyBody;
+struct EmptyBody {
+    _p: (),
+}
 
 impl HttpBody for EmptyBody {
     type Data = BytesBuf;
