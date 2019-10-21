@@ -1,5 +1,3 @@
-use futures::TryStreamExt;
-
 pub mod blobservice {
     tonic::include_proto!("blobservice");
 }
@@ -15,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let response = client.get_bytes(request).await?;
     let mut inner = response.into_inner();
     let mut i = 0_u64;
-    while let Some(_) = inner.try_next().await.map_err(|e| {
+    while let Some(_) = inner.message().await.map_err(|e| {
         println!("i={}", i);
         println!("message={}", e.message());
         e
