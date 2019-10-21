@@ -8,7 +8,7 @@ pub mod blobservice {
 
 use blobservice::{client::BlobberClient, BlobRequest};
 
-#[tokio::main(single_thread)]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     env_logger::init();
     let mut client = BlobberClient::connect("http://[::1]:50051")?;

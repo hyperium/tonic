@@ -38,7 +38,7 @@ impl Blobber for SimpleBlobber {
     }
 }
 
-#[tokio::main(single_thread)]
+#[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address = "[::1]:50051".parse().unwrap();
     Server::builder()
