@@ -23,7 +23,7 @@ struct Msg {
 async fn decode() {
     let decoder = ProstDecoder::<Msg>::default();
 
-    let data = Vec::from(&[0u8; 10000][..]);
+    let data = vec![0u8; 10000];
     let data_len = data.len();
     let msg = Msg { data };
 
