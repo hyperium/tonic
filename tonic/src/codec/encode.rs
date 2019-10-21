@@ -1,8 +1,4 @@
-use crate::{
-    body::BytesBuf,
-    codec::{BUFFER_SIZE, HEADER_SIZE},
-    Code, Status,
-};
+use crate::{body::BytesBuf, Code, Status};
 use bytes::{BufMut, BytesMut, IntoBuf};
 use futures_core::{Stream, TryStream};
 use futures_util::{ready, StreamExt, TryStreamExt};
@@ -12,6 +8,8 @@ use pin_project::pin_project;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio_codec::Encoder;
+
+const BUFFER_SIZE: usize = 8 * 1024;
 
 pub(crate) fn encode_server<T, U>(
     encoder: T,
@@ -49,22 +47,22 @@ where
         loop {
             match source.next().await {
                 Some(Ok(item)) => {
-                    buf.reserve(HEADER_SIZE);
+                    buf.reserve(5);
                     unsafe {
-                        buf.advance_mut(HEADER_SIZE);
+                        buf.advance_mut(5);
                     }
                     encoder.encode(item, &mut buf).map_err(drop).unwrap();
 
                     // now that we know length, we can write the header
-                    let len = buf.len() - HEADER_SIZE;
+                    let len = buf.len() - 5;
                     assert!(len <= std::u32::MAX as usize);
                     {
-                        let mut cursor = std::io::Cursor::new(&mut buf[..HEADER_SIZE]);
+                        let mut cursor = std::io::Cursor::new(&mut buf[..5]);
                         cursor.put_u8(0); // byte must be 0, reserve doesn't auto-zero
                         cursor.put_u32_be(len as u32);
                     }
 
-                    yield Ok(buf.split_to(len + HEADER_SIZE).freeze().into_buf());
+                    yield Ok(buf.split_to(len + 5).freeze().into_buf());
                 },
                 Some(Err(status)) => yield Err(status),
                 None => break,
