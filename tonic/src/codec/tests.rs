@@ -30,26 +30,30 @@ async fn decode() {
     let mut buf = BytesMut::new();
     let len = msg.encoded_len();
 
-    buf.reserve(len + 5);
-    buf.put_u8(0);
-    buf.put_u32_be(len as u32);
-    msg.encode(&mut buf).unwrap();
+    // encode a few messages
+    let nmessages = 3;
+    buf.reserve(nmessages * (len + 5));
 
-    let upper = 100;
+    for _ in 0..nmessages {
+        buf.put_u8(0);
+        buf.put_u32_be(len as u32);
+        msg.encode(&mut buf).unwrap();
+    }
+
     let body = MockBody {
         data: buf.freeze(),
-        lower: 0,
-        upper: upper,
+        partial_len: 10010,
     };
 
     let mut stream = Streaming::new_request(decoder, body);
 
     let mut i = 0usize;
+    println!("");
     while let Some(msg) = stream.message().await.unwrap() {
         assert_eq!(msg.data.len(), data_len);
         i += 1;
     }
-    assert_eq!(i, upper);
+    assert_eq!(i, nmessages);
 }
 
 #[tokio::test]
@@ -74,8 +78,7 @@ async fn encode() {
 #[derive(Debug)]
 struct MockBody {
     data: Bytes,
-    lower: usize,
-    upper: usize,
+    partial_len: usize,
 }
 
 impl Body for MockBody {
@@ -86,10 +89,13 @@ impl Body for MockBody {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        if self.upper > self.lower {
-            self.lower += 1;
-            let data = Data(self.data.clone().into_buf());
-            Poll::Ready(Some(Ok(data)))
+        let partial_len = self.partial_len;
+        let data_len = self.data.len();
+        let bytes_to_read = partial_len.min(data_len);
+        println!("");
+        if bytes_to_read > 0 {
+            let response = self.data.split_to(bytes_to_read).into_buf();
+            Poll::Ready(Some(Ok(Data(response))))
         } else {
             Poll::Ready(None)
         }

@@ -189,12 +189,20 @@ impl<T> Streaming<T> {
         if let State::ReadBody { len, .. } = &self.state {
             // if we haven't read enough of the message then return and keep
             // reading
-            if buf.remaining() < *len || self.buf.len() < *len + 5 {
+            println!(
+                "buf.remaining() == {}, *len == {}, self.buf.len() == {}",
+                buf.remaining(),
+                *len,
+                self.buf.len()
+            );
+            if buf.remaining() < *len {
+                // || self.buf.len() < *len + 5 {
                 return Ok(None);
             }
 
             // advance past the header
             self.buf.advance(5);
+            println!("self.buf.len() == {}", self.buf.len());
 
             match self.decoder.decode(&mut self.buf) {
                 Ok(Some(msg)) => {
@@ -220,6 +228,8 @@ impl<T> Stream for Streaming<T> {
             // FIXME: implement the ability to poll trailers when we _know_ that
             // the consumer of this stream will only poll for the first message.
             // This means we skip the poll_trailers step.
+            println!("decoding ...");
+            println!("self.buf.len() == {}", self.buf.len());
             match self.decode_chunk()? {
                 Some(item) => return Poll::Ready(Some(Ok(item))),
                 None => (),
@@ -245,6 +255,7 @@ impl<T> Stream for Streaming<T> {
                         BUFFER_SIZE
                     };
 
+                    println!("amt == {}", amt);
                     self.buf.reserve(amt);
                 }
 
