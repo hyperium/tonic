@@ -27,6 +27,7 @@ pub struct Streaming<T> {
     trailers: Option<MetadataMap>,
 }
 
+unsafe impl<T> Sync for Streaming<T> {}
 impl<T> Unpin for Streaming<T> {}
 
 #[derive(Debug)]
