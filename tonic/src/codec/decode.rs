@@ -37,7 +37,7 @@ enum State {
     ReadHeader,
     ReadBody {
         is_compressed: bool,
-        message_length: usize,
+        message_len: usize,
     },
 }
 
@@ -191,20 +191,20 @@ impl<T> Streaming<T> {
             };
 
             // consume the length of the message from the tonic header
-            let message_length = buf.get_u32_be() as usize;
+            let message_len = buf.get_u32_be() as usize;
 
             // time to read the message body
             self.state = State::ReadBody {
                 is_compressed,
-                message_length,
+                message_len,
             }
         }
 
         // read the message body
-        if let State::ReadBody { message_length, .. } = self.state {
+        if let State::ReadBody { message_len, .. } = self.state {
             // if we haven't read the entire message in then we need to wait for more data
             let bytes_left_to_decode = buf.remaining();
-            if bytes_left_to_decode < message_length {
+            if bytes_left_to_decode < message_len {
                 return Ok(None);
             }
 
@@ -235,7 +235,7 @@ impl<T> Streaming<T> {
             //
             // If that's the case we need to wait for more data.
             let bytes_allocd_for_decoding = self.buf.len();
-            let min_bytes_needed_to_decode = message_length + HEADER_SIZE;
+            let min_bytes_needed_to_decode = message_len + HEADER_SIZE;
             if bytes_allocd_for_decoding < min_bytes_needed_to_decode {
                 return Ok(None);
             }
