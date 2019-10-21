@@ -44,14 +44,6 @@ path = "src/tls/client.rs"
 name = "tls-server"
 path = "src/tls/server.rs"
 
-[[bin]]
-name = "blob-client"
-path = "src/blobservice/client.rs"
-
-[[bin]]
-name = "blob-server"
-path = "src/blobservice/server.rs"
-
 [dependencies]
 tonic = { path = "../tonic", features = ["rustls"] }
 bytes = "0.4"
