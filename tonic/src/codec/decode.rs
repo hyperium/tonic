@@ -1,10 +1,5 @@
 use super::Decoder;
-use crate::{
-    body::BoxBody,
-    codec::{BUFFER_SIZE, HEADER_SIZE},
-    metadata::MetadataMap,
-    Code, Status,
-};
+use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use futures_core::Stream;
 use futures_util::{future, ready};
@@ -16,6 +11,8 @@ use std::{
     task::{Context, Poll},
 };
 use tracing::{debug, trace};
+
+const BUFFER_SIZE: usize = 8 * 1024;
 
 /// Streaming requests and responses.
 ///
@@ -35,10 +32,7 @@ impl<T> Unpin for Streaming<T> {}
 #[derive(Debug)]
 enum State {
     ReadHeader,
-    ReadBody {
-        is_compressed: bool,
-        message_len: usize,
-    },
+    ReadBody { compression: bool, len: usize },
 }
 
 #[derive(Debug)]
@@ -160,18 +154,13 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
-        // pull out the bytes containing the message
         let mut buf = (&self.buf[..]).into_buf();
 
-        // read the tonic header
         if let State::ReadHeader = self.state {
-            // if we don't have enough data from the body to decode the tonic header then read more
-            // data
-            if buf.remaining() < HEADER_SIZE {
+            if buf.remaining() < 5 {
                 return Ok(None);
             }
 
-            // FIXME: compression isn't supported yet, so just consume the first byte
             let is_compressed = match buf.get_u8() {
                 0 => false,
                 1 => {
@@ -189,63 +178,21 @@ impl<T> Streaming<T> {
                     ));
                 }
             };
+            let len = buf.get_u32_be() as usize;
 
-            // consume the length of the message from the tonic header
-            let message_len = buf.get_u32_be() as usize;
-
-            // time to read the message body
             self.state = State::ReadBody {
-                is_compressed,
-                message_len,
+                compression: is_compressed,
+                len,
             }
         }
 
-        // read the message body
-        if let State::ReadBody { message_len, .. } = self.state {
-            // if we haven't read the entire message in then we need to wait for more data
-            let bytes_left_to_decode = buf.remaining();
-            if bytes_left_to_decode < message_len {
+        if let State::ReadBody { len, .. } = &self.state {
+            if buf.remaining() < *len {
                 return Ok(None);
             }
-
-            // It's possible to read enough data to appear that we could decode the body, when in
-            // fact the tonic + a _partial_ message body has been decoded.
-            //
-            // Example:
-            //
-            // Msg {
-            //     bytes: Vec<u8>
-            // }
-            //
-            // # Encode:
-            // 1. Encode 10000 bytes from an instance of `Msg`
-            // 2. Total bytes needed for decoding a message is:
-            //    5 bytes for tonic's header
-            //    + 10000 data bytes
-            //    + 2 bytes to encode the number 10000
-            //    + 1 tag byte
-            //    ------------------------------------
-            //    10008
-            //
-            // # Decode:
-            // 1. Partial read of 10005 bytes from HTTP2 stream
-            // 2. We've read enough bytes for the message, but we don't have the entire message
-            //    because the first 5 bytes are tonic's header
-            //
-            //
-            // If that's the case we need to wait for more data.
-            let bytes_allocd_for_decoding = self.buf.len();
-            let min_bytes_needed_to_decode = message_len + HEADER_SIZE;
-            if bytes_allocd_for_decoding < min_bytes_needed_to_decode {
-                return Ok(None);
-            }
-
-            // self.buf must always contain at least the length of the message number of bytes +
-            // the number of bytes in the tonic header
-            assert!(bytes_allocd_for_decoding >= min_bytes_needed_to_decode);
 
             // advance past the header
-            self.buf.advance(HEADER_SIZE);
+            self.buf.advance(5);
 
             match self.decoder.decode(&mut self.buf) {
                 Ok(Some(msg)) => {
@@ -271,15 +218,13 @@ impl<T> Stream for Streaming<T> {
             // FIXME: implement the ability to poll trailers when we _know_ that
             // the consumer of this stream will only poll for the first message.
             // This means we skip the poll_trailers step.
-
-            // if we're able to decode a chunk then the future is complete
-            if let Some(item) = self.decode_chunk()? {
-                return Poll::Ready(Some(Ok(item)));
+            match self.decode_chunk()? {
+                Some(item) => return Poll::Ready(Some(Ok(item))),
+                None => (),
             }
 
-            // otherwise wait for more data from the request body
-            let body_chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
-                Some(Ok(data)) => Some(data),
+            let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
+                Some(Ok(d)) => Some(d),
                 Some(Err(e)) => {
                     let err: crate::Error = e.into();
                     debug!("decoder inner stream error: {:?}", err);
@@ -290,20 +235,19 @@ impl<T> Stream for Streaming<T> {
                 None => None,
             };
 
-            // if we received some data from the body, ensure that self.buf has room and put data
-            // into it
-            if let Some(body_data) = body_chunk {
-                let bytes_left_to_decode = body_data.remaining();
-                let bytes_left_for_decoding = self.buf.remaining_mut();
-                if bytes_left_to_decode > bytes_left_for_decoding {
-                    let amt = bytes_left_to_decode.max(BUFFER_SIZE);
+            if let Some(data) = chunk {
+                if data.remaining() > self.buf.remaining_mut() {
+                    let amt = if data.remaining() > BUFFER_SIZE {
+                        data.remaining()
+                    } else {
+                        BUFFER_SIZE
+                    };
+
                     self.buf.reserve(amt);
                 }
 
-                self.buf.put(body_data);
+                self.buf.put(data);
             } else {
-                // otherwise, ensure that there are no remaining bytes in self.buf
-                //
                 // FIXME: improve buf usage.
                 let buf1 = (&self.buf[..]).into_buf();
                 if buf1.has_remaining() {
