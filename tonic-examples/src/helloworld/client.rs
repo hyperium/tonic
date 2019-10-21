@@ -9,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = GreeterClient::connect("http://[::1]:50051")?;
 
     let request = tonic::Request::new(HelloRequest {
-        name: "hello".into(),
+        name: "Tonic".into(),
     });
 
     let response = client.say_hello(request).await?;
