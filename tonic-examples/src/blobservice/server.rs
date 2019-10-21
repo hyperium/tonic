@@ -4,7 +4,7 @@ use std::iter::FromIterator;
 use std::pin::Pin;
 use tonic::{transport::Server, Request, Response, Status};
 
-pub mod blobservice {
+mod blobservice {
     tonic::include_proto!("blobservice");
 }
 
@@ -14,7 +14,7 @@ use blobservice::{
 };
 
 #[derive(Default)]
-pub struct SimpleBlobber;
+struct SimpleBlobber;
 
 #[tonic::async_trait]
 impl Blobber for SimpleBlobber {
