@@ -1,4 +1,5 @@
 use super::{Codec, Decoder, Encoder};
+use crate::codec::HEADER_SIZE;
 use crate::{Code, Status};
 use bytes::{BufMut, BytesMut};
 use prost::Message;
@@ -53,6 +54,8 @@ impl<T: Message> Encoder for ProstEncoder<T> {
         if buf.remaining_mut() < len {
             buf.reserve(len);
         }
+
+        assert!(buf.len() >= len + HEADER_SIZE);
 
         item.encode(buf)
             .map_err(|_| unreachable!("Message only errors if not enough space"))
