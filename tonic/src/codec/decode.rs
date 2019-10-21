@@ -253,8 +253,9 @@ impl<T> Stream for Streaming<T> {
                 return Poll::Ready(Some(Ok(item)));
             }
 
-            let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
-                Some(Ok(d)) => Some(d),
+            // otherwise wait for more data from the request body
+            let body_chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
+                Some(Ok(data)) => Some(data),
                 Some(Err(e)) => {
                     let err: crate::Error = e.into();
                     debug!("decoder inner stream error: {:?}", err);
@@ -265,18 +266,17 @@ impl<T> Stream for Streaming<T> {
                 None => None,
             };
 
-            if let Some(data) = chunk {
-                if data.remaining() > self.buf.remaining_mut() {
-                    let amt = if data.remaining() > BUFFER_SIZE {
-                        data.remaining()
-                    } else {
-                        BUFFER_SIZE
-                    };
-
+            // if we received some data from the body, ensure that self.buf has room and put data
+            // into it
+            if let Some(body_data) = body_chunk {
+                let bytes_left_to_decode = body_data.remaining();
+                let bytes_left_for_decoding = self.buf.remaining_mut();
+                if bytes_left_to_decode > bytes_left_for_decoding {
+                    let amt = bytes_left_to_decode.max(BUFFER_SIZE);
                     self.buf.reserve(amt);
                 }
 
-                self.buf.put(data);
+                self.buf.put(body_data);
             } else {
                 // otherwise, ensure that there are no remaining bytes in self.buf
                 //
