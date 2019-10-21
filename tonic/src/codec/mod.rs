@@ -3,8 +3,17 @@
 //! This module contains the generic `Codec` trait and a protobuf codec
 //! based on prost.
 
+// The mininum buffer size for codec data
+pub(crate) const BUFFER_SIZE: usize = 8 * 1024;
+
+// The number of bytes in the tonic header:
+// 1 * u8 for compression +
+// 1 * u32 for body length
+pub(crate) const HEADER_SIZE: usize = 5;
+
 mod decode;
 mod encode;
+
 #[cfg(feature = "prost")]
 mod prost;
 
