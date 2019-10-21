@@ -160,8 +160,10 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
+        // pull out the bytes containing the message
         let mut buf = (&self.buf[..]).into_buf();
 
+        // read the tonic header
         if let State::ReadHeader = self.state {
             // we have less than HEADER_SIZE bytes to read so return early (triggering further
             // reading from the body)
@@ -169,6 +171,7 @@ impl<T> Streaming<T> {
                 return Ok(None);
             }
 
+            // FIXME: compression isn't supported yet, so just consume the first byte
             let is_compressed = match buf.get_u8() {
                 0 => false,
                 1 => {
@@ -197,9 +200,7 @@ impl<T> Streaming<T> {
             }
         }
 
-        ///////////////////////////
-        // read the message body //
-        ///////////////////////////
+        // read the message
         if let State::ReadBody { message_length, .. } = self.state {
             // if we haven't read the entire message in then we need to wait for more data
             let bytes_left_to_decode = buf.remaining();
@@ -276,6 +277,8 @@ impl<T> Stream for Streaming<T> {
 
                 self.buf.put(data);
             } else {
+                // otherwise, ensure that there are no remaining bytes in self.buf
+                //
                 // FIXME: improve buf usage.
                 let buf1 = (&self.buf[..]).into_buf();
                 if buf1.has_remaining() {
