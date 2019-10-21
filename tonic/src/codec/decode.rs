@@ -1,5 +1,10 @@
 use super::Decoder;
-use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
+use crate::{
+    body::BoxBody,
+    codec::{BUFFER_SIZE, HEADER_SIZE},
+    metadata::MetadataMap,
+    Code, Status,
+};
 use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
 use futures_core::Stream;
 use futures_util::{future, ready};
@@ -11,8 +16,6 @@ use std::{
     task::{Context, Poll},
 };
 use tracing::{debug, trace};
-
-const BUFFER_SIZE: usize = 8 * 1024;
 
 /// Streaming requests and responses.
 ///
@@ -157,7 +160,9 @@ impl<T> Streaming<T> {
         let mut buf = (&self.buf[..]).into_buf();
 
         if let State::ReadHeader = self.state {
-            if buf.remaining() < 5 {
+            // we have less than HEADER_SIZE bytes to read so return early (triggering further
+            // reading from the body)
+            if buf.remaining() < HEADER_SIZE {
                 return Ok(None);
             }
 
@@ -192,7 +197,7 @@ impl<T> Streaming<T> {
             }
 
             // advance past the header
-            self.buf.advance(5);
+            self.buf.advance(HEADER_SIZE);
 
             match self.decoder.decode(&mut self.buf) {
                 Ok(Some(msg)) => {
