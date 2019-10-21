@@ -165,8 +165,8 @@ impl<T> Streaming<T> {
 
         // read the tonic header
         if let State::ReadHeader = self.state {
-            // we have less than HEADER_SIZE bytes to read so return early (triggering further
-            // reading from the body)
+            // if we don't have enough data from the body to decode the tonic header then read more
+            // data
             if buf.remaining() < HEADER_SIZE {
                 return Ok(None);
             }
@@ -190,17 +190,17 @@ impl<T> Streaming<T> {
                 }
             };
 
-            // consume the length of the message
+            // consume the length of the message from the tonic header
             let message_length = buf.get_u32_be() as usize;
 
-            // now it's time to read the body
+            // time to read the message body
             self.state = State::ReadBody {
                 is_compressed,
                 message_length,
             }
         }
 
-        // read the message
+        // read the message body
         if let State::ReadBody { message_length, .. } = self.state {
             // if we haven't read the entire message in then we need to wait for more data
             let bytes_left_to_decode = buf.remaining();
@@ -208,9 +208,33 @@ impl<T> Streaming<T> {
                 return Ok(None);
             }
 
+            // It's possible to read enough data to appear that we could decode the body, when in
+            // fact the tonic + a _partial_ message body has been decoded.
+            //
+            // Example:
+            //
+            // Msg {
+            //     bytes: Vec<u8>
+            // }
+            //
+            // # Encode:
+            // 1. Encode 10000 bytes from an instance of `Msg`
+            // 2. Total bytes needed for decoding a message is:
+            //    5 bytes for tonic's header
+            //    + 10000 data bytes
+            //    + 2 bytes to encode the number 10000
+            //    + 1 tag byte
+            //    ------------------------------------
+            //    10008
+            //
+            // # Decode:
+            // 1. Partial read of 10005 bytes from HTTP2 stream
+            // 2. We've read enough bytes for the message, but we don't have the entire message
+            //    because the first 5 bytes are tonic's header
+            //
+            //
+            // If that's the case we need to wait for more data.
             let bytes_allocd_for_decoding = self.buf.len();
-            // It's possible to read enough data to decode the body, but not enough to decode the
-            // body _and_ the tonic header. If that's the case, then read more data.
             let min_bytes_needed_to_decode = message_length + HEADER_SIZE;
             if bytes_allocd_for_decoding < min_bytes_needed_to_decode {
                 return Ok(None);
