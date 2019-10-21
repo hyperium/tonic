@@ -23,7 +23,8 @@ struct Msg {
 async fn decode() {
     let decoder = ProstDecoder::<Msg>::default();
 
-    let data = Vec::from(&[0u8; 1024][..]);
+    let data = Vec::from(&[0u8; 10000][..]);
+    let data_len = data.len();
     let msg = Msg { data };
 
     let mut buf = BytesMut::new();
@@ -34,11 +35,21 @@ async fn decode() {
     buf.put_u32_be(len as u32);
     msg.encode(&mut buf).unwrap();
 
-    let body = MockBody(buf.freeze(), 0, 100);
+    let upper = 100;
+    let body = MockBody {
+        data: buf.freeze(),
+        lower: 0,
+        upper: upper,
+    };
 
     let mut stream = Streaming::new_request(decoder, body);
 
-    while let Some(_) = stream.message().await.unwrap() {}
+    let mut i = 0usize;
+    while let Some(msg) = stream.message().await.unwrap() {
+        assert_eq!(msg.data.len(), data_len);
+        i += 1;
+    }
+    assert_eq!(i, upper);
 }
 
 #[tokio::test]
@@ -61,7 +72,11 @@ async fn encode() {
 }
 
 #[derive(Debug)]
-struct MockBody(Bytes, usize, usize);
+struct MockBody {
+    data: Bytes,
+    lower: usize,
+    upper: usize,
+}
 
 impl Body for MockBody {
     type Data = Data;
@@ -71,9 +86,9 @@ impl Body for MockBody {
         mut self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        if self.1 > self.2 {
-            self.1 += 1;
-            let data = Data(self.0.clone().into_buf());
+        if self.upper > self.lower {
+            self.lower += 1;
+            let data = Data(self.data.clone().into_buf());
             Poll::Ready(Some(Ok(data)))
         } else {
             Poll::Ready(None)
