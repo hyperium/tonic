@@ -48,6 +48,7 @@ $ cargo +beta build
 
 ### Tutorials
 
+- The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, prefect for first time users!
 - The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its
 features.
 
@@ -104,3 +105,4 @@ terms or conditions.
 [Docs]: https://docs.rs/tonic
 [Chat]: https://discord.gg/6yGkFeN
 [routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/tonic-examples/routeguide-tutorial.md
+[hellworld-tutorial]: https://github.com/hyperium/tonic/blob/master/tonic-examples/helloworld-tutorial.md
