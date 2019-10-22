@@ -10,9 +10,7 @@ use hello_world::{
 };
 
 #[derive(Default)]
-pub struct MyGreeter {
-    data: String,
-}
+pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
@@ -22,12 +20,8 @@ impl Greeter for MyGreeter {
     ) -> Result<Response<HelloReply>, Status> {
         println!("Got a request: {:?}", request);
 
-        let string = &self.data;
-
-        println!("My data: {:?}", string);
-
         let reply = hello_world::HelloReply {
-            message: "Zomg, it works!".into(),
+            message: format!("Hello {}!", request.into_inner().name).into(),
         };
         Ok(Response::new(reply))
     }
