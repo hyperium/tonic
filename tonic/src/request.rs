@@ -17,11 +17,15 @@ pub trait IntoRequest {
     fn into_request(self) -> Request<Self::Message>;
 }
 
-#[doc(hidden)]
+/// A trait that is implemented for all streaming RPC request types.
 pub trait IntoStreamingRequest {
+    /// The RPC request stream type
     type Stream: Stream<Item = Self::Message> + Send + 'static;
+
+    /// The RPC request type
     type Message;
 
+    /// Wrap the stream of messages in a `tonic::Request`
     fn into_streaming_request(self) -> Request<Self::Stream>;
 }
 
