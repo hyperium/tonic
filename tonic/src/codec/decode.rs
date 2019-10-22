@@ -27,6 +27,9 @@ pub struct Streaming<T> {
     trailers: Option<MetadataMap>,
 }
 
+#[cfg(test)]
+static_assertions::assert_impl_all!(Streaming<()>: Send, Sync);
+
 impl<T> Unpin for Streaming<T> {}
 
 #[derive(Debug)]
@@ -45,7 +48,7 @@ enum Direction {
 impl<T> Streaming<T> {
     pub(crate) fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Sync + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,
@@ -55,7 +58,7 @@ impl<T> Streaming<T> {
 
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Sync + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,
@@ -65,7 +68,7 @@ impl<T> Streaming<T> {
 
     pub(crate) fn new_request<B, D>(decoder: D, body: B) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Sync + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,
@@ -75,7 +78,7 @@ impl<T> Streaming<T> {
 
     fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Sync + Send + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Sync + Send + 'static,

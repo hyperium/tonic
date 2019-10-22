@@ -16,8 +16,9 @@ pub(crate) fn encode_server<T, U>(
     source: U,
 ) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
 where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
+    T: Encoder<Error = Status> + Send + Sync + 'static,
+    T::Item: Send + Sync,
+    U: Stream<Item = Result<T::Item, Status>> + Send + Sync + 'static,
 {
     let stream = encode(encoder, source).into_stream();
     EncodeBody::new_server(stream)
@@ -28,8 +29,9 @@ pub(crate) fn encode_client<T, U>(
     source: U,
 ) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
 where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = T::Item>,
+    T: Encoder<Error = Status> + Send + Sync + 'static,
+    T::Item: Send + Sync,
+    U: Stream<Item = T::Item> + Send + Sync + 'static,
 {
     let stream = encode(encoder, source.map(|x| Ok(x))).into_stream();
     EncodeBody::new_client(stream)
@@ -88,7 +90,7 @@ pub(crate) struct EncodeBody<S> {
 
 impl<S> EncodeBody<S>
 where
-    S: Stream<Item = Result<crate::body::BytesBuf, Status>>,
+    S: Stream<Item = Result<crate::body::BytesBuf, Status>> + Send + Sync + 'static,
 {
     pub(crate) fn new_client(inner: S) -> Self {
         Self {
