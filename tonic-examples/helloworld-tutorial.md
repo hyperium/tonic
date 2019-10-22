@@ -64,7 +64,7 @@ service Greeter {
 }
 ```
 
-Finally, we have to actual define those types we used above in our `SayHello` RPC method. RPC types are defined as messages which contain typed fields. Here is what that will look like for our HelloWorld application:
+Finally, we have to actually define those types we used above in our `SayHello` RPC method. RPC types are defined as messages which contain typed fields. Here is what that will look like for our HelloWorld application:
 
 ```proto
 message HelloRequest {
