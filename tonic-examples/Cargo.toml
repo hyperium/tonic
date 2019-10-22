@@ -44,6 +44,14 @@ path = "src/tls/client.rs"
 name = "tls-server"
 path = "src/tls/server.rs"
 
+[[bin]]
+name = "tls-client-auth-server"
+path = "src/tls_client_auth/server.rs"
+
+[[bin]]
+name = "tls-client-auth-client"
+path = "src/tls_client_auth/client.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["rustls"] }
 bytes = "0.4"
