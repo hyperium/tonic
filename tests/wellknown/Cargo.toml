@@ -11,6 +11,7 @@ publish = false
 tonic = { path = "../../tonic" }
 bytes = "0.4"
 prost = "0.5"
+prost-types = "0.5"
 
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }
