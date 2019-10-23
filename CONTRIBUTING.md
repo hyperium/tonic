@@ -15,7 +15,7 @@ It should be considered a map to help you navigate the process.
 You may also get help with contributing in the `dev` channel, please join
 us!
 
-Tonic is a part of the [Tokio][tokio] and [Hyperium][hyperium]project, and follows the project's
+Tonic is a part of the [Tokio][tokio] and [Hyperium][hyperium] project, and follows the project's
 guidelines for contributing. This document is based on the
 [`CONTRIBUTING.md` file][tokio-contrib] in the `tokio-rs/tokio` repository.
 
