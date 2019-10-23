@@ -71,7 +71,7 @@
 #![doc(
     html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.3")]
+#![doc(html_root_url = "https://docs.rs/tonic/0.1.0-alpha.4")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
