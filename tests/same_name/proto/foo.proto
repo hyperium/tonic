@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package foo;
+
+service Foo {
+  rpc Foo(stream FooRequest) returns (stream FooResponse) {}
+}
+
+message FooRequest {}
+
+message FooResponse {}
