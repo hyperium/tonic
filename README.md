@@ -46,133 +46,11 @@ $ rustup component add rustfmt --toolchain beta
 $ cargo +beta build
 ```
 
-### Examples
+### Tutorials
 
-<details>
-  <summary>Helloworld</summary>
-
-#### `Cargo.toml`
-
-```toml
-edition = "2018"
-
-[dependencies]
-tonic = "*"
-bytes = "0.4"
-prost = "0.5"
-prost-derive = "0.5"
-
-[build-dependencies]
-tonic-build = "*"
-```
-
-#### Protobuf
-
-```protobuf
-package helloworld;
-
-// The greeting service definition.
-service Greeter {
-  // Sends a greeting
-  rpc SayHello (HelloRequest) returns (HelloReply) {}
-}
-
-// The request message containing the user's name.
-message HelloRequest {
-  string name = 1;
-}
-
-// The response message containing the greetings
-message HelloReply {
-  string message = 1;
-}
-```
-
-#### `build.rs`
-
-```rust
-fn main() {
-    tonic_build::compile_protos("proto/helloworld/helloworld.proto").unwrap();
-}
-```
-
-#### Client
-
-```rust
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
-}
-
-use hello_world::{client::GreeterClient, HelloRequest};
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = GreeterClient::connect("http://[::1]:50051")?;
-
-    let request = tonic::Request::new(HelloRequest {
-        name: "hello".into(),
-    });
-
-    let response = client.say_hello(request).await?;
-
-    println!("RESPONSE={:?}", response);
-
-    Ok(())
-}
-```
-
-#### Server
-
-```rust
-use tonic::{transport::Server, Request, Response, Status};
-
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
-}
-
-use hello_world::{
-    server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
-};
-
-#[derive(Default)]
-pub struct MyGreeter {
-    data: String,
-}
-
-#[tonic::async_trait]
-impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
-        println!("Got a request: {:?}", request);
-
-        let string = &self.data;
-
-        println!("My data: {:?}", string);
-
-        let reply = hello_world::HelloReply {
-            message: "Zomg, it works!".into(),
-        };
-        Ok(Response::new(reply))
-    }
-}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse().unwrap();
-    let greeter = MyGreeter::default();
-
-    Server::builder()
-        .serve(addr, GreeterServer::new(greeter))
-        .await?;
-
-    Ok(())
-}
-```
-
-</details>
+- The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, prefect for first time users!
+- The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its
+features.
 
 ## Getting Help
 
@@ -226,3 +104,5 @@ terms or conditions.
 [Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
 [Chat]: https://discord.gg/6yGkFeN
+[routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/tonic-examples/routeguide-tutorial.md
+[hellworld-tutorial]: https://github.com/hyperium/tonic/blob/master/tonic-examples/helloworld-tutorial.md
