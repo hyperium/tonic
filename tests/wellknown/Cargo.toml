@@ -1,0 +1,17 @@
+[package]
+name = "wellknown"
+version = "0.1.0"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+edition = "2018"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = { path = "../../tonic" }
+bytes = "0.4"
+prost = "0.5"
+prost-types = "0.5"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
