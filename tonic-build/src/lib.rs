@@ -64,7 +64,6 @@ use quote::{ToTokens, TokenStreamExt};
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
 use std::{
-    collections::HashSet,
     io,
     path::{Path, PathBuf},
 };
@@ -220,8 +219,6 @@ struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
-    seen_input_types: HashSet<String>,
-    into_request_impls: TokenStream,
 }
 
 impl ServiceGenerator {
@@ -230,8 +227,6 @@ impl ServiceGenerator {
             builder,
             clients: TokenStream::default(),
             servers: TokenStream::default(),
-            seen_input_types: HashSet::new(),
-            into_request_impls: TokenStream::default(),
         }
     }
 }
@@ -248,19 +243,14 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         if self.builder.build_client {
             let client = client::generate(&service, path);
             self.clients.extend(client);
-
-            let tokens = generate_into_request_impls(&service, &mut self.seen_input_types);
-            self.into_request_impls.extend(tokens);
         }
     }
 
     fn finalize(&mut self, buf: &mut String) {
         if self.builder.build_client && !self.clients.is_empty() {
             let clients = &self.clients;
-            let trait_impls = &self.into_request_impls;
 
             let client_service = quote::quote! {
-                #trait_impls
                 /// Generated client implementations.
                 pub mod client {
                     #![allow(unused_variables, dead_code, missing_docs)]
@@ -338,43 +328,4 @@ fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenSt
     };
 
     (request, response)
-}
-
-fn generate_into_request_impls(
-    service: &prost_build::Service,
-    seen_input_types: &mut HashSet<String>,
-) -> TokenStream {
-    let service_input_types = service
-        .methods
-        .iter()
-        .fold(HashSet::new(), |mut set, method| {
-            set.insert(method.input_type.clone());
-            set
-        });
-
-    let token_stream = service_input_types.difference(seen_input_types).fold(
-        TokenStream::new(),
-        |mut stream, input| {
-            let request: syn::Type = syn::parse_str(&input).unwrap();
-
-            let trait_impl = quote::quote! {
-                impl tonic::IntoRequest for #request {
-                    type Message = Self;
-
-                    fn into_request(self) -> tonic::Request<Self> {
-                        tonic::Request::new(self)
-                    }
-                }
-            };
-
-            stream.extend(trait_impl);
-            stream
-        },
-    );
-
-    for input in service_input_types {
-        seen_input_types.insert(input.to_owned());
-    }
-
-    token_stream
 }

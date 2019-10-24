@@ -8,15 +8,6 @@ pub struct Request<T> {
     message: T,
 }
 
-/// A trait that is implemented for all RPC request request types.
-pub trait IntoRequest {
-    /// The RPC request type
-    type Message;
-
-    /// Wrap `Message` in a `tonic::Request`
-    fn into_request(self) -> Request<Self::Message>;
-}
-
 /// A trait that is implemented for all streaming RPC request types.
 pub trait IntoStreamingRequest {
     /// The RPC request stream type
@@ -111,11 +102,9 @@ impl<T> Request<T> {
     }
 }
 
-impl<T> IntoRequest for Request<T> {
-    type Message = T;
-
-    fn into_request(self) -> Request<T> {
-        self
+impl<T> From<T> for Request<T> {
+    fn from(t: T) -> Self {
+        Request::new(t)
     }
 }
 
