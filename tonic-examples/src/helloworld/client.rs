@@ -8,9 +8,9 @@ use hello_world::{client::GreeterClient, HelloRequest};
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = GreeterClient::connect("http://[::1]:50051")?;
 
-    let request = HelloRequest {
-        name: "hello".into(),
-    };
+    let request = tonic::Request::new(HelloRequest {
+        name: "Tonic".into(),
+    });
 
     let response = client.say_hello(request).await?;
 

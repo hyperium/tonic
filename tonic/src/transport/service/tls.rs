@@ -3,14 +3,14 @@ use crate::transport::{Certificate, Identity};
 #[cfg(feature = "openssl")]
 use openssl1::{
     pkey::PKey,
-    ssl::{select_next_proto, AlpnError, SslAcceptor, SslConnector, SslMethod},
-    x509::X509,
+    ssl::{select_next_proto, AlpnError, SslAcceptor, SslConnector, SslMethod, SslVerifyMode},
+    x509::{store::X509StoreBuilder, X509},
 };
 use std::{fmt, sync::Arc};
 use tokio::net::TcpStream;
 #[cfg(feature = "rustls")]
 use tokio_rustls::{
-    rustls::{internal::pemfile, ClientConfig, NoClientAuth, PrivateKey, ServerConfig, Session},
+    rustls::{ClientConfig, NoClientAuth, ServerConfig, Session},
     webpki::DNSNameRef,
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
@@ -58,6 +58,7 @@ impl TlsConnector {
     #[cfg(feature = "openssl")]
     pub(crate) fn new_with_openssl_cert(
         cert: Option<Certificate>,
+        identity: Option<Identity>,
         domain: String,
     ) -> Result<Self, crate::Error> {
         let mut config = SslConnector::builder(SslMethod::tls())?;
@@ -66,6 +67,13 @@ impl TlsConnector {
         if let Some(cert) = cert {
             let ca = X509::from_pem(&cert.pem[..])?;
             config.cert_store_mut().add_cert(ca)?;
+        }
+
+        if let Some(identity) = identity {
+            let key = PKey::private_key_from_pem(&identity.key[..])?;
+            let cert = X509::from_pem(&identity.cert.pem[..])?;
+            config.set_certificate(&cert)?;
+            config.set_private_key(&key)?;
         }
 
         Ok(Self {
@@ -87,14 +95,19 @@ impl TlsConnector {
 
     #[cfg(feature = "rustls")]
     pub(crate) fn new_with_rustls_cert(
-        cert: Option<Certificate>,
+        ca_cert: Option<Certificate>,
+        identity: Option<Identity>,
         domain: String,
     ) -> Result<Self, crate::Error> {
         let mut config = ClientConfig::new();
         config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
 
-        if cert.is_some() {
-            let cert = cert.unwrap();
+        if let Some(identity) = identity {
+            let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
+            config.set_single_client_cert(client_cert, client_key);
+        }
+
+        if let Some(cert) = ca_cert {
             let mut buf = std::io::Cursor::new(&cert.pem[..]);
             config.root_store.add_pem_file(&mut buf).unwrap();
         }
@@ -192,7 +205,10 @@ enum Acceptor {
 
 impl TlsAcceptor {
     #[cfg(feature = "openssl")]
-    pub(crate) fn new_with_openssl_identity(identity: Identity) -> Result<Self, crate::Error> {
+    pub(crate) fn new_with_openssl_identity(
+        identity: Identity,
+        client_ca_root: Option<Certificate>,
+    ) -> Result<Self, crate::Error> {
         let key = PKey::private_key_from_pem(&identity.key[..])?;
         let cert = X509::from_pem(&identity.cert.pem[..])?;
 
@@ -204,6 +220,16 @@ impl TlsAcceptor {
         config.set_alpn_select_callback(|_ssl, alpn| {
             select_next_proto(ALPN_H2_WIRE, alpn).ok_or(AlpnError::NOACK)
         });
+
+        if let Some(cert) = client_ca_root {
+            let ca_cert = X509::from_pem(&cert.pem[..])?;
+            let mut store = X509StoreBuilder::new()?;
+            store.add_cert(ca_cert.clone())?;
+
+            config.add_client_ca(&ca_cert)?;
+            config.set_verify_cert_store(store.build())?;
+            config.set_verify(SslVerifyMode::PEER | SslVerifyMode::FAIL_IF_NO_PEER_CERT);
+        }
 
         Ok(Self {
             inner: Acceptor::Openssl(config.build()),
@@ -220,50 +246,28 @@ impl TlsAcceptor {
     }
 
     #[cfg(feature = "rustls")]
-    fn load_rustls_private_key(
-        mut cursor: std::io::Cursor<&[u8]>,
-    ) -> Result<PrivateKey, crate::Error> {
-        // First attempt to load the private key assuming it is PKCS8-encoded
-        if let Ok(mut keys) = pemfile::pkcs8_private_keys(&mut cursor) {
-            if keys.len() > 0 {
-                return Ok(keys.remove(0));
-            }
-        }
+    pub(crate) fn new_with_rustls_identity(
+        identity: Identity,
+        client_ca_root: Option<Certificate>,
+    ) -> Result<Self, crate::Error> {
+        let (cert, key) = rustls_keys::load_identity(identity)?;
 
-        // If it not, try loading the private key as an RSA key
-        cursor.set_position(0);
-        if let Ok(mut keys) = pemfile::rsa_private_keys(&mut cursor) {
-            if keys.len() > 0 {
-                return Ok(keys.remove(0));
-            }
-        }
+        let mut config = match client_ca_root {
+            None => ServerConfig::new(NoClientAuth::new()),
+            Some(cert) => {
+                let mut cert = std::io::Cursor::new(&cert.pem[..]);
 
-        // Otherwise we have a Private Key parsing problem
-        Err(Box::new(TlsError::PrivateKeyParseError))
-    }
+                let mut client_root_cert_store = tokio_rustls::rustls::RootCertStore::empty();
+                match client_root_cert_store.add_pem_file(&mut cert) {
+                    Err(_) => return Err(Box::new(TlsError::CertificateParseError)),
+                    _ => (),
+                };
 
-    #[cfg(feature = "rustls")]
-    pub(crate) fn new_with_rustls_identity(identity: Identity) -> Result<Self, crate::Error> {
-        let cert = {
-            let mut cert = std::io::Cursor::new(&identity.cert.pem[..]);
-            match pemfile::certs(&mut cert) {
-                Ok(certs) => certs,
-                Err(_) => return Err(Box::new(TlsError::CertificateParseError)),
+                let client_auth =
+                    tokio_rustls::rustls::AllowAnyAuthenticatedClient::new(client_root_cert_store);
+                ServerConfig::new(client_auth)
             }
         };
-
-        let key = {
-            let key = std::io::Cursor::new(&identity.key[..]);
-            match Self::load_rustls_private_key(key) {
-                Ok(key) => key,
-                Err(e) => {
-                    return Err(e);
-                }
-            }
-        };
-
-        let mut config = ServerConfig::new(NoClientAuth::new());
-
         config.set_single_cert(cert, key)?;
         config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
 
@@ -338,3 +342,57 @@ impl fmt::Display for TlsError {
 }
 
 impl std::error::Error for TlsError {}
+
+#[cfg(feature = "rustls")]
+mod rustls_keys {
+    use tokio_rustls::rustls::{internal::pemfile, Certificate, PrivateKey};
+
+    use crate::transport::service::tls::TlsError;
+    use crate::transport::Identity;
+
+    fn load_rustls_private_key(
+        mut cursor: std::io::Cursor<&[u8]>,
+    ) -> Result<PrivateKey, crate::Error> {
+        // First attempt to load the private key assuming it is PKCS8-encoded
+        if let Ok(mut keys) = pemfile::pkcs8_private_keys(&mut cursor) {
+            if keys.len() > 0 {
+                return Ok(keys.remove(0));
+            }
+        }
+
+        // If it not, try loading the private key as an RSA key
+        cursor.set_position(0);
+        if let Ok(mut keys) = pemfile::rsa_private_keys(&mut cursor) {
+            if keys.len() > 0 {
+                return Ok(keys.remove(0));
+            }
+        }
+
+        // Otherwise we have a Private Key parsing problem
+        Err(Box::new(TlsError::PrivateKeyParseError))
+    }
+
+    pub(crate) fn load_identity(
+        identity: Identity,
+    ) -> Result<(Vec<Certificate>, PrivateKey), crate::Error> {
+        let cert = {
+            let mut cert = std::io::Cursor::new(&identity.cert.pem[..]);
+            match pemfile::certs(&mut cert) {
+                Ok(certs) => certs,
+                Err(_) => return Err(Box::new(TlsError::CertificateParseError)),
+            }
+        };
+
+        let key = {
+            let key = std::io::Cursor::new(&identity.key[..]);
+            match load_rustls_private_key(key) {
+                Ok(key) => key,
+                Err(e) => {
+                    return Err(e);
+                }
+            }
+        };
+
+        Ok((cert, key))
+    }
+}

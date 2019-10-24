@@ -37,6 +37,14 @@ openssl = ["openssl1", "tokio-openssl", "tls"]
 rustls = ["tokio-rustls", "tls"]
 tls = []
 
+[[bench]]
+name = "bench_main"
+harness = false
+
+[dev-dependencies]
+rand = "0.7.2"
+criterion = "0.3"
+
 [dependencies]
 bytes = "0.4"
 futures-core-preview = "=0.3.0-alpha.19"
