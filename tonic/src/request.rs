@@ -8,8 +8,11 @@ pub struct Request<T> {
     message: T,
 }
 
-/// A trait that is implemented for all streaming RPC request types.
-pub trait IntoStreamingRequest {
+/// Conversion into a streaming `Request`.
+///
+/// Types implementing this trait may be used as an argument to
+/// generated client-streaming RPC methods.
+pub trait IntoStreamingRequest: sealed::Sealed {
     /// The RPC request stream type
     type Stream: Stream<Item = Self::Message> + Send + 'static;
 
@@ -130,4 +133,12 @@ where
     fn into_streaming_request(self) -> Request<Self> {
         Request::new(self)
     }
+}
+
+impl<T> sealed::Sealed for T where T: Stream + Send + 'static {}
+
+impl<T> sealed::Sealed for Request<T> where T: Stream + Send + 'static {}
+
+mod sealed {
+    pub trait Sealed {}
 }
