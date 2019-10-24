@@ -28,9 +28,9 @@ pub trait Codec {
     type Decode: Send + 'static;
 
     /// The encoder that can encode a message.
-    type Encoder: Encoder<Item = Self::Encode, Error = Status> + Sync + Send + 'static;
+    type Encoder: Encoder<Item = Self::Encode, Error = Status> + Send + Sync + 'static;
     /// The encoder that can decode a message.
-    type Decoder: Decoder<Item = Self::Decode, Error = Status> + Sync + Send + 'static;
+    type Decoder: Decoder<Item = Self::Decode, Error = Status> + Send + Sync + 'static;
 
     /// The content type of this codec.
     ///

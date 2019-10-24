@@ -109,7 +109,7 @@ impl server::RouteGuide for RouteGuide {
     }
 
     type RouteChatStream =
-        Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Sync + Send + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>>;
 
     async fn route_chat(
         &self,
@@ -139,7 +139,7 @@ impl server::RouteGuide for RouteGuide {
 
         Ok(Response::new(Box::pin(output)
             as Pin<
-                Box<dyn Stream<Item = Result<RouteNote, Status>> + Sync + Send + 'static>,
+                Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>,
             >))
     }
 }

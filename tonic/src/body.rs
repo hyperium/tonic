@@ -15,7 +15,7 @@ use std::{
 pub(crate) type BytesBuf = <Bytes as IntoBuf>::Buf;
 
 /// A trait alias for [`http_body::Body`].
-pub trait Body: sealed::Sealed + Sync + Send {
+pub trait Body: sealed::Sealed + Send + Sync {
     /// The body data type.
     type Data: Buf;
     /// The errors produced from the body.
@@ -83,7 +83,7 @@ mod sealed {
 
 /// A type erased http body.
 pub struct BoxBody {
-    inner: Pin<Box<dyn Body<Data = BytesBuf, Error = Status> + Sync + Send + 'static>>,
+    inner: Pin<Box<dyn Body<Data = BytesBuf, Error = Status> + Send + Sync + 'static>>,
 }
 
 struct MapBody<B>(B);
@@ -92,7 +92,7 @@ impl BoxBody {
     /// Create a new `BoxBody` mapping item and error to the default types.
     pub fn new<B>(inner: B) -> Self
     where
-        B: Body<Data = BytesBuf, Error = Status> + Sync + Send + 'static,
+        B: Body<Data = BytesBuf, Error = Status> + Send + Sync + 'static,
     {
         BoxBody {
             inner: Box::pin(inner),
@@ -102,7 +102,7 @@ impl BoxBody {
     /// Create a new `BoxBody` mapping item and error to the default types.
     pub fn map_from<B>(inner: B) -> Self
     where
-        B: Body + Sync + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
     {

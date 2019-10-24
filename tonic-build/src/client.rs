@@ -133,7 +133,7 @@ fn generate_client_streaming(method: &Method, proto: &str, path: String) -> Toke
     quote! {
         pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
             -> Result<tonic::Response<#response>, tonic::Status>
-            where S: Stream<Item = #request> + Sync + Send + 'static,
+            where S: Stream<Item = #request> + Send + Sync + 'static,
         {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
@@ -151,7 +151,7 @@ fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream
     quote! {
         pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
             -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status>
-            where S: Stream<Item = #request> + Sync + Send + 'static,
+            where S: Stream<Item = #request> + Send + Sync + 'static,
         {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();

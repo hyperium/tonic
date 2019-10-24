@@ -41,7 +41,7 @@ where
     ) -> http::Response<BoxBody>
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
-        B: Body + Sync + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -71,8 +71,8 @@ where
     ) -> http::Response<BoxBody>
     where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
-        S::ResponseStream: Sync + Send + 'static,
-        B: Body + Sync + Send + 'static,
+        S::ResponseStream: Send + Sync + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -96,7 +96,7 @@ where
     ) -> http::Response<BoxBody>
     where
         S: ClientStreamingService<T::Decode, Response = T::Encode>,
-        B: Body + Sync + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
@@ -116,8 +116,8 @@ where
     ) -> http::Response<BoxBody>
     where
         S: StreamingService<T::Decode, Response = T::Encode> + Send,
-        S::ResponseStream: Sync + Send + 'static,
-        B: Body + Sync + Send + 'static,
+        S::ResponseStream: Send + Sync + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -131,7 +131,7 @@ where
         request: http::Request<B>,
     ) -> Result<Request<T::Decode>, Status>
     where
-        B: Body + Sync + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -159,7 +159,7 @@ where
         request: http::Request<B>,
     ) -> Request<Streaming<T::Decode>>
     where
-        B: Body + Sync + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -171,7 +171,7 @@ where
         response: Result<crate::Response<B>, Status>,
     ) -> http::Response<BoxBody>
     where
-        B: TryStream<Ok = T::Encode, Error = Status> + Sync + Send + 'static,
+        B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
     {
         match response {
             Ok(r) => {
