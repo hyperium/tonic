@@ -190,7 +190,9 @@ impl<T> Streaming<T> {
         }
 
         if let State::ReadBody { len, .. } = &self.state {
-            if buf.remaining() < *len {
+            // if we haven't read enough of the message then return and keep
+            // reading
+            if buf.remaining() < *len || self.buf.len() < *len + 5 {
                 return Ok(None);
             }
 

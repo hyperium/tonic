@@ -2,7 +2,7 @@ use super::channel::Channel;
 #[cfg(feature = "tls")]
 use super::{
     service::TlsConnector,
-    tls::{Certificate, TlsProvider},
+    tls::{Certificate, Identity, TlsProvider},
 };
 use bytes::Bytes;
 use http::uri::{InvalidUriBytes, Uri};
@@ -212,6 +212,7 @@ pub struct ClientTlsConfig {
     provider: TlsProvider,
     domain: Option<String>,
     cert: Option<Certificate>,
+    identity: Option<Identity>,
     #[cfg(feature = "openssl")]
     openssl_raw: Option<openssl1::ssl::SslConnector>,
     #[cfg(feature = "rustls")]
@@ -223,6 +224,9 @@ impl fmt::Debug for ClientTlsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientTlsConfig")
             .field("provider", &self.provider)
+            .field("domain", &self.domain)
+            .field("cert", &self.cert)
+            .field("identity", &self.identity)
             .finish()
     }
 }
@@ -246,6 +250,7 @@ impl ClientTlsConfig {
             provider,
             domain: None,
             cert: None,
+            identity: None,
             #[cfg(feature = "openssl")]
             openssl_raw: None,
             #[cfg(feature = "rustls")]
@@ -262,6 +267,12 @@ impl ClientTlsConfig {
     /// Sets the CA Certificate against which to verify the server's TLS certificate.
     pub fn ca_certificate(&mut self, ca_certificate: Certificate) -> &mut Self {
         self.cert = Some(ca_certificate);
+        self
+    }
+
+    /// Sets the client identity to present to the server.
+    pub fn identity(&mut self, identity: Identity) -> &mut Self {
+        self.identity = Some(identity);
         self
     }
 
@@ -294,12 +305,20 @@ impl ClientTlsConfig {
         match self.provider {
             #[cfg(feature = "openssl")]
             TlsProvider::OpenSsl => match &self.openssl_raw {
-                None => TlsConnector::new_with_openssl_cert(self.cert.clone(), domain),
+                None => TlsConnector::new_with_openssl_cert(
+                    self.cert.clone(),
+                    self.identity.clone(),
+                    domain,
+                ),
                 Some(r) => TlsConnector::new_with_openssl_raw(r.clone(), domain),
             },
             #[cfg(feature = "rustls")]
             TlsProvider::Rustls => match &self.rustls_raw {
-                None => TlsConnector::new_with_rustls_cert(self.cert.clone(), domain),
+                None => TlsConnector::new_with_rustls_cert(
+                    self.cert.clone(),
+                    self.identity.clone(),
+                    domain,
+                ),
                 Some(c) => TlsConnector::new_with_rustls_raw(c.clone(), domain),
             },
         }

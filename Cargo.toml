@@ -4,4 +4,7 @@ members = [
     "tonic-build",
     "tonic-examples",
     "tonic-interop",
+
+    "tests/same_name",
+    "tests/wellknown",
 ]

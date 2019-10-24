@@ -223,7 +223,7 @@ fn generate_unary(
     proto_path: &str,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = Ident::new(&method.proto_name, Span::call_site());
+    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
 
     let (request, response) = crate::replace_wellknown(proto_path, &method);
 
@@ -262,7 +262,7 @@ fn generate_server_streaming(
     proto_path: &str,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = Ident::new(&method.proto_name, Span::call_site());
+    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
 
     let (request, response) = crate::replace_wellknown(proto_path, &method);
 
@@ -305,7 +305,7 @@ fn generate_client_streaming(
     proto_path: &str,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = Ident::new(&method.proto_name, Span::call_site());
+    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
 
     let (request, response) = crate::replace_wellknown(proto_path, &method);
 
@@ -346,7 +346,7 @@ fn generate_streaming(
     proto_path: &str,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = Ident::new(&method.proto_name, Span::call_site());
+    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
 
     let (request, response) = crate::replace_wellknown(proto_path, &method);
 
