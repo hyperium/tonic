@@ -88,7 +88,7 @@ pub use self::channel::Channel;
 pub use self::endpoint::Endpoint;
 pub use self::error::Error;
 #[doc(inline)]
-pub use self::server::Server;
+pub use self::server::{Server, ServiceName};
 pub use self::tls::{Certificate, Identity};
 pub use hyper::Body;
 

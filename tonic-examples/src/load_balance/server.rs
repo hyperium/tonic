@@ -60,7 +60,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut tx = tx.clone();
 
         let server = EchoServer { addr };
-        let serve = Server::builder().serve(addr, pb::server::EchoServer::new(server));
+        let serve = Server::builder()
+            .add_service(pb::server::EchoServer::new(server))
+            .serve(addr);
 
         tokio::spawn(async move {
             if let Err(e) = serve.await {

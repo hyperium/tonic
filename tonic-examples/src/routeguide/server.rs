@@ -155,7 +155,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let svc = server::RouteGuideServer::new(route_guide);
 
-    Server::builder().serve(addr, svc).await?;
+    Server::builder().add_service(svc).serve(addr).await?;
 
     Ok(())
 }

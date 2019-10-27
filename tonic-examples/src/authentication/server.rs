@@ -78,8 +78,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         })
-        .clone()
-        .serve(addr, pb::server::EchoServer::new(server))
+        .add_service(pb::server::EchoServer::new(server))
+        .serve(addr)
         .await?;
 
     Ok(())

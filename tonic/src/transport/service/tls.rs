@@ -14,7 +14,6 @@ use tokio_rustls::{
     webpki::DNSNameRef,
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
-use tracing::trace;
 
 /// h2 alpn in wire format for openssl.
 #[cfg(feature = "openssl")]
@@ -137,7 +136,7 @@ impl TlsConnector {
                 let tls = tokio_openssl::connect(config, &self.domain, io).await?;
 
                 match tls.ssl().selected_alpn_protocol() {
-                    Some(b) if b == b"h2" => trace!("HTTP/2 succesfully negotiated."),
+                    Some(b) if b == b"h2" => tracing::trace!("HTTP/2 succesfully negotiated."),
                     _ => return Err(TlsError::H2NotNegotiated.into()),
                 };
 

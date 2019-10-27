@@ -150,6 +150,7 @@ impl pb::server::TestService for TestService {
     }
 }
 
+#[derive(Default)]
 pub struct UnimplementedService;
 
 #[tonic::async_trait]

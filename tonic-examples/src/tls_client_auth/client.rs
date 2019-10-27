@@ -13,7 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_key = tokio::fs::read("tonic-examples/data/tls/client1.key").await?;
     let client_identity = Identity::from_pem(client_cert, client_key);
 
-    let tls = ClientTlsConfig::with_openssl()
+    let tls = ClientTlsConfig::with_rustls()
         .domain_name("localhost")
         .ca_certificate(server_root_ca_cert)
         .identity(client_identity)
