@@ -19,6 +19,7 @@
 //! ## Client
 //!
 //! ```no_run
+//! # # [cfg(feature = "tls")]
 //! # use tonic::transport::{Channel, Certificate, ClientTlsConfig};
 //! # use std::time::Duration;
 //! # use tonic::body::BoxBody;
@@ -45,6 +46,7 @@
 //! ## Server
 //!
 //! ```no_run
+//! # #[cfg(feature = "tls")]
 //! # use tonic::transport::{Server, Identity, ServerTlsConfig};
 //! # use tower::{Service, service_fn};
 //! # use futures_util::future::{err, ok};
