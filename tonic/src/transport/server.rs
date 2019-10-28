@@ -64,72 +64,6 @@ pub struct Router<A, B> {
     routes: Routes<A, B, Request<Body>>,
 }
 
-impl<S> Router<S, Unimplemented> {
-    pub(crate) fn new(server: Server, svc: S) -> Self
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
-            + ServiceName
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let svc_name = <S as ServiceName>::NAME;
-        let svc_route = format!("/{}", svc_name);
-        let pred = move |req: &Request<Body>| {
-            let path = req.uri().path();
-
-            path.starts_with(&svc_route)
-        };
-        Self {
-            server,
-            routes: Routes::new(pred, svc, Unimplemented::default()),
-        }
-    }
-}
-
-impl<A, B> Router<A, B>
-where
-    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-    A::Future: Send + 'static,
-    A::Error: Into<crate::Error> + Send,
-    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-    B::Future: Send + 'static,
-    B::Error: Into<crate::Error> + Send,
-{
-    /// Add a new service to this router.
-    pub fn add_service<S>(self, svc: S) -> Router<S, Or<A, B, Request<Body>>>
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
-            + ServiceName
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let Self { routes, server } = self;
-
-        let svc_name = <S as ServiceName>::NAME;
-        let svc_route = format!("/{}", svc_name);
-        let pred = move |req: &Request<Body>| {
-            let path = req.uri().path();
-
-            path.starts_with(&svc_route)
-        };
-        let routes = routes.push(pred, svc);
-
-        Router { server, routes }
-    }
-
-    /// Consume this [`Server`] creating a future that will execute the server
-    /// on [`tokio`]'s default executor.
-    pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
-        self.server.serve(addr, self.routes).await
-    }
-}
-
 /// A trait to provide a static reference to the service's
 /// name. This is used for routing service's within the router.
 pub trait ServiceName {
@@ -300,6 +234,74 @@ impl Server {
             .map_err(map_err)?;
 
         Ok(())
+    }
+}
+
+impl<S> Router<S, Unimplemented> {
+    pub(crate) fn new(server: Server, svc: S) -> Self
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + ServiceName
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let svc_name = <S as ServiceName>::NAME;
+        let svc_route = format!("/{}", svc_name);
+        let pred = move |req: &Request<Body>| {
+            let path = req.uri().path();
+
+            path.starts_with(&svc_route)
+        };
+        Self {
+            server,
+            routes: Routes::new(pred, svc, Unimplemented::default()),
+        }
+    }
+}
+
+impl<A, B> Router<A, B>
+where
+    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    A::Future: Send + 'static,
+    A::Error: Into<crate::Error> + Send,
+    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    B::Future: Send + 'static,
+    B::Error: Into<crate::Error> + Send,
+{
+    /// Add a new service to this router.
+    pub fn add_service<S>(self, svc: S) -> Router<S, Or<A, B, Request<Body>>>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + ServiceName
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let Self { routes, server } = self;
+
+        let svc_name = <S as ServiceName>::NAME;
+        let svc_route = format!("/{}", svc_name);
+        let pred = move |req: &Request<Body>| {
+            let path = req.uri().path();
+
+            path.starts_with(&svc_route)
+        };
+        let routes = routes.push(pred, svc);
+
+        Router { server, routes }
+    }
+
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on [`tokio`]'s default executor.
+    ///
+    /// [`Server`]: struct.Server.html
+    pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
+        self.server.serve(addr, self.routes).await
     }
 }
 
