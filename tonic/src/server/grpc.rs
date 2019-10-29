@@ -179,7 +179,7 @@ where
                 // Set the content type
                 parts.headers.insert(
                     http::header::CONTENT_TYPE,
-                    http::header::HeaderValue::from_static(T::CONTENT_TYPE),
+                    http::header::HeaderValue::from_static("application/grpc"),
                 );
 
                 let body = encode_server(self.codec.encoder(), body.into_stream());
@@ -191,7 +191,7 @@ where
 
                 parts.headers.insert(
                     http::header::CONTENT_TYPE,
-                    http::header::HeaderValue::from_static(T::CONTENT_TYPE),
+                    http::header::HeaderValue::from_static("application/grpc"),
                 );
 
                 status.add_header(&mut parts.headers).unwrap();

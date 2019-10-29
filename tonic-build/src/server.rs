@@ -248,7 +248,7 @@ fn generate_unary(
         let inner = self.inner.clone();
         let fut = async move {
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::new();
+            let codec = tonic::codec::ProstCodec::default();
             let mut grpc = tonic::server::Grpc::new(codec);
             let res = grpc.unary(method, req).await;
             Ok(res)
@@ -291,7 +291,7 @@ fn generate_server_streaming(
         let inner = self.inner.clone();
         let fut = async move {
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::new();
+            let codec = tonic::codec::ProstCodec::default();
             let mut grpc = tonic::server::Grpc::new(codec);
             let res = grpc.server_streaming(method, req).await;
             Ok(res)
@@ -332,7 +332,7 @@ fn generate_client_streaming(
         let inner = self.inner.clone();
         let fut = async move {
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::new();
+            let codec = tonic::codec::ProstCodec::default();
             let mut grpc = tonic::server::Grpc::new(codec);
             let res = grpc.client_streaming(method, req).await;
             Ok(res)
@@ -375,7 +375,7 @@ fn generate_streaming(
         let inner = self.inner.clone();
         let fut = async move {
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::new();
+            let codec = tonic::codec::ProstCodec::default();
             let mut grpc = tonic::server::Grpc::new(codec);
             let res = grpc.streaming(method, req).await;
             Ok(res)

@@ -156,10 +156,9 @@ impl<T> Grpc<T> {
             .insert(TE, HeaderValue::from_static("trailers"));
 
         // Set the content type
-        let content_type = <C as Codec>::CONTENT_TYPE;
         request
             .headers_mut()
-            .insert(CONTENT_TYPE, HeaderValue::from_static(content_type));
+            .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
         let response = self
             .inner
