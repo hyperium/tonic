@@ -50,7 +50,23 @@
 //! # use futures_util::future::{err, ok};
 //! # #[cfg(feature = "rustls")]
 //! # async fn do_thing() -> Result<(), Box<dyn std::error::Error>> {
-//! # let my_svc = service_fn(|_| ok::<_, tonic::Status>(service_fn(|req| err(tonic::Status::unimplemented("")))));
+//! # #[derive(Clone)]
+//! # pub struct Svc;
+//! # impl Service<hyper::Request<hyper::Body>> for Svc {
+//! #   type Response = hyper::Response<tonic::body::BoxBody>;
+//! #   type Error = tonic::Status;
+//! #   type Future = futures_util::future::Ready<Result<Self::Response, Self::Error>>;
+//! #   fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
+//! #       Ok(()).into()
+//! #  }
+//! #   fn call(&mut self, _req: hyper::Request<hyper::Body>) -> Self::Future {
+//! #       unimplemented!()
+//! #   }
+//! # }
+//! # impl tonic::transport::ServiceName for Svc {
+//! # const NAME: &'static str = "some_svc";
+//! # }
+//! # let my_svc = Svc;
 //! let cert = std::fs::read_to_string("server.pem")?;
 //! let key = std::fs::read_to_string("server.key")?;
 //!
@@ -64,8 +80,8 @@
 //!         println!("Request: {:?}", req);
 //!         svc.call(req)
 //!     })
-//!     .clone()
-//!     .serve(addr, my_svc)
+//!     .add_service(my_svc)
+//!     .serve(addr)
 //!     .await?;
 //!
 //! # Ok(())
@@ -88,7 +104,7 @@ pub use self::channel::Channel;
 pub use self::endpoint::Endpoint;
 pub use self::error::Error;
 #[doc(inline)]
-pub use self::server::Server;
+pub use self::server::{Server, ServiceName};
 pub use self::tls::{Certificate, Identity};
 pub use hyper::Body;
 

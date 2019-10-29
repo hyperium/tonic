@@ -191,7 +191,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let greeter = MyGreeter {};
 
     Server::builder()
-        .serve(addr, GreeterServer::new(greeter))
+        .add_service(GreeterServer::new(greeter))
+        .serve(addr)
         .await?;
 
     Ok(())
@@ -236,7 +237,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let greeter = MyGreeter {};
 
     Server::builder()
-        .serve(addr, GreeterServer::new(greeter))
+        .add_service(GreeterServer::new(greeter))
+        .serve(addr)
         .await?;
 
     Ok(())

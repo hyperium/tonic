@@ -53,6 +53,14 @@ name = "tls-client-auth-client"
 path = "src/tls_client_auth/client.rs"
 
 [[bin]]
+name = "multiplex-server"
+path = "src/multiplex/server.rs"
+
+[[bin]]
+name = "multiplex-client"
+path = "src/multiplex/client.rs"
+
+[[bin]]
 name = "gcp-client"
 path = "src/gcp/client.rs"
 

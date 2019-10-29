@@ -1,6 +1,6 @@
 //! Server implementation and builder.
 
-use super::service::{layer_fn, BoxedIo, ServiceBuilderExt};
+use super::service::{layer_fn, BoxedIo, Or, Routes, ServiceBuilderExt};
 #[cfg(feature = "tls")]
 use super::{
     service::TlsAcceptor,
@@ -9,7 +9,7 @@ use super::{
 };
 use crate::body::BoxBody;
 use futures_core::Stream;
-use futures_util::{ready, try_future::MapErr, TryFutureExt, TryStreamExt};
+use futures_util::{future, ready, try_future::MapErr, TryFutureExt, TryStreamExt};
 use http::{Request, Response};
 use hyper::{
     server::{accept::Accept, conn},
@@ -31,7 +31,6 @@ use tower::{
     Service,
     ServiceBuilder,
 };
-use tower_make::MakeService;
 #[cfg(feature = "tls")]
 use tracing::error;
 
@@ -56,6 +55,22 @@ pub struct Server {
     init_stream_window_size: Option<u32>,
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
+}
+
+/// A stack based `Service` router.
+#[derive(Debug)]
+pub struct Router<A, B> {
+    server: Server,
+    routes: Routes<A, B, Request<Body>>,
+}
+
+/// A trait to provide a static reference to the service's
+/// name. This is used for routing service's within the router.
+pub trait ServiceName {
+    /// The `Service-Name` as described [here].
+    ///
+    /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
+    const NAME: &'static str;
 }
 
 impl Server {
@@ -149,14 +164,26 @@ impl Server {
         self
     }
 
-    /// Consume this [`Server`] creating a future that will execute the server
-    /// on [`tokio`]'s default executor.
-    pub async fn serve<M, S>(self, addr: SocketAddr, svc: M) -> Result<(), super::Error>
+    /// Create a router with the `S` typed service as the first service.
+    ///
+    /// This will clone the `Server` builder and create a router that will
+    /// route around different services.
+    pub fn add_service<S>(&mut self, svc: S) -> Router<S, Unimplemented>
     where
-        M: Service<(), Response = S>,
-        M::Error: Into<crate::Error> + Send + 'static,
-        M::Future: Send + 'static,
-        S: Service<Request<Body>, Response = Response<BoxBody>> + Send + 'static,
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + ServiceName
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        Router::new(self.clone(), svc)
+    }
+
+    pub(crate) async fn serve<S>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
@@ -207,6 +234,74 @@ impl Server {
             .map_err(map_err)?;
 
         Ok(())
+    }
+}
+
+impl<S> Router<S, Unimplemented> {
+    pub(crate) fn new(server: Server, svc: S) -> Self
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + ServiceName
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let svc_name = <S as ServiceName>::NAME;
+        let svc_route = format!("/{}", svc_name);
+        let pred = move |req: &Request<Body>| {
+            let path = req.uri().path();
+
+            path.starts_with(&svc_route)
+        };
+        Self {
+            server,
+            routes: Routes::new(pred, svc, Unimplemented::default()),
+        }
+    }
+}
+
+impl<A, B> Router<A, B>
+where
+    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    A::Future: Send + 'static,
+    A::Error: Into<crate::Error> + Send,
+    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    B::Future: Send + 'static,
+    B::Error: Into<crate::Error> + Send,
+{
+    /// Add a new service to this router.
+    pub fn add_service<S>(self, svc: S) -> Router<S, Or<A, B, Request<Body>>>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + ServiceName
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let Self { routes, server } = self;
+
+        let svc_name = <S as ServiceName>::NAME;
+        let svc_route = format!("/{}", svc_name);
+        let pred = move |req: &Request<Body>| {
+            let path = req.uri().path();
+
+            path.starts_with(&svc_route)
+        };
+        let routes = routes.push(pred, svc);
+
+        Router { server, routes }
+    }
+
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on [`tokio`]'s default executor.
+    ///
+    /// [`Server`]: struct.Server.html
+    pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
+        self.server.serve(addr, self.routes).await
     }
 }
 
@@ -371,19 +466,16 @@ where
     }
 }
 
-struct MakeSvc<M> {
+struct MakeSvc<S> {
     interceptor: Option<Interceptor>,
     concurrency_limit: Option<usize>,
     // timeout: Option<Duration>,
-    inner: M,
+    inner: S,
 }
 
-impl<M, S, T> Service<T> for MakeSvc<M>
+impl<S, T> Service<T> for MakeSvc<S>
 where
-    M: Service<(), Response = S>,
-    M::Error: Into<crate::Error> + Send,
-    M::Future: Send + 'static,
-    S: Service<Request<Body>, Response = Response<BoxBody>> + Send + 'static,
+    S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::Error> + Send,
 {
@@ -392,19 +484,17 @@ where
     type Future =
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        MakeService::poll_ready(&mut self.inner, cx).map_err(Into::into)
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Ok(()).into()
     }
 
     fn call(&mut self, _: T) -> Self::Future {
         let interceptor = self.interceptor.clone();
-        let make = self.inner.make_service(());
+        let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
         // let timeout = self.timeout.clone();
 
         Box::pin(async move {
-            let svc = make.await.map_err(Into::into)?;
-
             let svc = ServiceBuilder::new()
                 .optional_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
                 // .optional_layer(timeout.map(TimeoutLayer::new))
@@ -419,5 +509,31 @@ where
 
             Ok(svc)
         })
+    }
+}
+
+#[derive(Default, Clone, Debug)]
+#[doc(hidden)]
+pub struct Unimplemented {
+    _p: (),
+}
+
+impl Service<Request<Body>> for Unimplemented {
+    type Response = Response<BoxBody>;
+    type Error = crate::Error;
+    type Future = future::Ready<Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Ok(()).into()
+    }
+
+    fn call(&mut self, _req: Request<Body>) -> Self::Future {
+        future::ok(
+            http::Response::builder()
+                .status(200)
+                .header("grpc-status", "12")
+                .body(BoxBody::empty())
+                .unwrap(),
+        )
     }
 }

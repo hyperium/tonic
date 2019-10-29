@@ -33,7 +33,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let greeter = MyGreeter::default();
 
     Server::builder()
-        .serve(addr, GreeterServer::new(greeter))
+        .add_service(GreeterServer::new(greeter))
+        .serve(addr)
         .await?;
 
     Ok(())

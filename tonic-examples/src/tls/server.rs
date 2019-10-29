@@ -61,7 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Server::builder()
         .tls_config(ServerTlsConfig::with_rustls().identity(identity))
         .clone()
-        .serve(addr, pb::server::EchoServer::new(server))
+        .add_service(pb::server::EchoServer::new(server))
+        .serve(addr)
         .await?;
 
     Ok(())
