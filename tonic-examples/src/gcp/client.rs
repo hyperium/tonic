@@ -17,7 +17,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Pass a valid 0Auth bearer token via `GCP_AUTH_TOKEN` environment variable.".to_string()
     })?;
 
-    let project = std::env::args().skip(1).next().ok_or("Expected a project name as the first argument.".to_string())?;
+    let project = std::env::args()
+        .skip(1)
+        .next()
+        .ok_or("Expected a project name as the first argument.".to_string())?;
 
     let bearer_token = format!("Bearer {}", token);
     let header_value = HeaderValue::from_str(&bearer_token)?;
