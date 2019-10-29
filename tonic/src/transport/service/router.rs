@@ -66,6 +66,7 @@ impl<A: Clone, B: Clone, Request> Clone for Routes<A, B, Request> {
     }
 }
 
+#[doc(hidden)]
 pub struct Or<A, B, Request> {
     predicate: Arc<dyn Fn(&Request) -> bool + Send + Sync + 'static>,
     a: A,
@@ -123,6 +124,6 @@ impl<A: Clone, B: Clone, Request> Clone for Or<A, B, Request> {
 
 impl<A, B, Request> fmt::Debug for Or<A, B, Request> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Or")
+        write!(f, "Or {{ .. }}")
     }
 }

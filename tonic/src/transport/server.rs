@@ -514,7 +514,9 @@ where
 
 #[derive(Default, Clone, Debug)]
 #[doc(hidden)]
-pub struct Unimplemented;
+pub struct Unimplemented {
+    _p: (),
+}
 
 impl Service<Request<Body>> for Unimplemented {
     type Response = Response<BoxBody>;
