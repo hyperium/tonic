@@ -8,10 +8,73 @@ pub struct Request<T> {
     message: T,
 }
 
-/// Conversion into a streaming `Request`.
+/// Trait implemented by RPC request types.
 ///
-/// Types implementing this trait may be used as an argument to
-/// generated client-streaming RPC methods.
+/// Types implementing this trait can be used as arguments to client RPC
+/// methods without explicitly wrapping them into `tonic::Request`s. The purpose
+/// is to make client calls slightly more convenient to write.
+///
+/// Tonic's code generation and blanket implementations handle this for you,
+/// so it is not necessary to implement this trait directly.
+///
+/// # Example
+///
+/// Given the following gRPC method definition:
+/// ```proto
+/// rpc GetFeature(Point) returns (Feature) {}
+/// ```
+///
+/// we can call `get_feature` in two equivalent ways:
+/// ```rust
+/// # pub struct Point {}
+/// # pub struct Client {}
+/// # impl Client {
+/// #   fn get_feature(&self, r: impl tonic::IntoRequest<Point>) {}
+/// # }
+/// # let client = Client {};
+/// use tonic::Request;
+///
+/// client.get_feature(Point {});
+/// client.get_feature(Request::new(Point {}));
+/// ```
+pub trait IntoRequest<T>: sealed::Sealed {
+    /// Wrap the input message `T` in a `tonic::Request`
+    fn into_request(self) -> Request<T>;
+}
+
+/// Trait implemented by RPC streaming request types.
+///
+/// Types implementing this trait can be used as arguments to client streaming
+/// RPC methods without explicitly wrapping them into `tonic::Request`s. The
+/// purpose is to make client calls slightly more convenient to write.
+///
+/// Tonic's code generation and blanket implementations handle this for you,
+/// so it is not necessary to implement this trait directly.
+///
+/// # Example
+///
+/// Given the following gRPC service method definition:
+/// ```proto
+/// rpc RecordRoute(stream Point) returns (RouteSummary) {}
+/// ```
+/// we can call `record_route` in two equivalent ways:
+///
+/// ```rust
+/// # #[derive(Clone)]
+/// # pub struct Point {};
+/// # pub struct Client {};
+/// # impl Client {
+/// #   fn record_route(&self, r: impl tonic::IntoStreamingRequest<Message = Point>) {}
+/// # }
+/// # let client = Client {};
+/// use tonic::Request;
+/// use futures_util::stream;
+///
+/// let messages = vec![Point {}, Point {}];
+///
+/// client.record_route(Request::new(stream::iter(messages.clone())));
+/// client.record_route(stream::iter(messages));
+/// ```
 pub trait IntoStreamingRequest: sealed::Sealed {
     /// The RPC request stream type
     type Stream: Stream<Item = Self::Message> + Send + 'static;
@@ -21,15 +84,6 @@ pub trait IntoStreamingRequest: sealed::Sealed {
 
     /// Wrap the stream of messages in a `tonic::Request`
     fn into_streaming_request(self) -> Request<Self::Stream>;
-}
-
-/// Conversion into a unary `Request`.
-///
-/// Types implementing this trait may be used as an argument to
-/// generated unary RPC methods.
-pub trait IntoRequest<T>: sealed::Sealed {
-    /// Wrap the input message `T` in a `tonic::Request`
-    fn into_request(self) -> Request<T>;
 }
 
 impl<T> Request<T> {
@@ -114,26 +168,14 @@ impl<T> Request<T> {
     }
 }
 
-impl<T> IntoRequest<T> for Request<T> {
-    fn into_request(self) -> Request<T> {
-        self
-    }
-}
-
 impl<T> IntoRequest<T> for T {
     fn into_request(self) -> Request<Self> {
         Request::new(self)
     }
 }
 
-impl<T> IntoStreamingRequest for Request<T>
-where
-    T: Stream + Send + 'static,
-{
-    type Stream = T;
-    type Message = T::Item;
-
-    fn into_streaming_request(self) -> Self {
+impl<T> IntoRequest<T> for Request<T> {
+    fn into_request(self) -> Request<T> {
         self
     }
 }
@@ -147,6 +189,18 @@ where
 
     fn into_streaming_request(self) -> Request<Self> {
         Request::new(self)
+    }
+}
+
+impl<T> IntoStreamingRequest for Request<T>
+where
+    T: Stream + Send + 'static,
+{
+    type Stream = T;
+    type Message = T::Item;
+
+    fn into_streaming_request(self) -> Self {
+        self
     }
 }
 
