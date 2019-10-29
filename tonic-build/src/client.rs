@@ -102,7 +102,7 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
         pub async fn #ident(&mut self, request: tonic::Request<#request>)
             -> Result<tonic::Response<#response>, tonic::Status> {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.unary(request, path, codec).await
         }
@@ -118,7 +118,7 @@ fn generate_server_streaming(method: &Method, proto: &str, path: String) -> Toke
         pub async fn #ident(&mut self, request: tonic::Request<#request>)
             -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.server_streaming(request, path, codec).await
         }
@@ -136,7 +136,7 @@ fn generate_client_streaming(method: &Method, proto: &str, path: String) -> Toke
             where S: Stream<Item = #request> + Send + 'static,
         {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.client_streaming(request, path, codec).await
         }
@@ -154,7 +154,7 @@ fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream
             where S: Stream<Item = #request> + Send + 'static,
         {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.streaming(request, path, codec).await
         }
