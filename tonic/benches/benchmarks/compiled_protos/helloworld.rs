@@ -55,7 +55,7 @@ pub mod client {
             request: tonic::Request<super::HelloRequest>,
         ) -> Result<tonic::Response<super::HelloReply>, tonic::Status> {
             self.ready().await?;
-            let codec = tonic::codec::ProstCodec::new();
+            let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static("/helloworld.Greeter/SayHello");
             self.inner.unary(request, path, codec).await
         }
@@ -146,7 +146,7 @@ pub mod server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = SayHello(inner);
-                        let codec = tonic::codec::ProstCodec::new();
+                        let codec = tonic::codec::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec);
                         let res = grpc.unary(method, req).await;
                         Ok(res)

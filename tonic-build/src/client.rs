@@ -104,7 +104,7 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
             request: impl tonic::IntoRequest<#request>,
         ) -> Result<tonic::Response<#response>, tonic::Status> {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.unary(request.into_request(), path, codec).await
         }
@@ -122,7 +122,7 @@ fn generate_server_streaming(method: &Method, proto: &str, path: String) -> Toke
             request: impl tonic::IntoRequest<#request>,
         ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.server_streaming(request.into_request(), path, codec).await
         }
@@ -140,7 +140,7 @@ fn generate_client_streaming(method: &Method, proto: &str, path: String) -> Toke
             request: impl tonic::IntoStreamingRequest<Message = #request>
         ) -> Result<tonic::Response<#response>, tonic::Status> {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.client_streaming(request.into_streaming_request(), path, codec).await
         }
@@ -158,7 +158,7 @@ fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream
             request: impl tonic::IntoStreamingRequest<Message = #request>
         ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
            self.ready().await?;
-           let codec = tonic::codec::ProstCodec::new();
+           let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
