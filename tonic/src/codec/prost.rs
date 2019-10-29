@@ -10,9 +10,8 @@ pub struct ProstCodec<T, U> {
     _pd: PhantomData<(T, U)>,
 }
 
-impl<T, U> ProstCodec<T, U> {
-    /// Create a new codec that knows how to encode `T` and decode `U`.
-    pub fn new() -> Self {
+impl<T, U> Default for ProstCodec<T, U> {
+    fn default() -> Self {
         Self { _pd: PhantomData }
     }
 }
@@ -27,8 +26,6 @@ where
 
     type Encoder = ProstEncoder<T>;
     type Decoder = ProstDecoder<U>;
-
-    const CONTENT_TYPE: &'static str = "application/grpc+proto";
 
     fn encoder(&mut self) -> Self::Encoder {
         ProstEncoder(PhantomData)

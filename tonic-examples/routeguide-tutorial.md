@@ -192,10 +192,10 @@ serde_json = "1.0"
 prost = "0.5"
 rand = "0.7.2"
 tokio = "0.2.0-alpha.6"
-tonic = "0.1.0-alpha.3"
+tonic = "0.1.0-alpha.4"
 
 [build-dependencies]
-tonic-build = "0.1.0-alpha.3"
+tonic-build = "0.1.0-alpha.4"
 ```
 
 Create a `build.rs` file at the root of your crate:

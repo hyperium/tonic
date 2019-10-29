@@ -52,6 +52,10 @@ path = "src/tls_client_auth/server.rs"
 name = "tls-client-auth-client"
 path = "src/tls_client_auth/client.rs"
 
+[[bin]]
+name = "gcp-client"
+path = "src/gcp/client.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["rustls"] }
 bytes = "0.4"
@@ -67,6 +71,9 @@ tower = "=0.3.0-alpha.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.7.2"
+
+# Required for wellknown types
+prost-types = "0.5"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }
