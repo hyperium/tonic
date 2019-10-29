@@ -99,12 +99,14 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
     let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
-        pub async fn #ident(&mut self, request: tonic::Request<#request>)
-            -> Result<tonic::Response<#response>, tonic::Status> {
+        pub async fn #ident(
+            &mut self,
+            request: impl tonic::IntoRequest<#request>,
+        ) -> Result<tonic::Response<#response>, tonic::Status> {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.unary(request, path, codec).await
+           self.inner.unary(request.into_request(), path, codec).await
         }
     }
 }
@@ -115,12 +117,14 @@ fn generate_server_streaming(method: &Method, proto: &str, path: String) -> Toke
     let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
-        pub async fn #ident(&mut self, request: tonic::Request<#request>)
-            -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
+        pub async fn #ident(
+            &mut self,
+            request: impl tonic::IntoRequest<#request>,
+        ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.server_streaming(request, path, codec).await
+           self.inner.server_streaming(request.into_request(), path, codec).await
         }
     }
 }
@@ -131,14 +135,14 @@ fn generate_client_streaming(method: &Method, proto: &str, path: String) -> Toke
     let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
-        pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
-            -> Result<tonic::Response<#response>, tonic::Status>
-            where S: Stream<Item = #request> + Send + 'static,
-        {
+        pub async fn #ident(
+            &mut self,
+            request: impl tonic::IntoStreamingRequest<Message = #request>
+        ) -> Result<tonic::Response<#response>, tonic::Status> {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.client_streaming(request, path, codec).await
+           self.inner.client_streaming(request.into_streaming_request(), path, codec).await
         }
     }
 }
@@ -149,14 +153,14 @@ fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream
     let (request, response) = crate::replace_wellknown(proto, &method);
 
     quote! {
-        pub async fn #ident<S>(&mut self, request: tonic::Request<S>)
-            -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status>
-            where S: Stream<Item = #request> + Send + 'static,
-        {
+        pub async fn #ident(
+            &mut self,
+            request: impl tonic::IntoStreamingRequest<Message = #request>
+        ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.streaming(request, path, codec).await
+           self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
     }
 }
