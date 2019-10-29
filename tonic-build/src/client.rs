@@ -101,12 +101,12 @@ fn generate_unary(method: &Method, proto: &str, path: String) -> TokenStream {
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl Into<tonic::Request<#request>>,
+            request: impl tonic::IntoRequest<#request>,
         ) -> Result<tonic::Response<#response>, tonic::Status> {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.unary(request.into(), path, codec).await
+           self.inner.unary(request.into_request(), path, codec).await
         }
     }
 }
@@ -119,12 +119,12 @@ fn generate_server_streaming(method: &Method, proto: &str, path: String) -> Toke
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl Into<tonic::Request<#request>>,
+            request: impl tonic::IntoRequest<#request>,
         ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
            self.ready().await?;
            let codec = tonic::codec::ProstCodec::new();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.server_streaming(request.into(), path, codec).await
+           self.inner.server_streaming(request.into_request(), path, codec).await
         }
     }
 }

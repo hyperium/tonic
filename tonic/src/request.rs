@@ -23,6 +23,15 @@ pub trait IntoStreamingRequest: sealed::Sealed {
     fn into_streaming_request(self) -> Request<Self::Stream>;
 }
 
+/// Conversion into a unary `Request`.
+///
+/// Types implementing this trait may be used as an argument to
+/// generated unary RPC methods.
+pub trait IntoRequest<T>: sealed::Sealed {
+    /// Wrap the input message `T` in a `tonic::Request`
+    fn into_request(self) -> Request<T>;
+}
+
 impl<T> Request<T> {
     /// Create a new gRPC request.
     ///
@@ -105,9 +114,15 @@ impl<T> Request<T> {
     }
 }
 
-impl<T> From<T> for Request<T> {
-    fn from(t: T) -> Self {
-        Request::new(t)
+impl<T> IntoRequest<T> for Request<T> {
+    fn into_request(self) -> Request<T> {
+        self
+    }
+}
+
+impl<T> IntoRequest<T> for T {
+    fn into_request(self) -> Request<Self> {
+        Request::new(self)
     }
 }
 
@@ -135,9 +150,7 @@ where
     }
 }
 
-impl<T> sealed::Sealed for T where T: Stream + Send + 'static {}
-
-impl<T> sealed::Sealed for Request<T> where T: Stream + Send + 'static {}
+impl<T> sealed::Sealed for T {}
 
 mod sealed {
     pub trait Sealed {}
