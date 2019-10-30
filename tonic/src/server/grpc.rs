@@ -26,6 +26,7 @@ pub struct Grpc<T> {
 impl<T> Grpc<T>
 where
     T: Codec,
+    T::Encode: Sync,
 {
     /// Creates a new gRPC client with the provided [`Codec`].
     pub fn new(codec: T) -> Self {
@@ -40,7 +41,7 @@ where
     ) -> http::Response<BoxBody>
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -70,8 +71,8 @@ where
     ) -> http::Response<BoxBody>
     where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
-        S::ResponseStream: Send + 'static,
-        B: Body + Send + 'static,
+        S::ResponseStream: Send + Sync + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -95,7 +96,7 @@ where
     ) -> http::Response<BoxBody>
     where
         S: ClientStreamingService<T::Decode, Response = T::Encode>,
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
@@ -115,8 +116,8 @@ where
     ) -> http::Response<BoxBody>
     where
         S: StreamingService<T::Decode, Response = T::Encode> + Send,
-        S::ResponseStream: Send + 'static,
-        B: Body + Send + 'static,
+        S::ResponseStream: Send + Sync + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -130,7 +131,7 @@ where
         request: http::Request<B>,
     ) -> Result<Request<T::Decode>, Status>
     where
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -158,7 +159,7 @@ where
         request: http::Request<B>,
     ) -> Request<Streaming<T::Decode>>
     where
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
@@ -170,7 +171,7 @@ where
         response: Result<crate::Response<B>, Status>,
     ) -> http::Response<BoxBody>
     where
-        B: TryStream<Ok = T::Encode, Error = Status> + Send + 'static,
+        B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
     {
         match response {
             Ok(r) => {

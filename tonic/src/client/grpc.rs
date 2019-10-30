@@ -62,8 +62,8 @@ impl<T> Grpc<T> {
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
-        M1: Send + 'static,
-        M2: Send + 'static,
+        M1: Send + Sync + 'static,
+        M2: Send + Sync + 'static,
     {
         let request = request.map(|m| stream::once(future::ready(m)));
         self.client_streaming(request, path, codec).await
@@ -81,10 +81,10 @@ impl<T> Grpc<T> {
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
-        S: Stream<Item = M1> + Send + 'static,
+        S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
-        M1: Send + 'static,
-        M2: Send + 'static,
+        M1: Send + Sync + 'static,
+        M2: Send + Sync + 'static,
     {
         let (mut parts, body) = self.streaming(request, path, codec).await?.into_parts();
 
@@ -115,8 +115,8 @@ impl<T> Grpc<T> {
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
-        M1: Send + 'static,
-        M2: Send + 'static,
+        M1: Send + Sync + 'static,
+        M2: Send + Sync + 'static,
     {
         let request = request.map(|m| stream::once(future::ready(m)));
         self.streaming(request, path, codec).await
@@ -134,10 +134,10 @@ impl<T> Grpc<T> {
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        S: Stream<Item = M1> + Send + 'static,
+        S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
-        M1: Send + 'static,
-        M2: Send + 'static,
+        M1: Send + Sync + 'static,
+        M2: Send + Sync + 'static,
     {
         let mut parts = Parts::default();
         parts.path_and_query = Some(path);

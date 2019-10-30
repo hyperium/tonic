@@ -19,7 +19,7 @@ const BUFFER_SIZE: usize = 8 * 1024;
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
 /// to fetch the message stream and trailing metadata
 pub struct Streaming<T> {
-    decoder: Box<dyn Decoder<Item = T, Error = Status> + Send + 'static>,
+    decoder: Box<dyn Decoder<Item = T, Error = Status> + Send + Sync + 'static>,
     body: BoxBody,
     state: State,
     direction: Direction,
@@ -45,40 +45,40 @@ enum Direction {
 impl<T> Streaming<T> {
     pub(crate) fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
         Self::new(decoder, body, Direction::Response(status_code))
     }
 
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
         Self::new(decoder, body, Direction::EmptyResponse)
     }
 
     pub(crate) fn new_request<B, D>(decoder: D, body: B) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
         Self::new(decoder, body, Direction::Request)
     }
 
     fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
     where
-        B: Body + Send + 'static,
+        B: Body + Send + Sync + 'static,
         B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
         Self {
             decoder: Box::new(decoder),
@@ -291,3 +291,6 @@ impl<T> fmt::Debug for Streaming<T> {
         f.debug_struct("Streaming").finish()
     }
 }
+
+#[cfg(test)]
+static_assertions::assert_impl_all!(Streaming<()>: Send, Sync);

@@ -41,10 +41,6 @@ tls = []
 name = "bench_main"
 harness = false
 
-[dev-dependencies]
-rand = "0.7.2"
-criterion = "0.3"
-
 [dependencies]
 bytes = "0.4"
 futures-core-preview = "=0.3.0-alpha.19"
@@ -82,6 +78,11 @@ openssl1 = { package = "openssl", version = "0.10", optional = true }
 
 # rustls
 tokio-rustls = { version = "=0.12.0-alpha.4", optional = true }
+
+[dev-dependencies]
+static_assertions = "1.0"
+rand = "0.7.2"
+criterion = "0.3"
 
 [package.metadata.docs.rs]
 all-features = true

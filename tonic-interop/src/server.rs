@@ -12,8 +12,9 @@ pub struct TestService;
 
 type Result<T> = std::result::Result<Response<T>, Status>;
 type Streaming<T> = Request<tonic::Streaming<T>>;
-type Stream<T> =
-    Pin<Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+type Stream<T> = Pin<
+    Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + Sync + 'static>,
+>;
 
 #[tonic::async_trait]
 impl pb::server::TestService for TestService {
