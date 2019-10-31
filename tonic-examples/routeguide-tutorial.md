@@ -615,7 +615,7 @@ use route_guide::{client::RouteGuideClient, Point, Rectangle, RouteNote};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut client = RouteGuideClient::connect("http://[::1]:10000")?;
+    let mut client = RouteGuideClient::connect("http://[::1]:10000").await?;
 
      Ok(())
 }
