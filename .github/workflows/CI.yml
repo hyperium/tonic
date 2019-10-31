@@ -24,18 +24,14 @@ jobs:
     - uses: actions/checkout@master
     - name: Install rustfmt
       run: rustup component add rustfmt
+    - name: Install cargo-hack
+      run: cargo install cargo-hack
     - name: Check fmt
       run: cargo fmt -- --check
-    - name: Check all
-      run: cargo check --all
-    - name: Check with no default features
-      run: cargo check -p tonic --no-default-features
-    - name: Check with transport no tls
-      run: cargo check -p tonic
-    - name: Check with transport w/ openssl
-      run: cargo check -p tonic --features openssl
-    - name: Check with transport w/ rustls
-      run: cargo check -p tonic --features rustls
+    - name: Check features
+      run: cargo hack check --all --each-feature --no-dev-deps
+    - name: Check all targets
+      run: cargo check --all --all-targets --all-features
 
   test:
     runs-on: ${{ matrix.os }}
