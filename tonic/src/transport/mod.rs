@@ -35,7 +35,8 @@
 //!     .timeout(Duration::from_secs(5))
 //!     .rate_limit(5, Duration::from_secs(1))
 //!     .concurrency_limit(256)
-//!     .channel();
+//!     .connect()
+//!     .await?;
 //!
 //! channel.call(Request::new(BoxBody::empty())).await?;
 //! # Ok(())
