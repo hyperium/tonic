@@ -1,4 +1,26 @@
-# [0.1.0-alpha.4](https://github.com/hyperium/tonic/compare/v0.1.0-alpha.3...v0.1.0-alpha.4) (October 23, 2019)
+# [0.1.0-alpha.5](https://github.com/hyperium/tonic/compare/v0.1.0-alpha.5...v0.1.0-alpha.5) (October 23, 2019)
+
+### Bug Fixes
+
+* **build:** Fix missing argument in generate_connect ([#95](https://github.com/hyperium/tonic/issues/95)) ([eea3c0f](https://github.com/hyperium/tonic/commit/eea3c0f))
+* **codec:** Enforce encoders/decoders are `Sync` ([#84](https://github.com/hyperium/tonic/issues/84)) ([3ce61d9](https://github.com/hyperium/tonic/commit/3ce61d9)), closes [#81](https://github.com/hyperium/tonic/issues/81)
+* **codec:** Remove custom content-type  ([#104](https://github.com/hyperium/tonic/issues/104)) ([a17049f](https://github.com/hyperium/tonic/commit/a17049f))
+
+
+### Features
+
+* **transport:** Add service multiplexing/routing ([#99](https://github.com/hyperium/tonic/issues/99)) ([5b4f468](https://github.com/hyperium/tonic/commit/5b4f468)), closes [#29](https://github.com/hyperium/tonic/issues/29)
+* **transport:** Change channel connect to be async ([#107](https://github.com/hyperium/tonic/issues/107)) ([5c2f4db](https://github.com/hyperium/tonic/commit/5c2f4db))
+* Add `IntoRequest` and `IntoStreamingRequest` traits ([#66](https://github.com/hyperium/tonic/issues/66)) ([4bb087b](https://github.com/hyperium/tonic/commit/4bb087b))
+
+
+### BREAKING CHANGES
+
+* **transport:** `Endpoint::channel` was removed in favor of an async `Endpoint::connect`.
+* **codec** `Streaming<T>` now requires that the inner stream also implements `Sync`.
+* **codec** `Codec` trait no longer requires `CONTENT_TYPE` and now always uses `application/grpc`.
+
+# [0.1.0-alpha.5](https://github.com/hyperium/tonic/compare/v0.1.0-alpha.3...v0.1.0-alpha.5) (October 23, 2019)
 
 
 ### Bug Fixes
