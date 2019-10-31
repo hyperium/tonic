@@ -15,7 +15,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 HeaderValue::from_static("Bearer some-secret-token"),
             );
         })
-        .channel();
+        .connect()
+        .await?;
 
     let mut client = EchoClient::new(channel);
 

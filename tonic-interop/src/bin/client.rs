@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let channel = endpoint.channel();
+    let channel = endpoint.connect().await?;
 
     let mut client = client::TestClient::new(channel.clone());
     let mut unimplemented_client = client::UnimplementedClient::new(channel);

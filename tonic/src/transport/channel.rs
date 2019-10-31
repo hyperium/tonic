@@ -97,18 +97,20 @@ impl Channel {
         Self::balance(discover, buffer_size, interceptor_headers)
     }
 
-    pub(crate) fn connect(endpoint: Endpoint) -> Self {
+    pub(crate) async fn connect(endpoint: Endpoint) -> Result<Self, super::Error> {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
         let interceptor_headers = endpoint.interceptor_headers.clone();
 
-        let svc = Connection::new(endpoint);
+        let svc = Connection::new(endpoint)
+            .await
+            .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))?;
 
         let svc = Buffer::new(Either::A(svc), buffer_size);
 
-        Channel {
+        Ok(Channel {
             svc,
             interceptor_headers,
-        }
+        })
     }
 
     pub(crate) fn balance<D>(

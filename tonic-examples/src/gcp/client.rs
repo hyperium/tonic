@@ -37,7 +37,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             headers.insert("authorization", header_value.clone());
         })
         .tls_config(&tls_config)
-        .channel();
+        .connect()
+        .await?;
 
     let mut service = PublisherClient::new(channel);
 

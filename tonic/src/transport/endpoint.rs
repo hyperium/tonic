@@ -142,8 +142,8 @@ impl Endpoint {
     }
 
     /// Create a channel from this config.
-    pub fn channel(&self) -> Channel {
-        Channel::connect(self.clone())
+    pub async fn connect(&self) -> Result<Channel, super::Error> {
+        Channel::connect(self.clone()).await
     }
 }
 

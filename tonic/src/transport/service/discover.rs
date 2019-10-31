@@ -1,13 +1,18 @@
 use super::connection::Connection;
 use crate::transport::Endpoint;
-use std::collections::VecDeque;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::{
+    collections::VecDeque,
+    fmt,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tower::discover::{Change, Discover};
 
-#[derive(Debug)]
 pub(crate) struct ServiceList {
     list: VecDeque<Endpoint>,
+    connecting:
+        Option<Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>>,
     i: usize,
 }
 
@@ -15,6 +20,7 @@ impl ServiceList {
     pub(crate) fn new(list: Vec<Endpoint>) -> Self {
         Self {
             list: list.into(),
+            connecting: None,
             i: 0,
         }
     }
@@ -27,19 +33,34 @@ impl Discover for ServiceList {
 
     fn poll_discover(
         mut self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
+        cx: &mut Context<'_>,
     ) -> Poll<Result<Change<Self::Key, Self::Service>, Self::Error>> {
-        match self.list.pop_front() {
-            Some(endpoint) => {
+        loop {
+            if let Some(connecting) = &mut self.connecting {
+                let svc = futures_core::ready!(Pin::new(connecting).poll(cx))?;
+
                 let i = self.i;
                 self.i += 1;
 
-                let svc = Connection::new(endpoint);
                 let change = Ok(Change::Insert(i, svc));
 
-                Poll::Ready(change)
+                return Poll::Ready(change);
             }
-            None => Poll::Pending,
+
+            if let Some(endpoint) = self.list.pop_front() {
+                let fut = Connection::new(endpoint);
+                self.connecting = Some(Box::pin(fut));
+            } else {
+                return Poll::Pending;
+            }
         }
+    }
+}
+
+impl fmt::Debug for ServiceList {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ServiceList")
+            .field("list", &self.list)
+            .finish()
     }
 }

@@ -21,8 +21,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let channel = Channel::from_static("http://[::1]:50051")
         .tls_config(&tls)
-        .clone()
-        .channel();
+        .connect()
+        .await?;
 
     let mut client = EchoClient::new(channel);
 
