@@ -8,11 +8,11 @@ name = "tonic"
 #   - README.md
 # - Update CHANGELOG.md.
 # - Create "v0.1.x" git tag.
-version = "0.1.0-alpha.4"
+version = "0.1.0-alpha.5"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 license = "MIT"
-documentation = "https://docs.rs/tonic/0.1.0-alpha.4/tonic/"
+documentation = "https://docs.rs/tonic/0.1.0-alpha.5/tonic/"
 repository = "https://github.com/hyperium/tonic"
 homepage = "https://github.com/hyperium/tonic"
 description = """
@@ -75,7 +75,7 @@ tokio-openssl = { version = "=0.4.0-alpha.6", optional = true }
 openssl1 = { package = "openssl", version = "0.10", optional = true }
 
 # rustls
-tokio-rustls = { version = "=0.12.0-alpha.4", optional = true }
+tokio-rustls = { version = "=0.12.0-alpha.5", optional = true }
 
 [dev-dependencies]
 static_assertions = "1.0"
