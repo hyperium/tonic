@@ -29,7 +29,7 @@ jobs:
     - name: Check fmt
       run: cargo fmt -- --check
     - name: Check features
-      run: cargo hack check --all --each-feature
+      run: cargo hack check --all --each-feature --no-dev-deps
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
 
