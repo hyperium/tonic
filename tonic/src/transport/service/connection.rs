@@ -1,4 +1,4 @@
-use super::{connector, layer::ServiceBuilderExt, AddOrigin};
+use super::{connector, layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin};
 use crate::{body::BoxBody, transport::Endpoint};
 use hyper::client::conn::Builder;
 use hyper::client::service::Connect as HyperConnect;
@@ -16,7 +16,6 @@ use tower::{
     ServiceBuilder,
 };
 use tower_load::Load;
-use tower_reconnect::Reconnect;
 use tower_service::Service;
 
 pub(crate) type Request = http::Request<BoxBody>;
@@ -27,7 +26,7 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) fn new(endpoint: Endpoint) -> Self {
+    pub(crate) async fn new(endpoint: Endpoint) -> Result<Self, crate::Error> {
         #[cfg(feature = "tls")]
         let connector = connector(endpoint.tls.clone());
 
@@ -47,13 +46,15 @@ impl Connection {
             .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
-        let conn = Reconnect::new(HyperConnect::new(connector, settings), endpoint.uri.clone());
+        let mut connector = HyperConnect::new(connector, settings);
+        let initial_conn = connector.call(endpoint.uri.clone()).await?;
+        let conn = Reconnect::new(initial_conn, connector, endpoint.uri.clone());
 
         let inner = stack.layer(conn);
 
-        Self {
+        Ok(Self {
             inner: BoxService::new(inner),
-        }
+        })
     }
 }
 

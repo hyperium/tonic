@@ -29,7 +29,6 @@ transport = [
     "hyper",
     "tokio",
     "tower",
-    "tower-reconnect",
     "tower-balance",
     "tower-load",
 ]
@@ -68,7 +67,6 @@ hyper = { version = "=0.13.0-alpha.4", features = ["unstable-stream"], optional 
 tokio = { version = "=0.2.0-alpha.6", default-features = false, features = ["tcp"], optional = true }
 tower = { version = "=0.3.0-alpha.2", optional = true}
 tower-make = "=0.3.0-alpha.2a"
-tower-reconnect = { version = "=0.3.0-alpha.2", optional = true }
 tower-balance =  { version = "=0.3.0-alpha.2", optional = true }
 tower-load = { version = "=0.3.0-alpha.2", optional = true }
 

@@ -5,6 +5,7 @@ mod discover;
 mod either;
 mod io;
 mod layer;
+mod reconnect;
 mod router;
 #[cfg(feature = "tls")]
 mod tls;

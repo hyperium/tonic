@@ -12,7 +12,9 @@ use tonic::transport::Endpoint;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let channel = Endpoint::from_static("http://[::1]:50051").channel();
+    let channel = Endpoint::from_static("http://[::1]:50051")
+        .connect()
+        .await?;
 
     let mut greeter_client = GreeterClient::new(channel.clone());
     let mut echo_client = EchoClient::new(channel);
