@@ -33,6 +33,25 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 ///
 /// This provides a fully featured http2 gRPC client based on [`hyper::Client`]
 /// and `tower` services.
+///
+/// # Multiplexing requests
+///
+/// Sending a request on a channel requires a `&mut self` and thus can only send
+/// on request in flight. This is intentional and is required to follow the `Service`
+/// contract from the `tower` library which this channel implementation is built on
+/// top of.
+///
+/// `tower` itself has a concept of `poll_ready` which is the main mechanism to apply
+/// back pressure. `poll_ready` takes a `&mut self` and when it returns `Poll::Ready`
+/// we know the `Service` is able to accept only one request before we must `poll_ready`
+/// again. Due to this fact any `async fn` that wants to poll for readiness and submit
+/// the request must have a `&mut self` reference.
+///
+/// To work around this and to ease the use of the channel, `Channel` provides a
+/// `Clone` implementation that is _cheap_. This is because at the very top level
+/// the channel is backed by a `tower_buffer::Buffer` which runs the connection
+/// in a background task and provides a `mpsc` channel interface. Due to this
+/// cloning the `Channel` type is cheap and encouraged.
 #[derive(Clone)]
 pub struct Channel {
     svc: Buffer<Svc, Request<BoxBody>>,
