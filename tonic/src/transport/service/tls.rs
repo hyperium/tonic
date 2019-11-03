@@ -6,6 +6,10 @@ use openssl1::{
     ssl::{select_next_proto, AlpnError, SslAcceptor, SslConnector, SslMethod, SslVerifyMode},
     x509::{store::X509StoreBuilder, X509},
 };
+#[cfg(feature = "openssl-roots")]
+use openssl_probe;
+#[cfg(feature = "rustls-roots")]
+use rustls_native_certs;
 use std::{fmt, sync::Arc};
 use tokio::net::TcpStream;
 #[cfg(feature = "rustls")]
@@ -37,6 +41,8 @@ enum TlsError {
     CertificateParseError,
     #[cfg(feature = "rustls")]
     PrivateKeyParseError,
+    #[cfg(feature = "openssl-roots")]
+    TrustAnchorsConfigurationError(openssl1::error::ErrorStack),
 }
 
 #[derive(Clone)]
@@ -62,6 +68,15 @@ impl TlsConnector {
     ) -> Result<Self, crate::Error> {
         let mut config = SslConnector::builder(SslMethod::tls())?;
         config.set_alpn_protos(ALPN_H2_WIRE)?;
+
+        #[cfg(feature = "openssl-roots")]
+        {
+            openssl_probe::init_ssl_cert_env_vars();
+            match config.cert_store_mut().set_default_paths() {
+                Ok(()) => (),
+                Err(e) => return Err(Box::new(TlsError::TrustAnchorsConfigurationError(e))),
+            };
+        }
 
         if let Some(cert) = cert {
             let ca = X509::from_pem(&cert.pem[..])?;
@@ -104,6 +119,11 @@ impl TlsConnector {
         if let Some(identity) = identity {
             let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
             config.set_single_client_cert(client_cert, client_key);
+        }
+
+        #[cfg(feature = "rustls-roots")]
+        {
+            config.root_store = rustls_native_certs::load_native_certs()?;
         }
 
         if let Some(cert) = ca_cert {
@@ -336,6 +356,10 @@ impl fmt::Display for TlsError {
                 f,
                 "Error parsing TLS private key - no RSA or PKCS8-encoded keys found."
             ),
+            #[cfg(feature = "openssl-roots")]
+            TlsError::TrustAnchorsConfigurationError(stack) => {
+                f.write_fmt(format_args!("Error adding trust anchors - {}", stack))
+            }
         }
     }
 }
