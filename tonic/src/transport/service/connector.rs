@@ -13,6 +13,7 @@ use tower_service::Service;
 pub(crate) fn connector() -> HttpConnector {
     let mut http = HttpConnector::new();
     http.enforce_http(false);
+    http.set_nodelay(true);
     http
 }
 
@@ -32,6 +33,7 @@ impl Connector {
     pub(crate) fn new(tls: Option<TlsConnector>) -> Self {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
+        http.set_nodelay(true);
 
         Self { http, tls }
     }

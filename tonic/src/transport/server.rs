@@ -427,7 +427,8 @@ struct TcpIncoming {
 
 impl TcpIncoming {
     fn bind(addr: SocketAddr) -> Result<Self, crate::Error> {
-        let inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
+        let mut inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
+        inner.set_nodelay(true);
 
         Ok(Self { inner })
     }
