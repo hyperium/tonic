@@ -262,6 +262,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 
             let code = format!("{}", client_service);
             buf.push_str(&code);
+
+            self.clients = TokenStream::default();
         }
 
         if self.builder.build_server && !self.servers.is_empty() {
@@ -279,6 +281,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 
             let code = format!("{}", server_service);
             buf.push_str(&code);
+
+            self.servers = TokenStream::default();
         }
     }
 }
