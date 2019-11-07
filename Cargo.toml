@@ -5,6 +5,7 @@ members = [
     "tonic-examples",
     "tonic-interop",
 
+    "tests/included_service",
     "tests/same_name",
     "tests/wellknown",
 ]
