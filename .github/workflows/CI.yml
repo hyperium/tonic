@@ -12,7 +12,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        rust: [beta]
+        rust: [stable]
 
     env:
       RUSTFLAGS: "-D warnings"
@@ -38,7 +38,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        rust: [beta]
+        rust: [stable]
 
     env:
       RUSTFLAGS: "-D warnings"
@@ -58,7 +58,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest]
-        rust: [beta]
+        rust: [stable]
 
     env:
       RUSTFLAGS: "-D warnings"
