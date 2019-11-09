@@ -53,10 +53,6 @@ Tonic uses `rustfmt` to tidy up the code it generates, so we'll make sure it's i
 $ rustup component add rustfmt
 ```
 
-**Note** Prior to rust's 1.39 release, Tonic may be pinned to a specific toolchain version. Running
-the above command may first download and install a different toolchain. Check the project's [readme]
-for the latest requirements.
-
 Run the server
 ```shell
 $ cargo run --bin routeguide-server

@@ -37,13 +37,13 @@ may be a good resource as it shows examples of many of the gRPC features.
 
 ### Rust Version
 
-`tonic` currently works on rust `1.39-beta` and above as it requires support for the `async_await`
-feature. To install the beta simply follow the commands below:
+`tonic` currently works on rust `1.39` and above as it requires support for the `async_await`
+feature.
 
 ```bash
-$ rustup install beta
-$ rustup component add rustfmt --toolchain beta
-$ cargo +beta build
+$ rustup update
+$ rustup component add rustfmt
+$ cargo build
 ```
 
 ### Tutorials
