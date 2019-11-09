@@ -14,7 +14,7 @@ path = "src/bin/server.rs"
 
 [dependencies]
 tokio = "=0.2.0-alpha.6"
-tonic = { path = "../tonic", features = ["openssl"] }
+tonic = { path = "../tonic", features = ["rustls"] }
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"

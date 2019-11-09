@@ -26,7 +26,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
 
         let identity = Identity::from_pem(cert, key);
-        builder.tls_config(ServerTlsConfig::with_openssl().identity(identity));
+        builder.tls_config(ServerTlsConfig::with_rustls().identity(identity));
     }
 
     builder.interceptor_fn(|svc, req| {
