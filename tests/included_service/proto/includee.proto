@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package includee;
+
+service Included {
+  rpc SomeMethod(SomeRequest) returns (SomeResponse) {}
+}
+
+message SomeRequest {}
+
+message SomeResponse {}

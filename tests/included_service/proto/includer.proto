@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package includer;
+
+message TopMessage {}
+
+service TopService {
+  rpc TopMethod(TopMessage) returns (TopMessage) {}
+}
+
+import "includee.proto";
