@@ -22,8 +22,14 @@
 //! for [`tonic-build`]. Enabled by default.
 //! - `openssl`: Enables the `openssl` based tls options for the `transport` feature`. Not
 //! enabled by default.
+//! - `openssl-roots`: Adds system trust roots to `openssl`-based gRPC clients using the
+//! `openssl-probe` crate. Not enabled by default. `openssl` must be enabled to use
+//! `openssl-roots`.
 //! - `rustls`: Enables the `ruslts` based tls options for the `transport` feature`. Not
 //! enabled by default.
+//! - `rustls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
+//! `rustls-native-certs` crate. Not enabled by default. `rustls` must be enabled to use
+//! `openssl-roots`.
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //!
 //! # Structure

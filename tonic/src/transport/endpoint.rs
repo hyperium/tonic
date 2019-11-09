@@ -259,18 +259,27 @@ impl ClientTlsConfig {
     }
 
     /// Sets the domain name against which to verify the server's TLS certificate.
+    ///
+    /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
+    /// Rustls or OpenSSL respectively.
     pub fn domain_name(&mut self, domain_name: impl Into<String>) -> &mut Self {
         self.domain = Some(domain_name.into());
         self
     }
 
     /// Sets the CA Certificate against which to verify the server's TLS certificate.
+    ///
+    /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
+    /// Rustls or OpenSSL respectively.
     pub fn ca_certificate(&mut self, ca_certificate: Certificate) -> &mut Self {
         self.cert = Some(ca_certificate);
         self
     }
 
     /// Sets the client identity to present to the server.
+    ///
+    /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
+    /// Rustls or OpenSSL respectively.
     pub fn identity(&mut self, identity: Identity) -> &mut Self {
         self.identity = Some(identity);
         self
