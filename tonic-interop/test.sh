@@ -3,16 +3,19 @@
 set -eu
 set -o pipefail
 
+echo "Running for OS: ${OSTYPE}"
+
 case "$OSTYPE" in
-  darwin*)  OS="darwin" ;;
-  linux*)   OS="linux" ;;
+  darwin*)  OS="darwin"; EXT="" ;;
+  linux*)   OS="linux"; EXT="" ;;
+  msys*) OS="windows"; EXT=".exe" ;;
   *)        exit 2 ;;
 esac
 
 cargo build -p tonic-interop --bins
 
 ARG="${1:-""}"
-SERVER="tonic-interop/bin/server_${OS}_amd64"
+SERVER="tonic-interop/bin/server_${OS}_amd64${EXT}"
 
 # TLS_CA="tonic-interop/data/ca.pem"
 TLS_CRT="tonic-interop/data/server1.pem"
