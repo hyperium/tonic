@@ -21,34 +21,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let addr = "127.0.0.1:10000".parse().unwrap();
 
-    let mut builder = Server::builder();
-
-    if matches.use_tls {
-        #[cfg(not(any(feature = "tls_rustls", feature = "tls_openssl")))]
-        {
-            panic!("No TLS libary feature selected");
-        }
-
-        #[cfg(feature = "tls_rustls")]
-        {
-            let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
-            let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
-            let identity = Identity::from_pem(cert, key);
-
-            builder.tls_config(ServerTlsConfig::with_rustls().identity(identity));
-        }
-
-        #[cfg(feature = "tls_openssl")]
-        {
-            let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
-            let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
-            let identity = Identity::from_pem(cert, key);
-
-            builder.tls_config(ServerTlsConfig::with_openssl().identity(identity));
-        }
-    }
-
-    builder.interceptor_fn(|svc, req| {
+    let mut builder = Server::builder().interceptor_fn(|svc, req| {
         let echo_header = req
             .headers()
             .get("x-grpc-test-echo-initial")
@@ -75,6 +48,31 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
                 .map(BoxBody::new))
         }
     });
+
+    if matches.use_tls {
+        #[cfg(not(any(feature = "tls_rustls", feature = "tls_openssl")))]
+        {
+            panic!("No TLS library feature selected");
+        }
+
+        #[cfg(feature = "tls_rustls")]
+        {
+            let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
+            let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
+            let identity = Identity::from_pem(cert, key);
+
+            builder = builder.tls_config(ServerTlsConfig::with_rustls().identity(identity));
+        }
+
+        #[cfg(feature = "tls_openssl")]
+        {
+            let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
+            let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
+            let identity = Identity::from_pem(cert, key);
+
+            builder = builder.tls_config(ServerTlsConfig::with_openssl().identity(identity));
+        }
+    }
 
     let test_service = server::TestServiceServer::new(server::TestService::default());
     let unimplemented_service =

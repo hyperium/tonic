@@ -39,11 +39,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let tls = ServerTlsConfig::with_rustls()
         .identity(server_identity)
-        .client_ca_root(client_ca_cert)
-        .clone();
+        .client_ca_root(client_ca_cert);
 
     Server::builder()
-        .tls_config(&tls)
+        .tls_config(tls)
         .add_service(pb::server::EchoServer::new(server))
         .serve(addr)
         .await?;

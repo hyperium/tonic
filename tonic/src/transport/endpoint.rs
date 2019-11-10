@@ -76,9 +76,11 @@ impl Endpoint {
     /// # let mut builder = Endpoint::from_static("https://example.com");
     /// builder.timeout(Duration::from_secs(5));
     /// ```
-    pub fn timeout(&mut self, dur: Duration) -> &mut Self {
-        self.timeout = Some(dur);
-        self
+    pub fn timeout(self, dur: Duration) -> Self {
+        Endpoint {
+            timeout: Some(dur),
+            ..self
+        }
     }
 
     /// Apply a concurrency limit to each request.
@@ -88,9 +90,11 @@ impl Endpoint {
     /// # let mut builder = Endpoint::from_static("https://example.com");
     /// builder.concurrency_limit(256);
     /// ```
-    pub fn concurrency_limit(&mut self, limit: usize) -> &mut Self {
-        self.concurrency_limit = Some(limit);
-        self
+    pub fn concurrency_limit(self, limit: usize) -> Self {
+        Endpoint {
+            concurrency_limit: Some(limit),
+            ..self
+        }
     }
 
     /// Apply a rate limit to each request.
@@ -101,9 +105,11 @@ impl Endpoint {
     /// # let mut builder = Endpoint::from_static("https://example.com");
     /// builder.rate_limit(32, Duration::from_secs(1));
     /// ```
-    pub fn rate_limit(&mut self, limit: u64, duration: Duration) -> &mut Self {
-        self.rate_limit = Some((limit, duration));
-        self
+    pub fn rate_limit(self, limit: u64, duration: Duration) -> Self {
+        Endpoint {
+            rate_limit: Some((limit, duration)),
+            ..self
+        }
     }
 
     /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
@@ -112,33 +118,41 @@ impl Endpoint {
     /// Default is 65,535
     ///
     /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
-    pub fn initial_stream_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
-        self.init_stream_window_size = sz.into();
-        self
+    pub fn initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> Self {
+        Endpoint {
+            init_stream_window_size: sz.into(),
+            ..self
+        }
     }
 
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is 65,535
-    pub fn initial_connection_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
-        self.init_connection_window_size = sz.into();
-        self
+    pub fn initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> Self {
+        Endpoint {
+            init_connection_window_size: sz.into(),
+            ..self
+        }
     }
 
     /// Intercept outbound HTTP Request headers;
-    pub fn intercept_headers<F>(&mut self, f: F) -> &mut Self
+    pub fn intercept_headers<F>(self, f: F) -> Self
     where
         F: Fn(&mut http::HeaderMap) + Send + Sync + 'static,
     {
-        self.interceptor_headers = Some(Arc::new(f));
-        self
+        Endpoint {
+            interceptor_headers: Some(Arc::new(f)),
+            ..self
+        }
     }
 
     /// Configures TLS for the endpoint.
     #[cfg(feature = "tls")]
-    pub fn tls_config(&mut self, tls_config: &ClientTlsConfig) -> &mut Self {
-        self.tls = Some(tls_config.tls_connector(self.uri.clone()).unwrap());
-        self
+    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Self {
+        Endpoint {
+            tls: Some(tls_config.tls_connector(self.uri.clone()).unwrap()),
+            ..self
+        }
     }
 
     /// Create a channel from this config.
@@ -262,48 +276,55 @@ impl ClientTlsConfig {
     ///
     /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
     /// Rustls or OpenSSL respectively.
-    pub fn domain_name(&mut self, domain_name: impl Into<String>) -> &mut Self {
-        self.domain = Some(domain_name.into());
-        self
+    pub fn domain_name(self, domain_name: impl Into<String>) -> Self {
+        ClientTlsConfig {
+            domain: Some(domain_name.into()),
+            ..self
+        }
     }
 
     /// Sets the CA Certificate against which to verify the server's TLS certificate.
     ///
     /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
     /// Rustls or OpenSSL respectively.
-    pub fn ca_certificate(&mut self, ca_certificate: Certificate) -> &mut Self {
-        self.cert = Some(ca_certificate);
-        self
+    pub fn ca_certificate(self, ca_certificate: Certificate) -> Self {
+        ClientTlsConfig {
+            cert: Some(ca_certificate),
+            ..self
+        }
     }
 
     /// Sets the client identity to present to the server.
     ///
     /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
     /// Rustls or OpenSSL respectively.
-    pub fn identity(&mut self, identity: Identity) -> &mut Self {
-        self.identity = Some(identity);
-        self
+    pub fn identity(self, identity: Identity) -> Self {
+        ClientTlsConfig {
+            identity: Some(identity),
+            ..self
+        }
     }
 
     /// Use options specified by the given `SslConnector` to configure TLS.
     ///
     /// This overrides all other TLS options set via other means.
     #[cfg(feature = "openssl")]
-    pub fn openssl_connector(&mut self, connector: openssl1::ssl::SslConnector) -> &mut Self {
-        self.openssl_raw = Some(connector);
-        self
+    pub fn openssl_connector(self, connector: openssl1::ssl::SslConnector) -> Self {
+        ClientTlsConfig {
+            openssl_raw: Some(connector),
+            ..self
+        }
     }
 
     /// Use options specified by the given `ClientConfig` to configure TLS.
     ///
     /// This overrides all other TLS options set via other means.
     #[cfg(feature = "rustls")]
-    pub fn rustls_client_config(
-        &mut self,
-        config: tokio_rustls::rustls::ClientConfig,
-    ) -> &mut Self {
-        self.rustls_raw = Some(config);
-        self
+    pub fn rustls_client_config(self, config: tokio_rustls::rustls::ClientConfig) -> Self {
+        ClientTlsConfig {
+            rustls_raw: Some(config),
+            ..self
+        }
     }
 
     fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {

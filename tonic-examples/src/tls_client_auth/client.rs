@@ -16,11 +16,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tls = ClientTlsConfig::with_rustls()
         .domain_name("localhost")
         .ca_certificate(server_root_ca_cert)
-        .identity(client_identity)
-        .clone();
+        .identity(client_identity);
 
     let channel = Channel::from_static("http://[::1]:50051")
-        .tls_config(&tls)
+        .tls_config(tls)
         .connect()
         .await?;
 
