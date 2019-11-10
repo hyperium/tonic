@@ -8,7 +8,7 @@ name = "tonic"
 #   - README.md
 # - Update CHANGELOG.md.
 # - Create "v0.1.x" git tag.
-version = "0.1.0-alpha.5"
+version = "0.1.0-alpha.6"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 license = "MIT"
