@@ -38,6 +38,7 @@ impl Discover for ServiceList {
         loop {
             if let Some(connecting) = &mut self.connecting {
                 let svc = futures_core::ready!(Pin::new(connecting).poll(cx))?;
+                self.connecting = None;
 
                 let i = self.i;
                 self.i += 1;
