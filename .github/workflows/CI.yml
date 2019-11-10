@@ -29,7 +29,7 @@ jobs:
     - name: Check fmt
       run: cargo fmt -- --check
     - name: Check features
-      run: cargo hack check --all --each-feature --no-dev-deps
+      run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
 
@@ -53,11 +53,12 @@ jobs:
     - name: Run tests
       run: cargo test --all --all-features
 
-  interop:
+  interop-unix:
+    name: Interop Tests (Rustls & OpenSSL)
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
+        os: [ubuntu-latest, macOS-latest]
         rust: [stable]
 
     env:
@@ -67,12 +68,39 @@ jobs:
     - uses: hecrj/setup-rust-action@master
       with:
         rust-version: ${{ matrix.rust }}
-    - uses: actions/checkout@master
     - name: Install rustfmt
       run: rustup component add rustfmt
+    - uses: actions/checkout@master
     - name: Run interop tests
       run: ./tonic-interop/test.sh
       shell: bash
-    - name: Run interop tests with tls
-      run: ./tonic-interop/test.sh --use_tls
+    - name: Run interop tests with Rustls
+      run: ./tonic-interop/test.sh --use_tls tls_rustls
       shell: bash
+    - name: Run interop tests with OpenSSL
+      run: ./tonic-interop/test.sh --use_tls tls_openssl
+      shell: bash
+
+  interop-windows:
+    name: Interop Tests (Rustls)
+    runs-on: windows-latest
+    strategy:
+      matrix:
+        rust: [stable]
+
+    env:
+      RUSTFLAGS: "-D warnings"
+
+    steps:
+      - uses: hecrj/setup-rust-action@master
+        with:
+          rust-version: ${{ matrix.rust }}
+      - name: Install rustfmt
+        run: rustup component add rustfmt
+      - uses: actions/checkout@master
+      - name: Run interop tests
+        run: ./tonic-interop/test.sh
+        shell: bash
+      - name: Run interop tests with Rustls
+        run: ./tonic-interop/test.sh --use_tls tls_rustls
+        shell: bash

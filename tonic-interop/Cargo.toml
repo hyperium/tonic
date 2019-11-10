@@ -3,6 +3,12 @@ name = "tonic-interop"
 version = "0.1.0"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
+publish = false
+
+[features]
+default = ["tonic"]
+tls_openssl = ["tonic", "tonic/tls", "tonic/openssl"]
+tls_rustls = ["tonic", "tonic/tls", "tonic/rustls"]
 
 [[bin]]
 name = "client"
@@ -14,7 +20,7 @@ path = "src/bin/server.rs"
 
 [dependencies]
 tokio = "=0.2.0-alpha.6"
-tonic = { path = "../tonic", features = ["rustls"] }
+tonic = { path = "../tonic", optional = true }
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"

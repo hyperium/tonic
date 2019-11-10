@@ -2,7 +2,9 @@ use http::header::HeaderName;
 use structopt::StructOpt;
 use tonic::body::BoxBody;
 use tonic::client::GrpcService;
-use tonic::transport::{Identity, Server, ServerTlsConfig};
+use tonic::transport::Server;
+#[cfg(any(feature = "tls_rustls", feature = "tls_openssl"))]
+use tonic::transport::{Identity, ServerTlsConfig};
 use tonic_interop::{server, MergeTrailers};
 
 #[derive(StructOpt)]
@@ -22,11 +24,28 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut builder = Server::builder();
 
     if matches.use_tls {
-        let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
-        let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
+        #[cfg(not(any(feature = "tls_rustls", feature = "tls_openssl")))]
+        {
+            panic!("No TLS libary feature selected");
+        }
 
-        let identity = Identity::from_pem(cert, key);
-        builder.tls_config(ServerTlsConfig::with_rustls().identity(identity));
+        #[cfg(feature = "tls_rustls")]
+        {
+            let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
+            let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
+            let identity = Identity::from_pem(cert, key);
+
+            builder.tls_config(ServerTlsConfig::with_rustls().identity(identity));
+        }
+
+        #[cfg(feature = "tls_openssl")]
+        {
+            let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
+            let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
+            let identity = Identity::from_pem(cert, key);
+
+            builder.tls_config(ServerTlsConfig::with_openssl().identity(identity));
+        }
     }
 
     builder.interceptor_fn(|svc, req| {
