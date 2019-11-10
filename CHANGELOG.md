@@ -1,4 +1,17 @@
-# [0.1.0-alpha.5](https://github.com/hyperium/tonic/compare/v0.1.0-alpha.5...v0.1.0-alpha.5) (October 23, 2019)
+# [0.1.0-alpha.6](https://github.com/hyperium/tonic/compare/v0.1.0-alpha.5...v0.1.0-alpha.6) (November 10, 2019)
+
+### Bug Fixes
+
+* **build:** Prevent duplicated client/server generated code ([#121](https://github.com/hyperium/tonic/issues/121)) ([b02b4b2](https://github.com/hyperium/tonic/commit/b02b4b2))
+* **transport:** Load balance connecting panic ([#128](https://github.com/hyperium/tonic/issues/128)) ([23e7695](https://github.com/hyperium/tonic/commit/23e7695)), closes [#127](https://github.com/hyperium/tonic/issues/127)
+
+
+### Features
+
+* **transport:** Add system root anchors for TLS ([#114](https://github.com/hyperium/tonic/issues/114)) ([ac0e333](https://github.com/hyperium/tonic/commit/ac0e333)), closes [#101](https://github.com/hyperium/tonic/issues/101)
+* **transport:** Enable TCP_NODELAY. ([#120](https://github.com/hyperium/tonic/issues/120)) ([0299509](https://github.com/hyperium/tonic/commit/0299509))
+
+# [0.1.0-alpha.5](https://github.com/hyperium/tonic/compare/v0.1.0-alpha.4...v0.1.0-alpha.5) (October 23, 2019)
 
 ### Bug Fixes
 
