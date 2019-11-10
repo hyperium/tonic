@@ -82,7 +82,7 @@ jobs:
       shell: bash
 
   interop-windows:
-    name: Interop Tests (Rustls)
+    name: Interop Tests (Rustls) (Windows)
     runs-on: windows-latest
     strategy:
       matrix:
