@@ -29,14 +29,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let tls_config = ClientTlsConfig::with_rustls()
         .ca_certificate(Certificate::from_pem(certs.as_slice()))
-        .domain_name("pubsub.googleapis.com")
-        .clone();
+        .domain_name("pubsub.googleapis.com");
 
     let channel = Channel::from_static(ENDPOINT)
         .intercept_headers(move |headers| {
             headers.insert("authorization", header_value.clone());
         })
-        .tls_config(&tls_config)
+        .tls_config(tls_config)
         .connect()
         .await?;
 

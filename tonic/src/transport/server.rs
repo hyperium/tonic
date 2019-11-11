@@ -83,9 +83,11 @@ impl Server {
 impl Server {
     /// Configure TLS for this server.
     #[cfg(feature = "tls")]
-    pub fn tls_config(&mut self, tls_config: &ServerTlsConfig) -> &mut Self {
-        self.tls = Some(tls_config.tls_acceptor().unwrap());
-        self
+    pub fn tls_config(self, tls_config: ServerTlsConfig) -> Self {
+        Server {
+            tls: Some(tls_config.tls_acceptor().unwrap()),
+            ..self
+        }
     }
 
     /// Set the concurrency limit applied to on requests inbound per connection.
@@ -96,9 +98,11 @@ impl Server {
     /// # let mut builder = Server::builder();
     /// builder.concurrency_limit_per_connection(32);
     /// ```
-    pub fn concurrency_limit_per_connection(&mut self, limit: usize) -> &mut Self {
-        self.concurrency_limit = Some(limit);
-        self
+    pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
+        Server {
+            concurrency_limit: Some(limit),
+            ..self
+        }
     }
 
     // FIXME: tower-timeout currentlly uses `From` instead of `Into` for the error
@@ -114,17 +118,21 @@ impl Server {
     /// Default is 65,535
     ///
     /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
-    pub fn initial_stream_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
-        self.init_stream_window_size = sz.into();
-        self
+    pub fn initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> Self {
+        Server {
+            init_stream_window_size: sz.into(),
+            ..self
+        }
     }
 
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is 65,535
-    pub fn initial_connection_window_size(&mut self, sz: impl Into<Option<u32>>) -> &mut Self {
-        self.init_connection_window_size = sz.into();
-        self
+    pub fn initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> Self {
+        Server {
+            init_connection_window_size: sz.into(),
+            ..self
+        }
     }
 
     /// Sets the [`SETTINGS_MAX_CONCURRENT_STREAMS`][spec] option for HTTP2
@@ -133,9 +141,11 @@ impl Server {
     /// Default is no limit (`None`).
     ///
     /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_MAX_CONCURRENT_STREAMS
-    pub fn max_concurrent_streams(&mut self, max: impl Into<Option<u32>>) -> &mut Self {
-        self.max_concurrent_streams = max.into();
-        self
+    pub fn max_concurrent_streams(self, max: impl Into<Option<u32>>) -> Self {
+        Server {
+            max_concurrent_streams: max.into(),
+            ..self
+        }
     }
 
     /// Intercept the execution of gRPC methods.
@@ -149,7 +159,7 @@ impl Server {
     ///     svc.call(req)
     /// });
     /// ```
-    pub fn interceptor_fn<F, Out>(&mut self, f: F) -> &mut Self
+    pub fn interceptor_fn<F, Out>(self, f: F) -> Self
     where
         F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,
         Out: Future<Output = Result<Response<BoxBody>, crate::Error>> + Send + 'static,
@@ -160,8 +170,11 @@ impl Server {
             tower::service_fn(move |req| f(&mut s, req))
         });
         let layer = Stack::new(interceptor, layer_fn(BoxService::new));
-        self.interceptor = Some(Arc::new(layer));
-        self
+
+        Server {
+            interceptor: Some(Arc::new(layer)),
+            ..self
+        }
     }
 
     /// Create a router with the `S` typed service as the first service.
@@ -366,24 +379,30 @@ impl ServerTlsConfig {
     }
 
     /// Sets the [`Identity`] of the server.
-    pub fn identity(&mut self, identity: Identity) -> &mut Self {
-        self.identity = Some(identity);
-        self
+    pub fn identity(self, identity: Identity) -> Self {
+        ServerTlsConfig {
+            identity: Some(identity),
+            ..self
+        }
     }
 
     /// Sets a certificate against which to validate client TLS certificates.
-    pub fn client_ca_root(&mut self, cert: Certificate) -> &mut Self {
-        self.client_ca_root = Some(cert);
-        self
+    pub fn client_ca_root(self, cert: Certificate) -> Self {
+        ServerTlsConfig {
+            client_ca_root: Some(cert),
+            ..self
+        }
     }
 
     /// Use options specified by the given `SslAcceptor` to configure TLS.
     ///
     /// This overrides all other TLS options set via other means.
     #[cfg(feature = "openssl")]
-    pub fn openssl_connector(&mut self, acceptor: openssl1::ssl::SslAcceptor) -> &mut Self {
-        self.openssl_raw = Some(acceptor);
-        self
+    pub fn openssl_connector(self, acceptor: openssl1::ssl::SslAcceptor) -> Self {
+        ServerTlsConfig {
+            openssl_raw: Some(acceptor),
+            ..self
+        }
     }
 
     /// Use options specified by the given `ServerConfig` to configure TLS.

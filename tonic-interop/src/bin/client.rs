@@ -30,20 +30,19 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     #[allow(unused_mut)]
     let mut endpoint = Endpoint::from_static("http://localhost:10000")
         .timeout(Duration::from_secs(5))
-        .concurrency_limit(30)
-        .clone();
+        .concurrency_limit(30);
 
     if matches.use_tls {
         #[cfg(not(any(feature = "tls_rustls", feature = "tls_openssl")))]
         {
-            panic!("No TLS libary feature selected");
+            panic!("No TLS library feature selected");
         }
 
         #[cfg(feature = "tls_rustls")]
         {
             let pem = tokio::fs::read("tonic-interop/data/ca.pem").await?;
             let ca = Certificate::from_pem(pem);
-            endpoint.tls_config(
+            endpoint = endpoint.tls_config(
                 ClientTlsConfig::with_rustls()
                     .ca_certificate(ca)
                     .domain_name("foo.test.google.fr"),
@@ -54,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         {
             let pem = tokio::fs::read("tonic-interop/data/ca.pem").await?;
             let ca = Certificate::from_pem(pem);
-            endpoint.tls_config(
+            endpoint = endpoint.tls_config(
                 ClientTlsConfig::with_openssl()
                     .ca_certificate(ca)
                     .domain_name("foo.test.google.fr"),
