@@ -5,7 +5,7 @@ pub mod hello_world {
 }
 
 use hello_world::{
-    server::{Greeter, GreeterServer},
+    greeter_server::{Greeter, GreeterServer},
     HelloReply, HelloRequest,
 };
 

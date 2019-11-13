@@ -2,7 +2,7 @@ pub mod api {
     tonic::include_proto!("google.pubsub.v1");
 }
 
-use api::{client::PublisherClient, ListTopicsRequest};
+use api::{publisher_client::PublisherClient, ListTopicsRequest};
 use http::header::HeaderValue;
 use tonic::{
     transport::{Certificate, Channel, ClientTlsConfig},

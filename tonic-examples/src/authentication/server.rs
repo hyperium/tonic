@@ -14,7 +14,7 @@ type Stream = VecDeque<Result<EchoResponse, Status>>;
 pub struct EchoServer;
 
 #[tonic::async_trait]
-impl pb::server::Echo for EchoServer {
+impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
@@ -78,7 +78,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
             }
         })
-        .add_service(pb::server::EchoServer::new(server))
+        .add_service(pb::echo_server::EchoServer::new(server))
         .serve(addr)
         .await?;
 
