@@ -449,12 +449,6 @@ impl From<std::io::Error> for Status {
     }
 }
 
-impl From<tokio::timer::timeout::Elapsed> for Status {
-    fn from(_: tokio::timer::timeout::Elapsed) -> Self {
-        Status::deadline_exceeded("request timed out")
-    }
-}
-
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
