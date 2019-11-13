@@ -197,6 +197,18 @@ pub struct OccupiedEntry<'a, VE: ValueEncoding> {
 // ===== impl MetadataMap =====
 
 impl MetadataMap {
+    // Headers reserved by the gRPC protocol.
+    pub(crate) const GRPC_RESERVED_HEADERS: [&'static str; 8] = [
+        "te",
+        "user-agent",
+        "content-type",
+        "grpc-timeout",
+        "grpc-message",
+        "grpc-encoding",
+        "grpc-message-type",
+        "grpc-status",
+    ];
+
     /// Create an empty `MetadataMap`.
     ///
     /// The map will be created without any capacity. This function will not
@@ -234,6 +246,29 @@ impl MetadataMap {
     /// assert_eq!(http_map.get("x-host").unwrap(), "example.com");
     /// ```
     pub fn into_headers(self) -> http::HeaderMap {
+        self.headers
+    }
+
+    /// Convert a MetadataMap into a HTTP HeaderMap
+    ///
+    /// The returned map excludes headers reserved by the gRPC protocol.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tonic::metadata::*;
+    /// let mut map = MetadataMap::new();
+    /// map.insert("grpc-timeout", "1S".parse().unwrap());
+    /// map.insert("x-host", "example.com".parse().unwrap());
+    ///
+    /// let http_map = map.into_sanitized_headers();
+    ///
+    /// assert!(http_map.get("grpc-timeout").is_none());
+    /// ```
+    pub fn into_sanitized_headers(mut self) -> http::HeaderMap {
+        for r in &Self::GRPC_RESERVED_HEADERS {
+            self.headers.remove(*r);
+        }
         self.headers
     }
 
