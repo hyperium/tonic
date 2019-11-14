@@ -1,0 +1,57 @@
+[bans]
+multiple-versions = "deny"
+deny = [
+    # color-backtrace is nice but brings in too many dependencies and that are often outdated, so not worth it for us.
+    { name = "color-backtrace" },
+
+    # dirs crate has a lot of dependencies and there are better alternatives
+    { name = "dirs" },
+    { name = "dirs-sys" },
+
+    # deprecated
+    { name = "quickersort" },
+
+    # term is not fully maintained, and termcolor is replacing it
+    { name = "term" },
+]
+skip = [
+    { name = "crossbeam-utils", version = "=0.6.6" },
+]
+skip-tree = [
+    { name = "rand", version = "=0.6.5" },
+    { name = "syn",  version = "=0.15.44" },
+]
+
+[licenses]
+unlicensed = "deny"
+# We want really high confidence when inferring licenses from text
+confidence-threshold = 0.92
+allow = [
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "MIT",
+    "OpenSSL",
+]
+
+[[licenses.clarify]]
+name = "ring"
+# SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
+# https://spdx.org/licenses/OpenSSL.html
+# ISC - Both BoringSSL and ring use this for their new files
+# MIT - "Files in third_party/ have their own licenses, as described therein. The MIT
+# license, for third_party/fiat, which, unlike other third_party directories, is
+# compiled into non-test libraries, is included below."
+# OpenSSL - Obviously
+expression = "ISC AND MIT AND OpenSSL"
+license-files = [
+    { path = "LICENSE", hash = 0xbd0eed23 },
+]
+
+[[licenses.clarify]]
+name = "webpki"
+expression = "ISC"
+license-files = [
+    { path = "LICENSE", hash = 0x001c7e6c },
+]
