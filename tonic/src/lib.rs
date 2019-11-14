@@ -29,7 +29,7 @@
 //! enabled by default.
 //! - `rustls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
 //! `rustls-native-certs` crate. Not enabled by default. `rustls` must be enabled to use
-//! `openssl-roots`.
+//! `rustls-roots`.
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //!
 //! # Structure
