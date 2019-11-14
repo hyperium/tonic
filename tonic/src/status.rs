@@ -8,8 +8,6 @@ const GRPC_STATUS_HEADER_CODE: &str = "grpc-status";
 const GRPC_STATUS_MESSAGE_HEADER: &str = "grpc-message";
 const GRPC_STATUS_DETAILS_HEADER: &str = "grpc-status-details-bin";
 
-// Standard status codes
-
 /// A gRPC status describing the result of an RPC call.
 /// Values can be created using the `new` function or one of the specialized
 /// associated functions.
