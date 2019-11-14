@@ -1,7 +1,6 @@
 use std::time::Duration;
 use structopt::{clap::arg_enum, StructOpt};
 use tonic::transport::Endpoint;
-#[cfg(any(feature = "tls_rustls", feature = "tls_openssl"))]
 use tonic::transport::{Certificate, ClientTlsConfig};
 use tonic_interop::client;
 
@@ -33,32 +32,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .concurrency_limit(30);
 
     if matches.use_tls {
-        #[cfg(not(any(feature = "tls_rustls", feature = "tls_openssl")))]
-        {
-            panic!("No TLS library feature selected");
-        }
-
-        #[cfg(feature = "tls_rustls")]
-        {
-            let pem = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-            let ca = Certificate::from_pem(pem);
-            endpoint = endpoint.tls_config(
-                ClientTlsConfig::with_rustls()
-                    .ca_certificate(ca)
-                    .domain_name("foo.test.google.fr"),
-            );
-        }
-
-        #[cfg(feature = "tls_openssl")]
-        {
-            let pem = tokio::fs::read("tonic-interop/data/ca.pem").await?;
-            let ca = Certificate::from_pem(pem);
-            endpoint = endpoint.tls_config(
-                ClientTlsConfig::with_openssl()
-                    .ca_certificate(ca)
-                    .domain_name("foo.test.google.fr"),
-            );
-        }
+        let pem = tokio::fs::read("tonic-interop/data/ca.pem").await?;
+        let ca = Certificate::from_pem(pem);
+        endpoint = endpoint.tls_config(
+            ClientTlsConfig::with_rustls()
+                .ca_certificate(ca)
+                .domain_name("foo.test.google.fr"),
+        );
     }
 
     let channel = endpoint.connect().await?;

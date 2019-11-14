@@ -6,11 +6,6 @@ edition = "2018"
 publish = false
 license = "MIT"
 
-[features]
-default = ["tonic"]
-tls_openssl = ["tonic", "tonic/tls", "tonic/openssl"]
-tls_rustls = ["tonic", "tonic/tls", "tonic/rustls"]
-
 [[bin]]
 name = "client"
 path = "src/bin/client.rs"
@@ -21,7 +16,7 @@ path = "src/bin/server.rs"
 
 [dependencies]
 tokio = "=0.2.0-alpha.6"
-tonic = { path = "../tonic", optional = true }
+tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"

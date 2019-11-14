@@ -32,11 +32,8 @@ transport = [
     "tower-balance",
     "tower-load",
 ]
-openssl = ["openssl1", "tokio-openssl", "tls"]
-rustls = ["tokio-rustls", "tls"]
-openssl-roots = ["openssl-probe"]
-rustls-roots = ["rustls-native-certs"]
-tls = []
+tls = ["tokio-rustls"]
+tls-roots = ["rustls-native-certs"]
 
 [[bench]]
 name = "bench_main"
@@ -71,11 +68,6 @@ tower = { version = "=0.3.0-alpha.2", optional = true}
 tower-make = "=0.3.0-alpha.2a"
 tower-balance =  { version = "=0.3.0-alpha.2", optional = true }
 tower-load = { version = "=0.3.0-alpha.2", optional = true }
-
-# openssl
-tokio-openssl = { version = "=0.4.0-alpha.6", optional = true }
-openssl1 = { package = "openssl", version = "0.10", optional = true }
-openssl-probe = { version = "0.1", optional = true }
 
 # rustls
 tokio-rustls = { version = "=0.12.0-alpha.5", optional = true }
