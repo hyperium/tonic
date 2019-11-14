@@ -249,23 +249,7 @@ impl MetadataMap {
         self.headers
     }
 
-    /// Convert a MetadataMap into a HTTP HeaderMap
-    ///
-    /// The returned map excludes headers reserved by the gRPC protocol.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use tonic::metadata::*;
-    /// let mut map = MetadataMap::new();
-    /// map.insert("grpc-timeout", "1S".parse().unwrap());
-    /// map.insert("x-host", "example.com".parse().unwrap());
-    ///
-    /// let http_map = map.into_sanitized_headers();
-    ///
-    /// assert!(http_map.get("grpc-timeout").is_none());
-    /// ```
-    pub fn into_sanitized_headers(mut self) -> http::HeaderMap {
+    pub(crate) fn into_sanitized_headers(mut self) -> http::HeaderMap {
         for r in &Self::GRPC_RESERVED_HEADERS {
             self.headers.remove(*r);
         }
