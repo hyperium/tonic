@@ -9,6 +9,7 @@ const GRPC_STATUS_MESSAGE_HEADER: &str = "grpc-message";
 const GRPC_STATUS_DETAILS_HEADER: &str = "grpc-status-details-bin";
 
 /// A gRPC status describing the result of an RPC call.
+///
 /// Values can be created using the `new` function or one of the specialized
 /// associated functions.
 /// ```rust
@@ -115,7 +116,7 @@ impl Status {
     }
 
     /// Unknown error. An example of where this error may be returned is if a
-    /// Status value received from another address space belongs to an error-space
+    /// `Status` value received from another address space belongs to an error-space
     /// that is not known in this address space. Also errors raised by APIs that
     /// do not return enough error information may be converted to this error.
     pub fn unknown(message: impl Into<String>) -> Status {
