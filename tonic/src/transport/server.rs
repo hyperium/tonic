@@ -2,11 +2,7 @@
 
 use super::service::{layer_fn, BoxedIo, Or, Routes, ServiceBuilderExt};
 #[cfg(feature = "tls")]
-use super::{
-    service::TlsAcceptor,
-    tls::{Identity, TlsProvider},
-    Certificate,
-};
+use super::{service::TlsAcceptor, tls::Identity, Certificate};
 use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{future, ready, try_future::MapErr, TryFutureExt, TryStreamExt};
@@ -332,48 +328,25 @@ impl fmt::Debug for Server {
 #[cfg(feature = "tls")]
 #[derive(Clone)]
 pub struct ServerTlsConfig {
-    provider: TlsProvider,
     identity: Option<Identity>,
     client_ca_root: Option<Certificate>,
-    #[cfg(feature = "openssl")]
-    openssl_raw: Option<openssl1::ssl::SslAcceptor>,
-    #[cfg(feature = "rustls")]
     rustls_raw: Option<tokio_rustls::rustls::ServerConfig>,
 }
 
 #[cfg(feature = "tls")]
 impl fmt::Debug for ServerTlsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServerTlsConfig")
-            .field("provider", &self.provider)
-            .finish()
+        f.debug_struct("ServerTlsConfig").finish()
     }
 }
 
 #[cfg(feature = "tls")]
 impl ServerTlsConfig {
-    /// Creates a new `ServerTlsConfig` using OpenSSL.
-    #[cfg(feature = "openssl")]
-    pub fn with_openssl() -> Self {
-        Self::new(TlsProvider::OpenSsl)
-    }
-
-    /// Creates a new `ServerTlsConfig` using Rustls.
-    #[cfg(feature = "rustls")]
+    /// Creates a new `ServerTlsConfig`.
     pub fn with_rustls() -> Self {
-        Self::new(TlsProvider::Rustls)
-    }
-
-    /// Creates a new `ServerTlsConfig` backed by the specified provider. Enable the `openssl` or
-    /// `rustls` features of the `tonic` crate to use OpenSSL or Rustls respectively.
-    fn new(provider: TlsProvider) -> Self {
         ServerTlsConfig {
-            provider,
             identity: None,
             client_ca_root: None,
-            #[cfg(feature = "openssl")]
-            openssl_raw: None,
-            #[cfg(feature = "rustls")]
             rustls_raw: None,
         }
     }
@@ -394,21 +367,9 @@ impl ServerTlsConfig {
         }
     }
 
-    /// Use options specified by the given `SslAcceptor` to configure TLS.
-    ///
-    /// This overrides all other TLS options set via other means.
-    #[cfg(feature = "openssl")]
-    pub fn openssl_connector(self, acceptor: openssl1::ssl::SslAcceptor) -> Self {
-        ServerTlsConfig {
-            openssl_raw: Some(acceptor),
-            ..self
-        }
-    }
-
     /// Use options specified by the given `ServerConfig` to configure TLS.
     ///
     /// This overrides all other TLS options set via other means.
-    #[cfg(feature = "rustls")]
     pub fn rustls_server_config(
         &mut self,
         config: tokio_rustls::rustls::ServerConfig,
@@ -418,23 +379,12 @@ impl ServerTlsConfig {
     }
 
     fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::Error> {
-        match self.provider {
-            #[cfg(feature = "openssl")]
-            TlsProvider::OpenSsl => match &self.openssl_raw {
-                None => TlsAcceptor::new_with_openssl_identity(
-                    self.identity.clone().unwrap(),
-                    self.client_ca_root.clone(),
-                ),
-                Some(acceptor) => TlsAcceptor::new_with_openssl_raw(acceptor.clone()),
-            },
-            #[cfg(feature = "rustls")]
-            TlsProvider::Rustls => match &self.rustls_raw {
-                None => TlsAcceptor::new_with_rustls_identity(
-                    self.identity.clone().unwrap(),
-                    self.client_ca_root.clone(),
-                ),
-                Some(config) => TlsAcceptor::new_with_rustls_raw(config.clone()),
-            },
+        match &self.rustls_raw {
+            None => TlsAcceptor::new_with_rustls_identity(
+                self.identity.clone().unwrap(),
+                self.client_ca_root.clone(),
+            ),
+            Some(config) => TlsAcceptor::new_with_rustls_raw(config.clone()),
         }
     }
 }

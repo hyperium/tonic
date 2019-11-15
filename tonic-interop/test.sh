@@ -15,15 +15,8 @@ case "$OSTYPE" in
 esac
 
 ARG="${1:-""}"
-TLS_PROVIDER="${2:-""}"
 
-if [[ -n "${TLS_PROVIDER}" ]] ; then
-  FEATURES="--features ${TLS_PROVIDER}"
-else
-  FEATURES=
-fi
-
-(cd tonic-interop && cargo build --bins ${FEATURES})
+(cd tonic-interop && cargo build --bins)
 
 SERVER="tonic-interop/bin/server_${OS}_amd64${EXT}"
 

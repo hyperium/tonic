@@ -67,7 +67,7 @@ name = "gcp-client"
 path = "src/gcp/client.rs"
 
 [dependencies]
-tonic = { path = "../tonic", features = ["rustls"] }
+tonic = { path = "../tonic", features = ["tls"] }
 bytes = "0.4"
 prost = "0.5"
 

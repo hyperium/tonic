@@ -20,16 +20,11 @@
 //! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //! for [`tonic-build`]. Enabled by default.
-//! - `openssl`: Enables the `openssl` based tls options for the `transport` feature`. Not
+//! - `tls`: Enables the `ruslts` based TLS options for the `transport` feature`. Not
 //! enabled by default.
-//! - `openssl-roots`: Adds system trust roots to `openssl`-based gRPC clients using the
-//! `openssl-probe` crate. Not enabled by default. `openssl` must be enabled to use
-//! `openssl-roots`.
-//! - `rustls`: Enables the `ruslts` based tls options for the `transport` feature`. Not
-//! enabled by default.
-//! - `rustls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
-//! `rustls-native-certs` crate. Not enabled by default. `rustls` must be enabled to use
-//! `rustls-roots`.
+//! - `tls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
+//! `rustls-native-certs` crate. Not enabled by default. `tls` must be enabled to use
+//! `tls-roots`.
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //!
 //! # Structure
@@ -48,8 +43,8 @@
 //! and [`Server`]. These implementations are built on top of [`tokio`], [`hyper`] and [`tower`].
 //! It also provides many of the features that the core gRPC libraries provide such as load balancing,
 //! tls, timeouts, and many more. This implementation can also be used as a reference implementation
-//! to build even more feature rich clients and servers. This module also provides the ability to choose
-//! between [`rustls`] and [`openssl`] for the tls backend.
+//! to build even more feature rich clients and servers. This module also provides the ability to
+//! enable TLS using [`rustls`], via the `tls` feature flag.
 //!
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
@@ -63,7 +58,6 @@
 //! [`Channel`]: transport/struct.Channel.html
 //! [`Server`]: transport/struct.Server.html
 //! [`rustls`]: https://docs.rs/rustls
-//! [`openssl`]: https://www.openssl.org
 //! [`client`]: client/index.html
 //! [`transport`]: transport/index.html
 

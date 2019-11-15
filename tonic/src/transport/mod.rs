@@ -1,13 +1,13 @@
 //! Batteries included server and client.
 //!
 //! This module provides a set of batteries included, fully featured and
-//! fast set of HTTP/2 server and client's. These components each provide either an
-//! `openssl` or `rustls` tls backend when the respective feature flags are enabled.
-//!They also provide may configurable knobs that can be used to tune how they work.
+//! fast set of HTTP/2 server and client's. These components each provide a or
+//! `rustls` tls backend when the respective feature flag is enabled, and
+//! provides builders to configure transport behavior.
 //!
 //! # Features
 //!
-//! - TLS support via either [OpenSSL] or [rustls].
+//! - TLS support via [rustls].
 //! - Load balancing
 //! - Timeouts
 //! - Concurrency Limits
@@ -89,7 +89,6 @@
 //! # }
 //! ```
 //!
-//! [OpenSSL]: https://www.openssl.org/
 //! [rustls]: https://docs.rs/rustls/0.16.0/rustls/
 
 pub mod channel;

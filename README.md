@@ -25,7 +25,7 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 - Bi-directional streaming
 - High performance async io
 - Interoperability
-- TLS backed via either [`openssl`] or [`rustls`]
+- TLS backed by [`rustls`]
 - Load balancing
 - Custom metadata
 - Authentication
@@ -97,7 +97,6 @@ terms or conditions.
 [`prost`]: https://github.com/danburkert/prost
 [`protobuf`]: https://developers.google.com/protocol-buffers
 [`rustls`]: https://github.com/ctz/rustls
-[`openssl`]: https://www.openssl.org/
 [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples
 [`tonic-interop`]: https://github.com/hyperium/tonic/tree/master/tonic-interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/tonic-examples
