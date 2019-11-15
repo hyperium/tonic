@@ -72,7 +72,7 @@ impl<T> Response<T> {
         let mut res = http::Response::new(self.message);
 
         *res.version_mut() = http::Version::HTTP_2;
-        *res.headers_mut() = self.metadata.into_headers();
+        *res.headers_mut() = self.metadata.into_sanitized_headers();
 
         res
     }
@@ -87,5 +87,24 @@ impl<T> Response<T> {
             metadata: self.metadata,
             message,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::metadata::MetadataValue;
+
+    #[test]
+    fn reserved_headers_are_excluded() {
+        let mut r = Response::new(1);
+
+        for header in &MetadataMap::GRPC_RESERVED_HEADERS {
+            r.metadata_mut()
+                .insert(*header, MetadataValue::from_static("invalid"));
+        }
+
+        let http_response = r.into_http();
+        assert!(http_response.headers().is_empty());
     }
 }

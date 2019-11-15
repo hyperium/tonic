@@ -149,7 +149,7 @@ impl<T> Request<T> {
         *request.version_mut() = http::Version::HTTP_2;
         *request.method_mut() = http::Method::POST;
         *request.uri_mut() = uri;
-        *request.headers_mut() = self.metadata.into_headers();
+        *request.headers_mut() = self.metadata.into_sanitized_headers();
 
         request
     }
@@ -208,4 +208,24 @@ impl<T> sealed::Sealed for T {}
 
 mod sealed {
     pub trait Sealed {}
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::metadata::MetadataValue;
+    use http::Uri;
+
+    #[test]
+    fn reserved_headers_are_excluded() {
+        let mut r = Request::new(1);
+
+        for header in &MetadataMap::GRPC_RESERVED_HEADERS {
+            r.metadata_mut()
+                .insert(*header, MetadataValue::from_static("invalid"));
+        }
+
+        let http_request = r.into_http(Uri::default());
+        assert!(http_request.headers().is_empty());
+    }
 }
