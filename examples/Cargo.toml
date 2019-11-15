@@ -103,7 +103,7 @@ name = "hyper-warp-server"
 path = "src/hyper_warp/server.rs"
 
 [dependencies]
-tonic = { path = "../tonic", features = ["tls"] }
+tonic = { path = "../tonic", features = ["tls", "data-prost"] }
 prost = "0.6"
 tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
@@ -128,4 +128,4 @@ http-body = "0.3"
 pin-project = "0.4"
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build" }
+tonic-build = { path = "../tonic-build", features = ["prost"] }

@@ -6,18 +6,18 @@
 mod buffer;
 mod decode;
 mod encode;
-#[cfg(feature = "prost")]
+#[cfg(feature = "data-prost")]
 mod prost;
 
-#[cfg(test)]
-mod tests;
+#[cfg(all(test, feature = "data-prost"))]
+mod prost_tests;
 
 use std::io;
 
 pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
-#[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
+#[cfg(feature = "data-prost")]
+#[cfg_attr(docsrs, doc(cfg(feature = "data-prost")))]
 pub use self::prost::ProstCodec;
 use crate::Status;
 pub use buffer::{DecodeBuf, EncodeBuf};
