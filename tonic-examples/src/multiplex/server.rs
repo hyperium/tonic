@@ -1,5 +1,5 @@
-use std::collections::VecDeque;
 use tonic::{transport::Server, Request, Response, Status};
+use tonic_examples::ResponseStream;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -64,6 +64,6 @@ impl Echo for MyEcho {
         Ok(Response::new(EchoResponse { message }))
     }
 
-    type ServerStreamingEchoStream = VecDeque<Result<EchoResponse, Status>>;
-    type BidirectionalStreamingEchoStream = VecDeque<Result<EchoResponse, Status>>;
+    type ServerStreamingEchoStream = ResponseStream<Result<EchoResponse, Status>>;
+    type BidirectionalStreamingEchoStream = ResponseStream<Result<EchoResponse, Status>>;
 }

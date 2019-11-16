@@ -2,14 +2,13 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use std::collections::VecDeque;
-
 use pb::{EchoRequest, EchoResponse};
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status};
+use tonic_examples::ResponseStream;
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type Stream = VecDeque<Result<EchoResponse, Status>>;
+type Stream = ResponseStream<Result<EchoResponse, Status>>;
 
 #[derive(Default)]
 pub struct EchoServer;

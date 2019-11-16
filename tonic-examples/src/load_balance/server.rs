@@ -3,12 +3,13 @@ pub mod pb {
 }
 
 use pb::{EchoRequest, EchoResponse};
-use std::{collections::VecDeque, net::SocketAddr};
+use std::net::SocketAddr;
 use tokio::sync::mpsc;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
+use tonic_examples::ResponseStream;
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type Stream = VecDeque<Result<EchoResponse, Status>>;
+type Stream = ResponseStream<Result<EchoResponse, Status>>;
 
 #[derive(Debug)]
 pub struct EchoServer {
