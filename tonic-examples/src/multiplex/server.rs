@@ -1,5 +1,6 @@
+use futures::Stream;
+use std::pin::Pin;
 use tonic::{transport::Server, Request, Response, Status};
-use tonic_examples::ResponseStream;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -18,6 +19,8 @@ use echo::{
     server::{Echo, EchoServer},
     EchoRequest, EchoResponse,
 };
+
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -64,6 +67,6 @@ impl Echo for MyEcho {
         Ok(Response::new(EchoResponse { message }))
     }
 
-    type ServerStreamingEchoStream = ResponseStream<Result<EchoResponse, Status>>;
-    type BidirectionalStreamingEchoStream = ResponseStream<Result<EchoResponse, Status>>;
+    type ServerStreamingEchoStream = ResponseStream;
+    type BidirectionalStreamingEchoStream = ResponseStream;
 }

@@ -2,14 +2,16 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use pb::{EchoRequest, EchoResponse};
+use futures::Stream;
 use std::net::SocketAddr;
+use std::pin::Pin;
 use tokio::sync::mpsc;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
-use tonic_examples::ResponseStream;
+
+use pb::{EchoRequest, EchoResponse};
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type Stream = ResponseStream<Result<EchoResponse, Status>>;
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
 
 #[derive(Debug)]
 pub struct EchoServer {
@@ -24,7 +26,7 @@ impl pb::server::Echo for EchoServer {
         Ok(Response::new(EchoResponse { message }))
     }
 
-    type ServerStreamingEchoStream = Stream;
+    type ServerStreamingEchoStream = ResponseStream;
 
     async fn server_streaming_echo(
         &self,
@@ -40,7 +42,7 @@ impl pb::server::Echo for EchoServer {
         Err(Status::unimplemented("not implemented"))
     }
 
-    type BidirectionalStreamingEchoStream = Stream;
+    type BidirectionalStreamingEchoStream = ResponseStream;
 
     async fn bidirectional_streaming_echo(
         &self,
