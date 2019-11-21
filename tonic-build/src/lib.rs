@@ -246,7 +246,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         }
     }
 
-    fn finalize(&mut self, buf: &mut String) {
+    fn finalize_package(&mut self, buf: &mut String) {
         if self.builder.build_client && !self.clients.is_empty() {
             let clients = &self.clients;
 

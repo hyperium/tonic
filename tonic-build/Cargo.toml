@@ -16,7 +16,7 @@ keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
 
 
 [dependencies]
-prost-build = "0.5"
+prost-build = { git = "https://github.com/parasyte/prost.git", branch = "feature/defer-service-generator-finalize" }
 syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1.0"
