@@ -1,0 +1,15 @@
+[package]
+name = "complex_package_layout"
+version = "0.1.0"
+authors = ["Jay Oster <jay@kodewerx.org>"]
+edition = "2018"
+publish = false
+license = "MIT"
+
+[dependencies]
+bytes = "0.4"
+prost = "0.5"
+tonic = { path = "../../tonic" }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
