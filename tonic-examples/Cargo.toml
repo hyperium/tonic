@@ -80,7 +80,7 @@ tower = { git = "https://github.com/tower-rs/tower" }
 # Required for routeguide
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rand = "0.7.2"
+rand = "0.6"
 
 # Required for wellknown types
 prost-types = "0.5"
