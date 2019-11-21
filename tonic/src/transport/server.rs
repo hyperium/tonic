@@ -56,6 +56,7 @@ pub struct Server {
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
+    tcp_nodelay: bool,
 }
 
 /// A stack based `Service` router.
@@ -77,7 +78,10 @@ pub trait ServiceName {
 impl Server {
     /// Create a new server builder that can configure a [`Server`].
     pub fn builder() -> Self {
-        Default::default()
+        Server {
+            tcp_nodelay: true,
+            ..Default::default()
+        }
     }
 }
 
@@ -164,6 +168,14 @@ impl Server {
         }
     }
 
+    /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    pub fn tcp_nodelay(self, enabled: bool) -> Self {
+        Server {
+            tcp_nodelay: enabled,
+            ..self
+        }
+    }
+
     /// Intercept the execution of gRPC methods.
     ///
     /// ```
@@ -221,12 +233,13 @@ impl Server {
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
-        let tcp_keepalive = self.tcp_keepalive;
         // let timeout = self.timeout.clone();
 
         let incoming = hyper::server::accept::from_stream::<_, _, crate::Error>(
             async_stream::try_stream! {
-                let mut tcp = TcpIncoming::bind(addr, tcp_keepalive)?;
+                let mut tcp = TcpIncoming::bind(addr)?
+                    .set_nodelay(self.tcp_nodelay)
+                    .set_keepalive(self.tcp_keepalive);
 
                 while let Some(stream) = tcp.try_next().await? {
                     #[cfg(feature = "tls")]
@@ -418,12 +431,19 @@ struct TcpIncoming {
 }
 
 impl TcpIncoming {
-    fn bind(addr: SocketAddr, tcp_keepalive: Option<Duration>) -> Result<Self, crate::Error> {
-        let mut inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
-        inner.set_nodelay(true);
-        inner.set_keepalive(tcp_keepalive);
-
+    fn bind(addr: SocketAddr) -> Result<Self, crate::Error> {
+        let inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
         Ok(Self { inner })
+    }
+
+    fn set_nodelay(mut self, enabled: bool) -> Self {
+        self.inner.set_nodelay(enabled);
+        self
+    }
+
+    fn set_keepalive(mut self, tcp_keepalive: Option<Duration>) -> Self {
+        self.inner.set_keepalive(tcp_keepalive);
+        self
     }
 }
 
