@@ -157,7 +157,54 @@ impl Endpoint {
 
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, super::Error> {
-        Channel::connect(self.clone()).await
+        // Backwards API compatibility.
+        // Uses TCP if the TLS feature is not enabled, and TLS otherwise.
+
+        #[cfg(feature = "tls")]
+        let connector = super::service::connector(self.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = super::service::connector();
+
+        self.connect_with_connector(connector).await
+    }
+
+    /// Create a channel using a custom connector.
+    ///
+    /// The [`tower_make::MakeConnection`] requirement is an alias for `tower::Service<Uri, Response = AsyncRead +
+    /// Async Write>` - for example, a TCP stream as in [`Endpoint::connect`] above.
+    ///
+    /// # Example
+    /// ```rust
+    /// use hyper::client::connect::HttpConnector;
+    /// use tonic::transport::Endpoint;
+    ///
+    /// // note: This connector is the same as the default provided in `connect()`.
+    /// let mut connector = HttpConnector::new();
+    /// connector.enforce_http(false);
+    /// connector.set_nodelay(true);
+    ///
+    /// let endpoint = Endpoint::from_static("http://example.com");
+    /// endpoint.connect_with_connector(connector); //.await
+    /// ```
+    ///
+    /// # Example with non-default Connector
+    /// ```rust
+    /// // Use for unix-domain sockets
+    /// use hyper_unix_connector::UnixClient;
+    /// use tonic::transport::Endpoint;
+    ///
+    /// let endpoint = Endpoint::from_static("http://example.com");
+    /// endpoint.connect_with_connector(UnixClient); //.await
+    /// ```
+    pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, super::Error>
+    where
+        C: tower_make::MakeConnection<hyper::Uri> + Send + 'static,
+        C::Connection: Unpin + Send + 'static,
+        C::Future: Send + 'static,
+        C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+    {
+        Channel::connect(self.clone(), connector).await
     }
 }
 

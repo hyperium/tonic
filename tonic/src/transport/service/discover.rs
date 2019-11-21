@@ -9,24 +9,32 @@ use std::{
 };
 use tower::discover::{Change, Discover};
 
-pub(crate) struct ServiceList {
+pub(crate) struct ServiceList<C> {
     list: VecDeque<Endpoint>,
+    connector: C,
     connecting:
         Option<Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>>,
     i: usize,
 }
 
-impl ServiceList {
-    pub(crate) fn new(list: Vec<Endpoint>) -> Self {
+impl<C> ServiceList<C> {
+    pub(crate) fn new(list: Vec<Endpoint>, connector: C) -> Self {
         Self {
             list: list.into(),
+            connector,
             connecting: None,
             i: 0,
         }
     }
 }
 
-impl Discover for ServiceList {
+impl<C> Discover for ServiceList<C>
+where
+    C: tower_make::MakeConnection<hyper::Uri> + Send + Clone + Unpin + 'static,
+    C::Connection: Unpin + Send + 'static,
+    C::Future: Send + 'static,
+    C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+{
     type Key = usize;
     type Service = Connection;
     type Error = crate::Error;
@@ -49,7 +57,8 @@ impl Discover for ServiceList {
             }
 
             if let Some(endpoint) = self.list.pop_front() {
-                let fut = Connection::new(endpoint);
+                let c = &self.connector;
+                let fut = Connection::new(endpoint, c.clone());
                 self.connecting = Some(Box::pin(fut));
             } else {
                 return Poll::Pending;
@@ -58,7 +67,7 @@ impl Discover for ServiceList {
     }
 }
 
-impl fmt::Debug for ServiceList {
+impl<C> fmt::Debug for ServiceList<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServiceList")
             .field("list", &self.list)

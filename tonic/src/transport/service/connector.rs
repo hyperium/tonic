@@ -22,6 +22,7 @@ pub(crate) fn connector(tls: Option<TlsConnector>) -> Connector {
     Connector::new(tls)
 }
 
+#[derive(Clone)]
 pub(crate) struct Connector {
     http: HttpConnector,
     #[cfg(feature = "tls")]

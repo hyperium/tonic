@@ -1,4 +1,4 @@
-use super::{connector, layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin};
+use super::{layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin};
 use crate::{body::BoxBody, transport::Endpoint};
 use hyper::client::conn::Builder;
 use hyper::client::service::Connect as HyperConnect;
@@ -26,18 +26,22 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) async fn new(endpoint: Endpoint) -> Result<Self, crate::Error> {
-        #[cfg(feature = "tls")]
-        let connector = connector(endpoint.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = connector();
-
+    pub(crate) async fn new<C>(endpoint: Endpoint, connector: C) -> Result<Self, crate::Error>
+    where
+        C: tower_make::MakeConnection<hyper::Uri> + Send + 'static,
+        C::Connection: Unpin + Send + 'static,
+        C::Future: Send + 'static,
+        C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+    {
         let settings = Builder::new()
             .http2_initial_stream_window_size(endpoint.init_stream_window_size)
             .http2_initial_connection_window_size(endpoint.init_connection_window_size)
             .http2_only(true)
             .clone();
+
+        let mut connector = HyperConnect::new(connector, settings);
+        let initial_conn = connector.call(endpoint.uri.clone()).await?;
+        let conn = Reconnect::new(initial_conn, connector, endpoint.uri.clone());
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
@@ -45,10 +49,6 @@ impl Connection {
             .optional_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
             .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
-
-        let mut connector = HyperConnect::new(connector, settings);
-        let initial_conn = connector.call(endpoint.uri.clone()).await?;
-        let conn = Reconnect::new(initial_conn, connector, endpoint.uri.clone());
 
         let inner = stack.layer(conn);
 
