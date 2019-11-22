@@ -29,6 +29,7 @@ pub struct Endpoint {
         Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
     pub(super) init_stream_window_size: Option<u32>,
     pub(super) init_connection_window_size: Option<u32>,
+    pub(super) tcp_keepalive: Option<Duration>,
 }
 
 impl Endpoint {
@@ -79,6 +80,21 @@ impl Endpoint {
     pub fn timeout(self, dur: Duration) -> Self {
         Endpoint {
             timeout: Some(dur),
+            ..self
+        }
+    }
+
+    /// Set whether TCP keepalive messages are enabled on accepted connections.
+    ///
+    /// If `None` is specified, keepalive is disabled, otherwise the duration
+    /// specified will be the time to remain idle before sending TCP keepalive
+    /// probes.
+    ///
+    /// Default is no keepalive (`None`)
+    ///
+    pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
+        Endpoint {
+            tcp_keepalive,
             ..self
         }
     }
@@ -174,6 +190,7 @@ impl From<Uri> for Endpoint {
             interceptor_headers: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
+            tcp_keepalive: None,
         }
     }
 }
