@@ -74,7 +74,7 @@ tokio-rustls = { version = "=0.12.0-alpha.5", optional = true }
 rustls-native-certs = { version = "0.1", optional = true }
 
 [dev-dependencies]
-hyper-unix-connector = "0.1.1"
+hyper-unix-connector = "0.1.2"
 static_assertions = "1.0"
 rand = "0.7.2"
 criterion = "0.3"
