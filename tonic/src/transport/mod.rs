@@ -107,7 +107,6 @@ pub use self::error::Error;
 pub use self::server::{Server, ServiceName};
 pub use self::tls::{Certificate, Identity};
 pub use hyper::Body;
-pub use tower_make::MakeConnection;
 
 #[cfg(feature = "tls")]
 pub use self::endpoint::ClientTlsConfig;

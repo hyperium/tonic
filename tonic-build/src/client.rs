@@ -67,7 +67,7 @@ fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
             /// connector.
             pub async fn connect_with_connector<C, D>(dst: D, connector: C) -> Result<Self, tonic::transport::Error>
             where
-                C: tonic::transport::MakeConnection<http::Uri> + Send + 'static,
+                C: MakeConnection<http::Uri> + Send + 'static,
                 C::Connection: Unpin + Send + 'static,
                 C::Future: Send + 'static,
                 C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,

@@ -9,6 +9,8 @@ pub use std::future::Future;
 pub use std::pin::Pin;
 pub use std::sync::Arc;
 pub use std::task::{Context, Poll};
+#[cfg(feature = "transport")]
+pub use tower_make::MakeConnection;
 pub use tower_service::Service;
 pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub use crate::body::Body;
