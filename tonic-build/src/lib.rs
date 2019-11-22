@@ -61,6 +61,7 @@ use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenS
 use prost_build::{Config, Method};
 use quote::{ToTokens, TokenStreamExt};
 
+use std::collections::HashMap;
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
 use std::{
@@ -217,16 +218,16 @@ fn fmt(out_dir: &str) {
 
 struct ServiceGenerator {
     builder: Builder,
-    clients: TokenStream,
-    servers: TokenStream,
+    clients: HashMap<String, TokenStream>,
+    servers: HashMap<String, TokenStream>,
 }
 
 impl ServiceGenerator {
     fn new(builder: Builder) -> Self {
         ServiceGenerator {
             builder,
-            clients: TokenStream::default(),
-            servers: TokenStream::default(),
+            clients: HashMap::default(),
+            servers: HashMap::default(),
         }
     }
 }
@@ -237,18 +238,25 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 
         if self.builder.build_server {
             let server = server::generate(&service, path);
-            self.servers.extend(server);
+            self.servers
+                .entry(service.package.clone())
+                .or_insert_with(TokenStream::default)
+                .extend(server);
         }
 
         if self.builder.build_client {
             let client = client::generate(&service, path);
-            self.clients.extend(client);
+            self.clients
+                .entry(service.package)
+                .or_insert_with(TokenStream::default)
+                .extend(client);
         }
     }
 
-    fn finalize_package(&mut self, buf: &mut String) {
-        if self.builder.build_client && !self.clients.is_empty() {
-            let clients = &self.clients;
+    fn finalize_package(&mut self, package: &str, buf: &mut String) {
+        let clients = self.clients.get(package);
+        if self.builder.build_client && clients.is_some() {
+            let clients = clients.unwrap();
 
             let client_service = quote::quote! {
                 /// Generated client implementations.
@@ -263,11 +271,13 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let code = format!("{}", client_service);
             buf.push_str(&code);
 
-            self.clients = TokenStream::default();
+            self.clients
+                .insert(package.to_string(), TokenStream::default());
         }
 
-        if self.builder.build_server && !self.servers.is_empty() {
-            let servers = &self.servers;
+        let servers = self.servers.get(package);
+        if self.builder.build_server && servers.is_some() {
+            let servers = servers.unwrap();
 
             let server_service = quote::quote! {
                 /// Generated server implementations.
@@ -282,7 +292,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             let code = format!("{}", server_service);
             buf.push_str(&code);
 
-            self.servers = TokenStream::default();
+            self.servers
+                .insert(package.to_string(), TokenStream::default());
         }
     }
 }
