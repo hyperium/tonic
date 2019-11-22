@@ -1,6 +1,5 @@
 pub mod pb {
     tonic::include_proto!("includer");
-    tonic::include_proto!("includee");
 }
 
 // Ensure that an RPC service, defined before including a file that defines

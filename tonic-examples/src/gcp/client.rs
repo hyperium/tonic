@@ -1,6 +1,5 @@
 pub mod api {
     tonic::include_proto!("google.pubsub.v1");
-    tonic::include_proto!("google.api");
 }
 
 use api::{client::PublisherClient, ListTopicsRequest};
