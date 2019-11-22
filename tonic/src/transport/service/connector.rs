@@ -9,7 +9,6 @@ use std::task::{Context, Poll};
 use tower_make::MakeConnection;
 use tower_service::Service;
 
-#[cfg(not(feature = "tls"))]
 pub(crate) fn connector() -> HttpConnector {
     let mut http = HttpConnector::new();
     http.enforce_http(false);
@@ -18,7 +17,7 @@ pub(crate) fn connector() -> HttpConnector {
 }
 
 #[cfg(feature = "tls")]
-pub(crate) fn connector(tls: Option<TlsConnector>) -> Connector {
+pub(crate) fn tls_connector(tls: Option<TlsConnector>) -> Connector {
     Connector::new(tls)
 }
 
@@ -32,11 +31,10 @@ pub(crate) struct Connector {
 impl Connector {
     #[cfg(feature = "tls")]
     pub(crate) fn new(tls: Option<TlsConnector>) -> Self {
-        let mut http = HttpConnector::new();
-        http.enforce_http(false);
-        http.set_nodelay(true);
-
-        Self { http, tls }
+        Self {
+            http: connector(),
+            tls,
+        }
     }
 }
 

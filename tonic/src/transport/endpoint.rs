@@ -6,6 +6,7 @@ use super::{
 };
 use bytes::Bytes;
 use http::uri::{InvalidUriBytes, Uri};
+use hyper::client::connect::HttpConnector;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -17,13 +18,12 @@ use std::{
 ///
 /// This struct is used to build and configure HTTP/2 channels.
 #[derive(Clone)]
-pub struct Endpoint {
+pub struct Endpoint<C = HttpConnector> {
     pub(super) uri: Uri,
+    pub(super) connector: C,
     pub(super) timeout: Option<Duration>,
     pub(super) concurrency_limit: Option<usize>,
     pub(super) rate_limit: Option<(u64, Duration)>,
-    #[cfg(feature = "tls")]
-    pub(super) tls: Option<TlsConnector>,
     pub(super) buffer_size: Option<usize>,
     pub(super) interceptor_headers:
         Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
@@ -31,7 +31,7 @@ pub struct Endpoint {
     pub(super) init_connection_window_size: Option<u32>,
 }
 
-impl Endpoint {
+impl<C> Endpoint<C> {
     // FIXME: determine if we want to expose this or not. This is really
     // just used in codegen for a shortcut.
     #[doc(hidden)]
@@ -44,28 +44,6 @@ impl Endpoint {
             .try_into()
             .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e.into()))?;
         Ok(me)
-    }
-
-    /// Convert an `Endpoint` from a static string.
-    ///
-    /// ```
-    /// # use tonic::transport::Endpoint;
-    /// Endpoint::from_static("https://example.com");
-    /// ```
-    pub fn from_static(s: &'static str) -> Self {
-        let uri = Uri::from_static(s);
-        Self::from(uri)
-    }
-
-    /// Convert an `Endpoint` from shared bytes.
-    ///
-    /// ```
-    /// # use tonic::transport::Endpoint;
-    /// Endpoint::from_shared("https://example.com".to_string());
-    /// ```
-    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUriBytes> {
-        let uri = Uri::from_shared(s.into())?;
-        Ok(Self::from(uri))
     }
 
     /// Apply a timeout to each request.
@@ -147,32 +125,32 @@ impl Endpoint {
     }
 
     /// Configures TLS for the endpoint.
-    #[cfg(feature = "tls")]
-    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Self {
-        Endpoint {
-            tls: Some(tls_config.tls_connector(self.uri.clone()).unwrap()),
-            ..self
-        }
-    }
-
-    /// Create a channel from this config.
-    pub async fn connect(&self) -> Result<Channel, super::Error> {
-        // Backwards API compatibility.
-        // Uses TCP if the TLS feature is not enabled, and TLS otherwise.
-
-        #[cfg(feature = "tls")]
-        let connector = super::service::connector(self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = super::service::connector();
-
-        self.connect_with_connector(connector).await
-    }
-
-    /// Create a channel using a custom connector.
     ///
-    /// The [`tower_make::MakeConnection`] requirement is an alias for `tower::Service<Uri, Response = AsyncRead +
-    /// Async Write>` - for example, a TCP stream as in [`Endpoint::connect`] above.
+    /// Shortcut for configuring a TLS connector and calling [`Endpoint::connector`].
+    #[cfg(feature = "tls")]
+    pub fn tls_config(
+        self,
+        tls_config: ClientTlsConfig,
+    ) -> Endpoint<
+        impl tower_make::MakeConnection<
+                hyper::Uri,
+                Connection = impl Unpin + Send + 'static,
+                Future = impl Send + 'static,
+                Error = impl Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+            > + Clone,
+    > {
+        let tls_connector = tls_config.tls_connector(self.uri.clone()).unwrap();
+        let connector = super::service::tls_connector(Some(tls_connector));
+        self.connector(connector)
+    }
+}
+
+impl<C> Endpoint<C> {
+    /// Use a custom connector for the underlying channel.
+    ///
+    /// Calling [`Endpoint::connect`] requires the connector implement
+    /// the [`tower_make::MakeConnection`] requirement, which is an alias for `tower::Service<Uri, Response = AsyncRead +
+    /// Async Write>` - for example, a TCP stream for the default [`HttpConnector`].
     ///
     /// # Example
     /// ```rust
@@ -185,7 +163,7 @@ impl Endpoint {
     /// connector.set_nodelay(true);
     ///
     /// let endpoint = Endpoint::from_static("http://example.com");
-    /// endpoint.connect_with_connector(connector); //.await
+    /// endpoint.connector(connector).connect(); //.await
     /// ```
     ///
     /// # Example with non-default Connector
@@ -195,28 +173,69 @@ impl Endpoint {
     /// use tonic::transport::Endpoint;
     ///
     /// let endpoint = Endpoint::from_static("http://example.com");
-    /// endpoint.connect_with_connector(UnixClient); //.await
+    /// endpoint.connector(UnixClient).connect(); //.await
     /// ```
-    pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, super::Error>
-    where
-        C: tower_make::MakeConnection<hyper::Uri> + Send + 'static,
-        C::Connection: Unpin + Send + 'static,
-        C::Future: Send + 'static,
-        C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
-    {
-        Channel::connect(self.clone(), connector).await
+    pub fn connector<D>(self, connector: D) -> Endpoint<D> {
+        Endpoint {
+            uri: self.uri,
+            connector,
+            concurrency_limit: self.concurrency_limit,
+            rate_limit: self.rate_limit,
+            timeout: self.timeout,
+            buffer_size: self.buffer_size,
+            interceptor_headers: self.interceptor_headers,
+            init_stream_window_size: self.init_stream_window_size,
+            init_connection_window_size: self.init_connection_window_size,
+        }
     }
 }
 
-impl From<Uri> for Endpoint {
+impl<C> Endpoint<C>
+where
+    C: tower_make::MakeConnection<hyper::Uri> + Send + Clone + 'static,
+    C::Connection: Unpin + Send + 'static,
+    C::Future: Send + 'static,
+    C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+{
+    /// Create the channel.
+    pub async fn connect(&self) -> Result<Channel, super::Error> {
+        let e: Self = self.clone();
+        Channel::connect(e).await
+    }
+}
+
+impl Endpoint<HttpConnector> {
+    /// Convert an `Endpoint` from a static string.
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// Endpoint::from_static("https://example.com");
+    /// ```
+    pub fn from_static(s: &'static str) -> Self {
+        let uri = Uri::from_static(s);
+        Self::from(uri)
+    }
+
+    /// Convert an `Endpoint` from shared bytes.
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// Endpoint::from_shared("https://example.com".to_string());
+    /// ```
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUriBytes> {
+        let uri = Uri::from_shared(s.into())?;
+        Ok(Self::from(uri))
+    }
+}
+
+impl From<Uri> for Endpoint<HttpConnector> {
     fn from(uri: Uri) -> Self {
         Self {
             uri,
+            connector: super::service::connector(),
             concurrency_limit: None,
             rate_limit: None,
             timeout: None,
-            #[cfg(feature = "tls")]
-            tls: None,
             buffer_size: None,
             interceptor_headers: None,
             init_stream_window_size: None,
@@ -225,7 +244,7 @@ impl From<Uri> for Endpoint {
     }
 }
 
-impl TryFrom<Bytes> for Endpoint {
+impl TryFrom<Bytes> for Endpoint<HttpConnector> {
     type Error = InvalidUriBytes;
 
     fn try_from(t: Bytes) -> Result<Self, Self::Error> {
@@ -233,7 +252,7 @@ impl TryFrom<Bytes> for Endpoint {
     }
 }
 
-impl TryFrom<String> for Endpoint {
+impl TryFrom<String> for Endpoint<HttpConnector> {
     type Error = InvalidUriBytes;
 
     fn try_from(t: String) -> Result<Self, Self::Error> {
@@ -241,7 +260,7 @@ impl TryFrom<String> for Endpoint {
     }
 }
 
-impl TryFrom<&'static str> for Endpoint {
+impl TryFrom<&'static str> for Endpoint<HttpConnector> {
     type Error = Never;
 
     fn try_from(t: &'static str) -> Result<Self, Self::Error> {
@@ -260,7 +279,7 @@ impl std::fmt::Display for Never {
 
 impl std::error::Error for Never {}
 
-impl fmt::Debug for Endpoint {
+impl<C> fmt::Debug for Endpoint<C> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Endpoint").finish()
     }

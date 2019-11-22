@@ -10,18 +10,16 @@ use std::{
 use tower::discover::{Change, Discover};
 
 pub(crate) struct ServiceList<C> {
-    list: VecDeque<Endpoint>,
-    connector: C,
+    list: VecDeque<Endpoint<C>>,
     connecting:
         Option<Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>>,
     i: usize,
 }
 
 impl<C> ServiceList<C> {
-    pub(crate) fn new(list: Vec<Endpoint>, connector: C) -> Self {
+    pub(crate) fn new(list: Vec<Endpoint<C>>) -> Self {
         Self {
             list: list.into(),
-            connector,
             connecting: None,
             i: 0,
         }
@@ -57,8 +55,7 @@ where
             }
 
             if let Some(endpoint) = self.list.pop_front() {
-                let c = &self.connector;
-                let fut = Connection::new(endpoint, c.clone());
+                let fut = Connection::new(endpoint);
                 self.connecting = Some(Box::pin(fut));
             } else {
                 return Poll::Pending;

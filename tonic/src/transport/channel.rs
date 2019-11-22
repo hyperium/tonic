@@ -97,10 +97,7 @@ impl Channel {
     ///
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
-    pub fn balance_list_with_connector<C>(
-        list: impl Iterator<Item = Endpoint>,
-        connector: C,
-    ) -> Self
+    pub fn balance_list<C>(list: impl Iterator<Item = Endpoint<C>>) -> Self
     where
         C: tower_make::MakeConnection<hyper::Uri> + Send + Clone + Unpin + 'static,
         C::Connection: Unpin + Send + 'static,
@@ -120,34 +117,12 @@ impl Channel {
             .next()
             .and_then(|e| e.interceptor_headers.clone());
 
-        let discover = ServiceList::new(list, connector);
+        let discover = ServiceList::new(list);
 
         Self::balance(discover, buffer_size, interceptor_headers)
     }
 
-    /// Balance a list of [`Endpoint`]'s.
-    ///
-    /// This creates a [`Channel`] that will load balance accross all the
-    /// provided endpoints.
-    pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
-        // Backwards API compatibility.
-        // Uses TCP if the TLS feature is not enabled, and TLS otherwise.
-
-        let list = list.collect::<Vec<_>>();
-
-        #[cfg(feature = "tls")]
-        let connector = {
-            let tls_connector = list.iter().next().and_then(|e| e.tls.clone());
-            super::service::connector(tls_connector)
-        };
-
-        #[cfg(not(feature = "tls"))]
-        let connector = super::service::connector();
-
-        Channel::balance_list_with_connector(list.into_iter(), connector)
-    }
-
-    pub(crate) async fn connect<C>(endpoint: Endpoint, connector: C) -> Result<Self, super::Error>
+    pub(crate) async fn connect<C>(endpoint: Endpoint<C>) -> Result<Self, super::Error>
     where
         C: tower_make::MakeConnection<hyper::Uri> + Send + 'static,
         C::Connection: Unpin + Send + 'static,
@@ -157,7 +132,7 @@ impl Channel {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
         let interceptor_headers = endpoint.interceptor_headers.clone();
 
-        let svc = Connection::new(endpoint, connector)
+        let svc = Connection::new(endpoint)
             .await
             .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))?;
 

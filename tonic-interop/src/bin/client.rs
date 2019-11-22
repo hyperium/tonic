@@ -26,22 +26,24 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let test_cases = matches.test_case;
 
-    #[allow(unused_mut)]
-    let mut endpoint = Endpoint::from_static("http://localhost:10000")
+    let endpoint = Endpoint::from_static("http://localhost:10000")
         .timeout(Duration::from_secs(5))
         .concurrency_limit(30);
 
-    if matches.use_tls {
+    let channel = if matches.use_tls {
         let pem = tokio::fs::read("tonic-interop/data/ca.pem").await?;
         let ca = Certificate::from_pem(pem);
-        endpoint = endpoint.tls_config(
-            ClientTlsConfig::with_rustls()
-                .ca_certificate(ca)
-                .domain_name("foo.test.google.fr"),
-        );
-    }
-
-    let channel = endpoint.connect().await?;
+        endpoint
+            .tls_config(
+                ClientTlsConfig::with_rustls()
+                    .ca_certificate(ca)
+                    .domain_name("foo.test.google.fr"),
+            )
+            .connect()
+            .await?
+    } else {
+        endpoint.connect().await?
+    };
 
     let mut client = client::TestClient::new(channel.clone());
     let mut unimplemented_client = client::UnimplementedClient::new(channel);
