@@ -27,7 +27,7 @@ async-stream = "0.1.2"
 tower = "=0.3.0-alpha.2"
 http-body = "=0.2.0-alpha.3"
 
-console = "0.7"
+console = "0.9"
 structopt = "0.2"
 
 tracing = "0.1"
