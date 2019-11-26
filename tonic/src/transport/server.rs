@@ -6,7 +6,7 @@ use super::{service::TlsAcceptor, tls::Identity, Certificate};
 use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{future, ready, try_future::MapErr, TryFutureExt, TryStreamExt};
-use http::{Request, Response};
+use http::{HeaderValue, Request, Response};
 use hyper::{
     server::{accept::Accept, conn},
     Body,
@@ -29,6 +29,8 @@ use tower::{
 };
 #[cfg(feature = "tls")]
 use tracing::error;
+
+use tracing::{span, Id, Level};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
@@ -171,6 +173,24 @@ impl Server {
             interceptor: Some(Arc::new(layer)),
             ..self
         }
+    }
+
+    /// Setup propagation of trace parents requires a function that
+    /// can turn the `grpc-trace-bin` header into a parent span Id
+    pub fn propagate_trace_parents<F>(self, f: F) -> Self
+    where
+        F: Fn(&HeaderValue) -> Option<Id> + Send + Sync + 'static,
+    {
+        self.interceptor_fn(move |svc, req| {
+            if let Some(grpc_trace) = req.headers().get("grpc-trace-bin") {
+                let span_id = f(grpc_trace);
+                let root = span!(parent: span_id, Level::INFO, "request");
+                let _enter = root.enter();
+                svc.call(req)
+            } else {
+                svc.call(req)
+            }
+        })
     }
 
     /// Create a router with the `S` typed service as the first service.
