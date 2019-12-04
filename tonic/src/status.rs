@@ -325,7 +325,7 @@ impl Status {
                 .unwrap_or_else(|| Ok(String::new()));
             let details = header_map
                 .get(GRPC_STATUS_DETAILS_HEADER)
-                .map(|h| Bytes::from(h.as_bytes()))
+                .map(|h| Bytes::copy_from_slice(h.as_bytes()))
                 .unwrap_or_else(Bytes::new);
             match error_message {
                 Ok(message) => Status {
@@ -380,19 +380,19 @@ impl Status {
                     .to_string()
                     .into()
             } else {
-                Bytes::from(self.message().as_bytes())
+                Bytes::copy_from_slice(self.message().as_bytes())
             };
 
             header_map.insert(
                 GRPC_STATUS_MESSAGE_HEADER,
-                HeaderValue::from_shared(to_write).map_err(invalid_header_value_byte)?,
+                HeaderValue::from_maybe_shared(to_write).map_err(invalid_header_value_byte)?,
             );
         }
 
         if !self.details.is_empty() {
             header_map.insert(
                 GRPC_STATUS_DETAILS_HEADER,
-                HeaderValue::from_shared(self.details.clone())
+                HeaderValue::from_maybe_shared(self.details.clone())
                     .map_err(invalid_header_value_byte)?,
             );
         }

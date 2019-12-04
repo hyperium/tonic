@@ -1,9 +1,9 @@
 [workspace]
 members = [
     "tonic",
-    "tonic-build",
-    "tonic-examples",
-    "tonic-interop",
+    # "tonic-build",
+    # "tonic-examples",
+    # "tonic-interop",
 
     "tests/included_service",
     "tests/same_name",
