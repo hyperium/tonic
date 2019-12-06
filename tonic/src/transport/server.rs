@@ -14,6 +14,7 @@ use hyper::{
     server::{accept::Accept, conn},
     Body,
 };
+use std::time::Duration;
 use std::{
     fmt,
     future::Future,
@@ -54,6 +55,7 @@ pub struct Server {
     init_stream_window_size: Option<u32>,
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
+    tcp_keepalive: Option<Duration>,
 }
 
 /// A stack based `Service` router.
@@ -147,6 +149,21 @@ impl Server {
         }
     }
 
+    /// Set whether TCP keepalive messages are enabled on accepted connections.
+    ///
+    /// If `None` is specified, keepalive is disabled, otherwise the duration
+    /// specified will be the time to remain idle before sending TCP keepalive
+    /// probes.
+    ///
+    /// Default is no keepalive (`None`)
+    ///
+    pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
+        Server {
+            tcp_keepalive,
+            ..self
+        }
+    }
+
     /// Intercept the execution of gRPC methods.
     ///
     /// ```
@@ -204,11 +221,12 @@ impl Server {
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
+        let tcp_keepalive = self.tcp_keepalive;
         // let timeout = self.timeout.clone();
 
         let incoming = hyper::server::accept::from_stream::<_, _, crate::Error>(
             async_stream::try_stream! {
-                let mut tcp = TcpIncoming::bind(addr)?;
+                let mut tcp = TcpIncoming::bind(addr, tcp_keepalive)?;
 
                 while let Some(stream) = tcp.try_next().await? {
                     #[cfg(feature = "tls")]
@@ -400,9 +418,10 @@ struct TcpIncoming {
 }
 
 impl TcpIncoming {
-    fn bind(addr: SocketAddr) -> Result<Self, crate::Error> {
+    fn bind(addr: SocketAddr, tcp_keepalive: Option<Duration>) -> Result<Self, crate::Error> {
         let mut inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
         inner.set_nodelay(true);
+        inner.set_keepalive(tcp_keepalive);
 
         Ok(Self { inner })
     }
