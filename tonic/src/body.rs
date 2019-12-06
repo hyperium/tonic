@@ -101,7 +101,7 @@ impl BoxBody {
     pub fn map_from<B>(inner: B) -> Self
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes>,
+        // B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
     {
         BoxBody {
@@ -143,7 +143,7 @@ impl HttpBody for BoxBody {
 impl<B> HttpBody for MapBody<B>
 where
     B: Body,
-    B::Data: Into<Bytes>,
+    // B::Data: Into<Bytes>,
     B::Error: Into<crate::Error>,
 {
     type Data = Bytes;
@@ -162,7 +162,7 @@ where
             Pin::new_unchecked(&mut me.0).poll_data(cx)
         };
         match futures_util::ready!(v) {
-            Some(Ok(i)) => Poll::Ready(Some(Ok(i.into()))),
+            Some(Ok(mut i)) => Poll::Ready(Some(Ok(i.to_bytes()))),
             Some(Err(e)) => {
                 let err = Status::map_error(e.into());
                 Poll::Ready(Some(Err(err)))

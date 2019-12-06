@@ -7,7 +7,7 @@ use super::{
 use crate::{body::BoxBody, client::GrpcService};
 use bytes::Bytes;
 use http::{
-    uri::{InvalidUriBytes, Uri},
+    uri::{InvalidUri, Uri},
     Request, Response,
 };
 use std::{
@@ -88,8 +88,8 @@ impl Channel {
     /// # use tonic::transport::Channel;
     /// Channel::from_shared("https://example.com");
     /// ```
-    pub fn from_shared(s: impl Into<Bytes>) -> Result<Endpoint, InvalidUriBytes> {
-        let uri = Uri::from_shared(s.into())?;
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Endpoint, InvalidUri> {
+        let uri = Uri::from_maybe_shared(s.into())?;
         Ok(Self::builder(uri))
     }
 

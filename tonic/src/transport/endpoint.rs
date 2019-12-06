@@ -5,7 +5,7 @@ use super::{
     tls::{Certificate, Identity},
 };
 use bytes::Bytes;
-use http::uri::{InvalidUriBytes, Uri};
+use http::uri::{InvalidUri, Uri};
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -63,8 +63,8 @@ impl Endpoint {
     /// # use tonic::transport::Endpoint;
     /// Endpoint::from_shared("https://example.com".to_string());
     /// ```
-    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUriBytes> {
-        let uri = Uri::from_shared(s.into())?;
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUri> {
+        let uri = Uri::from_maybe_shared(s.into())?;
         Ok(Self::from(uri))
     }
 
@@ -179,7 +179,7 @@ impl From<Uri> for Endpoint {
 }
 
 impl TryFrom<Bytes> for Endpoint {
-    type Error = InvalidUriBytes;
+    type Error = InvalidUri;
 
     fn try_from(t: Bytes) -> Result<Self, Self::Error> {
         Self::from_shared(t)
@@ -187,7 +187,7 @@ impl TryFrom<Bytes> for Endpoint {
 }
 
 impl TryFrom<String> for Endpoint {
-    type Error = InvalidUriBytes;
+    type Error = InvalidUri;
 
     fn try_from(t: String) -> Result<Self, Self::Error> {
         Self::from_shared(t.into_bytes())

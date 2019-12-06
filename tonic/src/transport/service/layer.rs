@@ -1,6 +1,6 @@
 use super::either::Either;
 use tower::{
-    layer::{util::Stack, Layer},
+    layer::{Layer, Stack},
     ServiceBuilder,
 };
 pub(crate) trait ServiceBuilderExt<L> {

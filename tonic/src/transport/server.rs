@@ -5,7 +5,10 @@ use super::service::{layer_fn, BoxedIo, Or, Routes, ServiceBuilderExt};
 use super::{service::TlsAcceptor, tls::Identity, Certificate};
 use crate::body::BoxBody;
 use futures_core::Stream;
-use futures_util::{future, ready, try_future::MapErr, TryFutureExt, TryStreamExt};
+use futures_util::{
+    future::{self, MapErr},
+    ready, TryFutureExt, TryStreamExt,
+};
 use http::{Request, Response};
 use hyper::{
     server::{accept::Accept, conn},
@@ -21,7 +24,7 @@ use std::{
     // time::Duration,
 };
 use tower::{
-    layer::{util::Stack, Layer},
+    layer::{Layer, Stack},
     limit::concurrency::ConcurrencyLimitLayer,
     // timeout::TimeoutLayer,
     Service,
@@ -203,28 +206,30 @@ impl Server {
         let max_concurrent_streams = self.max_concurrent_streams;
         // let timeout = self.timeout.clone();
 
-        let incoming = hyper::server::accept::from_stream(async_stream::try_stream! {
-            let mut tcp = TcpIncoming::bind(addr)?;
+        let incoming = hyper::server::accept::from_stream::<_, _, crate::Error>(
+            async_stream::try_stream! {
+                let mut tcp = TcpIncoming::bind(addr)?;
 
-            while let Some(stream) = tcp.try_next().await? {
-                #[cfg(feature = "tls")]
-                {
-                    if let Some(tls) = &self.tls {
-                        let io = match tls.connect(stream.into_inner()).await {
-                            Ok(io) => io,
-                            Err(error) => {
-                                error!(message = "Unable to accept incoming connection.", %error);
-                                continue
-                            },
-                        };
-                        yield BoxedIo::new(io);
-                        continue;
+                while let Some(stream) = tcp.try_next().await? {
+                    #[cfg(feature = "tls")]
+                    {
+                        if let Some(tls) = &self.tls {
+                            let io = match tls.connect(stream.into_inner()).await {
+                                Ok(io) => io,
+                                Err(error) => {
+                                    error!(message = "Unable to accept incoming connection.", %error);
+                                    continue
+                                },
+                            };
+                            yield BoxedIo::new(io);
+                            continue;
+                        }
                     }
-                }
 
-                yield BoxedIo::new(stream);
-            }
-        });
+                    yield BoxedIo::new(stream);
+                }
+            },
+        );
 
         let svc = MakeSvc {
             inner: svc,

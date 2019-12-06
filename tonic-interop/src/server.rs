@@ -2,7 +2,7 @@ use crate::pb::{self, *};
 use async_stream::try_stream;
 use futures_util::{stream, StreamExt, TryStreamExt};
 use std::pin::Pin;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tonic::{Code, Request, Response, Status};
 
 pub use pb::server::{TestServiceServer, UnimplementedServiceServer};
@@ -65,8 +65,7 @@ impl pb::server::TestService for TestService {
 
         let stream = try_stream! {
             for param in response_parameters {
-                let deadline = Instant::now() + Duration::from_micros(param.interval_us as u64);
-                tokio::timer::delay(deadline).await;
+                tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
 
                 let payload = crate::server_payload(param.size as usize);
                 yield StreamingOutputCallResponse { payload: Some(payload) };
@@ -121,8 +120,7 @@ impl pb::server::TestService for TestService {
                     }
 
                     for param in msg.response_parameters {
-                        let deadline = Instant::now() + Duration::from_micros(param.interval_us as u64);
-                        tokio::timer::delay(deadline).await;
+                        tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
 
                         let payload = crate::server_payload(param.size as usize);
                         yield StreamingOutputCallResponse { payload: Some(payload) };
