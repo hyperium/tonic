@@ -59,6 +59,7 @@ where
                     let len = buf.len() - 5;
                     assert!(len <= std::u32::MAX as usize);
                     {
+                        let mut buf = &mut buf[..5];
                         buf.put_u8(0); // byte must be 0, reserve doesn't auto-zero
                         buf.put_u32(len as u32);
                     }

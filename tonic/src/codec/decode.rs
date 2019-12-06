@@ -187,12 +187,9 @@ impl<T> Streaming<T> {
         if let State::ReadBody { len, .. } = &self.state {
             // if we haven't read enough of the message then return and keep
             // reading
-            if self.buf.remaining() < *len || self.buf.len() < *len + 5 {
+            if self.buf.remaining() < *len || self.buf.len() < *len {
                 return Ok(None);
             }
-
-            // advance past the header
-            self.buf.advance(5);
 
             match self.decoder.decode(&mut self.buf) {
                 Ok(Some(msg)) => {

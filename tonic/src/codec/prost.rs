@@ -1,6 +1,6 @@
 use super::{Codec, Decoder, Encoder};
 use crate::{Code, Status};
-use bytes::{BufMut, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use prost::Message;
 use std::marker::PhantomData;
 
@@ -81,9 +81,7 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
 
         drop(cursor);
 
-        unsafe {
-            buf.advance_mut(amt);
-        }
+        buf.advance(amt);
 
         Ok(item)
     }
