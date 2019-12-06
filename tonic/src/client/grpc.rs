@@ -4,7 +4,6 @@ use crate::{
     codec::{encode_client, Codec, Streaming},
     Code, Request, Response, Status,
 };
-use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::{future, stream, TryStreamExt};
 use http::{

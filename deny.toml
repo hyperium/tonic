@@ -15,8 +15,8 @@ deny = [
     { name = "term" },
 ]
 skip = [
-    { name = "crossbeam-utils", version = "=0.6.6" },
     { name = "crossbeam-queue", version = "=0.2.0" },
+    { name = "bytes", version = "=0.4.12" },
 ]
 skip-tree = [
     { name = "rand", version = "=0.6.5" },

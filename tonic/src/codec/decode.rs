@@ -1,6 +1,6 @@
 use super::Decoder;
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
