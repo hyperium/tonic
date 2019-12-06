@@ -30,6 +30,7 @@ pub struct Endpoint {
     pub(super) init_stream_window_size: Option<u32>,
     pub(super) init_connection_window_size: Option<u32>,
     pub(super) tcp_keepalive: Option<Duration>,
+    pub(super) tcp_nodelay: bool,
 }
 
 impl Endpoint {
@@ -171,6 +172,14 @@ impl Endpoint {
         }
     }
 
+    /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    pub fn tcp_nodelay(self, enabled: bool) -> Self {
+        Endpoint {
+            tcp_nodelay: enabled,
+            ..self
+        }
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, super::Error> {
         Channel::connect(self.clone()).await
@@ -191,6 +200,7 @@ impl From<Uri> for Endpoint {
             init_stream_window_size: None,
             init_connection_window_size: None,
             tcp_keepalive: None,
+            tcp_nodelay: true,
         }
     }
 }

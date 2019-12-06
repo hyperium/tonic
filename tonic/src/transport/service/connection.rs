@@ -28,10 +28,14 @@ pub(crate) struct Connection {
 impl Connection {
     pub(crate) async fn new(endpoint: Endpoint) -> Result<Self, crate::Error> {
         #[cfg(feature = "tls")]
-        let connector = connector(endpoint.tls.clone(), endpoint.tcp_keepalive);
+        let connector = connector(endpoint.tls.clone())
+            .set_keepalive(endpoint.tcp_keepalive)
+            .set_nodelay(endpoint.tcp_nodelay);
 
         #[cfg(not(feature = "tls"))]
-        let connector = connector(endpoint.tcp_keepalive);
+        let connector = connector()
+            .set_keepalive(endpoint.tcp_keepalive)
+            .set_nodelay(endpoint.tcp_nodelay);
 
         let settings = Builder::new()
             .http2_initial_stream_window_size(endpoint.init_stream_window_size)
