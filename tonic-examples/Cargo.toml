@@ -71,11 +71,11 @@ tonic = { path = "../tonic", features = ["tls"] }
 bytes = "0.4"
 prost = "0.5"
 
-tokio = "=0.2.0-alpha.6"
-futures-preview = { version = "=0.3.0-alpha.19", default-features = false, features = ["alloc"]}
-async-stream = "0.1.2"
-http = "0.1"
-tower = "=0.3.0-alpha.2"
+tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs"] }
+futures = { version = "0.3", default-features = false, features = ["alloc"]}
+async-stream = "0.2"
+http = "0.2"
+tower = { git = "https://github.com/tower-rs/tower" }
 
 # Required for routeguide
 serde = { version = "1.0", features = ["derive"] }

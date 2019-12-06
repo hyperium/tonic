@@ -2,7 +2,7 @@
 members = [
     "tonic",
     "tonic-build",
-    # "tonic-examples",
+    "tonic-examples",
     "tonic-interop",
 
     "tests/included_service",
