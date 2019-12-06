@@ -4,15 +4,13 @@
 //! of the types in this module are based around [`http_body::Body`].
 
 use crate::{Error, Status};
-use bytes::{Buf, Bytes, IntoBuf};
+use bytes::{Buf, Bytes};
 use http_body::Body as HttpBody;
 use std::{
     fmt,
     pin::Pin,
     task::{Context, Poll},
 };
-
-pub(crate) type BytesBuf = <Bytes as IntoBuf>::Buf;
 
 /// A trait alias for [`http_body::Body`].
 pub trait Body: sealed::Sealed + Send + Sync {
@@ -83,7 +81,7 @@ mod sealed {
 
 /// A type erased http body.
 pub struct BoxBody {
-    inner: Pin<Box<dyn Body<Data = BytesBuf, Error = Status> + Send + Sync + 'static>>,
+    inner: Pin<Box<dyn Body<Data = Bytes, Error = Status> + Send + Sync + 'static>>,
 }
 
 struct MapBody<B>(B);
@@ -92,7 +90,7 @@ impl BoxBody {
     /// Create a new `BoxBody` mapping item and error to the default types.
     pub fn new<B>(inner: B) -> Self
     where
-        B: Body<Data = BytesBuf, Error = Status> + Send + Sync + 'static,
+        B: Body<Data = Bytes, Error = Status> + Send + Sync + 'static,
     {
         BoxBody {
             inner: Box::pin(inner),
@@ -103,7 +101,7 @@ impl BoxBody {
     pub fn map_from<B>(inner: B) -> Self
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes>,
+        // B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
     {
         BoxBody {
@@ -120,7 +118,7 @@ impl BoxBody {
 }
 
 impl HttpBody for BoxBody {
-    type Data = BytesBuf;
+    type Data = Bytes;
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {
@@ -145,10 +143,10 @@ impl HttpBody for BoxBody {
 impl<B> HttpBody for MapBody<B>
 where
     B: Body,
-    B::Data: Into<Bytes>,
+    // B::Data: Into<Bytes>,
     B::Error: Into<crate::Error>,
 {
-    type Data = BytesBuf;
+    type Data = Bytes;
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {
@@ -164,7 +162,7 @@ where
             Pin::new_unchecked(&mut me.0).poll_data(cx)
         };
         match futures_util::ready!(v) {
-            Some(Ok(i)) => Poll::Ready(Some(Ok(i.into().into_buf()))),
+            Some(Ok(mut i)) => Poll::Ready(Some(Ok(i.to_bytes()))),
             Some(Err(e)) => {
                 let err = Status::map_error(e.into());
                 Poll::Ready(Some(Err(err)))
@@ -199,7 +197,7 @@ struct EmptyBody {
 }
 
 impl HttpBody for EmptyBody {
-    type Data = BytesBuf;
+    type Data = Bytes;
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {

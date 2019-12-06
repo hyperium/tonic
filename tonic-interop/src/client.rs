@@ -1,5 +1,5 @@
 use crate::{pb::client::*, pb::*, test_assert, TestAssertion};
-use futures_util::{future, stream, SinkExt, StreamExt};
+use futures_util::{future, stream, StreamExt};
 use tokio::sync::mpsc;
 use tonic::transport::Channel;
 use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
@@ -148,8 +148,8 @@ pub async fn server_streaming(client: &mut TestClient, assertions: &mut Vec<Test
 }
 
 pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
-    let (mut tx, rx) = mpsc::unbounded_channel();
-    tx.try_send(make_ping_pong_request(0)).unwrap();
+    let (tx, rx) = mpsc::unbounded_channel();
+    tx.send(make_ping_pong_request(0)).unwrap();
 
     let result = client.full_duplex_call(Request::new(rx)).await;
 
@@ -170,9 +170,7 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
                         drop(tx);
                         break;
                     } else {
-                        tx.send(make_ping_pong_request(responses.len()))
-                            .await
-                            .unwrap();
+                        tx.send(make_ping_pong_request(responses.len())).unwrap();
                     }
                 }
                 None => {

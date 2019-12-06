@@ -10,7 +10,7 @@ license = "MIT"
 
 [dependencies]
 tonic = { path = "../../tonic" }
-bytes = "0.4"
+bytes = "0.5"
 prost = "0.5"
 prost-types = "0.5"
 

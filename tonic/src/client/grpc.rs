@@ -4,7 +4,6 @@ use crate::{
     codec::{encode_client, Codec, Streaming},
     Code, Request, Response, Status,
 };
-use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::{future, stream, TryStreamExt};
 use http::{
@@ -60,7 +59,7 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
+        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -80,7 +79,7 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
+        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -113,7 +112,7 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
+        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -132,7 +131,7 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
+        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,

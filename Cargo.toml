@@ -9,3 +9,8 @@ members = [
     "tests/same_name",
     "tests/wellknown",
 ]
+
+[patch.'https://github.com/tower-rs/tower']
+tower-service = "0.3"
+tower-make = "0.3"
+tower-layer = "0.3"

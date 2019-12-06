@@ -15,17 +15,18 @@ name = "server"
 path = "src/bin/server.rs"
 
 [dependencies]
-tokio = "=0.2.0-alpha.6"
+tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "stream", "fs"] }
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.5"
 prost-derive = "0.5"
 bytes = "0.4"
-http = "0.1"
-futures-core-preview = "=0.3.0-alpha.19"
-futures-util-preview = "=0.3.0-alpha.19"
-async-stream = "0.1.2"
-tower = "=0.3.0-alpha.2"
-http-body = "=0.2.0-alpha.3"
+http = "0.2"
+futures-core = "0.3"
+futures-util = "0.3"
+async-stream = "0.2"
+# tower = "=0.3.0-alpha.2"
+tower = { git = "https://github.com/tower-rs/tower" }
+http-body = "0.3"
 
 console = "0.9"
 structopt = "0.2"
