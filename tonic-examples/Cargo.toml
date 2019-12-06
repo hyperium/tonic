@@ -71,7 +71,7 @@ tonic = { path = "../tonic", features = ["tls"] }
 bytes = "0.4"
 prost = "0.5"
 
-tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs"] }
+tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"]}
 async-stream = "0.2"
 http = "0.2"
