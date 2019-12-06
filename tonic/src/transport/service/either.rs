@@ -1,4 +1,4 @@
-use futures_util::try_future::{MapErr, TryFutureExt};
+use futures_util::future::{MapErr, TryFutureExt};
 use std::{
     future::Future,
     pin::Pin,

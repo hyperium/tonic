@@ -1,6 +1,6 @@
 use super::Decoder;
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
-use bytes::{Buf, BufMut, Bytes, BytesMut, IntoBuf};
+use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
@@ -46,7 +46,7 @@ impl<T> Streaming<T> {
     pub(crate) fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes>,
+        // B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
@@ -56,7 +56,7 @@ impl<T> Streaming<T> {
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes>,
+        // B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
@@ -66,7 +66,7 @@ impl<T> Streaming<T> {
     pub(crate) fn new_request<B, D>(decoder: D, body: B) -> Self
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes>,
+        // B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
@@ -76,7 +76,7 @@ impl<T> Streaming<T> {
     fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes>,
+        // B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
@@ -154,14 +154,12 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
-        let mut buf = (&self.buf[..]).into_buf();
-
         if let State::ReadHeader = self.state {
-            if buf.remaining() < 5 {
+            if self.buf.remaining() < 5 {
                 return Ok(None);
             }
 
-            let is_compressed = match buf.get_u8() {
+            let is_compressed = match self.buf.get_u8() {
                 0 => false,
                 1 => {
                     trace!("message compressed, compression not supported yet");
@@ -178,7 +176,7 @@ impl<T> Streaming<T> {
                     ));
                 }
             };
-            let len = buf.get_u32_be() as usize;
+            let len = self.buf.get_u32() as usize;
 
             self.state = State::ReadBody {
                 compression: is_compressed,
@@ -189,12 +187,9 @@ impl<T> Streaming<T> {
         if let State::ReadBody { len, .. } = &self.state {
             // if we haven't read enough of the message then return and keep
             // reading
-            if buf.remaining() < *len || self.buf.len() < *len + 5 {
+            if self.buf.remaining() < *len || self.buf.len() < *len {
                 return Ok(None);
             }
-
-            // advance past the header
-            self.buf.advance(5);
 
             match self.decoder.decode(&mut self.buf) {
                 Ok(Some(msg)) => {
@@ -251,8 +246,7 @@ impl<T> Stream for Streaming<T> {
                 self.buf.put(data);
             } else {
                 // FIXME: improve buf usage.
-                let buf1 = (&self.buf[..]).into_buf();
-                if buf1.has_remaining() {
+                if self.buf.has_remaining() {
                     trace!("unexpected EOF decoding stream");
                     Err(Status::new(
                         Code::Internal,

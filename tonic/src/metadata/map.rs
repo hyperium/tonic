@@ -2176,9 +2176,7 @@ mod as_metadata_key {
             self,
             map: &mut MetadataMap,
         ) -> Result<Entry<'_, HeaderValue>, InvalidMetadataKey> {
-            map.headers
-                .entry(self.inner)
-                .map_err(|_| InvalidMetadataKey::new())
+            Ok(map.headers.entry(self.inner))
         }
 
         #[doc(hidden)]
@@ -2221,9 +2219,7 @@ mod as_metadata_key {
             self,
             map: &mut MetadataMap,
         ) -> Result<Entry<'_, HeaderValue>, InvalidMetadataKey> {
-            map.headers
-                .entry(&self.inner)
-                .map_err(|_| InvalidMetadataKey::new())
+            Ok(map.headers.entry(&self.inner))
         }
 
         #[doc(hidden)]
@@ -2278,9 +2274,11 @@ mod as_metadata_key {
             if !VE::is_valid_key(self) {
                 return Err(InvalidMetadataKey::new());
             }
-            map.headers
-                .entry(self)
-                .map_err(|_| InvalidMetadataKey::new())
+
+            let key = http::header::HeaderName::from_bytes(self.as_bytes())
+                .map_err(|_| InvalidMetadataKey::new())?;
+            let entry = map.headers.entry(key);
+            Ok(entry)
         }
 
         #[doc(hidden)]
@@ -2338,9 +2336,10 @@ mod as_metadata_key {
             if !VE::is_valid_key(self.as_str()) {
                 return Err(InvalidMetadataKey::new());
             }
-            map.headers
-                .entry(self.as_str())
-                .map_err(|_| InvalidMetadataKey::new())
+
+            let key = http::header::HeaderName::from_bytes(self.as_bytes())
+                .map_err(|_| InvalidMetadataKey::new())?;
+            Ok(map.headers.entry(key))
         }
 
         #[doc(hidden)]
@@ -2398,9 +2397,10 @@ mod as_metadata_key {
             if !VE::is_valid_key(self) {
                 return Err(InvalidMetadataKey::new());
             }
-            map.headers
-                .entry(self.as_str())
-                .map_err(|_| InvalidMetadataKey::new())
+
+            let key = http::header::HeaderName::from_bytes(self.as_bytes())
+                .map_err(|_| InvalidMetadataKey::new())?;
+            Ok(map.headers.entry(key))
         }
 
         #[doc(hidden)]
