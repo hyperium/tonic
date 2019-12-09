@@ -56,7 +56,6 @@ pub struct Server {
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
-    shutdown: Option<Arc<dyn Future<Output = ()>>>,
     tcp_nodelay: bool,
 }
 
@@ -107,26 +106,6 @@ impl Server {
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
         Server {
             concurrency_limit: Some(limit),
-            ..self
-        }
-    }
-
-    /// Prepares the server to handle graceful shutdown when the future completes
-    ///
-    /// ```
-    /// # use tonic::transport::Server;
-    /// # use tower_service::Service;
-    /// # let mut builder = Server::builder();
-    /// let (tx, rx) = tokio::sync::oneshot::channel::<()>();
-    /// builder.graceful_shutdown(async {
-    ///     rx.await.ok();
-    /// });
-    ///
-    /// let _ = tx.send(());
-    /// ```
-    pub fn graceful_shutdown<F: 'static + Future<Output = ()>>(self, shutdown: F) -> Self {
-        Server {
-            shutdown: Some(Arc::new(shutdown)),
             ..self
         }
     }
@@ -243,11 +222,12 @@ impl Server {
         Router::new(self.clone(), svc)
     }
 
-    pub(crate) async fn serve<S>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
+    pub(crate) async fn serve<S, F>(self, addr: SocketAddr, svc: S, shutdown_signal: Option<F>) -> Result<(), super::Error>
     where
         S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
+        F: Future<Output=()>,
     {
         let interceptor = self.interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
@@ -289,19 +269,17 @@ impl Server {
             concurrency_limit,
             // timeout,
         };
-        let serve_fut = hyper::server::builder(incoming)
+        let serve_fut = hyper::Server::builder(incoming)
             .http2_only(true)
             .http2_initial_connection_window_size(init_connection_window_size)
             .http2_initial_stream_window_size(init_stream_window_size)
             .http2_max_concurrent_streams(max_concurrent_streams)
             .serve(svc);
 
-        let final_fut = match self.shutdown {
-            Some(rx) => serve_fut.with_graceful_shutdown(rx),
-            None => serve_fut,
-        };
-
-        final_fut.await.map_err(map_err)?;
+        match shutdown_signal {
+            Some(rx) => serve_fut.with_graceful_shutdown(rx).await,
+            None => serve_fut.await,
+        }.map_err(map_err)?;
 
         Ok(())
     }
@@ -371,7 +349,11 @@ where
     ///
     /// [`Server`]: struct.Server.html
     pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
-        self.server.serve(addr, self.routes).await
+        self.server.serve(addr, self.routes, None::<impl Future<Output=()>>).await
+    }
+
+    pub async fn with_graceful_shutdown<F: Future<Output=()>>(self, addr: SocketAddr, signal: F) -> Result<(), super::Error> {
+        self.server.serve(addr, self.routes, Some(signal)).await
     }
 }
 
