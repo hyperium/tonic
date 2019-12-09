@@ -56,6 +56,7 @@ pub struct Server {
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
+    shutdown: Option<Box<dyn Future<Output=()>>>,
     tcp_nodelay: bool,
 }
 
@@ -106,6 +107,14 @@ impl Server {
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
         Server {
             concurrency_limit: Some(limit),
+            ..self
+        }
+    }
+
+    /// Set the graceful shutdown thing
+    pub fn graceful_shutdown(self, shutdown: Box<dyn Future<Output=()>>) -> Self {
+        Server {
+            shutdown: Some(shutdown),
             ..self
         }
     }
@@ -268,15 +277,26 @@ impl Server {
             concurrency_limit,
             // timeout,
         };
-
-        hyper::Server::builder(incoming)
-            .http2_only(true)
-            .http2_initial_connection_window_size(init_connection_window_size)
-            .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams)
-            .serve(svc)
-            .await
-            .map_err(map_err)?;
+        if let Some(rx) = self.shutdown {
+            hyper::server::builder(incoming)
+                .http2_only(true)
+                .http2_initial_connection_window_size(init_connection_window_size)
+                .http2_initial_stream_window_size(init_stream_window_size)
+                .http2_max_concurrent_streams(max_concurrent_streams)
+                .serve(svc)
+                .with_graceful_shutdown(rx)
+                .await
+                .map_err(map_err)?;
+        } else {
+            hyper::server::builder(incoming)
+                .http2_only(true)
+                .http2_initial_connection_window_size(init_connection_window_size)
+                .http2_initial_stream_window_size(init_stream_window_size)
+                .http2_max_concurrent_streams(max_concurrent_streams)
+                .serve(svc)
+                .await
+                .map_err(map_err)?;
+        }
 
         Ok(())
     }
