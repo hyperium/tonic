@@ -56,7 +56,6 @@ pub struct Server {
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
-    shutdown_signal: Option<Pin<Box<dyn Future<Output = ()>>>>,
     tcp_nodelay: bool,
 }
 
@@ -107,13 +106,6 @@ impl Server {
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
         Server {
             concurrency_limit: Some(limit),
-            ..self
-        }
-    }
-
-    pub fn graceful_shutdown(self, f: impl Future<Output = ()>) -> Self {
-        Server {
-            shutdown_signal: Some(Pin::new(Box::new(f))),
             ..self
         }
     }
@@ -230,14 +222,7 @@ impl Server {
         Router::new(self.clone(), svc)
     }
 
-    pub(crate) async fn serve<S>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let interceptor = self.interceptor.clone();
-        let concurrency_limit = self.concurrency_limit;
+    fn serve_common<I>(self, addr: SocketAddr) -> hyper::server::Builder<I> {
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
@@ -269,6 +254,21 @@ impl Server {
                 }
             },
         );
+        hyper::Server::builder(incoming)
+            .http2_only(true)
+            .http2_initial_connection_window_size(init_connection_window_size)
+            .http2_initial_stream_window_size(init_stream_window_size)
+            .http2_max_concurrent_streams(max_concurrent_streams)
+    }
+
+    pub(crate) async fn serve<S>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let interceptor = self.interceptor.clone();
+        let concurrency_limit = self.concurrency_limit;
 
         let svc = MakeSvc {
             inner: svc,
@@ -276,18 +276,37 @@ impl Server {
             concurrency_limit,
             // timeout,
         };
-        let serve_fut = hyper::Server::builder(incoming)
-            .http2_only(true)
-            .http2_initial_connection_window_size(init_connection_window_size)
-            .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams)
-            .serve(svc);
+        self.serve_common(addr).serve(svc).await.map_err(map_err)?;
 
-        match self.shutdown_signal {
-            Some(rx) => serve_fut.with_graceful_shutdown(rx).await,
-            None => serve_fut.await,
-        }
-        .map_err(map_err)?;
+        Ok(())
+    }
+
+    pub(crate) async fn serve_with_shutdown<S, F>(
+        self,
+        addr: SocketAddr,
+        svc: S,
+        signal: F,
+    ) -> Result<(), super::Error>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+        F: Future<Output = ()>,
+    {
+        let interceptor = self.interceptor.clone();
+        let concurrency_limit = self.concurrency_limit;
+
+        let svc = MakeSvc {
+            inner: svc,
+            interceptor,
+            concurrency_limit,
+            // timeout,
+        };
+        self.serve_common(addr)
+            .serve(svc)
+            .with_graceful_shutdown(signal)
+            .await
+            .map_err(map_err)?;
 
         Ok(())
     }
@@ -358,6 +377,19 @@ where
     /// [`Server`]: struct.Server.html
     pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
         self.server.serve(addr, self.routes).await
+    }
+
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on [`tokio`]'s default executor. And shutdown when the provided signal
+    /// is received.
+    ///
+    /// [`Server`]: struct.Server.html
+    pub async fn serve_with_shutdown<F: Future<Output = ()>>(
+        self,
+        addr: SocketAddr,
+        f: F,
+    ) -> Result<(), super::Error> {
+        self.server.serve_with_shutdown(addr, self.routes, f).await
     }
 }
 
