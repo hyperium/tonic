@@ -56,7 +56,7 @@ pub struct Server {
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
-    shutdown: Option<Box<dyn Future<Output=()>>>,
+    shutdown: Option<Arc<dyn Future<Output = ()>>>,
     tcp_nodelay: bool,
 }
 
@@ -111,10 +111,22 @@ impl Server {
         }
     }
 
-    /// Set the graceful shutdown thing
-    pub fn graceful_shutdown(self, shutdown: Box<dyn Future<Output=()>>) -> Self {
+    /// Prepares the server to handle graceful shutdown when the future completes
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// # let mut builder = Server::builder();
+    /// let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+    /// builder.graceful_shutdown(async {
+    ///     rx.await.ok();
+    /// });
+    ///
+    /// let _ = tx.send(());
+    /// ```
+    pub fn graceful_shutdown<F: 'static + Future<Output = ()>>(self, shutdown: F) -> Self {
         Server {
-            shutdown: Some(shutdown),
+            shutdown: Some(Arc::new(shutdown)),
             ..self
         }
     }
@@ -277,26 +289,19 @@ impl Server {
             concurrency_limit,
             // timeout,
         };
-        if let Some(rx) = self.shutdown {
-            hyper::server::builder(incoming)
-                .http2_only(true)
-                .http2_initial_connection_window_size(init_connection_window_size)
-                .http2_initial_stream_window_size(init_stream_window_size)
-                .http2_max_concurrent_streams(max_concurrent_streams)
-                .serve(svc)
-                .with_graceful_shutdown(rx)
-                .await
-                .map_err(map_err)?;
-        } else {
-            hyper::server::builder(incoming)
-                .http2_only(true)
-                .http2_initial_connection_window_size(init_connection_window_size)
-                .http2_initial_stream_window_size(init_stream_window_size)
-                .http2_max_concurrent_streams(max_concurrent_streams)
-                .serve(svc)
-                .await
-                .map_err(map_err)?;
-        }
+        let serve_fut = hyper::server::builder(incoming)
+            .http2_only(true)
+            .http2_initial_connection_window_size(init_connection_window_size)
+            .http2_initial_stream_window_size(init_stream_window_size)
+            .http2_max_concurrent_streams(max_concurrent_streams)
+            .serve(svc);
+
+        let final_fut = match self.shutdown {
+            Some(rx) => serve_fut.with_graceful_shutdown(rx),
+            None => serve_fut,
+        };
+
+        final_fut.await.map_err(map_err)?;
 
         Ok(())
     }
