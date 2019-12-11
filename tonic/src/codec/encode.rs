@@ -1,5 +1,5 @@
-use crate::{body::BytesBuf, Code, Status};
-use bytes::{BufMut, BytesMut, IntoBuf};
+use crate::{Code, Status};
+use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
 use futures_util::{ready, StreamExt, TryStreamExt};
 use http::HeaderMap;
@@ -7,14 +7,14 @@ use http_body::Body;
 use pin_project::pin_project;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio_codec::Encoder;
+use tokio_util::codec::Encoder;
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
 pub(crate) fn encode_server<T, U>(
     encoder: T,
     source: U,
-) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
+) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status> + Send + Sync + 'static,
     T::Item: Send + Sync,
@@ -27,7 +27,7 @@ where
 pub(crate) fn encode_client<T, U>(
     encoder: T,
     source: U,
-) -> EncodeBody<impl Stream<Item = Result<BytesBuf, Status>>>
+) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status> + Send + Sync + 'static,
     T::Item: Send + Sync,
@@ -37,7 +37,7 @@ where
     EncodeBody::new_client(stream)
 }
 
-fn encode<T, U>(mut encoder: T, source: U) -> impl TryStream<Ok = BytesBuf, Error = Status>
+fn encode<T, U>(mut encoder: T, source: U) -> impl TryStream<Ok = Bytes, Error = Status>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
@@ -59,12 +59,12 @@ where
                     let len = buf.len() - 5;
                     assert!(len <= std::u32::MAX as usize);
                     {
-                        let mut cursor = std::io::Cursor::new(&mut buf[..5]);
-                        cursor.put_u8(0); // byte must be 0, reserve doesn't auto-zero
-                        cursor.put_u32_be(len as u32);
+                        let mut buf = &mut buf[..5];
+                        buf.put_u8(0); // byte must be 0, reserve doesn't auto-zero
+                        buf.put_u32(len as u32);
                     }
 
-                    yield Ok(buf.split_to(len + 5).freeze().into_buf());
+                    yield Ok(buf.split_to(len + 5).freeze());
                 },
                 Some(Err(status)) => yield Err(status),
                 None => break,
@@ -90,7 +90,7 @@ pub(crate) struct EncodeBody<S> {
 
 impl<S> EncodeBody<S>
 where
-    S: Stream<Item = Result<crate::body::BytesBuf, Status>> + Send + Sync + 'static,
+    S: Stream<Item = Result<Bytes, Status>> + Send + Sync + 'static,
 {
     pub(crate) fn new_client(inner: S) -> Self {
         Self {
@@ -111,9 +111,9 @@ where
 
 impl<S> Body for EncodeBody<S>
 where
-    S: Stream<Item = Result<crate::body::BytesBuf, Status>>,
+    S: Stream<Item = Result<Bytes, Status>>,
 {
-    type Data = BytesBuf;
+    type Data = Bytes;
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {

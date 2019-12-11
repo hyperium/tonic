@@ -2,13 +2,16 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use pb::{EchoRequest, EchoResponse};
-use std::{collections::VecDeque, net::SocketAddr};
+use futures::Stream;
+use std::net::SocketAddr;
+use std::pin::Pin;
 use tokio::sync::mpsc;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
+use pb::{EchoRequest, EchoResponse};
+
 type EchoResult<T> = Result<Response<T>, Status>;
-type Stream = VecDeque<Result<EchoResponse, Status>>;
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
 
 #[derive(Debug)]
 pub struct EchoServer {
@@ -23,7 +26,7 @@ impl pb::echo_server::Echo for EchoServer {
         Ok(Response::new(EchoResponse { message }))
     }
 
-    type ServerStreamingEchoStream = Stream;
+    type ServerStreamingEchoStream = ResponseStream;
 
     async fn server_streaming_echo(
         &self,
@@ -39,7 +42,7 @@ impl pb::echo_server::Echo for EchoServer {
         Err(Status::unimplemented("not implemented"))
     }
 
-    type BidirectionalStreamingEchoStream = Stream;
+    type BidirectionalStreamingEchoStream = ResponseStream;
 
     async fn bidirectional_streaming_echo(
         &self,
@@ -57,7 +60,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     for addr in &addrs {
         let addr = addr.parse()?;
-        let mut tx = tx.clone();
+        let tx = tx.clone();
 
         let server = EchoServer { addr };
         let serve = Server::builder()
@@ -69,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("Error = {:?}", e);
             }
 
-            tx.try_send(()).unwrap();
+            tx.send(()).unwrap();
         });
     }
 

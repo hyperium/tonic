@@ -139,7 +139,7 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     #[inline]
     pub unsafe fn from_shared_unchecked(src: Bytes) -> Self {
         MetadataValue {
-            inner: HeaderValue::from_shared_unchecked(src),
+            inner: HeaderValue::from_maybe_shared_unchecked(src),
             phantom: PhantomData,
         }
     }
@@ -510,7 +510,7 @@ impl FromStr for MetadataValue<Ascii> {
 impl<VE: ValueEncoding> From<MetadataValue<VE>> for Bytes {
     #[inline]
     fn from(value: MetadataValue<VE>) -> Bytes {
-        Bytes::from(value.inner)
+        Bytes::copy_from_slice(value.inner.as_bytes())
     }
 }
 

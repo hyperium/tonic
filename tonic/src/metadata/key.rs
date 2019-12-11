@@ -193,7 +193,7 @@ impl<'a, VE: ValueEncoding> From<&'a MetadataKey<VE>> for MetadataKey<VE> {
 impl<VE: ValueEncoding> From<MetadataKey<VE>> for Bytes {
     #[inline]
     fn from(name: MetadataKey<VE>) -> Bytes {
-        name.inner.into()
+        Bytes::copy_from_slice(name.inner.as_ref())
     }
 }
 

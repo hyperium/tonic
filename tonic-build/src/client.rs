@@ -28,8 +28,7 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
             where T: tonic::client::GrpcService<tonic::body::BoxBody>,
                   T::ResponseBody: Body + HttpBody + Send + 'static,
                   T::Error: Into<StdError>,
-            <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send,
-            <T::ResponseBody as HttpBody>::Data: Into<bytes::Bytes> + Send, {
+                  <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send, {
                 pub fn new(inner: T) -> Self {
                     let inner = tonic::client::Grpc::new(inner);
                     Self { inner }

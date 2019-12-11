@@ -197,6 +197,18 @@ pub struct OccupiedEntry<'a, VE: ValueEncoding> {
 // ===== impl MetadataMap =====
 
 impl MetadataMap {
+    // Headers reserved by the gRPC protocol.
+    pub(crate) const GRPC_RESERVED_HEADERS: [&'static str; 8] = [
+        "te",
+        "user-agent",
+        "content-type",
+        "grpc-timeout",
+        "grpc-message",
+        "grpc-encoding",
+        "grpc-message-type",
+        "grpc-status",
+    ];
+
     /// Create an empty `MetadataMap`.
     ///
     /// The map will be created without any capacity. This function will not
@@ -234,6 +246,13 @@ impl MetadataMap {
     /// assert_eq!(http_map.get("x-host").unwrap(), "example.com");
     /// ```
     pub fn into_headers(self) -> http::HeaderMap {
+        self.headers
+    }
+
+    pub(crate) fn into_sanitized_headers(mut self) -> http::HeaderMap {
+        for r in &Self::GRPC_RESERVED_HEADERS {
+            self.headers.remove(*r);
+        }
         self.headers
     }
 
@@ -2157,9 +2176,7 @@ mod as_metadata_key {
             self,
             map: &mut MetadataMap,
         ) -> Result<Entry<'_, HeaderValue>, InvalidMetadataKey> {
-            map.headers
-                .entry(self.inner)
-                .map_err(|_| InvalidMetadataKey::new())
+            Ok(map.headers.entry(self.inner))
         }
 
         #[doc(hidden)]
@@ -2202,9 +2219,7 @@ mod as_metadata_key {
             self,
             map: &mut MetadataMap,
         ) -> Result<Entry<'_, HeaderValue>, InvalidMetadataKey> {
-            map.headers
-                .entry(&self.inner)
-                .map_err(|_| InvalidMetadataKey::new())
+            Ok(map.headers.entry(&self.inner))
         }
 
         #[doc(hidden)]
@@ -2259,9 +2274,11 @@ mod as_metadata_key {
             if !VE::is_valid_key(self) {
                 return Err(InvalidMetadataKey::new());
             }
-            map.headers
-                .entry(self)
-                .map_err(|_| InvalidMetadataKey::new())
+
+            let key = http::header::HeaderName::from_bytes(self.as_bytes())
+                .map_err(|_| InvalidMetadataKey::new())?;
+            let entry = map.headers.entry(key);
+            Ok(entry)
         }
 
         #[doc(hidden)]
@@ -2319,9 +2336,10 @@ mod as_metadata_key {
             if !VE::is_valid_key(self.as_str()) {
                 return Err(InvalidMetadataKey::new());
             }
-            map.headers
-                .entry(self.as_str())
-                .map_err(|_| InvalidMetadataKey::new())
+
+            let key = http::header::HeaderName::from_bytes(self.as_bytes())
+                .map_err(|_| InvalidMetadataKey::new())?;
+            Ok(map.headers.entry(key))
         }
 
         #[doc(hidden)]
@@ -2379,9 +2397,10 @@ mod as_metadata_key {
             if !VE::is_valid_key(self) {
                 return Err(InvalidMetadataKey::new());
             }
-            map.headers
-                .entry(self.as_str())
-                .map_err(|_| InvalidMetadataKey::new())
+
+            let key = http::header::HeaderName::from_bytes(self.as_bytes())
+                .map_err(|_| InvalidMetadataKey::new())?;
+            Ok(map.headers.entry(key))
         }
 
         #[doc(hidden)]

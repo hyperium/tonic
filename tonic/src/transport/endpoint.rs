@@ -2,10 +2,10 @@ use super::channel::Channel;
 #[cfg(feature = "tls")]
 use super::{
     service::TlsConnector,
-    tls::{Certificate, Identity, TlsProvider},
+    tls::{Certificate, Identity},
 };
 use bytes::Bytes;
-use http::uri::{InvalidUriBytes, Uri};
+use http::uri::{InvalidUri, Uri};
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -29,6 +29,8 @@ pub struct Endpoint {
         Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
     pub(super) init_stream_window_size: Option<u32>,
     pub(super) init_connection_window_size: Option<u32>,
+    pub(super) tcp_keepalive: Option<Duration>,
+    pub(super) tcp_nodelay: bool,
 }
 
 impl Endpoint {
@@ -63,8 +65,8 @@ impl Endpoint {
     /// # use tonic::transport::Endpoint;
     /// Endpoint::from_shared("https://example.com".to_string());
     /// ```
-    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUriBytes> {
-        let uri = Uri::from_shared(s.into())?;
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUri> {
+        let uri = Uri::from_maybe_shared(s.into())?;
         Ok(Self::from(uri))
     }
 
@@ -79,6 +81,21 @@ impl Endpoint {
     pub fn timeout(self, dur: Duration) -> Self {
         Endpoint {
             timeout: Some(dur),
+            ..self
+        }
+    }
+
+    /// Set whether TCP keepalive messages are enabled on accepted connections.
+    ///
+    /// If `None` is specified, keepalive is disabled, otherwise the duration
+    /// specified will be the time to remain idle before sending TCP keepalive
+    /// probes.
+    ///
+    /// Default is no keepalive (`None`)
+    ///
+    pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
+        Endpoint {
+            tcp_keepalive,
             ..self
         }
     }
@@ -155,6 +172,14 @@ impl Endpoint {
         }
     }
 
+    /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    pub fn tcp_nodelay(self, enabled: bool) -> Self {
+        Endpoint {
+            tcp_nodelay: enabled,
+            ..self
+        }
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, super::Error> {
         Channel::connect(self.clone()).await
@@ -174,12 +199,14 @@ impl From<Uri> for Endpoint {
             interceptor_headers: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
+            tcp_keepalive: None,
+            tcp_nodelay: true,
         }
     }
 }
 
 impl TryFrom<Bytes> for Endpoint {
-    type Error = InvalidUriBytes;
+    type Error = InvalidUri;
 
     fn try_from(t: Bytes) -> Result<Self, Self::Error> {
         Self::from_shared(t)
@@ -187,7 +214,7 @@ impl TryFrom<Bytes> for Endpoint {
 }
 
 impl TryFrom<String> for Endpoint {
-    type Error = InvalidUriBytes;
+    type Error = InvalidUri;
 
     fn try_from(t: String) -> Result<Self, Self::Error> {
         Self::from_shared(t.into_bytes())
@@ -223,13 +250,9 @@ impl fmt::Debug for Endpoint {
 #[cfg(feature = "tls")]
 #[derive(Clone)]
 pub struct ClientTlsConfig {
-    provider: TlsProvider,
     domain: Option<String>,
     cert: Option<Certificate>,
     identity: Option<Identity>,
-    #[cfg(feature = "openssl")]
-    openssl_raw: Option<openssl1::ssl::SslConnector>,
-    #[cfg(feature = "rustls")]
     rustls_raw: Option<tokio_rustls::rustls::ClientConfig>,
 }
 
@@ -237,7 +260,6 @@ pub struct ClientTlsConfig {
 impl fmt::Debug for ClientTlsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientTlsConfig")
-            .field("provider", &self.provider)
             .field("domain", &self.domain)
             .field("cert", &self.cert)
             .field("identity", &self.identity)
@@ -247,35 +269,19 @@ impl fmt::Debug for ClientTlsConfig {
 
 #[cfg(feature = "tls")]
 impl ClientTlsConfig {
-    /// Creates a new `ClientTlsConfig` using OpenSSL.
-    #[cfg(feature = "openssl")]
-    pub fn with_openssl() -> Self {
-        Self::new(TlsProvider::OpenSsl)
-    }
-
     /// Creates a new `ClientTlsConfig` using Rustls.
-    #[cfg(feature = "rustls")]
     pub fn with_rustls() -> Self {
-        Self::new(TlsProvider::Rustls)
-    }
-
-    fn new(provider: TlsProvider) -> Self {
         ClientTlsConfig {
-            provider,
             domain: None,
             cert: None,
             identity: None,
-            #[cfg(feature = "openssl")]
-            openssl_raw: None,
-            #[cfg(feature = "rustls")]
             rustls_raw: None,
         }
     }
 
     /// Sets the domain name against which to verify the server's TLS certificate.
     ///
-    /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
-    /// Rustls or OpenSSL respectively.
+    /// This has no effect if `rustls_client_config` is used to configure Rustls.
     pub fn domain_name(self, domain_name: impl Into<String>) -> Self {
         ClientTlsConfig {
             domain: Some(domain_name.into()),
@@ -285,8 +291,7 @@ impl ClientTlsConfig {
 
     /// Sets the CA Certificate against which to verify the server's TLS certificate.
     ///
-    /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
-    /// Rustls or OpenSSL respectively.
+    /// This has no effect if `rustls_client_config` is used to configure Rustls.
     pub fn ca_certificate(self, ca_certificate: Certificate) -> Self {
         ClientTlsConfig {
             cert: Some(ca_certificate),
@@ -296,8 +301,7 @@ impl ClientTlsConfig {
 
     /// Sets the client identity to present to the server.
     ///
-    /// This has no effect if `rustls_client_config` or `openssl_connector` is used to configure
-    /// Rustls or OpenSSL respectively.
+    /// This has no effect if `rustls_client_config` is used to configure Rustls.
     pub fn identity(self, identity: Identity) -> Self {
         ClientTlsConfig {
             identity: Some(identity),
@@ -305,21 +309,9 @@ impl ClientTlsConfig {
         }
     }
 
-    /// Use options specified by the given `SslConnector` to configure TLS.
-    ///
-    /// This overrides all other TLS options set via other means.
-    #[cfg(feature = "openssl")]
-    pub fn openssl_connector(self, connector: openssl1::ssl::SslConnector) -> Self {
-        ClientTlsConfig {
-            openssl_raw: Some(connector),
-            ..self
-        }
-    }
-
     /// Use options specified by the given `ClientConfig` to configure TLS.
     ///
     /// This overrides all other TLS options set via other means.
-    #[cfg(feature = "rustls")]
     pub fn rustls_client_config(self, config: tokio_rustls::rustls::ClientConfig) -> Self {
         ClientTlsConfig {
             rustls_raw: Some(config),
@@ -332,25 +324,11 @@ impl ClientTlsConfig {
             None => uri.to_string(),
             Some(domain) => domain.clone(),
         };
-        match self.provider {
-            #[cfg(feature = "openssl")]
-            TlsProvider::OpenSsl => match &self.openssl_raw {
-                None => TlsConnector::new_with_openssl_cert(
-                    self.cert.clone(),
-                    self.identity.clone(),
-                    domain,
-                ),
-                Some(r) => TlsConnector::new_with_openssl_raw(r.clone(), domain),
-            },
-            #[cfg(feature = "rustls")]
-            TlsProvider::Rustls => match &self.rustls_raw {
-                None => TlsConnector::new_with_rustls_cert(
-                    self.cert.clone(),
-                    self.identity.clone(),
-                    domain,
-                ),
-                Some(c) => TlsConnector::new_with_rustls_raw(c.clone(), domain),
-            },
+        match &self.rustls_raw {
+            None => {
+                TlsConnector::new_with_rustls_cert(self.cert.clone(), self.identity.clone(), domain)
+            }
+            Some(c) => TlsConnector::new_with_rustls_raw(c.clone(), domain),
         }
     }
 }
