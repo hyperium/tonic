@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
 
 pub(crate) trait Context {
-    const CODEC_NAME: &'static str;
+    fn codec_name(&self) -> &str;
 }
 
 pub(crate) trait Commentable<'a> {

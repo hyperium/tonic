@@ -18,7 +18,9 @@ pub(crate) struct ProstContext {
 }
 
 impl schema::Context for ProstContext {
-    const CODEC_NAME: &'static str = "ProstCodec";
+    fn codec_name(&self) -> &str {
+        "tonic::codec::ProstCodec"
+}
 }
 
 impl<'a> schema::Service<'a> for Service {

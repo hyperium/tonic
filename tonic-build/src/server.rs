@@ -1,7 +1,7 @@
 use super::schema::{Commentable, Context, Method, Service};
 use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
 use proc_macro2::{Span, TokenStream};
-use quote::{format_ident, quote};
+use quote::quote;
 use syn::{Ident, Lit, LitStr};
 
 pub(crate) fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
@@ -251,7 +251,7 @@ fn generate_unary<'a, T: Method<'a>>(
     context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = format_ident!("{}", T::Context::CODEC_NAME);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -278,7 +278,7 @@ fn generate_unary<'a, T: Method<'a>>(
             let interceptor = inner.1.clone();
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::#codec_name::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)
@@ -300,7 +300,7 @@ fn generate_server_streaming<'a, T: Method<'a>>(
     context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = format_ident!("{}", T::Context::CODEC_NAME);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -331,7 +331,7 @@ fn generate_server_streaming<'a, T: Method<'a>>(
             let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::#codec_name::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)
@@ -356,7 +356,7 @@ fn generate_client_streaming<'a, T: Method<'a>>(
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
     let (request, response) = method.request_response_name(context);
-    let codec_name = format_ident!("{}", T::Context::CODEC_NAME);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -381,7 +381,7 @@ fn generate_client_streaming<'a, T: Method<'a>>(
             let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::#codec_name::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)
@@ -403,7 +403,7 @@ fn generate_streaming<'a, T: Method<'a>>(
     context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = format_ident!("{}", T::Context::CODEC_NAME);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -434,7 +434,7 @@ fn generate_streaming<'a, T: Method<'a>>(
             let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::#codec_name::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)
