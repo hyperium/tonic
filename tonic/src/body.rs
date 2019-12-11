@@ -101,7 +101,6 @@ impl BoxBody {
     pub fn map_from<B>(inner: B) -> Self
     where
         B: Body + Send + Sync + 'static,
-        // B::Data: Into<Bytes>,
         B::Error: Into<crate::Error>,
     {
         BoxBody {
@@ -143,7 +142,6 @@ impl HttpBody for BoxBody {
 impl<B> HttpBody for MapBody<B>
 where
     B: Body,
-    // B::Data: Into<Bytes>,
     B::Error: Into<crate::Error>,
 {
     type Data = Bytes;
@@ -206,17 +204,15 @@ impl HttpBody for EmptyBody {
 
     fn poll_data(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        drop(cx);
         Poll::Ready(None)
     }
 
     fn poll_trailers(
         self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        _cx: &mut Context<'_>,
     ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        drop(cx);
         Poll::Ready(Ok(None))
     }
 }

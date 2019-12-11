@@ -59,7 +59,6 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -79,7 +78,6 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -112,7 +110,6 @@ impl<T> Grpc<T> {
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
-        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -131,7 +128,6 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
-        // <T::ResponseBody as HttpBody>::Data: Into<Bytes>,
         <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
@@ -200,8 +196,8 @@ impl<T: Clone> Clone for Grpc<T> {
     }
 }
 
-impl<T> fmt::Debug for Grpc<T> {
+impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Grpc").finish()
+        f.debug_struct("Grpc").field("inner", &self.inner).finish()
     }
 }

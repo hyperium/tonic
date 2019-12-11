@@ -4,7 +4,6 @@ use crate::{
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
-use bytes::Bytes;
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
@@ -42,7 +41,6 @@ where
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let request = match self.map_request_unary(req).await {
@@ -73,7 +71,6 @@ where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
         S::ResponseStream: Send + Sync + 'static,
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let request = match self.map_request_unary(req).await {
@@ -97,7 +94,6 @@ where
     where
         S: ClientStreamingService<T::Decode, Response = T::Encode>,
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes> + Send + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
         let request = self.map_request_streaming(req);
@@ -118,7 +114,6 @@ where
         S: StreamingService<T::Decode, Response = T::Encode> + Send,
         S::ResponseStream: Send + Sync + 'static,
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let request = self.map_request_streaming(req);
@@ -132,7 +127,6 @@ where
     ) -> Result<Request<T::Decode>, Status>
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         let (parts, body) = request.into_parts();
@@ -160,7 +154,6 @@ where
     ) -> Request<Streaming<T::Decode>>
     where
         B: Body + Send + Sync + 'static,
-        B::Data: Into<Bytes> + Send,
         B::Error: Into<crate::Error> + Send,
     {
         Request::from_http(request.map(|body| Streaming::new_request(self.codec.decoder(), body)))
@@ -203,8 +196,8 @@ where
     }
 }
 
-impl<T> fmt::Debug for Grpc<T> {
+impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Grpc").finish()
+        f.debug_struct("Grpc").field("codec", &self.codec).finish()
     }
 }
