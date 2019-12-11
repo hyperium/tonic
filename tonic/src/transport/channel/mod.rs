@@ -1,9 +1,11 @@
 //! Client implementation and builder.
 
 mod endpoint;
+#[cfg(feature = "tls")]
 mod tls;
 
 pub use endpoint::Endpoint;
+#[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
 use super::service::{Connection, ServiceList};

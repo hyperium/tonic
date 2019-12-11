@@ -1,6 +1,9 @@
-use super::{Channel, ClientTlsConfig};
+use super::Channel;
 #[cfg(feature = "tls")]
-use crate::transport::{service::TlsConnector, Error, ErrorKind};
+use super::ClientTlsConfig;
+#[cfg(feature = "tls")]
+use crate::transport::service::TlsConnector;
+use crate::transport::{Error, ErrorKind};
 use bytes::Bytes;
 use http::uri::{InvalidUri, Uri};
 use std::{
