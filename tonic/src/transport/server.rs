@@ -222,7 +222,14 @@ impl Server {
         Router::new(self.clone(), svc)
     }
 
-    fn serve_common<I>(self, addr: SocketAddr) -> hyper::server::Builder<I> {
+    pub(crate) async fn serve<S>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let interceptor = self.interceptor.clone();
+        let concurrency_limit = self.concurrency_limit;
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
@@ -254,29 +261,21 @@ impl Server {
                 }
             },
         );
-        hyper::Server::builder(incoming)
-            .http2_only(true)
-            .http2_initial_connection_window_size(init_connection_window_size)
-            .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams)
-    }
-
-    pub(crate) async fn serve<S>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let interceptor = self.interceptor.clone();
-        let concurrency_limit = self.concurrency_limit;
-
         let svc = MakeSvc {
             inner: svc,
             interceptor,
             concurrency_limit,
             // timeout,
         };
-        self.serve_common(addr).serve(svc).await.map_err(map_err)?;
+
+        hyper::Server::builder(incoming)
+            .http2_only(true)
+            .http2_initial_connection_window_size(init_connection_window_size)
+            .http2_initial_stream_window_size(init_stream_window_size)
+            .http2_max_concurrent_streams(max_concurrent_streams)
+            .serve(svc)
+            .await
+            .map_err(map_err)?;
 
         Ok(())
     }
@@ -295,6 +294,37 @@ impl Server {
     {
         let interceptor = self.interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
+        let init_connection_window_size = self.init_connection_window_size;
+        let init_stream_window_size = self.init_stream_window_size;
+        let max_concurrent_streams = self.max_concurrent_streams;
+        // let timeout = self.timeout.clone();
+
+        let incoming = hyper::server::accept::from_stream::<_, _, crate::Error>(
+            async_stream::try_stream! {
+                let mut tcp = TcpIncoming::bind(addr)?
+                    .set_nodelay(self.tcp_nodelay)
+                    .set_keepalive(self.tcp_keepalive);
+
+                while let Some(stream) = tcp.try_next().await? {
+                    #[cfg(feature = "tls")]
+                    {
+                        if let Some(tls) = &self.tls {
+                            let io = match tls.connect(stream.into_inner()).await {
+                                Ok(io) => io,
+                                Err(error) => {
+                                    error!(message = "Unable to accept incoming connection.", %error);
+                                    continue
+                                },
+                            };
+                            yield BoxedIo::new(io);
+                            continue;
+                        }
+                    }
+
+                    yield BoxedIo::new(stream);
+                }
+            },
+        );
 
         let svc = MakeSvc {
             inner: svc,
@@ -302,7 +332,11 @@ impl Server {
             concurrency_limit,
             // timeout,
         };
-        self.serve_common(addr)
+        hyper::Server::builder(incoming)
+            .http2_only(true)
+            .http2_initial_connection_window_size(init_connection_window_size)
+            .http2_initial_stream_window_size(init_stream_window_size)
+            .http2_max_concurrent_streams(max_concurrent_streams)
             .serve(svc)
             .with_graceful_shutdown(signal)
             .await
