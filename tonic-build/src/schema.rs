@@ -12,8 +12,7 @@ pub(crate) trait Commentable<'a> {
 
 pub(crate) trait Service<'a>: Commentable<'a> {
     type Method: Method<'a, Context = Self::Context> + 'a;
-    type MethodIterator: Iterator<Item = &'a Self::Method>;
-    type Context: Context + Sized + 'a;
+    type Context: Context + 'a;
 
     fn name(&self) -> &str;
     fn package(&self) -> &str;
@@ -22,7 +21,7 @@ pub(crate) trait Service<'a>: Commentable<'a> {
 }
 
 pub(crate) trait Method<'a>: Commentable<'a> {
-    type Context: Context + Sized + 'a;
+    type Context: Context + 'a;
 
     fn name(&self) -> &str;
     fn identifier(&self) -> &str;
