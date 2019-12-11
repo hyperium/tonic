@@ -1,3 +1,5 @@
+#![cfg(feature = "broken")]
+
 use criterion::*;
 
 mod benchmarks;

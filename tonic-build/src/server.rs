@@ -9,6 +9,7 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
 
     let server_service = quote::format_ident!("{}Server", service.name);
     let server_trait = quote::format_ident!("{}", service.name);
+    let server_mod = quote::format_ident!("{}_server", service.name.to_ascii_lowercase());
     let generated_trait = generate_trait(service, proto_path, server_trait.clone());
     let service_doc = generate_doc_comments(&service.comments.leading);
 
@@ -17,56 +18,62 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
     let transport = generate_transport(&server_service, &server_trait, &path);
 
     quote! {
-        #generated_trait
+        /// Generated server implementations.
+        pub mod #server_mod {
+            #![allow(unused_variables, dead_code, missing_docs)]
+            use tonic::codegen::*;
 
-        #service_doc
-        #[derive(Debug)]
-        #[doc(hidden)]
-        pub struct #server_service<T: #server_trait> {
-            inner: Arc<T>,
-        }
+            #generated_trait
 
-        impl<T: #server_trait> #server_service<T> {
-            pub fn new(inner: T) -> Self {
-                let inner = Arc::new(inner);
-                Self { inner }
-            }
-        }
-
-        impl<T: #server_trait> Service<http::Request<HyperBody>> for #server_service<T> {
-            type Response = http::Response<tonic::body::BoxBody>;
-            type Error = Never;
-            type Future = BoxFuture<Self::Response, Self::Error>;
-
-            fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-                Poll::Ready(Ok(()))
+            #service_doc
+            #[derive(Debug)]
+            #[doc(hidden)]
+            pub struct #server_service<T: #server_trait> {
+                inner: Arc<T>,
             }
 
-            fn call(&mut self, req: http::Request<HyperBody>) -> Self::Future {
-                let inner = self.inner.clone();
-
-                match req.uri().path() {
-                    #methods
-
-                    _ => Box::pin(async move {
-                         Ok(http::Response::builder()
-                            .status(200)
-                            .header("grpc-status", "12")
-                            .body(tonic::body::BoxBody::empty())
-                            .unwrap())
-                    }),
+            impl<T: #server_trait> #server_service<T> {
+                pub fn new(inner: T) -> Self {
+                    let inner = Arc::new(inner);
+                    Self { inner }
                 }
             }
-        }
 
-        impl<T: #server_trait> Clone for #server_service<T> {
-            fn clone(&self) -> Self {
-                let inner = self.inner.clone();
-                Self { inner }
+            impl<T: #server_trait> Service<http::Request<HyperBody>> for #server_service<T> {
+                type Response = http::Response<tonic::body::BoxBody>;
+                type Error = Never;
+                type Future = BoxFuture<Self::Response, Self::Error>;
+
+                fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+                    Poll::Ready(Ok(()))
+                }
+
+                fn call(&mut self, req: http::Request<HyperBody>) -> Self::Future {
+                    let inner = self.inner.clone();
+
+                    match req.uri().path() {
+                        #methods
+
+                        _ => Box::pin(async move {
+                            Ok(http::Response::builder()
+                               .status(200)
+                               .header("grpc-status", "12")
+                               .body(tonic::body::BoxBody::empty())
+                               .unwrap())
+                        }),
+                    }
+                }
             }
-        }
 
-        #transport
+            impl<T: #server_trait> Clone for #server_service<T> {
+                fn clone(&self) -> Self {
+                    let inner = self.inner.clone();
+                    Self { inner }
+                }
+            }
+
+            #transport
+        }
     }
 }
 

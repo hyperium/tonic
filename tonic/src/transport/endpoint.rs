@@ -5,7 +5,7 @@ use super::{
     tls::{Certificate, Identity},
 };
 use bytes::Bytes;
-use http::uri::{InvalidUriBytes, Uri};
+use http::uri::{InvalidUri, Uri};
 use hyper::client::connect::HttpConnector;
 use std::{
     convert::{TryFrom, TryInto},
@@ -29,6 +29,8 @@ pub struct Endpoint<C = HttpConnector> {
         Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
     pub(super) init_stream_window_size: Option<u32>,
     pub(super) init_connection_window_size: Option<u32>,
+    pub(super) tcp_keepalive: Option<Duration>,
+    pub(super) tcp_nodelay: bool,
 }
 
 impl<C> Endpoint<C> {
@@ -57,6 +59,21 @@ impl<C> Endpoint<C> {
     pub fn timeout(self, dur: Duration) -> Self {
         Endpoint {
             timeout: Some(dur),
+            ..self
+        }
+    }
+
+    /// Set whether TCP keepalive messages are enabled on accepted connections.
+    ///
+    /// If `None` is specified, keepalive is disabled, otherwise the duration
+    /// specified will be the time to remain idle before sending TCP keepalive
+    /// probes.
+    ///
+    /// Default is no keepalive (`None`)
+    ///
+    pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
+        Endpoint {
+            tcp_keepalive,
             ..self
         }
     }
@@ -198,6 +215,15 @@ where
     C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
 {
     /// Create the channel.
+    /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    pub fn tcp_nodelay(self, enabled: bool) -> Self {
+        Endpoint {
+            tcp_nodelay: enabled,
+            ..self
+        }
+    }
+
+    /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, super::Error> {
         let e: Self = self.clone();
         Channel::connect(e).await
@@ -240,6 +266,8 @@ impl From<Uri> for Endpoint<HttpConnector> {
             interceptor_headers: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
+            tcp_keepalive: None,
+            tcp_nodelay: true,
         }
     }
 }

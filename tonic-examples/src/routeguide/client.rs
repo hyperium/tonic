@@ -3,8 +3,8 @@ use rand::rngs::ThreadRng;
 use rand::Rng;
 use route_guide::{Point, Rectangle, RouteNote};
 use std::error::Error;
-use std::time::{Duration, Instant};
-use tokio::timer::Interval;
+use std::time::Duration;
+use tokio::time::Instant;
 use tonic::transport::Channel;
 use tonic::Request;
 
@@ -12,7 +12,7 @@ pub mod route_guide {
     tonic::include_proto!("routeguide");
 }
 
-use route_guide::client::RouteGuideClient;
+use route_guide::routeguide_client::RouteGuideClient;
 
 async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let rectangle = Rectangle {
@@ -62,9 +62,9 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
     let start = Instant::now();
 
     let outbound = async_stream::stream! {
-        let mut interval = Interval::new_interval(Duration::from_secs(1));
+        let mut interval = tokio::time::interval(Duration::from_secs(1));
 
-        while let Some(time) = interval.next().await {
+        while let time = interval.tick().await {
             let elapsed = time.duration_since(start);
             let note = RouteNote {
                 location: Some(Point {

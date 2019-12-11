@@ -70,7 +70,7 @@ impl self::value_encoding::Sealed for Ascii {
     }
 
     fn from_shared(value: Bytes) -> Result<HeaderValue, InvalidMetadataValueBytes> {
-        HeaderValue::from_shared(value).map_err(|_| InvalidMetadataValueBytes::new())
+        HeaderValue::from_maybe_shared(value).map_err(|_| InvalidMetadataValueBytes::new())
     }
 
     fn from_static(value: &'static str) -> HeaderValue {
@@ -78,7 +78,7 @@ impl self::value_encoding::Sealed for Ascii {
     }
 
     fn decode(value: &[u8]) -> Result<Bytes, InvalidMetadataValueBytes> {
-        Ok(Bytes::from(value))
+        Ok(Bytes::copy_from_slice(value))
     }
 
     fn equals(a: &HeaderValue, b: &[u8]) -> bool {
@@ -112,7 +112,8 @@ impl self::value_encoding::Sealed for Binary {
 
     fn from_bytes(value: &[u8]) -> Result<HeaderValue, InvalidMetadataValueBytes> {
         let encoded_value: String = base64::encode_config(value, base64::STANDARD_NO_PAD);
-        HeaderValue::from_shared(encoded_value.into()).map_err(|_| InvalidMetadataValueBytes::new())
+        HeaderValue::from_maybe_shared(Bytes::from(encoded_value))
+            .map_err(|_| InvalidMetadataValueBytes::new())
     }
 
     fn from_shared(value: Bytes) -> Result<HeaderValue, InvalidMetadataValueBytes> {
@@ -126,7 +127,7 @@ impl self::value_encoding::Sealed for Binary {
         unsafe {
             // Because this is valid base64 this must be a valid HTTP header value,
             // no need to check again by calling from_shared.
-            HeaderValue::from_shared_unchecked(Bytes::from_static(value.as_ref()))
+            HeaderValue::from_maybe_shared_unchecked(Bytes::from_static(value.as_ref()))
         }
     }
 

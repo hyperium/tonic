@@ -11,12 +11,12 @@ pub mod echo {
 }
 
 use hello_world::{
-    server::{Greeter, GreeterServer},
+    greeter_server::{Greeter, GreeterServer},
     HelloReply, HelloRequest,
 };
 
 use echo::{
-    server::{Echo, EchoServer},
+    echo_server::{Echo, EchoServer},
     EchoRequest, EchoResponse,
 };
 

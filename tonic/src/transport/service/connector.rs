@@ -6,9 +6,11 @@ use hyper::client::connect::HttpConnector;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::time::Duration;
 use tower_make::MakeConnection;
 use tower_service::Service;
 
+#[cfg(not(feature = "tls"))]
 pub(crate) fn connector() -> HttpConnector {
     let mut http = HttpConnector::new();
     http.enforce_http(false);
@@ -29,12 +31,36 @@ pub(crate) struct Connector {
 }
 
 impl Connector {
+    #[cfg(not(feature = "tls"))]
+    pub(crate) fn new() -> Self {
+        Self {
+            http: Self::http_connector(),
+            tls: None,
+        }
+    }
+
     #[cfg(feature = "tls")]
     pub(crate) fn new(tls: Option<TlsConnector>) -> Self {
         Self {
-            http: connector(),
+            http: Self::http_connector(),
             tls,
         }
+    }
+
+    pub(crate) fn set_nodelay(mut self, enabled: bool) -> Self {
+        self.http.set_nodelay(enabled);
+        self
+    }
+
+    pub(crate) fn set_keepalive(mut self, duration: Option<Duration>) -> Self {
+        self.http.set_keepalive(duration);
+        self
+    }
+
+    fn http_connector() -> HttpConnector {
+        let mut http = HttpConnector::new();
+        http.enforce_http(false);
+        http
     }
 }
 
