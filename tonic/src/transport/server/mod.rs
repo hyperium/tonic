@@ -1,13 +1,19 @@
 //! Server implementation and builder.
 
-use super::service::{layer_fn, BoxedIo, Or, Routes, ServiceBuilderExt};
 #[cfg(feature = "tls")]
-use super::{service::TlsAcceptor, tls::Identity, Certificate};
+mod tls;
+
+#[cfg(feature = "tls")]
+pub use tls::ServerTlsConfig;
+
+#[cfg(feature = "tls")]
+use super::service::TlsAcceptor;
+
+use super::service::{layer_fn, BoxedIo, Or, Routes, ServiceBuilderExt};
 use crate::body::BoxBody;
-use futures_core::Stream;
 use futures_util::{
-    future::{self, MapErr},
-    ready, TryFutureExt, TryStreamExt,
+    future::{self, poll_fn, MapErr},
+    TryFutureExt,
 };
 use http::{Request, Response};
 use hyper::{
@@ -222,69 +228,11 @@ impl Server {
         Router::new(self.clone(), svc)
     }
 
-    pub(crate) async fn serve<S>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let interceptor = self.interceptor.clone();
-        let concurrency_limit = self.concurrency_limit;
-        let init_connection_window_size = self.init_connection_window_size;
-        let init_stream_window_size = self.init_stream_window_size;
-        let max_concurrent_streams = self.max_concurrent_streams;
-        // let timeout = self.timeout.clone();
-
-        let incoming = hyper::server::accept::from_stream::<_, _, crate::Error>(
-            async_stream::try_stream! {
-                let mut tcp = TcpIncoming::bind(addr)?
-                    .set_nodelay(self.tcp_nodelay)
-                    .set_keepalive(self.tcp_keepalive);
-
-                while let Some(stream) = tcp.try_next().await? {
-                    #[cfg(feature = "tls")]
-                    {
-                        if let Some(tls) = &self.tls {
-                            let io = match tls.connect(stream.into_inner()).await {
-                                Ok(io) => io,
-                                Err(error) => {
-                                    error!(message = "Unable to accept incoming connection.", %error);
-                                    continue
-                                },
-                            };
-                            yield BoxedIo::new(io);
-                            continue;
-                        }
-                    }
-
-                    yield BoxedIo::new(stream);
-                }
-            },
-        );
-        let svc = MakeSvc {
-            inner: svc,
-            interceptor,
-            concurrency_limit,
-            // timeout,
-        };
-
-        hyper::Server::builder(incoming)
-            .http2_only(true)
-            .http2_initial_connection_window_size(init_connection_window_size)
-            .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams)
-            .serve(svc)
-            .await
-            .map_err(map_err)?;
-
-        Ok(())
-    }
-
     pub(crate) async fn serve_with_shutdown<S, F>(
         self,
         addr: SocketAddr,
         svc: S,
-        signal: F,
+        signal: Option<F>,
     ) -> Result<(), super::Error>
     where
         S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
@@ -301,11 +249,14 @@ impl Server {
 
         let incoming = hyper::server::accept::from_stream::<_, _, crate::Error>(
             async_stream::try_stream! {
-                let mut tcp = TcpIncoming::bind(addr)?
-                    .set_nodelay(self.tcp_nodelay)
-                    .set_keepalive(self.tcp_keepalive);
+                let mut incoming = conn::AddrIncoming::bind(&addr)?;
 
-                while let Some(stream) = tcp.try_next().await? {
+                incoming.set_nodelay(self.tcp_nodelay);
+                incoming.set_keepalive(self.tcp_keepalive);
+
+
+
+                while let Some(stream) = next_accept(&mut incoming).await? {
                     #[cfg(feature = "tls")]
                     {
                         if let Some(tls) = &self.tls {
@@ -332,15 +283,22 @@ impl Server {
             concurrency_limit,
             // timeout,
         };
-        hyper::Server::builder(incoming)
+
+        let server = hyper::Server::builder(incoming)
             .http2_only(true)
             .http2_initial_connection_window_size(init_connection_window_size)
             .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams)
-            .serve(svc)
-            .with_graceful_shutdown(signal)
-            .await
-            .map_err(map_err)?;
+            .http2_max_concurrent_streams(max_concurrent_streams);
+
+        if let Some(signal) = signal {
+            server
+                .serve(svc)
+                .with_graceful_shutdown(signal)
+                .await
+                .map_err(map_err)?
+        } else {
+            server.serve(svc).await.map_err(map_err)?;
+        }
 
         Ok(())
     }
@@ -410,7 +368,9 @@ where
     ///
     /// [`Server`]: struct.Server.html
     pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
-        self.server.serve(addr, self.routes).await
+        self.server
+            .serve_with_shutdown::<_, future::Ready<()>>(addr, self.routes, None)
+            .await
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
@@ -423,7 +383,9 @@ where
         addr: SocketAddr,
         f: F,
     ) -> Result<(), super::Error> {
-        self.server.serve_with_shutdown(addr, self.routes, f).await
+        self.server
+            .serve_with_shutdown(addr, self.routes, Some(f))
+            .await
     }
 }
 
@@ -434,105 +396,6 @@ fn map_err(e: impl Into<crate::Error>) -> super::Error {
 impl fmt::Debug for Server {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Builder").finish()
-    }
-}
-
-/// Configures TLS settings for servers.
-#[cfg(feature = "tls")]
-#[derive(Clone)]
-pub struct ServerTlsConfig {
-    identity: Option<Identity>,
-    client_ca_root: Option<Certificate>,
-    rustls_raw: Option<tokio_rustls::rustls::ServerConfig>,
-}
-
-#[cfg(feature = "tls")]
-impl fmt::Debug for ServerTlsConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServerTlsConfig").finish()
-    }
-}
-
-#[cfg(feature = "tls")]
-impl ServerTlsConfig {
-    /// Creates a new `ServerTlsConfig`.
-    pub fn with_rustls() -> Self {
-        ServerTlsConfig {
-            identity: None,
-            client_ca_root: None,
-            rustls_raw: None,
-        }
-    }
-
-    /// Sets the [`Identity`] of the server.
-    pub fn identity(self, identity: Identity) -> Self {
-        ServerTlsConfig {
-            identity: Some(identity),
-            ..self
-        }
-    }
-
-    /// Sets a certificate against which to validate client TLS certificates.
-    pub fn client_ca_root(self, cert: Certificate) -> Self {
-        ServerTlsConfig {
-            client_ca_root: Some(cert),
-            ..self
-        }
-    }
-
-    /// Use options specified by the given `ServerConfig` to configure TLS.
-    ///
-    /// This overrides all other TLS options set via other means.
-    pub fn rustls_server_config(
-        &mut self,
-        config: tokio_rustls::rustls::ServerConfig,
-    ) -> &mut Self {
-        self.rustls_raw = Some(config);
-        self
-    }
-
-    fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::Error> {
-        match &self.rustls_raw {
-            None => TlsAcceptor::new_with_rustls_identity(
-                self.identity.clone().unwrap(),
-                self.client_ca_root.clone(),
-            ),
-            Some(config) => TlsAcceptor::new_with_rustls_raw(config.clone()),
-        }
-    }
-}
-
-#[derive(Debug)]
-struct TcpIncoming {
-    inner: conn::AddrIncoming,
-}
-
-impl TcpIncoming {
-    fn bind(addr: SocketAddr) -> Result<Self, crate::Error> {
-        let inner = conn::AddrIncoming::bind(&addr).map_err(Box::new)?;
-        Ok(Self { inner })
-    }
-
-    fn set_nodelay(mut self, enabled: bool) -> Self {
-        self.inner.set_nodelay(enabled);
-        self
-    }
-
-    fn set_keepalive(mut self, tcp_keepalive: Option<Duration>) -> Self {
-        self.inner.set_keepalive(tcp_keepalive);
-        self
-    }
-}
-
-impl Stream for TcpIncoming {
-    type Item = Result<conn::AddrStream, crate::Error>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match ready!(Accept::poll_accept(Pin::new(&mut self.inner), cx)) {
-            Some(Ok(s)) => Poll::Ready(Some(Ok(s))),
-            Some(Err(e)) => Poll::Ready(Some(Err(e.into()))),
-            None => Poll::Ready(None),
-        }
     }
 }
 
@@ -626,5 +489,18 @@ impl Service<Request<Body>> for Unimplemented {
                 .body(BoxBody::empty())
                 .unwrap(),
         )
+    }
+}
+
+// Implement try_next for `Accept::poll_accept`.
+async fn next_accept(
+    incoming: &mut conn::AddrIncoming,
+) -> Result<Option<conn::AddrStream>, crate::Error> {
+    let res = poll_fn(|cx| Pin::new(&mut *incoming).poll_accept(cx)).await;
+
+    if let Some(res) = res {
+        Ok(Some(res?))
+    } else {
+        return Ok(None);
     }
 }

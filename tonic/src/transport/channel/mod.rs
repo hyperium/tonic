@@ -1,9 +1,14 @@
 //! Client implementation and builder.
 
-use super::{
-    service::{Connection, ServiceList},
-    Endpoint,
-};
+mod endpoint;
+#[cfg(feature = "tls")]
+mod tls;
+
+pub use endpoint::Endpoint;
+#[cfg(feature = "tls")]
+pub use tls::ClientTlsConfig;
+
+use super::service::{Connection, ServiceList};
 use crate::{body::BoxBody, client::GrpcService};
 use bytes::Bytes;
 use http::{

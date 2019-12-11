@@ -1,9 +1,9 @@
-use super::channel::Channel;
+use super::Channel;
 #[cfg(feature = "tls")]
-use super::{
-    service::TlsConnector,
-    tls::{Certificate, Identity},
-};
+use super::ClientTlsConfig;
+#[cfg(feature = "tls")]
+use crate::transport::service::TlsConnector;
+use crate::transport::{Error, ErrorKind};
 use bytes::Bytes;
 use http::uri::{InvalidUri, Uri};
 use std::{
@@ -18,33 +18,33 @@ use std::{
 /// This struct is used to build and configure HTTP/2 channels.
 #[derive(Clone)]
 pub struct Endpoint {
-    pub(super) uri: Uri,
-    pub(super) timeout: Option<Duration>,
-    pub(super) concurrency_limit: Option<usize>,
-    pub(super) rate_limit: Option<(u64, Duration)>,
+    pub(crate) uri: Uri,
+    pub(crate) timeout: Option<Duration>,
+    pub(crate) concurrency_limit: Option<usize>,
+    pub(crate) rate_limit: Option<(u64, Duration)>,
     #[cfg(feature = "tls")]
-    pub(super) tls: Option<TlsConnector>,
-    pub(super) buffer_size: Option<usize>,
-    pub(super) interceptor_headers:
+    pub(crate) tls: Option<TlsConnector>,
+    pub(crate) buffer_size: Option<usize>,
+    pub(crate) interceptor_headers:
         Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
-    pub(super) init_stream_window_size: Option<u32>,
-    pub(super) init_connection_window_size: Option<u32>,
-    pub(super) tcp_keepalive: Option<Duration>,
-    pub(super) tcp_nodelay: bool,
+    pub(crate) init_stream_window_size: Option<u32>,
+    pub(crate) init_connection_window_size: Option<u32>,
+    pub(crate) tcp_keepalive: Option<Duration>,
+    pub(crate) tcp_nodelay: bool,
 }
 
 impl Endpoint {
     // FIXME: determine if we want to expose this or not. This is really
     // just used in codegen for a shortcut.
     #[doc(hidden)]
-    pub fn new<D>(dst: D) -> Result<Self, super::Error>
+    pub fn new<D>(dst: D) -> Result<Self, Error>
     where
         D: TryInto<Self>,
         D::Error: Into<crate::Error>,
     {
         let me = dst
             .try_into()
-            .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e.into()))?;
+            .map_err(|e| Error::from_source(ErrorKind::Client, e.into()))?;
         Ok(me)
     }
 
@@ -181,7 +181,7 @@ impl Endpoint {
     }
 
     /// Create a channel from this config.
-    pub async fn connect(&self) -> Result<Channel, super::Error> {
+    pub async fn connect(&self) -> Result<Channel, Error> {
         Channel::connect(self.clone()).await
     }
 }
@@ -243,92 +243,5 @@ impl std::error::Error for Never {}
 impl fmt::Debug for Endpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Endpoint").finish()
-    }
-}
-
-/// Configures TLS settings for endpoints.
-#[cfg(feature = "tls")]
-#[derive(Clone)]
-pub struct ClientTlsConfig {
-    domain: Option<String>,
-    cert: Option<Certificate>,
-    identity: Option<Identity>,
-    rustls_raw: Option<tokio_rustls::rustls::ClientConfig>,
-}
-
-#[cfg(feature = "tls")]
-impl fmt::Debug for ClientTlsConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClientTlsConfig")
-            .field("domain", &self.domain)
-            .field("cert", &self.cert)
-            .field("identity", &self.identity)
-            .finish()
-    }
-}
-
-#[cfg(feature = "tls")]
-impl ClientTlsConfig {
-    /// Creates a new `ClientTlsConfig` using Rustls.
-    pub fn with_rustls() -> Self {
-        ClientTlsConfig {
-            domain: None,
-            cert: None,
-            identity: None,
-            rustls_raw: None,
-        }
-    }
-
-    /// Sets the domain name against which to verify the server's TLS certificate.
-    ///
-    /// This has no effect if `rustls_client_config` is used to configure Rustls.
-    pub fn domain_name(self, domain_name: impl Into<String>) -> Self {
-        ClientTlsConfig {
-            domain: Some(domain_name.into()),
-            ..self
-        }
-    }
-
-    /// Sets the CA Certificate against which to verify the server's TLS certificate.
-    ///
-    /// This has no effect if `rustls_client_config` is used to configure Rustls.
-    pub fn ca_certificate(self, ca_certificate: Certificate) -> Self {
-        ClientTlsConfig {
-            cert: Some(ca_certificate),
-            ..self
-        }
-    }
-
-    /// Sets the client identity to present to the server.
-    ///
-    /// This has no effect if `rustls_client_config` is used to configure Rustls.
-    pub fn identity(self, identity: Identity) -> Self {
-        ClientTlsConfig {
-            identity: Some(identity),
-            ..self
-        }
-    }
-
-    /// Use options specified by the given `ClientConfig` to configure TLS.
-    ///
-    /// This overrides all other TLS options set via other means.
-    pub fn rustls_client_config(self, config: tokio_rustls::rustls::ClientConfig) -> Self {
-        ClientTlsConfig {
-            rustls_raw: Some(config),
-            ..self
-        }
-    }
-
-    fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
-        let domain = match &self.domain {
-            None => uri.to_string(),
-            Some(domain) => domain.clone(),
-        };
-        match &self.rustls_raw {
-            None => {
-                TlsConnector::new_with_rustls_cert(self.cert.clone(), self.identity.clone(), domain)
-            }
-            Some(c) => TlsConnector::new_with_rustls_raw(c.clone(), domain),
-        }
     }
 }

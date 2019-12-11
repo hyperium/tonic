@@ -94,14 +94,12 @@
 pub mod channel;
 pub mod server;
 
-mod endpoint;
 mod error;
 mod service;
 mod tls;
 
 #[doc(inline)]
-pub use self::channel::Channel;
-pub use self::endpoint::Endpoint;
+pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
 pub use self::server::{Server, ServiceName};
@@ -109,7 +107,7 @@ pub use self::tls::{Certificate, Identity};
 pub use hyper::Body;
 
 #[cfg(feature = "tls")]
-pub use self::endpoint::ClientTlsConfig;
+pub use self::channel::ClientTlsConfig;
 #[cfg(feature = "tls")]
 pub use self::server::ServerTlsConfig;
 
