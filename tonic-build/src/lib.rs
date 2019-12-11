@@ -241,13 +241,13 @@ fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
 }
 
 // Generate a larger doc comment composed of many lines of doc comments
-fn generate_doc_comments<'a, T: AsRef<str> + 'a, I: Iterator<Item = &'a T>>(
-    comments: I,
+fn generate_doc_comments<'a, T: AsRef<str> + 'a, C: IntoIterator<Item = &'a T>>(
+    comments: C,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
-    for ref comment in comments {
-        stream.extend(generate_doc_comment(*comment));
+    for comment in comments {
+        stream.extend(generate_doc_comment(comment));
     }
 
     stream

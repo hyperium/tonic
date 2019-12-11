@@ -6,18 +6,19 @@ pub(crate) trait Context {
 
 pub(crate) trait Commentable<'a> {
     type Comment: AsRef<str> + 'a;
-    type CommentIterator: Iterator<Item = &'a Self::Comment>;
-    fn comment(&'a self) -> Self::CommentIterator;
+    type CommentContainer: IntoIterator<Item = &'a Self::Comment>;
+    fn comment(&'a self) -> Self::CommentContainer;
 }
 
 pub(crate) trait Service<'a>: Commentable<'a> {
     type Method: Method<'a, Context = Self::Context> + 'a;
+    type MethodContainer: IntoIterator<Item = &'a Self::Method>;
     type Context: Context + 'a;
 
     fn name(&self) -> &str;
     fn package(&self) -> &str;
     fn identifier(&self) -> &str;
-    fn methods(&'a self) -> Self::MethodIterator;
+    fn methods(&'a self) -> Self::MethodContainer;
 }
 
 pub(crate) trait Method<'a>: Commentable<'a> {

@@ -6,10 +6,10 @@ use std::path::{Path, PathBuf};
 
 impl<'a> schema::Commentable<'a> for Service {
     type Comment = String;
-    type CommentIterator = std::slice::Iter<'a, String>;
+    type CommentContainer = &'a Vec<Self::Comment>;
 
-    fn comment(&'a self) -> Self::CommentIterator {
-        self.comments.leading.iter()
+    fn comment(&'a self) -> Self::CommentContainer {
+        &self.comments.leading
     }
 }
 
@@ -20,12 +20,12 @@ pub(crate) struct ProstContext {
 impl schema::Context for ProstContext {
     fn codec_name(&self) -> &str {
         "tonic::codec::ProstCodec"
-}
+    }
 }
 
 impl<'a> schema::Service<'a> for Service {
     type Method = Method;
-    type MethodIterator = std::slice::Iter<'a, Method>;
+    type MethodContainer = &'a Vec<Self::Method>;
     type Context = ProstContext;
 
     fn name(&self) -> &str {
@@ -40,17 +40,17 @@ impl<'a> schema::Service<'a> for Service {
         &self.proto_name
     }
 
-    fn methods(&'a self) -> Self::MethodIterator {
-        self.methods.iter()
+    fn methods(&'a self) -> Self::MethodContainer {
+        &self.methods
     }
 }
 
 impl<'a> schema::Commentable<'a> for Method {
     type Comment = String;
-    type CommentIterator = std::slice::Iter<'a, Self::Comment>;
+    type CommentContainer = &'a Vec<Self::Comment>;
 
-    fn comment(&'a self) -> Self::CommentIterator {
-        self.comments.leading.iter()
+    fn comment(&'a self) -> Self::CommentContainer {
+        &self.comments.leading
     }
 }
 
