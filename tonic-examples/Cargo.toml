@@ -66,6 +66,14 @@ path = "src/multiplex/client.rs"
 name = "gcp-client"
 path = "src/gcp/client.rs"
 
+[[bin]]
+name = "context-client"
+path = "src/context/client.rs"
+
+[[bin]]
+name = "context-server"
+path = "src/context/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 bytes = "0.4"
