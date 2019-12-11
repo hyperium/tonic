@@ -94,12 +94,14 @@
 pub mod channel;
 pub mod server;
 
+mod context;
 mod error;
 mod service;
 mod tls;
 
 #[doc(inline)]
 pub use self::channel::{Channel, Endpoint};
+pub use self::context::{Ctx, CtxField};
 pub use self::error::Error;
 #[doc(inline)]
 pub use self::server::{Server, ServiceName};

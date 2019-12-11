@@ -1,3 +1,4 @@
+use crate::transport::Ctx;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -10,11 +11,24 @@ pub(in crate::transport) trait Io:
 
 impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
 
-pub(crate) struct BoxedIo(Pin<Box<dyn Io>>);
+pub(crate) struct BoxedIo {
+    inner: Pin<Box<dyn Io>>,
+    pub(crate) ctx: Ctx,
+}
 
 impl BoxedIo {
     pub(in crate::transport) fn new<I: Io>(io: I) -> Self {
-        BoxedIo(Box::pin(io))
+        BoxedIo {
+            inner: Box::pin(io),
+            ctx: Ctx::default(),
+        }
+    }
+
+    pub(in crate::transport) fn with_context<I: Io>(io: I, ctx: Ctx) -> Self {
+        BoxedIo {
+            inner: Box::pin(io),
+            ctx,
+        }
     }
 }
 
@@ -24,7 +38,7 @@ impl AsyncRead for BoxedIo {
         cx: &mut Context<'_>,
         buf: &mut [u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_read(cx, buf)
+        Pin::new(&mut self.inner).poll_read(cx, buf)
     }
 }
 
@@ -34,14 +48,14 @@ impl AsyncWrite for BoxedIo {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
+        Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
+        Pin::new(&mut self.inner).poll_flush(cx)
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.0).poll_shutdown(cx)
+        Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }

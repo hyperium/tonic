@@ -10,6 +10,7 @@ pub use tls::ServerTlsConfig;
 use super::service::TlsAcceptor;
 
 use super::service::{layer_fn, BoxedIo, Or, Routes, ServiceBuilderExt};
+use super::{Ctx, CtxField};
 use crate::body::BoxBody;
 use futures_util::{
     future::{self, poll_fn, MapErr},
@@ -63,6 +64,7 @@ pub struct Server {
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
     tcp_nodelay: bool,
+    ctx_fields: Vec<CtxField>,
 }
 
 /// A stack based `Service` router.
@@ -211,6 +213,23 @@ impl Server {
         }
     }
 
+    /// Add a field to the request context.
+    ///
+    /// A `Ctx` struct is attached to each request's extensions
+    /// so it can be used in interceptors.
+    ///
+    /// ```
+    /// # use tonic::transport::{CtxField, Server};
+    /// # let mut builder = Server::builder();
+    /// builder.with_ctx_field(CtxField::PeerAddr);
+    /// ```
+    pub fn with_ctx_field(self, field: CtxField) -> Self {
+        let mut ctx_fields = self.ctx_fields;
+        ctx_fields.push(field);
+
+        Server { ctx_fields, ..self }
+    }
+
     /// Create a router with the `S` typed service as the first service.
     ///
     /// This will clone the `Server` builder and create a router that will
@@ -254,9 +273,17 @@ impl Server {
                 incoming.set_nodelay(self.tcp_nodelay);
                 incoming.set_keepalive(self.tcp_keepalive);
 
-
-
                 while let Some(stream) = next_accept(&mut incoming).await? {
+                    let mut ctx = Ctx::default();
+
+                    for field in &self.ctx_fields {
+                        match field {
+                            CtxField::PeerAddr => {
+                                ctx.peer_addr = Some(stream.remote_addr())
+                            }
+                        }
+                    }
+
                     #[cfg(feature = "tls")]
                     {
                         if let Some(tls) = &self.tls {
@@ -267,12 +294,12 @@ impl Server {
                                     continue
                                 },
                             };
-                            yield BoxedIo::new(io);
+                            yield BoxedIo::with_context(io, ctx);
                             continue;
                         }
                     }
 
-                    yield BoxedIo::new(stream);
+                    yield BoxedIo::with_context(stream, ctx);
                 }
             },
         );
@@ -400,7 +427,16 @@ impl fmt::Debug for Server {
 }
 
 #[derive(Debug)]
-struct Svc<S>(S);
+struct Svc<S> {
+    inner: S,
+    ctx: Ctx,
+}
+
+impl<S> Svc<S> {
+    pub(crate) fn new(inner: S, ctx: Ctx) -> Self {
+        Svc { inner, ctx }
+    }
+}
 
 impl<S> Service<Request<Body>> for Svc<S>
 where
@@ -412,11 +448,12 @@ where
     type Future = MapErr<S::Future, fn(S::Error) -> crate::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        self.0.call(req).map_err(|e| e.into())
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        req.extensions_mut().insert(self.ctx);
+        self.inner.call(req).map_err(|e| e.into())
     }
 }
 
@@ -427,7 +464,7 @@ struct MakeSvc<S> {
     inner: S,
 }
 
-impl<S, T> Service<T> for MakeSvc<S>
+impl<S> Service<&BoxedIo> for MakeSvc<S>
 where
     S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
@@ -442,11 +479,13 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, _: T) -> Self::Future {
+    fn call(&mut self, io: &BoxedIo) -> Self::Future {
         let interceptor = self.interceptor.clone();
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
         // let timeout = self.timeout.clone();
+
+        let ctx = io.ctx;
 
         Box::pin(async move {
             let svc = ServiceBuilder::new()
@@ -455,10 +494,10 @@ where
                 .service(svc);
 
             let svc = if let Some(interceptor) = interceptor {
-                let layered = interceptor.layer(BoxService::new(Svc(svc)));
-                BoxService::new(Svc(layered))
+                let layered = interceptor.layer(BoxService::new(svc));
+                BoxService::new(Svc::new(layered, ctx))
             } else {
-                BoxService::new(Svc(svc))
+                BoxService::new(Svc::new(svc, ctx))
             };
 
             Ok(svc)
