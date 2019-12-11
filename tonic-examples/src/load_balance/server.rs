@@ -19,7 +19,7 @@ pub struct EchoServer {
 }
 
 #[tonic::async_trait]
-impl pb::server::Echo for EchoServer {
+impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
         let message = format!("{} (from {})", request.into_inner().message, self.addr);
 
@@ -64,7 +64,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let server = EchoServer { addr };
         let serve = Server::builder()
-            .add_service(pb::server::EchoServer::new(server))
+            .add_service(pb::echo_server::EchoServer::new(server))
             .serve(addr);
 
         tokio::spawn(async move {

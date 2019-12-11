@@ -1,4 +1,7 @@
-use crate::{pb::client::*, pb::*, test_assert, TestAssertion};
+use crate::{
+    pb::testservice_client::*, pb::unimplementedservice_client::*, pb::*, test_assert,
+    TestAssertion,
+};
 use futures_util::{future, stream, StreamExt};
 use tokio::sync::mpsc;
 use tonic::transport::Channel;

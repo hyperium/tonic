@@ -3,7 +3,7 @@ pub mod pb {
 }
 
 use http::header::HeaderValue;
-use pb::{client::EchoClient, EchoRequest};
+use pb::{echo_client::EchoClient, EchoRequest};
 use tonic::transport::Channel;
 
 #[tokio::main]

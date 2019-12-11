@@ -5,44 +5,50 @@ use quote::{format_ident, quote};
 
 pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name);
+    let client_mod = quote::format_ident!("{}_client", service.name.to_ascii_lowercase());
     let methods = generate_methods(service, proto);
 
     let connect = generate_connect(&service_ident);
     let service_doc = generate_doc_comments(&service.comments.leading);
 
     quote! {
-        #service_doc
-        pub struct #service_ident<T> {
-            inner: tonic::client::Grpc<T>,
-        }
+        /// Generated server implementations.
+        pub mod #client_mod {
+            #![allow(unused_variables, dead_code, missing_docs)]
+            use tonic::codegen::*;
 
-        #connect
-
-        impl<T> #service_ident<T>
-        where T: tonic::client::GrpcService<tonic::body::BoxBody>,
-              T::ResponseBody: Body + HttpBody + Send + 'static,
-              T::Error: Into<StdError>,
-              <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send,
-        {
-            pub fn new(inner: T) -> Self {
-                let inner = tonic::client::Grpc::new(inner);
-                Self { inner }
+            #service_doc
+            pub struct #service_ident<T> {
+                inner: tonic::client::Grpc<T>,
             }
 
-            /// Check if the service is ready.
-            pub async fn ready(&mut self) -> Result<(), tonic::Status> {
-                self.inner.ready().await.map_err(|e| {
-                    tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
-                })
+            #connect
+
+            impl<T> #service_ident<T>
+            where T: tonic::client::GrpcService<tonic::body::BoxBody>,
+                  T::ResponseBody: Body + HttpBody + Send + 'static,
+                  T::Error: Into<StdError>,
+                  <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send, {
+                pub fn new(inner: T) -> Self {
+                    let inner = tonic::client::Grpc::new(inner);
+                    Self { inner }
+                }
+
+                /// Check if the service is ready.
+                pub async fn ready(&mut self) -> Result<(), tonic::Status> {
+                    self.inner.ready().await.map_err(|e| {
+                        tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+                    })
+                }
+
+                #methods
             }
 
-            #methods
-        }
-
-        impl<T: Clone> Clone for #service_ident<T> {
-            fn clone(&self) -> Self {
-                Self {
-                    inner: self.inner.clone(),
+            impl<T: Clone> Clone for #service_ident<T> {
+                fn clone(&self) -> Self {
+                    Self {
+                        inner: self.inner.clone(),
+                    }
                 }
             }
         }

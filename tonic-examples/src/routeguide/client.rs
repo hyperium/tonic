@@ -12,7 +12,7 @@ pub mod route_guide {
     tonic::include_proto!("routeguide");
 }
 
-use route_guide::client::RouteGuideClient;
+use route_guide::routeguide_client::RouteGuideClient;
 
 async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let rectangle = Rectangle {

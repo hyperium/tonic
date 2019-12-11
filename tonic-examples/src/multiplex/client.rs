@@ -6,8 +6,8 @@ pub mod echo {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use echo::{client::EchoClient, EchoRequest};
-use hello_world::{client::GreeterClient, HelloRequest};
+use echo::{echo_client::EchoClient, EchoRequest};
+use hello_world::{greeter_client::GreeterClient, HelloRequest};
 use tonic::transport::Endpoint;
 
 #[tokio::main]

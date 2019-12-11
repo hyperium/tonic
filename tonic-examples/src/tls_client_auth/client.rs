@@ -2,7 +2,7 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use pb::{client::EchoClient, EchoRequest};
+use pb::{echo_client::EchoClient, EchoRequest};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
 
 #[tokio::main]
