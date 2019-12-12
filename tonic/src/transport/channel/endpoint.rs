@@ -1,3 +1,4 @@
+use super::super::service;
 use super::Channel;
 #[cfg(feature = "tls")]
 use super::ClientTlsConfig;
@@ -12,6 +13,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
+use tower_make::MakeConnection;
 
 /// Channel builder.
 ///
@@ -182,7 +184,35 @@ impl Endpoint {
 
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
-        Channel::connect(self.clone()).await
+        let mut http = hyper::client::connect::HttpConnector::new();
+        http.enforce_http(false);
+        http.set_nodelay(self.tcp_nodelay);
+        http.set_keepalive(self.tcp_keepalive);
+
+        #[cfg(feature = "tls")]
+        let connector = service::connector(http, self.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = service::connector(http);
+
+        Channel::connect(connector, self.clone()).await
+    }
+
+    /// Connect with a custom connector.
+    pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
+    where
+        C: MakeConnection<Uri> + Send + 'static,
+        C::Connection: Unpin + Send + 'static,
+        C::Future: Send + 'static,
+        crate::Error: From<C::Error> + Send + 'static,
+    {
+        #[cfg(feature = "tls")]
+        let connector = service::connector(connector, self.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = service::connector(connector);
+
+        Channel::connect(connector, self.clone()).await
     }
 }
 

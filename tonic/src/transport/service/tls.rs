@@ -3,6 +3,7 @@ use crate::transport::{Certificate, Identity};
 #[cfg(feature = "tls-roots")]
 use rustls_native_certs;
 use std::{fmt, sync::Arc};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 #[cfg(feature = "tls")]
 use tokio_rustls::{
@@ -80,7 +81,10 @@ impl TlsConnector {
         })
     }
 
-    pub(crate) async fn connect(&self, io: TcpStream) -> Result<BoxedIo, crate::Error> {
+    pub(crate) async fn connect<I>(&self, io: I) -> Result<BoxedIo, crate::Error>
+    where
+        I: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+    {
         let tls_io = {
             let dns = DNSNameRef::try_from_ascii_str(self.domain.as_str())?.to_owned();
 

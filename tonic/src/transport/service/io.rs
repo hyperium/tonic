@@ -1,3 +1,4 @@
+use hyper::client::connect::{Connected, Connection};
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -15,6 +16,12 @@ pub(crate) struct BoxedIo(Pin<Box<dyn Io>>);
 impl BoxedIo {
     pub(in crate::transport) fn new<I: Io>(io: I) -> Self {
         BoxedIo(Box::pin(io))
+    }
+}
+
+impl Connection for BoxedIo {
+    fn connected(&self) -> Connected {
+        Connected::new()
     }
 }
 
