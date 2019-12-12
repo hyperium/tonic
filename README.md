@@ -97,8 +97,8 @@ terms or conditions.
 [`prost`]: https://github.com/danburkert/prost
 [`protobuf`]: https://developers.google.com/protocol-buffers
 [`rustls`]: https://github.com/ctz/rustls
-[`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
-[`tonic-interop`]: https://github.com/hyperium/tonic/tree/master/interop
+[`examples`]: https://github.com/hyperium/tonic/tree/master/examples
+[`interop`]: https://github.com/hyperium/tonic/tree/master/interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/examples
 [Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
