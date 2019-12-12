@@ -78,12 +78,20 @@ path = "src/tracing/client.rs"
 name = "tracing-server"
 path = "src/tracing/server.rs"
 
+[[bin]]
+name = "uds-client"
+path = "src/uds/client.rs"
+
+[[bin]]
+name = "uds-server"
+path = "src/uds/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 bytes = "0.4"
 prost = "0.5"
 
-tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros"] }
+tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"]}
 async-stream = "0.2"
 http = "0.2"
