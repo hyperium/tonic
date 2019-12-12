@@ -16,13 +16,13 @@ esac
 
 ARG="${1:-""}"
 
-(cd tonic-interop && cargo build --bins)
+(cd interop && cargo build --bins)
 
-SERVER="tonic-interop/bin/server_${OS}_amd64${EXT}"
+SERVER="interop/bin/server_${OS}_amd64${EXT}"
 
-# TLS_CA="tonic-interop/data/ca.pem"
-TLS_CRT="tonic-interop/data/server1.pem"
-TLS_KEY="tonic-interop/data/server1.key"
+# TLS_CA="interop/data/ca.pem"
+TLS_CRT="interop/data/server1.pem"
+TLS_KEY="interop/data/server1.key"
 
 # run the test server
 ./"${SERVER}" ${ARG} --tls_cert_file $TLS_CRT --tls_key_file $TLS_KEY &

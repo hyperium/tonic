@@ -2,9 +2,12 @@
 members = [
     "tonic",
     "tonic-build",
-    "tonic-examples",
-    "tonic-interop",
 
+    # Non-published crates
+    "examples",
+    "interop",
+
+    # Tests
     "tests/included_service",
     "tests/same_name",
     "tests/wellknown",
