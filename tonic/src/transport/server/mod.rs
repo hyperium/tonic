@@ -15,7 +15,7 @@ use futures_util::{
     future::{self, poll_fn, MapErr},
     TryFutureExt,
 };
-use http::{Request, Response};
+use http::{HeaderMap, Request, Response};
 use hyper::{
     server::{accept::Accept, conn},
     Body,
@@ -39,9 +39,11 @@ use tower::{
 };
 #[cfg(feature = "tls")]
 use tracing::error;
+use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
+type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static>;
 
 /// A default batteries included `transport` server.
 ///
@@ -54,6 +56,7 @@ type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync
 #[derive(Default, Clone)]
 pub struct Server {
     interceptor: Option<Interceptor>,
+    trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
     // timeout: Option<Duration>,
     #[cfg(feature = "tls")]
@@ -211,6 +214,17 @@ impl Server {
         }
     }
 
+    /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
+    pub fn trace_fn<F>(self, f: F) -> Self
+    where
+        F: Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static,
+    {
+        Server {
+            trace_interceptor: Some(Arc::new(f)),
+            ..self
+        }
+    }
+
     /// Create a router with the `S` typed service as the first service.
     ///
     /// This will clone the `Server` builder and create a router that will
@@ -241,6 +255,7 @@ impl Server {
         F: Future<Output = ()>,
     {
         let interceptor = self.interceptor.clone();
+        let span = self.trace_interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
@@ -282,6 +297,7 @@ impl Server {
             interceptor,
             concurrency_limit,
             // timeout,
+            span,
         };
 
         let server = hyper::Server::builder(incoming)
@@ -399,8 +415,10 @@ impl fmt::Debug for Server {
     }
 }
 
-#[derive(Debug)]
-struct Svc<S>(S);
+struct Svc<S> {
+    inner: S,
+    span: Option<TraceInterceptor>,
+}
 
 impl<S> Service<Request<Body>> for Svc<S>
 where
@@ -409,14 +427,26 @@ where
 {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
-    type Future = MapErr<S::Future, fn(S::Error) -> crate::Error>;
+    type Future = MapErr<Instrumented<S::Future>, fn(S::Error) -> crate::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        self.0.call(req).map_err(|e| e.into())
+        let span = if let Some(trace_interceptor) = &self.span {
+            trace_interceptor(req.headers())
+        } else {
+            tracing::Span::none()
+        };
+
+        self.inner.call(req).instrument(span).map_err(|e| e.into())
+    }
+}
+
+impl<S> fmt::Debug for Svc<S> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Svc").finish()
     }
 }
 
@@ -425,6 +455,7 @@ struct MakeSvc<S> {
     concurrency_limit: Option<usize>,
     // timeout: Option<Duration>,
     inner: S,
+    span: Option<TraceInterceptor>,
 }
 
 impl<S, T> Service<T> for MakeSvc<S>
@@ -447,6 +478,7 @@ where
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
         // let timeout = self.timeout.clone();
+        let span = self.span.clone();
 
         Box::pin(async move {
             let svc = ServiceBuilder::new()
@@ -455,10 +487,10 @@ where
                 .service(svc);
 
             let svc = if let Some(interceptor) = interceptor {
-                let layered = interceptor.layer(BoxService::new(Svc(svc)));
-                BoxService::new(Svc(layered))
+                let layered = interceptor.layer(BoxService::new(Svc { inner: svc, span }));
+                BoxService::new(layered)
             } else {
-                BoxService::new(Svc(svc))
+                BoxService::new(Svc { inner: svc, span })
             };
 
             Ok(svc)

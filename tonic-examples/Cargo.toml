@@ -66,6 +66,14 @@ path = "src/multiplex/client.rs"
 name = "gcp-client"
 path = "src/gcp/client.rs"
 
+[[bin]]
+name = "tracing-client"
+path = "src/tracing/client.rs"
+
+[[bin]]
+name = "tracing-server"
+path = "src/tracing/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 bytes = "0.4"
@@ -81,6 +89,12 @@ tower = { git = "https://github.com/tower-rs/tower" }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.6"
+
+# Tracing
+tracing = "0.1"
+tracing-subscriber =  { version = "0.2.0-alpha", features = ["tracing-log"] }
+tracing-attributes = "0.1"
+tracing-futures = "0.2"
 
 # Required for wellknown types
 prost-types = "0.5"

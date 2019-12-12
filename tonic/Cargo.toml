@@ -31,6 +31,7 @@ transport = [
     "tower",
     "tower-balance",
     "tower-load",
+    "tracing-futures",
 ]
 tls = ["tokio-rustls"]
 tls-roots = ["rustls-native-certs"]
@@ -68,6 +69,7 @@ tower = { git = "https://github.com/tower-rs/tower", optional = true}
 tower-make = { version = "0.3", features = ["connect"] }
 tower-balance =  { git = "https://github.com/tower-rs/tower", optional = true }
 tower-load = { git = "https://github.com/tower-rs/tower", optional = true }
+tracing-futures = { version = "0.2", optional = true } 
 
 # rustls
 tokio-rustls = { version = "0.12", optional = true }
