@@ -49,8 +49,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     });
 
     if matches.use_tls {
-        let cert = tokio::fs::read("tonic-interop/data/server1.pem").await?;
-        let key = tokio::fs::read("tonic-interop/data/server1.key").await?;
+        let cert = tokio::fs::read("interop/data/server1.pem").await?;
+        let key = tokio::fs::read("interop/data/server1.key").await?;
         let identity = Identity::from_pem(cert, key);
 
         builder = builder.tls_config(ServerTlsConfig::with_rustls().identity(identity));
