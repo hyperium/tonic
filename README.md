@@ -32,7 +32,7 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 
 ## Getting Started
 
-Examples can be found in [`tonic-examples`] and for more complex scenarios [`tonic-interop`]
+Examples can be found in [`examples`] and for more complex scenarios [`interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
 ### Rust Version
@@ -67,9 +67,9 @@ question. If that doesn't work, try opening an [issue] with the question.
 - [`tonic`](https://github.com/hyperium/tonic/tree/master/tonic): Generic gRPC and HTTP/2 client/server
 implementation.
 - [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic-build): [`prost`] based service codegen.
-- [`tonic-examples`](https://github.com/hyperium/tonic/tree/master/tonic-examples): Example gRPC implementations showing off
+- [`examples`](https://github.com/hyperium/tonic/tree/master/examples): Example gRPC implementations showing off
 tls, load balancing and bi-directional streaming.
-- [`tonic-interop`](https://github.com/hyperium/tonic/tree/master/tonic-interop): Interop tests implementation.
+- [`interop`](https://github.com/hyperium/tonic/tree/master/interop): Interop tests implementation.
 
 ## Contributing
 
@@ -97,11 +97,11 @@ terms or conditions.
 [`prost`]: https://github.com/danburkert/prost
 [`protobuf`]: https://developers.google.com/protocol-buffers
 [`rustls`]: https://github.com/ctz/rustls
-[`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/tonic-examples
-[`tonic-interop`]: https://github.com/hyperium/tonic/tree/master/tonic-interop
-[Examples]: https://github.com/hyperium/tonic/tree/master/tonic-examples
+[`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
+[`tonic-interop`]: https://github.com/hyperium/tonic/tree/master/interop
+[Examples]: https://github.com/hyperium/tonic/tree/master/examples
 [Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
 [Chat]: https://discord.gg/6yGkFeN
-[routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/tonic-examples/routeguide-tutorial.md
-[helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/tonic-examples/helloworld-tutorial.md
+[routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
+[helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md

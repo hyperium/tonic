@@ -93,8 +93,8 @@ jobs:
       run: rustup component add rustfmt
     - uses: actions/checkout@master
     - name: Run interop tests
-      run: ./tonic-interop/test.sh
+      run: ./interop/test.sh
       shell: bash
     - name: Run interop tests with Rustls
-      run: ./tonic-interop/test.sh --use_tls tls_rustls
+      run: ./interop/test.sh --use_tls tls_rustls
       shell: bash
