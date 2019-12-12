@@ -490,7 +490,7 @@ where
                 let layered = interceptor.layer(BoxService::new(Svc { inner: svc, span }));
                 BoxService::new(layered)
             } else {
-                BoxService::new(svc)
+                BoxService::new(Svc { inner: svc, span })
             };
 
             Ok(svc)
