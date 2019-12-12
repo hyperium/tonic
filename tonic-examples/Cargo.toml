@@ -15,6 +15,10 @@ name = "helloworld-client"
 path = "src/helloworld/client.rs"
 
 [[bin]]
+name = "helloworld-client-blocking"
+path = "src/helloworld/client-blocking.rs"
+
+[[bin]]
 name = "routeguide-server"
 path = "src/routeguide/server.rs"
 
