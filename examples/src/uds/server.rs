@@ -1,3 +1,5 @@
+use std::path::Path;
+use tokio::net::UnixListener;
 use tonic::{transport::Server, Request, Response, Status};
 
 pub mod hello_world {
@@ -29,12 +31,17 @@ impl Greeter for MyGreeter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse().unwrap();
+    let path = "/tmp/tonic/helloworld";
+
+    tokio::fs::create_dir_all(Path::new(path).parent().unwrap()).await?;
+
+    let mut uds = UnixListener::bind(path)?;
+
     let greeter = MyGreeter::default();
 
     Server::builder()
         .add_service(GreeterServer::new(greeter))
-        .serve(addr)
+        .serve_with_incoming(uds.incoming())
         .await?;
 
     Ok(())

@@ -13,13 +13,15 @@ use tower::service_fn;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let channel = Endpoint::try_from("http://[::]:50051")?
-        .connect_with_connector(service_fn(|dst: Uri| {
-            let host = dst.host().unwrap();
-            let port = dst.port().unwrap();
+    // We will ignore this uri because uds do not use it
+    // if your connector does use the uri it will be provided
+    // as the request to the `MakeConnection`.
+    let channel = Endpoint::try_from("lttp://[::]:50051")?
+        .connect_with_connector(service_fn(|_: Uri| {
+            let path = "/tmp/tonic/helloworld";
 
             // Connect to a Uds socket
-            UnixStream::connect(format!("{}:{}", host, port))
+            UnixStream::connect(path)
         }))
         .await?;
 
