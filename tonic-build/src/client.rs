@@ -34,16 +34,6 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
                     Self { inner }
                 }
 
-                /// Get a immutable reference to the inner type `T`.
-                pub fn get_ref(&self) -> &T {
-                    &self.inner
-                }
-
-                /// Get a mutable reference to the inner type `T`.
-                pub fn get_mut(&mut self) -> &mut T {
-                    &mut self.inner
-                }
-
                 #methods
             }
 
@@ -175,7 +165,7 @@ fn generate_streaming(method: &Method, proto: &str, path: String) -> TokenStream
         ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
-            })?
+            })?;
            let codec = tonic::codec::ProstCodec::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.streaming(request.into_streaming_request(), path, codec).await
