@@ -5,11 +5,11 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 pub(in crate::transport) trait Io:
-    AsyncRead + AsyncWrite + Send + Unpin + 'static
+    AsyncRead + AsyncWrite + Send + 'static
 {
 }
 
-impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
+impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + 'static {}
 
 pub(crate) struct BoxedIo(Pin<Box<dyn Io>>);
 

@@ -4,7 +4,6 @@ use crate::transport::{Certificate, Identity};
 use rustls_native_certs;
 use std::{fmt, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::net::TcpStream;
 #[cfg(feature = "tls")]
 use tokio_rustls::{
     rustls::{ClientConfig, NoClientAuth, ServerConfig, Session},
@@ -158,7 +157,10 @@ impl TlsAcceptor {
         })
     }
 
-    pub(crate) async fn connect(&self, io: TcpStream) -> Result<BoxedIo, crate::Error> {
+    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<BoxedIo, crate::Error>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    {
         let io = {
             let acceptor = RustlsAcceptor::from(self.inner.clone());
             let tls = acceptor.accept(io).await?;

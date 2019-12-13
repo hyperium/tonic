@@ -1,5 +1,6 @@
 //! Server implementation and builder.
 
+mod incoming;
 #[cfg(feature = "tls")]
 mod tls;
 
@@ -9,18 +10,17 @@ pub use tls::ServerTlsConfig;
 #[cfg(feature = "tls")]
 use super::service::TlsAcceptor;
 
-use super::service::{layer_fn, BoxedIo, Or, Routes, ServiceBuilderExt};
+use incoming::TcpIncoming;
+
+use super::service::{layer_fn, Or, Routes, ServiceBuilderExt};
 use crate::body::BoxBody;
+use futures_core::Stream;
 use futures_util::{
-    future::{self, poll_fn, MapErr},
+    future::{self, MapErr},
     TryFutureExt,
 };
 use http::{HeaderMap, Request, Response};
-use hyper::{
-    server::{accept::Accept, conn},
-    Body,
-};
-use std::time::Duration;
+use hyper::{server::accept, Body};
 use std::{
     fmt,
     future::Future,
@@ -28,8 +28,9 @@ use std::{
     pin::Pin,
     sync::Arc,
     task::{Context, Poll},
-    // time::Duration,
+    time::Duration,
 };
+use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
     layer::{Layer, Stack},
     limit::concurrency::ConcurrencyLimitLayer,
@@ -37,8 +38,6 @@ use tower::{
     Service,
     ServiceBuilder,
 };
-#[cfg(feature = "tls")]
-use tracing::error;
 use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
@@ -242,16 +241,19 @@ impl Server {
         Router::new(self.clone(), svc)
     }
 
-    pub(crate) async fn serve_with_shutdown<S, F>(
+    pub(crate) async fn serve_with_shutdown<S, I, F, IO, IE>(
         self,
-        addr: SocketAddr,
         svc: S,
+        incoming: I,
         signal: Option<F>,
     ) -> Result<(), super::Error>
     where
         S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
+        I: Stream<Item = Result<IO, IE>>,
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IE: Into<crate::Error>,
         F: Future<Output = ()>,
     {
         let interceptor = self.interceptor.clone();
@@ -262,35 +264,8 @@ impl Server {
         let max_concurrent_streams = self.max_concurrent_streams;
         // let timeout = self.timeout.clone();
 
-        let incoming = hyper::server::accept::from_stream::<_, _, crate::Error>(
-            async_stream::try_stream! {
-                let mut incoming = conn::AddrIncoming::bind(&addr)?;
-
-                incoming.set_nodelay(self.tcp_nodelay);
-                incoming.set_keepalive(self.tcp_keepalive);
-
-
-
-                while let Some(stream) = next_accept(&mut incoming).await? {
-                    #[cfg(feature = "tls")]
-                    {
-                        if let Some(tls) = &self.tls {
-                            let io = match tls.connect(stream.into_inner()).await {
-                                Ok(io) => io,
-                                Err(error) => {
-                                    error!(message = "Unable to accept incoming connection.", %error);
-                                    continue
-                                },
-                            };
-                            yield BoxedIo::new(io);
-                            continue;
-                        }
-                    }
-
-                    yield BoxedIo::new(stream);
-                }
-            },
-        );
+        let tcp = incoming::tcp_incoming(incoming, self);
+        let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
 
         let svc = MakeSvc {
             inner: svc,
@@ -384,8 +359,10 @@ where
     ///
     /// [`Server`]: struct.Server.html
     pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
+        let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
+            .map_err(map_err)?;
         self.server
-            .serve_with_shutdown::<_, future::Ready<()>>(addr, self.routes, None)
+            .serve_with_shutdown::<_, _, future::Ready<()>, _, _>(self.routes, incoming, None)
             .await
     }
 
@@ -399,8 +376,25 @@ where
         addr: SocketAddr,
         f: F,
     ) -> Result<(), super::Error> {
+        let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
+            .map_err(map_err)?;
         self.server
-            .serve_with_shutdown(addr, self.routes, Some(f))
+            .serve_with_shutdown(self.routes, incoming, Some(f))
+            .await
+    }
+
+    /// Consume this [`Server`] creating a future that will execute the server on
+    /// the provided incoming stream of `AsyncRead + AsyncWrite`.
+    ///
+    /// [`Server`]: struct.Server.html
+    pub async fn serve_with_incoming<I, IO, IE>(self, incoming: I) -> Result<(), super::Error>
+    where
+        I: Stream<Item = Result<IO, IE>>,
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IE: Into<crate::Error>,
+    {
+        self.server
+            .serve_with_shutdown::<_, _, future::Ready<()>, _, _>(self.routes, incoming, None)
             .await
     }
 }
@@ -521,18 +515,5 @@ impl Service<Request<Body>> for Unimplemented {
                 .body(BoxBody::empty())
                 .unwrap(),
         )
-    }
-}
-
-// Implement try_next for `Accept::poll_accept`.
-async fn next_accept(
-    incoming: &mut conn::AddrIncoming,
-) -> Result<Option<conn::AddrStream>, crate::Error> {
-    let res = poll_fn(|cx| Pin::new(&mut *incoming).poll_accept(cx)).await;
-
-    if let Some(res) = res {
-        Ok(Some(res?))
-    } else {
-        return Ok(None);
     }
 }
