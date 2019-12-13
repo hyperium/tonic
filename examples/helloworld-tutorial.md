@@ -43,7 +43,7 @@ $ touch proto/helloworld.proto
 Then you define RPC methods inside your service definition, specifying their request and response
 types. gRPC lets you define four kinds of service methods, all of which are supported by Tonic. For this tutorial we will only use a simple RPC, if you would like to see a Tonic example which uses all four kinds please read the [routeguide tutorial].
 
-[routeguide tutorial]: https://github.com/hyperium/tonic/blob/master/tonic-examples/routeguide-tutorial.md
+[routeguide tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
 
 First we define our package name, which is what Tonic looks for when including your protos in the client and server applications. Lets give this one a name of `helloworld`.
 
