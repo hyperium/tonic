@@ -16,6 +16,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(feature = "tls")]
 use tracing::error;
 
+#[cfg_attr(not(feature = "tls"), allow(unused_variables))]
 pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
     server: Server,

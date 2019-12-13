@@ -23,6 +23,7 @@ pub(crate) struct Connector<C> {
     #[cfg(feature = "tls")]
     tls: Option<TlsConnector>,
     #[cfg(not(feature = "tls"))]
+    #[allow(dead_code)]
     tls: Option<()>,
 }
 
