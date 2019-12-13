@@ -1,6 +1,8 @@
-use super::{connector, layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin};
+use super::{layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin};
 use crate::{body::BoxBody, transport::Endpoint};
+use http::Uri;
 use hyper::client::conn::Builder;
+use hyper::client::connect::Connection as HyperConnection;
 use hyper::client::service::Connect as HyperConnect;
 use std::{
     fmt,
@@ -8,6 +10,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
@@ -26,17 +29,13 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) async fn new(endpoint: Endpoint) -> Result<Self, crate::Error> {
-        #[cfg(feature = "tls")]
-        let connector = connector(endpoint.tls.clone())
-            .set_keepalive(endpoint.tcp_keepalive)
-            .set_nodelay(endpoint.tcp_nodelay);
-
-        #[cfg(not(feature = "tls"))]
-        let connector = connector()
-            .set_keepalive(endpoint.tcp_keepalive)
-            .set_nodelay(endpoint.tcp_nodelay);
-
+    pub(crate) async fn new<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::Error> + Send,
+        C::Future: Unpin + Send,
+        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+    {
         let settings = Builder::new()
             .http2_initial_stream_window_size(endpoint.init_stream_window_size)
             .http2_initial_connection_window_size(endpoint.init_connection_window_size)

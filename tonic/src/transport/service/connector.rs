@@ -2,64 +2,50 @@ use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
-use hyper::client::connect::HttpConnector;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
 use tower_make::MakeConnection;
 use tower_service::Service;
 
 #[cfg(not(feature = "tls"))]
-pub(crate) fn connector() -> Connector {
-    Connector::new()
+pub(crate) fn connector<C>(inner: C) -> Connector<C> {
+    Connector::new(inner)
 }
 
 #[cfg(feature = "tls")]
-pub(crate) fn connector(tls: Option<TlsConnector>) -> Connector {
-    Connector::new(tls)
+pub(crate) fn connector<C>(inner: C, tls: Option<TlsConnector>) -> Connector<C> {
+    Connector::new(inner, tls)
 }
 
-pub(crate) struct Connector {
-    http: HttpConnector,
+pub(crate) struct Connector<C> {
+    inner: C,
     #[cfg(feature = "tls")]
     tls: Option<TlsConnector>,
+    #[cfg(not(feature = "tls"))]
+    #[allow(dead_code)]
+    tls: Option<()>,
 }
 
-impl Connector {
+impl<C> Connector<C> {
     #[cfg(not(feature = "tls"))]
-    pub(crate) fn new() -> Self {
-        Self {
-            http: Self::http_connector(),
-        }
+    pub(crate) fn new(inner: C) -> Self {
+        Self { inner, tls: None }
     }
 
     #[cfg(feature = "tls")]
-    fn new(tls: Option<TlsConnector>) -> Self {
-        Self {
-            http: Self::http_connector(),
-            tls,
-        }
-    }
-
-    pub(crate) fn set_nodelay(mut self, enabled: bool) -> Self {
-        self.http.set_nodelay(enabled);
-        self
-    }
-
-    pub(crate) fn set_keepalive(mut self, duration: Option<Duration>) -> Self {
-        self.http.set_keepalive(duration);
-        self
-    }
-
-    fn http_connector() -> HttpConnector {
-        let mut http = HttpConnector::new();
-        http.enforce_http(false);
-        http
+    fn new(inner: C, tls: Option<TlsConnector>) -> Self {
+        Self { inner, tls }
     }
 }
 
-impl Service<Uri> for Connector {
+impl<C> Service<Uri> for Connector<C>
+where
+    C: MakeConnection<Uri>,
+    C::Connection: Unpin + Send + 'static,
+    C::Future: Send + 'static,
+    crate::Error: From<C::Error> + Send + 'static,
+{
     type Response = BoxedIo;
     type Error = crate::Error;
 
@@ -67,11 +53,11 @@ impl Service<Uri> for Connector {
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        MakeConnection::poll_ready(&mut self.http, cx).map_err(Into::into)
+        MakeConnection::poll_ready(self, cx).map_err(Into::into)
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        let connect = MakeConnection::make_connection(&mut self.http, uri);
+        let connect = self.inner.make_connection(uri);
 
         #[cfg(feature = "tls")]
         let tls = self.tls.clone();

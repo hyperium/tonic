@@ -15,6 +15,7 @@ use http::{
     uri::{InvalidUri, Uri},
     Request, Response,
 };
+use hyper::client::connect::Connection as HyperConnection;
 use std::{
     fmt,
     future::Future,
@@ -22,6 +23,7 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
+use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
     buffer::{self, Buffer},
     discover::Discover,
@@ -121,11 +123,17 @@ impl Channel {
         Self::balance(discover, buffer_size, interceptor_headers)
     }
 
-    pub(crate) async fn connect(endpoint: Endpoint) -> Result<Self, super::Error> {
+    pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::Error> + Send,
+        C::Future: Unpin + Send,
+        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+    {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
         let interceptor_headers = endpoint.interceptor_headers.clone();
 
-        let svc = Connection::new(endpoint)
+        let svc = Connection::new(connector, endpoint)
             .await
             .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))?;
 

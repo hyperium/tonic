@@ -49,7 +49,11 @@ impl Discover for ServiceList {
             }
 
             if let Some(endpoint) = self.list.pop_front() {
-                let fut = Connection::new(endpoint);
+                let mut http = hyper::client::connect::HttpConnector::new();
+                http.set_nodelay(endpoint.tcp_nodelay);
+                http.set_keepalive(endpoint.tcp_keepalive);
+
+                let fut = Connection::new(http, endpoint);
                 self.connecting = Some(Box::pin(fut));
             } else {
                 return Poll::Pending;

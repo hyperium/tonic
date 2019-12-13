@@ -1,20 +1,27 @@
+use hyper::client::connect::{Connected, Connection};
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 pub(in crate::transport) trait Io:
-    AsyncRead + AsyncWrite + Send + Unpin + 'static
+    AsyncRead + AsyncWrite + Send + 'static
 {
 }
 
-impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + Unpin + 'static {}
+impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + 'static {}
 
 pub(crate) struct BoxedIo(Pin<Box<dyn Io>>);
 
 impl BoxedIo {
     pub(in crate::transport) fn new<I: Io>(io: I) -> Self {
         BoxedIo(Box::pin(io))
+    }
+}
+
+impl Connection for BoxedIo {
+    fn connected(&self) -> Connected {
+        Connected::new()
     }
 }
 
