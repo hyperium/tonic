@@ -6,6 +6,7 @@ use std::fmt;
 
 /// Configures TLS settings for servers.
 #[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Clone)]
 pub struct ServerTlsConfig {
     identity: Option<Identity>,
@@ -23,7 +24,7 @@ impl fmt::Debug for ServerTlsConfig {
 #[cfg(feature = "tls")]
 impl ServerTlsConfig {
     /// Creates a new `ServerTlsConfig`.
-    pub fn with_rustls() -> Self {
+    pub fn new() -> Self {
         ServerTlsConfig {
             identity: None,
             client_ca_root: None,

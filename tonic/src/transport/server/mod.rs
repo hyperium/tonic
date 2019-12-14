@@ -3,6 +3,7 @@
 mod conn;
 mod incoming;
 #[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
 
 pub use conn::Connected;
@@ -98,6 +99,7 @@ impl Server {
 impl Server {
     /// Configure TLS for this server.
     #[cfg(feature = "tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
     pub fn tls_config(self, tls_config: ServerTlsConfig) -> Self {
         Server {
             tls: Some(tls_config.tls_acceptor().unwrap()),

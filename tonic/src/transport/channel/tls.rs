@@ -7,6 +7,7 @@ use std::fmt;
 
 /// Configures TLS settings for endpoints.
 #[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Clone)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
@@ -29,7 +30,7 @@ impl fmt::Debug for ClientTlsConfig {
 #[cfg(feature = "tls")]
 impl ClientTlsConfig {
     /// Creates a new `ClientTlsConfig` using Rustls.
-    pub fn with_rustls() -> Self {
+    pub fn new() -> Self {
         ClientTlsConfig {
             domain: None,
             cert: None,

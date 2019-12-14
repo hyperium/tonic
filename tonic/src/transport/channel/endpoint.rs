@@ -167,6 +167,7 @@ impl Endpoint {
 
     /// Configures TLS for the endpoint.
     #[cfg(feature = "tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
     pub fn tls_config(self, tls_config: ClientTlsConfig) -> Self {
         Endpoint {
             tls: Some(tls_config.tls_connector(self.uri.clone()).unwrap()),

@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let pem = tokio::fs::read("interop/data/ca.pem").await?;
         let ca = Certificate::from_pem(pem);
         endpoint = endpoint.tls_config(
-            ClientTlsConfig::with_rustls()
+            ClientTlsConfig::new()
                 .ca_certificate(ca)
                 .domain_name("foo.test.google.fr"),
         );
