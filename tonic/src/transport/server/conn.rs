@@ -1,5 +1,6 @@
 use hyper::server::conn::AddrStream;
 use std::net::SocketAddr;
+#[cfg(feature = "tls")]
 use tokio_rustls::TlsStream;
 
 /// Trait that connected IO resources implement.
@@ -20,6 +21,7 @@ impl Connected for AddrStream {
     }
 }
 
+#[cfg(feature = "tls")]
 impl<T: Connected> Connected for TlsStream<T> {
     fn remote_addr(&self) -> Option<SocketAddr> {
         let (inner, _) = self.get_ref();
