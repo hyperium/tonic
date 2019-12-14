@@ -15,7 +15,7 @@ use super::service::TlsAcceptor;
 use incoming::TcpIncoming;
 
 use super::service::{layer_fn, Or, Routes, ServerIo, ServiceBuilderExt};
-use crate::body::BoxBody;
+use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
     future::{self, MapErr},
@@ -414,6 +414,7 @@ impl fmt::Debug for Server {
 struct Svc<S> {
     inner: S,
     span: Option<TraceInterceptor>,
+    conn_info: ConnectionInfo,
 }
 
 impl<S> Service<Request<Body>> for Svc<S>
@@ -429,12 +430,14 @@ where
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let span = if let Some(trace_interceptor) = &self.span {
             trace_interceptor(req.headers())
         } else {
             tracing::Span::none()
         };
+
+        req.extensions_mut().insert(self.conn_info.clone());
 
         self.inner.call(req).instrument(span).map_err(|e| e.into())
     }
@@ -469,7 +472,11 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, _io: &ServerIo) -> Self::Future {
+    fn call(&mut self, io: &ServerIo) -> Self::Future {
+        let conn_info = crate::request::ConnectionInfo {
+            remote_addr: io.remote_addr(),
+        };
+
         let interceptor = self.interceptor.clone();
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
@@ -483,10 +490,18 @@ where
                 .service(svc);
 
             let svc = if let Some(interceptor) = interceptor {
-                let layered = interceptor.layer(BoxService::new(Svc { inner: svc, span }));
+                let layered = interceptor.layer(BoxService::new(Svc {
+                    inner: svc,
+                    span,
+                    conn_info,
+                }));
                 BoxService::new(layered)
             } else {
-                BoxService::new(Svc { inner: svc, span })
+                BoxService::new(Svc {
+                    inner: svc,
+                    span,
+                    conn_info,
+                })
             };
 
             Ok(svc)
