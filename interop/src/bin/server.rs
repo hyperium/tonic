@@ -53,7 +53,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         let key = tokio::fs::read("interop/data/server1.key").await?;
         let identity = Identity::from_pem(cert, key);
 
-        builder = builder.tls_config(ServerTlsConfig::with_rustls().identity(identity));
+        builder = builder.tls_config(ServerTlsConfig::new().identity(identity));
     }
 
     let test_service = server::TestServiceServer::new(server::TestService::default());

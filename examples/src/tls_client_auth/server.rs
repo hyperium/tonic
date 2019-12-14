@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let server = EchoServer::default();
 
-    let tls = ServerTlsConfig::with_rustls()
+    let tls = ServerTlsConfig::new()
         .identity(server_identity)
         .client_ca_root(client_ca_cert);
 

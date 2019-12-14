@@ -2,6 +2,7 @@
 
 mod endpoint;
 #[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
 
 pub use endpoint::Endpoint;

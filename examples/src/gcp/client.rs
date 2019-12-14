@@ -27,7 +27,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let certs = tokio::fs::read("tonic-examples/data/gcp/roots.pem").await?;
 
-    let tls_config = ClientTlsConfig::with_rustls()
+    let tls_config = ClientTlsConfig::new()
         .ca_certificate(Certificate::from_pem(certs.as_slice()))
         .domain_name("pubsub.googleapis.com");
 
