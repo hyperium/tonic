@@ -1,9 +1,11 @@
 //! Server implementation and builder.
 
+mod conn;
 mod incoming;
 #[cfg(feature = "tls")]
 mod tls;
 
+pub use conn::Connected;
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
 
@@ -12,8 +14,8 @@ use super::service::TlsAcceptor;
 
 use incoming::TcpIncoming;
 
-use super::service::{layer_fn, Or, Routes, ServiceBuilderExt};
-use crate::body::BoxBody;
+use super::service::{layer_fn, Or, Routes, ServerIo, ServiceBuilderExt};
+use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
     future::{self, MapErr},
@@ -252,7 +254,7 @@ impl Server {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
         I: Stream<Item = Result<IO, IE>>,
-        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
     {
@@ -390,7 +392,7 @@ where
     pub async fn serve_with_incoming<I, IO, IE>(self, incoming: I) -> Result<(), super::Error>
     where
         I: Stream<Item = Result<IO, IE>>,
-        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::Error>,
     {
         self.server
@@ -412,6 +414,7 @@ impl fmt::Debug for Server {
 struct Svc<S> {
     inner: S,
     span: Option<TraceInterceptor>,
+    conn_info: ConnectionInfo,
 }
 
 impl<S> Service<Request<Body>> for Svc<S>
@@ -427,12 +430,14 @@ where
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let span = if let Some(trace_interceptor) = &self.span {
             trace_interceptor(req.headers())
         } else {
             tracing::Span::none()
         };
+
+        req.extensions_mut().insert(self.conn_info.clone());
 
         self.inner.call(req).instrument(span).map_err(|e| e.into())
     }
@@ -452,7 +457,7 @@ struct MakeSvc<S> {
     span: Option<TraceInterceptor>,
 }
 
-impl<S, T> Service<T> for MakeSvc<S>
+impl<S> Service<&ServerIo> for MakeSvc<S>
 where
     S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
@@ -467,7 +472,11 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, _: T) -> Self::Future {
+    fn call(&mut self, io: &ServerIo) -> Self::Future {
+        let conn_info = crate::request::ConnectionInfo {
+            remote_addr: io.remote_addr(),
+        };
+
         let interceptor = self.interceptor.clone();
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
@@ -481,10 +490,18 @@ where
                 .service(svc);
 
             let svc = if let Some(interceptor) = interceptor {
-                let layered = interceptor.layer(BoxService::new(Svc { inner: svc, span }));
+                let layered = interceptor.layer(BoxService::new(Svc {
+                    inner: svc,
+                    span,
+                    conn_info,
+                }));
                 BoxService::new(layered)
             } else {
-                BoxService::new(Svc { inner: svc, span })
+                BoxService::new(Svc {
+                    inner: svc,
+                    span,
+                    conn_info,
+                })
             };
 
             Ok(svc)
