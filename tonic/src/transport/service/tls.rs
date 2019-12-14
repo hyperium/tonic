@@ -1,5 +1,5 @@
 use super::io::BoxedIo;
-use crate::transport::{Certificate, Identity};
+use crate::transport::{server::Connected, Certificate, Identity};
 #[cfg(feature = "tls-roots")]
 use rustls_native_certs;
 use std::{fmt, sync::Arc};
@@ -159,7 +159,7 @@ impl TlsAcceptor {
 
     pub(crate) async fn accept<IO>(&self, io: IO) -> Result<BoxedIo, crate::Error>
     where
-        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     {
         let io = {
             let acceptor = RustlsAcceptor::from(self.inner.clone());

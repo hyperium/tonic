@@ -1,9 +1,11 @@
 //! Server implementation and builder.
 
+mod conn;
 mod incoming;
 #[cfg(feature = "tls")]
 mod tls;
 
+pub use conn::Connected;
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
 
@@ -12,7 +14,7 @@ use super::service::TlsAcceptor;
 
 use incoming::TcpIncoming;
 
-use super::service::{layer_fn, Or, Routes, ServiceBuilderExt};
+use super::service::{layer_fn, Or, Routes, ServerIo, ServiceBuilderExt};
 use crate::body::BoxBody;
 use futures_core::Stream;
 use futures_util::{
@@ -252,7 +254,7 @@ impl Server {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
         I: Stream<Item = Result<IO, IE>>,
-        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
     {
@@ -390,7 +392,7 @@ where
     pub async fn serve_with_incoming<I, IO, IE>(self, incoming: I) -> Result<(), super::Error>
     where
         I: Stream<Item = Result<IO, IE>>,
-        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::Error>,
     {
         self.server
@@ -452,7 +454,7 @@ struct MakeSvc<S> {
     span: Option<TraceInterceptor>,
 }
 
-impl<S, T> Service<T> for MakeSvc<S>
+impl<S> Service<&ServerIo> for MakeSvc<S>
 where
     S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
@@ -467,7 +469,7 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, _: T) -> Self::Future {
+    fn call(&mut self, _io: &ServerIo) -> Self::Future {
         let interceptor = self.interceptor.clone();
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;

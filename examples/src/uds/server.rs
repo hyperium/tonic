@@ -31,18 +31,19 @@ impl Greeter for MyGreeter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = "/tmp/tonic/helloworld";
+    // TODO: Show how to newtype and impl connected
+    // let path = "/tmp/tonic/helloworld";
 
-    tokio::fs::create_dir_all(Path::new(path).parent().unwrap()).await?;
+    // tokio::fs::create_dir_all(Path::new(path).parent().unwrap()).await?;
 
-    let mut uds = UnixListener::bind(path)?;
+    // let mut uds = UnixListener::bind(path)?;
 
-    let greeter = MyGreeter::default();
+    // let greeter = MyGreeter::default();
 
-    Server::builder()
-        .add_service(GreeterServer::new(greeter))
-        .serve_with_incoming(uds.incoming())
-        .await?;
+    // Server::builder()
+    //     .add_service(GreeterServer::new(greeter))
+    //     .serve_with_incoming(uds.incoming())
+    //     .await?;
 
     Ok(())
 }

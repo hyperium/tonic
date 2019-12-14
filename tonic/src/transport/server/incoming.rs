@@ -1,5 +1,5 @@
-use super::Server;
-use crate::transport::service::BoxedIo;
+use super::{Connected, Server};
+use crate::transport::service::ServerIo;
 use futures_core::Stream;
 use futures_util::stream::TryStreamExt;
 use hyper::server::{
@@ -20,9 +20,9 @@ use tracing::error;
 pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
     server: Server,
-) -> impl Stream<Item = Result<BoxedIo, crate::Error>>
+) -> impl Stream<Item = Result<ServerIo, crate::Error>>
 where
-    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
@@ -39,12 +39,12 @@ where
                             continue
                         },
                     };
-                    yield BoxedIo::new(io);
+                    yield ServerIo::new(io);
                     continue;
                 }
             }
 
-            yield BoxedIo::new(stream);
+            yield ServerIo::new(stream);
         }
     }
 }
