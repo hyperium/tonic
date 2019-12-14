@@ -1,11 +1,11 @@
-use crate::generate_doc_comments;
+use crate::{generate_doc_comments, naive_snake_case};
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
 use quote::{format_ident, quote};
 
 pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name);
-    let client_mod = quote::format_ident!("{}_client", service.name.to_ascii_lowercase());
+    let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name));
     let methods = generate_methods(service, proto);
 
     let connect = generate_connect(&service_ident);

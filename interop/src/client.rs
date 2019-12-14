@@ -1,5 +1,5 @@
 use crate::{
-    pb::testservice_client::*, pb::unimplementedservice_client::*, pb::*, test_assert,
+    pb::test_service_client::*, pb::unimplemented_service_client::*, pb::*, test_assert,
     TestAssertion,
 };
 use futures_util::{future, stream, StreamExt};
