@@ -21,7 +21,7 @@ impl Greeter for MyGreeter {
         println!("Got a request from {:?}", request.remote_addr());
 
         let reply = hello_world::HelloReply {
-            message: format!("Hello {}!", request.into_inner().name).into(),
+            message: format!("Hello {}!", request.into_inner().name),
         };
         Ok(Response::new(reply))
     }

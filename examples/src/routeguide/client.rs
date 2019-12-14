@@ -17,12 +17,12 @@ use route_guide::routeguide_client::RouteGuideClient;
 async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let rectangle = Rectangle {
         lo: Some(Point {
-            latitude: 400000000,
-            longitude: -750000000,
+            latitude: 400_000_000,
+            longitude: -750_000_000,
         }),
         hi: Some(Point {
-            latitude: 420000000,
-            longitude: -730000000,
+            latitude: 420_000_000,
+            longitude: -730_000_000,
         }),
     };
 
@@ -96,8 +96,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("*** SIMPLE RPC ***");
     let response = client
         .get_feature(Request::new(Point {
-            latitude: 409146138,
-            longitude: -746188906,
+            latitude: 409_146_138,
+            longitude: -746_188_906,
         }))
         .await?;
     println!("RESPONSE = {:?}", response);

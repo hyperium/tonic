@@ -10,12 +10,12 @@ use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 pub type TestClient = TestServiceClient<Channel>;
 pub type UnimplementedClient = UnimplementedServiceClient<Channel>;
 
-const LARGE_REQ_SIZE: usize = 271828;
-const LARGE_RSP_SIZE: i32 = 314159;
-const REQUEST_LENGTHS: &'static [i32] = &[27182, 8, 1828, 45904];
-const RESPONSE_LENGTHS: &'static [i32] = &[31415, 9, 2653, 58979];
-const TEST_STATUS_MESSAGE: &'static str = "test status message";
-const SPECIAL_TEST_STATUS_MESSAGE: &'static str =
+const LARGE_REQ_SIZE: usize = 271_828;
+const LARGE_RSP_SIZE: i32 = 314_159;
+const REQUEST_LENGTHS: &[i32] = &[27182, 8, 1828, 45904];
+const RESPONSE_LENGTHS: &[i32] = &[31415, 9, 2653, 58979];
+const TEST_STATUS_MESSAGE: &str = "test status message";
+const SPECIAL_TEST_STATUS_MESSAGE: &str =
     "\t\ntest with whitespace\r\nand Unicode BMP ☺ and non-BMP 😈\t\n";
 
 pub async fn empty_unary(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
@@ -217,7 +217,7 @@ pub async fn empty_stream(client: &mut TestClient, assertions: &mut Vec<TestAsse
 
         assertions.push(test_assert!(
             "there should be no responses",
-            responses.len() == 0,
+            responses.is_empty(),
             format!("responses.len()={:?}", responses.len())
         ));
     }

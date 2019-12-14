@@ -8,7 +8,7 @@ use tonic::transport::Channel;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let endpoints = ["http://[::1]:50051", "http://[::1]:50052"]
-        .into_iter()
+        .iter()
         .map(|a| Channel::from_static(a));
 
     let channel = Channel::balance_list(endpoints);

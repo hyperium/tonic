@@ -21,7 +21,7 @@ impl Greeter for MyGreeter {
         tracing::info!(message = "Inbound request.", metadata = ?request.metadata());
 
         let reply = hello_world::HelloReply {
-            message: format!("Hello {}!", request.into_inner().name).into(),
+            message: format!("Hello {}!", request.into_inner().name),
         };
 
         tracing::debug!(message = "Sending reply.", response = %reply.message);
