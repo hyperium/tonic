@@ -5,8 +5,8 @@ use std::pin::Pin;
 use std::time::Duration;
 use tonic::{Code, Request, Response, Status};
 
-pub use pb::testservice_server::TestServiceServer;
-pub use pb::unimplementedservice_server::UnimplementedServiceServer;
+pub use pb::test_service_server::TestServiceServer;
+pub use pb::unimplemented_service_server::UnimplementedServiceServer;
 
 #[derive(Default, Clone)]
 pub struct TestService;
@@ -18,7 +18,7 @@ type Stream<T> = Pin<
 >;
 
 #[tonic::async_trait]
-impl pb::testservice_server::TestService for TestService {
+impl pb::test_service_server::TestService for TestService {
     async fn empty_call(&self, _request: Request<Empty>) -> Result<Empty> {
         Ok(Response::new(Empty {}))
     }
@@ -154,7 +154,7 @@ impl pb::testservice_server::TestService for TestService {
 pub struct UnimplementedService;
 
 #[tonic::async_trait]
-impl pb::unimplementedservice_server::UnimplementedService for UnimplementedService {
+impl pb::unimplemented_service_server::UnimplementedService for UnimplementedService {
     async fn unimplemented_call(&self, _req: Request<Empty>) -> Result<Empty> {
         Err(Status::unimplemented(""))
     }

@@ -321,3 +321,31 @@ fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenSt
 
     (request, response)
 }
+
+fn naive_snake_case(name: &str) -> String {
+    let mut s = String::new();
+    let mut it = name.chars().peekable();
+
+    while let Some(x) = it.next() {
+        s.push(x.to_ascii_lowercase());
+        if let Some(y) = it.peek() {
+            if y.is_uppercase() {
+                s.push('_');
+            }
+        }
+    }
+
+    s
+}
+
+#[test]
+fn test_snake_case() {
+    for case in &[
+        ("Service", "service"),
+        ("ThatHasALongName", "that_has_a_long_name"),
+        ("greeter", "greeter"),
+        ("ABCServiceX", "a_b_c_service_x"),
+    ] {
+        assert_eq!(naive_snake_case(case.0), case.1)
+    }
+}
