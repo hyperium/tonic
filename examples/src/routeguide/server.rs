@@ -195,7 +195,7 @@ fn in_range(point: &Point, rect: &Rectangle) -> bool {
 /// This code was taken from http://www.movable-type.co.uk/scripts/latlong.html.
 fn calc_distance(p1: &Point, p2: &Point) -> i32 {
     const CORD_FACTOR: f64 = 1e7;
-    const R: f64 = 6371000.0; // meters
+    const R: f64 = 6_371_000.0; // meters
 
     let lat1 = p1.latitude as f64 / CORD_FACTOR;
     let lat2 = p2.latitude as f64 / CORD_FACTOR;
