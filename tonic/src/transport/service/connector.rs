@@ -53,7 +53,7 @@ where
         Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        MakeConnection::poll_ready(self, cx).map_err(Into::into)
+        MakeConnection::poll_ready(&mut self.inner, cx).map_err(Into::into)
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
