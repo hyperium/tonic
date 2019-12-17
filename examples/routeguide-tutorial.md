@@ -97,7 +97,7 @@ $ mkdir proto && touch proto/route_guide.proto
 ```
 
 You can see the complete `.proto` file in
-[tonic-examples/proto/routeguide/route_guide.proto][routeguide-proto].
+[examples/proto/routeguide/route_guide.proto][routeguide-proto].
 
 To define a service, you specify a named `service` in your `.proto` file:
 
@@ -165,7 +165,7 @@ message Point {
 }
 ```
 
-[routeguide-proto]: https://github.com/hyperium/tonic/blob/master/tonic-examples/proto/routeguide/route_guide.proto
+[routeguide-proto]: https://github.com/hyperium/tonic/blob/master/examples/proto/routeguide/route_guide.proto
 
 ## Generating client and server code
 
@@ -230,9 +230,9 @@ There are two parts to making our `RouteGuide` service do its job:
 - Running a gRPC server to listen for requests from clients.
 
 You can find our example `RouteGuide` server in
-[tonic-examples/src/routeguide/server.rs][routeguide-server].
+[examples/src/routeguide/server.rs][routeguide-server].
 
-[routeguide-server]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/server.rs
+[routeguide-server]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/server.rs
 
 ### Implementing the server::RouteGuide trait
 
@@ -332,12 +332,12 @@ $ mkdir data && touch data/route_guide_db.json
 $ touch src/data.rs
 ```
 
-You can find our example json data in [tonic-examples/data/route_guide_db.json][route-guide-db] and
+You can find our example json data in [examples/data/route_guide_db.json][route-guide-db] and
 the corresponding `data` module to load and deserialize it in
-[tonic-examples/routeguide/data.rs][data-module].
+[examples/routeguide/data.rs][data-module].
 
 **Note:** If you are following along, you'll need to change the data file's path  from
-`tonic-examples/data/route_guide_db.json` to `data/route_guide_db.json`.
+`examples/data/route_guide_db.json` to `data/route_guide_db.json`.
 
 Next, we need to implement `Hash` and `Eq` for `Point`, so we can use point values as map keys:
 
@@ -362,11 +362,11 @@ impl Eq for Point {}
 
 Lastly, we need implement two helper functions: `in_range` and `calc_distance`. We'll use them
 when performing feature lookups. You can find them in
-[tonic-examples/src/routeguide/server.rs][in-range-fn].
+[examples/src/routeguide/server.rs][in-range-fn].
 
-[route-guide-db]: https://github.com/hyperium/tonic/blob/master/tonic-examples/data/route_guide_db.json
-[data-module]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/data.rs
-[in-range-fn]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/server.rs#L188
+[route-guide-db]: https://github.com/hyperium/tonic/blob/master/examples/data/route_guide_db.json
+[data-module]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/data.rs
+[in-range-fn]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/server.rs#L177
 
 #### Request and Response types
 All our service methods receive a `tonic::Request<T>` and return a
@@ -571,14 +571,14 @@ In the future, Tonic may include higher level support for routing and intercepto
 
 [Tower]: https://github.com/tower-rs
 [hyper]: https://github.com/hyperium/hyper
-[authentication-example]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/authentication/server.rs#L54
-[router-example]: https://github.com/hyperium/tonic/blob/master/tonic-interop/src/bin/server.rs#L73
+[authentication-example]: https://github.com/hyperium/tonic/blob/master/examples/src/authentication/server.rs#L56
+[router-example]: https://github.com/hyperium/tonic/blob/master/interop/src/bin/server.rs#L73
 
 <a name="client"></a>
 ## Creating the client
 
 In this section, we'll look at creating a Tonic client for our `RouteGuide` service. You can see our
-complete example client code in [tonic-examples/src/routeguide/client.rs][routeguide-client].
+complete example client code in [examples/src/routeguide/client.rs][routeguide-client].
 
 Our crate will have two binary targets: `routeguide-client` and `routeguide-server`. We need to
 edit our `Cargo.toml` accordingly:
@@ -622,7 +622,7 @@ create a client in our main function, passing the server's full URL to `RouteGui
 Our client is now ready to make service calls. Note that `client` is mutable, this is because it
 needs to manage internal state.
 
-[routeguide-client]: https://github.com/hyperium/tonic/blob/master/tonic-examples/src/routeguide/client.rs
+[routeguide-client]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/client.rs
 
 
 ### Calling service methods
