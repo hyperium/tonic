@@ -113,19 +113,16 @@ name = "helloworld-client"
 path = "src/client.rs"
 
 [dependencies]
-tonic = { git = "https://github.com/hyperium/tonic.git" }
+tonic = "0.1.0-beta.1"
 bytes = "0.4"
 prost = "0.5"
 tokio = { version = "0.2", features = ["macros"] }
 
 [build-dependencies]
-tonic-build = { git = "https://github.com/hyperium/tonic.git" }
+tonic-build = "0.1.0-beta.1"
 ```
 
 We include `tonic-build` as a useful way to incorporate the generation of our client and server gRPC code into the build process of our application. We will setup this build process now:
-
-**Note**: As of 2019/12/19 we are depending on tonic and tonic-build from master in this tutorial.
-We'll update our dependencies as soon as there is a tonic release compatible with tokio 0.2.
 
 ## Generating Server and Client code
 

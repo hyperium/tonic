@@ -180,7 +180,7 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = { git = "https://github.com/hyperium/tonic.git" }
+tonic = "0.1.0-beta.1"
 bytes = "0.4"
 prost = "0.5"
 futures-core = "0.3"
@@ -193,12 +193,8 @@ serde_json = "1.0"
 rand = "0.7"
 
 [build-dependencies]
-tonic-build = { git = "https://github.com/hyperium/tonic.git" }
+tonic-build = "0.1.0-beta.1"
 ```
-
-**Note**: As of 2019/12/19 we are depending on tonic and tonic-build from master in this tutorial.
-We'll update our dependencies as soon as there is a tonic release compatible with tokio 0.2.
-
 
 Create a `build.rs` file at the root of your crate:
 
