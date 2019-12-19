@@ -8,11 +8,11 @@ name = "tonic"
 #   - README.md
 # - Update CHANGELOG.md.
 # - Create "v0.1.x" git tag.
-version = "0.1.0-alpha.6"
+version = "0.1.0-beta.1"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 license = "MIT"
-documentation = "https://docs.rs/tonic/0.1.0-alpha.5/tonic/"
+documentation = "https://docs.rs/tonic/0.1.0-beta.1/tonic/"
 repository = "https://github.com/hyperium/tonic"
 homepage = "https://github.com/hyperium/tonic"
 description = """
@@ -69,7 +69,7 @@ tower = { version = "0.3", optional = true}
 tower-make = { version = "0.3", features = ["connect"] }
 tower-balance =  { version = "0.3", optional = true }
 tower-load = { version = "0.3", optional = true }
-tracing-futures = { version = "0.2", optional = true } 
+tracing-futures = { version = "0.2", optional = true }
 
 # rustls
 tokio-rustls = { version = "0.12", optional = true }
