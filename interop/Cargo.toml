@@ -24,8 +24,7 @@ http = "0.2"
 futures-core = "0.3"
 futures-util = "0.3"
 async-stream = "0.2"
-# tower = "=0.3.0-alpha.2"
-tower = { git = "https://github.com/tower-rs/tower" }
+tower = "0.3"
 http-body = "0.3"
 
 console = "0.9"
