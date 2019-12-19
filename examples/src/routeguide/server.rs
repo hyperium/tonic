@@ -1,28 +1,30 @@
-mod data;
-
-use futures::{Stream, StreamExt};
 use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
+
+use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
+
+use routeguide::route_guide_server::{RouteGuide, RouteGuideServer};
+use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
 
 pub mod routeguide {
     tonic::include_proto!("routeguide");
 }
 
-use routeguide::{route_guide_server, Feature, Point, Rectangle, RouteNote, RouteSummary};
+mod data;
 
 #[derive(Debug)]
-pub struct RouteGuide {
+pub struct RouteGuideService {
     features: Arc<Vec<Feature>>,
 }
 
 #[tonic::async_trait]
-impl route_guide_server::RouteGuide for RouteGuide {
+impl RouteGuide for RouteGuideService {
     async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
         println!("GetFeature = {:?}", request);
 
@@ -32,12 +34,7 @@ impl route_guide_server::RouteGuide for RouteGuide {
             }
         }
 
-        let response = Response::new(Feature {
-            name: "".to_string(),
-            location: None,
-        });
-
-        Ok(response)
+        Ok(Response::new(Feature::default()))
     }
 
     type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
@@ -148,13 +145,13 @@ impl route_guide_server::RouteGuide for RouteGuide {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
 
-    println!("Listening on: {}", addr);
+    println!("RouteGuideServer listening on: {}", addr);
 
-    let route_guide = RouteGuide {
+    let route_guide = RouteGuideService {
         features: Arc::new(data::load()),
     };
 
-    let svc = route_guide_server::RouteGuideServer::new(route_guide);
+    let svc = RouteGuideServer::new(route_guide);
 
     Server::builder().add_service(svc).serve(addr).await?;
 

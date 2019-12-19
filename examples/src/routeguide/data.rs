@@ -15,8 +15,7 @@ struct Location {
 
 #[allow(dead_code)]
 pub fn load() -> Vec<crate::routeguide::Feature> {
-    let file =
-        File::open("tonic-examples/data/route_guide_db.json").expect("failed to open data file");
+    let file = File::open("examples/data/route_guide_db.json").expect("failed to open data file");
 
     let decoded: Vec<Feature> =
         serde_json::from_reader(&file).expect("failed to deserialize features");
