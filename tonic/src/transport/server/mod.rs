@@ -37,9 +37,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
     layer::{Layer, Stack},
     limit::concurrency::ConcurrencyLimitLayer,
-    // timeout::TimeoutLayer,
-    Service,
-    ServiceBuilder,
+    timeout::TimeoutLayer,
+    Service, ServiceBuilder,
 };
 use tracing_futures::{Instrument, Instrumented};
 
@@ -60,7 +59,7 @@ pub struct Server {
     interceptor: Option<Interceptor>,
     trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
-    // timeout: Option<Duration>,
+    timeout: Option<Duration>,
     #[cfg(feature = "tls")]
     tls: Option<TlsAcceptor>,
     init_stream_window_size: Option<u32>,
@@ -109,6 +108,8 @@ impl Server {
 
     /// Set the concurrency limit applied to on requests inbound per connection.
     ///
+    /// # Example
+    ///
     /// ```
     /// # use tonic::transport::Server;
     /// # use tower_service::Service;
@@ -122,12 +123,21 @@ impl Server {
         }
     }
 
-    // FIXME: tower-timeout currentlly uses `From` instead of `Into` for the error
-    // so our services do not align.
-    // pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
-    //     self.timeout = Some(timeout);
-    //     self
-    // }
+    /// Set a timeout on for all request handlers.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// # use std::time::Duration;
+    /// # let mut builder = Server::builder();
+    /// builder.timeout(Duration::from_secs(30));
+    /// ```
+    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.timeout = Some(timeout);
+        self
+    }
 
     /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
     /// stream-level flow control.
@@ -266,7 +276,7 @@ impl Server {
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
-        // let timeout = self.timeout.clone();
+        let timeout = self.timeout.clone();
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
@@ -275,7 +285,7 @@ impl Server {
             inner: svc,
             interceptor,
             concurrency_limit,
-            // timeout,
+            timeout,
             span,
         };
 
@@ -454,7 +464,7 @@ impl<S> fmt::Debug for Svc<S> {
 struct MakeSvc<S> {
     interceptor: Option<Interceptor>,
     concurrency_limit: Option<usize>,
-    // timeout: Option<Duration>,
+    timeout: Option<Duration>,
     inner: S,
     span: Option<TraceInterceptor>,
 }
@@ -482,13 +492,13 @@ where
         let interceptor = self.interceptor.clone();
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
-        // let timeout = self.timeout.clone();
+        let timeout = self.timeout.clone();
         let span = self.span.clone();
 
         Box::pin(async move {
             let svc = ServiceBuilder::new()
                 .optional_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
-                // .optional_layer(timeout.map(TimeoutLayer::new))
+                .optional_layer(timeout.map(TimeoutLayer::new))
                 .service(svc);
 
             let svc = if let Some(interceptor) = interceptor {
