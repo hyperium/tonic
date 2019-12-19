@@ -180,18 +180,20 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-async-stream = "0.1.2"
+tonic = "0.1.0-beta.1"
 bytes = "0.4"
-futures-preview = { version = "0.3.0-alpha.19", default-features = false, features = ["alloc"]}
+prost = "0.5"
+futures-core = "0.3"
+futures-util = "0.3"
+tokio = { version = "0.2", features = ["macros", "sync", "stream", "time"] }
+
+async-stream = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-prost = "0.5"
-rand = "0.7.2"
-tokio = "0.2.0-alpha.6"
-tonic = "0.1.0-alpha.5"
+rand = "0.7"
 
 [build-dependencies]
-tonic-build = "0.1.0-alpha.5"
+tonic-build = "0.1.0-beta.1"
 ```
 
 Create a `build.rs` file at the root of your crate:
@@ -210,8 +212,8 @@ $ cargo build
 That's it. The generated code contains:
 
 - Struct definitions for message types `Point`, `Rectangle`, `Feature`, `RouteNote`, `RouteSummary`.
-- A service trait we'll need to implement: `server::RouteGuide`.
-- A client type we'll use to call the server: `client::RouteGuideClient<T>`.
+- A service trait we'll need to implement: `route_guide_server::RouteGuide`.
+- A client type we'll use to call the server: `route_guide_client::RouteGuideClient<T>`.
 
 If your are curious as to where the generated files are, keep reading. The mystery will be revealed
 soon! We can now move on to the fun part.
@@ -234,16 +236,16 @@ You can find our example `RouteGuide` server in
 
 [routeguide-server]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/server.rs
 
-### Implementing the server::RouteGuide trait
+### Implementing the RouteGuide server trait
 
 We can start by defining a struct to represent our service, we can do this on `main.rs` for now:
 
 ```rust
 #[derive(Debug)]
-struct RouteGuide;
+struct RouteGuideService;
 ```
 
-Next, we need to implement the `server::RouteGuide` trait that is generated in our build step.
+Next, we need to implement the `route_guide_server::RouteGuide` trait that is generated in our build step.
 The generated code is placed inside our target directory, in a location defined by the `OUT_DIR`
 environment variable that is set by cargo. For our example, this means you can find the generated
 code in a path similar to `target/debug/build/routeguide/out/routeguide.rs`.
@@ -257,7 +259,8 @@ pub mod routeguide {
     tonic::include_proto!("routeguide");
 }
 
-use routeguide::{server, Feature, Point, Rectangle, RouteNote, RouteSummary};
+use routeguide::route_guide_server::RouteGuide;
+use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
 ```
 
 **Note**: The token passed to the `include_proto` macro (in our case "routeguide") is the name of
@@ -266,10 +269,11 @@ the package declared in in our `.proto` file, not a filename, e.g "routeguide.rs
 With this in place, we can stub out our service implementation:
 
 ```rust
-use tonic::{Request, Response, Status};
-use tokio::sync::mpsc;
 use std::pin::Pin;
-use futures::Stream;
+
+use futures_core::Stream;
+use tokio::sync::mpsc;
+use tonic::{Request, Response, Status};
 ```
 
 ```rust
@@ -320,7 +324,7 @@ deserialize them from a json file and keep them around as our only piece of shar
 
 ```rust
 #[derive(Debug)]
-pub struct RouteGuide {
+pub struct RouteGuideService {
     features: Arc<Vec<Feature>>,
 }
 ```
@@ -389,12 +393,7 @@ async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>
         }
     }
 
-    let response = Response::new(Feature {
-        name: "".to_string(),
-        location: None,
-    });
-
-    Ok(response)
+    Ok(Response::new(Feature::default()))
 }
 ```
 
@@ -441,7 +440,7 @@ with information about their trip. As you can see, this time the method receives
 
 ```rust
 use std::time::Instant;
-use futures::StreamExt;
+use futures_util::StreamExt;
 ```
 
 ```rust
@@ -552,12 +551,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         features: Arc::new(data::load()),
     };
 
-    let svc = server::RouteGuideServer::new(route_guide);
+    let svc = RouteGuideServer::new(route_guide);
 
-    Server::builder()
-        .add_service(svc)
-        .serve(addr)
-        .await?;
+    Server::builder().add_service(svc).serve(addr).await?;
 
     Ok(())
 }
@@ -603,11 +599,13 @@ $ touch src/client.rs
 To call service methods, we first need to create a gRPC *client* to communicate with the server.
 
 ```rust
-pub mod route_guide {
+pub mod routeguide {
     tonic::include_proto!("routeguide");
 }
 
-use route_guide::{client::RouteGuideClient, Point, Rectangle, RouteNote};
+use routeguide::route_guide_client::RouteGuideClient;
+use routeguide::{Point, Rectangle, RouteNote};
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -698,7 +696,7 @@ The client-side streaming method `record_route` takes a stream of `Point`s and r
 ```rust
 use rand::rngs::ThreadRng;
 use rand::Rng;
-use futures::stream;
+use futures_util::stream;
 ```
 
 ```rust
@@ -746,16 +744,16 @@ Finally, let's look at our bidirectional streaming RPC. The `route_chat` method 
 of `RouteNotes` and returns either another stream of `RouteNotes` or an error.
 
 ```rust
-use std::time::{Duration, Instant};
-use tokio::timer::Interval;
+use std::time::Duration;
+use tokio::time;
 ```
 
 ```rust
 async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
-    let start = Instant::now();
+    let start = time::Instant::now();
 
     let outbound = async_stream::stream! {
-        let mut interval = Interval::new_interval(Duration::from_secs(1));
+        let mut interval = time::interval(Duration::from_secs(1));
 
         while let Some(time) = interval.next().await {
             let elapsed = time.duration_since(start);
@@ -771,8 +769,7 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         }
     };
 
-    let request = Request::new(outbound);
-    let response = client.route_chat(request).await?;
+    let response = client.route_chat(Request::new(outbound)).await?;
     let mut inbound = response.into_inner();
 
     while let Some(note) = inbound.message().await? {

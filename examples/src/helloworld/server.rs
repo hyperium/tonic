@@ -1,13 +1,11 @@
 use tonic::{transport::Server, Request, Response, Status};
 
+use hello_world::greeter_server::{Greeter, GreeterServer};
+use hello_world::{HelloReply, HelloRequest};
+
 pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
-
-use hello_world::{
-    greeter_server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
-};
 
 #[derive(Default)]
 pub struct MyGreeter {}
@@ -31,6 +29,8 @@ impl Greeter for MyGreeter {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
+
+    println!("GreeterServer listening on {}", addr);
 
     Server::builder()
         .add_service(GreeterServer::new(greeter))

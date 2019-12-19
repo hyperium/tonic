@@ -113,14 +113,13 @@ name = "helloworld-client"
 path = "src/client.rs"
 
 [dependencies]
-tonic = "0.1.0-alpha.5"
+tonic = "0.1.0-beta.1"
 bytes = "0.4"
 prost = "0.5"
-prost-derive = "0.5"
-tokio = "=0.2.0-alpha.6"
+tokio = { version = "0.2", features = ["macros"] }
 
 [build-dependencies]
-tonic-build = "0.1.0-alpha.5"
+tonic-build = "0.1.0-beta.1"
 ```
 
 We include `tonic-build` as a useful way to incorporate the generation of our client and server gRPC code into the build process of our application. We will setup this build process now:
@@ -147,19 +146,18 @@ Now that the build process is written and our dependencies are all setup, we can
 ```rust
 use tonic::{transport::Server, Request, Response, Status};
 
+use hello_world::greeter_server::{Greeter, GreeterServer};
+use hello_world::{HelloReply, HelloRequest};
+
 pub mod hello_world {
     tonic::include_proto!("helloworld"); // The string specified here must match the proto package name
 }
-
-use hello_world::{
-    server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
-};
 ```
 
 Next up, let's implement the Greeter service we previously defined in our `.proto` file. Here's what that might look like:
 
 ```rust
+#[derive(Debug, Default)]
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
@@ -185,7 +183,7 @@ Finally, let's define the Tokio runtime that our server will actually run on. Th
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse()?;
-    let greeter = MyGreeter {};
+    let greeter = MyGreeter::default();
 
     Server::builder()
         .add_service(GreeterServer::new(greeter))
@@ -201,15 +199,14 @@ Altogether your server should look something like this once you are done:
 ```rust
 use tonic::{transport::Server, Request, Response, Status};
 
+use hello_world::greeter_server::{Greeter, GreeterServer};
+use hello_world::{HelloReply, HelloRequest};
+
 pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
 
-use hello_world::{
-    server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
-};
-
+#[derive(Debug, Default)]
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
@@ -231,7 +228,7 @@ impl Greeter for MyGreeter {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse()?;
-    let greeter = MyGreeter {};
+    let greeter = MyGreeter::default();
 
     Server::builder()
         .add_service(GreeterServer::new(greeter))
@@ -251,11 +248,12 @@ You should now be able to run your HelloWorld gRPC server using the command `car
 So now we have a running gRPC server, and that's great but how can our application communicate with it? This is where our client would come in. Tonic supports both client and server implementations. Similar to the server, we will start by creating a file `client.rs` in our `/src` directory and importing everything we will need:
 
 ```rust
+use hello_world::greeter_client::GreeterClient;
+use hello_world::HelloRequest;
+
 pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
-
-use hello_world::{client::GreeterClient, HelloRequest};
 ```
 
 The client is much simpler than the server as we don't need to implement any service methods, just make requests. Here is a Tokio runtime which will make our request and print the response to your terminal:
@@ -280,11 +278,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 That's it! Our complete client file should look something like below, if it doesn't please go back and make sure you followed along correctly:
 
 ```rust
+use hello_world::greeter_client::GreeterClient;
+use hello_world::HelloRequest;
+
 pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
-
-use hello_world::{client::GreeterClient, HelloRequest};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

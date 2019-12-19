@@ -1,18 +1,19 @@
+use std::error::Error;
+use std::time::Duration;
+
 use futures::stream;
 use rand::rngs::ThreadRng;
 use rand::Rng;
-use route_guide::{Point, Rectangle, RouteNote};
-use std::error::Error;
-use std::time::Duration;
-use tokio::time::Instant;
+use tokio::time;
 use tonic::transport::Channel;
 use tonic::Request;
 
-pub mod route_guide {
+use routeguide::route_guide_client::RouteGuideClient;
+use routeguide::{Point, Rectangle, RouteNote};
+
+pub mod routeguide {
     tonic::include_proto!("routeguide");
 }
-
-use route_guide::route_guide_client::RouteGuideClient;
 
 async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let rectangle = Rectangle {
@@ -59,10 +60,10 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 }
 
 async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
-    let start = Instant::now();
+    let start = time::Instant::now();
 
     let outbound = async_stream::stream! {
-        let mut interval = tokio::time::interval(Duration::from_secs(1));
+        let mut interval = time::interval(Duration::from_secs(1));
 
         while let time = interval.tick().await {
             let elapsed = time.duration_since(start);
@@ -78,8 +79,7 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         }
     };
 
-    let request = Request::new(outbound);
-    let response = client.route_chat(request).await?;
+    let response = client.route_chat(Request::new(outbound)).await?;
     let mut inbound = response.into_inner();
 
     while let Some(note) = inbound.message().await? {
