@@ -157,7 +157,7 @@ pub mod hello_world {
 Next up, let's implement the Greeter service we previously defined in our `.proto` file. Here's what that might look like:
 
 ```rust
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
@@ -206,7 +206,7 @@ pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
