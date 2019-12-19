@@ -65,10 +65,10 @@ async-trait = { version = "0.1.13", optional = true }
 # transport
 hyper = { version = "0.13", features = ["stream"], optional = true }
 tokio = { version = "0.2", features = ["tcp"], optional = true }
-tower = { git = "https://github.com/tower-rs/tower", optional = true}
+tower = { version = "0.3", optional = true}
 tower-make = { version = "0.3", features = ["connect"] }
-tower-balance =  { git = "https://github.com/tower-rs/tower", optional = true }
-tower-load = { git = "https://github.com/tower-rs/tower", optional = true }
+tower-balance =  { version = "0.3", optional = true }
+tower-load = { version = "0.3", optional = true }
 tracing-futures = { version = "0.2", optional = true } 
 
 # rustls

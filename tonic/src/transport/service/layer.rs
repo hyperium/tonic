@@ -1,8 +1,9 @@
-use super::either::Either;
 use tower::{
     layer::{Layer, Stack},
+    util::Either,
     ServiceBuilder,
 };
+
 pub(crate) trait ServiceBuilderExt<L> {
     fn layer_fn<F: Fn(S) -> Out, S, Out>(self, f: F) -> ServiceBuilder<Stack<LayerFn<F>, L>>;
 

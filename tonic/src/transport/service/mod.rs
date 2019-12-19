@@ -2,7 +2,6 @@ mod add_origin;
 mod connection;
 mod connector;
 mod discover;
-mod either;
 mod io;
 mod layer;
 mod reconnect;

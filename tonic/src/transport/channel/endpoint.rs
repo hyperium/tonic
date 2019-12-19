@@ -155,6 +155,18 @@ impl Endpoint {
     }
 
     /// Intercept outbound HTTP Request headers;
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # use std::time::Duration;
+    /// # let mut builder = Endpoint::from_static("https://example.com");
+    /// builder.intercept_headers(|headers| {
+    ///    // Do something with headers
+    ///    headers.insert("hello", "world".parse().unwrap());
+    /// });
+    /// ```
     pub fn intercept_headers<F>(self, f: F) -> Self
     where
         F: Fn(&mut http::HeaderMap) + Send + Sync + 'static,

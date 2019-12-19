@@ -95,7 +95,7 @@ tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "m
 futures = { version = "0.3", default-features = false, features = ["alloc"]}
 async-stream = "0.2"
 http = "0.2"
-tower = { git = "https://github.com/tower-rs/tower" }
+tower = "0.3" 
 
 # Required for routeguide
 serde = { version = "1.0", features = ["derive"] }
