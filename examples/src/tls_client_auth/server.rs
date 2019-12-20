@@ -27,11 +27,11 @@ impl pb::echo_server::Echo for EchoServer {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cert = tokio::fs::read("tonic-examples/data/tls/server.pem").await?;
-    let key = tokio::fs::read("tonic-examples/data/tls/server.key").await?;
+    let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
+    let key = tokio::fs::read("examples/data/tls/server.key").await?;
     let server_identity = Identity::from_pem(cert, key);
 
-    let client_ca_cert = tokio::fs::read("tonic-examples/data/tls/client_ca.pem").await?;
+    let client_ca_cert = tokio::fs::read("examples/data/tls/client_ca.pem").await?;
     let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
     let addr = "[::1]:50051".parse().unwrap();

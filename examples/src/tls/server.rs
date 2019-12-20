@@ -51,8 +51,8 @@ impl pb::echo_server::Echo for EchoServer {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cert = tokio::fs::read("tonic-examples/data/tls/server.pem").await?;
-    let key = tokio::fs::read("tonic-examples/data/tls/server.key").await?;
+    let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
+    let key = tokio::fs::read("examples/data/tls/server.key").await?;
 
     let identity = Identity::from_pem(cert, key);
 
