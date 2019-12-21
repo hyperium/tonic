@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bearer_token = format!("Bearer {}", token);
     let header_value = HeaderValue::from_str(&bearer_token)?;
 
-    let certs = tokio::fs::read("tonic-examples/data/gcp/roots.pem").await?;
+    let certs = tokio::fs::read("examples/data/gcp/roots.pem").await?;
 
     let tls_config = ClientTlsConfig::new()
         .ca_certificate(Certificate::from_pem(certs.as_slice()))
