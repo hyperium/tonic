@@ -8,9 +8,9 @@ use std::{
 
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use http_body::Body;
 use tokio_util::codec::Decoder;
 use tonic::{Status, Streaming};
-use http_body::Body;
 
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {
