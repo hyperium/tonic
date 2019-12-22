@@ -61,7 +61,7 @@ impl<T> Streaming<T> {
         Self::new(decoder, body, Direction::EmptyResponse)
     }
 
-    pub(crate) fn new_request<B, D>(decoder: D, body: B) -> Self
+    pub fn new_request<B, D>(decoder: D, body: B) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
