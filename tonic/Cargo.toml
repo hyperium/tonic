@@ -85,4 +85,7 @@ bencher = "0.1.5"
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[[bench]]
+name = "decode"
+harness = false
 
