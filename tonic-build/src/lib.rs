@@ -147,8 +147,8 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
-        let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
+    pub fn compile<P: AsRef<Path>>(self, _protos: &[P], _includes: &[P]) -> io::Result<()> {
+        let _out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
             out_dir.clone()
         } else {
             PathBuf::from(std::env::var("OUT_DIR").unwrap())
@@ -158,12 +158,12 @@ impl Builder {
         let format = self.format;
 
         #[cfg(feature = "prost")]
-        prost::compile(self, out_dir.clone(), protos, includes)?;
+        prost::compile(self, _out_dir.clone(), _protos, _includes)?;
 
         #[cfg(feature = "rustfmt")]
         {
             if format {
-                fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+                fmt(_out_dir.to_str().expect("Expected utf8 out_dir"));
             }
         }
 
