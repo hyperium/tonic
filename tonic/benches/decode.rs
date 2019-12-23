@@ -1,11 +1,11 @@
-use std::fmt::{Error, Formatter};
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http_body::Body;
-
+use std::{
+    fmt::{Error, Formatter},
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tonic::{codec::Decoder, Status, Streaming};
 
 macro_rules! bench {
