@@ -1,13 +1,14 @@
-use crate::{Code, Status};
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
 use futures_util::{ready, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use http_body::Body;
 use pin_project::pin_project;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use tokio_util::codec::Encoder;
+
+use crate::{codec::Encoder, Code, Status};
 
 const BUFFER_SIZE: usize = 8 * 1024;
 

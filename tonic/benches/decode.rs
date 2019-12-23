@@ -1,16 +1,12 @@
-extern crate bencher;
-
 use std::fmt::{Error, Formatter};
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http_body::Body;
-use tokio_util::codec::Decoder;
-use tonic::{Status, Streaming};
+
+use tonic::{codec::Decoder, Status, Streaming};
 
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {

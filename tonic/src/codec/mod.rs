@@ -11,13 +11,15 @@ mod prost;
 #[cfg(test)]
 mod tests;
 
+use std::io;
+
+use bytes::BytesMut;
+
 pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
-pub use tokio_util::codec::{Decoder, Encoder};
-
 use crate::Status;
 
 /// Trait that knows how to encode and decode gRPC messages.
@@ -36,4 +38,30 @@ pub trait Codec: Default {
     fn encoder(&mut self) -> Self::Encoder;
     /// Fetch the decoder.
     fn decoder(&mut self) -> Self::Decoder;
+}
+
+/// Decoding of frames via buffers.
+pub trait Decoder {
+    /// The type of decoded frames.
+    type Item;
+
+    /// The type of unrecoverable frame decoding errors.
+    type Error: From<io::Error>;
+
+    /// Attempts to decode a frame from the provided buffer of bytes.
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error>;
+}
+
+/// Trait of helper objects to write out messages as bytes.
+pub trait Encoder {
+    /// The type of items consumed by the `Encoder`
+    type Item;
+
+    /// The type of encoding errors.
+    ///
+    /// The type of unrecoverable frame encoding errors.
+    type Error: From<io::Error>;
+
+    /// Encodes a frame into the buffer provided.
+    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error>;
 }
