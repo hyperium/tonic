@@ -101,9 +101,10 @@ impl Decoder for MockDecoder {
     type Item = Bytes;
     type Error = Status;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let item = buf.split_to(self.message_size).freeze();
-        Ok(Some(item))
+    fn decode(&mut self, buf: &mut dyn Buf) -> Result<Option<Self::Item>, Self::Error> {
+        let mut out = vec![0; self.message_size];
+        buf.copy_to_slice(&mut out);
+        Ok(Some(Bytes::from(out)))
     }
 }
 
