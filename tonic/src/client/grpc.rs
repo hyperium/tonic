@@ -105,7 +105,7 @@ impl<T> Grpc<T> {
         request: Request<M1>,
         path: PathAndQuery,
         codec: C,
-    ) -> Result<Response<Streaming<M2>>, Status>
+    ) -> Result<Response<Streaming<M2, C::Decoder>>, Status>
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,
@@ -124,7 +124,7 @@ impl<T> Grpc<T> {
         request: Request<S>,
         path: PathAndQuery,
         mut codec: C,
-    ) -> Result<Response<Streaming<M2>>, Status>
+    ) -> Result<Response<Streaming<M2, C::Decoder>>, Status>
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + HttpBody + Send + 'static,

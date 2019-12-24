@@ -92,7 +92,7 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: ClientStreamingService<T::Decode, Response = T::Encode>,
+        S: ClientStreamingService<T::Decode, T::Decoder, Response = T::Encode>,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
@@ -111,7 +111,7 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: StreamingService<T::Decode, Response = T::Encode> + Send,
+        S: StreamingService<T::Decode, T::Decoder, Response = T::Encode> + Send,
         S::ResponseStream: Send + Sync + 'static,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
@@ -151,7 +151,7 @@ where
     fn map_request_streaming<B>(
         &mut self,
         request: http::Request<B>,
-    ) -> Request<Streaming<T::Decode>>
+    ) -> Request<Streaming<T::Decode, T::Decoder>>
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,

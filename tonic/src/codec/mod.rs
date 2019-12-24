@@ -49,7 +49,7 @@ pub trait Decoder {
     type Error: From<io::Error>;
 
     /// Attempts to decode a frame from the provided buffer of bytes.
-    fn decode(&mut self, src: &mut dyn Buf) -> Result<Option<Self::Item>, Self::Error>;
+    fn decode<B: Buf>(&mut self, src: &mut B) -> Result<Option<Self::Item>, Self::Error>;
 }
 
 /// Trait of helper objects to write out messages as bytes.
