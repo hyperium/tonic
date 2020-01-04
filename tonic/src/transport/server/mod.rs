@@ -300,9 +300,9 @@ impl Server {
                 .serve(svc)
                 .with_graceful_shutdown(signal)
                 .await
-                .map_err(map_err)?
+                .map_err(super::Error::from_source)?
         } else {
-            server.serve(svc).await.map_err(map_err)?;
+            server.serve(svc).await.map_err(super::Error::from_source)?;
         }
 
         Ok(())
@@ -374,7 +374,7 @@ where
     /// [`Server`]: struct.Server.html
     pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error> {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
-            .map_err(map_err)?;
+            .map_err(super::Error::from_source)?;
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _>(self.routes, incoming, None)
             .await
@@ -391,7 +391,7 @@ where
         f: F,
     ) -> Result<(), super::Error> {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
-            .map_err(map_err)?;
+            .map_err(super::Error::from_source)?;
         self.server
             .serve_with_shutdown(self.routes, incoming, Some(f))
             .await
@@ -411,10 +411,6 @@ where
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _>(self.routes, incoming, None)
             .await
     }
-}
-
-fn map_err(e: impl Into<crate::Error>) -> super::Error {
-    super::Error::from_source(super::ErrorKind::Server, e.into())
 }
 
 impl fmt::Debug for Server {

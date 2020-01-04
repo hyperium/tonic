@@ -136,7 +136,7 @@ impl Channel {
 
         let svc = Connection::new(connector, endpoint)
             .await
-            .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))?;
+            .map_err(|e| super::Error::from_source(e))?;
 
         let svc = Buffer::new(Either::A(svc), buffer_size);
 
@@ -174,8 +174,7 @@ impl GrpcService<BoxBody> for Channel {
     type Future = ResponseFuture;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        GrpcService::poll_ready(&mut self.svc, cx)
-            .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))
+        GrpcService::poll_ready(&mut self.svc, cx).map_err(|e| super::Error::from_source(e))
     }
 
     fn call(&mut self, mut request: Request<BoxBody>) -> Self::Future {
@@ -193,7 +192,7 @@ impl Future for ResponseFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let val = futures_util::ready!(Pin::new(&mut self.inner).poll(cx))
-            .map_err(|e| super::Error::from_source(super::ErrorKind::Client, e))?;
+            .map_err(|e| super::Error::from_source(e))?;
         Ok(val).into()
     }
 }

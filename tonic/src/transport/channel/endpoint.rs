@@ -4,7 +4,7 @@ use super::Channel;
 use super::ClientTlsConfig;
 #[cfg(feature = "tls")]
 use crate::transport::service::TlsConnector;
-use crate::transport::{Error, ErrorKind};
+use crate::transport::Error;
 use bytes::Bytes;
 use http::uri::{InvalidUri, Uri};
 use std::{
@@ -44,9 +44,7 @@ impl Endpoint {
         D: TryInto<Self>,
         D::Error: Into<crate::Error>,
     {
-        let me = dst
-            .try_into()
-            .map_err(|e| Error::from_source(ErrorKind::Client, e.into()))?;
+        let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
         Ok(me)
     }
 
