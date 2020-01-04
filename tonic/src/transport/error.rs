@@ -1,57 +1,23 @@
 use std::{error, fmt};
 
 /// Error's that originate from the client or server;
-pub struct Error {
-    kind: ErrorKind,
-    source: Option<crate::Error>,
-}
+#[derive(Debug)]
+pub struct Error(crate::Error);
 
 impl Error {
-    pub(crate) fn from_source(kind: ErrorKind, source: crate::Error) -> Self {
-        Self {
-            kind,
-            source: Some(source),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum ErrorKind {
-    Client,
-    Server,
-}
-
-impl fmt::Debug for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut f = f.debug_tuple("Error");
-        f.field(&self.kind);
-        if let Some(source) = &self.source {
-            f.field(source);
-        }
-        f.finish()
+    pub(crate) fn from_source(source: impl Into<crate::Error>) -> Self {
+        Self(source.into())
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if let Some(source) = &self.source {
-            write!(f, "{}: {}", self.kind, source)
-        } else {
-            write!(f, "{}", self.kind)
-        }
+        self.0.fmt(f)
     }
 }
 
 impl error::Error for Error {
     fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        self.source
-            .as_ref()
-            .map(|e| &**e as &(dyn error::Error + 'static))
-    }
-}
-
-impl fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{:?}", self)
+        self.0.source()
     }
 }

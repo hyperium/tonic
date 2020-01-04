@@ -112,5 +112,3 @@ pub use self::channel::ClientTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::server::ServerTlsConfig;
-
-pub(crate) use self::error::ErrorKind;
