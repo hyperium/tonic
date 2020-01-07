@@ -601,10 +601,7 @@ $ mv src/main.rs src/server.rs
 $ touch src/client.rs
 ```
 
-We can use Tonic's `include_proto` macro to bring the generated code into scope:
-
-
-To call service methods, we first need to create a gRPC *client* to communicate with the server. As in the server
+To call service methods, we first need to create a gRPC *client* to communicate with the server. Like in the server
 case, we'll start by bringing the generated code into scope:
 
 ```rust
