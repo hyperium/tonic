@@ -67,13 +67,13 @@ You should see some logging output flying past really quickly on both terminal w
 shell where you ran the client binary, you should see the output of the bidirectional streaming rpc,
 printing 1 line per second:
 
-        NOTE = RouteNote { location: Some(Point { latitude: 409146139, longitude: -746188906 }), message: "at 1.000319208s" }
+```
+NOTE = RouteNote { location: Some(Point { latitude: 409146139, longitude: -746188906 }), message: "at 1.000319208s" }
+```
 
 If you scroll up you should see the output of the other 3 request types: simple rpc, server-side
 streaming and client-side streaming.
 
-
-[readme]: https://github.com/hyperium/tonic#getting-started
 
 ## Project setup
 
@@ -259,7 +259,7 @@ pub mod routeguide {
     tonic::include_proto!("routeguide");
 }
 
-use routeguide::route_guide_server::RouteGuide;
+use routeguide::route_guide_server::{RouteGuide, RouteGuideServer};
 use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
 ```
 
@@ -269,16 +269,16 @@ the package declared in in our `.proto` file, not a filename, e.g "routeguide.rs
 With this in place, we can stub out our service implementation:
 
 ```rust
-use std::pin::Pin;
-
 use futures_core::Stream;
+use std::pin::Pin;
+use std::sync::Arc;
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status};
 ```
 
 ```rust
 #[tonic::async_trait]
-impl server::RouteGuide for RouteGuide {
+impl RouteGuide for RouteGuideService {
     async fn get_feature(&self, _request: Request<Point>) -> Result<Response<Feature>, Status> {
         unimplemented!()
     }
@@ -370,7 +370,7 @@ when performing feature lookups. You can find them in
 
 [route-guide-db]: https://github.com/hyperium/tonic/blob/master/examples/data/route_guide_db.json
 [data-module]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/data.rs
-[in-range-fn]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/server.rs#L177
+[in-range-fn]: https://github.com/hyperium/tonic/blob/master/examples/src/routeguide/server.rs#L174
 
 #### Request and Response types
 All our service methods receive a `tonic::Request<T>` and return a
@@ -449,7 +449,7 @@ async fn record_route(
     request: Request<tonic::Streaming<Point>>,
 ) -> Result<Response<RouteSummary>, Status> {
     let stream = request.into_inner();
-    futures::pin_mut!(stream);
+    futures_util::pin_mut!(stream);
 
     let mut summary = RouteSummary::default();
     let mut last_point = None;
@@ -488,7 +488,13 @@ Finally, let's look at our bidirectional streaming RPC `route_chat`, which recei
 of `RouteNote`s and returns  a stream of `RouteNote`s.
 
 ```rust
-type RouteChatStream = Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + 'static>>;
+use std::collections::HashMap;
+```
+
+```rust
+type RouteChatStream =
+    Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>>;
+
 
 async fn route_chat(
     &self,
@@ -498,7 +504,7 @@ async fn route_chat(
     let stream = request.into_inner();
 
     let output = async_stream::try_stream! {
-        futures::pin_mut!(stream);
+        futures_util::pin_mut!(stream);
 
         while let Some(note) = stream.next().await {
             let note = note?;
@@ -547,7 +553,7 @@ use tonic::transport::Server;
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
 
-    let route_guide = RouteGuide {
+    let route_guide = RouteGuideService {
         features: Arc::new(data::load()),
     };
 
@@ -561,14 +567,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 To handle requests, `Tonic` uses [Tower] and [hyper] internally. What this means,
 among other things, is that we have a flexible and composable stack we can build on top of. We can,
-for example, add an [interceptor][authentication-example] or implement [routing][router-example].
-In the future, Tonic may include higher level support for routing and interceptors.
+for example, add an [interceptor][authentication-example] to process requests before they reach our service
+methods.
 
 
 [Tower]: https://github.com/tower-rs
 [hyper]: https://github.com/hyperium/hyper
 [authentication-example]: https://github.com/hyperium/tonic/blob/master/examples/src/authentication/server.rs#L56
-[router-example]: https://github.com/hyperium/tonic/blob/master/interop/src/bin/server.rs#L73
 
 <a name="client"></a>
 ## Creating the client
@@ -596,7 +601,11 @@ $ mv src/main.rs src/server.rs
 $ touch src/client.rs
 ```
 
-To call service methods, we first need to create a gRPC *client* to communicate with the server.
+We can use Tonic's `include_proto` macro to bring the generated code into scope:
+
+
+To call service methods, we first need to create a gRPC *client* to communicate with the server. As in the server
+case, we'll start by bringing the generated code into scope:
 
 ```rust
 pub mod routeguide {
@@ -755,7 +764,7 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
     let outbound = async_stream::stream! {
         let mut interval = time::interval(Duration::from_secs(1));
 
-        while let Some(time) = interval.next().await {
+        while let time = interval.tick().await {
             let elapsed = time.duration_since(start);
             let note = RouteNote {
                 location: Some(Point {
