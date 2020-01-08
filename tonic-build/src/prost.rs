@@ -1,4 +1,4 @@
-use super::{client, fmt, schema, server};
+use super::{client, schema, server};
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
@@ -278,7 +278,7 @@ impl Builder {
         #[cfg(feature = "rustfmt")]
         {
             if format {
-                fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+                super::fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
             }
         }
 
