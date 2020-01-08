@@ -199,7 +199,7 @@ Create a `build.rs` file at the root of your crate:
 
 ```rust
 fn main() {
-    tonic_build::compile_protos("proto/route_guide.proto")
+    tonic_build::prost::compile_protos("proto/route_guide.proto")
         .unwrap_or_else(|e| panic!("Failed to compile protos {:?}", e));
 }
 ```
@@ -823,7 +823,7 @@ opposed to at build time, placing the resulting modules wherever we need them.
 
 ```rust
 fn main() {
-    tonic_build::configure()
+    tonic_build::prost::configure()
         .build_client(false)
         .out_dir("another_crate/src/pb")
         .compile(&["path/my_proto.proto"], &["path"])

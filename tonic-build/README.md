@@ -23,7 +23,7 @@ tonic-build = <tonic-version>
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::compile_protos("proto/service.proto")?;
+    tonic_build::prost::compile_protos("proto/service.proto")?;
     Ok(())
 }
 ```
@@ -32,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-   tonic_build::configure()
+   tonic_build::prost::configure()
         .build_server(false)
         .compile(
             &["proto/helloworld/helloworld.proto"],
