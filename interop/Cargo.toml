@@ -34,4 +34,4 @@ tracing-subscriber = "0.2.0-alpha"
 tracing-log = "0.1.0"
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build" }
+tonic-build = { path = "../tonic-build", features=["prost"] }
