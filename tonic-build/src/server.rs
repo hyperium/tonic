@@ -4,7 +4,8 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};
 
-pub(crate) fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+/// Generate service for Server
+pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
     let methods = generate_methods(service, context);
 
     let server_service = quote::format_ident!("{}Server", service.name());

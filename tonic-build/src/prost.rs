@@ -13,8 +13,11 @@ impl<'a> schema::Commentable<'a> for Service {
     }
 }
 
-pub(crate) struct ProstContext {
-    pub(crate) proto_path: String,
+/// Context data used while generate prost service
+#[derive(Debug)]
+pub struct ProstContext {
+    /// relative path to proto definitions from service definitions
+    pub proto_path: String,
 }
 
 impl schema::Context for ProstContext {

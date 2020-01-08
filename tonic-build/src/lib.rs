@@ -59,9 +59,11 @@
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use quote::TokenStreamExt;
 
+/// Prost generator
 #[cfg(feature = "prost")]
-mod prost;
-mod schema;
+pub mod prost;
+/// Traits to describe schema
+pub mod schema;
 
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
@@ -70,8 +72,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-mod client;
-mod server;
+/// Serivce code generation for client
+pub mod client;
+/// Serivce code generation for Server
+pub mod server;
 
 /// Service generator builder.
 #[derive(Debug, Clone)]
@@ -204,8 +208,9 @@ pub fn compile_protos(proto_path: impl AsRef<Path>) -> io::Result<()> {
     Ok(())
 }
 
+/// Format files under the out_dir with rustfmt
 #[cfg(feature = "rustfmt")]
-fn fmt(out_dir: &str) {
+pub fn fmt(out_dir: &str) {
     let dir = std::fs::read_dir(out_dir).unwrap();
 
     for entry in dir {

@@ -3,7 +3,8 @@ use crate::{generate_doc_comments, naive_snake_case};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-pub(crate) fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+/// Generate service for client
+pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
     let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name()));
     let methods = generate_methods(service, context);
