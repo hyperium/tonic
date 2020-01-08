@@ -388,12 +388,12 @@ where
     pub async fn serve_with_shutdown<F: Future<Output = ()>>(
         self,
         addr: SocketAddr,
-        f: F,
+        signal: F,
     ) -> Result<(), super::Error> {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
         self.server
-            .serve_with_shutdown(self.routes, incoming, Some(f))
+            .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
     }
 
@@ -409,6 +409,28 @@ where
     {
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _>(self.routes, incoming, None)
+            .await
+    }
+
+    /// Consume this [`Server`] creating a future that will execute the server on
+    /// the provided incoming stream of `AsyncRead + AsyncWrite`. Similar to
+    /// `serve_with_shutdown` this method will also take a signal future to
+    /// gracefully shutdown the server.
+    ///
+    /// [`Server`]: struct.Server.html
+    pub async fn serve_with_incoming_shutdown<I, IO, IE, F>(
+        self,
+        incoming: I,
+        signal: F,
+    ) -> Result<(), super::Error>
+    where
+        I: Stream<Item = Result<IO, IE>>,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+        IE: Into<crate::Error>,
+        F: Future<Output = ()>,
+    {
+        self.server
+            .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
     }
 }
