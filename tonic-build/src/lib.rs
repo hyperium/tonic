@@ -115,7 +115,7 @@ impl Builder {
     /// Declare externally provided Protobuf package or type.
     ///
     /// Passed directly to `prost_build::Config.extern_path`.
-    pub fn extern_path<T: AsRef<str>>(mut self, proto_path: T, rust_path: T) -> Self {
+    pub fn extern_path(mut self, proto_path: impl AsRef<str>, rust_path: impl AsRef<str>) -> Self {
         self.extern_path.push((
             proto_path.as_ref().to_string(),
             rust_path.as_ref().to_string(),
