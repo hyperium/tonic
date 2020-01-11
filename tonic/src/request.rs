@@ -1,7 +1,11 @@
 use crate::metadata::MetadataMap;
+#[cfg(feature = "transport")]
+use crate::transport::Certificate;
 use futures_core::Stream;
 use http::Extensions;
 use std::net::SocketAddr;
+#[cfg(feature = "transport")]
+use std::sync::Arc;
 
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
@@ -14,6 +18,8 @@ pub struct Request<T> {
 #[derive(Clone)]
 pub(crate) struct ConnectionInfo {
     pub(crate) remote_addr: Option<SocketAddr>,
+    #[cfg(feature = "transport")]
+    pub(crate) peer_certs: Option<Arc<Vec<Certificate>>>,
 }
 
 /// Trait implemented by RPC request types.
@@ -186,6 +192,18 @@ impl<T> Request<T> {
     /// only works on the server side.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.get::<ConnectionInfo>()?.remote_addr
+    }
+
+    /// Get the peer certificates of the connected client.
+    ///
+    /// This is used to fetch the certificates from the TLS session
+    /// and is mostly used for mTLS. This currently only returns
+    /// `Some` on the server side of the `transport` server with
+    /// TLS enabled connections.
+    #[cfg(feature = "transport")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
+    pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
+        self.get::<ConnectionInfo>()?.peer_certs.clone()
     }
 
     pub(crate) fn get<I: Send + Sync + 'static>(&self) -> Option<&I> {
