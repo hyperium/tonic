@@ -28,7 +28,7 @@ tower = "0.3"
 http-body = "0.3"
 
 console = "0.9"
-structopt = "0.2"
+structopt = "0.3"
 
 tracing = "0.1"
 tracing-subscriber = "0.2.0-alpha"

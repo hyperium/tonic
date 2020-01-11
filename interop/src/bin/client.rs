@@ -10,7 +10,7 @@ struct Opts {
         long = "test_case",
         use_delimiter = true,
         min_values = 1,
-        raw(possible_values = r#"&Testcase::variants()"#)
+        possible_values = &Testcase::variants()
     )]
     test_case: Vec<Testcase>,
 
