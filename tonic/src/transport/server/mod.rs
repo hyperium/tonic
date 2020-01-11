@@ -505,6 +505,7 @@ where
     fn call(&mut self, io: &ServerIo) -> Self::Future {
         let conn_info = crate::request::ConnectionInfo {
             remote_addr: io.remote_addr(),
+            peer_certs: io.peer_certs().map(Arc::new),
         };
 
         let interceptor = self.interceptor.clone();

@@ -157,17 +157,14 @@ impl TlsAcceptor {
         })
     }
 
-    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<BoxedIo, crate::Error>
+    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<tokio_rustls::server::TlsStream<IO>, crate::Error>
     where
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     {
-        let io = {
-            let acceptor = RustlsAcceptor::from(self.inner.clone());
-            let tls = acceptor.accept(io).await?;
-            BoxedIo::new(tls)
-        };
+        let acceptor = RustlsAcceptor::from(self.inner.clone());
+        let tls = acceptor.accept(io).await?;
 
-        Ok(io)
+        Ok(tls)
     }
 }
 

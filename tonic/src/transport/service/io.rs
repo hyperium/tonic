@@ -1,4 +1,4 @@
-use crate::transport::server::Connected;
+use crate::transport::{server::Connected, Certificate};
 use hyper::client::connect::{Connected as HyperConnected, Connection};
 use std::io;
 use std::net::SocketAddr;
@@ -71,8 +71,11 @@ impl ServerIo {
 
 impl Connected for ServerIo {
     fn remote_addr(&self) -> Option<SocketAddr> {
-        let io = &*self.0;
-        io.remote_addr()
+        (&*self.0).remote_addr()
+    }
+
+    fn peer_certs(&self) -> Option<Vec<Certificate>> {
+        (&self.0).peer_certs()
     }
 }
 

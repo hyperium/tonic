@@ -33,8 +33,8 @@ transport = [
     "tower-load",
     "tracing-futures",
 ]
-tls = ["tokio-rustls"]
-tls-roots = ["rustls-native-certs"]
+tls = ["transport", "tokio-rustls"]
+tls-roots = ["tls", "rustls-native-certs"]
 
 # [[bench]]
 # name = "bench_main"
