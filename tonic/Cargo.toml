@@ -56,8 +56,8 @@ http-body = "0.3"
 pin-project = "0.4"
 
 # prost
-prost = { version = "0.5", optional = true }
-prost-derive = { version = "0.5", optional = true }
+prost = { git = "https://github.com/danburkert/prost", branch = "master", optional = true }
+prost-derive = { git = "https://github.com/danburkert/prost", branch = "master", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
@@ -78,11 +78,14 @@ rustls-native-certs = { version = "0.1", optional = true }
 [dev-dependencies]
 tokio = { version = "0.2", features = ["rt-core", "macros"] }
 static_assertions = "1.0"
-rand = "0.6"
-criterion = "0.3"
+rand = "0.7"
+bencher = "0.1.5"
 
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[[bench]]
+name = "decode"
+harness = false
 

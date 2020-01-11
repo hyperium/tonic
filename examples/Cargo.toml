@@ -88,8 +88,7 @@ path = "src/uds/server.rs"
 
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
-bytes = "0.4"
-prost = "0.5"
+prost = { git = "https://github.com/danburkert/prost", branch = "master" }
 
 tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"]}
@@ -100,7 +99,7 @@ tower = "0.3"
 # Required for routeguide
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rand = "0.6"
+rand = "0.7"
 
 # Tracing
 tracing = "0.1"
@@ -109,7 +108,7 @@ tracing-attributes = "0.1"
 tracing-futures = "0.2"
 
 # Required for wellknown types
-prost-types = "0.5"
+prost-types = { git = "https://github.com/danburkert/prost", branch = "master" }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }

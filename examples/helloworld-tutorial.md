@@ -114,8 +114,7 @@ path = "src/client.rs"
 
 [dependencies]
 tonic = "0.1.0-beta.1"
-bytes = "0.4"
-prost = "0.5"
+prost = { git = "https://github.com/danburkert/prost", branch = "master" }
 tokio = { version = "0.2", features = ["macros"] }
 
 [build-dependencies]

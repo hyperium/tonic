@@ -16,7 +16,7 @@ keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
 
 
 [dependencies]
-prost-build = "0.5"
+prost-build = { git = "https://github.com/danburkert/prost", branch = "master" }
 syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1.0"

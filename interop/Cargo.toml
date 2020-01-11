@@ -17,9 +17,9 @@ path = "src/bin/server.rs"
 [dependencies]
 tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "stream", "fs"] }
 tonic = { path = "../tonic", features = ["tls"] }
-prost = "0.5"
-prost-derive = "0.5"
-bytes = "0.4"
+prost = { git = "https://github.com/danburkert/prost", branch = "master" }
+prost-derive = { git = "https://github.com/danburkert/prost", branch = "master" }
+bytes = "0.5"
 http = "0.2"
 futures-core = "0.3"
 futures-util = "0.3"
@@ -28,7 +28,7 @@ tower = "0.3"
 http-body = "0.3"
 
 console = "0.9"
-structopt = "0.2"
+structopt = "0.3"
 
 tracing = "0.1"
 tracing-subscriber = "0.2.0-alpha"
