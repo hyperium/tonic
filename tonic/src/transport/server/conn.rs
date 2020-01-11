@@ -2,7 +2,7 @@ use crate::transport::Certificate;
 use hyper::server::conn::AddrStream;
 use std::net::SocketAddr;
 #[cfg(feature = "tls")]
-use tokio_rustls::{server::TlsStream, rustls::Session};
+use tokio_rustls::{rustls::Session, server::TlsStream};
 
 /// Trait that connected IO resources implement.
 ///

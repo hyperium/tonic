@@ -157,7 +157,10 @@ impl TlsAcceptor {
         })
     }
 
-    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<tokio_rustls::server::TlsStream<IO>, crate::Error>
+    pub(crate) async fn accept<IO>(
+        &self,
+        io: IO,
+    ) -> Result<tokio_rustls::server::TlsStream<IO>, crate::Error>
     where
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     {
