@@ -181,7 +181,6 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 ```toml
 [dependencies]
 tonic = "0.1.0-beta.1"
-bytes = "0.5"
 prost = { git = "https://github.com/danburkert/prost", branch = "master" }
 futures-core = "0.3"
 futures-util = "0.3"

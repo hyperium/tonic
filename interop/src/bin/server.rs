@@ -8,7 +8,7 @@ use tonic_interop::{server, MergeTrailers};
 
 #[derive(StructOpt)]
 struct Opts {
-    #[structopt(long)]
+    #[structopt(name = "use_tls", long)]
     use_tls: bool,
 }
 

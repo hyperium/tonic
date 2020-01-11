@@ -14,12 +14,9 @@ deny = [
     # term is not fully maintained, and termcolor is replacing it
     { name = "term" },
 ]
-skip = [
-    { name = "bytes", version = "=0.4.12" },
-]
-skip-tree = [
-    { name = "rand", version = "=0.6.5" },
-    { name = "syn",  version = "=0.15.44" },
+skip-tree = [ 
+    { name = "winapi", version = "<= 0.3" },
+    { name = "autocfg", version = "<= 1" },
 ]
 
 [licenses]

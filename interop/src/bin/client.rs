@@ -6,16 +6,16 @@ use tonic_interop::client;
 
 #[derive(StructOpt)]
 struct Opts {
+    #[structopt(name = "use_tls", long)]
+    use_tls: bool,
+
     #[structopt(
         long = "test_case",
         use_delimiter = true,
         min_values = 1,
-        raw(possible_values = r#"&Testcase::variants()"#)
+        possible_values = &Testcase::variants()
     )]
     test_case: Vec<Testcase>,
-
-    #[structopt(long)]
-    use_tls: bool,
 }
 
 #[tokio::main]
