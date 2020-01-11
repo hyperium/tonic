@@ -6,7 +6,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tonic::{codec::Decoder, Status, Streaming};
+use tonic::{codec::DecodeBuf, codec::Decoder, Status, Streaming};
 
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {
@@ -101,9 +101,8 @@ impl Decoder for MockDecoder {
     type Item = Bytes;
     type Error = Status;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let item = buf.split_to(self.message_size).freeze();
-        Ok(Some(item))
+    fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
+        Ok(Some(buf.to_bytes()))
     }
 }
 

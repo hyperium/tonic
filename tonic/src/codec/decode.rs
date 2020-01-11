@@ -1,6 +1,7 @@
 use super::Decoder;
+use crate::codec::buffer::{BufList, DecodeBuf};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::Buf;
 use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
@@ -12,8 +13,6 @@ use std::{
 };
 use tracing::{debug, trace};
 
-const BUFFER_SIZE: usize = 8 * 1024;
-
 /// Streaming requests and responses.
 ///
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
@@ -23,7 +22,7 @@ pub struct Streaming<T> {
     body: BoxBody,
     state: State,
     direction: Direction,
-    buf: BytesMut,
+    buf: BufList,
     trailers: Option<MetadataMap>,
 }
 
@@ -82,7 +81,7 @@ impl<T> Streaming<T> {
             body: BoxBody::map_from(body),
             state: State::ReadHeader,
             direction,
-            buf: BytesMut::with_capacity(BUFFER_SIZE),
+            buf: BufList::new(),
             trailers: None,
         }
     }
@@ -185,20 +184,21 @@ impl<T> Streaming<T> {
         if let State::ReadBody { len, .. } = &self.state {
             // if we haven't read enough of the message then return and keep
             // reading
-            if self.buf.remaining() < *len || self.buf.len() < *len {
+            if self.buf.remaining() < *len {
                 return Ok(None);
             }
 
-            match self.decoder.decode(&mut self.buf) {
+            return match self
+                .decoder
+                .decode(&mut DecodeBuf::new(&mut self.buf, *len))
+            {
                 Ok(Some(msg)) => {
                     self.state = State::ReadHeader;
-                    return Ok(Some(msg));
+                    Ok(Some(msg))
                 }
-                Ok(None) => return Ok(None),
-                Err(e) => {
-                    return Err(e);
-                }
-            }
+                Ok(None) => Ok(None),
+                Err(e) => Err(e),
+            };
         }
 
         Ok(None)
@@ -231,17 +231,7 @@ impl<T> Stream for Streaming<T> {
             };
 
             if let Some(data) = chunk {
-                if data.remaining() > self.buf.remaining_mut() {
-                    let amt = if data.remaining() > BUFFER_SIZE {
-                        data.remaining()
-                    } else {
-                        BUFFER_SIZE
-                    };
-
-                    self.buf.reserve(amt);
-                }
-
-                self.buf.put(data);
+                self.buf.push(data);
             } else {
                 // FIXME: improve buf usage.
                 if self.buf.has_remaining() {
@@ -284,5 +274,5 @@ impl<T> fmt::Debug for Streaming<T> {
     }
 }
 
-//#[cfg(test)]
-//static_assertions::assert_impl_all!(Streaming<(), ()>: Send, Sync);
+#[cfg(test)]
+static_assertions::assert_impl_all!(Streaming<()>: Send, Sync);

@@ -1,4 +1,5 @@
 use super::{encode_server, Decoder, Encoder, Streaming};
+use crate::codec::buffer::DecodeBuf;
 use crate::Status;
 use bytes::{Buf, BufMut, BytesMut};
 use http_body::Body;
@@ -69,8 +70,8 @@ impl Decoder for MockDecoder {
     type Item = Vec<u8>;
     type Error = Status;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let out = Vec::from(&buf[..LEN]);
+    fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
+        let out = Vec::from(buf.bytes());
         buf.advance(LEN);
         Ok(Some(out))
     }

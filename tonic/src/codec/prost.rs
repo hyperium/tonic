@@ -1,4 +1,4 @@
-use super::{Codec, Decoder, Encoder};
+use super::{Codec, DecodeBuf, Decoder, Encoder};
 use crate::{Code, Status};
 use bytes::BytesMut;
 use prost::Message;

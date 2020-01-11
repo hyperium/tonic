@@ -3,6 +3,7 @@
 //! This module contains the generic `Codec` trait and a protobuf codec
 //! based on prost.
 
+mod buffer;
 mod decode;
 mod encode;
 #[cfg(feature = "prost")]
@@ -21,6 +22,7 @@ pub(crate) use self::encode::{encode_client, encode_server};
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
 use crate::Status;
+pub use buffer::DecodeBuf;
 
 /// Trait that knows how to encode and decode gRPC messages.
 pub trait Codec: Default {
@@ -49,7 +51,7 @@ pub trait Decoder {
     type Error: From<io::Error>;
 
     /// Attempts to decode a frame from the provided buffer of bytes.
-    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error>;
+    fn decode(&mut self, src: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error>;
 }
 
 /// Trait of helper objects to write out messages as bytes.
