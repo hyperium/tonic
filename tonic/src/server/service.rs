@@ -1,4 +1,3 @@
-use crate::codec::Decoder;
 use crate::{Request, Response, Status, Streaming};
 use futures_core::Stream;
 use std::future::Future;
@@ -67,10 +66,7 @@ where
 ///
 /// Existing tower_service::Service implementations with the correct form will
 /// automatically implement `ClientStreamingService`.
-pub trait ClientStreamingService<R, D>
-where
-    D: Decoder<Item = R, Error = Status> + Send + Sync + 'static,
-{
+pub trait ClientStreamingService<R> {
     /// Protobuf response message type
     type Response;
 
@@ -78,18 +74,17 @@ where
     type Future: Future<Output = Result<Response<Self::Response>, Status>>;
 
     /// Call the service
-    fn call(&mut self, request: Request<Streaming<R, D>>) -> Self::Future;
+    fn call(&mut self, request: Request<Streaming<R>>) -> Self::Future;
 }
 
-impl<T, D, M1, M2> ClientStreamingService<M1, D> for T
+impl<T, M1, M2> ClientStreamingService<M1> for T
 where
-    D: Decoder<Item = M1, Error = Status> + Send + Sync + 'static,
-    T: Service<Request<Streaming<M1, D>>, Response = Response<M2>, Error = crate::Status>,
+    T: Service<Request<Streaming<M1>>, Response = Response<M2>, Error = crate::Status>,
 {
     type Response = M2;
     type Future = T::Future;
 
-    fn call(&mut self, request: Request<Streaming<M1, D>>) -> Self::Future {
+    fn call(&mut self, request: Request<Streaming<M1>>) -> Self::Future {
         Service::call(self, request)
     }
 }
@@ -98,10 +93,7 @@ where
 ///
 /// Existing tower_service::Service implementations with the correct form will
 /// automatically implement `StreamingService`.
-pub trait StreamingService<R, D>
-where
-    D: Decoder<Item = R, Error = Status> + Send + Sync + 'static,
-{
+pub trait StreamingService<R> {
     /// Protobuf response message type
     type Response;
 
@@ -112,20 +104,19 @@ where
     type Future: Future<Output = Result<Response<Self::ResponseStream>, Status>>;
 
     /// Call the service
-    fn call(&mut self, request: Request<Streaming<R, D>>) -> Self::Future;
+    fn call(&mut self, request: Request<Streaming<R>>) -> Self::Future;
 }
 
-impl<T, S, D, M1, M2> StreamingService<M1, D> for T
+impl<T, S, M1, M2> StreamingService<M1> for T
 where
-    T: Service<Request<Streaming<M1, D>>, Response = Response<S>, Error = crate::Status>,
+    T: Service<Request<Streaming<M1>>, Response = Response<S>, Error = crate::Status>,
     S: Stream<Item = Result<M2, crate::Status>>,
-    D: Decoder<Item = M1, Error = Status> + Send + Sync + 'static,
 {
     type Response = M2;
     type ResponseStream = S;
     type Future = T::Future;
 
-    fn call(&mut self, request: Request<Streaming<M1, D>>) -> Self::Future {
+    fn call(&mut self, request: Request<Streaming<M1>>) -> Self::Future {
         Service::call(self, request)
     }
 }

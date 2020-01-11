@@ -69,9 +69,9 @@ impl Decoder for MockDecoder {
     type Item = Vec<u8>;
     type Error = Status;
 
-    fn decode<B: Buf>(&mut self, buf: &mut B) -> Result<Option<Self::Item>, Self::Error> {
-        let mut out = vec![0; buf.remaining()];
-        buf.copy_to_slice(&mut out);
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+        let out = Vec::from(&buf[..LEN]);
+        buf.advance(LEN);
         Ok(Some(out))
     }
 }

@@ -13,7 +13,7 @@ mod tests;
 
 use std::io;
 
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 
 pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
@@ -49,7 +49,7 @@ pub trait Decoder {
     type Error: From<io::Error>;
 
     /// Attempts to decode a frame from the provided buffer of bytes.
-    fn decode<B: Buf>(&mut self, src: &mut B) -> Result<Option<Self::Item>, Self::Error>;
+    fn decode(&mut self, src: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error>;
 }
 
 /// Trait of helper objects to write out messages as bytes.
