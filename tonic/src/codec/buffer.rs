@@ -9,12 +9,12 @@ pub(crate) struct BufList {
 
 /// A buffer to decode messages from.
 pub struct DecodeBuf<'a> {
-    buf: &'a mut dyn Buf,
+    buf: &'a mut BufList,
     len: usize,
 }
 
 impl<'a> DecodeBuf<'a> {
-    pub(crate) fn new(buf: &'a mut dyn Buf, len: usize) -> Self {
+    pub(crate) fn new(buf: &'a mut BufList, len: usize) -> Self {
         DecodeBuf { buf, len }
     }
 }

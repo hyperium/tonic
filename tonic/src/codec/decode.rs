@@ -231,7 +231,9 @@ impl<T> Stream for Streaming<T> {
             };
 
             if let Some(data) = chunk {
-                self.buf.push(data);
+                if data.has_remaining() {
+                    self.buf.push(data);
+                }
             } else {
                 // FIXME: improve buf usage.
                 if self.buf.has_remaining() {
