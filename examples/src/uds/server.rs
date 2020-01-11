@@ -1,17 +1,10 @@
+#![cfg_attr(not(unix), allow(unused_imports))]
+
 use futures::stream::TryStreamExt;
-use std::{
-    path::Path,
-    pin::Pin,
-    task::{Context, Poll},
-};
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::UnixListener,
-};
-use tonic::{
-    transport::{server::Connected, Server},
-    Request, Response, Status,
-};
+use std::path::Path;
+#[cfg(unix)]
+use tokio::net::UnixListener;
+use tonic::{transport::Server, Request, Response, Status};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -40,6 +33,7 @@ impl Greeter for MyGreeter {
     }
 }
 
+#[cfg(unix)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = "/tmp/tonic/helloworld";
@@ -52,41 +46,60 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Server::builder()
         .add_service(GreeterServer::new(greeter))
-        .serve_with_incoming(uds.incoming().map_ok(UnixStream))
+        .serve_with_incoming(uds.incoming().map_ok(unix::UnixStream))
         .await?;
 
     Ok(())
 }
 
-#[derive(Debug)]
-struct UnixStream(tokio::net::UnixStream);
+#[cfg(unix)]
+mod unix {
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
 
-impl Connected for UnixStream {}
+    use tokio::io::{AsyncRead, AsyncWrite};
+    use tonic::transport::server::Connected;
 
-impl AsyncRead for UnixStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.0).poll_read(cx, buf)
+    #[derive(Debug)]
+    pub struct UnixStream(pub tokio::net::UnixStream);
+
+    impl Connected for UnixStream {}
+
+    impl AsyncRead for UnixStream {
+        fn poll_read(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &mut [u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Pin::new(&mut self.0).poll_read(cx, buf)
+        }
+    }
+
+    impl AsyncWrite for UnixStream {
+        fn poll_write(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            buf: &[u8],
+        ) -> Poll<std::io::Result<usize>> {
+            Pin::new(&mut self.0).poll_write(cx, buf)
+        }
+
+        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.0).poll_flush(cx)
+        }
+
+        fn poll_shutdown(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+        ) -> Poll<std::io::Result<()>> {
+            Pin::new(&mut self.0).poll_shutdown(cx)
+        }
     }
 }
 
-impl AsyncWrite for UnixStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_shutdown(cx)
-    }
+#[cfg(not(unix))]
+fn main() {
+    panic!("The `uds` example only works on unix systems!");
 }
