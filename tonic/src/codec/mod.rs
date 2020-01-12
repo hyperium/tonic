@@ -14,15 +14,13 @@ mod tests;
 
 use std::io;
 
-use bytes::BytesMut;
-
 pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
 use crate::Status;
-pub use buffer::DecodeBuf;
+pub use buffer::{DecodeBuf, EncodeBuf};
 
 /// Trait that knows how to encode and decode gRPC messages.
 pub trait Codec: Default {
@@ -65,5 +63,5 @@ pub trait Encoder {
     type Error: From<io::Error>;
 
     /// Encodes a frame into the buffer provided.
-    fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> Result<(), Self::Error>;
+    fn encode(&mut self, item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error>;
 }

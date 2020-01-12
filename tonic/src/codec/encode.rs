@@ -1,3 +1,4 @@
+use crate::codec::buffer::EncodeBuf;
 use crate::{codec::Encoder, Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
@@ -54,7 +55,7 @@ where
                     unsafe {
                         buf.advance_mut(5);
                     }
-                    encoder.encode(item, &mut buf).map_err(drop).unwrap();
+                    encoder.encode(item, &mut EncodeBuf::new(&mut buf)).map_err(drop).unwrap();
 
                     // now that we know length, we can write the header
                     let len = buf.len() - 5;

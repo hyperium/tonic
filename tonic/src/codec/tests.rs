@@ -1,5 +1,6 @@
 use super::{encode_server, Decoder, Encoder, Streaming};
 use crate::codec::buffer::DecodeBuf;
+use crate::codec::EncodeBuf;
 use crate::Status;
 use bytes::{Buf, BufMut, BytesMut};
 use http_body::Body;
@@ -57,7 +58,7 @@ impl Encoder for MockEncoder {
     type Item = Vec<u8>;
     type Error = Status;
 
-    fn encode(&mut self, item: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
         buf.put(&item[..]);
         Ok(())
     }

@@ -1,6 +1,6 @@
 use super::{Codec, DecodeBuf, Decoder, Encoder};
+use crate::codec::EncodeBuf;
 use crate::{Code, Status};
-use bytes::BytesMut;
 use prost::Message;
 use std::marker::PhantomData;
 
@@ -44,7 +44,7 @@ impl<T: Message> Encoder for ProstEncoder<T> {
     type Item = T;
     type Error = Status;
 
-    fn encode(&mut self, item: Self::Item, buf: &mut BytesMut) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
         item.encode(buf)
             .expect("Message only errors if not enough space");
 
