@@ -190,7 +190,10 @@ impl<T> Streaming<T> {
                 return Ok(None);
             }
 
-            return match self.decoder.decode(&mut DecodeBuf::new(&mut self.buf)) {
+            return match self
+                .decoder
+                .decode(&mut DecodeBuf::new(&mut self.buf, *len))
+            {
                 Ok(Some(msg)) => {
                     self.state = State::ReadHeader;
                     Ok(Some(msg))

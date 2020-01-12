@@ -1,10 +1,11 @@
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 use std::mem::MaybeUninit;
 
 /// A buffer to decode messages from.
 #[derive(Debug)]
 pub struct DecodeBuf<'a> {
     buf: &'a mut BytesMut,
+    len: usize,
 }
 
 /// A buffer to encode a message into.
@@ -20,29 +21,33 @@ impl<'a> EncodeBuf<'a> {
 }
 
 impl<'a> DecodeBuf<'a> {
-    pub(crate) fn new(buf: &'a mut BytesMut) -> Self {
-        DecodeBuf { buf }
+    pub(crate) fn new(buf: &'a mut BytesMut, len: usize) -> Self {
+        DecodeBuf { buf, len }
     }
 }
 
 impl Buf for DecodeBuf<'_> {
     #[inline]
     fn remaining(&self) -> usize {
-        self.buf.len()
+        self.len
     }
 
     #[inline]
     fn bytes(&self) -> &[u8] {
-        self.buf.bytes()
+        let ret = self.buf.bytes();
+
+        if ret.len() > self.len {
+            &ret[..self.len]
+        } else {
+            ret
+        }
     }
 
     #[inline]
     fn advance(&mut self, cnt: usize) {
-        self.buf.advance(cnt)
-    }
-
-    fn to_bytes(&mut self) -> Bytes {
-        self.buf.to_bytes()
+        assert!(cnt <= self.len);
+        self.buf.advance(cnt);
+        self.len -= cnt;
     }
 }
 

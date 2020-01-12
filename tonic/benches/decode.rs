@@ -102,8 +102,8 @@ impl Decoder for MockDecoder {
     type Error = Status;
 
     fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-        let out = Vec::from(&buf.bytes()[..self.message_size]);
-        buf.advance(out.len());
+        let out = Vec::from(buf.bytes());
+        buf.advance(self.message_size);
         Ok(Some(out))
     }
 }
