@@ -1,7 +1,7 @@
 use super::Decoder;
-use crate::codec::buffer::{BufList, DecodeBuf};
+use crate::codec::buffer::DecodeBuf;
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
-use bytes::Buf;
+use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
@@ -13,6 +13,8 @@ use std::{
 };
 use tracing::{debug, trace};
 
+const BUFFER_SIZE: usize = 8 * 1024;
+
 /// Streaming requests and responses.
 ///
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
@@ -22,7 +24,7 @@ pub struct Streaming<T> {
     body: BoxBody,
     state: State,
     direction: Direction,
-    buf: BufList,
+    buf: BytesMut,
     trailers: Option<MetadataMap>,
 }
 
@@ -81,7 +83,7 @@ impl<T> Streaming<T> {
             body: BoxBody::map_from(body),
             state: State::ReadHeader,
             direction,
-            buf: BufList::new(),
+            buf: BytesMut::with_capacity(BUFFER_SIZE),
             trailers: None,
         }
     }
@@ -184,14 +186,11 @@ impl<T> Streaming<T> {
         if let State::ReadBody { len, .. } = &self.state {
             // if we haven't read enough of the message then return and keep
             // reading
-            if self.buf.remaining() < *len {
+            if self.buf.remaining() < *len || self.buf.len() < *len {
                 return Ok(None);
             }
 
-            return match self
-                .decoder
-                .decode(&mut DecodeBuf::new(&mut self.buf, *len))
-            {
+            return match self.decoder.decode(&mut DecodeBuf::new(&mut self.buf)) {
                 Ok(Some(msg)) => {
                     self.state = State::ReadHeader;
                     Ok(Some(msg))
@@ -231,9 +230,17 @@ impl<T> Stream for Streaming<T> {
             };
 
             if let Some(data) = chunk {
-                if data.has_remaining() {
-                    self.buf.push(data);
+                if data.remaining() > self.buf.remaining_mut() {
+                    let amt = if data.remaining() > BUFFER_SIZE {
+                        data.remaining()
+                    } else {
+                        BUFFER_SIZE
+                    };
+
+                    self.buf.reserve(amt);
                 }
+
+                self.buf.put(data);
             } else {
                 // FIXME: improve buf usage.
                 if self.buf.has_remaining() {

@@ -60,7 +60,7 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
     type Item = U;
     type Error = Status;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
         let item = Message::decode(buf)
             .map(Option::Some)
             .map_err(from_decode_error)?;
