@@ -47,6 +47,7 @@ impl Buf for DecodeBuf<'_> {
 }
 
 impl<'a> EncodeBuf<'a> {
+    #[doc(hidden)]
     #[inline]
     pub fn reserve(&mut self, capacity: usize) {
         self.buf.reserve(capacity);
