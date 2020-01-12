@@ -68,5 +68,27 @@ impl Echo for MyEcho {
     }
 
     type ServerStreamingEchoStream = ResponseStream;
+
+    async fn server_streaming_echo(
+        &self,
+        _: Request<EchoRequest>,
+    ) -> Result<Response<Self::ServerStreamingEchoStream>, Status> {
+        Err(Status::unimplemented("Not yet implemented"))
+    }
+
+    async fn client_streaming_echo(
+        &self,
+        _: Request<tonic::Streaming<EchoRequest>>,
+    ) -> Result<Response<EchoResponse>, Status> {
+        Err(Status::unimplemented("Not yet implemented"))
+    }
+
     type BidirectionalStreamingEchoStream = ResponseStream;
+
+    async fn bidirectional_streaming_echo(
+        &self,
+        _: Request<tonic::Streaming<EchoRequest>>,
+    ) -> Result<Response<Self::BidirectionalStreamingEchoStream>, Status> {
+        Err(Status::unimplemented("Not yet implemented"))
+    }
 }
