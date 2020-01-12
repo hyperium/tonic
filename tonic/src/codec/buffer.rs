@@ -14,12 +14,6 @@ pub struct EncodeBuf<'a> {
     buf: &'a mut BytesMut,
 }
 
-impl<'a> EncodeBuf<'a> {
-    pub(crate) fn new(buf: &'a mut BytesMut) -> Self {
-        EncodeBuf { buf }
-    }
-}
-
 impl<'a> DecodeBuf<'a> {
     pub(crate) fn new(buf: &'a mut BytesMut, len: usize) -> Self {
         DecodeBuf { buf, len }
@@ -52,6 +46,12 @@ impl Buf for DecodeBuf<'_> {
 }
 
 impl<'a> EncodeBuf<'a> {
+    pub(crate) fn new(buf: &'a mut BytesMut) -> Self {
+        EncodeBuf { buf }
+    }
+}
+
+impl EncodeBuf<'_> {
     #[doc(hidden)]
     #[inline]
     pub fn reserve(&mut self, capacity: usize) {
@@ -59,7 +59,7 @@ impl<'a> EncodeBuf<'a> {
     }
 }
 
-impl<'a> BufMut for EncodeBuf<'a> {
+impl BufMut for EncodeBuf<'_> {
     #[inline]
     fn remaining_mut(&self) -> usize {
         self.buf.remaining_mut()
