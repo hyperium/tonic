@@ -1,5 +1,5 @@
-use crate::codec::buffer::EncodeBuf;
-use crate::{codec::Encoder, Code, Status};
+use super::{EncodeBuf, Encoder};
+use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
 use futures_util::{ready, StreamExt, TryStreamExt};

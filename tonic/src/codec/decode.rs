@@ -1,5 +1,4 @@
-use super::Decoder;
-use crate::codec::buffer::DecodeBuf;
+use super::{DecodeBuf, Decoder};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;

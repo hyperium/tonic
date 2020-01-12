@@ -1,7 +1,7 @@
 //! Generic encoding and decoding.
 //!
-//! This module contains the generic `Codec` trait and a protobuf codec
-//! based on prost.
+//! This module contains the generic `Codec`, `Encoder` and `Decoder` traits
+//! and a protobuf codec based on prost.
 
 mod buffer;
 mod decode;
@@ -40,21 +40,9 @@ pub trait Codec: Default {
     fn decoder(&mut self) -> Self::Decoder;
 }
 
-/// Decoding of frames via buffers.
-pub trait Decoder {
-    /// The type of decoded frames.
-    type Item;
-
-    /// The type of unrecoverable frame decoding errors.
-    type Error: From<io::Error>;
-
-    /// Attempts to decode a frame from the provided buffer of bytes.
-    fn decode(&mut self, src: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error>;
-}
-
-/// Trait of helper objects to write out messages as bytes.
+/// Encodes gRPC message types
 pub trait Encoder {
-    /// The type of items consumed by the `Encoder`
+    /// The type that is encoded.
     type Item;
 
     /// The type of encoding errors.
@@ -62,6 +50,22 @@ pub trait Encoder {
     /// The type of unrecoverable frame encoding errors.
     type Error: From<io::Error>;
 
-    /// Encodes a frame into the buffer provided.
+    /// Encodes a message into the provided buffer.
     fn encode(&mut self, item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error>;
+}
+
+/// Decodes gRPC message types
+pub trait Decoder {
+    /// The type that is decoded.
+    type Item;
+
+    /// The type of unrecoverable frame decoding errors.
+    type Error: From<io::Error>;
+
+    /// Decode a message from the buffer.
+    ///
+    /// The buffer will contain exactly the bytes of a full message. There
+    /// is no need to get the length from the bytes, gRPC framing is handled
+    /// for you.
+    fn decode(&mut self, src: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error>;
 }
