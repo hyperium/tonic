@@ -88,7 +88,7 @@ path = "src/uds/server.rs"
 
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
-prost = { git = "https://github.com/danburkert/prost", branch = "master" }
+prost = "0.6"
 
 tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"]}
@@ -108,7 +108,7 @@ tracing-attributes = "0.1"
 tracing-futures = "0.2"
 
 # Required for wellknown types
-prost-types = { git = "https://github.com/danburkert/prost", branch = "master" }
+prost-types = "0.6"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }
