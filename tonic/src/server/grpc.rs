@@ -1,6 +1,7 @@
 use crate::{
     body::BoxBody,
     codec::{encode_server, Codec, Streaming},
+    interceptor::Interceptor,
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
@@ -8,6 +9,16 @@ use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
 use std::fmt;
+
+// A try! type macro for intercepting requests
+macro_rules! t {
+    ($expr : expr) => {
+        match $expr {
+            Ok(request) => request,
+            Err(res) => return res,
+        }
+    };
+}
 
 /// A gRPC Server handler.
 ///
@@ -20,6 +31,7 @@ use std::fmt;
 /// implements some [`Body`].
 pub struct Grpc<T> {
     codec: T,
+    interceptor: Option<Interceptor>,
 }
 
 impl<T> Grpc<T>
@@ -27,9 +39,21 @@ where
     T: Codec,
     T::Encode: Sync,
 {
-    /// Creates a new gRPC client with the provided [`Codec`].
+    /// Creates a new gRPC server with the provided [`Codec`].
     pub fn new(codec: T) -> Self {
-        Self { codec }
+        Self {
+            codec,
+            interceptor: None,
+        }
+    }
+
+    /// Creates a new gRPC server with the provided [`Codec`] and will apply the provided
+    /// interceptor on each inbound request.
+    pub fn with_interceptor(codec: T, interceptor: impl Into<Interceptor>) -> Self {
+        Self {
+            codec,
+            interceptor: Some(interceptor.into()),
+        }
     }
 
     /// Handle a single unary gRPC request.
@@ -52,6 +76,8 @@ where
                     ));
             }
         };
+
+        let request = t!(self.intercept_request(request));
 
         let response = service
             .call(request)
@@ -80,6 +106,8 @@ where
             }
         };
 
+        let request = t!(self.intercept_request(request));
+
         let response = service.call(request).await;
 
         self.map_response(response)
@@ -97,6 +125,7 @@ where
         B::Error: Into<crate::Error> + Send + 'static,
     {
         let request = self.map_request_streaming(req);
+        let request = t!(self.intercept_request(request));
         let response = service
             .call(request)
             .await
@@ -117,6 +146,7 @@ where
         B::Error: Into<crate::Error> + Send,
     {
         let request = self.map_request_streaming(req);
+        let request = t!(self.intercept_request(request));
         let response = service.call(request).await;
         self.map_response(response)
     }
@@ -180,18 +210,34 @@ where
 
                 http::Response::from_parts(parts, BoxBody::new(body))
             }
-            Err(status) => {
-                let (mut parts, _body) = Response::new(()).into_http().into_parts();
+            Err(status) => Self::map_status(status),
+        }
+    }
 
-                parts.headers.insert(
-                    http::header::CONTENT_TYPE,
-                    http::header::HeaderValue::from_static("application/grpc"),
-                );
+    fn map_status(status: Status) -> http::Response<BoxBody> {
+        let (mut parts, _body) = Response::new(()).into_http().into_parts();
 
-                status.add_header(&mut parts.headers).unwrap();
+        parts.headers.insert(
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("application/grpc"),
+        );
 
-                http::Response::from_parts(parts, BoxBody::empty())
+        status.add_header(&mut parts.headers).unwrap();
+
+        http::Response::from_parts(parts, BoxBody::empty())
+    }
+
+    fn intercept_request<A>(&self, req: Request<A>) -> Result<Request<A>, http::Response<BoxBody>> {
+        if let Some(interceptor) = &self.interceptor {
+            match interceptor.call(req) {
+                Ok(req) => Ok(req),
+                Err(status) => {
+                    let res = Self::map_status(status);
+                    return Err(res);
+                }
             }
+        } else {
+            Ok(req)
         }
     }
 }

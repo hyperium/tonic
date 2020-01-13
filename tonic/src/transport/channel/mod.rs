@@ -21,7 +21,6 @@ use std::{
     fmt,
     future::Future,
     pin::Pin,
-    sync::Arc,
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -63,7 +62,6 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 #[derive(Clone)]
 pub struct Channel {
     svc: Buffer<Svc, Request<BoxBody>>,
-    interceptor_headers: Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
 }
 
 /// A future that resolves to an HTTP response.
@@ -114,14 +112,9 @@ impl Channel {
             .and_then(|e| e.buffer_size)
             .unwrap_or(DEFAULT_BUFFER_SIZE);
 
-        let interceptor_headers = list
-            .iter()
-            .next()
-            .and_then(|e| e.interceptor_headers.clone());
-
         let discover = ServiceList::new(list);
 
-        Self::balance(discover, buffer_size, interceptor_headers)
+        Self::balance(discover, buffer_size)
     }
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
@@ -132,7 +125,6 @@ impl Channel {
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
-        let interceptor_headers = endpoint.interceptor_headers.clone();
 
         let svc = Connection::new(connector, endpoint)
             .await
@@ -142,14 +134,12 @@ impl Channel {
 
         Ok(Channel {
             svc,
-            interceptor_headers,
         })
     }
 
     pub(crate) fn balance<D>(
         discover: D,
         buffer_size: usize,
-        interceptor_headers: Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
     ) -> Self
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
@@ -163,7 +153,6 @@ impl Channel {
 
         Channel {
             svc,
-            interceptor_headers,
         }
     }
 }
@@ -177,11 +166,7 @@ impl GrpcService<BoxBody> for Channel {
         GrpcService::poll_ready(&mut self.svc, cx).map_err(|e| super::Error::from_source(e))
     }
 
-    fn call(&mut self, mut request: Request<BoxBody>) -> Self::Future {
-        if let Some(interceptor) = self.interceptor_headers.clone() {
-            interceptor(request.headers_mut());
-        }
-
+    fn call(&mut self, request: Request<BoxBody>) -> Self::Future {
         let inner = GrpcService::call(&mut self.svc, request);
         ResponseFuture { inner }
     }

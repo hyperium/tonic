@@ -5,11 +5,10 @@ pub mod hello_world {
 }
 
 use hello_world::{greeter_client::GreeterClient, HelloRequest};
-use http::Uri;
 use std::convert::TryFrom;
 #[cfg(unix)]
 use tokio::net::UnixStream;
-use tonic::transport::Endpoint;
+use tonic::transport::{Endpoint, Uri};
 use tower::service_fn;
 
 #[cfg(unix)]

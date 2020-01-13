@@ -1,9 +1,14 @@
 use crate::pb::{self, *};
 use async_stream::try_stream;
 use futures_util::{stream, StreamExt, TryStreamExt};
+use http::header::{HeaderMap, HeaderName, HeaderValue};
+use http_body::Body;
+use std::future::Future;
 use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::Duration;
-use tonic::{Code, Request, Response, Status};
+use tonic::{body::BoxBody, transport::ServiceName, Code, Request, Response, Status};
+use tower::Service;
 
 pub use pb::test_service_server::TestServiceServer;
 pub use pb::unimplemented_service_server::UnimplementedServiceServer;
@@ -157,5 +162,102 @@ pub struct UnimplementedService;
 impl pb::unimplemented_service_server::UnimplementedService for UnimplementedService {
     async fn unimplemented_call(&self, _req: Request<Empty>) -> Result<Empty> {
         Err(Status::unimplemented(""))
+    }
+}
+
+#[derive(Clone, Default)]
+pub struct EchoHeadersSvc<S> {
+    inner: S,
+}
+
+impl<S: ServiceName> ServiceName for EchoHeadersSvc<S> {
+    const NAME: &'static str = S::NAME;
+}
+
+impl<S> EchoHeadersSvc<S> {
+    pub fn new(inner: S) -> Self {
+        Self { inner }
+    }
+}
+
+impl<S> Service<http::Request<hyper::Body>> for EchoHeadersSvc<S>
+where
+    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>> + Send,
+    S::Future: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = Pin<
+        Box<dyn Future<Output = std::result::Result<Self::Response, Self::Error>> + Send + 'static>,
+    >;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+        Ok(()).into()
+    }
+
+    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+        let echo_header = req
+            .headers()
+            .get("x-grpc-test-echo-initial")
+            .map(Clone::clone);
+
+        let echo_trailer = req
+            .headers()
+            .get("x-grpc-test-echo-trailing-bin")
+            .map(Clone::clone)
+            .map(|v| (HeaderName::from_static("x-grpc-test-echo-trailing-bin"), v));
+
+        let call = self.inner.call(req);
+
+        Box::pin(async move {
+            let mut res = call.await?;
+
+            if let Some(echo_header) = echo_header {
+                res.headers_mut()
+                    .insert("x-grpc-test-echo-initial", echo_header);
+            }
+
+            Ok(res
+                .map(|b| MergeTrailers::new(b, echo_trailer))
+                .map(BoxBody::new))
+        })
+    }
+}
+
+pub struct MergeTrailers<B> {
+    inner: B,
+    trailer: Option<(HeaderName, HeaderValue)>,
+}
+
+impl<B> MergeTrailers<B> {
+    pub fn new(inner: B, trailer: Option<(HeaderName, HeaderValue)>) -> Self {
+        Self { inner, trailer }
+    }
+}
+
+impl<B: Body + Unpin> Body for MergeTrailers<B> {
+    type Data = B::Data;
+    type Error = B::Error;
+
+    fn poll_data(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<std::result::Result<Self::Data, Self::Error>>> {
+        Pin::new(&mut self.inner).poll_data(cx)
+    }
+
+    fn poll_trailers(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<std::result::Result<Option<HeaderMap>, Self::Error>> {
+        Pin::new(&mut self.inner).poll_trailers(cx).map_ok(|h| {
+            h.map(|mut headers| {
+                if let Some((key, value)) = &self.trailer {
+                    headers.insert(key.clone(), value.clone());
+                }
+
+                headers
+            })
+        })
     }
 }

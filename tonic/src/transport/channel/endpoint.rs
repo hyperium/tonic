@@ -10,7 +10,6 @@ use http::uri::{InvalidUri, Uri};
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
-    sync::Arc,
     time::Duration,
 };
 use tower_make::MakeConnection;
@@ -27,8 +26,6 @@ pub struct Endpoint {
     #[cfg(feature = "tls")]
     pub(crate) tls: Option<TlsConnector>,
     pub(crate) buffer_size: Option<usize>,
-    pub(crate) interceptor_headers:
-        Option<Arc<dyn Fn(&mut http::HeaderMap) + Send + Sync + 'static>>,
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
     pub(crate) tcp_keepalive: Option<Duration>,
@@ -152,29 +149,6 @@ impl Endpoint {
         }
     }
 
-    /// Intercept outbound HTTP Request headers;
-    ///
-    /// # Example
-    ///
-    /// ```
-    /// # use tonic::transport::Endpoint;
-    /// # use std::time::Duration;
-    /// # let mut builder = Endpoint::from_static("https://example.com");
-    /// builder.intercept_headers(|headers| {
-    ///    // Do something with headers
-    ///    headers.insert("hello", "world".parse().unwrap());
-    /// });
-    /// ```
-    pub fn intercept_headers<F>(self, f: F) -> Self
-    where
-        F: Fn(&mut http::HeaderMap) + Send + Sync + 'static,
-    {
-        Endpoint {
-            interceptor_headers: Some(Arc::new(f)),
-            ..self
-        }
-    }
-
     /// Configures TLS for the endpoint.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
@@ -237,7 +211,6 @@ impl From<Uri> for Endpoint {
             #[cfg(feature = "tls")]
             tls: None,
             buffer_size: None,
-            interceptor_headers: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
             tcp_keepalive: None,

@@ -86,27 +86,37 @@ path = "src/uds/client.rs"
 name = "uds-server"
 path = "src/uds/server.rs"
 
+[[bin]]
+name = "interceptor-client"
+path = "src/interceptor/client.rs"
+
+[[bin]]
+name = "interceptor-server"
+path = "src/interceptor/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
-
-tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
-futures = { version = "0.3", default-features = false, features = ["alloc"]}
+tokio = { version = "0.2", features = [
+    "rt-threaded",
+    "time",
+    "stream",
+    "fs",
+    "macros",
+    "uds"
+] }
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
 async-stream = "0.2"
-http = "0.2"
-tower = "0.3" 
-
+tower = "0.3"
 # Required for routeguide
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.7"
-
 # Tracing
 tracing = "0.1"
-tracing-subscriber =  { version = "0.2.0-alpha", features = ["tracing-log"] }
+tracing-subscriber = { version = "0.2.0-alpha", features = ["tracing-log"] }
 tracing-attributes = "0.1"
 tracing-futures = "0.2"
-
 # Required for wellknown types
 prost-types = "0.6"
 

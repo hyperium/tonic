@@ -42,6 +42,8 @@ impl<L> ServiceBuilderExt<L> for ServiceBuilder<L> {
     }
 }
 
+// TODO: figure out why this is causing a warning even though its used in optional_layer_fn
+#[allow(dead_code)]
 pub(crate) fn layer_fn<F>(f: F) -> LayerFn<F> {
     LayerFn(f)
 }

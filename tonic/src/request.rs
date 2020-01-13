@@ -145,6 +145,18 @@ impl<T> Request<T> {
         self.message
     }
 
+    pub(crate) fn into_parts(self) -> (MetadataMap, Extensions, T) {
+        (self.metadata, self.extensions, self.message)
+    }
+
+    pub(crate) fn from_parts(metadata: MetadataMap, extensions: Extensions, message: T) -> Self {
+        Self {
+            metadata,
+            extensions,
+            message,
+        }
+    }
+
     pub(crate) fn from_http_parts(parts: http::request::Parts, message: T) -> Self {
         Request {
             metadata: MetadataMap::from_headers(parts.headers),

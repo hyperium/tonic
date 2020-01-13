@@ -9,12 +9,8 @@ pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
 }
 
-use http::header::{HeaderMap, HeaderName, HeaderValue};
-use http_body::Body;
 use std::{
     default, fmt, iter,
-    pin::Pin,
-    task::{Context, Poll},
 };
 
 pub fn trace_init() {
@@ -148,40 +144,3 @@ macro_rules! test_assert {
     };
 }
 
-pub struct MergeTrailers<B> {
-    inner: B,
-    trailer: Option<(HeaderName, HeaderValue)>,
-}
-
-impl<B> MergeTrailers<B> {
-    pub fn new(inner: B, trailer: Option<(HeaderName, HeaderValue)>) -> Self {
-        Self { inner, trailer }
-    }
-}
-
-impl<B: Body + Unpin> Body for MergeTrailers<B> {
-    type Data = B::Data;
-    type Error = B::Error;
-
-    fn poll_data(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        Pin::new(&mut self.inner).poll_data(cx)
-    }
-
-    fn poll_trailers(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
-        Pin::new(&mut self.inner).poll_trailers(cx).map_ok(|h| {
-            h.map(|mut headers| {
-                if let Some((key, value)) = &self.trailer {
-                    headers.insert(key.clone(), value.clone());
-                }
-
-                headers
-            })
-        })
-    }
-}

@@ -3,10 +3,9 @@ pub mod api {
 }
 
 use api::{publisher_client::PublisherClient, ListTopicsRequest};
-use http::header::HeaderValue;
 use tonic::{
     transport::{Certificate, Channel, ClientTlsConfig},
-    Request,
+    Request, metadata::MetadataValue
 };
 
 const ENDPOINT: &str = "https://pubsub.googleapis.com";
@@ -23,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or("Expected a project name as the first argument.".to_string())?;
 
     let bearer_token = format!("Bearer {}", token);
-    let header_value = HeaderValue::from_str(&bearer_token)?;
+    let header_value = MetadataValue::from_str(&bearer_token)?;
 
     let certs = tokio::fs::read("examples/data/gcp/roots.pem").await?;
 
@@ -32,14 +31,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .domain_name("pubsub.googleapis.com");
 
     let channel = Channel::from_static(ENDPOINT)
-        .intercept_headers(move |headers| {
-            headers.insert("authorization", header_value.clone());
-        })
         .tls_config(tls_config)
         .connect()
         .await?;
 
-    let mut service = PublisherClient::new(channel);
+    let mut service = PublisherClient::with_interceptor(channel, move |mut req: Request<()>| {
+        req.metadata_mut().insert("authorization", header_value.clone());
+        Ok(req)
+    });
 
     let response = service
         .list_topics(Request::new(ListTopicsRequest {

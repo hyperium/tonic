@@ -5,8 +5,7 @@ pub mod pb {
 use futures::Stream;
 use pb::{EchoRequest, EchoResponse};
 use std::pin::Pin;
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status, Streaming};
-use tower::Service;
+use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status, Streaming};
 
 type EchoResult<T> = Result<Response<T>, Status>;
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
@@ -52,36 +51,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let server = EchoServer::default();
 
-    Server::builder()
-        .interceptor_fn(move |svc, req| {
-            let auth_header = req.headers().get("authorization").clone();
+    let svc = pb::echo_server::EchoServer::with_interceptor(server, check_auth);
 
-            let authed = if let Some(auth_header) = auth_header {
-                auth_header == "Bearer some-secret-token"
-            } else {
-                false
-            };
-
-            let fut = svc.call(req);
-
-            async move {
-                if authed {
-                    fut.await
-                } else {
-                    // Cancel the inner future since we never await it
-                    // the IO never gets registered.
-                    drop(fut);
-                    let res = http::Response::builder()
-                        .header("grpc-status", "16")
-                        .body(BoxBody::empty())
-                        .unwrap();
-                    Ok(res)
-                }
-            }
-        })
-        .add_service(pb::echo_server::EchoServer::new(server))
-        .serve(addr)
-        .await?;
+    Server::builder().add_service(svc).serve(addr).await?;
 
     Ok(())
+}
+
+fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
+    let token = MetadataValue::from_str("Bearer some-secret-token").unwrap();
+
+    match req.metadata().get("authorization") {
+        Some(t) if token == t => Ok(req),
+        _ => Err(Status::unauthenticated("No valid auth token")),
+    }
 }
