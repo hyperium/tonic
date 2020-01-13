@@ -1,4 +1,4 @@
-use super::Decoder;
+use super::{DecodeBuf, Decoder};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -91,10 +91,11 @@ impl<T> Streaming<T> {
 impl<T> Streaming<T> {
     /// Fetch the next message from this stream.
     /// ```rust
-    /// # use tonic::{Streaming, Status};
+    /// # use tonic::{Streaming, Status, codec::Decoder};
     /// # use std::fmt::Debug;
-    /// # async fn next_message_ex<T>(mut request: Streaming<T>) -> Result<(), Status>
-    /// # where T: Debug
+    /// # async fn next_message_ex<T, D>(mut request: Streaming<T>) -> Result<(), Status>
+    /// # where T: Debug,
+    /// # D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     /// # {
     /// if let Some(next_message) = request.message().await? {
     ///     println!("{:?}", next_message);
@@ -188,16 +189,17 @@ impl<T> Streaming<T> {
                 return Ok(None);
             }
 
-            match self.decoder.decode(&mut self.buf) {
+            return match self
+                .decoder
+                .decode(&mut DecodeBuf::new(&mut self.buf, *len))
+            {
                 Ok(Some(msg)) => {
                     self.state = State::ReadHeader;
-                    return Ok(Some(msg));
+                    Ok(Some(msg))
                 }
-                Ok(None) => return Ok(None),
-                Err(e) => {
-                    return Err(e);
-                }
-            }
+                Ok(None) => Ok(None),
+                Err(e) => Err(e),
+            };
         }
 
         Ok(None)

@@ -1,16 +1,12 @@
-extern crate bencher;
-
-use std::fmt::{Error, Formatter};
-use std::{
-    pin::Pin,
-    task::{Context, Poll},
-};
-
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http_body::Body;
-use tokio_util::codec::Decoder;
-use tonic::{Status, Streaming};
+use std::{
+    fmt::{Error, Formatter},
+    pin::Pin,
+    task::{Context, Poll},
+};
+use tonic::{codec::DecodeBuf, codec::Decoder, Status, Streaming};
 
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {
@@ -102,12 +98,13 @@ impl MockDecoder {
 }
 
 impl Decoder for MockDecoder {
-    type Item = Bytes;
+    type Item = Vec<u8>;
     type Error = Status;
 
-    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
-        let item = buf.split_to(self.message_size).freeze();
-        Ok(Some(item))
+    fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
+        let out = Vec::from(buf.bytes());
+        buf.advance(self.message_size);
+        Ok(Some(out))
     }
 }
 

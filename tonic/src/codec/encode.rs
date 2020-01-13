@@ -1,3 +1,4 @@
+use super::{EncodeBuf, Encoder};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
@@ -5,9 +6,10 @@ use futures_util::{ready, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use http_body::Body;
 use pin_project::pin_project;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-use tokio_util::codec::Encoder;
+use std::{
+    pin::Pin,
+    task::{Context, Poll},
+};
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
@@ -53,7 +55,7 @@ where
                     unsafe {
                         buf.advance_mut(5);
                     }
-                    encoder.encode(item, &mut buf).map_err(drop).unwrap();
+                    encoder.encode(item, &mut EncodeBuf::new(&mut buf)).map_err(drop).unwrap();
 
                     // now that we know length, we can write the header
                     let len = buf.len() - 5;
