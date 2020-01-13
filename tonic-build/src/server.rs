@@ -108,18 +108,14 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status> {
-                            Err(tonic::Status::unimplemented("Not yet implemented"))
-                        }
+                        -> Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (true, false) => {
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status> {
-                            Err(tonic::Status::unimplemented("Not yet implemented"))
-                        }
+                        -> Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (false, true) => {
@@ -135,9 +131,7 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status> {
-                            Err(tonic::Status::unimplemented("Not yet implemented"))
-                        }
+                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
             (true, true) => {
@@ -153,9 +147,7 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status> {
-                            Err(tonic::Status::unimplemented("Not yet implemented"))
-                        }
+                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
         };
