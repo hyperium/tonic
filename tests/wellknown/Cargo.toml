@@ -10,8 +10,8 @@ license = "MIT"
 
 [dependencies]
 tonic = { path = "../../tonic" }
-prost = { git = "https://github.com/danburkert/prost", branch = "master" }
-prost-types = { git = "https://github.com/danburkert/prost", branch = "master" }
+prost = "0.6"
+prost-types = "0.6"
 
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }
