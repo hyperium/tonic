@@ -238,9 +238,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-You should now be able to run your HelloWorld gRPC server using the command `cargo run --bin helloworld-server`. This uses the [[bin]] we defined earlier in our `Cargo.toml` to run specifically the server. If have a gRPC GUI client such as [Bloom RPC] you should be able to send requests to the server and get back greetings!
+You should now be able to run your HelloWorld gRPC server using the command `cargo run --bin helloworld-server`. This uses the [[bin]] we defined earlier in our `Cargo.toml` to run specifically the server. 
+
+If have a gRPC GUI client such as [Bloom RPC] you should be able to send requests to the server and get back greetings!
+
+Or if you use [grpcurl] then you can simply try send requests like this:
+```
+$ grpcurl -plaintext -import-path ./proto -proto helloworld.proto -d '{"name": "Tonic"}' localhost:50051 helloworld.Greeter/SayHello
+```
+And receiving responses like this:
+```
+{
+  "message": "Hello Tonic!"
+}
+```
 
 [bloom rpc]: https://github.com/uw-labs/bloomrpc
+[grpcurl]: https://github.com/fullstorydev/grpcurl
 
 ## Writing our Client
 
