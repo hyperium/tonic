@@ -4,8 +4,9 @@ pub mod api {
 
 use api::{publisher_client::PublisherClient, ListTopicsRequest};
 use tonic::{
+    metadata::MetadataValue,
     transport::{Certificate, Channel, ClientTlsConfig},
-    Request, metadata::MetadataValue
+    Request,
 };
 
 const ENDPOINT: &str = "https://pubsub.googleapis.com";
@@ -36,7 +37,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     let mut service = PublisherClient::with_interceptor(channel, move |mut req: Request<()>| {
-        req.metadata_mut().insert("authorization", header_value.clone());
+        req.metadata_mut()
+            .insert("authorization", header_value.clone());
         Ok(req)
     });
 

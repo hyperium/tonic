@@ -9,9 +9,7 @@ pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
 }
 
-use std::{
-    default, fmt, iter,
-};
+use std::{default, fmt, iter};
 
 pub fn trace_init() {
     let sub = tracing_subscriber::FmtSubscriber::builder()
@@ -143,4 +141,3 @@ macro_rules! test_assert {
         }
     };
 }
-

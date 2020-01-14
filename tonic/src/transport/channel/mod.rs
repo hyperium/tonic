@@ -132,15 +132,10 @@ impl Channel {
 
         let svc = Buffer::new(Either::A(svc), buffer_size);
 
-        Ok(Channel {
-            svc,
-        })
+        Ok(Channel { svc })
     }
 
-    pub(crate) fn balance<D>(
-        discover: D,
-        buffer_size: usize,
-    ) -> Self
+    pub(crate) fn balance<D>(discover: D, buffer_size: usize) -> Self
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
@@ -151,9 +146,7 @@ impl Channel {
         let svc = BoxService::new(svc);
         let svc = Buffer::new(Either::B(svc), buffer_size);
 
-        Channel {
-            svc,
-        }
+        Channel { svc }
     }
 }
 
