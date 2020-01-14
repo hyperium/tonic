@@ -15,13 +15,7 @@ name = "server"
 path = "src/bin/server.rs"
 
 [dependencies]
-tokio = { version = "0.2", features = [
-    "rt-threaded",
-    "time",
-    "macros",
-    "stream",
-    "fs"
-] }
+tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "stream", "fs"] }
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
 prost-derive = "0.6"

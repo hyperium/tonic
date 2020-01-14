@@ -97,14 +97,7 @@ path = "src/interceptor/server.rs"
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
-tokio = { version = "0.2", features = [
-    "rt-threaded",
-    "time",
-    "stream",
-    "fs",
-    "macros",
-    "uds"
-] }
+tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
 async-stream = "0.2"
 tower = "0.3"
