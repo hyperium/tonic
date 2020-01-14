@@ -73,7 +73,7 @@ pub struct Router<A, B> {
 
 /// A trait to provide a static reference to the service's
 /// name. This is used for routing service's within the router.
-pub trait ServiceName {
+pub trait NamedService {
     /// The `Service-Name` as described [here].
     ///
     /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
@@ -211,7 +211,7 @@ impl Server {
     pub fn add_service<S>(&mut self, svc: S) -> Router<S, Unimplemented>
     where
         S: Service<Request<Body>, Response = Response<BoxBody>>
-            + ServiceName
+            + NamedService
             + Clone
             + Send
             + 'static,
@@ -277,14 +277,14 @@ impl<S> Router<S, Unimplemented> {
     pub(crate) fn new(server: Server, svc: S) -> Self
     where
         S: Service<Request<Body>, Response = Response<BoxBody>>
-            + ServiceName
+            + NamedService
             + Clone
             + Send
             + 'static,
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let svc_name = <S as ServiceName>::NAME;
+        let svc_name = <S as NamedService>::NAME;
         let svc_route = format!("/{}", svc_name);
         let pred = move |req: &Request<Body>| {
             let path = req.uri().path();
@@ -311,7 +311,7 @@ where
     pub fn add_service<S>(self, svc: S) -> Router<S, Or<A, B, Request<Body>>>
     where
         S: Service<Request<Body>, Response = Response<BoxBody>>
-            + ServiceName
+            + NamedService
             + Clone
             + Send
             + 'static,
@@ -320,7 +320,7 @@ where
     {
         let Self { routes, server } = self;
 
-        let svc_name = <S as ServiceName>::NAME;
+        let svc_name = <S as NamedService>::NAME;
         let svc_route = format!("/{}", svc_name);
         let pred = move |req: &Request<Body>| {
             let path = req.uri().path();
