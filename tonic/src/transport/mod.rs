@@ -63,7 +63,7 @@
 //! #       unimplemented!()
 //! #   }
 //! # }
-//! # impl tonic::transport::ServiceName for Svc {
+//! # impl tonic::transport::NamedService for Svc {
 //! # const NAME: &'static str = "some_svc";
 //! # }
 //! # let my_svc = Svc;
@@ -97,7 +97,7 @@ mod tls;
 pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
-pub use self::server::{Server, ServiceName};
+pub use self::server::{NamedService, Server};
 pub use self::tls::{Certificate, Identity};
 pub use hyper::{Body, Uri};
 

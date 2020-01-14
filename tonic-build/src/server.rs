@@ -188,7 +188,7 @@ fn generate_transport(
     let service_name = syn::LitStr::new(service_name, proc_macro2::Span::call_site());
 
     quote! {
-        impl<T: #server_trait> tonic::transport::ServiceName for #server_service<T> {
+        impl<T: #server_trait> tonic::transport::NamedService for #server_service<T> {
             const NAME: &'static str = #service_name;
         }
     }
