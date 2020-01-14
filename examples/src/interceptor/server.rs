@@ -38,7 +38,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// This function will get called on each inbound request, if a `Status`
-/// is returned, it will cancel the request and return that status.
+/// is returned, it will cancel the request and return that status to the
+/// client.
 fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
     println!("Intercepting request: {:?}", req);
     Ok(req)
