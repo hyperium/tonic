@@ -12,7 +12,6 @@
 //! - Timeouts
 //! - Concurrency Limits
 //! - Rate limiting
-//! - gRPC Interceptors
 //!
 //! # Examples
 //!
@@ -77,10 +76,6 @@
 //!     .tls_config(ServerTlsConfig::with_rustls()
 //!         .identity(Identity::from_pem(&cert, &key)))
 //!     .concurrency_limit_per_connection(256)
-//!     .interceptor_fn(|svc, req| {
-//!         println!("Request: {:?}", req);
-//!         svc.call(req)
-//!     })
 //!     .add_service(my_svc)
 //!     .serve(addr)
 //!     .await?;
@@ -104,7 +99,7 @@ pub use self::error::Error;
 #[doc(inline)]
 pub use self::server::{Server, ServiceName};
 pub use self::tls::{Certificate, Identity};
-pub use hyper::Body;
+pub use hyper::{Body, Uri};
 
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]

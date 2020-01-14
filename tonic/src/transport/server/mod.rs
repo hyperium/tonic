@@ -15,7 +15,7 @@ use super::service::TlsAcceptor;
 
 use incoming::TcpIncoming;
 
-use super::service::{layer_fn, Or, Routes, ServerIo, ServiceBuilderExt};
+use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
@@ -35,15 +35,11 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
-    layer::{Layer, Stack},
-    limit::concurrency::ConcurrencyLimitLayer,
-    timeout::TimeoutLayer,
-    Service, ServiceBuilder,
+    limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer, Service, ServiceBuilder,
 };
 use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
-type Interceptor = Arc<dyn Layer<BoxService, Service = BoxService> + Send + Sync + 'static>;
 type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static>;
 
 /// A default batteries included `transport` server.
@@ -56,7 +52,6 @@ type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 
 /// wanting to create a more complex and/or specific implementation.
 #[derive(Default, Clone)]
 pub struct Server {
-    interceptor: Option<Interceptor>,
     trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
     timeout: Option<Duration>,
@@ -198,35 +193,6 @@ impl Server {
         }
     }
 
-    /// Intercept the execution of gRPC methods.
-    ///
-    /// ```
-    /// # use tonic::transport::Server;
-    /// # use tower_service::Service;
-    /// # let mut builder = Server::builder();
-    /// builder.interceptor_fn(|svc, req| {
-    ///     println!("request={:?}", req);
-    ///     svc.call(req)
-    /// });
-    /// ```
-    pub fn interceptor_fn<F, Out>(self, f: F) -> Self
-    where
-        F: Fn(&mut BoxService, Request<Body>) -> Out + Send + Sync + 'static,
-        Out: Future<Output = Result<Response<BoxBody>, crate::Error>> + Send + 'static,
-    {
-        let f = Arc::new(f);
-        let interceptor = layer_fn(move |mut s| {
-            let f = f.clone();
-            tower::service_fn(move |req| f(&mut s, req))
-        });
-        let layer = Stack::new(interceptor, layer_fn(BoxService::new));
-
-        Server {
-            interceptor: Some(Arc::new(layer)),
-            ..self
-        }
-    }
-
     /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
     pub fn trace_fn<F>(self, f: F) -> Self
     where
@@ -270,7 +236,6 @@ impl Server {
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
     {
-        let interceptor = self.interceptor.clone();
         let span = self.trace_interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
         let init_connection_window_size = self.init_connection_window_size;
@@ -283,7 +248,6 @@ impl Server {
 
         let svc = MakeSvc {
             inner: svc,
-            interceptor,
             concurrency_limit,
             timeout,
             span,
@@ -480,7 +444,6 @@ impl<S> fmt::Debug for Svc<S> {
 }
 
 struct MakeSvc<S> {
-    interceptor: Option<Interceptor>,
     concurrency_limit: Option<usize>,
     timeout: Option<Duration>,
     inner: S,
@@ -508,7 +471,6 @@ where
             peer_certs: io.peer_certs().map(Arc::new),
         };
 
-        let interceptor = self.interceptor.clone();
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
         let timeout = self.timeout.clone();
@@ -520,20 +482,11 @@ where
                 .optional_layer(timeout.map(TimeoutLayer::new))
                 .service(svc);
 
-            let svc = if let Some(interceptor) = interceptor {
-                let layered = interceptor.layer(BoxService::new(Svc {
-                    inner: svc,
-                    span,
-                    conn_info,
-                }));
-                BoxService::new(layered)
-            } else {
-                BoxService::new(Svc {
-                    inner: svc,
-                    span,
-                    conn_info,
-                })
-            };
+            let svc = BoxService::new(Svc {
+                inner: svc,
+                span,
+                conn_info,
+            });
 
             Ok(svc)
         })

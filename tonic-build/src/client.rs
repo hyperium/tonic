@@ -34,6 +34,11 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
                     Self { inner }
                 }
 
+                pub fn with_interceptor(inner: T, interceptor: impl Into<tonic::Interceptor>) -> Self {
+                    let inner = tonic::client::Grpc::with_interceptor(inner, interceptor);
+                    Self { inner }
+                }
+
                 #methods
             }
 

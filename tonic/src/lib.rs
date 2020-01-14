@@ -86,6 +86,7 @@ pub mod server;
 #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 pub mod transport;
 
+mod interceptor;
 mod macros;
 mod request;
 mod response;
@@ -98,6 +99,7 @@ pub use async_trait::async_trait;
 
 #[doc(inline)]
 pub use codec::Streaming;
+pub use interceptor::Interceptor;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, Status};

@@ -2,23 +2,19 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use http::header::HeaderValue;
 use pb::{echo_client::EchoClient, EchoRequest};
-use tonic::transport::Channel;
+use tonic::{metadata::MetadataValue, transport::Channel, Request};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let channel = Channel::from_static("http://[::1]:50051")
-        .intercept_headers(|headers| {
-            headers.insert(
-                "authorization",
-                HeaderValue::from_static("Bearer some-secret-token"),
-            );
-        })
-        .connect()
-        .await?;
+    let channel = Channel::from_static("http://[::1]:50051").connect().await?;
 
-    let mut client = EchoClient::new(channel);
+    let token = MetadataValue::from_str("Bearer some-auth-token")?;
+
+    let mut client = EchoClient::with_interceptor(channel, move |mut req: Request<()>| {
+        req.metadata_mut().insert("authorization", token.clone());
+        Ok(req)
+    });
 
     let request = tonic::Request::new(EchoRequest {
         message: "hello".into(),
