@@ -115,6 +115,7 @@ path = "src/client.rs"
 [dependencies]
 tonic = "0.1.0-beta.1"
 prost = "0.6"
+prost-types = "0.6"
 tokio = { version = "0.2", features = ["macros"] }
 
 [build-dependencies]
