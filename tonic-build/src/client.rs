@@ -12,7 +12,7 @@ pub(crate) fn generate(service: &Service, proto: &str) -> TokenStream {
     let service_doc = generate_doc_comments(&service.comments.leading);
 
     quote! {
-        /// Generated server implementations.
+        /// Generated client implementations.
         pub mod #client_mod {
             #![allow(unused_variables, dead_code, missing_docs)]
             use tonic::codegen::*;
