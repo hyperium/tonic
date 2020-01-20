@@ -1,3 +1,8 @@
+// TODO: remove this when we use errors throughout,
+// there are some that are only used under the TLS feature
+// these probably should be scoped to a `TLSError` enum.
+#![allow(dead_code)]
+
 use std::{error::Error as StdError, fmt};
 
 type Source = Box<dyn StdError + Send + Sync + 'static>;
@@ -15,7 +20,6 @@ struct ErrorImpl {
 #[derive(Debug)]
 pub(crate) enum Kind {
     Transport,
-
     InvalidUri,
 }
 
