@@ -1,10 +1,12 @@
-# [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v0.1.1) (2020-01-20)
+# [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v) (2020-01-20)
 
 
 ### Bug Fixes
 
 * **build:** Typo with client mod docstring ([#237](https://github.com/hyperium/tonic/issues/237)) ([5fc6762](https://github.com/hyperium/tonic/commit/5fc6762435494d8df023bea8e35a5d20d81f2f3b))
+* **transport:** Add Connected impl for TcpStream ([#245](https://github.com/hyperium/tonic/issues/245)) ([cfdf0af](https://github.com/hyperium/tonic/commit/cfdf0aff549196af0c3b7f6e531dbeacfb6990dc))
 * **transport:** Use Uri host if no domain for tls ([#244](https://github.com/hyperium/tonic/issues/244)) ([6de0b4d](https://github.com/hyperium/tonic/commit/6de0b4d26fd82b4d1303080b0ba8c4db2d4f0fd1))
+
 
 
 # [0.1.0](https://github.com/hyperium/tonic/compare/v0.1.0-beta.1...v0.1.0) (2020-01-14)
