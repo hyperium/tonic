@@ -1,6 +1,7 @@
 use crate::transport::Certificate;
 use hyper::server::conn::AddrStream;
 use std::net::SocketAddr;
+use tokio::net::TcpStream;
 #[cfg(feature = "tls")]
 use tokio_rustls::{rustls::Session, server::TlsStream};
 
@@ -24,6 +25,12 @@ pub trait Connected {
 impl Connected for AddrStream {
     fn remote_addr(&self) -> Option<SocketAddr> {
         Some(self.remote_addr())
+    }
+}
+
+impl Connected for TcpStream {
+    fn remote_addr(&self) -> Option<SocketAddr> {
+        self.peer_addr().ok()
     }
 }
 
