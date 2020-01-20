@@ -1,23 +1,85 @@
-use std::{error, fmt};
+// TODO: remove this when we use errors throughout,
+// there are some that are only used under the TLS feature
+// these probably should be scoped to a `TLSError` enum.
+#![allow(dead_code)]
+
+use std::{error::Error as StdError, fmt};
+
+type Source = Box<dyn StdError + Send + Sync + 'static>;
 
 /// Error's that originate from the client or server;
+pub struct Error {
+    inner: ErrorImpl,
+}
+
+struct ErrorImpl {
+    kind: Kind,
+    source: Option<Source>,
+}
+
 #[derive(Debug)]
-pub struct Error(crate::Error);
+pub(crate) enum Kind {
+    Transport,
+    InvalidUri,
+}
 
 impl Error {
+    pub(crate) fn new(kind: Kind) -> Self {
+        Self {
+            inner: ErrorImpl { kind, source: None },
+        }
+    }
+
+    pub(crate) fn with(mut self, source: impl Into<Source>) -> Self {
+        self.inner.source = Some(source.into());
+        self
+    }
+
     pub(crate) fn from_source(source: impl Into<crate::Error>) -> Self {
-        Self(source.into())
+        Error::new(Kind::Transport).with(source)
+    }
+
+    pub(crate) fn new_invalid_uri() -> Self {
+        Error::new(Kind::InvalidUri)
+    }
+
+    fn description(&self) -> &str {
+        match &self.inner.kind {
+            Kind::Transport => "transport error",
+            Kind::InvalidUri => "invalid URI",
+        }
+    }
+}
+
+impl fmt::Debug for Error {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut f = f.debug_tuple("tonic::transport::Error");
+
+        f.field(&self.inner.kind);
+
+        if let Some(source) = &self.inner.source {
+            f.field(source);
+        }
+
+        f.finish()
     }
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.0.fmt(f)
+        if let Some(source) = &self.inner.source {
+            write!(f, "{}: {}", self.description(), source)
+        } else {
+            f.write_str(self.description())
+        }
     }
 }
 
-impl error::Error for Error {
-    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
-        self.0.source()
+impl StdError for Error {
+    fn source(&self) -> Option<&(dyn StdError + 'static)> {
+        self.inner
+            .source
+            .as_ref()
+            .map(|source| &**source as &(dyn StdError + 'static))
     }
 }

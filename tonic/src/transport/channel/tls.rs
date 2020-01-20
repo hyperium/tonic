@@ -1,6 +1,7 @@
 use crate::transport::{
     service::TlsConnector,
     tls::{Certificate, Identity},
+    Error,
 };
 use http::Uri;
 use std::fmt;
@@ -81,7 +82,7 @@ impl ClientTlsConfig {
 
     pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
-            None => uri.to_string(),
+            None => uri.host().ok_or(Error::new_invalid_uri())?.to_string(),
             Some(domain) => domain.clone(),
         };
         match &self.rustls_raw {
