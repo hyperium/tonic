@@ -1,12 +1,26 @@
-# [0.1.0](https://github.com/hyperium/tonic/compare/v0.1.0-beta.1...v0.1.0) (2020-01-14)
+# [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v) (2020-01-20)
 
-* rename ServiceName -> NamedService ([#233](https://github.com/hyperium/tonic/issues/233)) ([6ee2ed9](https://github.com/hyperium/tonic/commit/6ee2ed9b4ff30c0517d70908c6348a633dab5b91))
+
+### Bug Fixes
+
+* **build:** Typo with client mod docstring ([#237](https://github.com/hyperium/tonic/issues/237)) ([5fc6762](https://github.com/hyperium/tonic/commit/5fc6762435494d8df023bea8e35a5d20d81f2f3b))
+* **transport:** Add Connected impl for TcpStream ([#245](https://github.com/hyperium/tonic/issues/245)) ([cfdf0af](https://github.com/hyperium/tonic/commit/cfdf0aff549196af0c3b7f6e531dbeacfb6990dc))
+* **transport:** Use Uri host if no domain for tls ([#244](https://github.com/hyperium/tonic/issues/244)) ([6de0b4d](https://github.com/hyperium/tonic/commit/6de0b4d26fd82b4d1303080b0ba8c4db2d4f0fd1))
+
+
+
+# [0.1.0](https://github.com/hyperium/tonic/compare/v0.1.0-beta.1...v0.1.0) (2020-01-14)
 
 
 ### Bug Fixes
 
 * **build:** Remove default impl for Server traits ([#229](https://github.com/hyperium/tonic/issues/229)) ([a41f55a](https://github.com/hyperium/tonic/commit/a41f55ab9dfe77fca920b3c2e89343c7ce963225))
 * **transport:** Improve `Error` type ([#217](https://github.com/hyperium/tonic/issues/217)) ([ec1f37e](https://github.com/hyperium/tonic/commit/ec1f37e4b46279d20f4fadafa5bf30cfb729fa42))
+
+
+### chore
+
+* rename ServiceName -> NamedService ([#233](https://github.com/hyperium/tonic/issues/233)) ([6ee2ed9](https://github.com/hyperium/tonic/commit/6ee2ed9b4ff30c0517d70908c6348a633dab5b91))
 
 
 ### Features
