@@ -11,7 +11,6 @@
 //!
 //! ```toml
 //! [dependencies]
-//! bytes = <bytes-version>
 //! tonic = <tonic-version>
 //! prost = <prost-version>
 //!

@@ -180,7 +180,7 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.1.0"
+tonic = "0.1"
 prost = "0.6"
 futures-core = "0.3"
 futures-util = "0.3"
