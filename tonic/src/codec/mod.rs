@@ -9,6 +9,9 @@ mod encode;
 #[cfg(feature = "data-prost")]
 mod prost;
 
+#[cfg(feature = "data-butte")]
+mod butte;
+
 #[cfg(all(test, feature = "data-prost"))]
 mod prost_tests;
 
@@ -19,6 +22,11 @@ pub(crate) use self::encode::{encode_client, encode_server};
 #[cfg(feature = "data-prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "data-prost")))]
 pub use self::prost::ProstCodec;
+
+#[cfg(feature = "data-butte")]
+#[cfg_attr(docsrs, doc(cfg(feature = "data-butte")))]
+pub use self::butte::ButteCodec;
+
 use crate::Status;
 pub use buffer::{DecodeBuf, EncodeBuf};
 

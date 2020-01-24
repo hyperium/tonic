@@ -62,6 +62,11 @@ use quote::TokenStreamExt;
 /// Prost generator
 #[cfg(feature = "prost")]
 pub mod prost;
+
+/// Butte generator
+#[cfg(feature = "butte")]
+pub mod butte;
+
 /// Traits to describe schema
 pub mod schema;
 

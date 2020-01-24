@@ -1,0 +1,28 @@
+[package]
+name = "tonic-butte-examples"
+version = "0.1.0"
+authors = ["Simon Chemouil <simon.chemouil@lambdacube.fr>"]
+edition = "2018"
+publish = false
+license = "MIT"
+
+[[bin]]
+name = "helloworld-fbs-server"
+path = "src/helloworld/server.rs"
+
+[[bin]]
+name = "helloworld-fbs-client"
+path = "src/helloworld/client.rs"
+
+
+[dependencies]
+tonic = { path = "../../tonic", features = ["tls", "data-butte"] }
+butte = { git = "https://github.com/butte-rs/butte" }
+tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
+futures = { version = "0.3", default-features = false, features = ["alloc"] }
+async-stream = "0.2"
+tower = "0.3"
+bytes = "0.5"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build", features = ["butte"] }

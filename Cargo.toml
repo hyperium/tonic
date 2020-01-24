@@ -3,7 +3,8 @@ members = [
     "tonic",
     "tonic-build",
     # Non-published crates
-    "examples",
+    "examples/protobuf",
+    "examples/flatbuffers",
     "interop",
     # Tests
     "tests/included_service",

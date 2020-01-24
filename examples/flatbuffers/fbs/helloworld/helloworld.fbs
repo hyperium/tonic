@@ -1,0 +1,13 @@
+
+table HelloRequest {
+  name:string (required);
+}
+
+table HelloReply {
+  message:string (required);
+}
+
+rpc_service Greeter {
+  SayHello(HelloRequest):HelloReply;
+}
+

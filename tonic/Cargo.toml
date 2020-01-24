@@ -23,7 +23,7 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 
 [features]
-default = ["transport", "codegen", "data-prost"]
+default = ["transport", "codegen", "data-prost", "data-butte"]
 codegen = ["async-trait"]
 transport = [
     "hyper",
@@ -36,6 +36,7 @@ transport = [
 tls = ["transport", "tokio-rustls"]
 tls-roots = ["tls", "rustls-native-certs"]
 data-prost = ["prost", "prost-derive"]
+data-butte = ["butte"] 
 
 # [[bench]]
 # name = "bench_main"
@@ -59,6 +60,9 @@ pin-project = "0.4"
 # prost
 prost = { version = "0.6", optional = true }
 prost-derive = { version = "0.6", optional = true }
+
+# butte
+butte = { git = "https://github.com/butte-rs/butte", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
