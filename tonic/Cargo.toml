@@ -46,7 +46,7 @@ futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 tracing = "0.1"
 http = "0.2"
-base64 = "0.10"
+base64 = "0.11"
 
 percent-encoding = "1.0.1"
 tower-service = "0.3"
