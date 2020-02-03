@@ -1,5 +1,5 @@
 use crate::transport::{
-    service::TlsConnector,
+    service::{CertsValidation, TlsConnector},
     tls::{Certificate, Identity},
     Error,
 };
@@ -15,6 +15,7 @@ pub struct ClientTlsConfig {
     cert: Option<Certificate>,
     identity: Option<Identity>,
     rustls_raw: Option<tokio_rustls::rustls::ClientConfig>,
+    _certs_validation: CertsValidation,
 }
 
 #[cfg(feature = "tls")]
@@ -37,6 +38,7 @@ impl ClientTlsConfig {
             cert: None,
             identity: None,
             rustls_raw: None,
+            _certs_validation: CertsValidation::Enable,
         }
     }
 
@@ -80,6 +82,28 @@ impl ClientTlsConfig {
         }
     }
 
+    /// Disables certificate validation.
+    ///
+    /// # Warning
+    ///
+    /// You should think very carefully before using this method. If
+    /// invalid certificates are trusted, *any* certificate for *any* site
+    /// will be trusted for use. This includes expired certificates. This
+    /// introduces significant vulnerabilities, and should only be used
+    /// as a last resort.
+    ///
+    /// # Optional
+    ///
+    /// This requires the optional `tls` and `tls-dangerous` features to be enabled.
+    #[cfg(feature = "tls-dangerous")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls-dangerous")))]
+    pub fn danger_accept_invalid_certs(self) -> Self {
+        ClientTlsConfig {
+            _certs_validation: CertsValidation::Disable,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
             None => uri.host().ok_or(Error::new_invalid_uri())?.to_string(),
@@ -87,7 +111,12 @@ impl ClientTlsConfig {
         };
         match &self.rustls_raw {
             None => {
-                TlsConnector::new_with_rustls_cert(self.cert.clone(), self.identity.clone(), domain)
+                TlsConnector::new_with_rustls_cert(
+                    self.cert.clone(),
+                    self.identity.clone(),
+                    self._certs_validation,
+                    domain,
+                )
             }
             Some(c) => TlsConnector::new_with_rustls_raw(c.clone(), domain),
         }

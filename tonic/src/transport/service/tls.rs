@@ -32,6 +32,14 @@ enum TlsError {
     PrivateKeyParseError,
 }
 
+/// If we do certificats validation.
+#[derive(Copy, Clone, Debug)]
+pub(crate) enum CertsValidation {
+    Enable,
+    #[cfg(feature = "tls-dangerous")]
+    Disable,
+}
+
 #[derive(Clone)]
 pub(crate) struct TlsConnector {
     config: Arc<ClientConfig>,
@@ -43,6 +51,7 @@ impl TlsConnector {
     pub(crate) fn new_with_rustls_cert(
         ca_cert: Option<Certificate>,
         identity: Option<Identity>,
+        _certs_validation: CertsValidation,
         domain: String,
     ) -> Result<Self, crate::Error> {
         let mut config = ClientConfig::new();
@@ -61,6 +70,14 @@ impl TlsConnector {
         if let Some(cert) = ca_cert {
             let mut buf = std::io::Cursor::new(&cert.pem[..]);
             config.root_store.add_pem_file(&mut buf).unwrap();
+        }
+
+        #[cfg(feature = "tls-dangerous")]
+        {
+            if let CertsValidation::Disable = _certs_validation {
+                config.dangerous()
+                    .set_certificate_verifier(std::sync::Arc::new(NoCertsValidation));
+            }
         }
 
         Ok(Self {
@@ -243,5 +260,21 @@ mod rustls_keys {
         };
 
         Ok((cert, key))
+    }
+}
+
+#[cfg(feature = "tls-dangerous")]
+struct NoCertsValidation;
+
+#[cfg(feature = "tls-dangerous")]
+impl rustls::ServerCertVerifier for NoCertsValidation {
+    fn verify_server_cert(
+        &self,
+        _roots: &rustls::RootCertStore,
+        _presented_certs: &[rustls::Certificate],
+        _dns_name: webpki::DNSNameRef<'_>,
+        _ocsp_response: &[u8],
+    ) -> Result<rustls::ServerCertVerified, rustls::TLSError> {
+        Ok(rustls::ServerCertVerified::assertion())
     }
 }

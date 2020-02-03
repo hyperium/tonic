@@ -35,6 +35,7 @@ transport = [
 ]
 tls = ["transport", "tokio-rustls"]
 tls-roots = ["tls", "rustls-native-certs"]
+tls-dangerous = ["rustls", "webpki"]
 
 # [[bench]]
 # name = "bench_main"
@@ -42,7 +43,7 @@ tls-roots = ["tls", "rustls-native-certs"]
 
 [dependencies]
 bytes = "0.5"
-futures-core = { version = "0.3", default-features = false } 
+futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 tracing = "0.1"
 http = "0.2"
@@ -74,6 +75,8 @@ tracing-futures = { version = "0.2", optional = true }
 # rustls
 tokio-rustls = { version = "0.12", optional = true }
 rustls-native-certs = { version = "0.1", optional = true }
+rustls = { version = "^0.16", features = ["dangerous_configuration"], optional = true }
+webpki = { version = "^0.21", optional = true }
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["rt-core", "macros"] }
@@ -88,4 +91,3 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[bench]]
 name = "decode"
 harness = false
-
