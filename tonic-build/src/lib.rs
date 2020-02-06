@@ -318,7 +318,9 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
 }
 
 fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenStream) {
-    let request = if method.input_proto_type.starts_with(".google.protobuf") {
+    let request = if method.input_proto_type.starts_with(".google.protobuf")
+        || method.input_type.starts_with("::")
+    {
         method.input_type.parse::<TokenStream>().unwrap()
     } else {
         syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.input_type))
@@ -326,7 +328,9 @@ fn replace_wellknown(proto_path: &str, method: &Method) -> (TokenStream, TokenSt
             .to_token_stream()
     };
 
-    let response = if method.output_proto_type.starts_with(".google.protobuf") {
+    let response = if method.output_proto_type.starts_with(".google.protobuf")
+        || method.output_type.starts_with("::")
+    {
         method.output_type.parse::<TokenStream>().unwrap()
     } else {
         syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, method.output_type))
