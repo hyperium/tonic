@@ -32,14 +32,6 @@ enum TlsError {
     PrivateKeyParseError,
 }
 
-/// If we do certificats validation.
-#[derive(Copy, Clone, Debug)]
-pub(crate) enum CertsValidation {
-    Enable,
-    #[cfg(feature = "tls-dangerous")]
-    Disable,
-}
-
 #[derive(Clone)]
 pub(crate) struct TlsConnector {
     config: Arc<ClientConfig>,
@@ -51,7 +43,7 @@ impl TlsConnector {
     pub(crate) fn new_with_rustls_cert(
         ca_cert: Option<Certificate>,
         identity: Option<Identity>,
-        _certs_validation: CertsValidation,
+        _certs_validation: bool,
         domain: String,
     ) -> Result<Self, crate::Error> {
         let mut config = ClientConfig::new();
@@ -74,7 +66,7 @@ impl TlsConnector {
 
         #[cfg(feature = "tls-dangerous")]
         {
-            if let CertsValidation::Disable = _certs_validation {
+            if _certs_validation {
                 config.dangerous()
                     .set_certificate_verifier(std::sync::Arc::new(NoCertsValidation));
             }

@@ -1,5 +1,5 @@
 use crate::transport::{
-    service::{CertsValidation, TlsConnector},
+    service::TlsConnector,
     tls::{Certificate, Identity},
     Error,
 };
@@ -15,7 +15,7 @@ pub struct ClientTlsConfig {
     cert: Option<Certificate>,
     identity: Option<Identity>,
     rustls_raw: Option<tokio_rustls::rustls::ClientConfig>,
-    _certs_validation: CertsValidation,
+    _certs_validation: bool,
 }
 
 #[cfg(feature = "tls")]
@@ -38,7 +38,7 @@ impl ClientTlsConfig {
             cert: None,
             identity: None,
             rustls_raw: None,
-            _certs_validation: CertsValidation::Enable,
+            _certs_validation: true,
         }
     }
 
@@ -99,7 +99,7 @@ impl ClientTlsConfig {
     #[cfg_attr(docsrs, doc(cfg(feature = "tls-dangerous")))]
     pub fn danger_accept_invalid_certs(self) -> Self {
         ClientTlsConfig {
-            _certs_validation: CertsValidation::Disable,
+            _certs_validation: true,
             ..self
         }
     }
