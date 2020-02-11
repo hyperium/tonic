@@ -114,6 +114,8 @@ impl Builder {
     /// Declare externally provided Protobuf package or type.
     ///
     /// Passed directly to `prost_build::Config.extern_path`.
+    /// Note that both the Protobuf path and the rust package paths should both be fully qualified.
+    /// i.e. Protobuf paths should start with "." and rust paths should start with "::"
     pub fn extern_path(mut self, proto_path: impl AsRef<str>, rust_path: impl AsRef<str>) -> Self {
         self.extern_path.push((
             proto_path.as_ref().to_string(),
