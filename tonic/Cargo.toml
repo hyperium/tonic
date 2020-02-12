@@ -48,7 +48,7 @@ tracing = "0.1"
 http = "0.2"
 base64 = "0.10"
 
-percent-encoding = "1.0.1"
+percent-encoding = "2.0"
 tower-service = "0.3"
 tokio-util = { version = "0.2", features = ["codec"] }
 async-stream = "0.2"
