@@ -447,8 +447,7 @@ async fn record_route(
     &self,
     request: Request<tonic::Streaming<Point>>,
 ) -> Result<Response<RouteSummary>, Status> {
-    let stream = request.into_inner();
-    futures_util::pin_mut!(stream);
+    let mut stream = request.into_inner();
 
     let mut summary = RouteSummary::default();
     let mut last_point = None;
@@ -500,11 +499,9 @@ async fn route_chat(
     request: Request<tonic::Streaming<RouteNote>>,
 ) -> Result<Response<Self::RouteChatStream>, Status> {
     let mut notes = HashMap::new();
-    let stream = request.into_inner();
+    let mut stream = request.into_inner();
 
     let output = async_stream::try_stream! {
-        futures_util::pin_mut!(stream);
-
         while let Some(note) = stream.next().await {
             let note = note?;
 
