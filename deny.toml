@@ -17,6 +17,8 @@ deny = [
 skip-tree = [ 
     { name = "winapi", version = "<= 0.3" },
     { name = "autocfg", version = "<= 1" },
+    { name = "base64", version = "<= 0.11" },
+    { name = "version_check", version = "<= 0.9" }
 ]
 
 [licenses]

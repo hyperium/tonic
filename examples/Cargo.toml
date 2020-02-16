@@ -122,7 +122,7 @@ tracing-futures = "0.2"
 prost-types = "0.6"
 # Hyper example
 hyper = "0.13"
-warp = "0.2"
+warp = { version = "0.2", default-features = false }
 http = "0.2"
 http-body = "0.3"
 pin-project = "0.4"
