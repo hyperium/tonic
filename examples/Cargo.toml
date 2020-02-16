@@ -94,6 +94,14 @@ path = "src/interceptor/client.rs"
 name = "interceptor-server"
 path = "src/interceptor/server.rs"
 
+[[bin]]
+name = "hyper-client"
+path = "src/hyper/client.rs"
+
+[[bin]]
+name = "hyper-server"
+path = "src/hyper/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
@@ -112,6 +120,8 @@ tracing-attributes = "0.1"
 tracing-futures = "0.2"
 # Required for wellknown types
 prost-types = "0.6"
+# Hyper example
+hyper = "0.13"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }
