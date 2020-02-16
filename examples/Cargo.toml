@@ -95,12 +95,12 @@ name = "interceptor-server"
 path = "src/interceptor/server.rs"
 
 [[bin]]
-name = "hyper-client"
-path = "src/hyper/client.rs"
+name = "hyper-warp-client"
+path = "src/hyper_warp/client.rs"
 
 [[bin]]
-name = "hyper-server"
-path = "src/hyper/server.rs"
+name = "hyper-warp-server"
+path = "src/hyper_warp/server.rs"
 
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
@@ -122,6 +122,10 @@ tracing-futures = "0.2"
 prost-types = "0.6"
 # Hyper example
 hyper = "0.13"
+warp = { version = "0.2", default-features = false }
+http = "0.2"
+http-body = "0.3"
+pin-project = "0.4"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build" }
