@@ -1,3 +1,8 @@
+//! To hit the gRPC endpoint you must run this client via:
+//! `cargo run --bin hyper-warp-client
+//! To hit the warp server you can run this command:
+//! `curl localhost:50051/hello`
+
 use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
 use hyper::{Client, Uri};
