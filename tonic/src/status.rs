@@ -1,8 +1,19 @@
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
-use percent_encoding::{percent_decode, percent_encode, EncodeSet, DEFAULT_ENCODE_SET};
-use std::{error::Error, fmt};
+use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
+use std::{borrow::Cow, error::Error, fmt};
 use tracing::{debug, trace, warn};
+
+const ENCODING_SET: &AsciiSet = &CONTROLS
+    .add(b' ')
+    .add(b'"')
+    .add(b'#')
+    .add(b'<')
+    .add(b'>')
+    .add(b'`')
+    .add(b'?')
+    .add(b'{')
+    .add(b'}');
 
 const GRPC_STATUS_HEADER_CODE: &str = "grpc-status";
 const GRPC_STATUS_MESSAGE_HEADER: &str = "grpc-message";
@@ -370,18 +381,9 @@ impl Status {
         header_map.insert(GRPC_STATUS_HEADER_CODE, self.code.to_header_value());
 
         if !self.message.is_empty() {
-            let is_need_encode = self
-                .message
-                .as_bytes()
-                .iter()
-                .any(|&x| DEFAULT_ENCODE_SET.contains(x));
-            let to_write = if is_need_encode {
-                percent_encode(&self.message().as_bytes(), DEFAULT_ENCODE_SET)
-                    .to_string()
-                    .into()
-            } else {
-                Bytes::copy_from_slice(self.message().as_bytes())
-            };
+            let to_write = Bytes::copy_from_slice(
+                Cow::from(percent_encode(&self.message().as_bytes(), ENCODING_SET)).as_bytes(),
+            );
 
             header_map.insert(
                 GRPC_STATUS_MESSAGE_HEADER,

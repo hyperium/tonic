@@ -68,10 +68,7 @@ impl RouteGuide for RouteGuideService {
     ) -> Result<Response<RouteSummary>, Status> {
         println!("RecordRoute");
 
-        let stream = request.into_inner();
-
-        // Pin the inbound stream to the stack so that we can call next on it
-        futures::pin_mut!(stream);
+        let mut stream = request.into_inner();
 
         let mut summary = RouteSummary::default();
         let mut last_point = None;
@@ -115,11 +112,9 @@ impl RouteGuide for RouteGuideService {
         println!("RouteChat");
 
         let mut notes = HashMap::new();
-        let stream = request.into_inner();
+        let mut stream = request.into_inner();
 
         let output = async_stream::try_stream! {
-            futures::pin_mut!(stream);
-
             while let Some(note) = stream.next().await {
                 let note = note?;
 
@@ -134,10 +129,7 @@ impl RouteGuide for RouteGuideService {
             }
         };
 
-        Ok(Response::new(Box::pin(output)
-            as Pin<
-                Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>,
-            >))
+        Ok(Response::new(Box::pin(output) as Self::RouteChatStream))
     }
 }
 
