@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package my_application;
+
+option go_package = "my_applicationpb";
+option java_multiple_files = true;
+option java_outer_classname = "ServiceProto";
+option java_package = "com.my_application";
+
+
+import "uuid.proto";
+
+message MyMessage {
+    uuid.Uuid message_id = 1;
+    string some_payload = 2;
+}
+
+service MyService {
+    rpc GetUuid(MyMessage) returns (uuid.Uuid){
+
+    }
+    rpc GetMyMessage(uuid.Uuid) returns (MyMessage){
+
+    }
+}
