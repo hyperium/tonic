@@ -9,4 +9,6 @@ members = [
     "tests/included_service",
     "tests/same_name",
     "tests/wellknown",
+    "tests/extern_path/uuid",
+    "tests/extern_path/my_application"
 ]

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+package uuid;
+
+option go_package = "uuidpb";
+option java_multiple_files = true;
+option java_outer_classname = "UuidProto";
+option java_package = "com.uuid";
+
+
+message Uuid {
+    string uuid_str = 1;
+}
