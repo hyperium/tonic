@@ -25,7 +25,7 @@ use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
-    future::{self, MapErr},
+    future::{self, Either, MapErr},
     TryFutureExt,
 };
 use http::{HeaderMap, Request, Response};
@@ -76,6 +76,51 @@ pub struct Server {
 pub struct Router<A, B> {
     server: Server,
     routes: Routes<A, B, Request<Body>>,
+}
+
+#[derive(Debug)]
+/// a service made from a router
+pub struct RouterService<A, B> {
+    router: Router<A, B>,
+}
+
+/// create a tower service out of a router
+pub fn service<A, B>(router: Router<A, B>) -> RouterService<A, B>
+where
+    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    A::Future: Send + 'static,
+    A::Error: Into<crate::Error> + Send,
+    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    B::Future: Send + 'static,
+    B::Error: Into<crate::Error> + Send,
+{
+    RouterService { router }
+}
+
+impl<A, B> Service<Request<Body>> for RouterService<A, B>
+where
+    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    A::Future: Send + 'static,
+    A::Error: Into<crate::Error> + Send,
+    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    B::Future: Send + 'static,
+    B::Error: Into<crate::Error> + Send,
+{
+    type Response = Response<BoxBody>;
+    type Future = Either<
+        MapErr<A::Future, fn(A::Error) -> crate::Error>,
+        MapErr<B::Future, fn(B::Error) -> crate::Error>,
+    >;
+    type Error = crate::Error;
+
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    #[inline]
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        self.router.routes.call(req)
+    }
 }
 
 /// A trait to provide a static reference to the service's
