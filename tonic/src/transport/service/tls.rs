@@ -66,7 +66,7 @@ impl TlsConnector {
 
         #[cfg(feature = "tls-dangerous")]
         {
-            if _certs_validation {
+            if !_certs_validation {
                 config.dangerous()
                     .set_certificate_verifier(std::sync::Arc::new(NoCertsValidation));
             }

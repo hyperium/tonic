@@ -101,7 +101,7 @@ impl ClientTlsConfig {
     #[cfg_attr(docsrs, doc(cfg(feature = "tls-dangerous")))]
     pub fn danger_accept_invalid_certs(self) -> Self {
         ClientTlsConfig {
-            certs_validation: true,
+            certs_validation: false,
             ..self
         }
     }
