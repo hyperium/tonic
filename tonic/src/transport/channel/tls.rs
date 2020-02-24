@@ -15,7 +15,8 @@ pub struct ClientTlsConfig {
     cert: Option<Certificate>,
     identity: Option<Identity>,
     rustls_raw: Option<tokio_rustls::rustls::ClientConfig>,
-    _certs_validation: bool,
+    #[cfg(feature = "tls-dangerous")]
+    certs_validation: bool,
 }
 
 #[cfg(feature = "tls")]
@@ -38,7 +39,8 @@ impl ClientTlsConfig {
             cert: None,
             identity: None,
             rustls_raw: None,
-            _certs_validation: true,
+            #[cfg(feature = "tls-dangerous")]
+            certs_validation: true,
         }
     }
 
@@ -99,7 +101,7 @@ impl ClientTlsConfig {
     #[cfg_attr(docsrs, doc(cfg(feature = "tls-dangerous")))]
     pub fn danger_accept_invalid_certs(self) -> Self {
         ClientTlsConfig {
-            _certs_validation: true,
+            certs_validation: true,
             ..self
         }
     }
@@ -111,10 +113,21 @@ impl ClientTlsConfig {
         };
         match &self.rustls_raw {
             None => {
+                let certs_validation = {
+                    #[cfg(feature = "tls-dangerous")]
+                        {
+                            self.certs_validation
+                        }
+                    #[cfg(not(feature = "tls-dangerous"))]
+                        {
+                            true
+                        }
+                };
+
                 TlsConnector::new_with_rustls_cert(
                     self.cert.clone(),
                     self.identity.clone(),
-                    self._certs_validation,
+                    certs_validation,
                     domain,
                 )
             }
