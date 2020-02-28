@@ -41,7 +41,8 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
-    limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer, Service, ServiceBuilder,
+    limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer, util::Either, Service,
+    ServiceBuilder,
 };
 use tracing_futures::{Instrument, Instrumented};
 
@@ -84,6 +85,10 @@ pub trait NamedService {
     ///
     /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
     const NAME: &'static str;
+}
+
+impl<S: NamedService, T> NamedService for Either<S, T> {
+    const NAME: &'static str = S::NAME;
 }
 
 impl Server {
@@ -228,6 +233,30 @@ impl Server {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
+        Router::new(self.clone(), svc)
+    }
+
+    /// Create a router with the optional `S` typed service as the first service.
+    ///
+    /// This will clone the `Server` builder and create a router that will
+    /// route around different services.
+    pub fn add_optional_service<S>(
+        &mut self,
+        svc: Option<S>,
+    ) -> Router<Either<S, EmptyService>, Unimplemented>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let svc = match svc {
+            Some(some) => Either::A(some),
+            None => Either::B(EmptyService),
+        };
         Router::new(self.clone(), svc)
     }
 
@@ -510,6 +539,29 @@ pub struct Unimplemented {
 }
 
 impl Service<Request<Body>> for Unimplemented {
+    type Response = Response<BoxBody>;
+    type Error = crate::Error;
+    type Future = future::Ready<Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Ok(()).into()
+    }
+
+    fn call(&mut self, _req: Request<Body>) -> Self::Future {
+        future::ok(
+            http::Response::builder()
+                .status(200)
+                .header("grpc-status", "12")
+                .body(BoxBody::empty())
+                .unwrap(),
+        )
+    }
+}
+
+#[derive(Clone)]
+pub struct EmptyService;
+
+impl Service<Request<Body>> for EmptyService {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = future::Ready<Result<Self::Response, Self::Error>>;
