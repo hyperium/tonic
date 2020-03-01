@@ -199,7 +199,7 @@ Create a `build.rs` file at the root of your crate:
 
 ```rust
 fn main() {
-    tonic_build::prost::compile_protos("proto/route_guide.proto")
+    tonic_build::compile_protos("proto/route_guide.proto")
         .unwrap_or_else(|e| panic!("Failed to compile protos {:?}", e));
 }
 ```
