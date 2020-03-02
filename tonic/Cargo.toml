@@ -47,6 +47,7 @@ futures-util = { version = "0.3", default-features = false }
 tracing = "0.1"
 http = "0.2"
 base64 = "0.10"
+pretty-hex = "*"
 
 percent-encoding = "1.0.1"
 tower-service = "0.3"
@@ -64,7 +65,7 @@ async-trait = { version = "0.1.13", optional = true }
 
 # transport
 hyper = { version = "0.13", features = ["stream"], optional = true }
-tokio = { version = "0.2", features = ["tcp"], optional = true }
+tokio = { version = "0.2", features = ["tcp", "rt-util"], optional = true }
 tower = { version = "0.3", optional = true}
 tower-make = { version = "0.3", features = ["connect"] }
 tower-balance =  { version = "0.3", optional = true }
