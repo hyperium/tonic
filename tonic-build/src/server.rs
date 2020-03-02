@@ -1,20 +1,21 @@
+use super::schema::{Commentable, Context, Method, Service};
 use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
 use proc_macro2::{Span, TokenStream};
-use prost_build::{Method, Service};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};
 
-pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
-    let methods = generate_methods(&service, proto_path);
+/// Generate service for Server
+pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+    let methods = generate_methods(service, context);
 
-    let server_service = quote::format_ident!("{}Server", service.name);
-    let server_trait = quote::format_ident!("{}", service.name);
-    let server_mod = quote::format_ident!("{}_server", naive_snake_case(&service.name));
-    let generated_trait = generate_trait(service, proto_path, server_trait.clone());
-    let service_doc = generate_doc_comments(&service.comments.leading);
+    let server_service = quote::format_ident!("{}Server", service.name());
+    let server_trait = quote::format_ident!("{}", service.name());
+    let server_mod = quote::format_ident!("{}_server", naive_snake_case(&service.name()));
+    let generated_trait = generate_trait(service, context, server_trait.clone());
+    let service_doc = generate_doc_comments(service.comment());
 
     // Transport based implementations
-    let path = format!("{}.{}", service.package, service.proto_name);
+    let path = format!("{}.{}", service.package(), service.identifier());
     let transport = generate_transport(&server_service, &server_trait, &path);
 
     quote! {
@@ -98,11 +99,15 @@ pub(crate) fn generate(service: &Service, proto_path: &str) -> TokenStream {
     }
 }
 
-fn generate_trait(service: &Service, proto_path: &str, server_trait: Ident) -> TokenStream {
-    let methods = generate_trait_methods(service, proto_path);
+fn generate_trait<'a, T: Service<'a>>(
+    service: &'a T,
+    context: &T::Context,
+    server_trait: Ident,
+) -> TokenStream {
+    let methods = generate_trait_methods(service, context);
     let trait_doc = generate_doc_comment(&format!(
         "Generated trait containing gRPC methods that should be implemented for use with {}Server.",
-        service.name
+        service.name()
     ));
 
     quote! {
@@ -114,17 +119,17 @@ fn generate_trait(service: &Service, proto_path: &str, server_trait: Ident) -> T
     }
 }
 
-fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
+fn generate_trait_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
     let mut stream = TokenStream::new();
 
-    for method in &service.methods {
-        let name = quote::format_ident!("{}", method.name);
+    for method in service.methods() {
+        let name = quote::format_ident!("{}", method.name());
 
-        let (req_message, res_message) = crate::replace_wellknown(proto_path, &method);
+        let (req_message, res_message) = method.request_response_name(context);
 
-        let method_doc = generate_doc_comments(&method.comments.leading);
+        let method_doc = generate_doc_comments(method.comment());
 
-        let method = match (method.client_streaming, method.server_streaming) {
+        let method = match (method.client_streaming(), method.server_streaming()) {
             (false, false) => {
                 quote! {
                     #method_doc
@@ -140,10 +145,10 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
                 }
             }
             (false, true) => {
-                let stream = quote::format_ident!("{}Stream", method.proto_name);
+                let stream = quote::format_ident!("{}Stream", method.identifier());
                 let stream_doc = generate_doc_comment(&format!(
                     "Server streaming response type for the {} method.",
-                    method.proto_name
+                    method.identifier()
                 ));
 
                 quote! {
@@ -156,10 +161,10 @@ fn generate_trait_methods(service: &Service, proto_path: &str) -> TokenStream {
                 }
             }
             (true, true) => {
-                let stream = quote::format_ident!("{}Stream", method.proto_name);
+                let stream = quote::format_ident!("{}Stream", method.identifier());
                 let stream_doc = generate_doc_comment(&format!(
                     "Server streaming response type for the {} method.",
-                    method.proto_name
+                    method.identifier()
                 ));
 
                 quote! {
@@ -203,29 +208,31 @@ fn generate_transport(
     TokenStream::new()
 }
 
-fn generate_methods(service: &Service, proto_path: &str) -> TokenStream {
+fn generate_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
     let mut stream = TokenStream::new();
 
-    for method in &service.methods {
+    for method in service.methods() {
         let path = format!(
             "/{}.{}/{}",
-            service.package, service.proto_name, method.proto_name
+            service.package(),
+            service.identifier(),
+            method.identifier()
         );
         let method_path = Lit::Str(LitStr::new(&path, Span::call_site()));
-        let ident = quote::format_ident!("{}", method.name);
-        let server_trait = quote::format_ident!("{}", service.name);
+        let ident = quote::format_ident!("{}", method.name());
+        let server_trait = quote::format_ident!("{}", service.name());
 
-        let method_stream = match (method.client_streaming, method.server_streaming) {
-            (false, false) => generate_unary(method, ident, proto_path, server_trait),
+        let method_stream = match (method.client_streaming(), method.server_streaming()) {
+            (false, false) => generate_unary(method, ident, context, server_trait),
 
             (false, true) => {
-                generate_server_streaming(method, ident.clone(), proto_path, server_trait)
+                generate_server_streaming(method, ident.clone(), context, server_trait)
             }
             (true, false) => {
-                generate_client_streaming(method, ident.clone(), proto_path, server_trait)
+                generate_client_streaming(method, ident.clone(), context, server_trait)
             }
 
-            (true, true) => generate_streaming(method, ident.clone(), proto_path, server_trait),
+            (true, true) => generate_streaming(method, ident.clone(), context, server_trait),
         };
 
         let method = quote! {
@@ -239,15 +246,17 @@ fn generate_methods(service: &Service, proto_path: &str) -> TokenStream {
     stream
 }
 
-fn generate_unary(
-    method: &Method,
+fn generate_unary<'a, T: Method<'a>>(
+    method: &T,
     method_ident: Ident,
-    proto_path: &str,
+    context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
-    let (request, response) = crate::replace_wellknown(proto_path, &method);
+    let service_ident = quote::format_ident!("{}Svc", method.identifier());
+
+    let (request, response) = method.request_response_name(context);
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -270,7 +279,7 @@ fn generate_unary(
             let interceptor = inner.1.clone();
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)
@@ -286,17 +295,19 @@ fn generate_unary(
     }
 }
 
-fn generate_server_streaming(
-    method: &Method,
+fn generate_server_streaming<'a, T: Method<'a>>(
+    method: &T,
     method_ident: Ident,
-    proto_path: &str,
+    context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
-    let (request, response) = crate::replace_wellknown(proto_path, &method);
+    let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
-    let response_stream = quote::format_ident!("{}Stream", method.proto_name);
+    let (request, response) = method.request_response_name(context);
+
+    let response_stream = quote::format_ident!("{}Stream", method.identifier());
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -321,7 +332,7 @@ fn generate_server_streaming(
             let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)
@@ -337,15 +348,16 @@ fn generate_server_streaming(
     }
 }
 
-fn generate_client_streaming(
-    method: &Method,
+fn generate_client_streaming<'a, T: Method<'a>>(
+    method: &T,
     method_ident: Ident,
-    proto_path: &str,
+    context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
+    let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
-    let (request, response) = crate::replace_wellknown(proto_path, &method);
+    let (request, response) = method.request_response_name(context);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
     quote! {
         struct #service_ident<T: #server_trait >(pub Arc<T>);
@@ -370,7 +382,7 @@ fn generate_client_streaming(
             let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)
@@ -386,17 +398,19 @@ fn generate_client_streaming(
     }
 }
 
-fn generate_streaming(
-    method: &Method,
+fn generate_streaming<'a, T: Method<'a>>(
+    method: &T,
     method_ident: Ident,
-    proto_path: &str,
+    context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
-    let service_ident = quote::format_ident!("{}Svc", method.proto_name);
+    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
-    let (request, response) = crate::replace_wellknown(proto_path, &method);
+    let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
-    let response_stream = quote::format_ident!("{}Stream", method.proto_name);
+    let (request, response) = method.request_response_name(context);
+
+    let response_stream = quote::format_ident!("{}Stream", method.identifier());
 
     quote! {
         struct #service_ident<T: #server_trait>(pub Arc<T>);
@@ -421,7 +435,7 @@ fn generate_streaming(
             let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = #codec_name::default();
 
             let mut grpc = if let Some(interceptor) = interceptor {
                 tonic::server::Grpc::with_interceptor(codec, interceptor)

@@ -94,8 +94,16 @@ path = "src/interceptor/client.rs"
 name = "interceptor-server"
 path = "src/interceptor/server.rs"
 
+[[bin]]
+name = "hyper-warp-client"
+path = "src/hyper_warp/client.rs"
+
+[[bin]]
+name = "hyper-warp-server"
+path = "src/hyper_warp/server.rs"
+
 [dependencies]
-tonic = { path = "../tonic", features = ["tls"] }
+tonic = { path = "../tonic", features = ["tls", "data-prost"] }
 prost = "0.6"
 tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
@@ -112,6 +120,12 @@ tracing-attributes = "0.1"
 tracing-futures = "0.2"
 # Required for wellknown types
 prost-types = "0.6"
+# Hyper example
+hyper = "0.13"
+warp = { version = "0.2", default-features = false }
+http = "0.2"
+http-body = "0.3"
+pin-project = "0.4"
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build" }
+tonic-build = { path = "../tonic-build", features = ["prost"] }
