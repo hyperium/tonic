@@ -1,0 +1,24 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558 
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "type": "cargo",
+            "subcommand": "build --bin helloworld-server",
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        },
+        {
+            "label": "cargo build helloworld-server",
+            "type": "shell",
+            "command": "cargo build --bin helloworld-server",
+            "problemMatcher": [     
+                "$rustc"
+            ],
+            "group": "build"
+        }
+    ]
+}
