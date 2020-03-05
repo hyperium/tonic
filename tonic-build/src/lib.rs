@@ -80,6 +80,9 @@ pub fn fmt(out_dir: &str) {
 
     for entry in dir {
         let file = entry.unwrap().file_name().into_string().unwrap();
+        if !file.ends_with(".rs") {
+            continue;
+        }
         let out = Command::new("rustfmt")
             .arg("--emit")
             .arg("files")
