@@ -5,7 +5,6 @@ use hello_world::{HelloReply, HelloRequest};
 
 use tokio::runtime::Runtime;
 
-
 pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
