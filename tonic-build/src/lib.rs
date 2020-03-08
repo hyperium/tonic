@@ -83,16 +83,18 @@ pub fn fmt(out_dir: &str) {
         if !file.ends_with(".rs") {
             continue;
         }
-        let out = Command::new("rustfmt")
+        let result = Command::new("rustfmt")
             .arg("--emit")
             .arg("files")
             .arg("--edition")
             .arg("2018")
             .arg(format!("{}/{}", out_dir, file))
-            .output()
-            .unwrap();
+            .output();
 
-        assert!(out.status.success());
+        match result {
+            Err(e) => println!("error running rustfmt: {:?}", e),
+            Ok(out) => assert!(out.status.success()),
+        }
     }
 }
 
