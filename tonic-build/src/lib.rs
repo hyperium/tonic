@@ -92,7 +92,6 @@ pub fn fmt(out_dir: &str) {
             .output()
             .unwrap();
 
-        println!("out: {:?}", out);
         assert!(out.status.success());
     }
 }
