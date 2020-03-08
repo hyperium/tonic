@@ -177,9 +177,7 @@ where
 
         Ok(req)
     }
-    
 
-    //John: Looks like another critical function.
     fn map_request_streaming<B>(
         &mut self,
         request: http::Request<B>,
@@ -190,9 +188,7 @@ where
     {
         Request::from_http(request.map(|body| Streaming::new_request(self.codec.decoder(), body)))
     }
-
-
-    //John: Converts an gRPC response into an HTTP Response. (Critical Part to hook)
+    
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,

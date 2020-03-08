@@ -6,8 +6,6 @@ mod incoming;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
 
-mod http1_proxy;
-
 pub use conn::Connected;
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
