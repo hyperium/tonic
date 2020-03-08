@@ -68,9 +68,9 @@ pub mod schema;
 #[cfg(feature = "rustfmt")]
 use std::process::Command;
 
-/// Serivce code generation for client
+/// Service code generation for client
 pub mod client;
-/// Serivce code generation for Server
+/// Service code generation for Server
 pub mod server;
 
 /// Format files under the out_dir with rustfmt
