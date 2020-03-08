@@ -2,5 +2,3 @@ target/
 **/*.rs.bk
 Cargo.lock
 tags
-
-examples/web/node_modules/
