@@ -66,7 +66,9 @@ pub mod prost;
 pub mod schema;
 
 #[cfg(feature = "rustfmt")]
-use std::process::Command;
+use std::io::{self, Write};
+#[cfg(feature = "rustfmt")]
+use std::process::{exit, Command};
 
 /// Service code generation for client
 pub mod client;
@@ -92,8 +94,16 @@ pub fn fmt(out_dir: &str) {
             .output();
 
         match result {
-            Err(e) => println!("error running rustfmt: {:?}", e),
-            Ok(out) => assert!(out.status.success()),
+            Err(e) => {
+                eprintln!("error running rustfmt: {:?}", e);
+                exit(1)
+            }
+            Ok(output) => {
+                if !output.status.success() {
+                    io::stderr().write_all(&output.stderr).unwrap();
+                    exit(output.status.code().unwrap_or(1))
+                }
+            }
         }
     }
 }
