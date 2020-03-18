@@ -20,7 +20,7 @@
 //! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //! for [`tonic-build`]. Enabled by default.
-//! - `tls`: Enables the `ruslts` based TLS options for the `transport` feature`. Not
+//! - `tls`: Enables the `rustls` based TLS options for the `transport` feature`. Not
 //! enabled by default.
 //! - `tls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
 //! `rustls-native-certs` crate. Not enabled by default. `tls` must be enabled to use
