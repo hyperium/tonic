@@ -180,15 +180,11 @@ impl InvalidMetadataValue {
 
 impl fmt::Display for InvalidMetadataValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.description().fmt(f)
+        f.write_str("failed to parse metadata value")
     }
 }
 
-impl Error for InvalidMetadataValue {
-    fn description(&self) -> &str {
-        "failed to parse metadata value"
-    }
-}
+impl Error for InvalidMetadataValue {}
 
 /// A possible error when converting a `MetadataValue` from a string or byte
 /// slice.
@@ -209,8 +205,4 @@ impl fmt::Display for InvalidMetadataValueBytes {
     }
 }
 
-impl Error for InvalidMetadataValueBytes {
-    fn description(&self) -> &str {
-        self.0.description()
-    }
-}
+impl Error for InvalidMetadataValueBytes {}
