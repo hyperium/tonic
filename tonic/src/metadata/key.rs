@@ -271,12 +271,8 @@ impl<'a, VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &'a str {
 
 impl fmt::Display for InvalidMetadataKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        self.description().fmt(f)
+        f.write_str("invalid gRPC metadata key name")
     }
 }
 
-impl Error for InvalidMetadataKey {
-    fn description(&self) -> &str {
-        "invalid gRPC metadata key name"
-    }
-}
+impl Error for InvalidMetadataKey {}
