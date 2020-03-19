@@ -259,6 +259,7 @@ fn generate_unary<'a, T: Method<'a>>(
     let (request, response) = method.request_response_name(context);
 
     quote! {
+        #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait >(pub Arc<T>);
 
         impl<T: #server_trait> tonic::server::UnaryService<#request> for #service_ident<T> {
@@ -310,6 +311,7 @@ fn generate_server_streaming<'a, T: Method<'a>>(
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
 
     quote! {
+        #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait >(pub Arc<T>);
 
         impl<T: #server_trait> tonic::server::ServerStreamingService<#request> for #service_ident<T> {
@@ -360,6 +362,7 @@ fn generate_client_streaming<'a, T: Method<'a>>(
     let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
 
     quote! {
+        #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait >(pub Arc<T>);
 
         impl<T: #server_trait> tonic::server::ClientStreamingService<#request> for #service_ident<T>
@@ -413,6 +416,7 @@ fn generate_streaming<'a, T: Method<'a>>(
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
 
     quote! {
+        #[allow(non_camel_case_types)]
         struct #service_ident<T: #server_trait>(pub Arc<T>);
 
         impl<T: #server_trait> tonic::server::StreamingService<#request> for #service_ident<T>
