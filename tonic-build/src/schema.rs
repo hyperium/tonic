@@ -1,11 +1,5 @@
 use proc_macro2::TokenStream;
 
-/// Context data used in code generation
-pub trait Context {
-    /// Provide name of tonic compatibale codec
-    fn codec_name(&self) -> &str;
-}
-
 /// Item has comment
 pub trait Commentable {
     /// Comment type
@@ -16,10 +10,11 @@ pub trait Commentable {
 
 /// Service
 pub trait Service: Commentable {
+    /// Path to the codec
+    const CODEC_PATH: &'static str;
+
     /// Method type
-    type Method: Method<Context = Self::Context>;
-    /// Common context
-    type Context: Context;
+    type Method: Method;
 
     /// Name of service
     fn name(&self) -> &str;
@@ -33,8 +28,8 @@ pub trait Service: Commentable {
 
 /// Method
 pub trait Method: Commentable {
-    /// Common context
-    type Context: Context;
+    /// Path to the codec
+    const CODEC_PATH: &'static str;
 
     /// Name of method
     fn name(&self) -> &str;
@@ -45,5 +40,5 @@ pub trait Method: Commentable {
     /// Method is streamed by server
     fn server_streaming(&self) -> bool;
     /// Type name of request and response
-    fn request_response_name(&self, context: &Self::Context) -> (TokenStream, TokenStream);
+    fn request_response_name(&self, proto_path: &str) -> (TokenStream, TokenStream);
 }

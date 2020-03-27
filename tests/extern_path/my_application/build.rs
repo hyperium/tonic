@@ -1,5 +1,5 @@
 fn main() -> Result<(), std::io::Error> {
-    tonic_build::prost::configure()
+    tonic_build::configure()
         .build_server(false)
         .build_client(true)
         .extern_path(".uuid", "::uuid")
