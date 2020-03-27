@@ -66,11 +66,13 @@ pub mod prost;
 pub mod schema;
 
 #[cfg(feature = "rustfmt")]
-use std::process::Command;
+use std::io::{self, Write};
+#[cfg(feature = "rustfmt")]
+use std::process::{exit, Command};
 
-/// Serivce code generation for client
+/// Service code generation for client
 pub mod client;
-/// Serivce code generation for Server
+/// Service code generation for Server
 pub mod server;
 
 /// Format files under the out_dir with rustfmt
@@ -83,17 +85,26 @@ pub fn fmt(out_dir: &str) {
         if !file.ends_with(".rs") {
             continue;
         }
-        let out = Command::new("rustfmt")
+        let result = Command::new("rustfmt")
             .arg("--emit")
             .arg("files")
             .arg("--edition")
             .arg("2018")
             .arg(format!("{}/{}", out_dir, file))
-            .output()
-            .unwrap();
+            .output();
 
-        println!("out: {:?}", out);
-        assert!(out.status.success());
+        match result {
+            Err(e) => {
+                eprintln!("error running rustfmt: {:?}", e);
+                exit(1)
+            }
+            Ok(output) => {
+                if !output.status.success() {
+                    io::stderr().write_all(&output.stderr).unwrap();
+                    exit(output.status.code().unwrap_or(1))
+                }
+            }
+        }
     }
 }
 
