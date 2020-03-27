@@ -5,12 +5,11 @@ use quote::ToTokens;
 use std::io;
 use std::path::{Path, PathBuf};
 
-impl<'a> schema::Commentable<'a> for Service {
+impl schema::Commentable for Service {
     type Comment = String;
-    type CommentContainer = &'a Vec<Self::Comment>;
 
-    fn comment(&'a self) -> Self::CommentContainer {
-        &self.comments.leading
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
     }
 }
 
@@ -27,9 +26,8 @@ impl schema::Context for ProstContext {
     }
 }
 
-impl<'a> schema::Service<'a> for Service {
+impl schema::Service for Service {
     type Method = Method;
-    type MethodContainer = &'a Vec<Self::Method>;
     type Context = ProstContext;
 
     fn name(&self) -> &str {
@@ -44,21 +42,20 @@ impl<'a> schema::Service<'a> for Service {
         &self.proto_name
     }
 
-    fn methods(&'a self) -> Self::MethodContainer {
-        &self.methods
+    fn methods(&self) -> &[Self::Method] {
+        &self.methods[..]
     }
 }
 
-impl<'a> schema::Commentable<'a> for Method {
+impl schema::Commentable for Method {
     type Comment = String;
-    type CommentContainer = &'a Vec<Self::Comment>;
 
-    fn comment(&'a self) -> Self::CommentContainer {
-        &self.comments.leading
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
     }
 }
 
-impl<'a> schema::Method<'a> for Method {
+impl schema::Method for Method {
     type Context = ProstContext;
 
     fn name(&self) -> &str {

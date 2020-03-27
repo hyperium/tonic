@@ -5,7 +5,7 @@ use quote::quote;
 use syn::{Ident, Lit, LitStr};
 
 /// Generate service for Server
-pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+pub fn generate<T: Service>(service: &T, context: &T::Context) -> TokenStream {
     let methods = generate_methods(service, context);
 
     let server_service = quote::format_ident!("{}Server", service.name());
@@ -99,8 +99,8 @@ pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> Tok
     }
 }
 
-fn generate_trait<'a, T: Service<'a>>(
-    service: &'a T,
+fn generate_trait<T: Service>(
+    service: &T,
     context: &T::Context,
     server_trait: Ident,
 ) -> TokenStream {
@@ -119,7 +119,7 @@ fn generate_trait<'a, T: Service<'a>>(
     }
 }
 
-fn generate_trait_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+fn generate_trait_methods<T: Service>(service: &T, context: &T::Context) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
@@ -208,7 +208,7 @@ fn generate_transport(
     TokenStream::new()
 }
 
-fn generate_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+fn generate_methods<T: Service>(service: &T, context: &T::Context) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
@@ -246,7 +246,7 @@ fn generate_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) ->
     stream
 }
 
-fn generate_unary<'a, T: Method<'a>>(
+fn generate_unary<T: Method>(
     method: &T,
     method_ident: Ident,
     context: &T::Context,
@@ -296,7 +296,7 @@ fn generate_unary<'a, T: Method<'a>>(
     }
 }
 
-fn generate_server_streaming<'a, T: Method<'a>>(
+fn generate_server_streaming<T: Method>(
     method: &T,
     method_ident: Ident,
     context: &T::Context,
@@ -350,7 +350,7 @@ fn generate_server_streaming<'a, T: Method<'a>>(
     }
 }
 
-fn generate_client_streaming<'a, T: Method<'a>>(
+fn generate_client_streaming<T: Method>(
     method: &T,
     method_ident: Ident,
     context: &T::Context,
@@ -401,7 +401,7 @@ fn generate_client_streaming<'a, T: Method<'a>>(
     }
 }
 
-fn generate_streaming<'a, T: Method<'a>>(
+fn generate_streaming<T: Method>(
     method: &T,
     method_ident: Ident,
     context: &T::Context,

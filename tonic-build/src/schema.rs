@@ -7,23 +7,19 @@ pub trait Context {
 }
 
 /// Item has comment
-pub trait Commentable<'a> {
+pub trait Commentable {
     /// Comment type
-    type Comment: AsRef<str> + 'a;
-    /// Container has comments.
-    type CommentContainer: IntoIterator<Item = &'a Self::Comment>;
+    type Comment: AsRef<str>;
     /// Get comments about this item
-    fn comment(&'a self) -> Self::CommentContainer;
+    fn comment(&self) -> &[Self::Comment];
 }
 
 /// Service
-pub trait Service<'a>: Commentable<'a> {
+pub trait Service: Commentable {
     /// Method type
-    type Method: Method<'a, Context = Self::Context> + 'a;
-    /// Container has methods
-    type MethodContainer: IntoIterator<Item = &'a Self::Method>;
+    type Method: Method<Context = Self::Context>;
     /// Common context
-    type Context: Context + 'a;
+    type Context: Context;
 
     /// Name of service
     fn name(&self) -> &str;
@@ -32,13 +28,13 @@ pub trait Service<'a>: Commentable<'a> {
     /// Identifier used to generate type name
     fn identifier(&self) -> &str;
     /// Methods provided by service
-    fn methods(&'a self) -> Self::MethodContainer;
+    fn methods(&self) -> &[Self::Method];
 }
 
 /// Method
-pub trait Method<'a>: Commentable<'a> {
+pub trait Method: Commentable {
     /// Common context
-    type Context: Context + 'a;
+    type Context: Context;
 
     /// Name of method
     fn name(&self) -> &str;
