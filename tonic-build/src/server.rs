@@ -49,7 +49,12 @@ pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> Tok
                 }
             }
 
-            impl<T: #server_trait> Service<http::Request<HyperBody>> for #server_service<T> {
+            impl<T, B> Service<http::Request<B>> for #server_service<T>
+                where
+                    T: #server_trait,
+                    B: HttpBody + Send + Sync + 'static,
+                    B::Error: Into<StdError> + Send + 'static,
+            {
                 type Response = http::Response<tonic::body::BoxBody>;
                 type Error = Never;
                 type Future = BoxFuture<Self::Response, Self::Error>;
@@ -58,7 +63,7 @@ pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> Tok
                     Poll::Ready(Ok(()))
                 }
 
-                fn call(&mut self, req: http::Request<HyperBody>) -> Self::Future {
+                fn call(&mut self, req: http::Request<B>) -> Self::Future {
                     let inner = self.inner.clone();
 
                     match req.uri().path() {
