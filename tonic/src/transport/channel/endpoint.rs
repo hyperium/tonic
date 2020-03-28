@@ -30,6 +30,9 @@ pub struct Endpoint {
     pub(crate) init_connection_window_size: Option<u32>,
     pub(crate) tcp_keepalive: Option<Duration>,
     pub(crate) tcp_nodelay: bool,
+    pub(crate) http2_keep_alive_interval: Option<Duration>,
+    pub(crate) http2_keep_alive_timeout: Option<Duration>,
+    pub(crate) http2_keep_alive_while_idle: Option<bool>,
 }
 
 impl Endpoint {
@@ -167,6 +170,30 @@ impl Endpoint {
         }
     }
 
+    /// Set http2 KEEP_ALIVE_INTERVAL. Uses `hyper`'s default otherwise.
+    pub fn http2_keep_alive_interval(self, interval: Duration) -> Self {
+        Endpoint {
+            http2_keep_alive_interval: Some(interval),
+            ..self
+        }
+    }
+
+    /// Set http2 KEEP_ALIVE_TIMEOUT. Uses `hyper`'s default otherwise.
+    pub fn keep_alive_timeout(self, duration: Duration) -> Self {
+        Endpoint {
+            http2_keep_alive_timeout: Some(duration),
+            ..self
+        }
+    }
+
+    /// Set http2 KEEP_ALIVE_WHILE_IDLE. Uses `hyper`'s default otherwise.
+    pub fn keep_alive_while_idle(self, enabled: bool) -> Self {
+        Endpoint {
+            http2_keep_alive_while_idle: Some(enabled),
+            ..self
+        }
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
@@ -215,6 +242,9 @@ impl From<Uri> for Endpoint {
             init_connection_window_size: None,
             tcp_keepalive: None,
             tcp_nodelay: true,
+            http2_keep_alive_interval: None,
+            http2_keep_alive_timeout: None,
+            http2_keep_alive_while_idle: None,
         }
     }
 }
