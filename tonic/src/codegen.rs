@@ -13,8 +13,10 @@ pub use tower_service::Service;
 pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub use crate::body::Body;
 
+#[cfg(not(feature = "transport"))]
+pub use crate::body::BoxBody as RequestBody;
 #[cfg(feature = "transport")]
-pub use hyper::Body as HyperBody;
+pub use hyper::Body as RequestBody;
 
 pub type BoxFuture<T, E> = self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
 pub type BoxStream<T> =
