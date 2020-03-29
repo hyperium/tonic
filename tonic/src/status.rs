@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
+use prost::Message;
 use std::{borrow::Cow, error::Error, fmt};
 use tracing::{debug, trace, warn};
 
@@ -401,6 +402,25 @@ impl Status {
 
         Ok(())
     }
+
+    /// Create a new `Status` with the associated code, message, and binary details field.
+    pub fn with_raw_details(code: Code, message: impl Into<String>, details: Bytes) -> Status {
+        Status {
+            code,
+            message: message.into(),
+            details: details,
+        }
+    }
+
+    /// Create a new `Status` with the associated code, message, and protobuf details field.
+    pub fn with_details(code: Code, message: impl Into<String>, details: impl Message) -> Status {
+        let mut bytes = vec![];
+        details
+            .encode(&mut bytes)
+            .expect("Message only errors if not enough space");
+        Status::with_raw_details(code, message, bytes.into())
+    }
+
 }
 
 impl fmt::Debug for Status {
