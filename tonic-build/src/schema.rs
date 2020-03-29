@@ -1,29 +1,20 @@
 use proc_macro2::TokenStream;
 
-/// Context data used in code generation
-pub trait Context {
-    /// Provide name of tonic compatibale codec
-    fn codec_name(&self) -> &str;
-}
-
 /// Item has comment
-pub trait Commentable<'a> {
+pub trait Commentable {
     /// Comment type
-    type Comment: AsRef<str> + 'a;
-    /// Container has comments.
-    type CommentContainer: IntoIterator<Item = &'a Self::Comment>;
+    type Comment: AsRef<str>;
     /// Get comments about this item
-    fn comment(&'a self) -> Self::CommentContainer;
+    fn comment(&self) -> &[Self::Comment];
 }
 
 /// Service
-pub trait Service<'a>: Commentable<'a> {
+pub trait Service: Commentable {
+    /// Path to the codec
+    const CODEC_PATH: &'static str;
+
     /// Method type
-    type Method: Method<'a, Context = Self::Context> + 'a;
-    /// Container has methods
-    type MethodContainer: IntoIterator<Item = &'a Self::Method>;
-    /// Common context
-    type Context: Context + 'a;
+    type Method: Method;
 
     /// Name of service
     fn name(&self) -> &str;
@@ -32,13 +23,13 @@ pub trait Service<'a>: Commentable<'a> {
     /// Identifier used to generate type name
     fn identifier(&self) -> &str;
     /// Methods provided by service
-    fn methods(&'a self) -> Self::MethodContainer;
+    fn methods(&self) -> &[Self::Method];
 }
 
 /// Method
-pub trait Method<'a>: Commentable<'a> {
-    /// Common context
-    type Context: Context + 'a;
+pub trait Method: Commentable {
+    /// Path to the codec
+    const CODEC_PATH: &'static str;
 
     /// Name of method
     fn name(&self) -> &str;
@@ -49,5 +40,5 @@ pub trait Method<'a>: Commentable<'a> {
     /// Method is streamed by server
     fn server_streaming(&self) -> bool;
     /// Type name of request and response
-    fn request_response_name(&self, context: &Self::Context) -> (TokenStream, TokenStream);
+    fn request_response_name(&self, proto_path: &str) -> (TokenStream, TokenStream);
 }

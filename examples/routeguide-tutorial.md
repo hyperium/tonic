@@ -823,7 +823,7 @@ opposed to at build time, placing the resulting modules wherever we need them.
 
 ```rust
 fn main() {
-    tonic_build::prost::configure()
+    tonic_build::configure()
         .build_client(false)
         .out_dir("another_crate/src/pb")
         .compile(&["path/my_proto.proto"], &["path"])

@@ -5,32 +5,20 @@ use quote::ToTokens;
 use std::io;
 use std::path::{Path, PathBuf};
 
-impl<'a> schema::Commentable<'a> for Service {
+const PROST_CODEC_PATH: &'static str = "tonic::codec::ProstCodec";
+
+impl schema::Commentable for Service {
     type Comment = String;
-    type CommentContainer = &'a Vec<Self::Comment>;
 
-    fn comment(&'a self) -> Self::CommentContainer {
-        &self.comments.leading
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
     }
 }
 
-/// Context data used while generate prost service
-#[derive(Debug)]
-pub struct ProstContext {
-    /// relative path to proto definitions from service definitions
-    pub proto_path: String,
-}
+impl schema::Service for Service {
+    const CODEC_PATH: &'static str = PROST_CODEC_PATH;
 
-impl schema::Context for ProstContext {
-    fn codec_name(&self) -> &str {
-        "tonic::codec::ProstCodec"
-    }
-}
-
-impl<'a> schema::Service<'a> for Service {
     type Method = Method;
-    type MethodContainer = &'a Vec<Self::Method>;
-    type Context = ProstContext;
 
     fn name(&self) -> &str {
         &self.name
@@ -44,22 +32,21 @@ impl<'a> schema::Service<'a> for Service {
         &self.proto_name
     }
 
-    fn methods(&'a self) -> Self::MethodContainer {
-        &self.methods
+    fn methods(&self) -> &[Self::Method] {
+        &self.methods[..]
     }
 }
 
-impl<'a> schema::Commentable<'a> for Method {
+impl schema::Commentable for Method {
     type Comment = String;
-    type CommentContainer = &'a Vec<Self::Comment>;
 
-    fn comment(&'a self) -> Self::CommentContainer {
-        &self.comments.leading
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
     }
 }
 
-impl<'a> schema::Method<'a> for Method {
-    type Context = ProstContext;
+impl schema::Method for Method {
+    const CODEC_PATH: &'static str = PROST_CODEC_PATH;
 
     fn name(&self) -> &str {
         &self.name
@@ -77,13 +64,13 @@ impl<'a> schema::Method<'a> for Method {
         self.server_streaming
     }
 
-    fn request_response_name(&self, context: &Self::Context) -> (TokenStream, TokenStream) {
+    fn request_response_name(&self, proto_path: &str) -> (TokenStream, TokenStream) {
         let request = if self.input_proto_type.starts_with(".google.protobuf")
             || self.input_type.starts_with("::")
         {
             self.input_type.parse::<TokenStream>().unwrap()
         } else {
-            syn::parse_str::<syn::Path>(&format!("{}::{}", context.proto_path, self.input_type))
+            syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, self.input_type))
                 .unwrap()
                 .to_token_stream()
         };
@@ -93,7 +80,7 @@ impl<'a> schema::Method<'a> for Method {
         {
             self.output_type.parse::<TokenStream>().unwrap()
         } else {
-            syn::parse_str::<syn::Path>(&format!("{}::{}", context.proto_path, self.output_type))
+            syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, self.output_type))
                 .unwrap()
                 .to_token_stream()
         };
@@ -145,17 +132,13 @@ impl ServiceGenerator {
 
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
-        let context = ProstContext {
-            proto_path: String::from("super"),
-        };
-
         if self.builder.build_server {
-            let server = server::generate(&service, &context);
+            let server = server::generate(&service, &self.builder.proto_path);
             self.servers.extend(server);
         }
 
         if self.builder.build_client {
-            let client = client::generate(&service, &context);
+            let client = client::generate(&service, &self.builder.proto_path);
             self.clients.extend(client);
         }
     }
@@ -197,6 +180,7 @@ pub struct Builder {
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
+    pub(crate) proto_path: String,
 
     out_dir: Option<PathBuf>,
     #[cfg(feature = "rustfmt")]
@@ -262,6 +246,15 @@ impl Builder {
         self
     }
 
+    /// Set the path to where tonic will search for the Request/Response proto structs
+    /// live relative to the module where you call `include_proto!`.
+    ///
+    /// This defaults to `super` since tonic will generate code in a module.
+    pub fn proto_path(mut self, proto_path: impl AsRef<str>) -> Self {
+        self.proto_path = proto_path.as_ref().to_string();
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
         let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
@@ -297,6 +290,7 @@ pub fn configure() -> Builder {
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
         type_attributes: Vec::new(),
+        proto_path: "super".to_string(),
         #[cfg(feature = "rustfmt")]
         format: true,
     }
@@ -306,8 +300,8 @@ pub fn configure() -> Builder {
 ///
 /// The include directory will be the parent folder of the specified path.
 /// The package name will be the filename without the extension.
-pub fn compile_protos(proto_path: impl AsRef<Path>) -> io::Result<()> {
-    let proto_path: &Path = proto_path.as_ref();
+pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
+    let proto_path: &Path = proto.as_ref();
 
     // directory the main .proto file resides in
     let proto_dir = proto_path

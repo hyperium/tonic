@@ -1,3 +1,3 @@
 fn main() {
-    tonic_build::prost::compile_protos("proto/wellknown.proto").unwrap();
+    tonic_build::compile_protos("proto/wellknown.proto").unwrap();
 }

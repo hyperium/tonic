@@ -1,13 +1,13 @@
-use super::schema::{Context, Method, Service};
+use super::schema::{Method, Service};
 use crate::{generate_doc_comments, naive_snake_case};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
 /// Generate service for client
-pub fn generate<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
     let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name()));
-    let methods = generate_methods(service, context);
+    let methods = generate_methods(service, proto_path);
 
     let connect = generate_connect(&service_ident);
     let service_doc = generate_doc_comments(service.comment());
@@ -76,7 +76,7 @@ fn generate_connect(_service_ident: &syn::Ident) -> TokenStream {
     TokenStream::new()
 }
 
-fn generate_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) -> TokenStream {
+fn generate_methods<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
@@ -92,10 +92,10 @@ fn generate_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) ->
         stream.extend(generate_doc_comments(method.comment()));
 
         let method = match (method.client_streaming(), method.server_streaming()) {
-            (false, false) => generate_unary(method, &context, path),
-            (false, true) => generate_server_streaming(method, &context, path),
-            (true, false) => generate_client_streaming(method, &context, path),
-            (true, true) => generate_streaming(method, &context, path),
+            (false, false) => generate_unary(method, proto_path, path),
+            (false, true) => generate_server_streaming(method, proto_path, path),
+            (true, false) => generate_client_streaming(method, proto_path, path),
+            (true, true) => generate_streaming(method, proto_path, path),
         };
 
         stream.extend(method);
@@ -104,14 +104,10 @@ fn generate_methods<'a, T: Service<'a>>(service: &'a T, context: &T::Context) ->
     stream
 }
 
-fn generate_unary<'a, T: Method<'a>>(
-    method: &T,
-    context: &T::Context,
-    path: String,
-) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
+fn generate_unary<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
+    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
     let ident = format_ident!("{}", method.name());
-    let (request, response) = method.request_response_name(context);
+    let (request, response) = method.request_response_name(proto_path);
 
     quote! {
         pub async fn #ident(
@@ -128,15 +124,11 @@ fn generate_unary<'a, T: Method<'a>>(
     }
 }
 
-fn generate_server_streaming<'a, T: Method<'a>>(
-    method: &T,
-    context: &T::Context,
-    path: String,
-) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
+fn generate_server_streaming<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
+    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
     let ident = format_ident!("{}", method.name());
 
-    let (request, response) = method.request_response_name(context);
+    let (request, response) = method.request_response_name(proto_path);
 
     quote! {
         pub async fn #ident(
@@ -153,15 +145,11 @@ fn generate_server_streaming<'a, T: Method<'a>>(
     }
 }
 
-fn generate_client_streaming<'a, T: Method<'a>>(
-    method: &T,
-    context: &T::Context,
-    path: String,
-) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
+fn generate_client_streaming<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
+    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
     let ident = format_ident!("{}", method.name());
 
-    let (request, response) = method.request_response_name(context);
+    let (request, response) = method.request_response_name(proto_path);
 
     quote! {
         pub async fn #ident(
@@ -178,15 +166,11 @@ fn generate_client_streaming<'a, T: Method<'a>>(
     }
 }
 
-fn generate_streaming<'a, T: Method<'a>>(
-    method: &T,
-    context: &T::Context,
-    path: String,
-) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(context.codec_name()).unwrap();
+fn generate_streaming<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
+    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
     let ident = format_ident!("{}", method.name());
 
-    let (request, response) = method.request_response_name(context);
+    let (request, response) = method.request_response_name(proto_path);
 
     quote! {
         pub async fn #ident(

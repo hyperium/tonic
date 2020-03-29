@@ -23,7 +23,7 @@
 //!
 //! ```rust,no_run
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     tonic_build::prost::compile_protos("proto/service.proto")?;
+//!     tonic_build::compile_protos("proto/service.proto")?;
 //!     Ok(())
 //! }
 //! ```
@@ -32,7 +32,7 @@
 //!
 //! ```rust,no_run
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!    tonic_build::prost::configure()
+//!    tonic_build::configure()
 //!         .build_server(false)
 //!         .compile(
 //!             &["proto/helloworld/helloworld.proto"],
@@ -61,7 +61,11 @@ use quote::TokenStreamExt;
 
 /// Prost generator
 #[cfg(feature = "prost")]
-pub mod prost;
+mod prost;
+
+#[cfg(feature = "prost")]
+pub use prost::{compile_protos, configure, Builder};
+
 /// Traits to describe schema
 pub mod schema;
 
