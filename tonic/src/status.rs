@@ -420,7 +420,6 @@ impl Status {
             .expect("Message only errors if not enough space");
         Status::with_raw_details(code, message, bytes.into())
     }
-
 }
 
 impl fmt::Debug for Status {
