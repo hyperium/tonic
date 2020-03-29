@@ -36,11 +36,22 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let settings = Builder::new()
+        let mut settings = Builder::new()
             .http2_initial_stream_window_size(endpoint.init_stream_window_size)
             .http2_initial_connection_window_size(endpoint.init_connection_window_size)
             .http2_only(true)
+            .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
             .clone();
+
+        if let Some(val) = endpoint.http2_keep_alive_timeout {
+            settings.http2_keep_alive_timeout(val);
+        }
+
+        if let Some(val) = endpoint.http2_keep_alive_while_idle {
+            settings.http2_keep_alive_while_idle(val);
+        }
+
+        let settings = settings.clone();
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
