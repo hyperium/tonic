@@ -29,6 +29,7 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 - Load balancing
 - Custom metadata
 - Authentication
+- Health Checking
 
 ## Getting Started
 
@@ -67,6 +68,8 @@ question. If that doesn't work, try opening an [issue] with the question.
 - [`tonic`](https://github.com/hyperium/tonic/tree/master/tonic): Generic gRPC and HTTP/2 client/server
 implementation.
 - [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic-build): [`prost`] based service codegen.
+- [`tonic-health`](https://github.com/hyperium/tonic/tree/master/tonic-health): Implementation of the standard [gRPC
+health checking service][healthcheck]. Also serves as an example of both unary and response streaming.
 - [`examples`](https://github.com/hyperium/tonic/tree/master/examples): Example gRPC implementations showing off
 tls, load balancing and bi-directional streaming.
 - [`interop`](https://github.com/hyperium/tonic/tree/master/interop): Interop tests implementation.
@@ -105,3 +108,4 @@ terms or conditions.
 [Chat]: https://discord.gg/6yGkFeN
 [routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
 [helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
+[healthcheck]: https://github.com/grpc/grpc/blob/master/doc/health-checking.md

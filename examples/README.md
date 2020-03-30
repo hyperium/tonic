@@ -72,6 +72,13 @@ $ cargo run --bin tls-client
 $ cargo run --bin tls-server
 ```
 
+## Health Checking
+
+### Server
+
+```bash
+$ cargo run --bin health-server
+```
 
 ### Notes:
 
