@@ -401,6 +401,15 @@ impl Status {
 
         Ok(())
     }
+
+    /// Create a new `Status` with the associated code, message, and binary details field.
+    pub fn with_details(code: Code, message: impl Into<String>, details: Bytes) -> Status {
+        Status {
+            code,
+            message: message.into(),
+            details: details,
+        }
+    }
 }
 
 impl fmt::Debug for Status {
