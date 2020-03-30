@@ -1,10 +1,13 @@
-use super::schema::{Commentable, Method, Service};
+use super::{Method, Service};
 use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};
 
-/// Generate service for Server
+/// Generate service for Server.
+///
+/// This takes some `Service` and will generate a `TokenStream` that contains
+/// a public module containing the server service and handler trait.
 pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let methods = generate_methods(service, proto_path);
 

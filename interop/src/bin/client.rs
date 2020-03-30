@@ -1,8 +1,8 @@
+use interop::client;
 use std::time::Duration;
 use structopt::{clap::arg_enum, StructOpt};
 use tonic::transport::Endpoint;
 use tonic::transport::{Certificate, ClientTlsConfig};
-use tonic_interop::client;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -20,7 +20,7 @@ struct Opts {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_interop::trace_init();
+    interop::trace_init();
 
     let matches = Opts::from_args();
 

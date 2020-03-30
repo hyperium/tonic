@@ -1,7 +1,7 @@
+use interop::server;
 use structopt::StructOpt;
 use tonic::transport::Server;
 use tonic::transport::{Identity, ServerTlsConfig};
-use tonic_interop::server;
 
 #[derive(StructOpt)]
 struct Opts {
@@ -11,7 +11,7 @@ struct Opts {
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
-    tonic_interop::trace_init();
+    interop::trace_init();
 
     let matches = Opts::from_args();
 

@@ -1,4 +1,4 @@
-use super::{client, schema, server};
+use super::{client, server};
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
@@ -7,18 +7,11 @@ use std::path::{Path, PathBuf};
 
 const PROST_CODEC_PATH: &'static str = "tonic::codec::ProstCodec";
 
-impl schema::Commentable for Service {
-    type Comment = String;
-
-    fn comment(&self) -> &[Self::Comment] {
-        &self.comments.leading[..]
-    }
-}
-
-impl schema::Service for Service {
+impl crate::Service for Service {
     const CODEC_PATH: &'static str = PROST_CODEC_PATH;
 
     type Method = Method;
+    type Comment = String;
 
     fn name(&self) -> &str {
         &self.name
@@ -32,21 +25,18 @@ impl schema::Service for Service {
         &self.proto_name
     }
 
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
+    }
+
     fn methods(&self) -> &[Self::Method] {
         &self.methods[..]
     }
 }
 
-impl schema::Commentable for Method {
-    type Comment = String;
-
-    fn comment(&self) -> &[Self::Comment] {
-        &self.comments.leading[..]
-    }
-}
-
-impl schema::Method for Method {
+impl crate::Method for Method {
     const CODEC_PATH: &'static str = PROST_CODEC_PATH;
+    type Comment = String;
 
     fn name(&self) -> &str {
         &self.name
@@ -62,6 +52,10 @@ impl schema::Method for Method {
 
     fn server_streaming(&self) -> bool {
         self.server_streaming
+    }
+
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
     }
 
     fn request_response_name(&self, proto_path: &str) -> (TokenStream, TokenStream) {

@@ -1,9 +1,12 @@
-use super::schema::{Method, Service};
+use super::{Method, Service};
 use crate::{generate_doc_comments, naive_snake_case};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-/// Generate service for client
+/// Generate service for client.
+///
+/// This takes some `Service` and will generate a `TokenStream` that contains
+/// a public module with the generated client.
 pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
     let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name()));
@@ -80,8 +83,6 @@ fn generate_methods<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
-        use super::schema::Commentable;
-
         let path = format!(
             "/{}.{}/{}",
             service.package(),
