@@ -15,6 +15,8 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let connect = generate_connect(&service_ident);
     let service_doc = generate_doc_comments(service.comment());
 
+    let struct_debug = format!("{} {{{{ ... }}}}", &service_ident);
+
     quote! {
         /// Generated client implementations.
         pub mod #client_mod {
@@ -51,6 +53,12 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
                     Self {
                         inner: self.inner.clone(),
                     }
+                }
+            }
+
+            impl<T> std::fmt::Debug for #service_ident<T> {
+                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                   write!(f, #struct_debug)
                 }
             }
         }
