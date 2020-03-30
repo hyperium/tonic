@@ -66,9 +66,6 @@ mod prost;
 #[cfg(feature = "prost")]
 pub use prost::{compile_protos, configure, Builder};
 
-/// Traits to describe schema
-pub mod schema;
-
 #[cfg(feature = "rustfmt")]
 use std::io::{self, Write};
 #[cfg(feature = "rustfmt")]
@@ -78,6 +75,60 @@ use std::process::{exit, Command};
 pub mod client;
 /// Service code generation for Server
 pub mod server;
+
+/// Service generation trait.
+///
+/// This trait can be implemented and consumed
+/// by `client::generate` and `server::generate`
+/// to allow any codegen module to generate service
+/// abstractions.
+pub trait Service {
+    /// Path to the codec
+    const CODEC_PATH: &'static str;
+
+    /// Comment type
+    type Comment: AsRef<str>;
+
+    /// Method type
+    type Method: Method;
+
+    /// Name of service
+    fn name(&self) -> &str;
+    /// Package name of service
+    fn package(&self) -> &str;
+    /// Identifier used to generate type name
+    fn identifier(&self) -> &str;
+    /// Methods provided by service
+    fn methods(&self) -> &[Self::Method];
+    /// Get comments about this item
+    fn comment(&self) -> &[Self::Comment];
+}
+
+/// Method generation trait.
+///
+/// Each service contains a set of generic
+/// `Methods`'s that will be used by codegen
+/// to generate abstraction implementations for
+/// the provided methods.
+pub trait Method {
+    /// Path to the codec
+    const CODEC_PATH: &'static str;
+    /// Comment type.
+    type Comment: AsRef<str>;
+
+    /// Name of method
+    fn name(&self) -> &str;
+    /// Identifier used to generate type name
+    fn identifier(&self) -> &str;
+    /// Method is streamed by client
+    fn client_streaming(&self) -> bool;
+    /// Method is streamed by server
+    fn server_streaming(&self) -> bool;
+    /// Get comments about this item
+    fn comment(&self) -> &[Self::Comment];
+    /// Type name of request and response
+    fn request_response_name(&self, proto_path: &str) -> (TokenStream, TokenStream);
+}
 
 /// Format files under the out_dir with rustfmt
 #[cfg(feature = "rustfmt")]
@@ -129,9 +180,7 @@ fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
 }
 
 // Generate a larger doc comment composed of many lines of doc comments
-fn generate_doc_comments<'a, T: AsRef<str> + 'a, C: IntoIterator<Item = &'a T>>(
-    comments: C,
-) -> TokenStream {
+fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for comment in comments {

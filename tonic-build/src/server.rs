@@ -1,4 +1,4 @@
-use super::schema::{Commentable, Method, Service};
+use super::{Method, Service};
 use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;

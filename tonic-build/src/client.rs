@@ -1,4 +1,4 @@
-use super::schema::{Method, Service};
+use super::{Method, Service};
 use crate::{generate_doc_comments, naive_snake_case};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -83,8 +83,6 @@ fn generate_methods<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
-        use super::schema::Commentable;
-
         let path = format!(
             "/{}.{}/{}",
             service.package(),
