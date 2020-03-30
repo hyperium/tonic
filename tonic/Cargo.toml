@@ -23,7 +23,7 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 
 [features]
-default = ["transport", "codegen", "data-prost"]
+default = ["transport", "codegen", "prost"]
 codegen = ["async-trait"]
 transport = [
     "hyper",
@@ -35,7 +35,7 @@ transport = [
 ]
 tls = ["transport", "tokio-rustls"]
 tls-roots = ["tls", "rustls-native-certs"]
-data-prost = ["prost", "prost-derive"]
+prost = ["prost1", "prost-derive"]
 
 # [[bench]]
 # name = "bench_main"
@@ -57,15 +57,15 @@ http-body = "0.3"
 pin-project = "0.4"
 
 # prost
-prost = { version = "0.6", optional = true }
+prost1 = { package = "prost", version = "0.6", optional = true }
 prost-derive = { version = "0.6", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
 
 # transport
-hyper = { version = "0.13", features = ["stream"], optional = true }
-tokio = { version = "0.2", features = ["tcp"], optional = true }
+hyper = { version = "0.13.4", features = ["stream"], optional = true }
+tokio = { version = "0.2.13", features = ["tcp"], optional = true }
 tower = { version = "0.3", optional = true}
 tower-make = { version = "0.3", features = ["connect"] }
 tower-balance =  { version = "0.3", optional = true }

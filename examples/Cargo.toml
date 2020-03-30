@@ -1,5 +1,5 @@
 [package]
-name = "tonic-examples"
+name = "examples"
 version = "0.1.0"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
@@ -107,7 +107,7 @@ name = "health-server"
 path = "src/health/server.rs"
 
 [dependencies]
-tonic = { path = "../tonic", features = ["tls", "data-prost"] }
+tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
 tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }

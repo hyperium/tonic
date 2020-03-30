@@ -14,12 +14,13 @@ categories = ["network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "async", "healthcheck"]
 
 [features]
+default = ["transport"]
 transport = ["tonic/transport"]
 
 [dependencies]
 async-stream = "0.2"
 tokio = { version = "0.2", features = ["sync", "stream"] }
-tonic = { path = "../tonic", features = ["codegen", "data-prost"] }
+tonic = { path = "../tonic", features = ["codegen", "prost"] }
 bytes = "0.5"
 prost = "0.6"
 
