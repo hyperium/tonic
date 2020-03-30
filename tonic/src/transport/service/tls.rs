@@ -50,7 +50,7 @@ impl TlsConnector {
 
         if let Some(identity) = identity {
             let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
-            config.set_single_client_cert(client_cert, client_key);
+            config.set_single_client_cert(client_cert, client_key)?;
         }
 
         #[cfg(feature = "tls-roots")]
