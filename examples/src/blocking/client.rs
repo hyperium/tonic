@@ -9,12 +9,13 @@ use hello_world::{greeter_client::GreeterClient, HelloReply, HelloRequest};
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T, E = StdError> = ::std::result::Result<T, E>;
 
-// The order of the fields in this struct is important. The runtime must be the first field and the
-// client must be the last field so that when `BlockingClient` is dropped the client is dropped
+// The order of the fields in this struct is important. They must be ordered 
+// such that when `BlockingClient` is dropped the client is dropped
 // before the runtime. Not doing this will result in a deadlock when dropped.
+// Rust drops struct fields in declaration order.
 struct BlockingClient {
-    rt: Runtime,
     client: GreeterClient<tonic::transport::Channel>,
+    rt: Runtime,
 }
 
 impl BlockingClient {
