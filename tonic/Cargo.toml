@@ -51,7 +51,7 @@ base64 = "0.11"
 
 percent-encoding = "2.0"
 tower-service = "0.3"
-tokio-util = { version = "0.2", features = ["codec"] }
+tokio-util = { version = "0.3", features = ["codec"] }
 async-stream = "0.2"
 http-body = "0.3"
 pin-project = "0.4"
