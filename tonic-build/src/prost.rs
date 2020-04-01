@@ -5,6 +5,40 @@ use quote::ToTokens;
 use std::io;
 use std::path::{Path, PathBuf};
 
+/// Configure `tonic-build` code generation.
+///
+/// Use [`compile_protos`] instead if you don't need to tweak anything.
+pub fn configure() -> Builder {
+    Builder {
+        build_client: true,
+        build_server: true,
+        out_dir: None,
+        extern_path: Vec::new(),
+        field_attributes: Vec::new(),
+        type_attributes: Vec::new(),
+        proto_path: "super".to_string(),
+        #[cfg(feature = "rustfmt")]
+        format: true,
+    }
+}
+
+/// Simple `.proto` compiling. Use [`configure`] instead if you need more options.
+///
+/// The include directory will be the parent folder of the specified path.
+/// The package name will be the filename without the extension.
+pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
+    let proto_path: &Path = proto.as_ref();
+
+    // directory the main .proto file resides in
+    let proto_dir = proto_path
+        .parent()
+        .expect("proto file should reside in a directory");
+
+    self::configure().compile(&[proto_path], &[proto_dir])?;
+
+    Ok(())
+}
+
 const PROST_CODEC_PATH: &'static str = "tonic::codec::ProstCodec";
 
 impl crate::Service for Service {
@@ -81,31 +115,6 @@ impl crate::Method for Method {
 
         (request, response)
     }
-}
-
-pub(crate) fn compile<P: AsRef<Path>>(
-    builder: Builder,
-    out_dir: PathBuf,
-    protos: &[P],
-    includes: &[P],
-) -> std::io::Result<()> {
-    let mut config = Config::new();
-
-    config.out_dir(out_dir);
-    for (proto_path, rust_path) in builder.extern_path.iter() {
-        config.extern_path(proto_path, rust_path);
-    }
-    for (prost_path, attr) in builder.field_attributes.iter() {
-        config.field_attribute(prost_path, attr);
-    }
-    for (prost_path, attr) in builder.type_attributes.iter() {
-        config.type_attribute(prost_path, attr);
-    }
-    config.service_generator(Box::new(ServiceGenerator::new(builder)));
-
-    config.compile_protos(protos, includes)?;
-
-    Ok(())
 }
 
 struct ServiceGenerator {
@@ -250,7 +259,24 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    pub fn compile<P: AsRef<Path>>(self, protos: &[P], includes: &[P]) -> io::Result<()> {
+    pub fn compile<P>(self, protos: &[P], includes: &[P]) -> io::Result<()>
+    where
+        P: AsRef<Path>,
+    {
+        self.compile_with_config(Config::new(), protos, includes)
+    }
+
+    /// Compile the .proto files and execute code generation using a
+    /// custom `prost_build::Config`.
+    pub fn compile_with_config<P>(
+        self,
+        mut config: Config,
+        protos: &[P],
+        includes: &[P],
+    ) -> io::Result<()>
+    where
+        P: AsRef<Path>,
+    {
         let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
             out_dir.clone()
         } else {
@@ -260,7 +286,19 @@ impl Builder {
         #[cfg(feature = "rustfmt")]
         let format = self.format;
 
-        compile(self, out_dir.clone(), protos, includes)?;
+        config.out_dir(out_dir.clone());
+        for (proto_path, rust_path) in self.extern_path.iter() {
+            config.extern_path(proto_path, rust_path);
+        }
+        for (prost_path, attr) in self.field_attributes.iter() {
+            config.field_attribute(prost_path, attr);
+        }
+        for (prost_path, attr) in self.type_attributes.iter() {
+            config.type_attribute(prost_path, attr);
+        }
+        config.service_generator(Box::new(ServiceGenerator::new(self)));
+
+        config.compile_protos(protos, includes)?;
 
         #[cfg(feature = "rustfmt")]
         {
@@ -271,38 +309,4 @@ impl Builder {
 
         Ok(())
     }
-}
-
-/// Configure tonic-build code generation.
-///
-/// Use [`compile_protos`] instead if you don't need to tweak anything.
-pub fn configure() -> Builder {
-    Builder {
-        build_client: true,
-        build_server: true,
-        out_dir: None,
-        extern_path: Vec::new(),
-        field_attributes: Vec::new(),
-        type_attributes: Vec::new(),
-        proto_path: "super".to_string(),
-        #[cfg(feature = "rustfmt")]
-        format: true,
-    }
-}
-
-/// Simple `.proto` compiling. Use [`configure`] instead if you need more options.
-///
-/// The include directory will be the parent folder of the specified path.
-/// The package name will be the filename without the extension.
-pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
-    let proto_path: &Path = proto.as_ref();
-
-    // directory the main .proto file resides in
-    let proto_dir = proto_path
-        .parent()
-        .expect("proto file should reside in a directory");
-
-    self::configure().compile(&[proto_path], &[proto_dir])?;
-
-    Ok(())
 }
