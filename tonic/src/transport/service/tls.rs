@@ -1,5 +1,8 @@
 use super::io::BoxedIo;
-use crate::transport::{server::Connected, Certificate, Identity};
+use crate::transport::{
+    server::{Connected, TlsStream},
+    Certificate, Identity,
+};
 #[cfg(feature = "tls-roots")]
 use rustls_native_certs;
 use std::{fmt, sync::Arc};
@@ -157,17 +160,14 @@ impl TlsAcceptor {
         })
     }
 
-    pub(crate) async fn accept<IO>(
-        &self,
-        io: IO,
-    ) -> Result<tokio_rustls::server::TlsStream<IO>, crate::Error>
+    pub(crate) fn accept<IO>(&self, io: IO) -> TlsStream<IO>
     where
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     {
         let acceptor = RustlsAcceptor::from(self.inner.clone());
-        let tls = acceptor.accept(io).await?;
+        let accept = acceptor.accept(io);
 
-        Ok(tls)
+        TlsStream::new(accept)
     }
 }
 
