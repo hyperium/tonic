@@ -1,5 +1,5 @@
 [package]
-name = "uuid"
+name = "uuid1"
 version = "0.1.0"
 authors = ["Danny Hua <danny@42layers.io>"]
 edition = "2018"
