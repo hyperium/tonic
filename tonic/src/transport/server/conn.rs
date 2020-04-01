@@ -1,9 +1,11 @@
+#[cfg(feature = "tls")]
+use super::TlsStream;
 use crate::transport::Certificate;
 use hyper::server::conn::AddrStream;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 #[cfg(feature = "tls")]
-use tokio_rustls::{rustls::Session, server::TlsStream};
+use tokio_rustls::rustls::Session;
 
 /// Trait that connected IO resources implement.
 ///
@@ -37,19 +39,24 @@ impl Connected for TcpStream {
 #[cfg(feature = "tls")]
 impl<T: Connected> Connected for TlsStream<T> {
     fn remote_addr(&self) -> Option<SocketAddr> {
-        let (inner, _) = self.get_ref();
-        inner.remote_addr()
+        if let Some((inner, _)) = self.get_ref() {
+            inner.remote_addr()
+        } else {
+            None
+        }
     }
 
     fn peer_certs(&self) -> Option<Vec<Certificate>> {
-        let (_, session) = self.get_ref();
-
-        if let Some(certs) = session.get_peer_certificates() {
-            let certs = certs
-                .into_iter()
-                .map(|c| Certificate::from_pem(c.0))
-                .collect();
-            Some(certs)
+        if let Some((_, session)) = self.get_ref() {
+            if let Some(certs) = session.get_peer_certificates() {
+                let certs = certs
+                    .into_iter()
+                    .map(|c| Certificate::from_pem(c.0))
+                    .collect();
+                Some(certs)
+            } else {
+                None
+            }
         } else {
             None
         }

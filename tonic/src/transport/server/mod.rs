@@ -14,6 +14,7 @@ pub use tls::ServerTlsConfig;
 use super::service::TlsAcceptor;
 
 use incoming::TcpIncoming;
+pub(crate) use incoming::TlsStream;
 
 use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
 use crate::{body::BoxBody, request::ConnectionInfo};
