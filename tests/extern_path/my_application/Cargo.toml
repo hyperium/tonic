@@ -12,7 +12,7 @@ license = "MIT"
 tonic = { path= "../../../tonic" }
 prost = "0.6"
 prost-types = "0.6"
-uuid = { path= "../uuid" }
+uuid1 = { path= "../uuid" }
 
 [build-dependencies]
 tonic-build = { path= "../../../tonic-build" }
