@@ -9,7 +9,7 @@ use hello_world::{greeter_client::GreeterClient, HelloReply, HelloRequest};
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T, E = StdError> = ::std::result::Result<T, E>;
 
-// The order of the fields in this struct is important. They must be ordered 
+// The order of the fields in this struct is important. They must be ordered
 // such that when `BlockingClient` is dropped the client is dropped
 // before the runtime. Not doing this will result in a deadlock when dropped.
 // Rust drops struct fields in declaration order.
