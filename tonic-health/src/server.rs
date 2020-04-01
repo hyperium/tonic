@@ -1,3 +1,5 @@
+//! Contains all healthcheck based server utilities.
+
 use crate::proto::health_server::{Health, HealthServer};
 use crate::proto::{HealthCheckRequest, HealthCheckResponse};
 use crate::ServingStatus;
@@ -46,6 +48,7 @@ impl HealthReporter {
     /// Sets the status of the service implemented by `S` to `Serving`. This notifies any watchers
     /// if there is a change in status.
     #[cfg(feature = "transport")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
     pub async fn set_serving<S>(&mut self)
     where
         S: NamedService,
@@ -58,6 +61,7 @@ impl HealthReporter {
     /// Sets the status of the service implemented by `S` to `NotServing`. This notifies any watchers
     /// if there is a change in status.
     #[cfg(feature = "transport")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
     pub async fn set_not_serving<S>(&mut self)
     where
         S: NamedService,

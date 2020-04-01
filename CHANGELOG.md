@@ -1,3 +1,34 @@
+# [0.2.0](https://github.com/hyperium/tonic/compare/v0.1.1...v0.2.0) (2020-04-01)
+
+
+### Bug Fixes
+
+* **build:** Allow non_camel_case_types on codegen structs ([224280d](https://github.com/hyperium/tonic/commit/224280dfff8944e9e553337416d23d6e5a050945)), closes [#295](https://github.com/hyperium/tonic/issues/295)
+* **build:** Don't replace extern_paths ([#261](https://github.com/hyperium/tonic/issues/261)) ([1b3d107](https://github.com/hyperium/tonic/commit/1b3d107206136312a2536d3b72748c52191d99b1))
+* **build:** Ignore non `.rs` files with rustfmt ([#284](https://github.com/hyperium/tonic/issues/284)) ([7dfa2a2](https://github.com/hyperium/tonic/commit/7dfa2a277b593e008cea53eef7163ca59a06c56a)), closes [#283](https://github.com/hyperium/tonic/issues/283)
+* **build:** Implement Debug for client struct ([6dbe88d](https://github.com/hyperium/tonic/commit/6dbe88d445e378fff48d05083c23baeb2020cb2d)), closes [#298](https://github.com/hyperium/tonic/issues/298)
+* **build:** Remove debug println! ([#287](https://github.com/hyperium/tonic/issues/287)) ([e2c2be2](https://github.com/hyperium/tonic/commit/e2c2be2f084b7c1ef4e93f6994cb9c728de0c1ed))
+* **build:** Server service uses generic body bound ([#306](https://github.com/hyperium/tonic/issues/306)) ([5758b75](https://github.com/hyperium/tonic/commit/5758b758b2d44059b0149a31542d11589999a789))
+* **health:** Set referenced version of tonic ([59c7788](https://github.com/hyperium/tonic/commit/59c77888464a0302993dbe07fed7c1848b415f8f))
+* **metadata:** Remove deprecated error description ([61e0429](https://github.com/hyperium/tonic/commit/61e0429ae810354363835c36a046b5113b3c74b4))
+* **transport:** Handle tls accepting on task ([#320](https://github.com/hyperium/tonic/issues/320)) ([04a8c0c](https://github.com/hyperium/tonic/commit/04a8c0c82a4007f48c3bf3539a3f2312746fedd1))
+
+
+### Features
+
+* **build:** Add support for custom prost config ([#318](https://github.com/hyperium/tonic/issues/318)) ([202093c](https://github.com/hyperium/tonic/commit/202093c31715b52997c6c206c758924ff5f69bc8))
+* **health:** Add tonic-health server impl ([da92dbf](https://github.com/hyperium/tonic/commit/da92dbf8aa885ea0ea05755e9432532fc980e353)), closes [#135](https://github.com/hyperium/tonic/issues/135) [#135](https://github.com/hyperium/tonic/issues/135)
+* Add Status with Details Constructor ([#308](https://github.com/hyperium/tonic/issues/308)) ([cfd59db](https://github.com/hyperium/tonic/commit/cfd59dbb342a8b7d216f4856e13d24b564c606f3))
+* **build:** Decouple codgen from `prost` ([#170](https://github.com/hyperium/tonic/issues/170)) ([f65cda1](https://github.com/hyperium/tonic/commit/f65cda1ea0a190fe07c4f8d91473baad9a6f1f77))
+* **transport:** Expose http2 keep-alive support ([#307](https://github.com/hyperium/tonic/issues/307)) ([012fa3c](https://github.com/hyperium/tonic/commit/012fa3cb4a0e010dafa28305416fab6c4278fc7b))
+
+
+### BREAKING CHANGES
+
+* Bumped `rustls` to `0.17`.
+* Removed deprecated `Error::description` implementations.
+
+
 # [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v0.1.1) (2020-01-20)
 
 
