@@ -23,6 +23,7 @@
 use std::fmt::{Display, Formatter};
 
 mod proto {
+    #![allow(unreachable_pub)]
     tonic::include_proto!("grpc.health.v1");
 }
 
