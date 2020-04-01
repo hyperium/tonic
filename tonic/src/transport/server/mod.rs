@@ -14,6 +14,8 @@ pub use tls::ServerTlsConfig;
 use super::service::TlsAcceptor;
 
 use incoming::TcpIncoming;
+
+#[cfg(feature = "tls")]
 pub(crate) use incoming::TlsStream;
 
 use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};

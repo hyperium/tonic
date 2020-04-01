@@ -7,7 +7,6 @@ use hyper::server::{
     conn::{AddrIncoming, AddrStream},
 };
 use std::{
-    io,
     net::SocketAddr,
     pin::Pin,
     task::{Context, Poll},
@@ -31,13 +30,6 @@ where
             #[cfg(feature = "tls")]
             {
                 if let Some(tls) = &server.tls {
-                    // let io = match tls.accept(stream).await {
-                    //     Ok(io) => io,
-                    //     Err(error) => {
-                    //         error!(message = "Unable to accept incoming connection.", %error);
-                    //         continue
-                    //     },
-                    // };
                     let io = tls.accept(stream);
                     yield ServerIo::new(io);
                     continue;
@@ -77,15 +69,18 @@ impl Stream for TcpIncoming {
 // tokio_rustls::server::TlsStream doesn't expose constructor methods,
 // so we have to TlsAcceptor::accept and handshake to have access to it
 // TlsStream implements AsyncRead/AsyncWrite handshaking tokio_rustls::Accept first
+#[cfg(feature = "tls")]
 pub(crate) struct TlsStream<IO> {
     state: State<IO>,
 }
 
+#[cfg(feature = "tls")]
 enum State<IO> {
     Handshaking(tokio_rustls::Accept<IO>),
     Streaming(tokio_rustls::server::TlsStream<IO>),
 }
 
+#[cfg(feature = "tls")]
 impl<IO> TlsStream<IO> {
     pub(crate) fn new(accept: tokio_rustls::Accept<IO>) -> Self {
         TlsStream {
@@ -102,6 +97,7 @@ impl<IO> TlsStream<IO> {
     }
 }
 
+#[cfg(feature = "tls")]
 impl<IO> AsyncRead for TlsStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
@@ -110,7 +106,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+    ) -> Poll<std::io::Result<usize>> {
         use std::future::Future;
 
         let pin = self.get_mut();
@@ -130,6 +126,7 @@ where
     }
 }
 
+#[cfg(feature = "tls")]
 impl<IO> AsyncWrite for TlsStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
@@ -138,7 +135,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
+    ) -> Poll<std::io::Result<usize>> {
         use std::future::Future;
 
         let pin = self.get_mut();
@@ -157,14 +154,14 @@ where
         }
     }
 
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.state {
             State::Handshaking(_) => Poll::Ready(Ok(())),
             State::Streaming(ref mut stream) => Pin::new(stream).poll_flush(cx),
         }
     }
 
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
         match self.state {
             State::Handshaking(_) => Poll::Ready(Ok(())),
             State::Streaming(ref mut stream) => Pin::new(stream).poll_shutdown(cx),
