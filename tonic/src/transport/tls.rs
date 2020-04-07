@@ -19,6 +19,27 @@ impl Certificate {
         let pem = pem.as_ref().into();
         Self { pem }
     }
+
+    /// Get a immutable reference to underlying certificate
+    pub fn get_ref(&self) -> &[u8] {
+        &self.pem.as_slice()
+    }
+
+    /// Get a mutable reference to underlying certificate
+    pub fn get_mut(&mut self) -> &mut [u8] {
+        self.pem.as_mut()
+    }
+
+    /// Consumes `self`, returning the underlying certificate
+    pub fn into_inner(self) -> Vec<u8> {
+        self.pem
+    }
+}
+
+impl AsRef<[u8]> for Certificate {
+    fn as_ref(&self) -> &[u8] {
+        self.pem.as_ref()
+    }
 }
 
 impl Identity {
