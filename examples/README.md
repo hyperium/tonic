@@ -80,6 +80,13 @@ $ cargo run --bin tls-server
 $ cargo run --bin health-server
 ```
 
+## Autoreloading Server
+
+### Server
+```bash
+systemfd --no-pid -s http::[::1]:50051 -- cargo watch -x 'run --bin autoreload-server'
+```
+
 ### Notes:
 
 If you are using the `codegen` feature, then the following dependencies are
@@ -89,3 +96,7 @@ If you are using the `codegen` feature, then the following dependencies are
 * [prost](https://crates.io/crates/prost)
 * [prost-derive](https://crates.io/crates/prost-derive)
 
+The autoload example requires the following crates installed globally:
+
+* [systemfd](https://crates.io/crates/systemfd)
+* [cargo-watch](https://crates.io/crates/cargo-watch)

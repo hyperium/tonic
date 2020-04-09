@@ -106,6 +106,10 @@ path = "src/hyper_warp/server.rs"
 name = "health-server"
 path = "src/health/server.rs"
 
+[[bin]]
+name = "autoreload-server"
+path = "src/autoreload/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
@@ -132,6 +136,7 @@ http-body = "0.3"
 pin-project = "0.4"
 # Health example
 tonic-health = { path = "../tonic-health" }
+listenfd = "0.3"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
