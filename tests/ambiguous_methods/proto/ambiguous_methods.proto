@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package ambiguous_methods;
+
+message DropReq {}
+message DropResp {}
+
+// The generated stubs can confuse drop and clone
+// with the same method names from Arc,
+// resulting in a compile error.
+service HelloService {
+    rpc Drop (DropReq) returns (DropResp);
+    rpc Clone (DropReq) returns (DropResp);
+}
+
+service HelloStreamingService {
+    rpc Drop (DropReq) returns (stream DropResp);
+    rpc Clone (DropReq) returns (stream DropResp);
+}
