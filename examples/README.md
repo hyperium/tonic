@@ -96,4 +96,7 @@ If you are using the `codegen` feature, then the following dependencies are
 * [prost](https://crates.io/crates/prost)
 * [prost-derive](https://crates.io/crates/prost-derive)
 
-The autoload example requires [systemfd](https://crates.io/crates/systemfd)
+The autoload example requires the following crates installed globally:
+
+* [systemfd](https://crates.io/crates/systemfd)
+* [cargo-watch](https://crates.io/crates/cargo-watch)
