@@ -32,8 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("GreeterServer listening on {}", addr);
 
-    let server = Server::builder()
-        .add_service(GreeterServer::new(greeter));
+    let server = Server::builder().add_service(GreeterServer::new(greeter));
 
     match listenfd::ListenFd::from_env().take_tcp_listener(0)? {
         Some(listener) => {
