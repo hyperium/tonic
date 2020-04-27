@@ -1,3 +1,4 @@
+use super::super::service;
 use super::connection::Connection;
 use crate::transport::Endpoint;
 use std::{
@@ -52,8 +53,15 @@ impl Discover for ServiceList {
                 let mut http = hyper::client::connect::HttpConnector::new();
                 http.set_nodelay(endpoint.tcp_nodelay);
                 http.set_keepalive(endpoint.tcp_keepalive);
+                http.enforce_http(false);
 
-                let fut = Connection::new(http, endpoint);
+                #[cfg(feature = "tls")]
+                let connector = service::connector(http, endpoint.tls.clone());
+
+                #[cfg(not(feature = "tls"))]
+                let connector = service::connector(http);
+
+                let fut = Connection::new(connector, endpoint);
                 self.connecting = Some(Box::pin(fut));
             } else {
                 return Poll::Pending;
