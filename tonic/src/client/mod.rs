@@ -8,6 +8,7 @@
 //! for the gRPC service. Thusly, they are a bit cumbersome to use by hand.
 //!
 //! ## Concurrent usage
+//!
 //! Upon using the your generated client, you will discover all the functions
 //! corresponding to your rpc methods take `&mut self`, making concurrent
 //! usage of the client difficult. The answer is simply to clone the client,
