@@ -6,10 +6,11 @@ mod endpoint;
 mod tls;
 
 pub use endpoint::Endpoint;
+pub use endpoint::EndpointManager;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, ServiceList};
+use super::service::{Connection, ServiceList,DynamicServiceList};
 use crate::{body::BoxBody, client::GrpcService};
 use bytes::Bytes;
 use http::{
@@ -116,6 +117,12 @@ impl Channel {
 
         Self::balance(discover, buffer_size)
     }
+
+    pub fn balance_with_manager(manager: Box<dyn EndpointManager>) -> Self {
+	let list = DynamicServiceList::new(manager);	
+        Self::balance(list, DEFAULT_BUFFER_SIZE)
+    }
+
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
     where
