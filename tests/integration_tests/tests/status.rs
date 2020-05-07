@@ -15,7 +15,7 @@ async fn status_with_details() {
             Err(Status::with_details(
                 Code::ResourceExhausted,
                 "Too many requests",
-                Bytes::from_static(b"hello"),
+                Bytes::from_static(&[1]),
             ))
         }
     }
@@ -44,7 +44,7 @@ async fn status_with_details() {
         .unwrap_err();
 
     assert_eq!(err.message(), "Too many requests");
-    assert_eq!(err.details(), b"hello");
+    assert_eq!(err.details(), &[1]);
 
     tx.send(()).unwrap();
 

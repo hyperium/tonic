@@ -334,9 +334,14 @@ impl Status {
                         .map(|cow| cow.to_string())
                 })
                 .unwrap_or_else(|| Ok(String::new()));
+
             let details = header_map
                 .get(GRPC_STATUS_DETAILS_HEADER)
-                .map(|h| Bytes::copy_from_slice(h.as_bytes()))
+                .map(|h| {
+                    base64::decode(h.as_bytes())
+                        .expect("Invalid status header, expected base64 encoded value")
+                })
+                .map(Bytes::from)
                 .unwrap_or_else(Bytes::new);
             match error_message {
                 Ok(message) => Status {
@@ -404,10 +409,12 @@ impl Status {
 
     /// Create a new `Status` with the associated code, message, and binary details field.
     pub fn with_details(code: Code, message: impl Into<String>, details: Bytes) -> Status {
+        let details = base64::encode_config(&details[..], base64::STANDARD_NO_PAD);
+
         Status {
             code,
             message: message.into(),
-            details: details,
+            details: details.into(),
         }
     }
 }
