@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package test;
+
+service Test {
+  rpc UnaryCall(Input) returns (Output);
+}
+
+message Input {}
+message Output {}

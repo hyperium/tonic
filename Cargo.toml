@@ -14,5 +14,6 @@ members = [
     "tests/wellknown",
     "tests/extern_path/uuid",
     "tests/ambiguous_methods",
-    "tests/extern_path/my_application"
+    "tests/extern_path/my_application",
+    "tests/integration_tests"
 ]
