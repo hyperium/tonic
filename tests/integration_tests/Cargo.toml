@@ -15,7 +15,7 @@ futures-util = "0.3"
 bytes = "0.5"
 
 [dev-dependencies]
-tokio = { version = "0.2", features = ["full"] }
+tokio = { version = "0.2", features = ["macros", "rt-core", "tcp"] }
 
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }
