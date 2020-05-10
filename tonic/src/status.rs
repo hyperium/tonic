@@ -481,6 +481,10 @@ impl fmt::Debug for Status {
             builder.field("details", &self.details);
         }
 
+        if !self.metadata.is_empty() {
+            builder.field("metadata", &self.metadata);
+        }
+
         builder.finish()
     }
 }
@@ -517,9 +521,11 @@ impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "grpc-status: {:?}, grpc-message: {:?}",
+            "grpc-status: {:?}, grpc-message: {:?}, grpc-status-details-bin: {:?}, metadata: {:?}",
             self.code(),
-            self.message()
+            self.message(),
+            base64::encode_config(self.details(), base64::STANDARD_NO_PAD),
+            self.metadata(),
         )
     }
 }
