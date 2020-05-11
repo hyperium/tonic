@@ -27,7 +27,6 @@ use std::{
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::stream::Stream;
 
-
 use tower::{
     buffer::{self, Buffer},
     discover::{Change, Discover},
@@ -107,16 +106,15 @@ impl Channel {
     ///
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
-    pub fn balance_list(list: impl Iterator<Item = Endpoint> + Send+'static) -> Self {
-	let list = list.map(|endpoint| Change::Insert(endpoint.uri.clone(),endpoint));
+    pub fn balance_list(list: impl Iterator<Item = Endpoint> + Send + 'static) -> Self {
+        let list = list.map(|endpoint| Change::Insert(endpoint.uri.clone(), endpoint));
 
         Self::balance_channel(tokio::stream::iter(list))
     }
 
-
     /// Balance a list of [`Endpoint`]'s.
     ///
-    /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints. 
+    /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
     pub fn balance_channel<K>(
         changes: impl Stream<Item = Change<K, Endpoint>> + Unpin + Send + 'static,
     ) -> Self

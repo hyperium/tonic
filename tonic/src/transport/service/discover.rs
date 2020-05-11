@@ -10,7 +10,6 @@ use std::{
 use tokio::stream::Stream;
 use tower::discover::{Change, Discover};
 
-
 pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone + Unpin> {
     changes: Box<dyn Stream<Item = Change<K, Endpoint>> + Unpin + Send + 'static>,
     connecting: Option<(
@@ -18,8 +17,6 @@ pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone + Unpin> {
         Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>,
     )>,
 }
-
-
 
 impl<K: Hash + Eq + Clone + Unpin> DynamicServiceStream<K> {
     pub(crate) fn new(
@@ -52,32 +49,30 @@ impl<K: Hash + Eq + Clone + Unpin> Discover for DynamicServiceStream<K> {
 
             let c = &mut self.changes;
             match Pin::new(&mut *c).poll_next(cx) {
-                Poll::Pending => {
-		    return Poll::Pending
-		},
+                Poll::Pending => return Poll::Pending,
                 Poll::Ready(None) => {
                     // let transport_type = crate::transport::error::Kind::Transport;
                     // let err = Box::new(crate::transport::Error::new(transport_type));
-		    // return Poll::Ready(Err(err));
-		    return Poll::Pending
+                    // return Poll::Ready(Err(err));
+                    return Poll::Pending;
                 }
                 Poll::Ready(Some(change)) => match change {
                     Change::Insert(k, endpoint) => {
                         let mut http = hyper::client::connect::HttpConnector::new();
                         http.set_nodelay(endpoint.tcp_nodelay);
                         http.set_keepalive(endpoint.tcp_keepalive);
-			http.enforce_http(false);
-			#[cfg(feature = "tls")]
-			let connector = service::connector(http, endpoint.tls.clone());
-			
-			#[cfg(not(feature = "tls"))]
-			let connector = service::connector(http);
-			let fut = Connection::new(connector, endpoint);
+                        http.enforce_http(false);
+                        #[cfg(feature = "tls")]
+                        let connector = service::connector(http, endpoint.tls.clone());
+
+                        #[cfg(not(feature = "tls"))]
+                        let connector = service::connector(http);
+                        let fut = Connection::new(connector, endpoint);
                         self.connecting = Some((k, Box::pin(fut)));
                         continue;
                     }
                     Change::Remove(k) => return Poll::Ready(Ok(Change::Remove(k))),
-                }
+                },
             }
         }
     }
