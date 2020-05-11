@@ -1,3 +1,18 @@
+# [0.2.1](https://github.com/hyperium/tonic/compare/v0.2.0...v0.2.1) (2020-05-07)
+
+
+### Bug Fixes
+
+* base64 encode details header ([#345](https://github.com/hyperium/tonic/issues/345)) ([e683ffe](https://github.com/hyperium/tonic/commit/e683ffef1fcbe0ace9cc696232489f5f6600e83f))
+* **build:** Remove ambiguity in service method call ([#327](https://github.com/hyperium/tonic/issues/327)) ([5d56daa](https://github.com/hyperium/tonic/commit/5d56daa721cfb18edc74cf50db4270e2c8461fc9))
+* **transport:** Apply tls-connector for discovery when applicable ([#334](https://github.com/hyperium/tonic/issues/334)) ([#338](https://github.com/hyperium/tonic/issues/338)) ([99fbe22](https://github.com/hyperium/tonic/commit/99fbe22e7c1340d6be9ee5d3ae9738850881af61))
+
+
+### Features
+
+* **transport:** Add AsRef impl for Certificate ([#326](https://github.com/hyperium/tonic/issues/326)) ([d2ad8df](https://github.com/hyperium/tonic/commit/d2ad8df629a349cc151a0a4ede96f04356f73839))
+
+
 # [0.2.0](https://github.com/hyperium/tonic/compare/v0.1.1...v0.2.0) (2020-04-01)
 
 

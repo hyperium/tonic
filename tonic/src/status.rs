@@ -1,3 +1,4 @@
+use crate::metadata::MetadataMap;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
@@ -39,6 +40,10 @@ pub struct Status {
     message: String,
     /// Binary opaque details, found in the `grpc-status-details-bin` header.
     details: Bytes,
+    /// Custom metadata, found in the user-defined headers.
+    /// If the metadata contains any headers with names reserved either by the gRPC spec
+    /// or by `Status` fields above, they will be ignored.
+    metadata: MetadataMap,
 }
 
 /// gRPC status codes used by [`Status`].
@@ -113,6 +118,7 @@ impl Status {
             code,
             message: message.into(),
             details: Bytes::new(),
+            metadata: MetadataMap::new(),
         }
     }
 
@@ -266,6 +272,7 @@ impl Status {
                     code: status.code,
                     message: status.message.clone(),
                     details: status.details.clone(),
+                    metadata: status.metadata.clone(),
                 });
             }
 
@@ -334,15 +341,27 @@ impl Status {
                         .map(|cow| cow.to_string())
                 })
                 .unwrap_or_else(|| Ok(String::new()));
+
             let details = header_map
                 .get(GRPC_STATUS_DETAILS_HEADER)
-                .map(|h| Bytes::copy_from_slice(h.as_bytes()))
+                .map(|h| {
+                    base64::decode(h.as_bytes())
+                        .expect("Invalid status header, expected base64 encoded value")
+                })
+                .map(Bytes::from)
                 .unwrap_or_else(Bytes::new);
+
+            let mut other_headers = header_map.clone();
+            other_headers.remove(GRPC_STATUS_HEADER_CODE);
+            other_headers.remove(GRPC_STATUS_MESSAGE_HEADER);
+            other_headers.remove(GRPC_STATUS_DETAILS_HEADER);
+
             match error_message {
                 Ok(message) => Status {
                     code,
                     message,
                     details,
+                    metadata: MetadataMap::from_headers(other_headers),
                 },
                 Err(err) => {
                     warn!("Error deserializing status message header: {}", err);
@@ -350,6 +369,7 @@ impl Status {
                         code: Code::Unknown,
                         message: format!("Error deserializing status message header: {}", err),
                         details,
+                        metadata: MetadataMap::from_headers(other_headers),
                     }
                 }
             }
@@ -371,13 +391,25 @@ impl Status {
         &self.details
     }
 
+    /// Get a reference to the custom metadata.
+    pub fn metadata(&self) -> &MetadataMap {
+        &self.metadata
+    }
+
+    /// Get a mutable reference to the custom metadata.
+    pub fn metadata_mut(&mut self) -> &mut MetadataMap {
+        &mut self.metadata
+    }
+
     pub(crate) fn to_header_map(&self) -> Result<HeaderMap, Self> {
-        let mut header_map = HeaderMap::with_capacity(3);
+        let mut header_map = HeaderMap::with_capacity(3 + self.metadata.len());
         self.add_header(&mut header_map)?;
         Ok(header_map)
     }
 
     pub(crate) fn add_header(&self, header_map: &mut HeaderMap) -> Result<(), Self> {
+        header_map.extend(self.metadata.clone().into_sanitized_headers());
+
         header_map.insert(GRPC_STATUS_HEADER_CODE, self.code.to_header_value());
 
         if !self.message.is_empty() {
@@ -404,10 +436,32 @@ impl Status {
 
     /// Create a new `Status` with the associated code, message, and binary details field.
     pub fn with_details(code: Code, message: impl Into<String>, details: Bytes) -> Status {
+        Self::with_details_and_metadata(code, message, details, MetadataMap::new())
+    }
+
+    /// Create a new `Status` with the associated code, message, and custom metadata
+    pub fn with_metadata(code: Code, message: impl Into<String>, metadata: MetadataMap) -> Status {
+        Self::with_details_and_metadata(code, message, Bytes::new(), metadata)
+    }
+
+    /// Create a new `Status` with the associated code, message, binary details field and custom metadata
+    pub fn with_details_and_metadata(
+        code: Code,
+        message: impl Into<String>,
+        details: Bytes,
+        metadata: MetadataMap,
+    ) -> Status {
+        let details = if details.is_empty() {
+            details
+        } else {
+            base64::encode_config(&details[..], base64::STANDARD_NO_PAD).into()
+        };
+
         Status {
             code,
             message: message.into(),
             details: details,
+            metadata: metadata,
         }
     }
 }
@@ -425,6 +479,10 @@ impl fmt::Debug for Status {
 
         if !self.details.is_empty() {
             builder.field("details", &self.details);
+        }
+
+        if !self.metadata.is_empty() {
+            builder.field("metadata", &self.metadata);
         }
 
         builder.finish()
@@ -463,9 +521,11 @@ impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "grpc-status: {:?}, grpc-message: {:?}",
+            "status: {:?}, message: {:?}, details: {:?}, metadata: {:?}",
             self.code(),
-            self.message()
+            self.message(),
+            self.details(),
+            self.metadata(),
         )
     }
 }

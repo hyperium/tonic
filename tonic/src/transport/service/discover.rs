@@ -1,3 +1,4 @@
+use super::super::service;
 use super::connection::Connection;
 use crate::transport::Endpoint;
 use std::hash::Hash;
@@ -50,7 +51,6 @@ impl<K: Hash + Eq + Clone + Unpin> Discover for DynamicServiceStream<K> {
             };
 
             let c = &mut self.changes;
-
             match Pin::new(&mut *c).poll_next(cx) {
                 Poll::Pending => {
 		    return Poll::Pending
@@ -66,12 +66,18 @@ impl<K: Hash + Eq + Clone + Unpin> Discover for DynamicServiceStream<K> {
                         let mut http = hyper::client::connect::HttpConnector::new();
                         http.set_nodelay(endpoint.tcp_nodelay);
                         http.set_keepalive(endpoint.tcp_keepalive);
-                        let fut = Connection::new(http, endpoint);
+			http.enforce_http(false);
+			#[cfg(feature = "tls")]
+			let connector = service::connector(http, endpoint.tls.clone());
+			
+			#[cfg(not(feature = "tls"))]
+			let connector = service::connector(http);
+			let fut = Connection::new(connector, endpoint);
                         self.connecting = Some((k, Box::pin(fut)));
                         continue;
                     }
                     Change::Remove(k) => return Poll::Ready(Ok(Change::Remove(k))),
-                },
+                }
             }
         }
     }

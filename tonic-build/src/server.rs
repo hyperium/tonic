@@ -31,7 +31,6 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
 
             #service_doc
             #[derive(Debug)]
-            #[doc(hidden)]
             pub struct #server_service<T: #server_trait> {
                 inner: _Inner<T>,
             }
