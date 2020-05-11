@@ -9,7 +9,7 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, DynamicServiceStream, ServiceList};
+use super::service::{Connection, DynamicServiceStream};
 use crate::{body::BoxBody, client::GrpcService};
 use bytes::Bytes;
 use http::{
@@ -26,6 +26,8 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::stream::Stream;
+
+
 use tower::{
     buffer::{self, Buffer},
     discover::{Change, Discover},
@@ -105,20 +107,16 @@ impl Channel {
     ///
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
-    pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
-        let list = list.collect::<Vec<_>>();
+    pub fn balance_list(list: impl Iterator<Item = Endpoint> + Send+'static) -> Self {
+	let list = list.map(|endpoint| Change::Insert(endpoint.uri.clone(),endpoint));
 
-        let buffer_size = list
-            .iter()
-            .next()
-            .and_then(|e| e.buffer_size)
-            .unwrap_or(DEFAULT_BUFFER_SIZE);
-
-        let discover = ServiceList::new(list);
-
-        Self::balance(discover, buffer_size)
+        Self::balance_channel(tokio::stream::iter(list))
     }
 
+
+    /// Balance a list of [`Endpoint`]'s.
+    ///
+    /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints. 
     pub fn balance_channel<K>(
         changes: impl Stream<Item = Change<K, Endpoint>> + Unpin + Send + 'static,
     ) -> Self
