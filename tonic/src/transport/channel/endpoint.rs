@@ -14,11 +14,6 @@ use std::{
 };
 use tower_make::MakeConnection;
 
-pub trait EndpointManager:Send+'static{
-    fn to_add(&self)->Option<(usize, Endpoint)>;
-    fn to_remove(&self)->Option<usize>;
-}
-
 /// Channel builder.
 ///
 /// This struct is used to build and configure HTTP/2 channels.

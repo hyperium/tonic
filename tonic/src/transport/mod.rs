@@ -94,7 +94,7 @@ mod service;
 mod tls;
 
 #[doc(inline)]
-pub use self::channel::{Channel, Endpoint,EndpointManager};
+pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
 pub use self::server::{NamedService, Server};

@@ -6,11 +6,10 @@ mod endpoint;
 mod tls;
 
 pub use endpoint::Endpoint;
-pub use endpoint::EndpointManager;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, ServiceList,DynamicServiceList};
+use super::service::{Connection, DynamicServiceStream, ServiceList};
 use crate::{body::BoxBody, client::GrpcService};
 use bytes::Bytes;
 use http::{
@@ -18,6 +17,7 @@ use http::{
     Request, Response,
 };
 use hyper::client::connect::Connection as HyperConnection;
+use std::hash::Hash;
 use std::{
     fmt,
     future::Future,
@@ -25,9 +25,10 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::stream::Stream;
 use tower::{
     buffer::{self, Buffer},
-    discover::Discover,
+    discover::{Change, Discover},
     util::{BoxService, Either},
     Service,
 };
@@ -118,11 +119,15 @@ impl Channel {
         Self::balance(discover, buffer_size)
     }
 
-    pub fn balance_with_manager(manager: Box<dyn EndpointManager>) -> Self {
-	let list = DynamicServiceList::new(manager);	
+    pub fn balance_channel<K>(
+        changes: impl Stream<Item = Change<K, Endpoint>> + Unpin + Send + 'static,
+    ) -> Self
+    where
+        K: Hash + Eq + Send + Clone + Unpin + 'static,
+    {
+        let list = DynamicServiceStream::new(changes);
         Self::balance(list, DEFAULT_BUFFER_SIZE)
     }
-
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
     where
