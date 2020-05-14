@@ -105,26 +105,27 @@ impl Channel {
     ///
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
-    pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {       
-
+    pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
         let (channel, mut tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
-	list.for_each(|endpoint|{
-	    let _res = tx.try_send(Change::Insert(endpoint.uri.clone(),endpoint));
-	});
-	
-	channel
+        list.for_each(|endpoint| {
+            let _res = tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint));
+        });
+
+        channel
     }
 
     /// Balance a list of [`Endpoint`]'s.
     ///
     /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
-    pub fn balance_channel<K>(capacity:usize) -> (Self, tokio::sync::mpsc::Sender<Change<K, Endpoint>>)
+    pub fn balance_channel<K>(
+        capacity: usize,
+    ) -> (Self, tokio::sync::mpsc::Sender<Change<K, Endpoint>>)
     where
         K: Hash + Eq + Send + Clone + Unpin + 'static,
     {
-	let (tx,rx) = tokio::sync::mpsc::channel(capacity);
+        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
         let list = DynamicServiceStream::new(rx);
-        (Self::balance(list, DEFAULT_BUFFER_SIZE),tx)
+        (Self::balance(list, DEFAULT_BUFFER_SIZE), tx)
     }
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>

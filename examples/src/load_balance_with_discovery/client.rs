@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let e1 = Endpoint::from_static("http://[::1]:50051").timeout(std::time::Duration::from_secs(1));
     let e2 = Endpoint::from_static("http://[::1]:50052").timeout(std::time::Duration::from_secs(1));
 
-    let (channel,mut rx) = Channel::balance_channel(10);
+    let (channel, mut rx) = Channel::balance_channel(10);
     let mut client = EchoClient::new(channel);
 
     let done = Arc::new(AtomicBool::new(false));

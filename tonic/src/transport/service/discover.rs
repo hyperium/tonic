@@ -19,9 +19,7 @@ pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone + Unpin> {
 }
 
 impl<K: Hash + Eq + Clone + Unpin> DynamicServiceStream<K> {
-    pub(crate) fn new(
-        changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>,
-    ) -> Self {
+    pub(crate) fn new(changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>) -> Self {
         Self {
             changes,
             connecting: None,
