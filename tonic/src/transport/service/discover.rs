@@ -10,7 +10,7 @@ use std::{
 use tokio::stream::Stream;
 use tower::discover::{Change, Discover};
 
-pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone + Unpin> {
+pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {
     changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>,
     connecting: Option<(
         K,
@@ -18,7 +18,7 @@ pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone + Unpin> {
     )>,
 }
 
-impl<K: Hash + Eq + Clone + Unpin> DynamicServiceStream<K> {
+impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
     pub(crate) fn new(changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>) -> Self {
         Self {
             changes,
@@ -27,7 +27,7 @@ impl<K: Hash + Eq + Clone + Unpin> DynamicServiceStream<K> {
     }
 }
 
-impl<K: Hash + Eq + Clone + Unpin> Discover for DynamicServiceStream<K> {
+impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
     type Key = K;
     type Service = Connection;
     type Error = crate::Error;
@@ -72,3 +72,5 @@ impl<K: Hash + Eq + Clone + Unpin> Discover for DynamicServiceStream<K> {
         }
     }
 }
+
+impl<K:Hash + Eq + Clone> Unpin for DynamicServiceStream<K> {}

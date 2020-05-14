@@ -121,7 +121,7 @@ impl Channel {
         capacity: usize,
     ) -> (Self, tokio::sync::mpsc::Sender<Change<K, Endpoint>>)
     where
-        K: Hash + Eq + Send + Clone + Unpin + 'static,
+        K: Hash + Eq + Send + Clone + 'static,
     {
         let (tx, rx) = tokio::sync::mpsc::channel(capacity);
         let list = DynamicServiceStream::new(rx);
