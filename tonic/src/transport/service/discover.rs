@@ -73,4 +73,4 @@ impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
     }
 }
 
-impl<K:Hash + Eq + Clone> Unpin for DynamicServiceStream<K> {}
+impl<K: Hash + Eq + Clone> Unpin for DynamicServiceStream<K> {}
