@@ -25,7 +25,6 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::stream::Stream;
 
 use tower::{
     buffer::{self, Buffer},
@@ -106,23 +105,26 @@ impl Channel {
     ///
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
-    pub fn balance_list(list: impl Iterator<Item = Endpoint> + Send + 'static) -> Self {
-        let list = list.map(|endpoint| Change::Insert(endpoint.uri.clone(), endpoint));
+    pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {       
 
-        Self::balance_channel(tokio::stream::iter(list))
+        let (channel, mut tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
+	list.for_each(|endpoint|{
+	    let _res = tx.try_send(Change::Insert(endpoint.uri.clone(),endpoint));
+	});
+	
+	channel
     }
 
     /// Balance a list of [`Endpoint`]'s.
     ///
     /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
-    pub fn balance_channel<K>(
-        changes: impl Stream<Item = Change<K, Endpoint>> + Unpin + Send + 'static,
-    ) -> Self
+    pub fn balance_channel<K>(capacity:usize) -> (Self, tokio::sync::mpsc::Sender<Change<K, Endpoint>>)
     where
         K: Hash + Eq + Send + Clone + Unpin + 'static,
     {
-        let list = DynamicServiceStream::new(changes);
-        Self::balance(list, DEFAULT_BUFFER_SIZE)
+	let (tx,rx) = tokio::sync::mpsc::channel(capacity);
+        let list = DynamicServiceStream::new(rx);
+        (Self::balance(list, DEFAULT_BUFFER_SIZE),tx)
     }
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>

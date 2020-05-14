@@ -11,7 +11,7 @@ use tokio::stream::Stream;
 use tower::discover::{Change, Discover};
 
 pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone + Unpin> {
-    changes: Box<dyn Stream<Item = Change<K, Endpoint>> + Unpin + Send + 'static>,
+    changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>,
     connecting: Option<(
         K,
         Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>,
@@ -20,10 +20,10 @@ pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone + Unpin> {
 
 impl<K: Hash + Eq + Clone + Unpin> DynamicServiceStream<K> {
     pub(crate) fn new(
-        changes: impl Stream<Item = Change<K, Endpoint>> + Unpin + Send + 'static,
+        changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>,
     ) -> Self {
         Self {
-            changes: Box::new(changes),
+            changes,
             connecting: None,
         }
     }
@@ -51,9 +51,6 @@ impl<K: Hash + Eq + Clone + Unpin> Discover for DynamicServiceStream<K> {
             match Pin::new(&mut *c).poll_next(cx) {
                 Poll::Pending => return Poll::Pending,
                 Poll::Ready(None) => {
-                    // let transport_type = crate::transport::error::Kind::Transport;
-                    // let err = Box::new(crate::transport::Error::new(transport_type));
-                    // return Poll::Ready(Err(err));
                     return Poll::Pending;
                 }
                 Poll::Ready(Some(change)) => match change {
