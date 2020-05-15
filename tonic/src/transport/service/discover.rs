@@ -1,17 +1,19 @@
 use super::super::service;
 use super::connection::Connection;
 use crate::transport::Endpoint;
-use std::hash::Hash;
+
 use std::{
     future::Future,
+    hash::Hash,
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::stream::Stream;
+use tokio::{stream::Stream, sync::mpsc::Receiver};
+
 use tower::discover::{Change, Discover};
 
 pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {
-    changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>,
+    changes: Receiver<Change<K, Endpoint>>,
     connecting: Option<(
         K,
         Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>,
@@ -19,7 +21,7 @@ pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {
 }
 
 impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
-    pub(crate) fn new(changes: tokio::sync::mpsc::Receiver<Change<K, Endpoint>>) -> Self {
+    pub(crate) fn new(changes: Receiver<Change<K, Endpoint>>) -> Self {
         Self {
             changes,
             connecting: None,

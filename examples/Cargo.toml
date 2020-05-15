@@ -43,12 +43,12 @@ name = "load-balance-server"
 path = "src/load_balance/server.rs"
 
 [[bin]]
-name = "load-balance-client-discovery"
-path = "src/load_balance_with_discovery/client.rs"
+name = "dynamic-load-balance-client"
+path = "src/dynamic_load_balance/client.rs"
 
 [[bin]]
-name = "load-balance-server-discovery"
-path = "src/load_balance_with_discovery/server.rs"
+name = "dynamic-load-balance-server"
+path = "src/dynamic_load_balance/server.rs"
 
 [[bin]]
 name = "tls-client"

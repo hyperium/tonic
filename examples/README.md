@@ -44,7 +44,7 @@ $ cargo run --bin authentication-client
 $ cargo run --bin authentication-server
 ```
 
-## Load balance
+## Load Balance
 
 ### Client
 
@@ -56,6 +56,20 @@ $ cargo run --bin load-balance-client
 
 ```bash
 $ cargo run --bin load-balance-server
+```
+
+## Dyanmic Load Balance
+
+### Client
+
+```bash
+$ cargo run --bin dynamic-load-balance-client
+```
+
+### Server
+
+```bash
+$ cargo run --bin dynamic-load-balance-server
 ```
 
 ## TLS (rustls)

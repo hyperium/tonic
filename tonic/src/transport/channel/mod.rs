@@ -17,14 +17,17 @@ use http::{
     Request, Response,
 };
 use hyper::client::connect::Connection as HyperConnection;
-use std::hash::Hash;
 use std::{
     fmt,
     future::Future,
+    hash::Hash,
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::mpsc::{channel, Sender},
+};
 
 use tower::{
     buffer::{self, Buffer},
@@ -108,7 +111,8 @@ impl Channel {
     pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
         let (channel, mut tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
         list.for_each(|endpoint| {
-            let _res = tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint));
+            tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint))
+                .unwrap();
         });
 
         channel
@@ -117,13 +121,11 @@ impl Channel {
     /// Balance a list of [`Endpoint`]'s.
     ///
     /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
-    pub fn balance_channel<K>(
-        capacity: usize,
-    ) -> (Self, tokio::sync::mpsc::Sender<Change<K, Endpoint>>)
+    pub fn balance_channel<K>(capacity: usize) -> (Self, Sender<Change<K, Endpoint>>)
     where
         K: Hash + Eq + Send + Clone + 'static,
     {
-        let (tx, rx) = tokio::sync::mpsc::channel(capacity);
+        let (tx, rx) = channel(capacity);
         let list = DynamicServiceStream::new(rx);
         (Self::balance(list, DEFAULT_BUFFER_SIZE), tx)
     }
