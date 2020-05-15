@@ -43,6 +43,14 @@ name = "load-balance-server"
 path = "src/load_balance/server.rs"
 
 [[bin]]
+name = "dynamic-load-balance-client"
+path = "src/dynamic_load_balance/client.rs"
+
+[[bin]]
+name = "dynamic-load-balance-server"
+path = "src/dynamic_load_balance/server.rs"
+
+[[bin]]
 name = "tls-client"
 path = "src/tls/client.rs"
 
@@ -122,8 +130,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.7"
 # Tracing
-tracing = "0.1.14"
-tracing-subscriber = "0.2"
+tracing = "0.1.16"
+tracing-subscriber = { version = "0.2", features = ["tracing-log"] }
 tracing-futures = "0.2"
 # Required for wellknown types
 prost-types = "0.6"

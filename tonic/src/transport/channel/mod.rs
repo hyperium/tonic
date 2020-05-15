@@ -9,7 +9,7 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, ServiceList};
+use super::service::{Connection, DynamicServiceStream};
 use crate::{body::BoxBody, client::GrpcService};
 use bytes::Bytes;
 use http::{
@@ -20,13 +20,18 @@ use hyper::client::connect::Connection as HyperConnection;
 use std::{
     fmt,
     future::Future,
+    hash::Hash,
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    sync::mpsc::{channel, Sender},
+};
+
 use tower::{
     buffer::{self, Buffer},
-    discover::Discover,
+    discover::{Change, Discover},
     util::{BoxService, Either},
     Service,
 };
@@ -104,17 +109,25 @@ impl Channel {
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
     pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
-        let list = list.collect::<Vec<_>>();
+        let (channel, mut tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
+        list.for_each(|endpoint| {
+            tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint))
+                .unwrap();
+        });
 
-        let buffer_size = list
-            .iter()
-            .next()
-            .and_then(|e| e.buffer_size)
-            .unwrap_or(DEFAULT_BUFFER_SIZE);
+        channel
+    }
 
-        let discover = ServiceList::new(list);
-
-        Self::balance(discover, buffer_size)
+    /// Balance a list of [`Endpoint`]'s.
+    ///
+    /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
+    pub fn balance_channel<K>(capacity: usize) -> (Self, Sender<Change<K, Endpoint>>)
+    where
+        K: Hash + Eq + Send + Clone + 'static,
+    {
+        let (tx, rx) = channel(capacity);
+        let list = DynamicServiceStream::new(rx);
+        (Self::balance(list, DEFAULT_BUFFER_SIZE), tx)
     }
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
