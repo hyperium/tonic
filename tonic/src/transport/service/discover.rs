@@ -1,34 +1,36 @@
 use super::super::service;
 use super::connection::Connection;
 use crate::transport::Endpoint;
+
 use std::{
-    collections::VecDeque,
-    fmt,
     future::Future,
+    hash::Hash,
     pin::Pin,
     task::{Context, Poll},
 };
+use tokio::{stream::Stream, sync::mpsc::Receiver};
+
 use tower::discover::{Change, Discover};
 
-pub(crate) struct ServiceList {
-    list: VecDeque<Endpoint>,
-    connecting:
-        Option<Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>>,
-    i: usize,
+pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {
+    changes: Receiver<Change<K, Endpoint>>,
+    connecting: Option<(
+        K,
+        Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>,
+    )>,
 }
 
-impl ServiceList {
-    pub(crate) fn new(list: Vec<Endpoint>) -> Self {
+impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
+    pub(crate) fn new(changes: Receiver<Change<K, Endpoint>>) -> Self {
         Self {
-            list: list.into(),
+            changes,
             connecting: None,
-            i: 0,
         }
     }
 }
 
-impl Discover for ServiceList {
-    type Key = usize;
+impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
+    type Key = K;
     type Service = Connection;
     type Error = crate::Error;
 
@@ -37,43 +39,40 @@ impl Discover for ServiceList {
         cx: &mut Context<'_>,
     ) -> Poll<Result<Change<Self::Key, Self::Service>, Self::Error>> {
         loop {
-            if let Some(connecting) = &mut self.connecting {
+            if let Some((key, connecting)) = &mut self.connecting {
                 let svc = futures_core::ready!(Pin::new(connecting).poll(cx))?;
+                let key = key.to_owned();
                 self.connecting = None;
-
-                let i = self.i;
-                self.i += 1;
-
-                let change = Ok(Change::Insert(i, svc));
-
+                let change = Ok(Change::Insert(key, svc));
                 return Poll::Ready(change);
-            }
+            };
 
-            if let Some(endpoint) = self.list.pop_front() {
-                let mut http = hyper::client::connect::HttpConnector::new();
-                http.set_nodelay(endpoint.tcp_nodelay);
-                http.set_keepalive(endpoint.tcp_keepalive);
-                http.enforce_http(false);
+            let c = &mut self.changes;
+            match Pin::new(&mut *c).poll_next(cx) {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => {
+                    return Poll::Pending;
+                }
+                Poll::Ready(Some(change)) => match change {
+                    Change::Insert(k, endpoint) => {
+                        let mut http = hyper::client::connect::HttpConnector::new();
+                        http.set_nodelay(endpoint.tcp_nodelay);
+                        http.set_keepalive(endpoint.tcp_keepalive);
+                        http.enforce_http(false);
+                        #[cfg(feature = "tls")]
+                        let connector = service::connector(http, endpoint.tls.clone());
 
-                #[cfg(feature = "tls")]
-                let connector = service::connector(http, endpoint.tls.clone());
-
-                #[cfg(not(feature = "tls"))]
-                let connector = service::connector(http);
-
-                let fut = Connection::new(connector, endpoint);
-                self.connecting = Some(Box::pin(fut));
-            } else {
-                return Poll::Pending;
+                        #[cfg(not(feature = "tls"))]
+                        let connector = service::connector(http);
+                        let fut = Connection::new(connector, endpoint);
+                        self.connecting = Some((k, Box::pin(fut)));
+                        continue;
+                    }
+                    Change::Remove(k) => return Poll::Ready(Ok(Change::Remove(k))),
+                },
             }
         }
     }
 }
 
-impl fmt::Debug for ServiceList {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ServiceList")
-            .field("list", &self.list)
-            .finish()
-    }
-}
+impl<K: Hash + Eq + Clone> Unpin for DynamicServiceStream<K> {}
