@@ -58,7 +58,7 @@ $ cargo run --bin load-balance-client
 $ cargo run --bin load-balance-server
 ```
 
-## Dyanmic Load Balance
+## Dynamic Load Balance
 
 ### Client
 
