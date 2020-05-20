@@ -22,13 +22,12 @@ pub(crate) use incoming::TlsStream;
 use crate::transport::Error;
 
 use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
-use crate::{body::BoxBody, request::ConnectionInfo};
 use crate::transport::proxy::{ProxyConfig, ProxySvc};
+use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
     future::{self, MapErr},
-    TryFutureExt,
-    FutureExt
+    FutureExt, TryFutureExt,
 };
 use http::{HeaderMap, Request, Response};
 use hyper::{server::accept, Body};
@@ -71,7 +70,7 @@ pub struct Server {
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
     tcp_nodelay: bool,
-    proxy_config: Option<ProxyConfig>
+    proxy_config: Option<ProxyConfig>,
 }
 
 /// A stack based `Service` router.
@@ -223,8 +222,8 @@ impl Server {
     }
 
     /// Enables GRPC-Web proxy
-    pub fn use_grpc_web_proxy(mut self, config: ProxyConfig) -> Self{
-        Server { 
+    pub fn use_grpc_web_proxy(mut self, config: ProxyConfig) -> Self {
+        Server {
             proxy_config: Some(config),
             ..self
         }
@@ -296,7 +295,7 @@ impl Server {
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
         let timeout = self.timeout.clone();
-        let proxy_config = self.proxy_config.clone(); 
+        let proxy_config = self.proxy_config.clone();
 
         let http2_only = proxy_config.is_none();
 
@@ -308,7 +307,7 @@ impl Server {
             concurrency_limit,
             timeout,
             span,
-            proxy_config
+            proxy_config,
         };
 
         let server = hyper::Server::builder(incoming)
@@ -542,7 +541,7 @@ struct MakeSvc<S> {
     timeout: Option<Duration>,
     inner: S,
     span: Option<TraceInterceptor>,
-    proxy_config: Option<ProxyConfig>
+    proxy_config: Option<ProxyConfig>,
 }
 
 impl<S> Service<&ServerIo> for MakeSvc<S>
@@ -570,23 +569,23 @@ where
         let concurrency_limit = self.concurrency_limit;
         let timeout = self.timeout.clone();
         let span = self.span.clone();
-        let proxy_config = self.proxy_config.clone(); 
+        let proxy_config = self.proxy_config.clone();
         Box::pin(async move {
             let svc = ServiceBuilder::new()
                 .optional_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
                 .optional_layer(timeout.map(TimeoutLayer::new))
                 .service(svc);
 
-            if let Some(proxy_config) = proxy_config { 
-                Ok(BoxService::new(ProxySvc{
-                    inner: Svc { 
-                        inner: svc, 
+            if let Some(proxy_config) = proxy_config {
+                Ok(BoxService::new(ProxySvc {
+                    inner: Svc {
+                        inner: svc,
                         span,
-                        conn_info
-                    }, 
-                    config: proxy_config
+                        conn_info,
+                    },
+                    config: proxy_config,
                 }))
-            }else { 
+            } else {
                 Ok(BoxService::new(Svc {
                     inner: svc,
                     span,

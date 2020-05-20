@@ -1,4 +1,4 @@
-use super::{AllowedOrigins, Config };
+use super::{AllowedOrigins, Config};
 use http::{
     header::{self, HeaderName, HeaderValue},
     Method,
@@ -114,7 +114,8 @@ impl CorsBuilder {
             header::ORIGIN,
             header::ACCESS_CONTROL_REQUEST_METHOD,
             header::ACCESS_CONTROL_REQUEST_HEADERS,
-        ]).expect("Invalid vary");
+        ])
+        .expect("Invalid vary");
 
         Config {
             allow_credentials,
