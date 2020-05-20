@@ -188,7 +188,7 @@ where
     {
         Request::from_http(request.map(|body| Streaming::new_request(self.codec.decoder(), body)))
     }
-    
+
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,

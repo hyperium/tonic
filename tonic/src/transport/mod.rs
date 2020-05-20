@@ -90,9 +90,9 @@ pub mod channel;
 pub mod server;
 
 mod error;
+mod proxy;
 mod service;
 mod tls;
-mod proxy;
 
 #[doc(inline)]
 pub use self::channel::{Channel, Endpoint};
