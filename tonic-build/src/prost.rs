@@ -12,6 +12,7 @@ pub fn configure() -> Builder {
     Builder {
         build_client: true,
         build_server: true,
+        include_file_descriptor_set: false,
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
@@ -180,6 +181,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 pub struct Builder {
     pub(crate) build_client: bool,
     pub(crate) build_server: bool,
+    pub(crate) include_file_descriptor_set: bool,
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
@@ -200,6 +202,13 @@ impl Builder {
     /// Enable or disable gRPC server code generation.
     pub fn build_server(mut self, enable: bool) -> Self {
         self.build_server = enable;
+        self
+    }
+
+    /// Generate a file containing the encoded `prost_types::FileDescriptorSet` for protocol buffers
+    /// modules. This is required for implementing gRPC Server Reflection.
+    pub fn include_file_descriptor_set(mut self, include: bool) -> Self {
+        self.include_file_descriptor_set = include;
         self
     }
 
@@ -287,6 +296,9 @@ impl Builder {
         let format = self.format;
 
         config.out_dir(out_dir.clone());
+        if self.include_file_descriptor_set {
+            config.include_file_descriptor_set();
+        }
         for (proto_path, rust_path) in self.extern_path.iter() {
             config.extern_path(proto_path, rust_path);
         }

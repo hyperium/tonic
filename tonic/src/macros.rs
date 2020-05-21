@@ -33,3 +33,29 @@ macro_rules! include_proto {
         include!(concat!(env!("OUT_DIR"), concat!("/", $package, ".rs")));
     };
 }
+
+/// Include encoded `prost_types::FileDescriptorSet` as a `&'static [u8]`.
+///
+/// ```rust,ignore
+/// mod pb {
+///     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!();
+/// }
+/// ```
+///
+/// # Note:
+/// **This only works if the tonic-build output directory has been unmodified**.
+/// The default output directory is set to the [`OUT_DIR`] environment variable.
+/// If the output directory has been modified, the following pattern may be used
+/// instead of this macro.
+///
+/// ```rust,ignore
+/// mod pb {
+///     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("/relative/protobuf/directory/file_descriptor_set.bin");
+/// }
+/// ```
+#[macro_export]
+macro_rules! include_file_descriptor_set {
+    () => {
+        include_bytes!(concat!(env!("OUT_DIR"), "/file_descriptor_set.bin"));
+    };
+}
