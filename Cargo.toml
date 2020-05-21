@@ -22,3 +22,4 @@ members = [
 [replace]
 'prost:0.6.1' = { git = "https://github.com/jen20/prost", branch = "jen20/file-descriptor-set" }
 'prost-build:0.6.1' = { git = "https://github.com/jen20/prost", branch = "jen20/file-descriptor-set" }
+'prost-types:0.6.1' = { git = "https://github.com/jen20/prost", branch = "jen20/file-descriptor-set" }
