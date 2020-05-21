@@ -3,6 +3,7 @@ members = [
     "tonic",
     "tonic-build",
     "tonic-health",
+    "tonic-reflection",
 
     # Non-published crates
     "examples",
@@ -17,3 +18,7 @@ members = [
     "tests/extern_path/my_application",
     "tests/integration_tests"
 ]
+
+[replace]
+'prost:0.6.1' = { git = "https://github.com/jen20/prost", branch = "jen20/file-descriptor-set" }
+'prost-build:0.6.1' = { git = "https://github.com/jen20/prost", branch = "jen20/file-descriptor-set" }
