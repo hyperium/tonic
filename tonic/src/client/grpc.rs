@@ -188,7 +188,7 @@ impl<T> Grpc<T> {
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
         // Set the timeout, if provided
-        if let Some(deadline) = self.deadline.as_ref() {
+        if let Some(deadline) = self.deadline {
             request.headers_mut().insert(
                 HeaderName::from_static(GRPC_TIMEOUT_HEADER_CODE),
                 GrpcTimeout::from(deadline).into(),
