@@ -3,16 +3,19 @@ use crate::{
     client::GrpcService,
     codec::{encode_client, Codec, Streaming},
     interceptor::Interceptor,
+    metadata::timeout::GrpcTimeout,
     Code, Request, Response, Status,
 };
 use futures_core::Stream;
 use futures_util::{future, stream, TryStreamExt};
 use http::{
-    header::{HeaderValue, CONTENT_TYPE, TE},
+    header::{HeaderName, HeaderValue, CONTENT_TYPE, TE},
     uri::{Parts, PathAndQuery, Uri},
 };
 use http_body::Body as HttpBody;
-use std::fmt;
+use std::{fmt, time::Duration};
+
+const GRPC_TIMEOUT_HEADER_CODE: &str = "grpc-timeout";
 
 /// A gRPC client dispatcher.
 ///
@@ -28,6 +31,7 @@ use std::fmt;
 ///
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
+    deadline: Option<Duration>,
     inner: T,
     interceptor: Option<Interceptor>,
 }
@@ -36,6 +40,7 @@ impl<T> Grpc<T> {
     /// Creates a new gRPC client with the provided [`GrpcService`].
     pub fn new(inner: T) -> Self {
         Self {
+            deadline: None,
             inner,
             interceptor: None,
         }
@@ -45,9 +50,16 @@ impl<T> Grpc<T> {
     /// the provided interceptor on each request.
     pub fn with_interceptor(inner: T, interceptor: impl Into<Interceptor>) -> Self {
         Self {
+            deadline: None,
             inner,
             interceptor: Some(interceptor.into()),
         }
+    }
+
+    /// Sets a deadline for how long you're willing to wait for a response from the server.
+    /// If this deadline is passed before a response, returns gRPC status [`tonic::Code::Cancelled`]
+    pub fn set_deadline(&mut self, deadline: Duration) {
+        self.deadline = Some(deadline);
     }
 
     /// Check if the inner [`GrpcService`] is able to accept a  new request.
@@ -175,6 +187,14 @@ impl<T> Grpc<T> {
             .headers_mut()
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
+        // Set the timeout, if provided
+        if let Some(deadline) = self.deadline.as_ref() {
+            request.headers_mut().insert(
+                HeaderName::from_static(GRPC_TIMEOUT_HEADER_CODE),
+                GrpcTimeout::from(deadline).into(),
+            );
+        };
+
         let response = self
             .inner
             .call(request)
@@ -211,6 +231,7 @@ impl<T> Grpc<T> {
 impl<T: Clone> Clone for Grpc<T> {
     fn clone(&self) -> Self {
         Self {
+            deadline: self.deadline.clone(),
             inner: self.inner.clone(),
             interceptor: self.interceptor.clone(),
         }

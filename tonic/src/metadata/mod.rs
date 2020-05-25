@@ -3,6 +3,7 @@
 mod encoding;
 mod key;
 mod map;
+pub(crate) mod timeout;
 mod value;
 
 pub use self::encoding::Ascii;

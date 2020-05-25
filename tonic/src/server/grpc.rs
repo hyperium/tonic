@@ -76,14 +76,11 @@ where
                     ));
             }
         };
-
         let request = t!(self.intercept_request(request));
-
         let response = service
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-
         self.map_response(response)
     }
 
@@ -105,11 +102,8 @@ where
                 return self.map_response::<S::ResponseStream>(Err(status));
             }
         };
-
         let request = t!(self.intercept_request(request));
-
         let response = service.call(request).await;
-
         self.map_response(response)
     }
 
