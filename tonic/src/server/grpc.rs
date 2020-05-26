@@ -2,16 +2,14 @@ use crate::{
     body::BoxBody,
     codec::{encode_server, Codec, Streaming},
     interceptor::Interceptor,
-    metadata::timeout::GrpcTimeout,
+    metadata::timeout::{GrpcTimeout, wrap_with_timeout},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
 use futures_core::TryStream;
-use futures_util::future::FutureExt;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
 use std::fmt;
-use std::convert::TryInto;
 
 // A try! type macro for intercepting requests
 macro_rules! t {
@@ -80,13 +78,8 @@ where
             }
         };
         let request = t!(self.intercept_request(request));
-        let timeout: GrpcTimeout = request.metadata().try_into().unwrap();
-        let call_fut = service.call(request);
-        let response = tokio::time::timeout(timeout.into_inner(), call_fut)
-            .map(|maybe_timeout| match maybe_timeout {
-                Ok(resp) => resp,
-                Err(_) => Err(Status::cancelled("request timed out!")),
-            })
+        let timeout = GrpcTimeout::try_read_from_metadata(request.metadata()).ok();
+        let response = wrap_with_timeout(service.call(request), timeout)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
         self.map_response(response)
