@@ -58,6 +58,7 @@ impl<T> Grpc<T> {
 
     /// Sets a deadline for how long you're willing to wait for a response from the server.
     /// If this deadline is passed before a response, returns gRPC status [`tonic::Code::Cancelled`]
+    #[cfg(feature = "transport")]
     pub fn set_deadline(&mut self, deadline: Duration) {
         self.deadline = Some(deadline);
     }

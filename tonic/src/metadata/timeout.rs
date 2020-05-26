@@ -1,4 +1,5 @@
 use crate::{metadata::map::MetadataMap, Status};
+#[cfg(feature = "transport")]
 use futures_util::{future::Either, FutureExt};
 use http::header::HeaderValue;
 use std::{future::Future, str::FromStr, string::ToString, time::Duration};
@@ -72,7 +73,9 @@ impl FromStr for GrpcTimeout {
     }
 }
 
-/// Optionally wrap a future in a Timeout, if one is provided
+/// Optionally wrap a future in a Timeout, if one is provided.
+/// `features = ["transport"]` must be enabled.
+#[cfg(feature = "transport")]
 pub(crate) fn wrap_with_timeout<R>(
     future: impl Future<Output = Result<R, Status>>,
     deadline: Option<GrpcTimeout>,
@@ -89,6 +92,14 @@ pub(crate) fn wrap_with_timeout<R>(
         }
         None => Either::Right(future),
     }
+}
+
+#[cfg(not(feature = "transport"))]
+pub(crate) fn wrap_with_timeout<R>(
+    future: impl Future<Output = Result<R, Status>>,
+    _deadline: Option<GrpcTimeout>,
+) -> impl Future<Output = Result<R, Status>> {
+    future
 }
 
 #[cfg(test)]
