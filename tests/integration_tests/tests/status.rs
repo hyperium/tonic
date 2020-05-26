@@ -117,3 +117,55 @@ async fn status_with_metadata() {
 
     jh.await.unwrap();
 }
+
+#[tokio::test]
+async fn cancelation_on_timeout() {
+    struct Svc;
+
+    const MESSAGE: &str = "Hello World!";
+
+    #[tonic::async_trait]
+    impl test_server::Test for Svc {
+        async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
+            // Wait for a time longer than the timeout
+            tokio::time::delay_for(Duration::from_millis(1_000)).await;
+            Ok(Response::new(Output {
+                message: MESSAGE.to_owned(),
+            }))
+        }
+    }
+
+    let svc = test_server::TestServer::new(Svc);
+
+    let (tx, rx) = oneshot::channel::<()>();
+
+    let jh = tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), rx.map(drop))
+            .await
+            .unwrap();
+    });
+
+    tokio::time::delay_for(Duration::from_millis(100)).await;
+
+    let mut channel = test_client::TestClient::connect("http://127.0.0.1:1339")
+        .await
+        .unwrap();
+    channel
+        .inner
+        .set_deadline(std::time::Duration::from_millis(500));
+
+    let err = channel
+        .unary_call(Request::new(Input {}))
+        .await
+        .unwrap_err();
+    dbg!(&err);
+
+    assert_eq!(err.message(), "request timed out!");
+    assert_eq!(err.code(), Code::Cancelled);
+
+    tx.send(()).unwrap();
+
+    jh.await.unwrap();
+}

@@ -7,4 +7,6 @@ service Test {
 }
 
 message Input {}
-message Output {}
+message Output {
+  string message = 1;
+}

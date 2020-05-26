@@ -25,7 +25,7 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
 
             #service_doc
             pub struct #service_ident<T> {
-                inner: tonic::client::Grpc<T>,
+                pub inner: tonic::client::Grpc<T>,
             }
 
             #connect
