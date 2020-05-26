@@ -2,7 +2,7 @@ use crate::{
     body::BoxBody,
     codec::{encode_server, Codec, Streaming},
     interceptor::Interceptor,
-    metadata::timeout::{GrpcTimeout, wrap_with_timeout},
+    metadata::timeout::{wrap_with_timeout, GrpcTimeout},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Response, Status,
 };
@@ -104,7 +104,8 @@ where
             }
         };
         let request = t!(self.intercept_request(request));
-        let response = service.call(request).await;
+        let timeout = GrpcTimeout::try_read_from_metadata(request.metadata()).ok();
+        let response = wrap_with_timeout(service.call(request), timeout).await;
         self.map_response(response)
     }
 
@@ -121,8 +122,8 @@ where
     {
         let request = self.map_request_streaming(req);
         let request = t!(self.intercept_request(request));
-        let response = service
-            .call(request)
+        let timeout = GrpcTimeout::try_read_from_metadata(request.metadata()).ok();
+        let response = wrap_with_timeout(service.call(request), timeout)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
         self.map_response(response)
@@ -142,7 +143,8 @@ where
     {
         let request = self.map_request_streaming(req);
         let request = t!(self.intercept_request(request));
-        let response = service.call(request).await;
+        let timeout = GrpcTimeout::try_read_from_metadata(request.metadata()).ok();
+        let response = wrap_with_timeout(service.call(request), timeout).await;
         self.map_response(response)
     }
 

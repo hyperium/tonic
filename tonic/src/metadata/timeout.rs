@@ -1,5 +1,5 @@
 use crate::{metadata::map::MetadataMap, Status};
-use futures_util::{FutureExt, future::Either};
+use futures_util::{future::Either, FutureExt};
 use http::header::HeaderValue;
 use std::{future::Future, str::FromStr, string::ToString, time::Duration};
 
@@ -18,6 +18,8 @@ pub(crate) enum GrpcTimeoutError {
 }
 
 impl GrpcTimeout {
+    /// Try to read a `"grp-timeout"` value from a MetadataMap. Errors if the value is not present,
+    /// or if it cannot be parsed
     pub(crate) fn try_read_from_metadata(metadata: &MetadataMap) -> Result<Self, GrpcTimeoutError> {
         let value = metadata
             .get(GRPC_TIMEOUT_HEADER_CODE)
@@ -68,6 +70,7 @@ impl FromStr for GrpcTimeout {
     }
 }
 
+/// Optionally wrap a future in a Timeout, if one is provided
 pub(crate) fn wrap_with_timeout<R>(
     future: impl Future<Output = Result<R, Status>>,
     deadline: Option<GrpcTimeout>,
@@ -75,11 +78,13 @@ pub(crate) fn wrap_with_timeout<R>(
     match deadline {
         Some(d) => {
             let duration = d.into();
-            Either::Left(tokio::time::timeout(duration, future).map(|timeout_result| match timeout_result {
-                Ok(resp) => resp,
-                Err(_) => Err(Status::cancelled("request timed out!")),
-            }))
-        },
+            Either::Left(
+                tokio::time::timeout(duration, future).map(|timeout_result| match timeout_result {
+                    Ok(resp) => resp,
+                    Err(_) => Err(Status::cancelled("request timed out!")),
+                }),
+            )
+        }
         None => Either::Right(future),
     }
 }
