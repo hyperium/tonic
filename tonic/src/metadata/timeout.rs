@@ -18,7 +18,7 @@ pub(crate) enum GrpcTimeoutError {
 }
 
 impl GrpcTimeout {
-    /// Try to read a `"grp-timeout"` value from a MetadataMap. Errors if the value is not present,
+    /// Try to read a `"grpc-timeout"` value from a MetadataMap. Errors if the value is not present,
     /// or if it cannot be parsed
     pub(crate) fn try_read_from_metadata(metadata: &MetadataMap) -> Result<Self, GrpcTimeoutError> {
         let value = metadata
@@ -59,6 +59,8 @@ impl From<GrpcTimeout> for HeaderValue {
 impl FromStr for GrpcTimeout {
     type Err = GrpcTimeoutError;
 
+    /// TODO: Better parsing of the "grpc-timeout" header value, official spec
+    /// [here](https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md)
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let idx = s.find("n").ok_or(GrpcTimeoutError::Parse)?;
         let (value, _unit) = s.split_at(idx);

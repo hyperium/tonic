@@ -160,7 +160,6 @@ async fn cancelation_on_timeout() {
         .unary_call(Request::new(Input {}))
         .await
         .unwrap_err();
-    dbg!(&err);
 
     assert_eq!(err.message(), "request timed out!");
     assert_eq!(err.code(), Code::Cancelled);

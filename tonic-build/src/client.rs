@@ -25,6 +25,7 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
 
             #service_doc
             pub struct #service_ident<T> {
+                // TODO: Don't expose the inner struct, add `set_deadline(...)` in the codegen
                 pub inner: tonic::client::Grpc<T>,
             }
 

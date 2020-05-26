@@ -85,7 +85,7 @@ where
         self.map_response(response)
     }
 
-    /// Handle a server side streacming request.
+    /// Handle a server side streaming request.
     pub async fn server_streaming<S, B>(
         &mut self,
         mut service: S,
