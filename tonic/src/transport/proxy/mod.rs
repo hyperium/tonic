@@ -3,14 +3,9 @@ mod cors;
 use crate::body::BoxBody;
 use crate::transport::server::Svc;
 use futures_util::{FutureExt, TryFutureExt};
-use http::{
-    header::{HeaderMap, HeaderName, HeaderValue},
-    method, Method,
-};
 use http::{Request, Response, StatusCode};
 use hyper::Body;
 use pretty_hex::*;
-use std::{collections::HashSet, error, fmt, iter::FromIterator};
 use std::{
     future::Future,
     pin::Pin,

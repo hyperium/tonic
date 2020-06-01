@@ -3,11 +3,10 @@ use super::{Config, CorsResource};
 use futures_core::future::Future;
 
 use crate::body::BoxBody;
-use http::{self, HeaderMap, Request, Response, StatusCode};
+use http::{self, Request, Response, StatusCode};
 use std::pin::Pin;
 use tower_service::Service;
 
-use futures_core::stream::Stream;
 use hyper::Body;
 use std::sync::Arc;
 use std::task::{Context, Poll};
