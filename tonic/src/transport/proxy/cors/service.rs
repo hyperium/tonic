@@ -14,10 +14,12 @@ use std::task::{Context, Poll};
 /// Decorates a service, providing an implementation of the CORS specification.
 #[derive(Debug, Clone)]
 pub struct CorsService<S> {
+    #[doc(hidden)]
     pub inner: S,
     config: Arc<Config>,
 }
 
+#[doc(hidden)]
 impl<S> CorsService<S> {
     pub fn new(inner: S, config: Arc<Config>) -> CorsService<S> {
         CorsService { inner, config }

@@ -55,6 +55,7 @@ where
     }
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub enum InvalidRequest {
     DisallowedOrigin,
@@ -76,6 +77,7 @@ impl fmt::Display for InvalidRequest {
     }
 }
 
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 pub struct Config {
     pub allowed_methods: HashSet<Method>,
@@ -90,6 +92,7 @@ pub struct Config {
     pub vary_header: HeaderValue,
 }
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub enum CorsResource {
     Preflight(HeaderMap),
@@ -97,7 +100,7 @@ pub enum CorsResource {
 }
 
 impl Config {
-    // https://www.w3.org/TR/cors/#resource-processing-model
+    /// https://www.w3.org/TR/cors/#resource-processing-model
     pub fn process_request<B>(&self, request: &Request<B>) -> Result<CorsResource, InvalidRequest> {
         use self::InvalidRequest::*;
 
