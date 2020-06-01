@@ -453,7 +453,7 @@ async fn record_route(
     let mut last_point = None;
     let now = Instant::now();
 
-    while let Some(point) = stream.next().await {
+    while let Some(point) = stream.message().await? {
         let point = point?;
         summary.point_count += 1;
 
