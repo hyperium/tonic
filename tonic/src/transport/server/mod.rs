@@ -222,7 +222,7 @@ impl Server {
     }
 
     /// Enables GRPC-Web proxy
-    pub fn use_grpc_web_proxy(mut self, config: ProxyConfig) -> Self {
+    pub fn use_grpc_web_proxy(self, config: ProxyConfig) -> Self {
         Server {
             proxy_config: Some(config),
             ..self

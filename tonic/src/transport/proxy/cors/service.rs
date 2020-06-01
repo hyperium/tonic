@@ -42,7 +42,6 @@ where
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
         let state = self.config.process_request(&req);
-        let uri = req.uri().to_string();
         let version = req.version();
 
         let response_future = self.inner.call(req);
@@ -66,7 +65,7 @@ where
                     response.headers_mut().extend(headers);
                     Ok(response)
                 }
-                Err(e) => {
+                Err(_) => {
                     let mut response = http::Response::new(BoxBody::empty());
                     *response.status_mut() = StatusCode::FORBIDDEN;
                     Ok(response)

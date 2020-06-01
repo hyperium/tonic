@@ -55,8 +55,6 @@ where
 
         //Get the CORs state
         let cors_state = self.config.cors_config.process_request(&req);
-        let uri = req.uri().to_string();
-        let version = req.version();
 
         //Handle the simple CORs cases.
         match cors_state {
@@ -66,7 +64,7 @@ where
                 *response.headers_mut() = headers;
                 return Box::pin(async { Ok(response) });
             }
-            Err(e) => {
+            Err(_) => {
                 let mut response = http::Response::new(BoxBody::empty());
                 *response.status_mut() = StatusCode::FORBIDDEN;
                 return Box::pin(async { Ok(response) });
@@ -83,14 +81,6 @@ where
 
         //let content_type = parts.headers.get("content-type").unwrap().to_str().unwrap();
         let user_agent = parts.headers.get("x-user-agent").unwrap().to_str().unwrap();
-        let origin = parts
-            .headers
-            .get("origin")
-            .unwrap()
-            .to_str()
-            .unwrap()
-            .to_string();
-
         parts
             .headers
             .insert("user-agent", user_agent.parse().unwrap());
