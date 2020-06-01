@@ -27,7 +27,7 @@ use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
     future::{self, MapErr},
-    FutureExt, TryFutureExt,
+    TryFutureExt,
 };
 use http::{HeaderMap, Request, Response};
 use hyper::{server::accept, Body};
