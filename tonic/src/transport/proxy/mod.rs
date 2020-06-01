@@ -79,8 +79,9 @@ where
         //Get headers and transform stuff.
         let (mut parts, body): (_, Body) = req.into_parts();
 
+        let hc = parts.headers.clone();
         //let content_type = parts.headers.get("content-type").unwrap().to_str().unwrap();
-        let user_agent = parts.headers.get("x-user-agent").unwrap().to_str().unwrap();
+        let user_agent = hc.get("x-user-agent").unwrap().to_str().unwrap();
         parts
             .headers
             .insert("user-agent", user_agent.parse().unwrap());
