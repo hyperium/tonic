@@ -1,5 +1,7 @@
 pub mod builder;
+#[doc(hidden)]
 pub mod config;
+#[doc(hidden)]
 pub mod service;
 
 pub use self::builder::CorsBuilder;

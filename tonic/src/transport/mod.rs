@@ -90,7 +90,8 @@ pub mod channel;
 pub mod server;
 
 mod error;
-mod proxy;
+#[doc(hidden)]
+pub mod proxy;
 mod service;
 mod tls;
 
