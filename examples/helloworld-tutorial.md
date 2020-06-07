@@ -129,7 +129,7 @@ At the root of your crate, create a `build.rs` file and add the following code:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::compile_protos("src/proto/helloworld.proto")?;
+    tonic_build::compile_protos("proto/helloworld.proto")?;
     Ok(())
 }
 ```
@@ -244,7 +244,7 @@ If have a gRPC GUI client such as [Bloom RPC] you should be able to send request
 
 Or if you use [grpcurl] then you can simply try send requests like this:
 ```
-$ grpcurl -plaintext -import-path ./proto -proto helloworld.proto -d '{"name": "Tonic"}' localhost:50051 helloworld.Greeter/SayHello
+$ grpcurl -plaintext -import-path ./proto -proto helloworld.proto -d '{"name": "Tonic"}' [::]:50051 helloworld.Greeter/SayHello
 ```
 And receiving responses like this:
 ```
