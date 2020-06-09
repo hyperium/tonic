@@ -54,7 +54,7 @@ tower-service = "0.3"
 tokio-util = { version = "0.3", features = ["codec"] }
 async-stream = "0.2"
 http-body = "0.3"
-pin-project = "0.4"
+pin-project = "0.4.17"
 
 # prost
 prost1 = { package = "prost", version = "0.6", optional = true }

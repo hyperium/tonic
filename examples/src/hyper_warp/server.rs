@@ -6,7 +6,7 @@
 use futures::future::{self, Either, TryFutureExt};
 use http::version::Version;
 use hyper::{service::make_service_fn, Server};
-use pin_project::{pin_project, project};
+use pin_project::pin_project;
 use std::convert::Infallible;
 use std::{
     pin::Pin,
@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[pin_project]
+#[pin_project(project = EitherBodyProj)]
 enum EitherBody<A, B> {
     Left(#[pin] A),
     Right(#[pin] B),
@@ -100,27 +100,23 @@ where
         }
     }
 
-    #[project]
     fn poll_data(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        #[project]
         match self.project() {
-            EitherBody::Left(b) => b.poll_data(cx).map(map_option_err),
-            EitherBody::Right(b) => b.poll_data(cx).map(map_option_err),
+            EitherBodyProj::Left(b) => b.poll_data(cx).map(map_option_err),
+            EitherBodyProj::Right(b) => b.poll_data(cx).map(map_option_err),
         }
     }
 
-    #[project]
     fn poll_trailers(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        #[project]
         match self.project() {
-            EitherBody::Left(b) => b.poll_trailers(cx).map_err(Into::into),
-            EitherBody::Right(b) => b.poll_trailers(cx).map_err(Into::into),
+            EitherBodyProj::Left(b) => b.poll_trailers(cx).map_err(Into::into),
+            EitherBodyProj::Right(b) => b.poll_trailers(cx).map_err(Into::into),
         }
     }
 }

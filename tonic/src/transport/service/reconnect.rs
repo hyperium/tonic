@@ -1,5 +1,5 @@
 use crate::Error;
-use pin_project::{pin_project, project};
+use pin_project::pin_project;
 use std::fmt;
 use std::{
     future::Future,
@@ -161,7 +161,7 @@ pub(crate) struct ResponseFuture<F, E> {
     inner: Inner<F, E>,
 }
 
-#[pin_project]
+#[pin_project(project = InnerProj)]
 #[derive(Debug)]
 enum Inner<F, E> {
     Future(#[pin] F),
@@ -190,14 +190,12 @@ where
 {
     type Output = Result<T, Error>;
 
-    #[project]
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         //self.project().inner.poll(cx).map_err(Into::into)
         let me = self.project();
-        #[project]
         match me.inner.project() {
-            Inner::Future(fut) => fut.poll(cx).map_err(Into::into),
-            Inner::Error(e) => {
+            InnerProj::Future(fut) => fut.poll(cx).map_err(Into::into),
+            InnerProj::Error(e) => {
                 let e = e.take().expect("Polled after ready.").into();
                 Poll::Ready(Err(e))
             }
