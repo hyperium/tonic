@@ -28,7 +28,7 @@
 //! let cert = std::fs::read_to_string("ca.pem")?;
 //!
 //! let mut channel = Channel::from_static("https://example.com")
-//!     .tls_config(ClientTlsConfig::with_rustls()
+//!     .tls_config(ClientTlsConfig::new()
 //!         .ca_certificate(Certificate::from_pem(&cert))
 //!         .domain_name("example.com".to_string()))
 //!     .timeout(Duration::from_secs(5))
@@ -73,7 +73,7 @@
 //! let addr = "[::1]:50051".parse()?;
 //!
 //! Server::builder()
-//!     .tls_config(ServerTlsConfig::with_rustls()
+//!     .tls_config(ServerTlsConfig::new()
 //!         .identity(Identity::from_pem(&cert, &key)))
 //!     .concurrency_limit_per_connection(256)
 //!     .add_service(my_svc)
