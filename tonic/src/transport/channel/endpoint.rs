@@ -226,6 +226,19 @@ impl Endpoint {
 
         Channel::connect(connector, self.clone()).await
     }
+
+    /// Get the endpoint uri.
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # use http::Uri;
+    /// let endpoint = Endpoint::from_static("https://example.com");
+    ///
+    /// assert_eq!(endpoint.get_uri(), &Uri::from_static("https://example.com"));
+    /// ```
+    pub fn get_uri(&self) -> &Uri {
+        &self.uri
+    }
 }
 
 impl From<Uri> for Endpoint {
