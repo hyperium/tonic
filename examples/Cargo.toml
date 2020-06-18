@@ -67,6 +67,10 @@ name = "tls-client-auth-client"
 path = "src/tls_client_auth/client.rs"
 
 [[bin]]
+name = "tower-server"
+path = "src/tower/server.rs"
+
+[[bin]]
 name = "multiplex-server"
 path = "src/multiplex/server.rs"
 
