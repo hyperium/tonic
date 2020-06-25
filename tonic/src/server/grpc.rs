@@ -3,7 +3,7 @@ use crate::{
     codec::{encode_server, Codec, Streaming},
     interceptor::Interceptor,
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
-    Code, Request, Response, Status,
+    Code, Request, Status,
 };
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
@@ -210,31 +210,15 @@ where
 
                 http::Response::from_parts(parts, BoxBody::new(body))
             }
-            Err(status) => Self::map_status(status),
+            Err(status) => status.to_http(),
         }
-    }
-
-    fn map_status(status: Status) -> http::Response<BoxBody> {
-        let (mut parts, _body) = Response::new(()).into_http().into_parts();
-
-        parts.headers.insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
-        );
-
-        status.add_header(&mut parts.headers).unwrap();
-
-        http::Response::from_parts(parts, BoxBody::empty())
     }
 
     fn intercept_request<A>(&self, req: Request<A>) -> Result<Request<A>, http::Response<BoxBody>> {
         if let Some(interceptor) = &self.interceptor {
             match interceptor.call(req) {
                 Ok(req) => Ok(req),
-                Err(status) => {
-                    let res = Self::map_status(status);
-                    return Err(res);
-                }
+                Err(status) => Err(status.to_http()),
             }
         } else {
             Ok(req)

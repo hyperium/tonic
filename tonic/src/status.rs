@@ -1,3 +1,4 @@
+use crate::body::BoxBody;
 use crate::metadata::MetadataMap;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
@@ -463,6 +464,20 @@ impl Status {
             details: details,
             metadata: metadata,
         }
+    }
+
+    /// Build an `http::Response` from the given `Status`.
+    pub fn to_http(self) -> http::Response<BoxBody> {
+        let (mut parts, _body) = http::Response::new(()).into_parts();
+
+        parts.headers.insert(
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("application/grpc"),
+        );
+
+        self.add_header(&mut parts.headers).unwrap();
+
+        http::Response::from_parts(parts, BoxBody::empty())
     }
 }
 
