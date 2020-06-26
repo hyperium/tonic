@@ -122,6 +122,10 @@ path = "src/health/server.rs"
 name = "autoreload-server"
 path = "src/autoreload/server.rs"
 
+[[bin]]
+name = "optional-server"
+path = "src/optional/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
