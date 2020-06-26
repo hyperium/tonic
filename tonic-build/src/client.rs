@@ -94,7 +94,11 @@ fn generate_methods<T: Service>(service: &T, proto_path: &str) -> TokenStream {
         let path = format!(
             "/{}{}{}/{}",
             service.package(),
-            if service.package().is_empty() {""} else {"."},
+            if service.package().is_empty() {
+                ""
+            } else {
+                "."
+            },
             service.identifier(),
             method.identifier()
         );
