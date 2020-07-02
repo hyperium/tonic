@@ -18,8 +18,10 @@ use incoming::TcpIncoming;
 #[cfg(feature = "tls")]
 pub(crate) use incoming::TlsStream;
 
-use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
+#[cfg(feature = "tls")]
 use crate::transport::Error;
+
+use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
