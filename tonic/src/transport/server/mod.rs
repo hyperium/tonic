@@ -19,6 +19,7 @@ use incoming::TcpIncoming;
 pub(crate) use incoming::TlsStream;
 
 use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
+use crate::transport::Error;
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
@@ -97,11 +98,15 @@ impl Server {
     /// Configure TLS for this server.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-    pub fn tls_config(self, tls_config: ServerTlsConfig) -> Self {
-        Server {
-            tls: Some(tls_config.tls_acceptor().unwrap()),
+    pub fn tls_config(self, tls_config: ServerTlsConfig) -> Result<Self, Error> {
+        Ok(Server {
+            tls: Some(
+                tls_config
+                    .tls_acceptor()
+                    .map_err(|e| Error::from_source(e))?,
+            ),
             ..self
-        }
+        })
     }
 
     /// Set the concurrency limit applied to on requests inbound per connection.

@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .domain_name("example.com");
 
     let channel = Channel::from_static("http://[::1]:50051")
-        .tls_config(tls)
+        .tls_config(tls)?
         .connect()
         .await?;
 

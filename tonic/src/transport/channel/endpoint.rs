@@ -155,11 +155,15 @@ impl Endpoint {
     /// Configures TLS for the endpoint.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Self {
-        Endpoint {
-            tls: Some(tls_config.tls_connector(self.uri.clone()).unwrap()),
+    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Result<Self, Error> {
+        Ok(Endpoint {
+            tls: Some(
+                tls_config
+                    .tls_connector(self.uri.clone())
+                    .map_err(|e| Error::from_source(e))?,
+            ),
             ..self
-        }
+        })
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
