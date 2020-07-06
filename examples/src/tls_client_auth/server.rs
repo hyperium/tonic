@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .client_ca_root(client_ca_cert);
 
     Server::builder()
-        .tls_config(tls)
+        .tls_config(tls)?
         .add_service(pb::echo_server::EchoServer::new(server))
         .serve(addr)
         .await?;

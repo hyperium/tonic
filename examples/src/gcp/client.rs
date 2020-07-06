@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .domain_name("pubsub.googleapis.com");
 
     let channel = Channel::from_static(ENDPOINT)
-        .tls_config(tls_config)
+        .tls_config(tls_config)?
         .connect()
         .await?;
 

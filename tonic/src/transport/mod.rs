@@ -30,7 +30,7 @@
 //! let mut channel = Channel::from_static("https://example.com")
 //!     .tls_config(ClientTlsConfig::new()
 //!         .ca_certificate(Certificate::from_pem(&cert))
-//!         .domain_name("example.com".to_string()))
+//!         .domain_name("example.com".to_string()))?
 //!     .timeout(Duration::from_secs(5))
 //!     .rate_limit(5, Duration::from_secs(1))
 //!     .concurrency_limit(256)
@@ -74,7 +74,7 @@
 //!
 //! Server::builder()
 //!     .tls_config(ServerTlsConfig::new()
-//!         .identity(Identity::from_pem(&cert, &key)))
+//!         .identity(Identity::from_pem(&cert, &key)))?
 //!     .concurrency_limit_per_connection(256)
 //!     .add_service(my_svc)
 //!     .serve(addr)
