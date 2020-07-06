@@ -110,6 +110,55 @@ pub enum Code {
     __NonExhaustive,
 }
 
+impl Code {
+    /// Get description of this `Code`.
+    /// ```
+    /// fn make_grpc_request() -> tonic::Code {
+    ///     // ...   
+    ///     tonic::Code::Ok
+    /// }
+    /// let code = make_grpc_request();
+    /// println!("Operation completed. Human readable description: {}", code.description());
+    /// ```
+    /// If you only need description in `println`, `format`, `log` and other
+    /// formatting contexts, you may want to use `Display` impl for `Code`
+    /// instead.
+    pub fn description(&self) -> &'static str {
+        match self {
+            Code::Ok => "The operation completed successfully",
+            Code::Cancelled => "The operation was cancelled",
+            Code::Unknown => "Unknown error",
+            Code::InvalidArgument => "Client specified an invalid argument",
+            Code::DeadlineExceeded => "Deadline expired before operation could complete",
+            Code::NotFound => "Some requested entity was not found",
+            Code::AlreadyExists => "Some entity that we attempted to create already exists",
+            Code::PermissionDenied => {
+                "The caller does not have permission to execute the specified operation"
+            }
+            Code::ResourceExhausted => "Some resource has been exhausted",
+            Code::FailedPrecondition => {
+                "The system is not in a state required for the operation's execution"
+            }
+            Code::Aborted => "The operation was aborted",
+            Code::OutOfRange => "Operation was attempted past the valid range",
+            Code::Unimplemented => "Operation is not implemented or not supported",
+            Code::Internal => "Internal error",
+            Code::Unavailable => "The service is currently unavailable",
+            Code::DataLoss => "Unrecoverable data loss or corruption",
+            Code::Unauthenticated => "The request does not have valid authentication credentials",
+            Code::__NonExhaustive => {
+                unreachable!("__NonExhaustive variant must not be constructed")
+            }
+        }
+    }
+}
+
+impl std::fmt::Display for Code {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.description(), f)
+    }
+}
+
 // ===== impl Status =====
 
 impl Status {
