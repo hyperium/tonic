@@ -139,8 +139,7 @@ impl Channel {
     {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
 
-        let svc = Connection::new(connector, endpoint)
-            .map_err(super::Error::from_source)?;
+        let svc = Connection::new(connector, endpoint).map_err(super::Error::from_source)?;
         let svc = Buffer::new(Either::A(svc), buffer_size);
 
         Ok(Channel { svc })

@@ -16,8 +16,7 @@ use tower::{
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
     timeout::TimeoutLayer,
     util::BoxService,
-    ServiceBuilder,
-    ServiceExt,
+    ServiceBuilder, ServiceExt,
 };
 use tower_load::Load;
 use tower_service::Service;
