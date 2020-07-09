@@ -214,6 +214,25 @@ impl Endpoint {
         Channel::connect(connector, self.clone()).await
     }
 
+    /// Create a channel from this config.
+    ///
+    /// The channel returned by this method does not attempt to connect to the endpoint until first
+    /// use.
+    pub fn connect_lazy(&self) -> Result<Channel, Error> {
+        let mut http = hyper::client::connect::HttpConnector::new();
+        http.enforce_http(false);
+        http.set_nodelay(self.tcp_nodelay);
+        http.set_keepalive(self.tcp_keepalive);
+
+        #[cfg(feature = "tls")]
+        let connector = service::connector(http, self.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = service::connector(http);
+
+        Channel::new(connector, self.clone())
+    }
+
     /// Connect with a custom connector.
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
