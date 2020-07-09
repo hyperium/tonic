@@ -77,9 +77,7 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let mut connection = Self::new(connector, endpoint)?;
-        connection.ready_and().await?;
-        Ok(connection)
+        Self::new(connector, endpoint)?.ready_oneshot().await
     }
 }
 
