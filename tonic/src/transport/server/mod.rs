@@ -240,6 +240,10 @@ impl Server {
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services.
+    ///
+    /// # Note
+    /// Even when the argument given is `None` this will capture *all* requests to this service name.
+    /// As a result, one cannot use this to toggle between two indentically named implementations.
     pub fn add_optional_service<S>(
         &mut self,
         svc: Option<S>,
@@ -365,6 +369,42 @@ where
             let path = req.uri().path();
 
             path.starts_with(&svc_route)
+        };
+        let routes = routes.push(pred, svc);
+
+        Router { server, routes }
+    }
+
+    /// Add a new optional service to this router.
+    ///
+    /// # Note
+    /// Even when the argument given is `None` this will capture *all* requests to this service name.
+    /// As a result, one cannot use this to toggle between two indentically named implementations.
+    pub fn add_optional_service<S>(
+        self,
+        svc: Option<S>,
+    ) -> Router<Either<S, Unimplemented>, Or<A, B, Request<Body>>>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let Self { routes, server } = self;
+
+        let svc_name = <S as NamedService>::NAME;
+        let svc_route = format!("/{}", svc_name);
+        let pred = move |req: &Request<Body>| {
+            let path = req.uri().path();
+
+            path.starts_with(&svc_route)
+        };
+        let svc = match svc {
+            Some(some) => Either::A(some),
+            None => Either::B(Unimplemented::default()),
         };
         let routes = routes.push(pred, svc);
 
