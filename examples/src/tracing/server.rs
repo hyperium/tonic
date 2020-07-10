@@ -9,22 +9,23 @@ use hello_world::{
     HelloReply, HelloRequest,
 };
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
+    #[tracing::instrument]
     async fn say_hello(
         &self,
         request: Request<HelloRequest>,
     ) -> Result<Response<HelloReply>, Status> {
-        tracing::info!(message = "Inbound request.", metadata = ?request.metadata());
+        tracing::info!("received request");
 
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
 
-        tracing::debug!(message = "Sending reply.", response = %reply.message);
+        tracing::debug!("sending response");
 
         Ok(Response::new(reply))
     }
@@ -32,7 +33,7 @@ impl Greeter for MyGreeter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tracing_subscriber::FmtSubscriber::builder()
+    tracing_subscriber::fmt()
         .with_max_level(tracing::Level::DEBUG)
         .init();
 
