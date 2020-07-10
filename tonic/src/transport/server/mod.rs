@@ -243,7 +243,7 @@ impl Server {
     pub fn add_optional_service<S>(
         &mut self,
         svc: Option<S>,
-    ) -> Router<Either<S, EmptyService>, Unimplemented>
+    ) -> Router<Either<S, Unimplemented>, Unimplemented>
     where
         S: Service<Request<Body>, Response = Response<BoxBody>>
             + NamedService
@@ -255,7 +255,7 @@ impl Server {
     {
         let svc = match svc {
             Some(some) => Either::A(some),
-            None => Either::B(EmptyService),
+            None => Either::B(Unimplemented::default()),
         };
         Router::new(self.clone(), svc)
     }
@@ -539,29 +539,6 @@ pub struct Unimplemented {
 }
 
 impl Service<Request<Body>> for Unimplemented {
-    type Response = Response<BoxBody>;
-    type Error = crate::Error;
-    type Future = future::Ready<Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Ok(()).into()
-    }
-
-    fn call(&mut self, _req: Request<Body>) -> Self::Future {
-        future::ok(
-            http::Response::builder()
-                .status(200)
-                .header("grpc-status", "12")
-                .body(BoxBody::empty())
-                .unwrap(),
-        )
-    }
-}
-
-#[derive(Clone)]
-pub struct EmptyService;
-
-impl Service<Request<Body>> for EmptyService {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = future::Ready<Result<Self::Response, Self::Error>>;
