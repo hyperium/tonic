@@ -31,16 +31,10 @@ impl<M, Target> Reconnect<M, Target>
 where
     M: Service<Target>,
 {
-    pub(crate) fn new<S, Request>(initial_connection: S, mk_service: M, target: Target) -> Self
-    where
-        M: Service<Target, Response = S>,
-        S: Service<Request>,
-        Error: From<M::Error> + From<S::Error>,
-        Target: Clone,
-    {
+    pub(crate) fn new(mk_service: M, target: Target) -> Self {
         Reconnect {
             mk_service,
-            state: State::Connected(initial_connection),
+            state: State::Idle,
             target,
             error: None,
         }

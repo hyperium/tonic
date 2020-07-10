@@ -130,6 +130,21 @@ impl Channel {
         (Self::balance(list, DEFAULT_BUFFER_SIZE), tx)
     }
 
+    pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::Error> + Send,
+        C::Future: Unpin + Send,
+        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+    {
+        let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
+
+        let svc = Connection::new(connector, endpoint).map_err(super::Error::from_source)?;
+        let svc = Buffer::new(Either::A(svc), buffer_size);
+
+        Ok(Channel { svc })
+    }
+
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
@@ -139,10 +154,9 @@ impl Channel {
     {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
 
-        let svc = Connection::new(connector, endpoint)
+        let svc = Connection::connect(connector, endpoint)
             .await
-            .map_err(|e| super::Error::from_source(e))?;
-
+            .map_err(super::Error::from_source)?;
         let svc = Buffer::new(Either::A(svc), buffer_size);
 
         Ok(Channel { svc })

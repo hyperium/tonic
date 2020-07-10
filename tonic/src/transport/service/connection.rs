@@ -16,7 +16,7 @@ use tower::{
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
     timeout::TimeoutLayer,
     util::BoxService,
-    ServiceBuilder,
+    ServiceBuilder, ServiceExt,
 };
 use tower_load::Load;
 use tower_service::Service;
@@ -29,7 +29,7 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) async fn new<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
+    pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
@@ -60,15 +60,24 @@ impl Connection {
             .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
-        let mut connector = HyperConnect::new(connector, settings);
-        let initial_conn = connector.call(endpoint.uri.clone()).await?;
-        let conn = Reconnect::new(initial_conn, connector, endpoint.uri.clone());
+        let connector = HyperConnect::new(connector, settings);
+        let conn = Reconnect::new(connector, endpoint.uri.clone());
 
         let inner = stack.layer(conn);
 
         Ok(Self {
             inner: BoxService::new(inner),
         })
+    }
+
+    pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::Error> + Send,
+        C::Future: Unpin + Send,
+        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+    {
+        Self::new(connector, endpoint)?.ready_oneshot().await
     }
 }
 
