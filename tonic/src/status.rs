@@ -474,10 +474,11 @@ impl Status {
         }
 
         if !self.details.is_empty() {
+            let details = base64::encode_config(&self.details[..], base64::STANDARD_NO_PAD);
+
             header_map.insert(
                 GRPC_STATUS_DETAILS_HEADER,
-                HeaderValue::from_maybe_shared(self.details.clone())
-                    .map_err(invalid_header_value_byte)?,
+                HeaderValue::from_maybe_shared(details).map_err(invalid_header_value_byte)?,
             );
         }
 
@@ -501,12 +502,6 @@ impl Status {
         details: Bytes,
         metadata: MetadataMap,
     ) -> Status {
-        let details = if details.is_empty() {
-            details
-        } else {
-            base64::encode_config(&details[..], base64::STANDARD_NO_PAD).into()
-        };
-
         Status {
             code,
             message: message.into(),
@@ -836,5 +831,24 @@ mod tests {
         assert_eq!(Status::unavailable("").code(), Code::Unavailable);
         assert_eq!(Status::data_loss("").code(), Code::DataLoss);
         assert_eq!(Status::unauthenticated("").code(), Code::Unauthenticated);
+    }
+
+    #[test]
+    fn details() {
+        const DETAILS: &[u8] = &[0, 2, 3];
+
+        let status = Status::with_details(Code::Unavailable, "some message", DETAILS.into());
+
+        assert_eq!(&status.details()[..], DETAILS);
+
+        let header_map = status.to_header_map().unwrap();
+
+        let b64_details = base64::encode_config(&DETAILS[..], base64::STANDARD_NO_PAD);
+
+        assert_eq!(header_map[super::GRPC_STATUS_DETAILS_HEADER], b64_details);
+
+        let status = Status::from_header_map(&header_map).unwrap();
+
+        assert_eq!(&status.details()[..], DETAILS);
     }
 }
