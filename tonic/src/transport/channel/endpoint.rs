@@ -257,7 +257,7 @@ impl Endpoint {
     /// # use http::Uri;
     /// let endpoint = Endpoint::from_static("https://example.com");
     ///
-    /// assert_eq!(endpoint.get_uri(), &Uri::from_static("https://example.com"));
+    /// assert_eq!(endpoint.uri(), &Uri::from_static("https://example.com"));
     /// ```
     pub fn uri(&self) -> &Uri {
         &self.uri
