@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             ClientTlsConfig::new()
                 .ca_certificate(ca)
                 .domain_name("foo.test.google.fr"),
-        );
+        )?;
     }
 
     let channel = endpoint.connect().await?;

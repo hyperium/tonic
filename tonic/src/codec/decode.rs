@@ -168,10 +168,15 @@ impl<T> Streaming<T> {
                 }
                 f => {
                     trace!("unexpected compression flag");
-                    return Err(Status::new(
-                        Code::Internal,
-                        format!("Unexpected compression flag: {}", f),
-                    ));
+                    let message = if let Direction::Response(status) = self.direction {
+                        format!(
+                            "Unexpected compression flag: {}, while receiving response with status: {}",
+                            f, status
+                        )
+                    } else {
+                        format!("Unexpected compression flag: {}, while sending request", f)
+                    };
+                    return Err(Status::new(Code::Internal, message));
                 }
             };
             let len = self.buf.get_u32() as usize;

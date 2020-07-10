@@ -155,11 +155,15 @@ impl Endpoint {
     /// Configures TLS for the endpoint.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Self {
-        Endpoint {
-            tls: Some(tls_config.tls_connector(self.uri.clone()).unwrap()),
+    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Result<Self, Error> {
+        Ok(Endpoint {
+            tls: Some(
+                tls_config
+                    .tls_connector(self.uri.clone())
+                    .map_err(|e| Error::from_source(e))?,
+            ),
             ..self
-        }
+        })
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
@@ -210,6 +214,25 @@ impl Endpoint {
         Channel::connect(connector, self.clone()).await
     }
 
+    /// Create a channel from this config.
+    ///
+    /// The channel returned by this method does not attempt to connect to the endpoint until first
+    /// use.
+    pub fn connect_lazy(&self) -> Result<Channel, Error> {
+        let mut http = hyper::client::connect::HttpConnector::new();
+        http.enforce_http(false);
+        http.set_nodelay(self.tcp_nodelay);
+        http.set_keepalive(self.tcp_keepalive);
+
+        #[cfg(feature = "tls")]
+        let connector = service::connector(http, self.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = service::connector(http);
+
+        Channel::new(connector, self.clone())
+    }
+
     /// Connect with a custom connector.
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
@@ -225,6 +248,19 @@ impl Endpoint {
         let connector = service::connector(connector);
 
         Channel::connect(connector, self.clone()).await
+    }
+
+    /// Get the endpoint uri.
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # use http::Uri;
+    /// let endpoint = Endpoint::from_static("https://example.com");
+    ///
+    /// assert_eq!(endpoint.get_uri(), &Uri::from_static("https://example.com"));
+    /// ```
+    pub fn get_uri(&self) -> &Uri {
+        &self.uri
     }
 }
 

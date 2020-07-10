@@ -517,9 +517,7 @@ async fn route_chat(
     };
 
     Ok(Response::new(Box::pin(output)
-        as Pin<
-            Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>,
-        >))
+        as Self::RouteChatStream))
 
 }
 ```

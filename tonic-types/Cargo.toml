@@ -1,0 +1,22 @@
+[package]
+name = "tonic-types"
+version = "0.1.0"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+edition = "2018"
+license = "MIT"
+documentation = "https://docs.rs/tonic-types/0.1.0/tonic-types/"
+repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/hyperium/tonic"
+description = """
+A collection of useful protobuf types that can be used with `tonic`.
+"""
+readme = "../README.md"
+categories = ["web-programming", "network-programming", "asynchronous"]
+keywords = ["rpc", "grpc", "protobuf"]
+
+[dependencies]
+prost = "0.6"
+prost-types = "0.6"
+
+[build-dependencies]
+prost-build = "0.6"
