@@ -29,7 +29,7 @@ impl Greeter for MyGreeter {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let enabled = args.get(1) == Some(&"enabled".to_string());
+    let enabled = args.get(1) == Some(&"enable".to_string());
 
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
