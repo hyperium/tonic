@@ -1,3 +1,29 @@
+# [0.2.2](https://github.com/hyperium/tonic/compare/v0.2.1...v0.2.2) (2020-07-10)
+
+
+### Bug Fixes
+
+* `Status::details` leaking base64 encoding ([#395](https://github.com/hyperium/tonic/issues/395)) ([2c4c544](https://github.com/hyperium/tonic/commit/2c4c544d902c588fc0654910fba1f0d21d78eab3)), closes [#379](https://github.com/hyperium/tonic/issues/379)
+* **build:** Allow empty packages ([#382](https://github.com/hyperium/tonic/issues/382)) ([f085aba](https://github.com/hyperium/tonic/commit/f085aba302001986fd04219d2843f659f73c4031)), closes [#381](https://github.com/hyperium/tonic/issues/381)
+* **build:** Make generated server service public ([#347](https://github.com/hyperium/tonic/issues/347)) ([8cd6f05](https://github.com/hyperium/tonic/commit/8cd6f0506429cfbe59e63b0216f208482d12358a))
+* **transport:** Propagate errors in tls_config instead of unwrap/panic ([#385](https://github.com/hyperium/tonic/issues/385)) ([3b9d6a6](https://github.com/hyperium/tonic/commit/3b9d6a6262b62f30b8c9953f0da8e403be53216e))
+* Remove uses of pin_project::project attribute ([#367](https://github.com/hyperium/tonic/issues/367)) ([5bda615](https://github.com/hyperium/tonic/commit/5bda6156328bd2c94bc274588871b666f1b72d6e))
+
+
+### Features
+
+* **codec:** Improve compression flag log ([#374](https://github.com/hyperium/tonic/issues/374)) ([d68dd36](https://github.com/hyperium/tonic/commit/d68dd365321764aceaf4e37a106a519797926495))
+* **transport:** Add Endpoint::connect_lazy method ([#392](https://github.com/hyperium/tonic/issues/392)) ([ec9046d](https://github.com/hyperium/tonic/commit/ec9046dfc23d63828363d9555cd7b96811ad442d)), closes [#167](https://github.com/hyperium/tonic/issues/167)
+* **transport:** Add optional service methods ([#275](https://github.com/hyperium/tonic/issues/275)) ([2b997b0](https://github.com/hyperium/tonic/commit/2b997b0c5f37d69f3cd8b5b566b64df110d9f4eb))
+* **transport:** Dynamic load balancing ([#341](https://github.com/hyperium/tonic/issues/341)) ([85ae0a4](https://github.com/hyperium/tonic/commit/85ae0a4733b9e99edaa05e65160d98f21f288fc1))
+* **types:** Add `tonic-types` crate ([#391](https://github.com/hyperium/tonic/issues/391)) ([ea7fe66](https://github.com/hyperium/tonic/commit/ea7fe66b145e01891f1c1f16d247e02524d98fae))
+* Add `Display` implementation for `Code` ([#386](https://github.com/hyperium/tonic/issues/386)) ([ab1de44](https://github.com/hyperium/tonic/commit/ab1de44771f3fa6ac283485bdbf1035d6407ac1a))
+* Add `Status::to_http` ([#376](https://github.com/hyperium/tonic/issues/376)) ([327b4ff](https://github.com/hyperium/tonic/commit/327b4fffa3381345ee4620df7e9998efe2aa9454))
+* Add metadata to error responses ([#348](https://github.com/hyperium/tonic/issues/348)) ([372da52](https://github.com/hyperium/tonic/commit/372da52e96114ca76cc221f3c598be82bfae970c))
+* Add new method get_uri for Endpoint ([#371](https://github.com/hyperium/tonic/issues/371)) ([54d7a7a](https://github.com/hyperium/tonic/commit/54d7a7af6b6530b80353c5741586c38cca8382c9))
+
+
+
 # [0.2.1](https://github.com/hyperium/tonic/compare/v0.2.0...v0.2.1) (2020-05-07)
 
 
