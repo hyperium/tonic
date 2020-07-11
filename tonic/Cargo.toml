@@ -43,11 +43,11 @@ prost = ["prost1", "prost-derive"]
 
 [dependencies]
 bytes = "0.5"
-futures-core = { version = "0.3", default-features = false } 
+futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 tracing = "0.1"
 http = "0.2"
-base64 = "0.11"
+base64 = "0.12"
 
 percent-encoding = "2.0"
 tower-service = "0.3"
@@ -73,8 +73,8 @@ tower-load = { version = "0.3", optional = true }
 tracing-futures = { version = "0.2", optional = true }
 
 # rustls
-tokio-rustls = { version = "0.13", optional = true }
-rustls-native-certs = { version = "0.3", optional = true }
+tokio-rustls = { version = "0.14", optional = true }
+rustls-native-certs = { version = "0.4", optional = true }
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["rt-core", "macros"] }
