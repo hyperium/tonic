@@ -49,7 +49,7 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 /// # Multiplexing requests
 ///
 /// Sending a request on a channel requires a `&mut self` and thus can only send
-/// on request in flight. This is intentional and is required to follow the `Service`
+/// one request in flight. This is intentional and is required to follow the `Service`
 /// contract from the `tower` library which this channel implementation is built on
 /// top of.
 ///
