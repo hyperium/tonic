@@ -1,5 +1,6 @@
-# [0.2.2](https://github.com/hyperium/tonic/compare/v0.2.1...v0.2.2) (2020-07-10)
+# [0.3.0](https://github.com/hyperium/tonic/compare/v0.2.1...v0.3.0) (2020-07-13)
 
+* Bump `base64` to `0.12` and `tokio-rustls`/`rustls-native-certs` to `0.14`/`0.4`. ([#397](https://github.com/hyperium/tonic/pull/397) ([570c606](https://github.com/hyperium/tonic/commit/570c606397e47406ec148fe1763586e87a8f5298))).
 
 ### Bug Fixes
 
@@ -21,6 +22,11 @@
 * Add `Status::to_http` ([#376](https://github.com/hyperium/tonic/issues/376)) ([327b4ff](https://github.com/hyperium/tonic/commit/327b4fffa3381345ee4620df7e9998efe2aa9454))
 * Add metadata to error responses ([#348](https://github.com/hyperium/tonic/issues/348)) ([372da52](https://github.com/hyperium/tonic/commit/372da52e96114ca76cc221f3c598be82bfae970c))
 * Add new method get_uri for Endpoint ([#371](https://github.com/hyperium/tonic/issues/371)) ([54d7a7a](https://github.com/hyperium/tonic/commit/54d7a7af6b6530b80353c5741586c38cca8382c9))
+
+### BREAKING CHANGES
+
+* Bumped rustls to `0.18`.
+* Endpoint `tls_config` now returns a result.
 
 
 
