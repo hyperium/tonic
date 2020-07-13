@@ -1,5 +1,6 @@
 # [0.3.0](https://github.com/hyperium/tonic/compare/v0.2.1...v0.3.0) (2020-07-13)
 
+* Bump `base64` to `0.12` and `tokio-rustls`/`rustls-native-certs` to `0.14`/`0.4`. ([#397](https://github.com/hyperium/tonic/pull/397) ([570c606](https://github.com/hyperium/tonic/commit/570c606397e47406ec148fe1763586e87a8f5298))).
 
 ### Bug Fixes
 
