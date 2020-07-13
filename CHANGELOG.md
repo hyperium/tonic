@@ -23,6 +23,11 @@
 * Add metadata to error responses ([#348](https://github.com/hyperium/tonic/issues/348)) ([372da52](https://github.com/hyperium/tonic/commit/372da52e96114ca76cc221f3c598be82bfae970c))
 * Add new method get_uri for Endpoint ([#371](https://github.com/hyperium/tonic/issues/371)) ([54d7a7a](https://github.com/hyperium/tonic/commit/54d7a7af6b6530b80353c5741586c38cca8382c9))
 
+### BREAKING CHANGES
+
+* Bumped rustls to `0.18`.
+* Endpoint `tls_config` now returns a result.
+
 
 
 # [0.2.1](https://github.com/hyperium/tonic/compare/v0.2.0...v0.2.1) (2020-05-07)
