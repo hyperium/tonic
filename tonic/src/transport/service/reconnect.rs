@@ -18,6 +18,7 @@ where
     state: State<M::Future, M::Response>,
     target: Target,
     error: Option<M::Error>,
+    has_been_connected: bool,
 }
 
 #[derive(Debug)]
@@ -37,6 +38,7 @@ where
             state: State::Idle,
             target,
             error: None,
+            has_been_connected: false,
         }
     }
 }
@@ -84,14 +86,23 @@ where
                         }
                         Poll::Ready(Err(e)) => {
                             trace!("poll_ready; error");
+
                             state = State::Idle;
-                            self.error = Some(e.into());
-                            break;
+
+                            if self.has_been_connected {
+                                self.error = Some(e.into());
+                                break;
+                            } else {
+                                return Poll::Ready(Err(e.into()));
+                            }
                         }
                     }
                 }
                 State::Connected(ref mut inner) => {
                     trace!("poll_ready; connected");
+
+                    self.has_been_connected = true;
+
                     match inner.poll_ready(cx) {
                         Poll::Ready(Ok(())) => {
                             trace!("poll_ready; ready");
