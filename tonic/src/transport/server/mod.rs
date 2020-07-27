@@ -243,7 +243,7 @@ impl Server {
     ///
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
-    /// As a result, one cannot use this to toggle between two indentically named implementations.
+    /// As a result, one cannot use this to toggle between two identically named implementations.
     pub fn add_optional_service<S>(
         &mut self,
         svc: Option<S>,
@@ -379,7 +379,7 @@ where
     ///
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
-    /// As a result, one cannot use this to toggle between two indentically named implementations.
+    /// As a result, one cannot use this to toggle between two identically named implementations.
     pub fn add_optional_service<S>(
         self,
         svc: Option<S>,
