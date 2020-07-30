@@ -25,7 +25,7 @@ use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
-    future::{self, Either, MapErr},
+    future::{self, Either as FutureEither, MapErr},
     TryFutureExt,
 };
 use http::{HeaderMap, Request, Response};
@@ -79,22 +79,9 @@ pub struct Router<A, B> {
 }
 
 #[derive(Debug)]
-/// a service made from a router
+/// A service made from a router
 pub struct RouterService<A, B> {
     router: Router<A, B>,
-}
-
-/// create a tower service out of a router
-pub fn service<A, B>(router: Router<A, B>) -> RouterService<A, B>
-where
-    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-    A::Future: Send + 'static,
-    A::Error: Into<crate::Error> + Send,
-    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-    B::Future: Send + 'static,
-    B::Error: Into<crate::Error> + Send,
-{
-    RouterService { router }
 }
 
 impl<A, B> Service<Request<Body>> for RouterService<A, B>
@@ -107,7 +94,7 @@ where
     B::Error: Into<crate::Error> + Send,
 {
     type Response = Response<BoxBody>;
-    type Future = Either<
+    type Future = FutureEither<
         MapErr<A::Future, fn(A::Error) -> crate::Error>,
         MapErr<B::Future, fn(B::Error) -> crate::Error>,
     >;
@@ -520,6 +507,11 @@ where
         self.server
             .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
+    }
+
+    /// Create a tower service out of a router
+    pub fn into_service(self) -> RouterService<A, B> {
+        RouterService { router: self }
     }
 }
 
