@@ -236,6 +236,23 @@ impl Server {
         Router::new(self.clone(), svc)
     }
 
+    /// Create a router with the `S` typed service as the first service.
+    ///
+    /// This will clone the `Server` builder and create a catch-all router that will
+    /// route around different services.
+    ///
+    /// Catchall services are expected to handle all requests they receive (as opposed to a
+    /// NamedService). As they should be stacked ahead of any services specified with `add_service`
+    /// or `add_optional_service`.
+    pub fn add_catchall_service<S>(&mut self, svc: S) -> Router<S, Unimplemented>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        Router::new_with_catchall_service(self.clone(), svc)
+    }
+
     /// Create a router with the optional `S` typed service as the first service.
     ///
     /// This will clone the `Server` builder and create a router that will
@@ -334,6 +351,19 @@ impl<S> Router<S, Unimplemented> {
 
             path.starts_with(&svc_route)
         };
+        Self {
+            server,
+            routes: Routes::new(pred, svc, Unimplemented::default()),
+        }
+    }
+
+    pub(crate) fn new_with_catchall_service(server: Server, svc: S) -> Self
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let pred = move |_: &Request<Body>| true;
         Self {
             server,
             routes: Routes::new(pred, svc, Unimplemented::default()),
