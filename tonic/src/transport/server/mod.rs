@@ -592,6 +592,7 @@ impl Service<Request<Body>> for Unimplemented {
             http::Response::builder()
                 .status(200)
                 .header("grpc-status", "12")
+                .header("content-type", "application/grpc+proto")
                 .body(BoxBody::empty())
                 .unwrap(),
         )
