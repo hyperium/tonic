@@ -236,7 +236,7 @@ impl Endpoint {
     /// Connect with a custom connector.
     ///
     /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport.
-    /// See `/examples/src/uds/` for an example of how to use this function to build channel that
+    /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
