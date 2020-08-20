@@ -78,8 +78,12 @@ pub struct Router<A, B> {
     routes: Routes<A, B, Request<Body>>,
 }
 
+/// A service that is produced from a Tonic `Router`.
+///
+/// This service implementation will route between multiple Tonic
+/// gRPC endpoints and can be consumed with the rest of the `tower`
+/// ecosystem.
 #[derive(Debug)]
-/// A service made from a router
 pub struct RouterService<A, B> {
     router: Router<A, B>,
 }
@@ -509,7 +513,7 @@ where
             .await
     }
 
-    /// Create a tower service out of a router
+    /// Create a tower service out of a router.
     pub fn into_service(self) -> RouterService<A, B> {
         RouterService { router: self }
     }
