@@ -28,4 +28,4 @@ prost = "0.6"
 tokio = { version = "0.2", features = ["rt-core", "macros"]}
 
 [build-dependencies]
-tonic-build = { version = "0.3", path = "../tonic-build" }
+tonic-build = { version = "0.3", path = "../tonic-build", default-features = false, features = ["transport", "prost"] }
