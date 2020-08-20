@@ -1,6 +1,13 @@
+# [0.3.1](https://github.com/hyperium/tonic/compare/v0.3.0...v0.3.1) (2020-08-20)
+
+### Bug Fixes
+
+* **transport:** Return connection error on `Channel::connect` ([#413](https://github.com/hyperium/tonic/issues/413)) ([2ea17b2](https://github.com/hyperium/tonic/commit/2ea17b2ecfc40a20f4d9608f807b3d099a8f415d)), closes [#403](https://github.com/hyperium/tonic/issues/403)
+
+
+
 # [0.3.0](https://github.com/hyperium/tonic/compare/v0.2.1...v0.3.0) (2020-07-13)
 
-* Bump `base64` to `0.12` and `tokio-rustls`/`rustls-native-certs` to `0.14`/`0.4`. ([#397](https://github.com/hyperium/tonic/pull/397) ([570c606](https://github.com/hyperium/tonic/commit/570c606397e47406ec148fe1763586e87a8f5298))).
 
 ### Bug Fixes
 
@@ -21,16 +28,11 @@
 * Add `Display` implementation for `Code` ([#386](https://github.com/hyperium/tonic/issues/386)) ([ab1de44](https://github.com/hyperium/tonic/commit/ab1de44771f3fa6ac283485bdbf1035d6407ac1a))
 * Add `Status::to_http` ([#376](https://github.com/hyperium/tonic/issues/376)) ([327b4ff](https://github.com/hyperium/tonic/commit/327b4fffa3381345ee4620df7e9998efe2aa9454))
 * Add metadata to error responses ([#348](https://github.com/hyperium/tonic/issues/348)) ([372da52](https://github.com/hyperium/tonic/commit/372da52e96114ca76cc221f3c598be82bfae970c))
-* Add new method get_uri for Endpoint ([#371](https://github.com/hyperium/tonic/issues/371)) ([54d7a7a](https://github.com/hyperium/tonic/commit/54d7a7af6b6530b80353c5741586c38cca8382c9))
-
-### BREAKING CHANGES
-
-* Bumped rustls to `0.18`.
-* Endpoint `tls_config` now returns a result.
+* add new method get_uri for Endpoint ([#371](https://github.com/hyperium/tonic/issues/371)) ([54d7a7a](https://github.com/hyperium/tonic/commit/54d7a7af6b6530b80353c5741586c38cca8382c9))
 
 
 
-# [0.2.1](https://github.com/hyperium/tonic/compare/v0.2.0...v0.2.1) (2020-05-07)
+## [0.2.1](https://github.com/hyperium/tonic/compare/v0.2.0...v0.2.1) (2020-05-07)
 
 
 ### Bug Fixes
@@ -43,6 +45,7 @@
 ### Features
 
 * **transport:** Add AsRef impl for Certificate ([#326](https://github.com/hyperium/tonic/issues/326)) ([d2ad8df](https://github.com/hyperium/tonic/commit/d2ad8df629a349cc151a0a4ede96f04356f73839))
+
 
 
 # [0.2.0](https://github.com/hyperium/tonic/compare/v0.1.1...v0.2.0) (2020-04-01)
@@ -70,13 +73,8 @@
 * **transport:** Expose http2 keep-alive support ([#307](https://github.com/hyperium/tonic/issues/307)) ([012fa3c](https://github.com/hyperium/tonic/commit/012fa3cb4a0e010dafa28305416fab6c4278fc7b))
 
 
-### BREAKING CHANGES
 
-* Bumped `rustls` to `0.17`.
-* Removed deprecated `Error::description` implementations.
-
-
-# [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v0.1.1) (2020-01-20)
+## [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v0.1.1) (2020-01-20)
 
 
 ### Bug Fixes
