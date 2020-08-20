@@ -25,7 +25,7 @@ use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
-    future::{self, MapErr},
+    future::{self, Either as FutureEither, MapErr},
     TryFutureExt,
 };
 use http::{HeaderMap, Request, Response};
@@ -76,6 +76,42 @@ pub struct Server {
 pub struct Router<A, B> {
     server: Server,
     routes: Routes<A, B, Request<Body>>,
+}
+
+/// A service that is produced from a Tonic `Router`.
+///
+/// This service implementation will route between multiple Tonic
+/// gRPC endpoints and can be consumed with the rest of the `tower`
+/// ecosystem.
+#[derive(Debug)]
+pub struct RouterService<A, B> {
+    router: Router<A, B>,
+}
+
+impl<A, B> Service<Request<Body>> for RouterService<A, B>
+where
+    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    A::Future: Send + 'static,
+    A::Error: Into<crate::Error> + Send,
+    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    B::Future: Send + 'static,
+    B::Error: Into<crate::Error> + Send,
+{
+    type Response = Response<BoxBody>;
+    type Future = FutureEither<
+        MapErr<A::Future, fn(A::Error) -> crate::Error>,
+        MapErr<B::Future, fn(B::Error) -> crate::Error>,
+    >;
+    type Error = crate::Error;
+
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    #[inline]
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        self.router.routes.call(req)
+    }
 }
 
 /// A trait to provide a static reference to the service's
@@ -475,6 +511,11 @@ where
         self.server
             .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
+    }
+
+    /// Create a tower service out of a router.
+    pub fn into_service(self) -> RouterService<A, B> {
+        RouterService { router: self }
     }
 }
 

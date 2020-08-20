@@ -126,6 +126,14 @@ path = "src/autoreload/server.rs"
 name = "optional-server"
 path = "src/optional/server.rs"
 
+[[bin]]
+name = "hyper-warp-multiplex-client"
+path = "src/hyper_warp_multiplex/client.rs"
+
+[[bin]]
+name = "hyper-warp-multiplex-server"
+path = "src/hyper_warp_multiplex/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
