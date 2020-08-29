@@ -50,6 +50,10 @@ impl Endpoint {
 
     /// Convert an `Endpoint` from a static string.
     ///
+    /// # Panics
+    ///
+    /// This function panics if the argument is an invalid URI.
+    ///
     /// ```
     /// # use tonic::transport::Endpoint;
     /// Endpoint::from_static("https://example.com");
@@ -306,23 +310,12 @@ impl TryFrom<String> for Endpoint {
 }
 
 impl TryFrom<&'static str> for Endpoint {
-    type Error = Never;
+    type Error = InvalidUri;
 
     fn try_from(t: &'static str) -> Result<Self, Self::Error> {
-        Ok(Self::from_static(t))
+        Endpoint::try_from(t.to_string())
     }
 }
-
-#[derive(Debug)]
-pub enum Never {}
-
-impl std::fmt::Display for Never {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {}
-    }
-}
-
-impl std::error::Error for Never {}
 
 impl fmt::Debug for Endpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
