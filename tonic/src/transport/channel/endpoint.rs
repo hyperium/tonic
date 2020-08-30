@@ -313,7 +313,7 @@ impl TryFrom<&'static str> for Endpoint {
     type Error = InvalidUri;
 
     fn try_from(t: &'static str) -> Result<Self, Self::Error> {
-        Endpoint::try_from(t.to_string())
+        Self::from_shared(t.as_bytes())
     }
 }
 
