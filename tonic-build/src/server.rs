@@ -75,6 +75,7 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
                             Ok(http::Response::builder()
                                .status(200)
                                .header("grpc-status", "12")
+                               .header("content-type", "application/grpc")
                                .body(tonic::body::BoxBody::empty())
                                .unwrap())
                         }),
