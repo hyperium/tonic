@@ -215,11 +215,12 @@ where
             if let Some(echo_header) = echo_header {
                 res.headers_mut()
                     .insert("x-grpc-test-echo-initial", echo_header);
+                Ok(res
+                    .map(|b| MergeTrailers::new(b, echo_trailer))
+                    .map(BoxBody::new))
+            } else {
+                Ok(res)
             }
-
-            Ok(res
-                .map(|b| MergeTrailers::new(b, echo_trailer))
-                .map(BoxBody::new))
         })
     }
 }

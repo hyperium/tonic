@@ -57,3 +57,9 @@ sleep 1
 --test_case=empty_unary,large_unary,client_streaming,server_streaming,ping_pong,\
 empty_stream,status_code_and_message,special_status_message,unimplemented_method,\
 unimplemented_service,custom_metadata ${ARG}
+
+# TODO: run all other test cases w/wo tls
+GO_CLIENT="interop/bin/client_${OS}_amd64${EXT}"
+
+$GO_CLIENT --test_case="status_code_and_message"
+$GO_CLIENT --test_case="custom_metadata"
