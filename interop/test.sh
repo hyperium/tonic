@@ -16,6 +16,7 @@ esac
 
 ARG="${1:-""}"
 
+
 (cd interop && cargo build --bins)
 
 SERVER="interop/bin/server_${OS}_amd64${EXT}"
@@ -58,8 +59,10 @@ sleep 1
 empty_stream,status_code_and_message,special_status_message,unimplemented_method,\
 unimplemented_service,custom_metadata ${ARG}
 
-# TODO: run all other test cases w/wo tls
-GO_CLIENT="interop/bin/client_${OS}_amd64${EXT}"
+if [ -z "${ARG}" ]; then
+  # TODO: run all other test cases w/wo tls
+  GO_CLIENT="interop/bin/client_${OS}_amd64${EXT}"
 
-$GO_CLIENT --test_case="status_code_and_message"
-$GO_CLIENT --test_case="custom_metadata"
+  $GO_CLIENT --test_case="status_code_and_message"
+  $GO_CLIENT --test_case="custom_metadata"
+fi
