@@ -203,7 +203,7 @@ impl Endpoint {
     }
 
     /// Create a channel from this config.
-    pub async fn connect(&self) -> Result<Channel, Error> {
+    pub async fn connect(self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
@@ -222,7 +222,7 @@ impl Endpoint {
     ///
     /// The channel returned by this method does not attempt to connect to the endpoint until first
     /// use.
-    pub fn connect_lazy(&self) -> Result<Channel, Error> {
+    pub fn connect_lazy(self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
@@ -242,7 +242,7 @@ impl Endpoint {
     /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport.
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
-    pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
+    pub async fn connect_with_connector<C>(self, connector: C) -> Result<Channel, Error>
     where
         C: MakeConnection<Uri> + Send + 'static,
         C::Connection: Unpin + Send + 'static,
