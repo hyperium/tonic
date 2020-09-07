@@ -41,8 +41,6 @@ impl ClientTlsConfig {
     }
 
     /// Sets the domain name against which to verify the server's TLS certificate.
-    ///
-    /// This has no effect if `rustls_client_config` is used to configure Rustls.
     pub fn domain_name(self, domain_name: impl Into<String>) -> Self {
         ClientTlsConfig {
             domain: Some(domain_name.into()),
