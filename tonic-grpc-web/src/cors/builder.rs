@@ -53,6 +53,7 @@ impl CorsBuilder {
         self
     }
 
+    #[allow(unused)]
     /// Whether to allow clients to send cookies to this resource or not
     pub fn allow_credentials(mut self, allow_credentials: bool) -> Self {
         self.allow_credentials = allow_credentials;
@@ -77,6 +78,7 @@ impl CorsBuilder {
         self
     }
 
+    #[allow(unused)]
     /// When set, the wildcard ('*') will be used as the value for
     /// AccessControlAllowOrigin. When not set, the incoming origin
     /// will be used.

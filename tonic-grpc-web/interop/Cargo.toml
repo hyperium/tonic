@@ -1,0 +1,17 @@
+[package]
+name = "interop"
+version = "0.1.0"
+authors = ["Juan Alvarez <j@yabit.io>"]
+edition = "2018"
+
+[workspace]
+
+[dependencies]
+tonic = { path = "../../tonic" }
+tonic-grpc-web = { path = "../../tonic-grpc-web" }
+tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "stream"] }
+prost = "0.6.1"
+hyper = "0.13.7"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }

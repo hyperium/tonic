@@ -1,0 +1,21 @@
+[package]
+name = "tonic-grpc-web"
+version = "0.1.0"
+authors = ["Juan Alvarez <j@yabit.io>"]
+edition = "2018"
+
+[workspace]
+
+[dependencies]
+tonic = { path = "../tonic" }
+http = "0.2.1"
+base64 = "0.12.3"
+futures-util = "0.3.5"
+futures-core = "0.3.5"
+bytes = "0.5.6"
+hyper = "0.13.7"
+http-body = "0.3.1"
+tower-service = "0.3.0"
+
+#[build-dependencies]
+#tonic-build = { path = "../tonic-build", features = ["prost"] }
