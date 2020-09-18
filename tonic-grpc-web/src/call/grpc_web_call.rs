@@ -35,9 +35,10 @@ impl<B> GrpcWebCall<B> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<Bytes>, Status> {
-        if self.buf.remaining() > 0 && self.buf.remaining() % 4 == 0 {
-            let decoded = base64::decode(self.buf.split().freeze()).map_err(internal_error)?;
-            Ok(Some(decoded.into()))
+        if self.buf.has_remaining() && self.buf.remaining() % 4 == 0 {
+            base64::decode(self.buf.split().freeze())
+                .map(|decoded| Some(Bytes::from(decoded)))
+                .map_err(internal_error)
         } else {
             Ok(None)
         }
@@ -83,7 +84,13 @@ where
                 match ready!(Pin::new(&mut self.inner).poll_data(cx)) {
                     Some(Ok(data)) => self.buf.put(data),
                     Some(Err(e)) => return Poll::Ready(Some(Err(internal_error(e)))),
-                    None => return Poll::Ready(None),
+                    None => {
+                        return if self.buf.has_remaining() {
+                            Poll::Ready(Some(Err(internal_error("malformed base64 request"))))
+                        } else {
+                            Poll::Ready(None)
+                        }
+                    }
                 }
             },
 
