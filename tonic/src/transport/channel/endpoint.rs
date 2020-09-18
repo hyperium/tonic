@@ -7,6 +7,7 @@ use crate::transport::service::TlsConnector;
 use crate::transport::Error;
 use bytes::Bytes;
 use http::uri::{InvalidUri, Uri};
+use http::HeaderValue;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -20,6 +21,7 @@ use tower_make::MakeConnection;
 #[derive(Clone)]
 pub struct Endpoint {
     pub(crate) uri: Uri,
+    pub(crate) user_agent: Option<HeaderValue>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) concurrency_limit: Option<usize>,
     pub(crate) rate_limit: Option<(u64, Duration)>,
@@ -72,6 +74,30 @@ impl Endpoint {
     pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUri> {
         let uri = Uri::from_maybe_shared(s.into())?;
         Ok(Self::from(uri))
+    }
+
+    /// Set a custom user-agent header.
+    ///
+    /// `user_agent` will be prepended to Tonic's default user-agent string (`tonic/x.x.x`).
+    /// It must be a value that can be converted into a valid  `http::HeaderValue` or building
+    /// the endpoint will fail.
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # let mut builder = Endpoint::from_static("https://example.com");
+    /// builder.user_agent("Greeter").expect("Greeter should be a valid header value");
+    /// // user-agent: "Greeter tonic/x.x.x"
+    /// ```
+    pub fn user_agent<T>(self, user_agent: T) -> Result<Self, Error>
+    where
+        T: TryInto<HeaderValue>,
+    {
+        user_agent
+            .try_into()
+            .map(|ua| Endpoint {
+                user_agent: Some(ua),
+                ..self
+            })
+            .map_err(|_| Error::new_invalid_user_agent())
     }
 
     /// Apply a timeout to each request.
@@ -276,6 +302,7 @@ impl From<Uri> for Endpoint {
     fn from(uri: Uri) -> Self {
         Self {
             uri,
+            user_agent: None,
             concurrency_limit: None,
             rate_limit: None,
             timeout: None,
