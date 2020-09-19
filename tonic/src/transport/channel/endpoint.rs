@@ -234,7 +234,7 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(http);
 
-        Channel::new(connector, self.clone())
+        Ok(Channel::new(connector, self.clone()))
     }
 
     /// Connect with a custom connector.

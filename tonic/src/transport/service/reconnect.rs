@@ -19,6 +19,7 @@ where
     target: Target,
     error: Option<M::Error>,
     has_been_connected: bool,
+    is_lazy: bool,
 }
 
 #[derive(Debug)]
@@ -32,13 +33,14 @@ impl<M, Target> Reconnect<M, Target>
 where
     M: Service<Target>,
 {
-    pub(crate) fn new(mk_service: M, target: Target) -> Self {
+    pub(crate) fn new(mk_service: M, target: Target, is_lazy: bool) -> Self {
         Reconnect {
             mk_service,
             state: State::Idle,
             target,
             error: None,
             has_been_connected: false,
+            is_lazy,
         }
     }
 }
@@ -89,12 +91,12 @@ where
 
                             state = State::Idle;
 
-                            if self.has_been_connected {
-                                self.error = Some(e.into());
-                                break;
-                            } else {
+                            if !self.has_been_connected && !self.is_lazy {
                                 return Poll::Ready(Err(e.into()));
                             }
+
+                            self.error = Some(e.into());
+                            break;
                         }
                     }
                 }
