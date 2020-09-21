@@ -14,19 +14,19 @@ const GRPC_WEB_TEXT: &str = "application/grpc-web-text";
 const GRPC_WEB_TEXT_PROTO: &str = "application/grpc-web-text+proto";
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum Direction {
+pub(crate) enum Direction {
     Request,
     Response,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
-pub enum Encoding {
+pub(crate) enum Encoding {
     Base64,
     None,
 }
 
 impl Encoding {
-    pub fn content_type(&self) -> &'static str {
+    pub(crate) fn content_type(&self) -> &'static str {
         match self {
             Encoding::Base64 => GRPC_WEB_TEXT_PROTO,
             Encoding::None => GRPC_WEB_PROTO,
@@ -73,6 +73,9 @@ pub(crate) fn accept(req: &Request<hyper::Body>) -> Option<&str> {
         .and_then(|val| val.to_str().ok())
 }
 
+// Mutating request headers to conform to a gRPC request is not really
+// necessary for us at this point. We could remove most of these except
+// maybe for inserting `header::TE`, which tonic should check?
 pub(crate) fn coerce_request(mut req: Request<Body>) -> Request<Body> {
     let request_encoding = Encoding::from(content_type(&req));
 

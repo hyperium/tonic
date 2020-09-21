@@ -10,12 +10,14 @@ use http_body::{Body, SizeHint};
 use tonic::Status;
 
 use super::{Direction, Encoding};
-use crate::call::Encoding::Base64;
 
 const BUFFER_SIZE: usize = 8 * 1024;
-const GRPC_WEB_MARKER: u8 = 0b10000000;
 
-pub struct GrpcWebCall<B> {
+// 8th (MSB) bit of the 1st gRPC frame byte
+// denotes an uncompressed trailer (as part of the body)
+const GRPC_WEB_TRAILERS_MARKER: u8 = 0b10000000;
+
+pub(crate) struct GrpcWebCall<B> {
     inner: B,
     buf: BytesMut,
     direction: Direction,
@@ -24,7 +26,7 @@ pub struct GrpcWebCall<B> {
 }
 
 impl<B> GrpcWebCall<B> {
-    pub fn new(inner: B, direction: Direction, encoding: Encoding) -> Self {
+    pub(crate) fn new(inner: B, direction: Direction, encoding: Encoding) -> Self {
         GrpcWebCall {
             inner,
             buf: BytesMut::with_capacity(BUFFER_SIZE),
@@ -44,6 +46,7 @@ impl<B> GrpcWebCall<B> {
         }
     }
 
+    // Key-value pairs encoded as a HTTP/1 headers block (without the terminating newline)
     fn encode_trailers(&self, trailers: HeaderMap) -> Vec<u8> {
         trailers.iter().fold(Vec::new(), |mut acc, (key, value)| {
             acc.put_slice(key.as_ref());
@@ -55,11 +58,15 @@ impl<B> GrpcWebCall<B> {
     }
 
     fn make_trailers_frame(&self, trailers: HeaderMap) -> Vec<u8> {
-        let trailers = self.encode_trailers(trailers);
+        const HEADER_SIZE: usize = 5;
 
-        let mut frame = Vec::with_capacity(trailers.len() + 5);
-        frame.push(GRPC_WEB_MARKER);
-        frame.put_u32(trailers.len() as u32);
+        let trailers = self.encode_trailers(trailers);
+        let len = trailers.len();
+        assert!(len <= std::u32::MAX as usize);
+
+        let mut frame = Vec::with_capacity(len + HEADER_SIZE);
+        frame.push(GRPC_WEB_TRAILERS_MARKER);
+        frame.put_u32(len as u32);
         frame.extend(trailers);
 
         frame
@@ -77,6 +84,7 @@ where
     ) -> Poll<Option<Result<B::Data, Status>>> {
         match self.encoding {
             Encoding::Base64 => loop {
+                // TODO: Do not loop until buf.remaining() % 4 == 0, emit a chunk as soon as possible.
                 if let Some(bytes) = self.decode_chunk()? {
                     return Poll::Ready(Some(Ok(bytes)));
                 }
@@ -95,8 +103,7 @@ where
             },
 
             Encoding::None => match ready!(Pin::new(&mut self.inner).poll_data(cx)) {
-                Some(Err(e)) => Poll::Ready(Some(Err(internal_error(e)))),
-                Some(Ok(data)) => Poll::Ready(Some(Ok(data))),
+                Some(res) => Poll::Ready(Some(res.map_err(internal_error))),
                 None => Poll::Ready(None),
             },
         }
@@ -107,7 +114,7 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<B::Data, Status>>> {
         if let Some(mut res) = ready!(Pin::new(&mut self.inner).poll_data(cx)) {
-            if self.encoding == Base64 {
+            if self.encoding == Encoding::Base64 {
                 res = res.map(|b| base64::encode(b).into())
             }
 
