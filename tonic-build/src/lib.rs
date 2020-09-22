@@ -103,15 +103,14 @@ pub mod server;
 /// to allow any codegen module to generate service
 /// abstractions.
 pub trait Service {
-    /// Path to the codec.
-    const CODEC_PATH: &'static str;
-
     /// Comment type.
     type Comment: AsRef<str>;
 
     /// Method type.
     type Method: Method;
 
+    /// Path to the codec.
+    fn codec_path(&self) -> &str;
     /// Name of service.
     fn name(&self) -> &str;
     /// Package name of service.
@@ -131,11 +130,11 @@ pub trait Service {
 /// to generate abstraction implementations for
 /// the provided methods.
 pub trait Method {
-    /// Path to the codec.
-    const CODEC_PATH: &'static str;
     /// Comment type.
     type Comment: AsRef<str>;
 
+    /// Path to the codec.
+    fn codec_path(&self) -> &str;
     /// Name of method.
     fn name(&self) -> &str;
     /// Identifier used to generate type name.

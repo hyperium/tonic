@@ -119,7 +119,7 @@ fn generate_methods<T: Service>(service: &T, proto_path: &str) -> TokenStream {
 }
 
 fn generate_unary<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path);
 
@@ -132,14 +132,14 @@ fn generate_unary<T: Method>(method: &T, proto_path: &str, path: String) -> Toke
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
-           let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.unary(request.into_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static(#path);
+            self.inner.unary(request.into_request(), path, codec).await
         }
     }
 }
 
 fn generate_server_streaming<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
     let (request, response) = method.request_response_name(proto_path);
@@ -153,14 +153,14 @@ fn generate_server_streaming<T: Method>(method: &T, proto_path: &str, path: Stri
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
-           let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.server_streaming(request.into_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static(#path);
+            self.inner.server_streaming(request.into_request(), path, codec).await
         }
     }
 }
 
 fn generate_client_streaming<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
     let (request, response) = method.request_response_name(proto_path);
@@ -181,7 +181,7 @@ fn generate_client_streaming<T: Method>(method: &T, proto_path: &str, path: Stri
 }
 
 fn generate_streaming<T: Method>(method: &T, proto_path: &str, path: String) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
     let (request, response) = method.request_response_name(proto_path);
@@ -195,8 +195,8 @@ fn generate_streaming<T: Method>(method: &T, proto_path: &str, path: String) -> 
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
-           let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.streaming(request.into_streaming_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static(#path);
+            self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
     }
 }
