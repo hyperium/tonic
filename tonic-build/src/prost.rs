@@ -62,7 +62,7 @@ impl Service {
                 inner: v,
                 codec_path: codec_path.clone()
             }).collect(),
-            codec_path: codec_path.clone(),
+            codec_path,
         }
     }
 }
