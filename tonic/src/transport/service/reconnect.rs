@@ -32,13 +32,15 @@ impl<M, Target> Reconnect<M, Target>
 where
     M: Service<Target>,
 {
-    pub(crate) fn new(mk_service: M, target: Target) -> Self {
+    pub(crate) fn new(mk_service: M, target: Target, always_reconnect: bool) -> Self {
         Reconnect {
             mk_service,
             state: State::Idle,
             target,
             error: None,
-            has_been_connected: false,
+            // If true, it makes sure that a failure (if any) on the first connection attempt
+            // will not result in an error, and we will keep trying reconnecting.
+            has_been_connected: always_reconnect,
         }
     }
 }

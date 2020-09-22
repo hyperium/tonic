@@ -130,7 +130,11 @@ impl Channel {
         (Self::balance(list, DEFAULT_BUFFER_SIZE), tx)
     }
 
-    pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
+    pub(crate) fn new<C>(
+        connector: C,
+        endpoint: Endpoint,
+        always_reconnect: bool,
+    ) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
@@ -139,13 +143,18 @@ impl Channel {
     {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
 
-        let svc = Connection::new(connector, endpoint).map_err(super::Error::from_source)?;
+        let svc = Connection::new(connector, endpoint, always_reconnect)
+            .map_err(super::Error::from_source)?;
         let svc = Buffer::new(Either::A(svc), buffer_size);
 
         Ok(Channel { svc })
     }
 
-    pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
+    pub(crate) async fn connect<C>(
+        connector: C,
+        endpoint: Endpoint,
+        always_reconnect: bool,
+    ) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
@@ -154,7 +163,7 @@ impl Channel {
     {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
 
-        let svc = Connection::connect(connector, endpoint)
+        let svc = Connection::connect(connector, endpoint, always_reconnect)
             .await
             .map_err(super::Error::from_source)?;
         let svc = Buffer::new(Either::A(svc), buffer_size);

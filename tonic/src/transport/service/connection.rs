@@ -29,7 +29,11 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
+    pub(crate) fn new<C>(
+        connector: C,
+        endpoint: Endpoint,
+        always_reconnect: bool,
+    ) -> Result<Self, crate::Error>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
@@ -61,7 +65,7 @@ impl Connection {
             .into_inner();
 
         let connector = HyperConnect::new(connector, settings);
-        let conn = Reconnect::new(connector, endpoint.uri.clone());
+        let conn = Reconnect::new(connector, endpoint.uri.clone(), always_reconnect);
 
         let inner = stack.layer(conn);
 
@@ -70,14 +74,20 @@ impl Connection {
         })
     }
 
-    pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
+    pub(crate) async fn connect<C>(
+        connector: C,
+        endpoint: Endpoint,
+        always_reconnect: bool,
+    ) -> Result<Self, crate::Error>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint)?.ready_oneshot().await
+        Self::new(connector, endpoint, always_reconnect)?
+            .ready_oneshot()
+            .await
     }
 }
 

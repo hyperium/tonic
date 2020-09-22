@@ -64,7 +64,8 @@ impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
 
                         #[cfg(not(feature = "tls"))]
                         let connector = service::connector(http);
-                        let fut = Connection::connect(connector, endpoint);
+                        let always_reconnect = false;
+                        let fut = Connection::connect(connector, endpoint, always_reconnect);
                         self.connecting = Some((k, Box::pin(fut)));
                         continue;
                     }

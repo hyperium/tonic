@@ -215,7 +215,8 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(http);
 
-        Channel::connect(connector, self.clone()).await
+        let always_reconnect = false;
+        Channel::connect(connector, self.clone(), always_reconnect).await
     }
 
     /// Create a channel from this config.
@@ -234,7 +235,8 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(http);
 
-        Channel::new(connector, self.clone())
+        let always_reconnect = true;
+        Channel::new(connector, self.clone(), always_reconnect)
     }
 
     /// Connect with a custom connector.
@@ -255,7 +257,8 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(connector);
 
-        Channel::connect(connector, self.clone()).await
+        let always_reconnect = false;
+        Channel::connect(connector, self.clone(), always_reconnect).await
     }
 
     /// Get the endpoint uri.
