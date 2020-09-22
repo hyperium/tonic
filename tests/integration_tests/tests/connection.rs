@@ -70,8 +70,7 @@ async fn connect_lazy_reconnects_after_first_failure() {
     let mut client = TestClient::new(channel);
 
     // First call should fail, the server is not running
-    let res = client.unary_call(Request::new(Input {})).await;
-    assert!(res.is_err());
+    client.unary_call(Request::new(Input {})).await.unwrap_err();
 
     // Start the server now, second call should succeed
     let jh = tokio::spawn(async move {

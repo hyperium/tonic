@@ -91,12 +91,12 @@ where
 
                             state = State::Idle;
 
-                            if !self.has_been_connected && !self.is_lazy {
+                            if !(self.has_been_connected || self.is_lazy) {
                                 return Poll::Ready(Err(e.into()));
+                            } else {
+                                self.error = Some(e.into());
+                                break;
                             }
-
-                            self.error = Some(e.into());
-                            break;
                         }
                     }
                 }
