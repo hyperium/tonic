@@ -3,6 +3,27 @@
 set -eu
 set -o pipefail
 
+# the go client does not support passing an argument with multiple test cases
+# so we loop over this array calling the binary each time around
+TEST_CASES=(
+  "empty_unary"
+  "large_unary"
+  "client_streaming"
+  "server_streaming"
+  "ping_pong"
+  "empty_stream"
+  "status_code_and_message"
+  "special_status_message"
+  "custom_metadata"
+  "unimplemented_method"
+  "unimplemented_service"
+)
+
+# join all test cases in one comma separated string (dropping the first one)
+# so we can call the rust client only once, reducing the noise
+JOINED_TEST_CASES=$(printf ",%s" "${TEST_CASES[@]}")
+JOINED_TEST_CASES="${JOINED_TEST_CASES:1}"
+
 set -x
 
 echo "Running for OS: ${OSTYPE}"
@@ -21,7 +42,7 @@ ARG="${1:-""}"
 
 SERVER="interop/bin/server_${OS}_amd64${EXT}"
 
-# TLS_CA="interop/data/ca.pem"
+TLS_CA="interop/data/ca.pem"
 TLS_CRT="interop/data/server1.pem"
 TLS_KEY="interop/data/server1.key"
 
@@ -36,10 +57,7 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client \
- --test_case=empty_unary,large_unary,client_streaming,server_streaming,ping_pong,\
-empty_stream,status_code_and_message,special_status_message,unimplemented_method,\
-unimplemented_service,custom_metadata ${ARG}
+./target/debug/client --test_case="${JOINED_TEST_CASES}" ${ARG}
 
 echo ":; killing test server"; kill ${SERVER_PID};
 
@@ -54,15 +72,14 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client \
---test_case=empty_unary,large_unary,client_streaming,server_streaming,ping_pong,\
-empty_stream,status_code_and_message,special_status_message,unimplemented_method,\
-unimplemented_service,custom_metadata ${ARG}
+./target/debug/client --test_case="${JOINED_TEST_CASES}" ${ARG}
 
-if [ -z "${ARG}" ]; then
-  # TODO: run all other test cases w/wo tls
-  GO_CLIENT="interop/bin/client_${OS}_amd64${EXT}"
+TLS_ARGS=""
 
-  $GO_CLIENT --test_case="status_code_and_message"
-  $GO_CLIENT --test_case="custom_metadata"
+if [ -n "${ARG}" ]; then
+  TLS_ARGS="--use_tls --use_test_ca --server_host_override=foo.test.google.fr --ca_file=${TLS_CA}"
 fi
+
+for CASE in "${TEST_CASES[@]}"; do
+  interop/bin/client_${OS}_amd64${EXT} --test_case="${CASE}" ${TLS_ARGS}
+done
