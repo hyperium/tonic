@@ -58,10 +58,14 @@ impl Service {
             package: service.package,
             proto_name: service.proto_name,
             comments: service.comments.leading,
-            methods: service.methods.into_iter().map(|v| Method {
-                inner: v,
-                codec_path: codec_path.clone()
-            }).collect(),
+            methods: service
+                .methods
+                .into_iter()
+                .map(|v| Method {
+                    inner: v,
+                    codec_path: codec_path.clone(),
+                })
+                .collect(),
             codec_path,
         }
     }
