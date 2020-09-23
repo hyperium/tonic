@@ -45,3 +45,26 @@ where
         self.inner.call(req)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    struct Svc;
+
+    #[test]
+    fn sets_default_if_no_custom_user_agent() {
+        assert_eq!(
+            UserAgent::new(Svc, None).user_agent,
+            HeaderValue::from_static(TONIC_USER_AGENT)
+        )
+    }
+
+    #[test]
+    fn prepends_custom_user_agent_to_default() {
+        assert_eq!(
+            UserAgent::new(Svc, Some(HeaderValue::from_static("Greeter 1.1"))).user_agent,
+            HeaderValue::from_str(&format!("Greeter 1.1 {}", TONIC_USER_AGENT)).unwrap()
+        )
+    }
+}
