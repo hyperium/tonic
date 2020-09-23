@@ -21,6 +21,7 @@ struct ErrorImpl {
 pub(crate) enum Kind {
     Transport,
     InvalidUri,
+    InvalidUserAgent,
 }
 
 impl Error {
@@ -43,10 +44,15 @@ impl Error {
         Error::new(Kind::InvalidUri)
     }
 
+    pub(crate) fn new_invalid_user_agent() -> Self {
+        Error::new(Kind::InvalidUserAgent)
+    }
+
     fn description(&self) -> &str {
         match &self.inner.kind {
             Kind::Transport => "transport error",
             Kind::InvalidUri => "invalid URI",
+            Kind::InvalidUserAgent => "user agent is not a valid header value",
         }
     }
 }
