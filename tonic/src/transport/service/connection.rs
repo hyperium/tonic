@@ -29,7 +29,7 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
+    fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool) -> Self
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
@@ -61,13 +61,13 @@ impl Connection {
             .into_inner();
 
         let connector = HyperConnect::new(connector, settings);
-        let conn = Reconnect::new(connector, endpoint.uri.clone());
+        let conn = Reconnect::new(connector, endpoint.uri.clone(), is_lazy);
 
         let inner = stack.layer(conn);
 
-        Ok(Self {
+        Self {
             inner: BoxService::new(inner),
-        })
+        }
     }
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
@@ -77,7 +77,17 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint)?.ready_oneshot().await
+        Self::new(connector, endpoint, false).ready_oneshot().await
+    }
+
+    pub(crate) fn lazy<C>(connector: C, endpoint: Endpoint) -> Self
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::Error> + Send,
+        C::Future: Unpin + Send,
+        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+    {
+        Self::new(connector, endpoint, true)
     }
 }
 
