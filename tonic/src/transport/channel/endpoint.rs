@@ -6,8 +6,10 @@ use super::ClientTlsConfig;
 use crate::transport::service::TlsConnector;
 use crate::transport::Error;
 use bytes::Bytes;
-use http::uri::{InvalidUri, Uri};
-use http::HeaderValue;
+use http::{
+    uri::{InvalidUri, Uri},
+    HeaderValue,
+};
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
