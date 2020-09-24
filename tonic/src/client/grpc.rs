@@ -1,7 +1,7 @@
 use crate::{
     body::{Body, BoxBody},
     client::GrpcService,
-    codec::{encode_client, Codec, Streaming},
+    codec::{encode_client, Codec, MessageStream, Streaming},
     interceptor::Interceptor,
     Code, Request, Response, Status,
 };

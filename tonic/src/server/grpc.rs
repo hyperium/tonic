@@ -3,7 +3,7 @@ use crate::{
     codec::{encode_server, Codec, Streaming},
     interceptor::Interceptor,
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
-    Code, Request, Status,
+    Code, MessageStream, Request, Status,
 };
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};

@@ -5,7 +5,7 @@ use crate::{
 use futures_util::{future, stream, StreamExt};
 use tokio::sync::mpsc;
 use tonic::transport::Channel;
-use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
+use tonic::{codec::MessageStream, metadata::MetadataValue, Code, Request, Response, Status};
 
 pub type TestClient = TestServiceClient<Channel>;
 pub type UnimplementedClient = UnimplementedServiceClient<Channel>;

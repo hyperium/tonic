@@ -11,7 +11,7 @@ mod prost;
 
 use std::io;
 
-pub use self::decode::Streaming;
+pub use self::decode::{MessageStream, Streaming};
 pub(crate) use self::encode::{encode_client, encode_server};
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]

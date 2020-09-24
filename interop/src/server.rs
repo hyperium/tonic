@@ -7,7 +7,9 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
-use tonic::{body::BoxBody, transport::NamedService, Code, Request, Response, Status};
+use tonic::{
+    body::BoxBody, codec::MessageStream, transport::NamedService, Code, Request, Response, Status,
+};
 use tower::Service;
 
 pub use pb::test_service_server::TestServiceServer;

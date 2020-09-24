@@ -98,7 +98,7 @@ mod status;
 pub use async_trait::async_trait;
 
 #[doc(inline)]
-pub use codec::Streaming;
+pub use codec::{MessageStream, Streaming};
 pub use interceptor::Interceptor;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;

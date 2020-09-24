@@ -6,7 +6,7 @@ use rand::rngs::ThreadRng;
 use rand::Rng;
 use tokio::time;
 use tonic::transport::Channel;
-use tonic::Request;
+use tonic::{MessageStream, Request};
 
 use routeguide::route_guide_client::RouteGuideClient;
 use routeguide::{Point, Rectangle, RouteNote};

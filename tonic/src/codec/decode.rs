@@ -14,6 +14,19 @@ use tracing::{debug, trace};
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
+#[crate::async_trait]
+/// Streaming messages
+pub trait MessageStream: std::marker::Send {
+    /// Streamed Message
+    type Message;
+
+    /// Fetch the next message from this stream.
+    async fn message<'a>(&'a mut self) -> Result<Option<Self::Message>, Status>;
+    /// Fetch trailers from this stream.
+    /// Pending message will be drained.
+    async fn trailers<'a>(&'a mut self) -> Result<Option<MetadataMap>, Status>;
+}
+
 /// Streaming requests and responses.
 ///
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
@@ -88,10 +101,13 @@ impl<T> Streaming<T> {
     }
 }
 
-impl<T> Streaming<T> {
+#[crate::async_trait]
+impl<T> MessageStream for Streaming<T> {
+    type Message = T;
+
     /// Fetch the next message from this stream.
     /// ```rust
-    /// # use tonic::{Streaming, Status, codec::Decoder};
+    /// # use tonic::{MessageStream, Streaming, Status, codec::Decoder};
     /// # use std::fmt::Debug;
     /// # async fn next_message_ex<T, D>(mut request: Streaming<T>) -> Result<(), Status>
     /// # where T: Debug,
@@ -103,7 +119,7 @@ impl<T> Streaming<T> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn message(&mut self) -> Result<Option<T>, Status> {
+    async fn message(&mut self) -> Result<Option<Self::Message>, Status> {
         match future::poll_fn(|cx| Pin::new(&mut *self).poll_next(cx)).await {
             Some(Ok(m)) => Ok(Some(m)),
             Some(Err(e)) => Err(e),
@@ -118,7 +134,7 @@ impl<T> Streaming<T> {
     /// will not need to poll for trailers since the body was totally consumed.
     ///
     /// ```rust
-    /// # use tonic::{Streaming, Status};
+    /// # use tonic::{MessageStream, Streaming, Status};
     /// # async fn trailers_ex<T>(mut request: Streaming<T>) -> Result<(), Status> {
     /// if let Some(metadata) = request.trailers().await? {
     ///     println!("{:?}", metadata);
@@ -126,7 +142,7 @@ impl<T> Streaming<T> {
     /// # Ok(())
     /// # }
     /// ```
-    pub async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
+    async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
         // Shortcut to see if we already pulled the trailers in the stream step
         // we need to do that so that the stream can error on trailing grpc-status
         if let Some(trailers) = self.trailers.take() {
@@ -150,7 +166,9 @@ impl<T> Streaming<T> {
 
         Ok(map.map(MetadataMap::from_headers))
     }
+}
 
+impl<T> Streaming<T> {
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
         if let State::ReadHeader = self.state {
             if self.buf.remaining() < 5 {
