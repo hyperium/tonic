@@ -5,7 +5,7 @@ pub mod pb {
 use futures::Stream;
 use pb::{EchoRequest, EchoResponse};
 use std::pin::Pin;
-use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status, Streaming};
+use tonic::{metadata::MetadataValue, transport::Server, MessageStream, Request, Response, Status};
 
 type EchoResult<T> = Result<Response<T>, Status>;
 type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
@@ -29,18 +29,18 @@ impl pb::echo_server::Echo for EchoServer {
         Err(Status::unimplemented("not implemented"))
     }
 
-    async fn client_streaming_echo(
+    async fn client_streaming_echo<S: MessageStream<Message = EchoRequest>>(
         &self,
-        _: Request<Streaming<EchoRequest>>,
+        _: Request<S>,
     ) -> EchoResult<EchoResponse> {
         Err(Status::unimplemented("not implemented"))
     }
 
     type BidirectionalStreamingEchoStream = ResponseStream;
 
-    async fn bidirectional_streaming_echo(
+    async fn bidirectional_streaming_echo<S: MessageStream<Message = EchoRequest>>(
         &self,
-        _: Request<Streaming<EchoRequest>>,
+        _: Request<S>,
     ) -> EchoResult<Self::BidirectionalStreamingEchoStream> {
         Err(Status::unimplemented("not implemented"))
     }

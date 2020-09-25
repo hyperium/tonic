@@ -1,6 +1,6 @@
 use futures::Stream;
 use std::pin::Pin;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, MessageStream, Request, Response, Status};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -76,18 +76,18 @@ impl Echo for MyEcho {
         Err(Status::unimplemented("Not yet implemented"))
     }
 
-    async fn client_streaming_echo(
+    async fn client_streaming_echo<S: MessageStream<Message = EchoRequest>>(
         &self,
-        _: Request<tonic::Streaming<EchoRequest>>,
+        _: Request<S>,
     ) -> Result<Response<EchoResponse>, Status> {
         Err(Status::unimplemented("Not yet implemented"))
     }
 
     type BidirectionalStreamingEchoStream = ResponseStream;
 
-    async fn bidirectional_streaming_echo(
+    async fn bidirectional_streaming_echo<S: MessageStream<Message = EchoRequest>>(
         &self,
-        _: Request<tonic::Streaming<EchoRequest>>,
+        _: Request<S>,
     ) -> Result<Response<Self::BidirectionalStreamingEchoStream>, Status> {
         Err(Status::unimplemented("Not yet implemented"))
     }

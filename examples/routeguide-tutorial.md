@@ -291,18 +291,18 @@ impl RouteGuide for RouteGuideService {
         unimplemented!()
     }
 
-    async fn record_route(
+    async fn record_route<S: tonic::MessageStream<Message = Point>>(
         &self,
-        _request: Request<tonic::Streaming<Point>>,
+        _request: Request<S>,
     ) -> Result<Response<RouteSummary>, Status> {
         unimplemented!()
     }
 
     type RouteChatStream = Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>>;
 
-    async fn route_chat(
+    async fn route_chat<S: tonic::MessageStream<Message = RouteNote>>(
         &self,
-        _request: Request<tonic::Streaming<RouteNote>>,
+        _request: Request<S>,
     ) -> Result<Response<Self::RouteChatStream>, Status> {
         unimplemented!()
     }
@@ -435,7 +435,7 @@ The `Stream` half of the channel is returned to the caller, wrapped in a `tonic:
 Now let's look at something a little more complicated: the client-side streaming method
 `record_route`, where we get a stream of `Point`s from the client and return a single `RouteSummary`
 with information about their trip. As you can see, this time the method receives a
-`tonic::Request<tonic::Streaming<Point>>`.
+`tonic::Request<tonic::MessageStream<Message = Point>>`.
 
 ```rust
 use std::time::Instant;
@@ -443,9 +443,9 @@ use futures_util::StreamExt;
 ```
 
 ```rust
-async fn record_route(
+async fn record_route<S: tonic::MessageStream<Message = Point>>(
     &self,
-    request: Request<tonic::Streaming<Point>>,
+    request: Request<S>,
 ) -> Result<Response<RouteSummary>, Status> {
     let mut stream = request.into_inner();
 
@@ -494,9 +494,9 @@ type RouteChatStream =
     Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>>;
 
 
-async fn route_chat(
+async fn route_chat<S: tonic::MessageStream<Message = RouteNote>>(
     &self,
-    request: Request<tonic::Streaming<RouteNote>>,
+    request: Request<S>,
 ) -> Result<Response<Self::RouteChatStream>, Status> {
     let mut notes = HashMap::new();
     let mut stream = request.into_inner();
@@ -685,7 +685,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
 As in the simple RPC, we pass a single value request. However, instead of getting a
 single value back, we get a stream of `Features`.
 
-We use the the `message()` method from the `tonic::Streaming` struct to repeatedly read in the
+We use the the `message()` method from the `tonic::MessageStream` trait to repeatedly read in the
 server's responses to a response protocol buffer object (in this case a `Feature`) until there are
 no more messages left in the stream.
 
