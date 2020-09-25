@@ -1,6 +1,6 @@
 use crate::pb::{self, *};
 use async_stream::try_stream;
-use futures_util::{stream, StreamExt, TryStreamExt};
+use futures_util::stream;
 use http::header::{HeaderMap, HeaderName, HeaderValue};
 use http_body::Body;
 use std::future::Future;
@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tonic::{
-    body::BoxBody, codec::MessageStream, transport::NamedService, Code, Request, Response, Status,
+    body::BoxBody, transport::NamedService, Code, MessageStream, Request, Response, Status,
 };
 use tower::Service;
 
@@ -19,7 +19,6 @@ pub use pb::unimplemented_service_server::UnimplementedServiceServer;
 pub struct TestService;
 
 type Result<T> = std::result::Result<Response<T>, Status>;
-type Streaming<T> = Request<tonic::Streaming<T>>;
 type Stream<T> = Pin<
     Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + Sync + 'static>,
 >;
@@ -85,14 +84,14 @@ impl pb::test_service_server::TestService for TestService {
         ))
     }
 
-    async fn streaming_input_call(
+    async fn streaming_input_call<S: MessageStream<Message = StreamingInputCallRequest>>(
         &self,
-        req: Streaming<StreamingInputCallRequest>,
+        req: Request<S>,
     ) -> Result<StreamingInputCallResponse> {
         let mut stream = req.into_inner();
 
         let mut aggregated_payload_size = 0 as i32;
-        while let Some(msg) = stream.try_next().await? {
+        while let Some(msg) = stream.message().await? {
             aggregated_payload_size += msg.payload.unwrap().body.len() as i32;
         }
 
@@ -105,9 +104,9 @@ impl pb::test_service_server::TestService for TestService {
 
     type FullDuplexCallStream = Stream<StreamingOutputCallResponse>;
 
-    async fn full_duplex_call(
+    async fn full_duplex_call<S: MessageStream<Message = StreamingOutputCallRequest>>(
         &self,
-        req: Streaming<StreamingOutputCallRequest>,
+        req: Request<S>,
     ) -> Result<Self::FullDuplexCallStream> {
         let mut stream = req.into_inner();
 
@@ -116,27 +115,27 @@ impl pb::test_service_server::TestService for TestService {
                 let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
                 return Err(status);
             }
+            todo!();
+        // let single_message = stream::iter(vec![Ok(first_msg)]);
+        // let mut stream = single_message.chain(stream);
 
-            let single_message = stream::iter(vec![Ok(first_msg)]);
-            let mut stream = single_message.chain(stream);
+        // let stream = try_stream! {
+        //     while let Some(msg) = stream.message().await? {
+        //         if let Some(echo_status) = msg.response_status {
+        //             let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
+        //             Err(status)?;
+        //         }
 
-            let stream = try_stream! {
-                while let Some(msg) = stream.try_next().await? {
-                    if let Some(echo_status) = msg.response_status {
-                        let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
-                        Err(status)?;
-                    }
+        //         for param in msg.response_parameters {
+        //             tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
 
-                    for param in msg.response_parameters {
-                        tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
+        //             let payload = crate::server_payload(param.size as usize);
+        //             yield StreamingOutputCallResponse { payload: Some(payload) };
+        //         }
+        //     }
+        // };
 
-                        let payload = crate::server_payload(param.size as usize);
-                        yield StreamingOutputCallResponse { payload: Some(payload) };
-                    }
-                }
-            };
-
-            Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
+        // Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
         } else {
             let stream = stream::empty();
             Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
@@ -145,9 +144,9 @@ impl pb::test_service_server::TestService for TestService {
 
     type HalfDuplexCallStream = Stream<StreamingOutputCallResponse>;
 
-    async fn half_duplex_call(
+    async fn half_duplex_call<S: MessageStream<Message = StreamingOutputCallRequest>>(
         &self,
-        _: Streaming<StreamingOutputCallRequest>,
+        _: Request<S>,
     ) -> Result<Self::HalfDuplexCallStream> {
         Err(Status::unimplemented("TODO"))
     }

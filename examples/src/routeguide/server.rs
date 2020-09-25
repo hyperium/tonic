@@ -1,10 +1,9 @@
-use std::collections::HashMap;
 use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
-use futures::{Stream, StreamExt};
+use futures::Stream;
 use tokio::sync::mpsc;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
@@ -62,9 +61,9 @@ impl RouteGuide for RouteGuideService {
         Ok(Response::new(rx))
     }
 
-    async fn record_route(
+    async fn record_route<S: tonic::MessageStream<Message = Point>>(
         &self,
-        request: Request<tonic::Streaming<Point>>,
+        request: Request<S>,
     ) -> Result<Response<RouteSummary>, Status> {
         println!("RecordRoute");
 
@@ -74,9 +73,7 @@ impl RouteGuide for RouteGuideService {
         let mut last_point = None;
         let now = Instant::now();
 
-        while let Some(point) = stream.next().await {
-            let point = point?;
-
+        while let Some(point) = stream.message().await? {
             println!("  ==> Point = {:?}", point);
 
             // Increment the point count
@@ -105,31 +102,30 @@ impl RouteGuide for RouteGuideService {
     type RouteChatStream =
         Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>>;
 
-    async fn route_chat(
+    async fn route_chat<S: tonic::MessageStream<Message = RouteNote>>(
         &self,
-        request: Request<tonic::Streaming<RouteNote>>,
+        _request: Request<S>,
     ) -> Result<Response<Self::RouteChatStream>, Status> {
         println!("RouteChat");
 
-        let mut notes = HashMap::new();
-        let mut stream = request.into_inner();
+        todo!();
+        // let mut notes = HashMap::new();
+        // let mut stream = request.into_inner();
+        //
+        // let output = async_stream::try_stream! {
+        //     while let Some(note) = stream.message().await? {
+        //         let location = note.location.clone().unwrap();
 
-        let output = async_stream::try_stream! {
-            while let Some(note) = stream.next().await {
-                let note = note?;
+        //         let location_notes = notes.entry(location).or_insert(vec![]);
+        //         location_notes.push(note);
 
-                let location = note.location.clone().unwrap();
+        //         for note in location_notes {
+        //             yield note.clone();
+        //         }
+        //     }
+        // };
 
-                let location_notes = notes.entry(location).or_insert(vec![]);
-                location_notes.push(note);
-
-                for note in location_notes {
-                    yield note.clone();
-                }
-            }
-        };
-
-        Ok(Response::new(Box::pin(output) as Self::RouteChatStream))
+        // Ok(Response::new(Box::pin(output) as Self::RouteChatStream))
     }
 }
 
