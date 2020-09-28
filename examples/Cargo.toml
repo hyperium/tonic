@@ -71,6 +71,10 @@ name = "tower-server"
 path = "src/tower/server.rs"
 
 [[bin]]
+name = "tower-client"
+path = "src/tower/client.rs"
+
+[[bin]]
 name = "multiplex-server"
 path = "src/multiplex/server.rs"
 
