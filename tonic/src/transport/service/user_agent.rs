@@ -20,7 +20,7 @@ impl<T> UserAgent<T> {
                 buf.extend(TONIC_USER_AGENT.as_bytes());
                 HeaderValue::from_bytes(&buf).expect("user-agent should be valid")
             })
-            .unwrap_or(HeaderValue::from_static(TONIC_USER_AGENT));
+            .unwrap_or_else(|| HeaderValue::from_static(TONIC_USER_AGENT));
 
         Self { inner, user_agent }
     }

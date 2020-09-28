@@ -183,7 +183,7 @@ impl GrpcService<BoxBody> for Channel {
     type Future = ResponseFuture;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        GrpcService::poll_ready(&mut self.svc, cx).map_err(|e| super::Error::from_source(e))
+        GrpcService::poll_ready(&mut self.svc, cx).map_err(super::Error::from_source)
     }
 
     fn call(&mut self, request: Request<BoxBody>) -> Self::Future {
@@ -197,7 +197,7 @@ impl Future for ResponseFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let val = futures_util::ready!(Pin::new(&mut self.inner).poll(cx))
-            .map_err(|e| super::Error::from_source(e))?;
+            .map_err(super::Error::from_source)?;
         Ok(val).into()
     }
 }

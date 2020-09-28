@@ -21,6 +21,8 @@ use tower::{
 use tower_load::Load;
 use tower_service::Service;
 
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
+
 pub(crate) type Request = http::Request<BoxBody>;
 pub(crate) type Response = http::Response<hyper::Body>;
 
@@ -50,8 +52,6 @@ impl Connection {
         if let Some(val) = endpoint.http2_keep_alive_while_idle {
             settings.http2_keep_alive_while_idle(val);
         }
-
-        let settings = settings.clone();
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
@@ -95,9 +95,7 @@ impl Connection {
 impl Service<Request> for Connection {
     type Response = Response;
     type Error = crate::Error;
-
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Service::poll_ready(&mut self.inner, cx).map_err(Into::into)

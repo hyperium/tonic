@@ -192,7 +192,7 @@ impl Endpoint {
             tls: Some(
                 tls_config
                     .tls_connector(self.uri.clone())
-                    .map_err(|e| Error::from_source(e))?,
+                    .map_err(Error::from_source)?,
             ),
             ..self
         })

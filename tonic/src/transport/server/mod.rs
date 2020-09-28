@@ -48,6 +48,7 @@ use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static>;
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 
 /// A default batteries included `transport` server.
 ///
@@ -98,11 +99,13 @@ where
     B::Error: Into<crate::Error> + Send,
 {
     type Response = Response<BoxBody>;
+    type Error = crate::Error;
+
+    #[allow(clippy::type_complexity)]
     type Future = FutureEither<
         MapErr<A::Future, fn(A::Error) -> crate::Error>,
         MapErr<B::Future, fn(B::Error) -> crate::Error>,
     >;
-    type Error = crate::Error;
 
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
@@ -143,11 +146,7 @@ impl Server {
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
     pub fn tls_config(self, tls_config: ServerTlsConfig) -> Result<Self, Error> {
         Ok(Server {
-            tls: Some(
-                tls_config
-                    .tls_acceptor()
-                    .map_err(|e| Error::from_source(e))?,
-            ),
+            tls: Some(tls_config.tls_acceptor().map_err(Error::from_source)?),
             ..self
         })
     }
@@ -320,7 +319,7 @@ impl Server {
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
@@ -538,6 +537,8 @@ where
 {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
+
+    #[allow(clippy::type_complexity)]
     type Future = MapErr<Instrumented<S::Future>, fn(S::Error) -> crate::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -578,8 +579,7 @@ where
 {
     type Response = BoxService;
     type Error = crate::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Ok(()).into()
@@ -593,7 +593,7 @@ where
 
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
         let span = self.span.clone();
 
         Box::pin(async move {

@@ -12,12 +12,12 @@ use tokio::{stream::Stream, sync::mpsc::Receiver};
 
 use tower::discover::{Change, Discover};
 
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
+type DiscoverResult<K, S, E> = Result<Change<K, S>, E>;
+
 pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {
     changes: Receiver<Change<K, Endpoint>>,
-    connecting: Option<(
-        K,
-        Pin<Box<dyn Future<Output = Result<Connection, crate::Error>> + Send + 'static>>,
-    )>,
+    connecting: Option<(K, BoxFuture<Connection, crate::Error>)>,
 }
 
 impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
@@ -37,7 +37,7 @@ impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
     fn poll_discover(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Result<Change<Self::Key, Self::Service>, Self::Error>> {
+    ) -> Poll<DiscoverResult<Self::Key, Self::Service, Self::Error>> {
         loop {
             if let Some((key, connecting)) = &mut self.connecting {
                 let svc = futures_core::ready!(Pin::new(connecting).poll(cx))?;

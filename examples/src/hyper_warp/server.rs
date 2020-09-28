@@ -48,12 +48,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("GreeterServer listening on {}", addr);
 
     let tonic = GreeterServer::new(greeter);
-    let warp = warp::service(warp::path("hello").map(|| "hello, world!"));
+    let mut warp = warp::service(warp::path("hello").map(|| "hello, world!"));
 
     Server::bind(&addr)
         .serve(make_service_fn(move |_| {
             let mut tonic = tonic.clone();
-            let mut warp = warp.clone();
             future::ok::<_, Infallible>(tower::service_fn(
                 move |req: hyper::Request<hyper::Body>| match req.version() {
                     Version::HTTP_11 | Version::HTTP_10 => Either::Left(

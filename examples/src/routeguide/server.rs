@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
@@ -148,17 +147,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Server::builder().add_service(svc).serve(addr).await?;
 
     Ok(())
-}
-
-// Implement hash for Point
-impl Hash for Point {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: Hasher,
-    {
-        self.latitude.hash(state);
-        self.longitude.hash(state);
-    }
 }
 
 impl Eq for Point {}
