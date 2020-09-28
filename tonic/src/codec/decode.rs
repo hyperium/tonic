@@ -134,7 +134,6 @@ impl<T> Streaming<T> {
         }
 
         // To fetch the trailers we must clear the body and drop it.
-        // while let Some(_) = self.message().await? {}
         while self.message().await?.is_some() {}
 
         // Since we call poll_trailers internally on poll_next we need to
