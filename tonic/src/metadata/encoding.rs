@@ -6,7 +6,7 @@ use std::hash::Hash;
 
 /// A possible error when converting a `MetadataValue` from a string or byte
 /// slice.
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct InvalidMetadataValue {
     _priv: (),
 }
@@ -121,7 +121,7 @@ impl self::value_encoding::Sealed for Binary {
     }
 
     fn from_static(value: &'static str) -> HeaderValue {
-        if !base64::decode(value).is_ok() {
+        if base64::decode(value).is_err() {
             panic!("Invalid base64 passed to from_static: {}", value);
         }
         unsafe {
@@ -146,12 +146,10 @@ impl self::value_encoding::Sealed for Binary {
     }
 
     fn values_equal(a: &HeaderValue, b: &HeaderValue) -> bool {
-        let decoded_a = Self::decode(a.as_bytes());
-        let decoded_b = Self::decode(b.as_bytes());
-        if decoded_a.is_ok() && decoded_b.is_ok() {
-            decoded_a.unwrap() == decoded_b.unwrap()
-        } else {
-            decoded_a.is_err() && decoded_b.is_err()
+        match (Self::decode(a.as_bytes()), Self::decode(b.as_bytes())) {
+            (Ok(a), Ok(b)) => a == b,
+            (Err(_), Err(_)) => true,
+            _ => false,
         }
     }
 
@@ -188,7 +186,7 @@ impl Error for InvalidMetadataValue {}
 
 /// A possible error when converting a `MetadataValue` from a string or byte
 /// slice.
-#[derive(Debug)]
+#[derive(Debug, Hash)]
 pub struct InvalidMetadataValueBytes(InvalidMetadataValue);
 
 // ===== impl InvalidMetadataValueBytes =====

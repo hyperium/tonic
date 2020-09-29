@@ -275,4 +275,10 @@ impl fmt::Display for InvalidMetadataKey {
     }
 }
 
+impl Default for InvalidMetadataKey {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Error for InvalidMetadataKey {}

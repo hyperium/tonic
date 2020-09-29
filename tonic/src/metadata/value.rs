@@ -6,6 +6,7 @@ use super::key::MetadataKey;
 use bytes::Bytes;
 use http::header::HeaderValue;
 use std::error::Error;
+use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
 use std::str::FromStr;
 use std::{cmp, fmt};
@@ -16,7 +17,7 @@ use std::{cmp, fmt};
 ///
 /// [`HeaderMap`]: struct.HeaderMap.html
 /// [`MetadataMap`]: struct.MetadataMap.html
-#[derive(Clone, Hash)]
+#[derive(Clone)]
 #[repr(transparent)]
 pub struct MetadataValue<VE: ValueEncoding> {
     // Note: There are unsafe transmutes that assume that the memory layout
@@ -133,6 +134,8 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     /// Convert a `Bytes` directly into a `MetadataValue` without validating.
     /// For MetadataValue<Binary> the provided parameter must be base64
     /// encoded without padding bytes at the end.
+    ///
+    /// # Safety
     ///
     /// This function does NOT validate that illegal bytes are not contained
     /// within the buffer.
@@ -277,6 +280,8 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     }
 }
 
+// is_empty is defined in the generic impl block above
+#[allow(clippy::len_without_is_empty)]
 impl MetadataValue<Ascii> {
     /// Attempt to convert a string to a `MetadataValue<Ascii>`.
     ///
@@ -303,6 +308,7 @@ impl MetadataValue<Ascii> {
     /// let val = AsciiMetadataValue::from_str("\n");
     /// assert!(val.is_err());
     /// ```
+    #[allow(clippy::should_implement_trait)]
     #[inline]
     pub fn from_str(src: &str) -> Result<Self, InvalidMetadataValue> {
         HeaderValue::from_str(src)
@@ -537,6 +543,21 @@ impl fmt::Display for ToStrError {
 
 impl Error for ToStrError {}
 
+impl Hash for MetadataValue<Ascii> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.inner.hash(state)
+    }
+}
+
+impl Hash for MetadataValue<Binary> {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        match self.to_bytes() {
+            Ok(b) => b.hash(state),
+            Err(e) => e.hash(state),
+        }
+    }
+}
+
 // ===== PartialEq / PartialOrd =====
 
 impl<VE: ValueEncoding> PartialEq for MetadataValue<VE> {
@@ -747,10 +768,10 @@ fn test_value_eq_value() {
     type AMV = AsciiMetadataValue;
 
     assert_eq!(AMV::from_static("abc"), AMV::from_static("abc"));
-    assert!(AMV::from_static("abc") != AMV::from_static("ABC"));
+    assert_ne!(AMV::from_static("abc"), AMV::from_static("ABC"));
 
     assert_eq!(BMV::from_bytes(b"abc"), BMV::from_bytes(b"abc"));
-    assert!(BMV::from_bytes(b"abc") != BMV::from_bytes(b"ABC"));
+    assert_ne!(BMV::from_bytes(b"abc"), BMV::from_bytes(b"ABC"));
 
     // Padding is ignored.
     assert_eq!(
@@ -772,14 +793,14 @@ fn test_value_eq_str() {
     type AMV = AsciiMetadataValue;
 
     assert_eq!(AMV::from_static("abc"), "abc");
-    assert!(AMV::from_static("abc") != "ABC");
+    assert_ne!(AMV::from_static("abc"), "ABC");
     assert_eq!("abc", AMV::from_static("abc"));
-    assert!("ABC" != AMV::from_static("abc"));
+    assert_ne!("ABC", AMV::from_static("abc"));
 
     assert_eq!(BMV::from_bytes(b"abc"), "abc");
-    assert!(BMV::from_bytes(b"abc") != "ABC");
+    assert_ne!(BMV::from_bytes(b"abc"), "ABC");
     assert_eq!("abc", BMV::from_bytes(b"abc"));
-    assert!("ABC" != BMV::from_bytes(b"abc"));
+    assert_ne!("ABC", BMV::from_bytes(b"abc"));
 
     // Padding is ignored.
     assert_eq!(BMV::from_static("SGVsbG8hIQ=="), "Hello!!");
@@ -792,14 +813,85 @@ fn test_value_eq_bytes() {
     type AMV = AsciiMetadataValue;
 
     assert_eq!(AMV::from_static("abc"), "abc".as_bytes());
-    assert!(AMV::from_static("abc") != "ABC".as_bytes());
+    assert_ne!(AMV::from_static("abc"), "ABC".as_bytes());
     assert_eq!(*"abc".as_bytes(), AMV::from_static("abc"));
-    assert!(*"ABC".as_bytes() != AMV::from_static("abc"));
+    assert_ne!(*"ABC".as_bytes(), AMV::from_static("abc"));
 
     assert_eq!(*"abc".as_bytes(), BMV::from_bytes(b"abc"));
-    assert!(*"ABC".as_bytes() != BMV::from_bytes(b"abc"));
+    assert_ne!(*"ABC".as_bytes(), BMV::from_bytes(b"abc"));
 
     // Padding is ignored.
     assert_eq!(BMV::from_static("SGVsbG8hIQ=="), "Hello!!".as_bytes());
     assert_eq!(*"Hello!!".as_bytes(), BMV::from_static("SGVsbG8hIQ=="));
+}
+
+#[test]
+fn test_ascii_value_hash() {
+    use std::collections::hash_map::DefaultHasher;
+    type AMV = AsciiMetadataValue;
+
+    fn hash(value: AMV) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    let value1 = AMV::from_static("abc");
+    let value2 = AMV::from_static("abc");
+    assert_eq!(value1, value2);
+    assert_eq!(hash(value1), hash(value2));
+
+    let value1 = AMV::from_static("abc");
+    let value2 = AMV::from_static("xyz");
+
+    assert_ne!(value1, value2);
+    assert_ne!(hash(value1), hash(value2));
+}
+
+#[test]
+fn test_valid_binary_value_hash() {
+    use std::collections::hash_map::DefaultHasher;
+    type BMV = BinaryMetadataValue;
+
+    fn hash(value: BMV) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    let value1 = BMV::from_bytes(b"abc");
+    let value2 = BMV::from_bytes(b"abc");
+    assert_eq!(value1, value2);
+    assert_eq!(hash(value1), hash(value2));
+
+    let value1 = BMV::from_bytes(b"abc");
+    let value2 = BMV::from_bytes(b"xyz");
+    assert_ne!(value1, value2);
+    assert_ne!(hash(value1), hash(value2));
+}
+
+#[test]
+fn test_invalid_binary_value_hash() {
+    use std::collections::hash_map::DefaultHasher;
+    type BMV = BinaryMetadataValue;
+
+    fn hash(value: BMV) -> u64 {
+        let mut hasher = DefaultHasher::new();
+        value.hash(&mut hasher);
+        hasher.finish()
+    }
+
+    unsafe {
+        let value1 = BMV::from_shared_unchecked(Bytes::from_static(b"..{}"));
+        let value2 = BMV::from_shared_unchecked(Bytes::from_static(b"{}.."));
+        assert_eq!(value1, value2);
+        assert_eq!(hash(value1), hash(value2));
+    }
+
+    unsafe {
+        let valid = BMV::from_bytes(b"abc");
+        let invalid = BMV::from_shared_unchecked(Bytes::from_static(b"{}.."));
+        assert_ne!(valid, invalid);
+        assert_ne!(hash(valid), hash(invalid));
+    }
 }
