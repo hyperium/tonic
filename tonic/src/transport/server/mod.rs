@@ -21,7 +21,10 @@ pub(crate) use incoming::TlsStream;
 #[cfg(feature = "tls")]
 use crate::transport::Error;
 
-use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
+use super::{
+    service::{Or, Routes, ServerIo, ServiceBuilderExt},
+    BoxFuture,
+};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
@@ -34,7 +37,6 @@ use std::{
     fmt,
     future::Future,
     net::SocketAddr,
-    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
@@ -48,7 +50,6 @@ use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static>;
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 
 /// A default batteries included `transport` server.
 ///

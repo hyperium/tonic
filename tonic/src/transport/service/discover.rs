@@ -1,4 +1,4 @@
-use super::super::service;
+use super::super::{service, BoxFuture};
 use super::connection::Connection;
 use crate::transport::Endpoint;
 
@@ -12,7 +12,6 @@ use tokio::{stream::Stream, sync::mpsc::Receiver};
 
 use tower::discover::{Change, Discover};
 
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 type DiscoverResult<K, S, E> = Result<Change<K, S>, E>;
 
 pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {

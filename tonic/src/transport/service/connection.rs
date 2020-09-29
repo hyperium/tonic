@@ -1,3 +1,4 @@
+use super::super::BoxFuture;
 use super::{layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin, UserAgent};
 use crate::{body::BoxBody, transport::Endpoint};
 use http::Uri;
@@ -6,8 +7,6 @@ use hyper::client::connect::Connection as HyperConnection;
 use hyper::client::service::Connect as HyperConnect;
 use std::{
     fmt,
-    future::Future,
-    pin::Pin,
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -20,8 +19,6 @@ use tower::{
 };
 use tower_load::Load;
 use tower_service::Service;
-
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 
 pub(crate) type Request = http::Request<BoxBody>;
 pub(crate) type Response = http::Response<hyper::Body>;

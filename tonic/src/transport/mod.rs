@@ -107,3 +107,6 @@ pub use self::channel::ClientTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::server::ServerTlsConfig;
+
+type BoxFuture<T, E> =
+    std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, E>> + Send + 'static>>;

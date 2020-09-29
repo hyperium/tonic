@@ -1,14 +1,11 @@
+use super::super::BoxFuture;
 use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
-use std::future::Future;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower_make::MakeConnection;
 use tower_service::Service;
-
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn connector<C>(inner: C) -> Connector<C> {
