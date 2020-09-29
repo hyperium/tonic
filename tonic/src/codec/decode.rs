@@ -134,7 +134,7 @@ impl<T> Streaming<T> {
         }
 
         // To fetch the trailers we must clear the body and drop it.
-        while let Some(_) = self.message().await? {}
+        while self.message().await?.is_some() {}
 
         // Since we call poll_trailers internally on poll_next we need to
         // check if it got cached again.
@@ -219,9 +219,8 @@ impl<T> Stream for Streaming<T> {
             // FIXME: implement the ability to poll trailers when we _know_ that
             // the consumer of this stream will only poll for the first message.
             // This means we skip the poll_trailers step.
-            match self.decode_chunk()? {
-                Some(item) => return Poll::Ready(Some(Ok(item))),
-                None => (),
+            if let Some(item) = self.decode_chunk()? {
+                return Poll::Ready(Some(Ok(item)));
             }
 
             let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
@@ -230,8 +229,7 @@ impl<T> Stream for Streaming<T> {
                     let err: crate::Error = e.into();
                     debug!("decoder inner stream error: {:?}", err);
                     let status = Status::from_error(&*err);
-                    Err(status)?;
-                    break;
+                    return Poll::Ready(Some(Err(status)));
                 }
                 None => None,
             };
@@ -252,10 +250,10 @@ impl<T> Stream for Streaming<T> {
                 // FIXME: improve buf usage.
                 if self.buf.has_remaining() {
                     trace!("unexpected EOF decoding stream");
-                    Err(Status::new(
+                    return Poll::Ready(Some(Err(Status::new(
                         Code::Internal,
                         "Unexpected EOF decoding stream.".to_string(),
-                    ))?;
+                    ))));
                 } else {
                     break;
                 }

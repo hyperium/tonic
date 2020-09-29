@@ -251,7 +251,6 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
         response_status: Some(EchoStatus {
             code: 2,
             message: TEST_STATUS_MESSAGE.to_string(),
-            ..Default::default()
         }),
         ..Default::default()
     };
@@ -260,7 +259,6 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
         response_status: Some(EchoStatus {
             code: 2,
             message: TEST_STATUS_MESSAGE.to_string(),
-            ..Default::default()
         }),
         ..Default::default()
     };
@@ -286,7 +284,6 @@ pub async fn special_status_message(client: &mut TestClient, assertions: &mut Ve
         response_status: Some(EchoStatus {
             code: 2,
             message: SPECIAL_TEST_STATUS_MESSAGE.to_string(),
-            ..Default::default()
         }),
         ..Default::default()
     };

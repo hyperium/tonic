@@ -505,11 +505,12 @@ impl Status {
         Status {
             code,
             message: message.into(),
-            details: details,
-            metadata: metadata,
+            details,
+            metadata,
         }
     }
 
+    #[allow(clippy::wrong_self_convention)]
     /// Build an `http::Response` from the given `Status`.
     pub fn to_http(self) -> http::Response<BoxBody> {
         let (mut parts, _body) = http::Response::new(()).into_parts();

@@ -94,6 +94,8 @@ where
 {
     type Response = A::Response;
     type Error = crate::Error;
+
+    #[allow(clippy::type_complexity)]
     type Future = Either<
         MapErr<A::Future, fn(A::Error) -> crate::Error>,
         MapErr<B::Future, fn(B::Error) -> crate::Error>,

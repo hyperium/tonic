@@ -50,7 +50,7 @@ fn response_length(response: &pb::StreamingOutputCallResponse) -> i32 {
     }
 }
 
-fn response_lengths(responses: &Vec<pb::StreamingOutputCallResponse>) -> Vec<i32> {
+fn response_lengths(responses: &[pb::StreamingOutputCallResponse]) -> Vec<i32> {
     responses.iter().map(&response_length).collect()
 }
 

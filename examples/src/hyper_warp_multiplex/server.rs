@@ -96,9 +96,7 @@ impl Echo for MyEcho {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
 
-    //println!("GreeterServer listening on {}", addr);
-
-    let warp = warp::service(warp::path("hello").map(|| "hello, world!"));
+    let mut warp = warp::service(warp::path("hello").map(|| "hello, world!"));
 
     Server::bind(&addr)
         .serve(make_service_fn(move |_| {
@@ -110,7 +108,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_service(echo)
                 .into_service();
 
-            let mut warp = warp.clone();
             future::ok::<_, Infallible>(tower::service_fn(
                 move |req: hyper::Request<hyper::Body>| match req.version() {
                     Version::HTTP_11 | Version::HTTP_10 => Either::Left(

@@ -35,7 +35,7 @@ where
     T::Item: Send + Sync,
     U: Stream<Item = T::Item> + Send + Sync + 'static,
 {
-    let stream = encode(encoder, source.map(|x| Ok(x))).into_stream();
+    let stream = encode(encoder, source.map(Ok)).into_stream();
     EncodeBody::new_client(stream)
 }
 

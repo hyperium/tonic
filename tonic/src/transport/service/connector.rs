@@ -1,9 +1,8 @@
+use super::super::BoxFuture;
 use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
-use std::future::Future;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 use tower_make::MakeConnection;
 use tower_service::Service;
@@ -48,9 +47,7 @@ where
 {
     type Response = BoxedIo;
     type Error = crate::Error;
-
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         MakeConnection::poll_ready(&mut self.inner, cx).map_err(Into::into)

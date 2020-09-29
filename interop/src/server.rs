@@ -21,6 +21,7 @@ type Streaming<T> = Request<tonic::Streaming<T>>;
 type Stream<T> = Pin<
     Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + Sync + 'static>,
 >;
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'static>>;
 
 #[tonic::async_trait]
 impl pb::test_service_server::TestService for TestService {
@@ -187,9 +188,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = Pin<
-        Box<dyn Future<Output = std::result::Result<Self::Response, Self::Error>> + Send + 'static>,
-    >;
+    type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
         Ok(()).into()

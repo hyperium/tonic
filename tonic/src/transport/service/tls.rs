@@ -133,10 +133,9 @@ impl TlsAcceptor {
                 let mut cert = std::io::Cursor::new(&cert.pem[..]);
 
                 let mut client_root_cert_store = tokio_rustls::rustls::RootCertStore::empty();
-                match client_root_cert_store.add_pem_file(&mut cert) {
-                    Err(_) => return Err(Box::new(TlsError::CertificateParseError)),
-                    _ => (),
-                };
+                if client_root_cert_store.add_pem_file(&mut cert).is_err() {
+                    return Err(Box::new(TlsError::CertificateParseError));
+                }
 
                 let client_auth =
                     tokio_rustls::rustls::AllowAnyAuthenticatedClient::new(client_root_cert_store);
@@ -204,7 +203,7 @@ mod rustls_keys {
     ) -> Result<PrivateKey, crate::Error> {
         // First attempt to load the private key assuming it is PKCS8-encoded
         if let Ok(mut keys) = pemfile::pkcs8_private_keys(&mut cursor) {
-            if keys.len() > 0 {
+            if !keys.is_empty() {
                 return Ok(keys.remove(0));
             }
         }
@@ -212,7 +211,7 @@ mod rustls_keys {
         // If it not, try loading the private key as an RSA key
         cursor.set_position(0);
         if let Ok(mut keys) = pemfile::rsa_private_keys(&mut cursor) {
-            if keys.len() > 0 {
+            if !keys.is_empty() {
                 return Ok(keys.remove(0));
             }
         }

@@ -1,3 +1,4 @@
+use super::super::BoxFuture;
 use super::{layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin, UserAgent};
 use crate::{body::BoxBody, transport::Endpoint};
 use http::Uri;
@@ -6,8 +7,6 @@ use hyper::client::connect::Connection as HyperConnection;
 use hyper::client::service::Connect as HyperConnect;
 use std::{
     fmt,
-    future::Future,
-    pin::Pin,
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -51,8 +50,6 @@ impl Connection {
             settings.http2_keep_alive_while_idle(val);
         }
 
-        let settings = settings.clone();
-
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
             .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
@@ -95,9 +92,7 @@ impl Connection {
 impl Service<Request> for Connection {
     type Response = Response;
     type Error = crate::Error;
-
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Service::poll_ready(&mut self.inner, cx).map_err(Into::into)

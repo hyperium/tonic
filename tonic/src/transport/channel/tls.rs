@@ -9,7 +9,7 @@ use std::fmt;
 /// Configures TLS settings for endpoints.
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
     cert: Option<Certificate>,
@@ -80,7 +80,7 @@ impl ClientTlsConfig {
 
     pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
-            None => uri.host().ok_or(Error::new_invalid_uri())?.to_string(),
+            None => uri.host().ok_or_else(Error::new_invalid_uri)?.to_string(),
             Some(domain) => domain.clone(),
         };
         match &self.rustls_raw {

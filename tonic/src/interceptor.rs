@@ -1,6 +1,9 @@
 use crate::{Request, Status};
 use std::{fmt, sync::Arc};
 
+type InterceptorFn =
+    Arc<dyn Fn(Request<()>) -> Result<Request<()>, Status> + Send + Sync + 'static>;
+
 /// Represents a gRPC interceptor.
 ///
 /// gRPC interceptors are similar to middleware but have much less
@@ -16,7 +19,7 @@ use std::{fmt, sync::Arc};
 /// features to the body of the request, going through the `tower` abstraction is recommended.
 #[derive(Clone)]
 pub struct Interceptor {
-    f: Arc<dyn Fn(Request<()>) -> Result<Request<()>, Status> + Send + Sync + 'static>,
+    f: InterceptorFn,
 }
 
 impl Interceptor {

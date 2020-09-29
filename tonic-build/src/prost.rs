@@ -39,7 +39,7 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
     Ok(())
 }
 
-const PROST_CODEC_PATH: &'static str = "tonic::codec::ProstCodec";
+const PROST_CODEC_PATH: &str = "tonic::codec::ProstCodec";
 
 impl crate::Service for Service {
     const CODEC_PATH: &'static str = PROST_CODEC_PATH;
