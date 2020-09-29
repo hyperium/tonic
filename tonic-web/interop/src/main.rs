@@ -1,6 +1,6 @@
 use interop::server::{EchoHeadersSvc, TestService, TestServiceServer};
 use tonic::transport::Server;
-use tonic_grpc_web::GrpcWeb;
+use tonic_web::GrpcWeb;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
