@@ -1,5 +1,5 @@
 [package]
-name = "tonic-grpc-web"
+name = "tonic-web"
 version = "0.1.0"
 authors = ["Juan Alvarez <j@yabit.io>"]
 edition = "2018"
@@ -17,5 +17,3 @@ hyper = "0.13.7"
 http-body = "0.3.1"
 tower-service = "0.3.0"
 
-#[build-dependencies]
-#tonic-build = { path = "../tonic-build", features = ["prost"] }
