@@ -16,8 +16,8 @@
  *
  */
 
+// Adapted from https://github.com/grpc/grpc-web/tree/master/test/interop
 
-// Fill in XHR runtime
 global.XMLHttpRequest = require("xhr2");
 
 const parseArgs = require('minimist');
@@ -36,18 +36,16 @@ console.log('Tonic server:', SERVER_HOST);
 
 const PROTO_PATH = argv.mode === 'binary' ? './binary' : './text';
 
-const {Empty} = require(`${PROTO_PATH}/empty_pb.js`);
-
 const {
+    Empty,
     SimpleRequest,
     StreamingOutputCallRequest,
     EchoStatus,
     Payload,
     ResponseParameters
-} = require(`${PROTO_PATH}/messages_pb.js`);
+} = require(`${PROTO_PATH}/test_pb.js`);
 
-const {TestServiceClient} =
-    require(`${PROTO_PATH}/test_grpc_web_pb.js`);
+const {TestServiceClient} = require(`${PROTO_PATH}/test_grpc_web_pb.js`);
 
 const assert = require('assert');
 const grpc = {};
@@ -198,7 +196,7 @@ const testCases = {
 };
 
 
-describe('tonic-grpc-web interop tests', function () {
+describe('tonic-web interop tests', function () {
     Object.keys(testCases).forEach((testCase) => {
         if (argv.mode === 'binary' && testCases[testCase].skipBinaryMode) return;
         it('should pass ' + testCase, testCases[testCase].testFunc);

@@ -1,62 +1,36 @@
+use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use futures_util::future::{self, Future};
 use http::header::{self, HeaderName};
-use http::{Method, Request, Response, StatusCode};
+use http::{HeaderValue, Method, Request, Response, StatusCode};
 use hyper::Body;
 use tonic::body::BoxBody;
 use tonic::transport::NamedService;
 use tower_service::Service;
 
-use crate::call::{
-    self, coerce_request, coerce_response, is_grpc_web, is_grpc_web_preflight, Encoding,
-};
-use crate::cors::{AllowedOrigins, Config, CorsBuilder, CorsResource};
+use crate::call::{coerce_request, coerce_response, is_grpc_web, is_grpc_web_preflight, Encoding};
+use crate::cors::{AllowedOrigins, Builder, Cors, CorsResource};
 
 type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
+type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Debug, Clone)]
 pub struct GrpcWeb<S> {
     inner: S,
-    cors: Config,
+    cors: Cors,
 }
 
 impl<S> GrpcWeb<S> {
-    // TODO: Expose a builder to configure CORS
-    pub fn new(inner: S) -> Self {
-        let allowed_headers = &[
-            header::USER_AGENT,
-            header::CACHE_CONTROL,
-            header::CONTENT_TYPE,
-            HeaderName::from_static("keep-alive"),
-            HeaderName::from_static("x-grpc-web"),
-            HeaderName::from_static("x-user-agent"),
-            HeaderName::from_static("grpc-timeout"),
-            // TODO: remove from default allowed headers
-            HeaderName::from_static("custom-header-1"),
-        ];
-
-        let exposed_headers = &[
-            HeaderName::from_static("grpc-status"),
-            HeaderName::from_static("grpc-message"),
-        ];
-
-        let allowed_methods = &[Method::POST, Method::OPTIONS];
-
-        let max_age = std::time::Duration::from_secs(24 * 60 * 60);
-
-        let allowed_origins = AllowedOrigins::Any { allow_null: false };
-
-        let cors = CorsBuilder::new()
-            .allow_origins(allowed_origins)
-            .allow_methods(allowed_methods)
-            .allow_headers(allowed_headers)
-            .expose_headers(exposed_headers)
-            .max_age(max_age)
-            .into_config();
-
+    pub fn with_cors(inner: S, cors: Cors) -> Self {
         GrpcWeb { inner, cors }
+    }
+
+    pub fn new(inner: S) -> Self {
+        GrpcWeb {
+            inner,
+            cors: Cors::default(),
+        }
     }
 }
 
@@ -64,7 +38,7 @@ impl<S> Service<Request<Body>> for GrpcWeb<S>
 where
     S: Service<Request<Body>, Response = Response<BoxBody>> + Send + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<crate::Error> + Send,
+    S::Error: Into<Error> + Send,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -75,13 +49,13 @@ where
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        if !is_grpc_web(&req) && !is_grpc_web_preflight(&req) {
+        if !(is_grpc_web(req.headers()) || is_grpc_web_preflight(&req)) {
             return Box::pin(self.inner.call(req));
         }
 
         match self.cors.process_request(&req) {
             Ok(CorsResource::Simple(headers)) => {
-                let response_encoding = Encoding::from(call::accept(&req));
+                let response_encoding = Encoding::from_accept(req.headers());
                 let request_future = self.inner.call(coerce_request(req));
 
                 Box::pin(async move {
@@ -93,9 +67,9 @@ where
             Ok(CorsResource::Preflight(headers)) => {
                 let mut res = http_response(StatusCode::NO_CONTENT);
                 res.headers_mut().extend(headers);
-                Box::pin(future::ok(res))
+                Box::pin(async { Ok(res) })
             }
-            Err(_) => Box::pin(future::ok(http_response(StatusCode::FORBIDDEN))),
+            Err(_) => Box::pin(async { Ok(http_response(StatusCode::FORBIDDEN)) }),
         }
     }
 }

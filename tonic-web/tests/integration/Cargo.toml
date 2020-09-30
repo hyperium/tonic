@@ -1,0 +1,17 @@
+[package]
+name = "integration"
+version = "0.1.0"
+authors = ["Juan Alvarez <j@yabit.io>"]
+publish = false
+edition = "2018"
+
+[dependencies]
+tonic = { path = "../../../tonic" }
+tonic-web = { path = "../../tonic-web" }
+prost = "0.6.1"
+
+[dev-dependencies]
+tokio = { version = "0.2", features = ["macros", "rt-core", "tcp"] }
+
+[build-dependencies]
+tonic-build = { path = "../../../tonic-build" }

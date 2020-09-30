@@ -1,3 +1,6 @@
 node_modules
 /target
+binary
+text
+run.sh
 package-lock.json

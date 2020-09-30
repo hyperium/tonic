@@ -3,19 +3,18 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures_core::Stream;
-use futures_util::ready;
+use futures_core::{ready, Stream};
 use http::{HeaderMap, HeaderValue};
 use http_body::{Body, SizeHint};
 use tonic::Status;
 
 use super::{Direction, Encoding};
 
-const BUFFER_SIZE: usize = 8 * 1024;
+const BUFFER_SIZE: usize = 2 * 1024;
 
 // 8th (MSB) bit of the 1st gRPC frame byte
 // denotes an uncompressed trailer (as part of the body)
-const GRPC_WEB_TRAILERS_MARKER: u8 = 0b10000000;
+const GRPC_WEB_TRAILERS_BIT: u8 = 0b10000000;
 
 pub(crate) struct GrpcWebCall<B> {
     inner: B,
@@ -26,24 +25,43 @@ pub(crate) struct GrpcWebCall<B> {
 }
 
 impl<B> GrpcWebCall<B> {
-    pub(crate) fn new(inner: B, direction: Direction, encoding: Encoding) -> Self {
+    pub(crate) fn request(inner: B, encoding: Encoding) -> Self {
+        Self::new(inner, Direction::Request, encoding)
+    }
+
+    pub(crate) fn response(inner: B, encoding: Encoding) -> Self {
+        Self::new(inner, Direction::Response, encoding)
+    }
+
+    fn new(inner: B, direction: Direction, encoding: Encoding) -> Self {
         GrpcWebCall {
             inner,
-            buf: BytesMut::with_capacity(BUFFER_SIZE),
+            buf: BytesMut::with_capacity(match (direction, encoding) {
+                (Direction::Response, Encoding::Base64) => BUFFER_SIZE,
+                _ => 0,
+            }),
             direction,
             encoding,
             poll_trailers: true,
         }
     }
 
+    #[inline]
+    fn max_decodable(&self) -> usize {
+        (self.buf.len() / 4) * 4
+    }
+
     fn decode_chunk(&mut self) -> Result<Option<Bytes>, Status> {
-        if self.buf.has_remaining() && self.buf.remaining() % 4 == 0 {
-            base64::decode(self.buf.split().freeze())
-                .map(|decoded| Some(Bytes::from(decoded)))
-                .map_err(internal_error)
-        } else {
-            Ok(None)
+        // not enough bytes to decode
+        if self.buf.is_empty() || self.buf.len() < 4 {
+            return Ok(None);
         }
+
+        // Split `buf` at the largest index that is multiple of 4. Decode the
+        // returned `Bytes`, keeping the rest for the next attempt to decode.
+        base64::decode(self.buf.split_to(self.max_decodable()).freeze())
+            .map(|decoded| Some(Bytes::from(decoded)))
+            .map_err(internal_error)
     }
 
     // Key-value pairs encoded as a HTTP/1 headers block (without the terminating newline)
@@ -65,7 +83,7 @@ impl<B> GrpcWebCall<B> {
         assert!(len <= std::u32::MAX as usize);
 
         let mut frame = Vec::with_capacity(len + HEADER_SIZE);
-        frame.push(GRPC_WEB_TRAILERS_MARKER);
+        frame.push(GRPC_WEB_TRAILERS_BIT);
         frame.put_u32(len as u32);
         frame.extend(trailers);
 
@@ -84,7 +102,6 @@ where
     ) -> Poll<Option<Result<B::Data, Status>>> {
         match self.encoding {
             Encoding::Base64 => loop {
-                // TODO: Do not loop until buf.remaining() % 4 == 0, emit a chunk as soon as possible.
                 if let Some(bytes) = self.decode_chunk()? {
                     return Poll::Ready(Some(Ok(bytes)));
                 }
@@ -163,15 +180,10 @@ where
     }
 
     fn poll_trailers(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
     ) -> Poll<Result<Option<HeaderMap<HeaderValue>>, Self::Error>> {
-        match self.direction {
-            Direction::Request => Pin::new(&mut self.inner)
-                .poll_trailers(cx)
-                .map_err(internal_error),
-            Direction::Response => Poll::Ready(Ok(None)),
-        }
+        Poll::Ready(Ok(None))
     }
 
     fn is_end_stream(&self) -> bool {

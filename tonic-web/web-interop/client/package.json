@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "gRPC-Web Interop Test Client",
   "license": "Apache-2.0",
+  "private": true,
   "scripts": {
     "test": "mocha -b --timeout 500 ./interop_client.js"
   },
