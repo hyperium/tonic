@@ -2,15 +2,21 @@
 
 Start the server:
 
-    cd tonic-grpc-web/interop
+    cd tonic-web/interop
     cargo run
         
-Run the client tests:
+Build the client docker image:
     
-     cd tonic-grpc-web/interop/client
-     npm i
-     npm test -- --mode=binary # runs tests in binary mode (application/grpc-web)
-     npm test # runs tests in text mode (application/grpc-web-text)
-        
-Note that in binary mode, server streaming is not supported and the test is skipped.    
-    
+     cd tonic-web/interop/client
+     docker build -t grpcweb-client .
+     
+Run tests on linux:
+     
+     docker run --network=host --rm grpcweb-client npm test 
+     docker run --network=host --rm grpcweb-client npm test -- --mode=binary 
+     
+Run tests on docker desktop: 
+     
+     docker run --rm grpcweb-client npm test -- --host=host.docker.internal 
+     docker run --rm grpcweb-client  npm test -- --host=host.docker.internal --mode=binary 
+         

@@ -14,4 +14,3 @@ tonic-web = { path = "../../tonic-web" }
 tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "stream"] }
 prost = "0.6.1"
 hyper = "0.13.7"
-

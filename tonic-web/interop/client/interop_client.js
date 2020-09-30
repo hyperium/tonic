@@ -22,20 +22,21 @@ global.XMLHttpRequest = require("xhr2");
 
 const parseArgs = require('minimist');
 const argv = parseArgs(process.argv, {
-    string: ['mode']
+    string: ['mode', 'host']
 });
 
+const SERVER_HOST = `http://${argv.host || "localhost"}:9999`;
+
 if (argv.mode === 'binary') {
-    console.log('Testing tonic-grpc-web mode (binary)...');
+    console.log('Testing tonic-web mode (binary)...');
 } else {
-    console.log('Testing tonic-grpc-web-text mode...');
+    console.log('Testing tonic-web mode (text)...');
 }
+console.log('Tonic server:', SERVER_HOST);
 
-const CLIENT_PROTO = argv.mode === 'binary'
-    ? './pb/test_grpc_web_pb_bin.js'
-    : './pb/test_grpc_web_pb_text.js';
+const PROTO_PATH = argv.mode === 'binary' ? './binary' : './text';
 
-const {Empty} = require('./pb/empty_pb.js');
+const {Empty} = require(`${PROTO_PATH}/empty_pb.js`);
 
 const {
     SimpleRequest,
@@ -43,16 +44,14 @@ const {
     EchoStatus,
     Payload,
     ResponseParameters
-} = require('./pb/messages_pb.js');
+} = require(`${PROTO_PATH}/messages_pb.js`);
 
 const {TestServiceClient} =
-    require(CLIENT_PROTO);
+    require(`${PROTO_PATH}/test_grpc_web_pb.js`);
 
 const assert = require('assert');
 const grpc = {};
 grpc.web = require('grpc-web');
-
-const SERVER_HOST = 'http://localhost:9999';
 
 function multiDone(done, count) {
     return function () {
