@@ -1,6 +1,6 @@
 [workspace]
 members = [
     "tonic-web",
-    "web-interop",
+    "interop",
     "tests/integration"
 ]
