@@ -18,7 +18,16 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let service_doc = generate_doc_comments(service.comment());
 
     // Transport based implementations
-    let path = format!("{}.{}", service.package(), service.identifier());
+    let path = format!(
+        "{}{}{}",
+        service.package(),
+        if service.package().is_empty() {
+            ""
+        } else {
+            "."
+        },
+        service.identifier()
+    );
     let transport = generate_transport(&server_service, &server_trait, &path);
 
     quote! {
