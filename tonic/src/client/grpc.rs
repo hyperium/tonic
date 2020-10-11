@@ -1,7 +1,7 @@
 use crate::{
     body::{Body, BoxBody},
     client::GrpcService,
-    codec::{encode_client, Codec, Streaming},
+    codec::{encode_client, Codec, Decompression, Streaming},
     interceptor::Interceptor,
     Code, Request, Response, Status,
 };
@@ -196,9 +196,10 @@ impl<T> Grpc<T> {
             true
         };
 
+        let decompression = Decompression::from_headers(response.headers());
         let response = response.map(|body| {
             if expect_additional_trailers {
-                Streaming::new_response(codec.decoder(), body, status_code)
+                Streaming::new_response(codec.decoder(), body, status_code, decompression)
             } else {
                 Streaming::new_empty(codec.decoder(), body)
             }

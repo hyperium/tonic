@@ -6,10 +6,13 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tonic::{codec::DecodeBuf, codec::Decoder, Status, Streaming};
+use tonic::{codec::DecodeBuf, codec::Decoder, codec::Decompression, Status, Streaming};
 
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {
+        bench!($name, $message_size, $chunk_size, $message_count, None);
+    };
+    ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr, $encoding:expr) => {
         fn $name(b: &mut Bencher) {
             let mut rt = tokio::runtime::Builder::new()
                 .basic_scheduler()
@@ -23,7 +26,9 @@ macro_rules! bench {
             b.iter(|| {
                 rt.block_on(async {
                     let decoder = MockDecoder::new($message_size);
-                    let mut stream = Streaming::new_request(decoder, body.clone());
+
+                    let decompression = Decompression::new($encoding);
+                    let mut stream = Streaming::new_request(decoder, body.clone(), decompression);
 
                     let mut count = 0;
                     while let Some(msg) = stream.message().await.unwrap() {
@@ -137,6 +142,57 @@ bench!(message_count_1, 500, 505, 1);
 bench!(message_count_10, 500, 505, 10);
 bench!(message_count_20, 500, 505, 20);
 
+// gzip change body chunk size only
+bench!(chunk_size_100_gzip, 1_000, 100, 1, Some("gzip".to_string()));
+bench!(chunk_size_500_gzip, 1_000, 500, 1, Some("gzip".to_string()));
+bench!(
+    chunk_size_1005_gzip,
+    1_000,
+    1_005,
+    1,
+    Some("gzip".to_string())
+);
+
+// gzip change message size only
+bench!(
+    message_size_1k_gzip,
+    1_000,
+    1_005,
+    2,
+    Some("gzip".to_string())
+);
+bench!(
+    message_size_5k_gzip,
+    5_000,
+    1_005,
+    2,
+    Some("gzip".to_string())
+);
+bench!(
+    message_size_10k_gzip,
+    10_000,
+    1_005,
+    2,
+    Some("gzip".to_string())
+);
+
+// gzip change message count only
+bench!(message_count_1_gzip, 500, 505, 1, Some("gzip".to_string()));
+bench!(
+    message_count_10_gzip,
+    500,
+    505,
+    10,
+    Some("gzip".to_string())
+);
+bench!(
+    message_count_20_gzip,
+    500,
+    505,
+    20,
+    Some("gzip".to_string())
+);
+
 benchmark_group!(chunk_size, chunk_size_100, chunk_size_500, chunk_size_1005);
 
 benchmark_group!(
@@ -153,4 +209,32 @@ benchmark_group!(
     message_count_20
 );
 
-benchmark_main!(chunk_size, message_size, message_count);
+benchmark_group!(
+    chunk_size_gzip,
+    chunk_size_100_gzip,
+    chunk_size_500_gzip,
+    chunk_size_1005_gzip
+);
+
+benchmark_group!(
+    message_size_gzip,
+    message_size_1k_gzip,
+    message_size_5k_gzip,
+    message_size_10k_gzip
+);
+
+benchmark_group!(
+    message_count_gzip,
+    message_count_1_gzip,
+    message_count_10_gzip,
+    message_count_20_gzip
+);
+
+benchmark_main!(
+    chunk_size,
+    message_size,
+    message_count,
+    chunk_size_gzip,
+    message_size_gzip,
+    message_count_gzip
+);

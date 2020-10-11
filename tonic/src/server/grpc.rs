@@ -1,6 +1,6 @@
 use crate::{
     body::BoxBody,
-    codec::{encode_server, Codec, Streaming},
+    codec::{encode_server, Codec, Decompression, Streaming},
     interceptor::Interceptor,
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
@@ -160,7 +160,8 @@ where
         B::Error: Into<crate::Error> + Send,
     {
         let (parts, body) = request.into_parts();
-        let stream = Streaming::new_request(self.codec.decoder(), body);
+        let decompression = Decompression::from_headers(&parts.headers);
+        let stream = Streaming::new_request(self.codec.decoder(), body, decompression);
 
         futures_util::pin_mut!(stream);
 
@@ -186,7 +187,10 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        Request::from_http(request.map(|body| Streaming::new_request(self.codec.decoder(), body)))
+        let decompression = Decompression::from_headers(request.headers());
+        Request::from_http(
+            request.map(|body| Streaming::new_request(self.codec.decoder(), body, decompression)),
+        )
     }
 
     fn map_response<B>(
