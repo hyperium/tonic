@@ -1,14 +1,14 @@
-use std::error::Error;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
+use super::{Direction, Encoding};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_core::{ready, Stream};
 use http::{HeaderMap, HeaderValue};
 use http_body::{Body, SizeHint};
+use std::{
+    error::Error,
+    pin::Pin,
+    task::{Context, Poll},
+};
 use tonic::Status;
-
-use super::{Direction, Encoding};
 
 const BUFFER_SIZE: usize = 2 * 1024;
 

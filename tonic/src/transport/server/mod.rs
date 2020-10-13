@@ -72,6 +72,7 @@ pub struct Server {
     http2_keepalive_interval: Option<Duration>,
     http2_keepalive_timeout: Option<Duration>,
     max_frame_size: Option<u32>,
+    accept_http1: bool,
 }
 
 /// A stack based `Service` router.
@@ -137,6 +138,7 @@ impl Server {
     pub fn builder() -> Self {
         Server {
             tcp_nodelay: true,
+            accept_http1: false,
             ..Default::default()
         }
     }
@@ -382,7 +384,7 @@ impl Server {
         };
 
         let server = hyper::Server::builder(incoming)
-            .http2_only(true)
+            .http2_only(http2_only)
             .http2_initial_connection_window_size(init_connection_window_size)
             .http2_initial_stream_window_size(init_stream_window_size)
             .http2_max_concurrent_streams(max_concurrent_streams)

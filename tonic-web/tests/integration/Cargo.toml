@@ -9,9 +9,11 @@ edition = "2018"
 tonic = { path = "../../../tonic" }
 tonic-web = { path = "../../tonic-web" }
 prost = "0.6.1"
+tokio = { version = "0.2", features = ["macros", "rt-core", "tcp"] }
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["macros", "rt-core", "tcp"] }
+hyper = "0.13.8"
 
 [build-dependencies]
 tonic-build = { path = "../../../tonic-build" }

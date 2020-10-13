@@ -1,17 +1,64 @@
-use http::header::{self, HeaderName, HeaderValue};
-use http::{HeaderMap, Method, Request, Response};
+use crate::{
+    content_types::*,
+    cors_headers::{ORIGIN, REQUEST_HEADERS},
+};
+use http::{
+    header::{self, HeaderValue},
+    HeaderMap, Method, Request, Response, Version,
+};
 use hyper::Body;
 use tonic::body::BoxBody;
 
-mod grpc_web_call;
 use grpc_web_call::GrpcWebCall;
+mod grpc_web_call;
 
-// Grpc content types
-const GRPC: &str = "application/grpc";
-const GRPC_WEB: &str = "application/grpc-web";
-const GRPC_WEB_PROTO: &str = "application/grpc-web+proto";
-const GRPC_WEB_TEXT: &str = "application/grpc-web-text";
-const GRPC_WEB_TEXT_PROTO: &str = "application/grpc-web-text+proto";
+fn is_grpc_web(headers: &HeaderMap) -> bool {
+    matches!(
+        content_type(headers),
+        Some(GRPC_WEB) | Some(GRPC_WEB_PROTO) | Some(GRPC_WEB_TEXT) | Some(GRPC_WEB_TEXT_PROTO)
+    )
+}
+
+// TODO: this should be moved out of here, to service or util
+pub(crate) fn classify_request<'a>(
+    headers: &'a HeaderMap,
+    method: &'a Method,
+    version: Version,
+) -> RequestKind<'a> {
+    if is_grpc_web(headers) {
+        return RequestKind::GrpcWeb(method);
+    }
+
+    let req_headers = headers.get(REQUEST_HEADERS);
+    let origin = headers.get(ORIGIN);
+
+    match (method, origin, req_headers) {
+        (&Method::OPTIONS, Some(origin), Some(value)) => match value.to_str() {
+            Ok(h) if h.contains("x-grpc-web") => {
+                println!("THINKS ITS VALID PRE-FLIGHT");
+
+                return RequestKind::GrpcWebPreflight {
+                    origin,
+                    request_headers: value,
+                };
+            }
+            _ => {}
+        },
+        _ => {}
+    }
+
+    RequestKind::Other(version)
+}
+
+#[derive(Debug, PartialEq)]
+pub(crate) enum RequestKind<'a> {
+    GrpcWeb(&'a Method),
+    GrpcWebPreflight {
+        origin: &'a HeaderValue,
+        request_headers: &'a HeaderValue,
+    },
+    Other(http::Version),
+}
 
 #[derive(Copy, Clone, PartialEq, Debug)]
 pub(crate) enum Direction {
@@ -27,15 +74,15 @@ pub(crate) enum Encoding {
 
 impl Encoding {
     pub(crate) fn from_content_type(headers: &HeaderMap) -> Encoding {
-        Encoding::from_header(header::CONTENT_TYPE, headers)
+        Self::from_header(headers.get(header::CONTENT_TYPE))
     }
 
     pub(crate) fn from_accept(headers: &HeaderMap) -> Encoding {
-        Encoding::from_header(header::ACCEPT, headers)
+        Self::from_header(headers.get(header::ACCEPT))
     }
 
-    fn from_header(name: HeaderName, headers: &HeaderMap) -> Encoding {
-        match header_value(name, headers) {
+    fn from_header(value: Option<&HeaderValue>) -> Encoding {
+        match value.and_then(|val| val.to_str().ok()) {
             Some(GRPC_WEB_TEXT_PROTO) | Some(GRPC_WEB_TEXT) => Encoding::Base64,
             _ => Encoding::None,
         }
@@ -49,34 +96,16 @@ impl Encoding {
     }
 }
 
-pub(crate) fn is_grpc_web(headers: &HeaderMap) -> bool {
-    matches!(
-        content_type(headers),
-        Some(GRPC_WEB) | Some(GRPC_WEB_PROTO) | Some(GRPC_WEB_TEXT) | Some(GRPC_WEB_TEXT_PROTO)
-    )
-}
-
-pub(crate) fn is_grpc_web_preflight<B>(req: &Request<B>) -> bool {
-    match header_value(header::ACCESS_CONTROL_REQUEST_HEADERS, req.headers()) {
-        Some(value) => value.contains("x-grpc-web") && req.method() == Method::OPTIONS,
-        None => false,
-    }
-}
-
 pub(crate) fn content_type(headers: &HeaderMap) -> Option<&str> {
-    header_value(header::CONTENT_TYPE, headers)
-}
-
-pub(crate) fn header_value(name: HeaderName, headers: &HeaderMap) -> Option<&str> {
-    headers.get(name).and_then(|val| val.to_str().ok())
+    headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|val| val.to_str().ok())
 }
 
 // Mutating request headers to conform to a gRPC request is not really
 // necessary for us at this point. We could remove most of these except
 // maybe for inserting `header::TE`, which tonic should check?
-pub(crate) fn coerce_request(mut req: Request<Body>) -> Request<Body> {
-    let encoding = Encoding::from_content_type(req.headers());
-
+pub(crate) fn coerce_request(mut req: Request<Body>, encoding: Encoding) -> Request<Body> {
     req.headers_mut().remove(header::CONTENT_LENGTH);
 
     req.headers_mut()
@@ -105,4 +134,30 @@ pub(crate) fn coerce_response(res: Response<BoxBody>, encoding: Encoding) -> Res
     );
 
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encoding_constructors() {
+        let cases = &[
+            (GRPC_WEB, Encoding::None),
+            (GRPC_WEB_PROTO, Encoding::None),
+            (GRPC_WEB_TEXT, Encoding::Base64),
+            (GRPC_WEB_TEXT_PROTO, Encoding::Base64),
+            ("foo", Encoding::None),
+        ];
+
+        let mut headers = HeaderMap::new();
+
+        for case in cases {
+            headers.insert(header::CONTENT_TYPE, case.0.parse().unwrap());
+            headers.insert(header::ACCEPT, case.0.parse().unwrap());
+
+            assert_eq!(Encoding::from_content_type(&headers), case.1, "{}", case.0);
+            assert_eq!(Encoding::from_accept(&headers), case.1, "{}", case.0);
+        }
+    }
 }
