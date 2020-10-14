@@ -1,20 +1,52 @@
-use super::{Direction, Encoding};
+use std::error::Error;
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_core::{ready, Stream};
-use http::{HeaderMap, HeaderValue};
+use http::{header, HeaderMap, HeaderValue};
 use http_body::{Body, SizeHint};
-use std::{
-    error::Error,
-    pin::Pin,
-    task::{Context, Poll},
-};
 use tonic::Status;
+
+use self::content_types::*;
+
+pub(crate) mod content_types {
+    use http::{header::CONTENT_TYPE, HeaderMap};
+
+    pub(crate) const GRPC_WEB: &str = "application/grpc-web";
+    pub(crate) const GRPC_WEB_PROTO: &str = "application/grpc-web+proto";
+    pub(crate) const GRPC_WEB_TEXT: &str = "application/grpc-web-text";
+    pub(crate) const GRPC_WEB_TEXT_PROTO: &str = "application/grpc-web-text+proto";
+
+    pub(crate) fn is_grpc_web(headers: &HeaderMap) -> bool {
+        matches!(
+            content_type(headers),
+            Some(GRPC_WEB) | Some(GRPC_WEB_PROTO) | Some(GRPC_WEB_TEXT) | Some(GRPC_WEB_TEXT_PROTO)
+        )
+    }
+
+    fn content_type(headers: &HeaderMap) -> Option<&str> {
+        headers.get(CONTENT_TYPE).and_then(|val| val.to_str().ok())
+    }
+}
 
 const BUFFER_SIZE: usize = 2 * 1024;
 
 // 8th (MSB) bit of the 1st gRPC frame byte
 // denotes an uncompressed trailer (as part of the body)
 const GRPC_WEB_TRAILERS_BIT: u8 = 0b10000000;
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+enum Direction {
+    Request,
+    Response,
+}
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub(crate) enum Encoding {
+    Base64,
+    None,
+}
 
 pub(crate) struct GrpcWebCall<B> {
     inner: B,
@@ -207,6 +239,56 @@ where
     }
 }
 
+impl Encoding {
+    pub(crate) fn from_content_type(headers: &HeaderMap) -> Encoding {
+        Self::from_header(headers.get(header::CONTENT_TYPE))
+    }
+
+    pub(crate) fn from_accept(headers: &HeaderMap) -> Encoding {
+        Self::from_header(headers.get(header::ACCEPT))
+    }
+
+    pub(crate) fn to_content_type(&self) -> &'static str {
+        match self {
+            Encoding::Base64 => GRPC_WEB_TEXT_PROTO,
+            Encoding::None => GRPC_WEB_PROTO,
+        }
+    }
+
+    fn from_header(value: Option<&HeaderValue>) -> Encoding {
+        match value.and_then(|val| val.to_str().ok()) {
+            Some(GRPC_WEB_TEXT_PROTO) | Some(GRPC_WEB_TEXT) => Encoding::Base64,
+            _ => Encoding::None,
+        }
+    }
+}
+
 fn internal_error(e: impl std::fmt::Display) -> Status {
     Status::internal(e.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn encoding_constructors() {
+        let cases = &[
+            (GRPC_WEB, Encoding::None),
+            (GRPC_WEB_PROTO, Encoding::None),
+            (GRPC_WEB_TEXT, Encoding::Base64),
+            (GRPC_WEB_TEXT_PROTO, Encoding::Base64),
+            ("foo", Encoding::None),
+        ];
+
+        let mut headers = HeaderMap::new();
+
+        for case in cases {
+            headers.insert(header::CONTENT_TYPE, case.0.parse().unwrap());
+            headers.insert(header::ACCEPT, case.0.parse().unwrap());
+
+            assert_eq!(Encoding::from_content_type(&headers), case.1, "{}", case.0);
+            assert_eq!(Encoding::from_accept(&headers), case.1, "{}", case.0);
+        }
+    }
 }

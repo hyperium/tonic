@@ -1,6 +1,5 @@
 use interop::server::{EchoHeadersSvc, TestService, TestServiceServer};
 use tonic::transport::Server;
-use tonic_web::GrpcWeb;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -10,7 +9,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Server::builder()
         .accept_http1(true)
-        .add_service(GrpcWeb::new(with_echo))
+        .add_service(tonic_web::enable(with_echo))
         .serve(addr)
         .await?;
 

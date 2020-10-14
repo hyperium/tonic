@@ -1,27 +1,69 @@
+//! TODO: doc
+#![warn(
+    missing_debug_implementations,
+    missing_docs,
+    rust_2018_idioms,
+    unreachable_pub
+)]
+
+pub use config::Config;
+
 mod call;
-
-pub use cors::Cors;
+mod config;
 mod cors;
-
 mod service;
-pub use service::GrpcWeb;
 
-mod content_types {
-    pub(crate) const GRPC: &str = "application/grpc";
-    pub(crate) const GRPC_WEB: &str = "application/grpc-web";
-    pub(crate) const GRPC_WEB_PROTO: &str = "application/grpc-web+proto";
-    pub(crate) const GRPC_WEB_TEXT: &str = "application/grpc-web-text";
-    pub(crate) const GRPC_WEB_TEXT_PROTO: &str = "application/grpc-web-text+proto";
+use crate::service::GrpcWeb;
+use std::future::Future;
+use std::pin::Pin;
+use tonic::body::BoxBody;
+use tonic::transport::NamedService;
+use tower_service::Service;
+
+/// TODO: doc, return type
+pub fn enable<S>(
+    service: S,
+) -> impl Service<
+    http::Request<hyper::Body>,
+    Response = http::Response<BoxBody>,
+    Error = S::Error,
+    Future = BoxFuture<S::Response, S::Error>,
+> + NamedService
+       + Clone
+where
+    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: NamedService + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Into<BoxError> + Send,
+{
+    enable_with_config(service, Config::default())
 }
 
-mod cors_headers {
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_CREDENTIALS as ALLOW_CREDENTIALS;
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_HEADERS as ALLOW_HEADERS;
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_METHODS as ALLOW_METHODS;
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_ORIGIN as ALLOW_ORIGIN;
-    pub(crate) use http::header::ACCESS_CONTROL_EXPOSE_HEADERS as EXPOSE_HEADERS;
-    pub(crate) use http::header::ACCESS_CONTROL_MAX_AGE as MAX_AGE;
-    pub(crate) use http::header::ACCESS_CONTROL_REQUEST_HEADERS as REQUEST_HEADERS;
-    pub(crate) use http::header::ACCESS_CONTROL_REQUEST_METHOD as REQUEST_METHOD;
-    pub(crate) use http::header::ORIGIN;
+/// TODO: doc, return type
+pub fn enable_with_config<S>(
+    service: S,
+    config: Config,
+) -> impl Service<
+    http::Request<hyper::Body>,
+    Response = http::Response<BoxBody>,
+    Error = S::Error,
+    Future = BoxFuture<S::Response, S::Error>,
+> + NamedService
+       + Clone
+where
+    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: NamedService + Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Into<BoxError> + Send,
+{
+    tracing::trace!("enabled for {}", S::NAME);
+    GrpcWeb::new(service, config)
 }
+
+/// TODO: doc
+pub fn config() -> Config {
+    Config::default()
+}
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;

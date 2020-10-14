@@ -1,117 +1,162 @@
+use std::future::Future;
+use std::net::SocketAddr;
+
+use tokio::net::TcpListener;
+use tokio::stream::{self, StreamExt};
+use tokio::time::Duration;
+use tokio::{join, try_join};
+use tonic::transport::{Channel, Error, Server};
+use tonic::{Response, Streaming};
+
 use integration::pb::{test_client::TestClient, test_server::TestServer, Input};
 use integration::Svc;
-use tokio::{
-    stream::{self, StreamExt},
-    time::Duration,
-    try_join,
-};
-use tonic::transport::Server;
-use tonic_web::GrpcWeb;
 
 #[tokio::test]
-async fn smoke() {
-    let addr1 = ([127, 0, 0, 1], 1234).into();
-    let addr2 = ([127, 0, 0, 1], 1235).into();
+async fn smoke_unary() {
+    let (mut c1, mut c2, mut c3, mut c4) = spawn().await.expect("clients");
 
-    let grpc = TestServer::new(Svc);
-    let grpc_web = GrpcWeb::new(grpc.clone());
-
-    let _ = tokio::spawn(async move {
-        Server::builder()
-            .add_service(grpc)
-            .serve(addr1)
-            .await
-            .unwrap();
-    });
-
-    let _ = tokio::spawn(async move {
-        Server::builder()
-            .add_service(grpc_web)
-            .serve(addr2)
-            .await
-            .unwrap();
-    });
-
-    tokio::time::delay_for(Duration::from_millis(30)).await;
-
-    let (mut client1, mut client2) = try_join!(
-        TestClient::connect(format!("http://{}", addr1)),
-        TestClient::connect(format!("http://{}", addr2))
+    let (r1, r2, r3, r4) = try_join!(
+        c1.unary_call(input()),
+        c2.unary_call(input()),
+        c3.unary_call(input()),
+        c4.unary_call(input()),
     )
-    .unwrap();
+    .expect("responses");
 
-    let input = Input {
+    assert!(meta(&r1) == meta(&r2) && meta(&r2) == meta(&r3) && meta(&r3) == meta(&r4));
+    assert!(data(&r1) == data(&r2) && data(&r2) == data(&r3) && data(&r3) == data(&r4));
+}
+
+#[tokio::test]
+async fn smoke_client_stream() {
+    let (mut c1, mut c2, mut c3, mut c4) = spawn().await.expect("clients");
+
+    let input_stream = || stream::iter(vec![input(), input()]);
+
+    let (r1, r2, r3, r4) = try_join!(
+        c1.client_stream(input_stream()),
+        c2.client_stream(input_stream()),
+        c3.client_stream(input_stream()),
+        c4.client_stream(input_stream()),
+    )
+    .expect("responses");
+
+    assert!(meta(&r1) == meta(&r2) && meta(&r2) == meta(&r3) && meta(&r3) == meta(&r4));
+    assert!(data(&r1) == data(&r2) && data(&r2) == data(&r3) && data(&r3) == data(&r4));
+}
+
+#[tokio::test]
+async fn smoke_server_stream() {
+    let (mut c1, mut c2, mut c3, mut c4) = spawn().await.expect("clients");
+
+    let (r1, r2, r3, r4) = try_join!(
+        c1.server_stream(input()),
+        c2.server_stream(input()),
+        c3.server_stream(input()),
+        c4.server_stream(input()),
+    )
+    .expect("responses");
+
+    assert!(meta(&r1) == meta(&r2) && meta(&r2) == meta(&r3) && meta(&r3) == meta(&r4));
+
+    let r1 = stream(r1).await;
+    let r2 = stream(r2).await;
+    let r3 = stream(r3).await;
+    let r4 = stream(r4).await;
+
+    assert!(&r1 == &r2 && &r2 == &r3 && &r3 == &r4);
+}
+#[tokio::test]
+async fn smoke_error() {
+    let (mut c1, mut c2, mut c3, mut c4) = spawn().await.expect("clients");
+
+    let boom = Input {
         id: 1,
-        desc: "one".to_owned(),
-    };
-
-    let (res1, res2) = try_join!(
-        client1.unary_call(input.clone()),
-        client2.unary_call(input.clone())
-    )
-    .unwrap();
-
-    assert_eq!(
-        format!("{:?}", res1.metadata()),
-        format!("{:?}", res2.metadata())
-    );
-
-    assert_eq!(res1.into_inner(), res2.into_inner());
-
-    let (res3, res4) = try_join!(
-        client1.server_stream(input.clone()),
-        client2.server_stream(input.clone())
-    )
-    .unwrap();
-
-    assert_eq!(
-        format!("{:?}", res3.metadata()),
-        format!("{:?}", res4.metadata())
-    );
-
-    assert_eq!(
-        res3.into_inner()
-            .collect::<Result<Vec<_>, _>>()
-            .await
-            .unwrap(),
-        res4.into_inner()
-            .collect::<Result<Vec<_>, _>>()
-            .await
-            .unwrap()
-    );
-
-    let input = vec![input.clone(), input.clone()];
-
-    let (res5, res6) = try_join!(
-        client1.client_stream(stream::iter(input.clone())),
-        client2.client_stream(stream::iter(input))
-    )
-    .unwrap();
-
-    assert_eq!(
-        format!("{:?}", res5.metadata()),
-        format!("{:?}", res6.metadata())
-    );
-
-    assert_eq!(res5.into_inner(), res6.into_inner());
-
-    let input = Input {
-        id: 2,
         desc: "boom".to_owned(),
     };
 
-    let (res7, res8) = tokio::join!(
-        client1.unary_call(input.clone()),
-        client2.unary_call(input.clone())
+    let (r1, r2, r3, r4) = join!(
+        c1.unary_call(boom.clone()),
+        c2.unary_call(boom.clone()),
+        c3.unary_call(boom.clone()),
+        c4.unary_call(boom.clone()),
     );
 
-    let status1 = res7.unwrap_err();
-    let status2 = res8.unwrap_err();
+    let s1 = r1.unwrap_err();
+    let s2 = r2.unwrap_err();
+    let s3 = r3.unwrap_err();
+    let s4 = r4.unwrap_err();
 
-    assert_eq!(status1.code(), status2.code());
-    assert_eq!(status1.message(), status2.message());
-    assert_eq!(
-        format!("{:?}", status1.metadata()),
-        format!("{:?}", status2.metadata())
-    );
+    assert!(status(&s1) == status(&s2) && status(&s2) == status(&s3) && status(&s3) == status(&s4))
+}
+
+async fn bind() -> (TcpListener, String) {
+    let addr = SocketAddr::from(([127, 0, 0, 1], 0));
+    let lis = TcpListener::bind(addr).await.expect("listener");
+    let url = format!("http://{}", lis.local_addr().unwrap());
+
+    (lis, url)
+}
+
+async fn grpc(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, String) {
+    let (listener, url) = bind().await;
+
+    let fut = Server::builder()
+        .accept_http1(accept_h1)
+        .add_service(TestServer::new(Svc))
+        .serve_with_incoming(listener);
+
+    (fut, url)
+}
+
+async fn grpc_web(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, String) {
+    let (listener, url) = bind().await;
+
+    let fut = Server::builder()
+        .accept_http1(accept_h1)
+        .add_service(tonic_web::enable(TestServer::new(Svc)))
+        .serve_with_incoming(listener);
+
+    (fut, url)
+}
+
+type C = TestClient<Channel>;
+
+async fn spawn() -> Result<(C, C, C, C), Error> {
+    let ((s1, u1), (s2, u2), (s3, u3), (s4, u4)) =
+        join!(grpc(true), grpc(false), grpc_web(true), grpc_web(false));
+
+    let _ = tokio::spawn(async move { tokio::join!(s1, s2, s3, s4) });
+
+    tokio::time::delay_for(Duration::from_millis(30)).await;
+
+    tokio::try_join!(
+        TestClient::connect(u1),
+        TestClient::connect(u2),
+        TestClient::connect(u3),
+        TestClient::connect(u4)
+    )
+}
+
+fn input() -> Input {
+    Input {
+        id: 1,
+        desc: "one".to_owned(),
+    }
+}
+
+fn meta<T>(r: &Response<T>) -> String {
+    format!("{:?}", r.metadata())
+}
+
+fn data<T>(r: &Response<T>) -> &T {
+    r.get_ref()
+}
+
+async fn stream<T>(r: Response<Streaming<T>>) -> Vec<T> {
+    r.into_inner().collect::<Result<Vec<_>, _>>().await.unwrap()
+}
+
+fn status(s: &tonic::Status) -> (String, tonic::Code) {
+    (format!("{:?}", s.metadata()), s.code())
 }

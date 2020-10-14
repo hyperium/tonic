@@ -1,7 +1,9 @@
-use pb::{test_server::Test, Input, Output};
 use std::pin::Pin;
+
 use tokio::stream::{self, Stream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
+
+use pb::{test_server::Test, Input, Output};
 
 pub mod pb {
     tonic::include_proto!("test");
