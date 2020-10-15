@@ -14,11 +14,7 @@ impl<T> UserAgent<T> {
     pub(crate) fn new(inner: T, user_agent: Option<HeaderValue>) -> Self {
         let user_agent = user_agent
             .map(|value| {
-                let mut buf = Vec::new();
-                buf.extend(value.as_bytes());
-                buf.push(b' ');
-                buf.extend(TONIC_USER_AGENT.as_bytes());
-                HeaderValue::from_bytes(&buf).expect("user-agent should be valid")
+                HeaderValue::from_bytes(value.as_bytes()).expect("user-agent should be valid")
             })
             .unwrap_or_else(|| HeaderValue::from_static(TONIC_USER_AGENT));
 
@@ -64,7 +60,7 @@ mod tests {
     fn prepends_custom_user_agent_to_default() {
         assert_eq!(
             UserAgent::new(Svc, Some(HeaderValue::from_static("Greeter 1.1"))).user_agent,
-            HeaderValue::from_str(&format!("Greeter 1.1 {}", TONIC_USER_AGENT)).unwrap()
+            HeaderValue::from_static("Greeter 1.1")
         )
     }
 }

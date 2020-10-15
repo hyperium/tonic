@@ -80,14 +80,13 @@ impl Endpoint {
 
     /// Set a custom user-agent header.
     ///
-    /// `user_agent` will be prepended to Tonic's default user-agent string (`tonic/x.x.x`).
     /// It must be a value that can be converted into a valid  `http::HeaderValue` or building
     /// the endpoint will fail.
     /// ```
     /// # use tonic::transport::Endpoint;
     /// # let mut builder = Endpoint::from_static("https://example.com");
-    /// builder.user_agent("Greeter").expect("Greeter should be a valid header value");
-    /// // user-agent: "Greeter tonic/x.x.x"
+    /// builder.user_agent("Greeter 1.1").expect("Greeter should be a valid header value");
+    /// // user-agent: "Greeter 1.1"
     /// ```
     pub fn user_agent<T>(self, user_agent: T) -> Result<Self, Error>
     where
