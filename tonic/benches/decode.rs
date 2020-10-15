@@ -19,7 +19,7 @@ macro_rules! bench {
                 .build()
                 .expect("runtime");
 
-            let payload = make_payload($message_size, $message_count);
+            let payload = make_payload($message_size, $message_count, $encoding);
             let body = MockBody::new(payload, $chunk_size);
             b.bytes = body.len() as u64;
 
@@ -113,13 +113,16 @@ impl Decoder for MockDecoder {
     }
 }
 
-fn make_payload(message_length: usize, message_count: usize) -> Bytes {
+fn make_payload(message_length: usize, message_count: usize, encoding: Option<String>) -> Bytes {
     let mut buf = BytesMut::new();
 
     for _ in 0..message_count {
         let msg = vec![97u8; message_length];
         buf.reserve(msg.len() + 5);
-        buf.put_u8(0);
+        buf.put_u8(match encoding {
+            Some(_) => 1,
+            None => 0,
+        });
         buf.put_u32(msg.len() as u32);
         buf.put(&msg[..]);
     }
