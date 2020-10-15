@@ -1,6 +1,6 @@
 use std::io;
 
-use super::{Compressor, bufwriter};
+use super::{bufwriter, Compressor};
 use bytes::{Buf, BytesMut};
 use flate2::read::GzDecoder;
 
