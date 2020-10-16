@@ -27,11 +27,11 @@ impl Decompression {
         Decompression::new(encoding)
     }
 
-    /// Get if the current encoding is the no-op "identity" one
-    pub fn is_identity(&self) -> bool {
+    /// Get if the current encoding is the no-op "identity" one or no decompression is configured
+    pub fn is_identity_or_none(&self) -> bool {
         match &self.encoding {
             Some(encoding) => encoding == compressors::IDENTITY,
-            None => false,
+            None => true,
         }
     }
 
