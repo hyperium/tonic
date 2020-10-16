@@ -6,7 +6,10 @@ use tracing::debug;
 
 use crate::metadata::MetadataMap;
 
-use super::{ACCEPT_ENCODING_HEADER, Compressor, ENCODING_HEADER, compressors::{self, IDENTITY}};
+use super::{
+    compressors::{self, IDENTITY},
+    Compressor, ACCEPT_ENCODING_HEADER, ENCODING_HEADER,
+};
 
 pub(crate) const BUFFER_SIZE: usize = 8 * 1024;
 
@@ -103,11 +106,14 @@ impl Compression {
     /// Set the `grpc-encoding` header with the compressor name
     pub(crate) fn set_headers(&self, headers: &mut http::HeaderMap, set_accept_encoding: bool) {
         if set_accept_encoding {
-            headers.insert(ACCEPT_ENCODING_HEADER, HeaderValue::from_str(&compressors::get_accept_encoding_header()).unwrap());
+            headers.insert(
+                ACCEPT_ENCODING_HEADER,
+                HeaderValue::from_str(&compressors::get_accept_encoding_header()).unwrap(),
+            );
         }
 
         match self.compressor {
-            None => {},
+            None => {}
             Some(compressor) => {
                 headers.insert(ENCODING_HEADER, HeaderValue::from_static(compressor.name()));
             }

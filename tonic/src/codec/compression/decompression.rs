@@ -1,7 +1,7 @@
 use bytes::{Buf, BytesMut};
 use tracing::debug;
 
-use super::{Compressor, DecompressionError, ENCODING_HEADER, compressors};
+use super::{compressors, Compressor, DecompressionError, ENCODING_HEADER};
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
