@@ -159,11 +159,13 @@ impl<T> Grpc<T> {
 
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
+        let compression = Compression::disabled();
         let request = request
-            .map(|s| encode_client(codec.encoder(), s, Compression::new_request()))
+            .map(|s| encode_client(codec.encoder(), s, compression.clone()))
             .map(BoxBody::new);
 
         let mut request = request.into_http(uri);
+        compression.set_headers(request.headers_mut());
 
         // Add the gRPC related HTTP headers
         request

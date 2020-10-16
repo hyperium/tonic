@@ -4,6 +4,8 @@ mod compressors;
 mod decompression;
 mod errors;
 
+pub(crate) const ENCODING_HEADER: &str = "grpc-encoding";
+
 #[cfg(feature = "gzip")]
 mod gzip;
 

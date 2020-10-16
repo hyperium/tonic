@@ -139,7 +139,7 @@ name = "hyper-warp-multiplex-server"
 path = "src/hyper_warp_multiplex/server.rs"
 
 [dependencies]
-tonic = { path = "../tonic", features = ["tls"] }
+tonic = { path = "../tonic", features = ["tls", "gzip"] }
 prost = "0.6"
 tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }

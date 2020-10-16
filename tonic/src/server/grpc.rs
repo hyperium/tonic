@@ -216,6 +216,7 @@ where
                     http::header::CONTENT_TYPE,
                     http::header::HeaderValue::from_static("application/grpc"),
                 );
+                compression.set_headers(&mut parts.headers);
 
                 let body = encode_server(self.codec.encoder(), body.into_stream(), compression);
 

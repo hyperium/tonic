@@ -1,10 +1,9 @@
 use bytes::{Buf, BytesMut};
 use tracing::debug;
 
-use super::{compressors, Compressor, DecompressionError};
+use super::{Compressor, DecompressionError, ENCODING_HEADER, compressors};
 
 const BUFFER_SIZE: usize = 8 * 1024;
-const ENCODING_HEADER: &str = "grpc-encoding";
 
 /// Information related to the decompression of a request or response
 #[derive(Debug)]
