@@ -1,4 +1,4 @@
-use super::{EncodeBuf, Encoder, compression::Compression};
+use super::{compression::Compression, EncodeBuf, Encoder};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
@@ -41,7 +41,11 @@ where
     EncodeBody::new_client(stream)
 }
 
-fn encode<T, U>(mut encoder: T, source: U, compression: Compression) -> impl TryStream<Ok = Bytes, Error = Status>
+fn encode<T, U>(
+    mut encoder: T,
+    source: U,
+    compression: Compression,
+) -> impl TryStream<Ok = Bytes, Error = Status>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,

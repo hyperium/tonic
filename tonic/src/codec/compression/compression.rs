@@ -5,7 +5,10 @@ use tracing::debug;
 
 use crate::metadata::MetadataMap;
 
-use super::{Compressor, compressors::{self, IDENTITY}};
+use super::{
+    compressors::{self, IDENTITY},
+    Compressor,
+};
 
 pub(crate) const BUFFER_SIZE: usize = 8 * 1024;
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
@@ -17,19 +20,27 @@ pub(crate) struct Compression {
 impl Debug for Compression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Compression")
-        .field("compressor", &self.compressor.map(|c| c.name()).unwrap_or(IDENTITY))
-        .finish()
+            .field(
+                "compressor",
+                &self.compressor.map(|c| c.name()).unwrap_or(IDENTITY),
+            )
+            .finish()
     }
 }
 
 fn parse_accept_encoding_header(value: &str) -> Vec<&str> {
-    value.split(",").map(|v| v.trim()).filter(|v| !v.is_empty()).collect::<Vec<_>>()
+    value
+        .split(",")
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+        .collect::<Vec<_>>()
 }
 
 fn first_supported_compressor(accepted: &Vec<&str>) -> Option<&'static Box<dyn Compressor>> {
-    accepted.iter()
+    accepted
+        .iter()
         .filter(|name| **name != IDENTITY)
-        .filter_map(|name|compressors::get(name))
+        .filter_map(|name| compressors::get(name))
         .next()
 }
 

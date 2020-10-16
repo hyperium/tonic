@@ -1,4 +1,10 @@
-use crate::{Code, Request, Status, body::BoxBody, codec::{Codec, Compression, Decompression, Streaming, encode_server}, interceptor::Interceptor, server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService}};
+use crate::{
+    body::BoxBody,
+    codec::{encode_server, Codec, Compression, Decompression, Streaming},
+    interceptor::Interceptor,
+    server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
+    Code, Request, Status,
+};
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
@@ -66,9 +72,10 @@ where
             Ok(r) => r,
             Err(status) => {
                 return self
-                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(Err(
-                        status,
-                    ), compression);
+                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
+                        Err(status),
+                        compression,
+                    );
             }
         };
 
@@ -99,7 +106,6 @@ where
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-
                 return self.map_response::<S::ResponseStream>(Err(status), compression);
             }
         };

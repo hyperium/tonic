@@ -7,7 +7,7 @@ use flate2::read::{GzDecoder, GzEncoder};
 /// Compress using GZIP
 #[derive(Debug)]
 pub(crate) struct GZipCompressor {
-    compression_level: flate2::Compression
+    compression_level: flate2::Compression,
 }
 
 impl GZipCompressor {

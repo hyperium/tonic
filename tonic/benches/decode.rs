@@ -122,7 +122,8 @@ fn make_payload(message_length: usize, message_count: usize, encoding: &Option<S
         #[cfg(feature = "gzip")]
         Some(encoding) if encoding == "gzip" => {
             use bytes::buf::BufMutExt;
-            let mut reader = flate2::read::GzEncoder::new(&raw_msg[..], flate2::Compression::best());
+            let mut reader =
+                flate2::read::GzEncoder::new(&raw_msg[..], flate2::Compression::best());
             let mut writer = BytesMut::new().writer();
 
             std::io::copy(&mut reader, &mut writer).expect("copy");
@@ -133,14 +134,15 @@ fn make_payload(message_length: usize, message_count: usize, encoding: &Option<S
             msg_buf.put(&raw_msg[..]);
             msg_buf
         }
-        Some(encoding) => {
-            panic!("Encoding {} isn't supported", encoding)
-        }
+        Some(encoding) => panic!("Encoding {} isn't supported", encoding),
     };
 
     for _ in 0..message_count {
         buf.reserve(msg_buf.len() + 5);
-        buf.put_u8(match encoding { Some(_) => 1, None => 0});
+        buf.put_u8(match encoding {
+            Some(_) => 1,
+            None => 0,
+        });
         buf.put_u32(msg_buf.len() as u32);
         buf.put(&msg_buf[..]);
     }
@@ -262,8 +264,4 @@ benchmark_main!(
 );
 
 #[cfg(not(feature = "gzip"))]
-benchmark_main!(
-    chunk_size,
-    message_size,
-    message_count
-);
+benchmark_main!(chunk_size, message_size, message_count);

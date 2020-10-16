@@ -1,13 +1,11 @@
 mod bufwriter;
-mod compressors;
 mod compression;
+mod compressors;
 mod decompression;
 mod errors;
 
 #[cfg(feature = "gzip")]
 mod gzip;
-
-use bytes::BytesMut;
 
 pub(crate) use self::compressors::Compressor;
 

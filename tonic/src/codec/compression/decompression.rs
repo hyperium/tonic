@@ -36,16 +36,6 @@ impl Decompression {
         }
     }
 
-    /// Clear the buffer and reserve an estimated number of bytes
-    fn prepare_decompress_buf(buffer: &mut BytesMut, estimated_len: usize) {
-        buffer.clear();
-
-        if buffer.capacity() < estimated_len {
-            let capacity = ((estimated_len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
-            buffer.reserve(capacity)
-        }
-    }
-
     /// Find a compressor in the registry for the current encoding
     fn get_compressor(&self) -> Result<&Box<dyn Compressor>, DecompressionError> {
         match &self.encoding {
@@ -71,7 +61,8 @@ impl Decompression {
     ) -> Result<(), DecompressionError> {
         let compressor = self.get_compressor()?;
 
-        out_buffer.reserve(((compressor.estimate_decompressed_len(len) / BUFFER_SIZE) + 1) * BUFFER_SIZE);
+        out_buffer
+            .reserve(((compressor.estimate_decompressed_len(len) / BUFFER_SIZE) + 1) * BUFFER_SIZE);
         compressor.decompress(in_buffer, out_buffer, len)?;
         in_buffer.advance(len);
 
