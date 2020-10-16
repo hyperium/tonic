@@ -14,10 +14,10 @@ static COMPRESSORS: Lazy<HashMap<String, Box<dyn Compressor>>> = Lazy::new(|| {
         m.insert(compressor.name().to_string(), compressor);
     };
 
-    add(Box::new(IdentityCompressor {}));
+    add(Box::new(IdentityCompressor::default()));
 
     #[cfg(feature = "gzip")]
-    add(Box::new(super::gzip::GZipCompressor {}));
+    add(Box::new(super::gzip::GZipCompressor::default()));
 
     m
 });
@@ -45,6 +45,14 @@ pub(crate) trait Compressor: Sync + Send {
         len: usize,
     ) -> io::Result<()>;
 
+    /// Compress `len` bytes from `in_buffer` into `out_buffer`
+    fn compress(
+        &self,
+        in_buffer: &mut BytesMut,
+        out_buffer: &mut BytesMut,
+        len: usize,
+    ) -> io::Result<()>;
+
     /// Estimate the space necessary to decompress `compressed_len` bytes of compressed data
     fn estimate_decompressed_len(&self, compressed_len: usize) -> usize {
         compressed_len * 2
@@ -55,12 +63,33 @@ pub(crate) trait Compressor: Sync + Send {
 #[derive(Debug)]
 struct IdentityCompressor {}
 
+impl Default for IdentityCompressor {
+    fn default() -> Self {
+        Self {}
+    }
+}
+
 impl Compressor for IdentityCompressor {
     fn name(&self) -> &'static str {
         IDENTITY
     }
 
     fn decompress(
+        &self,
+        in_buffer: &mut BytesMut,
+        out_buffer: &mut BytesMut,
+        len: usize,
+    ) -> io::Result<()> {
+        let mut in_reader = &in_buffer[0..len];
+        let mut out_writer = bufwriter::new(out_buffer);
+
+        std::io::copy(&mut in_reader, &mut out_writer)?;
+        in_buffer.advance(len);
+
+        Ok(())
+    }
+
+    fn compress(
         &self,
         in_buffer: &mut BytesMut,
         out_buffer: &mut BytesMut,
