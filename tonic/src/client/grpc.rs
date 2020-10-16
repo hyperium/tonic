@@ -165,7 +165,7 @@ impl<T> Grpc<T> {
             .map(BoxBody::new);
 
         let mut request = request.into_http(uri);
-        compression.set_headers(request.headers_mut());
+        compression.set_headers(request.headers_mut(), true);
 
         // Add the gRPC related HTTP headers
         request

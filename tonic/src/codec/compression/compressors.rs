@@ -59,6 +59,10 @@ pub(crate) trait Compressor: Sync + Send {
     }
 }
 
+pub(crate) fn get_accept_encoding_header() -> String {
+    COMPRESSORS.keys().map(|s| &**s).filter(|name| *name != IDENTITY).collect::<Vec<_>>().join(",")
+}
+
 /// The identity compressor doesn't compress
 #[derive(Debug)]
 struct IdentityCompressor {}
