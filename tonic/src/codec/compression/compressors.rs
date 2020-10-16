@@ -1,7 +1,7 @@
 use std::{collections::HashMap, io};
 
 use super::bufwriter;
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use once_cell::sync::Lazy;
 
 pub(crate) const IDENTITY: &str = "identity";
@@ -40,7 +40,7 @@ pub(crate) trait Compressor: Sync + Send {
     /// Decompress `len` bytes from `in_buffer` into `out_buffer`
     fn decompress(
         &self,
-        in_buffer: &mut BytesMut,
+        in_buffer: &BytesMut,
         out_buffer: &mut BytesMut,
         len: usize,
     ) -> io::Result<()>;
@@ -48,7 +48,7 @@ pub(crate) trait Compressor: Sync + Send {
     /// Compress `len` bytes from `in_buffer` into `out_buffer`
     fn compress(
         &self,
-        in_buffer: &mut BytesMut,
+        in_buffer: &BytesMut,
         out_buffer: &mut BytesMut,
         len: usize,
     ) -> io::Result<()>;
@@ -76,7 +76,7 @@ impl Compressor for IdentityCompressor {
 
     fn decompress(
         &self,
-        in_buffer: &mut BytesMut,
+        in_buffer: &BytesMut,
         out_buffer: &mut BytesMut,
         len: usize,
     ) -> io::Result<()> {
@@ -84,14 +84,13 @@ impl Compressor for IdentityCompressor {
         let mut out_writer = bufwriter::new(out_buffer);
 
         std::io::copy(&mut in_reader, &mut out_writer)?;
-        in_buffer.advance(len);
 
         Ok(())
     }
 
     fn compress(
         &self,
-        in_buffer: &mut BytesMut,
+        in_buffer: &BytesMut,
         out_buffer: &mut BytesMut,
         len: usize,
     ) -> io::Result<()> {
@@ -99,7 +98,6 @@ impl Compressor for IdentityCompressor {
         let mut out_writer = bufwriter::new(out_buffer);
 
         std::io::copy(&mut in_reader, &mut out_writer)?;
-        in_buffer.advance(len);
 
         Ok(())
     }

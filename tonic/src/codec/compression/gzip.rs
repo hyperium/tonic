@@ -1,7 +1,7 @@
 use std::io;
 
 use super::{bufwriter, Compressor};
-use bytes::{Buf, BytesMut};
+use bytes::BytesMut;
 use flate2::read::{GzDecoder, GzEncoder};
 
 /// Compress using GZIP
@@ -29,7 +29,7 @@ impl Compressor for GZipCompressor {
 
     fn decompress(
         &self,
-        in_buffer: &mut BytesMut,
+        in_buffer: &BytesMut,
         out_buffer: &mut BytesMut,
         len: usize,
     ) -> io::Result<()> {
@@ -37,14 +37,13 @@ impl Compressor for GZipCompressor {
         let mut out_writer = bufwriter::new(out_buffer);
 
         std::io::copy(&mut gzip_decoder, &mut out_writer)?;
-        in_buffer.advance(len);
 
         Ok(())
     }
 
     fn compress(
         &self,
-        in_buffer: &mut BytesMut,
+        in_buffer: &BytesMut,
         out_buffer: &mut BytesMut,
         len: usize,
     ) -> io::Result<()> {
@@ -52,7 +51,6 @@ impl Compressor for GZipCompressor {
         let mut out_writer = bufwriter::new(out_buffer);
 
         std::io::copy(&mut gzip_decoder, &mut out_writer)?;
-        in_buffer.advance(len);
 
         Ok(())
     }

@@ -1,4 +1,4 @@
-use bytes::BytesMut;
+use bytes::{Buf, BytesMut};
 use tracing::debug;
 
 use super::{compressors, Compressor, DecompressionError};
@@ -76,6 +76,7 @@ impl Decompression {
             compressor.estimate_decompressed_len(len),
         );
         compressor.decompress(in_buffer, out_buffer, len)?;
+        in_buffer.advance(len);
 
         debug!(
             "Decompressed {} bytes into {} bytes using {:?}",
