@@ -106,3 +106,9 @@ impl Compressor for IdentityCompressor {
         compressed_len
     }
 }
+
+static BOXED_IDENTITY_COMPRESSOR: Lazy<Box<dyn Compressor>> = Lazy::new(|| Box::new(IdentityCompressor::default()));
+
+pub(crate) fn identity() -> &'static Box<dyn Compressor> {
+    &BOXED_IDENTITY_COMPRESSOR
+}

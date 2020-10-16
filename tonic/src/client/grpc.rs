@@ -1,7 +1,7 @@
 use crate::{
     body::{Body, BoxBody},
     client::GrpcService,
-    codec::{encode_client, Codec, Decompression, Streaming},
+    codec::{encode_client, Codec, Compression, Decompression, Streaming},
     interceptor::Interceptor,
     Code, Request, Response, Status,
 };
@@ -160,7 +160,7 @@ impl<T> Grpc<T> {
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
         let request = request
-            .map(|s| encode_client(codec.encoder(), s))
+            .map(|s| encode_client(codec.encoder(), s, Compression::new_request()))
             .map(BoxBody::new);
 
         let mut request = request.into_http(uri);

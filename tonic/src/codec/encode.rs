@@ -1,4 +1,4 @@
-use super::{EncodeBuf, Encoder};
+use super::{EncodeBuf, Encoder, compression::Compression};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
@@ -16,36 +16,42 @@ const BUFFER_SIZE: usize = 8 * 1024;
 pub(crate) fn encode_server<T, U>(
     encoder: T,
     source: U,
+    compression: Compression,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status> + Send + Sync + 'static,
     T::Item: Send + Sync,
     U: Stream<Item = Result<T::Item, Status>> + Send + Sync + 'static,
 {
-    let stream = encode(encoder, source).into_stream();
+    let stream = encode(encoder, source, compression).into_stream();
     EncodeBody::new_server(stream)
 }
 
 pub(crate) fn encode_client<T, U>(
     encoder: T,
     source: U,
+    compression: Compression,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status> + Send + Sync + 'static,
     T::Item: Send + Sync,
     U: Stream<Item = T::Item> + Send + Sync + 'static,
 {
-    let stream = encode(encoder, source.map(Ok)).into_stream();
+    let stream = encode(encoder, source.map(Ok), compression).into_stream();
     EncodeBody::new_client(stream)
 }
 
-fn encode<T, U>(mut encoder: T, source: U) -> impl TryStream<Ok = Bytes, Error = Status>
+fn encode<T, U>(mut encoder: T, source: U, compression: Compression) -> impl TryStream<Ok = Bytes, Error = Status>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
 {
+    let compression_enabled = compression.is_enabled();
+    let compressed_u8 = if compression_enabled { 1 } else { 0 };
+
     async_stream::stream! {
         let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
+        let mut compress_buf = if compression_enabled { BytesMut::with_capacity(BUFFER_SIZE) } else { BytesMut::new() };
         futures_util::pin_mut!(source);
 
         loop {
@@ -55,14 +61,21 @@ where
                     unsafe {
                         buf.advance_mut(5);
                     }
-                    encoder.encode(item, &mut EncodeBuf::new(&mut buf)).map_err(drop).unwrap();
+                    if compression_enabled {
+                        compress_buf.clear();
+                        encoder.encode(item, &mut EncodeBuf::new(&mut compress_buf)).map_err(drop).unwrap();
+                        let compressed_len = compress_buf.len();
+                        compression.compress(&mut compress_buf, &mut buf, compressed_len).map_err(drop).unwrap();
+                    } else {
+                        encoder.encode(item, &mut EncodeBuf::new(&mut buf)).map_err(drop).unwrap();
+                    }
 
                     // now that we know length, we can write the header
                     let len = buf.len() - 5;
                     assert!(len <= std::u32::MAX as usize);
                     {
                         let mut buf = &mut buf[..5];
-                        buf.put_u8(0); // byte must be 0, reserve doesn't auto-zero
+                        buf.put_u8(compressed_u8);
                         buf.put_u32(len as u32);
                     }
 

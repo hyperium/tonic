@@ -1,10 +1,4 @@
-use crate::{
-    body::BoxBody,
-    codec::{encode_server, Codec, Decompression, Streaming},
-    interceptor::Interceptor,
-    server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
-    Code, Request, Status,
-};
+use crate::{Code, Request, Status, body::BoxBody, codec::{Codec, Compression, Decompression, Streaming, encode_server}, interceptor::Interceptor, server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService}};
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
@@ -67,24 +61,26 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        let compression = Compression::response_from_headers(req.headers());
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
                 return self
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(Err(
                         status,
-                    ));
+                    ), compression);
             }
         };
 
         let request = t!(self.intercept_request(request));
+        let compression = Compression::response_from_metadata(request.metadata());
 
         let response = service
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response)
+        self.map_response(response, compression)
     }
 
     /// Handle a server side streaming request.
@@ -99,18 +95,20 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        let compression = Compression::response_from_headers(req.headers());
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status));
+
+                return self.map_response::<S::ResponseStream>(Err(status), compression);
             }
         };
 
         let request = t!(self.intercept_request(request));
-
+        let compression = Compression::response_from_metadata(request.metadata());
         let response = service.call(request).await;
 
-        self.map_response(response)
+        self.map_response(response, compression)
     }
 
     /// Handle a client side streaming gRPC request.
@@ -126,11 +124,12 @@ where
     {
         let request = self.map_request_streaming(req);
         let request = t!(self.intercept_request(request));
+        let compression = Compression::response_from_metadata(request.metadata());
         let response = service
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-        self.map_response(response)
+        self.map_response(response, compression)
     }
 
     /// Handle a bi-directional streaming gRPC request.
@@ -147,8 +146,9 @@ where
     {
         let request = self.map_request_streaming(req);
         let request = t!(self.intercept_request(request));
+        let compression = Compression::response_from_metadata(request.metadata());
         let response = service.call(request).await;
-        self.map_response(response)
+        self.map_response(response, compression)
     }
 
     async fn map_request_unary<B>(
@@ -196,6 +196,7 @@ where
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
+        compression: Compression,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
@@ -210,7 +211,7 @@ where
                     http::header::HeaderValue::from_static("application/grpc"),
                 );
 
-                let body = encode_server(self.codec.encoder(), body.into_stream());
+                let body = encode_server(self.codec.encoder(), body.into_stream(), compression);
 
                 http::Response::from_parts(parts, BoxBody::new(body))
             }

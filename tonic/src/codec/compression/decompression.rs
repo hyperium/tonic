@@ -71,10 +71,7 @@ impl Decompression {
     ) -> Result<(), DecompressionError> {
         let compressor = self.get_compressor()?;
 
-        Decompression::prepare_decompress_buf(
-            out_buffer,
-            compressor.estimate_decompressed_len(len),
-        );
+        out_buffer.reserve(((compressor.estimate_decompressed_len(len) / BUFFER_SIZE) + 1) * BUFFER_SIZE);
         compressor.decompress(in_buffer, out_buffer, len)?;
         in_buffer.advance(len);
 
