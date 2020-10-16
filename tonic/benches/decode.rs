@@ -19,7 +19,7 @@ macro_rules! bench {
                 .build()
                 .expect("runtime");
 
-            let payload = make_payload($message_size, $message_count, $encoding);
+            let payload = make_payload($message_size, $message_count, &$encoding);
             let body = MockBody::new(payload, $chunk_size);
             b.bytes = body.len() as u64;
 
@@ -113,18 +113,36 @@ impl Decoder for MockDecoder {
     }
 }
 
-fn make_payload(message_length: usize, message_count: usize, encoding: Option<String>) -> Bytes {
+fn make_payload(message_length: usize, message_count: usize, encoding: &Option<String>) -> Bytes {
     let mut buf = BytesMut::new();
 
+    let raw_msg = vec![97u8; message_length];
+
+    let msg_buf = match encoding {
+        #[cfg(feature = "gzip")]
+        Some(encoding) if encoding == "gzip" => {
+            use bytes::buf::BufMutExt;
+            let mut reader = flate2::read::GzEncoder::new(&raw_msg[..], flate2::Compression::best());
+            let mut writer = BytesMut::new().writer();
+
+            std::io::copy(&mut reader, &mut writer).expect("copy");
+            writer.into_inner()
+        }
+        None => {
+            let mut msg_buf = BytesMut::new();
+            msg_buf.put(&raw_msg[..]);
+            msg_buf
+        }
+        Some(encoding) => {
+            panic!("Encoding {} isn't supported", encoding)
+        }
+    };
+
     for _ in 0..message_count {
-        let msg = vec![97u8; message_length];
-        buf.reserve(msg.len() + 5);
-        buf.put_u8(match encoding {
-            Some(_) => 1,
-            None => 0,
-        });
-        buf.put_u32(msg.len() as u32);
-        buf.put(&msg[..]);
+        buf.reserve(msg_buf.len() + 5);
+        buf.put_u8(match encoding { Some(_) => 1, None => 0});
+        buf.put_u32(msg_buf.len() as u32);
+        buf.put(&msg_buf[..]);
     }
 
     buf.freeze()
@@ -233,6 +251,7 @@ benchmark_group!(
     message_count_20_gzip
 );
 
+#[cfg(feature = "gzip")]
 benchmark_main!(
     chunk_size,
     message_size,
@@ -240,4 +259,11 @@ benchmark_main!(
     chunk_size_gzip,
     message_size_gzip,
     message_count_gzip
+);
+
+#[cfg(not(feature = "gzip"))]
+benchmark_main!(
+    chunk_size,
+    message_size,
+    message_count
 );

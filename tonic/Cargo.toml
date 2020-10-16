@@ -92,4 +92,3 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[bench]]
 name = "decode"
 harness = false
-
