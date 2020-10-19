@@ -1,5 +1,3 @@
-use std::future::Future;
-use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
@@ -13,12 +11,9 @@ use crate::call::content_types::is_grpc_web;
 use crate::call::{Encoding, GrpcWebCall};
 use crate::cors::headers::{ORIGIN, REQUEST_HEADERS};
 use crate::cors::Cors;
-use crate::Config;
+use crate::{BoxError, BoxFuture, Config};
 
 const GRPC: &str = "application/grpc";
-
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send + 'static>>;
-type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[derive(Debug, Clone)]
 pub(crate) struct GrpcWeb<S> {
@@ -78,7 +73,7 @@ impl<S> Service<Request<Body>> for GrpcWeb<S>
 where
     S: Service<Request<Body>, Response = Response<BoxBody>> + Send + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<Error> + Send,
+    S::Error: Into<BoxError> + Send,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -221,8 +216,6 @@ mod tests {
     #[derive(Clone)]
     struct Svc;
 
-    type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
-
     impl tower_service::Service<Request<Body>> for Svc {
         type Response = Response<BoxBody>;
         type Error = String;
@@ -276,10 +269,9 @@ mod tests {
 
         #[tokio::test]
         async fn origin_not_allowed() {
-            let mut svc = crate::enable_with_config(
-                Svc,
-                crate::config().allow_origins(vec!["http://localhost"]),
-            );
+            let mut svc = crate::config()
+                .allow_origins(vec!["http://localhost"])
+                .enable(Svc);
 
             let res = svc.call(request()).await.unwrap();
 
@@ -347,10 +339,9 @@ mod tests {
 
         #[tokio::test]
         async fn origin_not_allowed() {
-            let mut svc = crate::enable_with_config(
-                Svc,
-                crate::config().allow_origins(vec!["http://foo.com"]),
-            );
+            let mut svc = crate::config()
+                .allow_origins(vec!["http://foo.com"])
+                .enable(Svc);
 
             let res = svc.call(request()).await.unwrap();
 

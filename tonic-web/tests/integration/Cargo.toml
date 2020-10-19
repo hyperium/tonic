@@ -10,6 +10,8 @@ tonic = { path = "../../../tonic" }
 tonic-web = { path = "../../tonic-web" }
 prost = "0.6.1"
 tokio = { version = "0.2", features = ["macros", "rt-core", "tcp"] }
+base64 = "0.13.0"
+bytes = "0.5.6"
 
 [dev-dependencies]
 tokio = { version = "0.2", features = ["macros", "rt-core", "tcp"] }

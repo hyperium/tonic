@@ -112,9 +112,13 @@ async fn grpc(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, Stri
 async fn grpc_web(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, String) {
     let (listener, url) = bind().await;
 
+    let svc = tonic_web::config()
+        .allow_origins(vec!["http://foo.com"])
+        .enable(TestServer::new(Svc));
+
     let fut = Server::builder()
         .accept_http1(accept_h1)
-        .add_service(tonic_web::enable(TestServer::new(Svc)))
+        .add_service(svc)
         .serve_with_incoming(listener);
 
     (fut, url)
@@ -126,11 +130,11 @@ async fn spawn() -> Result<(C, C, C, C), Error> {
     let ((s1, u1), (s2, u2), (s3, u3), (s4, u4)) =
         join!(grpc(true), grpc(false), grpc_web(true), grpc_web(false));
 
-    let _ = tokio::spawn(async move { tokio::join!(s1, s2, s3, s4) });
+    let _ = tokio::spawn(async move { join!(s1, s2, s3, s4) });
 
     tokio::time::delay_for(Duration::from_millis(30)).await;
 
-    tokio::try_join!(
+    try_join!(
         TestClient::connect(u1),
         TestClient::connect(u2),
         TestClient::connect(u3),
@@ -145,6 +149,11 @@ fn input() -> Input {
     }
 }
 
+// The metadata map includes a timestamp like: `Mon, 19 Oct 2020 14:17:53 GMT`.
+// Will this give us flaky tests?
+//   a) yes and no
+//   b) no or maybe
+//   c) I don't know
 fn meta<T>(r: &Response<T>) -> String {
     format!("{:?}", r.metadata())
 }

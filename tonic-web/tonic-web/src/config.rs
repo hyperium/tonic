@@ -3,12 +3,23 @@ use std::convert::TryFrom;
 use std::time::Duration;
 
 use http::{header::HeaderName, HeaderValue};
+use tonic::body::BoxBody;
+use tonic::transport::NamedService;
+use tower_service::Service;
+
+use crate::service::GrpcWeb;
+use crate::{BoxError, BoxFuture};
 
 const DEFAULT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
 const DEFAULT_EXPOSED_HEADERS: [&str; 2] = ["grpc-status", "grpc-message"];
 
-/// TODO: doc
+/// Configuration options for wrapped services
+///
+///  * Default configuration
+///  * Not general-purpose CORS, but grpc-web specific
+///  * Settings that cannot be changed
+///  * Cloning a Config instance
 #[derive(Debug, Clone)]
 pub struct Config {
     pub(crate) allowed_origins: AllowedOrigins,
@@ -111,9 +122,25 @@ impl Config {
         }
     }
 
-    /// TODO:  remove
-    pub fn finish(self) -> Config {
-        self
+    /// TODO: doc, return type
+    pub fn enable<S>(
+        &self,
+        service: S,
+    ) -> impl Service<
+        http::Request<hyper::Body>,
+        Response = http::Response<BoxBody>,
+        Error = S::Error,
+        Future = BoxFuture<S::Response, S::Error>,
+    > + NamedService
+           + Clone
+    where
+        S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+        S: NamedService + Clone + Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<BoxError> + Send,
+    {
+        tracing::trace!("enabled for {}", S::NAME);
+        GrpcWeb::new(service, self.clone())
     }
 }
 

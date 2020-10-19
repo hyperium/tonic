@@ -1,4 +1,16 @@
-//! TODO: doc
+//! grpc-WEB protocol translation for Tonic services.
+//!
+//! This crate provides a wrapper to decorate tonic services...
+//!
+//!  * grpc-WEB requests
+//!  * grpc-WEB preflight requests
+//!  * http1 requests
+//!
+//!  ## Configuring Tonic
+//!
+//!  * easiest: `accept_http1` setting
+//!  * preferred: ALPN
+//!  
 #![warn(
     missing_debug_implementations,
     missing_docs,
@@ -13,14 +25,15 @@ mod config;
 mod cors;
 mod service;
 
-use crate::service::GrpcWeb;
 use std::future::Future;
 use std::pin::Pin;
 use tonic::body::BoxBody;
 use tonic::transport::NamedService;
 use tower_service::Service;
 
-/// TODO: doc, return type
+// TODO: improve placeholder docs, `enable` return type
+
+/// enable a tonic service to accept grpc-WEB requests, applying configuration.
 pub fn enable<S>(
     service: S,
 ) -> impl Service<
@@ -36,31 +49,10 @@ where
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
 {
-    enable_with_config(service, Config::default())
+    config().enable(service)
 }
 
-/// TODO: doc, return type
-pub fn enable_with_config<S>(
-    service: S,
-    config: Config,
-) -> impl Service<
-    http::Request<hyper::Body>,
-    Response = http::Response<BoxBody>,
-    Error = S::Error,
-    Future = BoxFuture<S::Response, S::Error>,
-> + NamedService
-       + Clone
-where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
-    S: NamedService + Clone + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
-{
-    tracing::trace!("enabled for {}", S::NAME);
-    GrpcWeb::new(service, config)
-}
-
-/// TODO: doc
+/// returns an instance of `Config`
 pub fn config() -> Config {
     Config::default()
 }

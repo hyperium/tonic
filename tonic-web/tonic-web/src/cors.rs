@@ -228,7 +228,6 @@ mod tests {
                     HeaderValue::from_static("http://a.com"),
                     HeaderValue::from_static("http://b.com"),
                 ])
-                .finish()
                 .into();
 
             let mut req_headers = preflight_headers();
@@ -239,10 +238,7 @@ mod tests {
 
         #[test]
         fn origin_not_allowed() {
-            let cors: Cors = Config::new()
-                .allow_origins(vec!["http://a.com"])
-                .finish()
-                .into();
+            let cors: Cors = Config::new().allow_origins(vec!["http://a.com"]).into();
 
             let err = cors.__check_preflight(&preflight_headers()).unwrap_err();
 
@@ -251,7 +247,7 @@ mod tests {
 
         #[test]
         fn disallow_credentials() {
-            let cors = Cors::new(Config::new().allow_credentials(false).finish());
+            let cors = Cors::new(Config::new().allow_credentials(false));
             let headers = cors.__check_preflight(&preflight_headers()).unwrap();
 
             assert!(!headers.contains_key(ALLOW_CREDENTIALS));
@@ -259,7 +255,7 @@ mod tests {
 
         #[test]
         fn expose_headers_are_merged() {
-            let cors = Cors::new(Config::new().expose_headers(vec!["x-request-id"]).finish());
+            let cors = Cors::new(Config::new().expose_headers(vec!["x-request-id"]));
             let headers = cors.__check_preflight(&preflight_headers()).unwrap();
 
             assert_value_eq!(
@@ -316,7 +312,7 @@ mod tests {
         fn custom_max_age() {
             use std::time::Duration;
 
-            let cors = Cors::new(Config::new().max_age(Duration::from_secs(99)).finish());
+            let cors = Cors::new(Config::new().max_age(Duration::from_secs(99)));
             let headers = cors.__check_preflight(&preflight_headers()).unwrap();
 
             assert_eq!(headers[MAX_AGE], "99");
@@ -324,7 +320,7 @@ mod tests {
 
         #[test]
         fn no_max_age() {
-            let cors = Cors::new(Config::new().max_age(None).finish());
+            let cors = Cors::new(Config::new().max_age(None));
             let headers = cors.__check_preflight(&preflight_headers()).unwrap();
 
             assert!(!headers.contains_key(MAX_AGE));
@@ -356,7 +352,7 @@ mod tests {
 
         #[test]
         fn any_origin() {
-            let cors: Cors = Config::new().allow_all_origins().finish().into();
+            let cors: Cors = Config::new().allow_all_origins().into();
 
             assert!(cors.simple(&request_headers()).is_ok());
         }
@@ -368,7 +364,6 @@ mod tests {
                     HeaderValue::from_static("http://a.com"),
                     HeaderValue::from_static("http://b.com"),
                 ])
-                .finish()
                 .into();
 
             let mut req_headers = request_headers();
@@ -379,10 +374,7 @@ mod tests {
 
         #[test]
         fn origin_not_allowed() {
-            let cors: Cors = Config::new()
-                .allow_origins(vec!["http://a.com"])
-                .finish()
-                .into();
+            let cors: Cors = Config::new().allow_origins(vec!["http://a.com"]).into();
 
             let err = cors.simple(&request_headers()).unwrap_err();
 
@@ -391,7 +383,7 @@ mod tests {
 
         #[test]
         fn disallow_credentials() {
-            let cors = Cors::new(Config::new().allow_credentials(false).finish());
+            let cors = Cors::new(Config::new().allow_credentials(false));
             let headers = cors.simple(&request_headers()).unwrap();
 
             assert!(!headers.contains_key(ALLOW_CREDENTIALS));
