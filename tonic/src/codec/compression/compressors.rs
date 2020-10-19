@@ -1,25 +1,26 @@
-use std::{collections::HashMap, io};
-
-use super::bufwriter;
 use bytes::BytesMut;
 use once_cell::sync::Lazy;
+use std::{collections::HashMap, io};
 
 pub(crate) const IDENTITY: &str = "identity";
 
 /// List of known compressors
 static COMPRESSORS: Lazy<HashMap<String, Box<dyn Compressor>>> = Lazy::new(|| {
-    let mut m = HashMap::new();
-
-    let mut add = |compressor: Box<dyn Compressor>| {
-        m.insert(compressor.name().to_string(), compressor);
-    };
-
-    add(Box::new(IdentityCompressor::default()));
-
     #[cfg(feature = "gzip")]
-    add(Box::new(super::gzip::GZipCompressor::default()));
+    {
+        let mut m = HashMap::new();
 
-    m
+        let mut add = |compressor: Box<dyn Compressor>| {
+            m.insert(compressor.name().to_string(), compressor);
+        };
+
+        add(Box::new(super::gzip::GZipCompressor::default()));
+
+        m
+    }
+
+    #[cfg(not(feature = "gzip"))]
+    HashMap::new()
 });
 
 /// Get a compressor from it's name
@@ -63,62 +64,6 @@ pub(crate) fn get_accept_encoding_header() -> String {
     COMPRESSORS
         .keys()
         .map(|s| &**s)
-        .filter(|name| *name != IDENTITY)
         .collect::<Vec<_>>()
         .join(",")
-}
-
-/// The identity compressor doesn't compress
-#[derive(Debug)]
-struct IdentityCompressor {}
-
-impl Default for IdentityCompressor {
-    fn default() -> Self {
-        Self {}
-    }
-}
-
-impl Compressor for IdentityCompressor {
-    fn name(&self) -> &'static str {
-        IDENTITY
-    }
-
-    fn decompress(
-        &self,
-        in_buffer: &BytesMut,
-        out_buffer: &mut BytesMut,
-        len: usize,
-    ) -> io::Result<()> {
-        let mut in_reader = &in_buffer[0..len];
-        let mut out_writer = bufwriter::new(out_buffer);
-
-        std::io::copy(&mut in_reader, &mut out_writer)?;
-
-        Ok(())
-    }
-
-    fn compress(
-        &self,
-        in_buffer: &BytesMut,
-        out_buffer: &mut BytesMut,
-        len: usize,
-    ) -> io::Result<()> {
-        let mut in_reader = &in_buffer[0..len];
-        let mut out_writer = bufwriter::new(out_buffer);
-
-        std::io::copy(&mut in_reader, &mut out_writer)?;
-
-        Ok(())
-    }
-
-    fn estimate_decompressed_len(&self, compressed_len: usize) -> usize {
-        compressed_len
-    }
-}
-
-static BOXED_IDENTITY_COMPRESSOR: Lazy<Box<dyn Compressor>> =
-    Lazy::new(|| Box::new(IdentityCompressor::default()));
-
-pub(crate) fn identity() -> &'static Box<dyn Compressor> {
-    &BOXED_IDENTITY_COMPRESSOR
 }

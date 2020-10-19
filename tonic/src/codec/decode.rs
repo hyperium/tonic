@@ -208,13 +208,6 @@ impl<T> Streaming<T> {
             }
 
             let decode_result = if *compression {
-                if self.decompression.is_identity_or_none() {
-                    return Err(Status::new(
-                        Code::Internal,
-                        "compressed flag set with identity or empty encoding",
-                    ));
-                }
-
                 if let Err(err) =
                     self.decompression
                         .decompress(&mut self.buf, &mut self.decompress_buf, *len)

@@ -1,53 +1,45 @@
 use bytes::{Buf, BytesMut};
+use std::fmt::Debug;
 use tracing::debug;
 
-use super::{compressors, Compressor, DecompressionError, ENCODING_HEADER};
+use super::{
+    compressors::{self, IDENTITY},
+    Compressor, DecompressionError, ENCODING_HEADER,
+};
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
 /// Information related to the decompression of a request or response
-#[derive(Debug)]
 pub struct Decompression {
     encoding: Option<String>,
+    compressor: Option<&'static Box<dyn Compressor>>,
+}
+
+impl Debug for Decompression {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let encoding = self.encoding.as_ref().map(|e| &e[..]).unwrap_or("");
+        f.debug_struct("Compression")
+            .field("encoding", &encoding)
+            .field(
+                "compressor",
+                &self.compressor.map(|c| c.name()).unwrap_or(""),
+            )
+            .finish()
+    }
 }
 
 impl Decompression {
-    /// Create a `Decompression` structure
-    pub fn new(encoding: Option<String>) -> Decompression {
-        Decompression { encoding }
-    }
-
     /// Create a `Decompression` structure from http headers
     pub fn from_headers(metadata: &http::HeaderMap) -> Decompression {
         let encoding = metadata
             .get(ENCODING_HEADER)
             .and_then(|v| v.to_str().ok())
-            .map(|s| s.to_string());
+            .and_then(|v| if v == IDENTITY { None } else { Some(v) });
+        let compressor = encoding.and_then(compressors::get);
 
-        Decompression::new(encoding)
-    }
-
-    /// Get if the current encoding is the no-op "identity" one or no decompression is configured
-    pub fn is_identity_or_none(&self) -> bool {
-        match &self.encoding {
-            Some(encoding) => encoding == compressors::IDENTITY,
-            None => true,
-        }
-    }
-
-    /// Find a compressor in the registry for the current encoding
-    fn get_compressor(&self) -> Result<&Box<dyn Compressor>, DecompressionError> {
-        match &self.encoding {
-            None => {
-                Ok(compressors::get(compressors::IDENTITY).expect("Identity is always present"))
-            }
-            Some(encoding) => match compressors::get(encoding) {
-                Some(compressor) => Ok(compressor),
-                None => Err(DecompressionError::NotFound {
-                    requested: encoding.clone(),
-                    known: compressors::names(),
-                }),
-            },
+        Decompression {
+            encoding: encoding.map(|v| v.to_string()),
+            compressor,
         }
     }
 
@@ -58,10 +50,21 @@ impl Decompression {
         out_buffer: &mut BytesMut,
         len: usize,
     ) -> Result<(), DecompressionError> {
-        let compressor = self.get_compressor()?;
+        let compressor = self.compressor.ok_or_else(|| {
+            match &self.encoding {
+                // Asked to decompress but not compression was specified
+                None => DecompressionError::NoCompression,
+                // Asked to decompress but the decompressor wasn't found
+                Some(encoding) => DecompressionError::NotFound {
+                    requested: encoding.clone(),
+                    known: compressors::names(),
+                },
+            }
+        })?;
 
-        out_buffer
-            .reserve(((compressor.estimate_decompressed_len(len) / BUFFER_SIZE) + 1) * BUFFER_SIZE);
+        let capacity =
+            ((compressor.estimate_decompressed_len(len) / BUFFER_SIZE) + 1) * BUFFER_SIZE;
+        out_buffer.reserve(capacity);
         compressor.decompress(in_buffer, out_buffer, len)?;
         in_buffer.advance(len);
 
@@ -69,7 +72,7 @@ impl Decompression {
             "Decompressed {} bytes into {} bytes using {:?}",
             len,
             out_buffer.len(),
-            self.encoding
+            compressor.name()
         );
         Ok(())
     }
@@ -77,6 +80,9 @@ impl Decompression {
 
 impl Default for Decompression {
     fn default() -> Self {
-        Decompression { encoding: None }
+        Decompression {
+            encoding: None,
+            compressor: None,
+        }
     }
 }

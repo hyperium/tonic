@@ -8,6 +8,7 @@ pub(crate) struct Writer<'a, B> {
     buf: &'a mut B,
 }
 
+#[cfg(feature = "gzip")]
 pub(crate) fn new<'a, B>(buf: &'a mut B) -> Writer<'a, B> {
     Writer { buf }
 }

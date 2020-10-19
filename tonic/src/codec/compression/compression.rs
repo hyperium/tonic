@@ -1,15 +1,13 @@
-use std::{fmt::Debug, io};
-
-use bytes::{Buf, BytesMut};
-use http::HeaderValue;
-use tracing::debug;
-
-use crate::metadata::MetadataMap;
-
 use super::{
     compressors::{self, IDENTITY},
+    errors::CompressionError,
     Compressor, ACCEPT_ENCODING_HEADER, ENCODING_HEADER,
 };
+use crate::metadata::MetadataMap;
+use bytes::{Buf, BytesMut};
+use http::HeaderValue;
+use std::fmt::Debug;
+use tracing::debug;
 
 pub(crate) const BUFFER_SIZE: usize = 8 * 1024;
 
@@ -86,10 +84,11 @@ impl Compression {
         in_buffer: &mut BytesMut,
         out_buffer: &mut BytesMut,
         len: usize,
-    ) -> Result<(), io::Error> {
-        out_buffer.reserve(((len / BUFFER_SIZE) + 1) * BUFFER_SIZE);
+    ) -> Result<(), CompressionError> {
+        let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
+        out_buffer.reserve(capacity);
 
-        let compressor = self.compressor.unwrap_or_else(compressors::identity);
+        let compressor = self.compressor.ok_or(CompressionError::NoCompression)?;
         compressor.compress(in_buffer, out_buffer, len)?;
         in_buffer.advance(len);
 
@@ -108,7 +107,7 @@ impl Compression {
         if set_accept_encoding {
             headers.insert(
                 ACCEPT_ENCODING_HEADER,
-                HeaderValue::from_str(&compressors::get_accept_encoding_header()).unwrap(),
+                HeaderValue::from_str(&compressors::get_accept_encoding_header()).expect("All encoding names should be ASCII"),
             );
         }
 
