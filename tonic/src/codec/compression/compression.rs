@@ -107,7 +107,8 @@ impl Compression {
         if set_accept_encoding {
             headers.insert(
                 ACCEPT_ENCODING_HEADER,
-                HeaderValue::from_str(&compressors::get_accept_encoding_header()).expect("All encoding names should be ASCII"),
+                HeaderValue::from_str(&compressors::get_accept_encoding_header())
+                    .expect("All encoding names should be ASCII"),
             );
         }
 
