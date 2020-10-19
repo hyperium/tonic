@@ -19,7 +19,7 @@ macro_rules! bench {
                 .build()
                 .expect("runtime");
 
-            let payload = make_payload($message_size, $message_count, &$encoding);
+            let payload = make_payload($message_size, $message_count, $encoding);
             let body = MockBody::new(payload, $chunk_size);
             b.bytes = body.len() as u64;
 
@@ -27,7 +27,7 @@ macro_rules! bench {
                 rt.block_on(async {
                     let decoder = MockDecoder::new($message_size);
 
-                    let decompression = Decompression::new($encoding);
+                    let decompression = Decompression::from_encoding($encoding);
                     let mut stream = Streaming::new_request(decoder, body.clone(), decompression);
 
                     let mut count = 0;
@@ -113,7 +113,7 @@ impl Decoder for MockDecoder {
     }
 }
 
-fn make_payload(message_length: usize, message_count: usize, encoding: &Option<String>) -> Bytes {
+fn make_payload(message_length: usize, message_count: usize, encoding: Option<&str>) -> Bytes {
     let mut buf = BytesMut::new();
 
     let raw_msg = vec![97u8; message_length];
@@ -166,14 +166,14 @@ bench!(message_count_10, 500, 505, 10);
 bench!(message_count_20, 500, 505, 20);
 
 // gzip change body chunk size only
-bench!(chunk_size_100_gzip, 1_000, 100, 1, Some("gzip".to_string()));
-bench!(chunk_size_500_gzip, 1_000, 500, 1, Some("gzip".to_string()));
+bench!(chunk_size_100_gzip, 1_000, 100, 1, Some("gzip"));
+bench!(chunk_size_500_gzip, 1_000, 500, 1, Some("gzip"));
 bench!(
     chunk_size_1005_gzip,
     1_000,
     1_005,
     1,
-    Some("gzip".to_string())
+    Some("gzip")
 );
 
 // gzip change message size only
@@ -182,38 +182,38 @@ bench!(
     1_000,
     1_005,
     2,
-    Some("gzip".to_string())
+    Some("gzip")
 );
 bench!(
     message_size_5k_gzip,
     5_000,
     1_005,
     2,
-    Some("gzip".to_string())
+    Some("gzip")
 );
 bench!(
     message_size_10k_gzip,
     10_000,
     1_005,
     2,
-    Some("gzip".to_string())
+    Some("gzip")
 );
 
 // gzip change message count only
-bench!(message_count_1_gzip, 500, 505, 1, Some("gzip".to_string()));
+bench!(message_count_1_gzip, 500, 505, 1, Some("gzip"));
 bench!(
     message_count_10_gzip,
     500,
     505,
     10,
-    Some("gzip".to_string())
+    Some("gzip")
 );
 bench!(
     message_count_20_gzip,
     500,
     505,
     20,
-    Some("gzip".to_string())
+    Some("gzip")
 );
 
 benchmark_group!(chunk_size, chunk_size_100, chunk_size_500, chunk_size_1005);

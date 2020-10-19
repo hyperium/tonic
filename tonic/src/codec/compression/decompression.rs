@@ -29,18 +29,24 @@ impl Debug for Decompression {
 }
 
 impl Decompression {
-    /// Create a `Decompression` structure from http headers
-    pub fn from_headers(metadata: &http::HeaderMap) -> Decompression {
-        let encoding = metadata
-            .get(ENCODING_HEADER)
-            .and_then(|v| v.to_str().ok())
-            .and_then(|v| if v == IDENTITY { None } else { Some(v) });
+    /// Create a `Decompression` structure from an encoding name
+    pub fn from_encoding(encoding: Option<&str>) -> Decompression {
         let compressor = encoding.and_then(compressors::get);
 
         Decompression {
             encoding: encoding.map(|v| v.to_string()),
             compressor,
         }
+    }
+
+    /// Create a `Decompression` structure from http headers
+    pub fn from_headers(metadata: &http::HeaderMap) -> Decompression {
+        let encoding = metadata
+            .get(ENCODING_HEADER)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| if v == IDENTITY { None } else { Some(v) });
+
+        Decompression::from_encoding(encoding)
     }
 
     /// Decompress `len` bytes from `in_buffer` into `out_buffer`
