@@ -16,7 +16,7 @@ use crate::{BoxError, BoxFuture, Config};
 const GRPC: &str = "application/grpc";
 
 #[derive(Debug, Clone)]
-pub(crate) struct GrpcWeb<S> {
+pub struct GrpcWeb<S> {
     inner: S,
     cors: Cors,
 }

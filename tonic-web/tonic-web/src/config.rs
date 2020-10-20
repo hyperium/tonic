@@ -8,18 +8,29 @@ use tonic::transport::NamedService;
 use tower_service::Service;
 
 use crate::service::GrpcWeb;
-use crate::{BoxError, BoxFuture};
+use crate::BoxError;
 
 const DEFAULT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 
 const DEFAULT_EXPOSED_HEADERS: [&str; 2] = ["grpc-status", "grpc-message"];
 
-/// Configuration options for wrapped services
+/// A Configuration builder for grpc_web services.
 ///
-///  * Default configuration
-///  * Not general-purpose CORS, but grpc-web specific
-///  * Settings that cannot be changed
-///  * Cloning a Config instance
+/// `Config` can be used to tweak the behavior of tonic_web services. Currently,
+/// `Config` instances only expose cors settings. However, since tonic_web is designed to work
+/// with grpc-web compliant clients only, some cors options have specific default values and not
+/// all settings are configurable.
+///
+/// ## Default values an configuration options
+///
+/// * `allow-origin`: All origins allowed by default. Configurable but null and wildcard origins
+///    are not supported.
+/// * `allow-methods`: "POST,OPTIONS". Not configurable.
+/// * `allow-headers`: Set to whatever the `OPTIONS` request carries. Not configurable.
+/// * `allow-credentials`: "true". Configurable.
+/// * `max-age`: "86400". Configurable.
+/// * `expose-headers`: "grpc-status,grpc-message". Configurable but values can only be added.
+///    `grpc-status` and `grpc-message` will always be exposed.
 #[derive(Debug, Clone)]
 pub struct Config {
     pub(crate) allowed_origins: AllowedOrigins,
@@ -58,7 +69,9 @@ impl Config {
         }
     }
 
-    /// TODO: doc
+    /// Allow any origin to access this resource.
+    ///
+    /// This is the default value.
     pub fn allow_all_origins(self) -> Config {
         Self {
             allowed_origins: AllowedOrigins::Any,
@@ -66,7 +79,13 @@ impl Config {
         }
     }
 
-    /// TODO: doc
+    /// Only allow a specific set of origins to access this resource.
+    ///
+    /// ## Example
+    ///
+    /// ```
+    /// tonic_web::config().allow_origins(vec!["http://a.com", "http://b.com"]);
+    /// ```
     pub fn allow_origins<I>(self, origins: I) -> Config
     where
         I: IntoIterator,
@@ -89,7 +108,9 @@ impl Config {
         }
     }
 
-    /// TODO: doc
+    /// Adds multiple headers to the list of exposed headers.
+    ///
+    /// Default: `grpc-status,grpc-message`. These will always be included.
     pub fn expose_headers<I>(mut self, headers: I) -> Config
     where
         I: IntoIterator,
@@ -106,7 +127,10 @@ impl Config {
         self
     }
 
-    /// TODO: doc
+    /// Defines the maximum cache lifetime for operations allowed on this
+    /// resource.
+    ///
+    /// Default: "86400" (24 hours)
     pub fn max_age<T: Into<Option<Duration>>>(self, max_age: T) -> Config {
         Self {
             max_age: max_age.into(),
@@ -114,7 +138,9 @@ impl Config {
         }
     }
 
-    /// TODO: doc
+    /// If true, the `access-control-allow-credentials` will be sent.
+    ///
+    /// Default: true
     pub fn allow_credentials(self, allow_credentials: bool) -> Config {
         Self {
             allow_credentials,
@@ -122,17 +148,8 @@ impl Config {
         }
     }
 
-    /// TODO: doc, return type
-    pub fn enable<S>(
-        &self,
-        service: S,
-    ) -> impl Service<
-        http::Request<hyper::Body>,
-        Response = http::Response<BoxBody>,
-        Error = S::Error,
-        Future = BoxFuture<S::Response, S::Error>,
-    > + NamedService
-           + Clone
+    /// enable a tonic service to handle grpc-web requests with this configuration values.
+    pub fn enable<S>(&self, service: S) -> GrpcWeb<S>
     where
         S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
         S: NamedService + Clone + Send + 'static,
