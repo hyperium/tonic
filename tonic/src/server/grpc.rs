@@ -104,7 +104,8 @@ where
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status), Compression::disabled());
+                return self
+                    .map_response::<S::ResponseStream>(Err(status), Compression::disabled());
             }
         };
 

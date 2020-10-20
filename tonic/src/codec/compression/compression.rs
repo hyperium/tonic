@@ -27,22 +27,6 @@ impl Debug for Compression {
     }
 }
 
-fn parse_accept_encoding_header(value: &str) -> Vec<&str> {
-    value
-        .split(",")
-        .map(|v| v.trim())
-        .filter(|v| !v.is_empty())
-        .collect::<Vec<_>>()
-}
-
-fn first_supported_compressor(accepted: &Vec<&str>) -> Option<&'static Box<dyn Compressor>> {
-    accepted
-        .iter()
-        .filter(|name| **name != IDENTITY)
-        .filter_map(|name| compressors::get(name))
-        .next()
-}
-
 impl Compression {
     /// Create an instance of compression that doesn't compress anything
     pub(crate) fn disabled() -> Compression {
@@ -51,14 +35,17 @@ impl Compression {
 
     /// Create an instance of compression from GRPC metadata
     pub(crate) fn response_from_metadata(request_metadata: &MetadataMap) -> Compression {
-        let accept_encoding_header = request_metadata
-            .get(ACCEPT_ENCODING_HEADER)
+        // The following implementation is very conservative, and similar to the Golang GRPC implementation.
+        // Instead of looking at 'grpc-accept-encoding' and potentially compressing the response with a different
+        // compressor than the one used by the request it uses the same compressor
+        let request_compressor = request_metadata
+            .get(ENCODING_HEADER)
             .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
+            .and_then(compressors::get);
 
-        let parsed = parse_accept_encoding_header(accept_encoding_header);
-        let compressor = first_supported_compressor(&parsed);
-        Compression { compressor }
+        Compression {
+            compressor: request_compressor,
+        }
     }
 
     /// Get if compression is enabled

@@ -168,53 +168,17 @@ bench!(message_count_20, 500, 505, 20);
 // gzip change body chunk size only
 bench!(chunk_size_100_gzip, 1_000, 100, 1, Some("gzip"));
 bench!(chunk_size_500_gzip, 1_000, 500, 1, Some("gzip"));
-bench!(
-    chunk_size_1005_gzip,
-    1_000,
-    1_005,
-    1,
-    Some("gzip")
-);
+bench!(chunk_size_1005_gzip, 1_000, 1_005, 1, Some("gzip"));
 
 // gzip change message size only
-bench!(
-    message_size_1k_gzip,
-    1_000,
-    1_005,
-    2,
-    Some("gzip")
-);
-bench!(
-    message_size_5k_gzip,
-    5_000,
-    1_005,
-    2,
-    Some("gzip")
-);
-bench!(
-    message_size_10k_gzip,
-    10_000,
-    1_005,
-    2,
-    Some("gzip")
-);
+bench!(message_size_1k_gzip, 1_000, 1_005, 2, Some("gzip"));
+bench!(message_size_5k_gzip, 5_000, 1_005, 2, Some("gzip"));
+bench!(message_size_10k_gzip, 10_000, 1_005, 2, Some("gzip"));
 
 // gzip change message count only
 bench!(message_count_1_gzip, 500, 505, 1, Some("gzip"));
-bench!(
-    message_count_10_gzip,
-    500,
-    505,
-    10,
-    Some("gzip")
-);
-bench!(
-    message_count_20_gzip,
-    500,
-    505,
-    20,
-    Some("gzip")
-);
+bench!(message_count_10_gzip, 500, 505, 10, Some("gzip"));
+bench!(message_count_20_gzip, 500, 505, 20, Some("gzip"));
 
 benchmark_group!(chunk_size, chunk_size_100, chunk_size_500, chunk_size_1005);
 
