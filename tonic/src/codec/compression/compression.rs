@@ -61,18 +61,6 @@ impl Compression {
         Compression { compressor }
     }
 
-    /// Create an instance of compression from HTTP headers
-    pub(crate) fn response_from_headers(request_headers: &http::HeaderMap) -> Compression {
-        let accept_encoding_header = request_headers
-            .get(ACCEPT_ENCODING_HEADER)
-            .and_then(|v| v.to_str().ok())
-            .unwrap_or("");
-
-        let parsed = parse_accept_encoding_header(accept_encoding_header);
-        let compressor = first_supported_compressor(&parsed);
-        Compression { compressor }
-    }
-
     /// Get if compression is enabled
     pub(crate) fn is_enabled(&self) -> bool {
         self.compressor.is_some()

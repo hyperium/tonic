@@ -67,14 +67,13 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let compression = Compression::response_from_headers(req.headers());
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
                 return self
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
                         Err(status),
-                        compression,
+                        Compression::disabled(),
                     );
             }
         };
@@ -102,11 +101,10 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let compression = Compression::response_from_headers(req.headers());
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status), compression);
+                return self.map_response::<S::ResponseStream>(Err(status), Compression::disabled());
             }
         };
 
