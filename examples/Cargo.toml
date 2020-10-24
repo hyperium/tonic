@@ -75,6 +75,14 @@ name = "tower-client"
 path = "src/tower/client.rs"
 
 [[bin]]
+name = "timeout-server"
+path = "src/timeout/server.rs"
+
+[[bin]]
+name = "timeout-client"
+path = "src/timeout/client.rs"
+
+[[bin]]
 name = "multiplex-server"
 path = "src/multiplex/server.rs"
 
