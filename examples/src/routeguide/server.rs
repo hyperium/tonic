@@ -44,7 +44,7 @@ impl RouteGuide for RouteGuideService {
     ) -> Result<Response<Self::ListFeaturesStream>, Status> {
         println!("ListFeatures = {:?}", request);
 
-        let (mut tx, rx) = mpsc::channel(4);
+        let (tx, rx) = mpsc::channel(4);
         let features = self.features.clone();
 
         tokio::spawn(async move {

@@ -109,7 +109,7 @@ impl Channel {
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
     pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
-        let (channel, mut tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
+        let (channel, tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
         list.for_each(|endpoint| {
             tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint))
                 .unwrap();

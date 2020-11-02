@@ -11,8 +11,7 @@ use tonic::{codec::DecodeBuf, codec::Decoder, Status, Streaming};
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {
         fn $name(b: &mut Bencher) {
-            let mut rt = tokio::runtime::Builder::new()
-                .basic_scheduler()
+            let rt = tokio::runtime::Builder::new_current_thread()
                 .build()
                 .expect("runtime");
 

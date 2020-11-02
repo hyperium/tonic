@@ -3,7 +3,7 @@ use tonic::{transport::Server, Request, Response, Status};
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
 use std::time::Duration;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 use tonic_health::server::HealthReporter;
 
 pub mod hello_world {
@@ -34,7 +34,7 @@ async fn twiddle_service_status(mut reporter: HealthReporter) {
     let mut iter = 0u64;
     loop {
         iter += 1;
-        delay_for(Duration::from_secs(1)).await;
+        sleep(Duration::from_secs(1)).await;
 
         if iter % 2 == 0 {
             reporter.set_serving::<GreeterServer<MyGreeter>>().await;

@@ -157,7 +157,7 @@ tracing-futures = "0.2"
 # Required for wellknown types
 prost-types = "0.6"
 # Hyper example
-hyper = "0.13"
+hyper = { git = "https://github.com/hawkw/hyper", branch = "eliza/bump-tokio" }
 warp = { version = "0.2", default-features = false }
 http = "0.2"
 http-body = "0.3"
@@ -168,3 +168,6 @@ listenfd = "0.3"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
+
+[patch.crates-io]
+hyper = { git = "https://github.com/hawkw/hyper", branch = "eliza/bump-tokio" }

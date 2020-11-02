@@ -3,6 +3,9 @@
 //! To hit the warp server you can run this command:
 //! `curl localhost:50051/hello`
 
+// TODO(eliza): remove when this works again
+#![allow(unused_imports, dead_code)]
+
 use futures::future::{self, Either, TryFutureExt};
 use futures::Stream;
 use http::version::Version;
@@ -94,40 +97,41 @@ impl Echo for MyEcho {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse().unwrap();
+    todo!("bring this example back when Warp has been updated to the latest Hyper");
+    // let addr = "[::1]:50051".parse().unwrap();
 
-    let mut warp = warp::service(warp::path("hello").map(|| "hello, world!"));
+    // let mut warp = warp::service(warp::path("hello").map(|| "hello, world!"));
 
-    Server::bind(&addr)
-        .serve(make_service_fn(move |_| {
-            let greeter = GreeterServer::new(MyGreeter::default());
-            let echo = EchoServer::new(MyEcho::default());
+    // Server::bind(&addr)
+    //     .serve(make_service_fn(move |_| {
+    //         let greeter = GreeterServer::new(MyGreeter::default());
+    //         let echo = EchoServer::new(MyEcho::default());
 
-            let mut tonic = TonicServer::builder()
-                .add_service(greeter)
-                .add_service(echo)
-                .into_service();
+    //         let mut tonic = TonicServer::builder()
+    //             .add_service(greeter)
+    //             .add_service(echo)
+    //             .into_service();
 
-            future::ok::<_, Infallible>(tower::service_fn(
-                move |req: hyper::Request<hyper::Body>| match req.version() {
-                    Version::HTTP_11 | Version::HTTP_10 => Either::Left(
-                        warp.call(req)
-                            .map_ok(|res| res.map(EitherBody::Left))
-                            .map_err(Error::from),
-                    ),
-                    Version::HTTP_2 => Either::Right(
-                        tonic
-                            .call(req)
-                            .map_ok(|res| res.map(EitherBody::Right))
-                            .map_err(Error::from),
-                    ),
-                    _ => unimplemented!(),
-                },
-            ))
-        }))
-        .await?;
+    //         future::ok::<_, Infallible>(tower::service_fn(
+    //             move |req: hyper::Request<hyper::Body>| match req.version() {
+    //                 Version::HTTP_11 | Version::HTTP_10 => Either::Left(
+    //                     warp.call(req)
+    //                         .map_ok(|res| res.map(EitherBody::Left))
+    //                         .map_err(Error::from),
+    //                 ),
+    //                 Version::HTTP_2 => Either::Right(
+    //                     tonic
+    //                         .call(req)
+    //                         .map_ok(|res| res.map(EitherBody::Right))
+    //                         .map_err(Error::from),
+    //                 ),
+    //                 _ => unimplemented!(),
+    //             },
+    //         ))
+    //     }))
+    //     .await?;
 
-    Ok(())
+    // Ok(())
 }
 
 enum EitherBody<A, B> {

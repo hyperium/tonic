@@ -36,9 +36,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match listenfd::ListenFd::from_env().take_tcp_listener(0)? {
         Some(listener) => {
-            let mut listener = tokio::net::TcpListener::from_std(listener)?;
+            let listener = tokio::net::TcpListener::from_std(listener)?;
 
-            server.serve_with_incoming(listener.incoming()).await?;
+            server.serve_with_incoming(listener).await?;
         }
         None => {
             server.serve(addr).await?;

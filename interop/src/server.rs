@@ -2,7 +2,7 @@ use crate::pb::{self, *};
 use async_stream::try_stream;
 use futures_util::{stream, StreamExt, TryStreamExt};
 use http::header::{HeaderMap, HeaderName, HeaderValue};
-use http_body::Body;
+use hyper::body::HttpBody;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -72,7 +72,7 @@ impl pb::test_service_server::TestService for TestService {
 
         let stream = try_stream! {
             for param in response_parameters {
-                tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
+                tokio::time::sleep(Duration::from_micros(param.interval_us as u64)).await;
 
                 let payload = crate::server_payload(param.size as usize);
                 yield StreamingOutputCallResponse { payload: Some(payload) };
@@ -127,7 +127,7 @@ impl pb::test_service_server::TestService for TestService {
                     }
 
                     for param in msg.response_parameters {
-                        tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
+                        tokio::time::sleep(Duration::from_micros(param.interval_us as u64)).await;
 
                         let payload = crate::server_payload(param.size as usize);
                         yield StreamingOutputCallResponse { payload: Some(payload) };
@@ -235,7 +235,7 @@ impl<B> MergeTrailers<B> {
     }
 }
 
-impl<B: Body + Unpin> Body for MergeTrailers<B> {
+impl<B: HttpBody + Unpin> HttpBody for MergeTrailers<B> {
     type Data = B::Data;
     type Error = B::Error;
 
