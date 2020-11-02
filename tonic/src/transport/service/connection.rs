@@ -13,11 +13,11 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
+    load::Load,
     timeout::TimeoutLayer,
     util::BoxService,
     ServiceBuilder, ServiceExt,
 };
-use tower_load::Load;
 use tower_service::Service;
 
 pub(crate) type Request = http::Request<BoxBody>;

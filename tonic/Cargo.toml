@@ -29,8 +29,6 @@ transport = [
     "hyper",
     "tokio",
     "tower",
-    "tower-balance",
-    "tower-load",
     "tracing-futures",
 ]
 tls = ["transport", "tokio-rustls"]
@@ -51,7 +49,7 @@ base64 = "0.12"
 
 percent-encoding = "2.0"
 tower-service = "0.3"
-tokio-util = { version = "0.3", features = ["codec"] }
+tokio-util = { version = "0.5", features = ["codec"] }
 async-stream = "0.2"
 http-body = "0.3"
 pin-project = "0.4.17"
@@ -64,20 +62,22 @@ prost-derive = { version = "0.6", optional = true }
 async-trait = { version = "0.1.13", optional = true }
 
 # transport
-hyper = { version = "0.13.4", features = ["stream"], optional = true }
-tokio = { version = "0.2.13", features = ["tcp"], optional = true }
-tower = { version = "0.3", optional = true}
-tower-make = { version = "0.3", features = ["connect"] }
-tower-balance =  { version = "0.3", optional = true }
-tower-load = { version = "0.3", optional = true }
+hyper = { git = "https://github.com/hawkw/hyper", branch = "eliza/bump-tokio", features = ["stream"], optional = true }
+tokio = { version = "0.3.2", features = ["net", "sync"], optional = true }
 tracing-futures = { version = "0.2", optional = true }
 
 # rustls
-tokio-rustls = { version = "0.14", optional = true }
+tokio-rustls = { version = "0.20", optional = true }
 rustls-native-certs = { version = "0.4", optional = true }
 
+[dependencies.tower]
+git = "https://github.com/tower-rs/tower"
+version = "0.4"
+features = ["balance", "load", "make", "buffer", "limit", "util", "timeout"]
+optional = true
+
 [dev-dependencies]
-tokio = { version = "0.2", features = ["rt-core", "macros"] }
+tokio = { version = "0.3", features = ["rt", "macros"] }
 static_assertions = "1.0"
 rand = "0.7"
 bencher = "0.1.5"

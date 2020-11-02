@@ -141,10 +141,10 @@ path = "src/hyper_warp_multiplex/server.rs"
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
-tokio = { version = "0.2", features = ["rt-threaded", "time", "stream", "fs", "macros", "uds"] }
+tokio = { version = "0.3", features = ["rt-multi-thread", "time", "stream", "fs", "macros", "net"] }
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
 async-stream = "0.2"
-tower = "0.3"
+tower = { git = "https://github.com/tower-rs/tower", version = "0.4" }
 # Required for routeguide
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"

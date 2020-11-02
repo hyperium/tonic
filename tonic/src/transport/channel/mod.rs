@@ -30,12 +30,12 @@ use tokio::{
 };
 
 use tower::{
+    balance::p2c::Balance,
     buffer::{self, Buffer},
     discover::{Change, Discover},
     util::{BoxService, Either},
     Service,
 };
-use tower_balance::p2c::Balance;
 
 type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
 
@@ -166,9 +166,9 @@ impl Channel {
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
-        D::Key: Send + Clone,
+        D::Key: Hash + Send + Clone,
     {
-        let svc = Balance::from_entropy(discover);
+        let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
         let svc = Buffer::new(Either::B(svc), buffer_size);

@@ -10,7 +10,7 @@ use std::{
 };
 use tokio::{stream::Stream, sync::mpsc::Receiver};
 
-use tower::discover::{Change, Discover};
+use tower::discover::Change;
 
 type DiscoverResult<K, S, E> = Result<Change<K, S>, E>;
 
@@ -28,22 +28,17 @@ impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
     }
 }
 
-impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
-    type Key = K;
-    type Service = Connection;
-    type Error = crate::Error;
+impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
+    type Item = DiscoverResult<K, Connection, crate::Error>;
 
-    fn poll_discover(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<DiscoverResult<Self::Key, Self::Service, Self::Error>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let Some((key, connecting)) = &mut self.connecting {
                 let svc = futures_core::ready!(Pin::new(connecting).poll(cx))?;
                 let key = key.to_owned();
                 self.connecting = None;
                 let change = Ok(Change::Insert(key, svc));
-                return Poll::Ready(change);
+                return Poll::Ready(Some(change));
             };
 
             let c = &mut self.changes;
@@ -67,7 +62,7 @@ impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
                         self.connecting = Some((k, Box::pin(fut)));
                         continue;
                     }
-                    Change::Remove(k) => return Poll::Ready(Ok(Change::Remove(k))),
+                    Change::Remove(k) => return Poll::Ready(Some(Ok(Change::Remove(k)))),
                 },
             }
         }

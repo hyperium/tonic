@@ -1,5 +1,5 @@
 use tower::{
-    layer::{Layer, Stack},
+    layer::{util::Stack, Layer},
     util::Either,
     ServiceBuilder,
 };
