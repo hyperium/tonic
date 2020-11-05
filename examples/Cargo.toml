@@ -168,6 +168,3 @@ listenfd = "0.3"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
-
-[patch.crates-io]
-hyper = { git = "https://github.com/hawkw/hyper", branch = "eliza/bump-tokio" }

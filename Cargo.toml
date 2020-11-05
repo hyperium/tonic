@@ -18,3 +18,6 @@ members = [
     "tests/extern_path/my_application",
     "tests/integration_tests"
 ]
+
+[patch.crates-io]
+hyper = { git = "https://github.com/hawkw/hyper", branch = "eliza/bump-tokio" }
