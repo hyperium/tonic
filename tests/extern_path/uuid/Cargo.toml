@@ -10,6 +10,6 @@ license = "MIT"
 
 [dependencies]
 prost = "0.6"
-bytes = "0.5"
+bytes = "0.6"
 [build-dependencies]
 prost-build = "0.6"

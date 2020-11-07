@@ -1,5 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut};
-use std::mem::MaybeUninit;
+use bytes::{Buf, BufMut, BytesMut, buf::UninitSlice};
 
 /// A specialized buffer to decode gRPC messages from.
 #[derive(Debug)]
@@ -63,7 +62,7 @@ impl EncodeBuf<'_> {
     }
 }
 
-impl BufMut for EncodeBuf<'_> {
+unsafe impl BufMut for EncodeBuf<'_> {
     #[inline]
     fn remaining_mut(&self) -> usize {
         self.buf.remaining_mut()
@@ -75,7 +74,7 @@ impl BufMut for EncodeBuf<'_> {
     }
 
     #[inline]
-    fn bytes_mut(&mut self) -> &mut [MaybeUninit<u8>] {
+    fn bytes_mut(&mut self) -> &mut UninitSlice {
         self.buf.bytes_mut()
     }
 }

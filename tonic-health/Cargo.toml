@@ -21,7 +21,7 @@ transport = ["tonic/transport"]
 async-stream = "0.2"
 tokio = { version = "0.2", features = ["sync", "stream"] }
 tonic = { version = "0.3", path = "../tonic", features = ["codegen", "prost"] }
-bytes = "0.5"
+bytes = "0.6"
 prost = "0.6"
 
 [dev-dependencies]

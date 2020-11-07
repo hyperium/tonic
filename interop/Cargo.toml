@@ -19,7 +19,7 @@ tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "stream"
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.6"
 prost-derive = "0.6"
-bytes = "0.5"
+bytes = "0.6"
 http = "0.2"
 futures-core = "0.3"
 futures-util = "0.3"

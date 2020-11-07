@@ -42,7 +42,7 @@ prost = ["prost1", "prost-derive"]
 # harness = false
 
 [dependencies]
-bytes = "0.5"
+bytes = "0.6"
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 tracing = "0.1"
