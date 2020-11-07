@@ -1,4 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut, buf::UninitSlice};
+use bytes::{buf::UninitSlice, Buf, BufMut, BytesMut};
 
 /// A specialized buffer to decode gRPC messages from.
 #[derive(Debug)]
