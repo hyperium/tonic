@@ -32,28 +32,26 @@ impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<DiscoverResult<Self::Key, Self::Service, Self::Error>> {
-        loop {
-            let c = &mut self.changes;
-            return match Pin::new(&mut *c).poll_next(cx) {
-                Poll::Pending | Poll::Ready(None) => Poll::Pending,
-                Poll::Ready(Some(change)) => match change {
-                    Change::Insert(k, endpoint) => {
-                        let mut http = hyper::client::connect::HttpConnector::new();
-                        http.set_nodelay(endpoint.tcp_nodelay);
-                        http.set_keepalive(endpoint.tcp_keepalive);
-                        http.enforce_http(false);
-                        #[cfg(feature = "tls")]
-                        let connector = service::connector(http, endpoint.tls.clone());
+        let c = &mut self.changes;
+        match Pin::new(&mut *c).poll_next(cx) {
+            Poll::Pending | Poll::Ready(None) => Poll::Pending,
+            Poll::Ready(Some(change)) => match change {
+                Change::Insert(k, endpoint) => {
+                    let mut http = hyper::client::connect::HttpConnector::new();
+                    http.set_nodelay(endpoint.tcp_nodelay);
+                    http.set_keepalive(endpoint.tcp_keepalive);
+                    http.enforce_http(false);
+                    #[cfg(feature = "tls")]
+                    let connector = service::connector(http, endpoint.tls.clone());
 
-                        #[cfg(not(feature = "tls"))]
-                        let connector = service::connector(http);
-                        let connection = Connection::lazy(connector, endpoint);
-                        let change = Ok(Change::Insert(k, connection));
-                        Poll::Ready(change)
-                    }
-                    Change::Remove(k) => Poll::Ready(Ok(Change::Remove(k))),
-                },
-            };
+                    #[cfg(not(feature = "tls"))]
+                    let connector = service::connector(http);
+                    let connection = Connection::lazy(connector, endpoint);
+                    let change = Ok(Change::Insert(k, connection));
+                    Poll::Ready(change)
+                }
+                Change::Remove(k) => Poll::Ready(Ok(Change::Remove(k))),
+            },
         }
     }
 }
