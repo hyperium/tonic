@@ -1,4 +1,4 @@
-use super::super::{service};
+use super::super::service;
 use super::connection::Connection;
 use crate::transport::Endpoint;
 
@@ -19,9 +19,7 @@ pub(crate) struct DynamicServiceStream<K: Hash + Eq + Clone> {
 
 impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
     pub(crate) fn new(changes: Receiver<Change<K, Endpoint>>) -> Self {
-        Self {
-            changes,
-        }
+        Self { changes }
     }
 }
 
@@ -45,17 +43,17 @@ impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
                         http.set_keepalive(endpoint.tcp_keepalive);
                         http.enforce_http(false);
                         #[cfg(feature = "tls")]
-                            let connector = service::connector(http, endpoint.tls.clone());
+                        let connector = service::connector(http, endpoint.tls.clone());
 
                         #[cfg(not(feature = "tls"))]
-                            let connector = service::connector(http);
+                        let connector = service::connector(http);
                         let connection = Connection::lazy(connector, endpoint);
                         let change = Ok(Change::Insert(k, connection));
                         Poll::Ready(change)
                     }
                     Change::Remove(k) => Poll::Ready(Ok(Change::Remove(k))),
                 },
-            }
+            };
         }
     }
 }
