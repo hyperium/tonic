@@ -1,6 +1,7 @@
 use crate::Error;
 use pin_project::pin_project;
 use std::fmt;
+use std::fmt::Debug;
 use std::{
     future::Future,
     pin::Pin,
@@ -13,6 +14,7 @@ use tracing::trace;
 pub(crate) struct Reconnect<M, Target>
 where
     M: Service<Target>,
+    M::Error: Debug,
 {
     mk_service: M,
     state: State<M::Future, M::Response>,
@@ -32,6 +34,7 @@ enum State<F, S> {
 impl<M, Target> Reconnect<M, Target>
 where
     M: Service<Target>,
+    M::Error: Debug,
 {
     pub(crate) fn new(mk_service: M, target: Target, is_lazy: bool) -> Self {
         Reconnect {
@@ -52,6 +55,7 @@ where
     M::Future: Unpin,
     Error: From<M::Error> + From<S::Error>,
     Target: Clone,
+    <M as tower_service::Service<Target>>::Error: std::fmt::Debug,
 {
     type Response = S::Response;
     type Error = Error;
@@ -59,6 +63,10 @@ where
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let mut state;
+
+        if self.error.is_some() {
+            return Poll::Ready(Ok(()));
+        }
 
         loop {
             match self.state {
@@ -94,6 +102,7 @@ where
                             if !(self.has_been_connected || self.is_lazy) {
                                 return Poll::Ready(Err(e.into()));
                             } else {
+                                tracing::error!("reconnect::poll_ready: {:?}", e);
                                 self.error = Some(e);
                                 break;
                             }
@@ -130,7 +139,9 @@ where
     }
 
     fn call(&mut self, request: Request) -> Self::Future {
+        tracing::trace!("Reconnect::call");
         if let Some(error) = self.error.take() {
+            tracing::error!("error: {:?}", error);
             return ResponseFuture::error(error);
         }
 
@@ -150,6 +161,7 @@ where
     M::Future: fmt::Debug,
     M::Response: fmt::Debug,
     Target: fmt::Debug,
+    <M as tower_service::Service<Target>>::Error: std::fmt::Debug,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Reconnect")
