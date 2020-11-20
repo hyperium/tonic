@@ -15,20 +15,6 @@ use tonic::transport::channel::{Channel, ClientTlsConfig};
 static GRPC_REPORT_ENDPOINTS_CHANNEL_SIZE: usize = 1024;
 
 /// Implements tonic `GrpcService` for a client-side load balanced `Channel` (using `The Power of
-/// Two Choices`).
-/// ```rust
-/// #[tokio::main]
-/// async fn main() {
-///     use truelayer_tonic::client::{LoadBalancedChannelBuilder,LoadBalancedChannel};
-///     use truelayer_tonic::pb::tester_client::TesterClient;
-///
-///     let load_balanced_channel =
-///     LoadBalancedChannelBuilder::new_with_service(("my_hostname", 5000)).await
-///                                     .expect("failed to read system conf").channel();
-///     let client: TesterClient<LoadBalancedChannel> = TesterClient::new(load_balanced_channel);
-/// }
-/// ```
-///
 #[derive(Debug, Clone)]
 pub struct LoadBalancedChannel(Channel);
 
