@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package test;
+
+message Ping {}
+
+message Pong {
+    oneof payload {
+        string raw = 1;
+    }
+}
+
+// The tester service definition.
+service Tester {
+  rpc Test (Ping) returns (Pong) {}
+}
+
+

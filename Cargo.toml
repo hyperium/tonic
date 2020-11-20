@@ -16,5 +16,6 @@ members = [
     "tests/extern_path/uuid",
     "tests/ambiguous_methods",
     "tests/extern_path/my_application",
-    "tests/integration_tests"
+    "tests/integration_tests",
+    "tests/load_balancing"
 ]

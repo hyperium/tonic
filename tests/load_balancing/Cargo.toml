@@ -1,0 +1,23 @@
+[package]
+name = "load-balancing"
+version = "0.1.0"
+authors = ["Helge Hoff <helge.hoff@truelayer.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = { path = "../../tonic" }
+examples = { path = "../../examples" }
+async-trait = "0.1"
+tokio = { version = "0.2", features = ["full"] }
+prost = "0.6"
+http = "0.2"
+anyhow = "1"
+tracing = "0.1.16"
+tower-service = "0.3"
+hyper = "0.13.9"
+futures = "0.3.8"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
