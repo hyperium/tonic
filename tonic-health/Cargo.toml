@@ -19,13 +19,13 @@ transport = ["tonic/transport"]
 
 [dependencies]
 async-stream = "0.2"
-tokio = { version = "0.2", features = ["sync", "stream"] }
+tokio = { version = "0.3", features = ["sync", "stream"] }
 tonic = { version = "0.3", path = "../tonic", features = ["codegen", "prost"] }
-bytes = "0.5"
-prost = "0.6"
+bytes = "0.6"
+prost = { git = "https://github.com/danburkert/prost" }
 
 [dev-dependencies]
-tokio = { version = "0.2", features = ["rt-core", "macros"]}
+tokio = { version = "0.3", features = ["rt", "macros"]}
 
 [build-dependencies]
 tonic-build = { version = "0.3", path = "../tonic-build" }

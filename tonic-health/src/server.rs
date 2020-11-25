@@ -84,8 +84,7 @@ impl HealthReporter {
                 let _ = writer.insert(service_name.to_string(), watch::channel(status));
             }
             Some((tx, rx)) => {
-                let mut rx = rx.clone();
-                if rx.recv().await == Some(status) {
+                if *rx.borrow() == status {
                     return;
                 }
 
@@ -93,7 +92,7 @@ impl HealthReporter {
                 // receiver should always be present, only being dropped when clearing the
                 // service status. Consequently, `tx.broadcast` should not fail, making use
                 // of `expect` here safe.
-                tx.broadcast(status).expect("channel should not be closed");
+                tx.send(status).expect("channel should not be closed");
             }
         };
     }
@@ -118,7 +117,7 @@ impl HealthService {
         let reader = self.statuses.read().await;
         match reader.get(service_name).map(|p| p.1.clone()) {
             None => None,
-            Some(mut receiver) => receiver.recv().await,
+            Some(receiver) => Some(receiver.borrow().clone()),
         }
     }
 }
@@ -154,10 +153,14 @@ impl Health for HealthService {
         };
 
         let output = async_stream::try_stream! {
-            while let Some(status) = status_rx.recv().await {
-                yield HealthCheckResponse{
+            loop {
+                let status = *status_rx.borrow();
+                yield HealthCheckResponse {
                     status: crate::proto::health_check_response::ServingStatus::from(status) as i32,
                 };
+                if status_rx.changed().await.is_err() {
+                    break;
+                }
             }
         };
 
