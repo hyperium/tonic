@@ -10,9 +10,9 @@ license = "MIT"
 
 [dependencies]
 tonic = { path = "../../tonic" }
-prost = "0.6"
+prost = { git = "https://github.com/danburkert/prost" }
 futures-util = "0.3"
-bytes = "0.5"
+bytes = "0.6"
 
 [dev-dependencies]
 tokio = { version = "0.3", features = ["macros", "rt", "net"] }
