@@ -15,8 +15,8 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "protobuf"]
 
 [dependencies]
-prost = "0.6"
-prost-types = "0.6"
+prost = { git = "https://github.com/danburkert/prost" }
+prost-types = { git = "https://github.com/danburkert/prost" }
 
 [build-dependencies]
-prost-build = "0.6"
+prost-build = { git = "https://github.com/danburkert/prost" }

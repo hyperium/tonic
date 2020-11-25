@@ -1,5 +1,4 @@
-use bytes::{Buf, BufMut, BytesMut};
-use std::mem::MaybeUninit;
+use bytes::{buf::UninitSlice, Buf, BufMut, BytesMut};
 
 /// A specialized buffer to decode gRPC messages from.
 #[derive(Debug)]
@@ -63,7 +62,10 @@ impl EncodeBuf<'_> {
     }
 }
 
-impl BufMut for EncodeBuf<'_> {
+// Safety: this impl simply forwards to the inner `BytesMut`'s BufMut` impl; if
+// the impl of `BufMut` for `BytesMut` is safe, then this implementation is as
+// well.
+unsafe impl BufMut for EncodeBuf<'_> {
     #[inline]
     fn remaining_mut(&self) -> usize {
         self.buf.remaining_mut()
@@ -75,7 +77,7 @@ impl BufMut for EncodeBuf<'_> {
     }
 
     #[inline]
-    fn bytes_mut(&mut self) -> &mut [MaybeUninit<u8>] {
+    fn bytes_mut(&mut self) -> &mut UninitSlice {
         self.buf.bytes_mut()
     }
 }
@@ -102,7 +104,7 @@ mod tests {
         assert_eq!(buf.remaining(), 5);
         assert_eq!(buf.bytes().len(), 5);
 
-        assert_eq!(buf.to_bytes().len(), 5);
+        assert_eq!(buf.copy_to_bytes(5).len(), 5);
         assert!(!buf.has_remaining());
     }
 

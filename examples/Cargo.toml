@@ -157,10 +157,10 @@ tracing-futures = "0.2"
 # Required for wellknown types
 prost-types = "0.6"
 # Hyper example
-hyper = { git = "https://github.com/hawkw/hyper", branch = "eliza/bump-tokio" }
+hyper = { git = "https://github.com/hyperium/hyper", branch = "master" }
 warp = { version = "0.2", default-features = false }
 http = "0.2"
-http-body = "0.3"
+http-body  = { git = "https://github.com/hyperium/http-body", branch = "master" }
 pin-project = "0.4.17"
 # Health example
 tonic-health = { path = "../tonic-health" }

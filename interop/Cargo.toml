@@ -17,16 +17,16 @@ path = "src/bin/server.rs"
 [dependencies]
 tokio = { version = "0.3", features = ["rt-multi-thread", "time", "macros", "stream", "fs"] }
 tonic = { path = "../tonic", features = ["tls"] }
-prost = "0.6"
-prost-derive = "0.6"
-bytes = "0.5"
+prost = { git = "https://github.com/danburkert/prost" }
+prost-derive  = { git = "https://github.com/danburkert/prost" }
+bytes = "0.6"
 http = "0.2"
 futures-core = "0.3"
 futures-util = "0.3"
 async-stream = "0.2"
 tower = { git = "https://github.com/tower-rs/tower", version = "0.4" }
-http-body = "0.3"
-hyper = { git = "https://github.com/hawkw/hyper", branch = "eliza/bump-tokio", features = ["stream"] }
+http-body  = { git = "https://github.com/hyperium/http-body", branch = "master" }
+hyper = { git = "https://github.com/hyperium/hyper", branch = "master", features = ["stream"] }
 console = "0.9"
 structopt = "0.3"
 tracing = "0.1"
