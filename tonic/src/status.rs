@@ -572,8 +572,29 @@ impl From<Status> for h2::Error {
 }
 
 impl From<std::io::Error> for Status {
-    fn from(_io: std::io::Error) -> Self {
-        unimplemented!()
+    fn from(err: std::io::Error) -> Self {
+        use std::io::ErrorKind;
+        let code = match err.kind() {
+            ErrorKind::BrokenPipe
+            | ErrorKind::WouldBlock
+            | ErrorKind::WriteZero
+            | ErrorKind::Interrupted => Code::Internal,
+            ErrorKind::ConnectionRefused
+            | ErrorKind::ConnectionReset
+            | ErrorKind::NotConnected
+            | ErrorKind::AddrInUse
+            | ErrorKind::AddrNotAvailable => Code::Unavailable,
+            ErrorKind::AlreadyExists => Code::AlreadyExists,
+            ErrorKind::ConnectionAborted => Code::Aborted,
+            ErrorKind::InvalidData => Code::DataLoss,
+            ErrorKind::InvalidInput => Code::InvalidArgument,
+            ErrorKind::NotFound => Code::NotFound,
+            ErrorKind::PermissionDenied => Code::PermissionDenied,
+            ErrorKind::TimedOut => Code::DeadlineExceeded,
+            ErrorKind::UnexpectedEof => Code::OutOfRange,
+            _ => Code::Unknown,
+        };
+        Status::new(code, err.to_string())
     }
 }
 
