@@ -26,6 +26,7 @@ keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 default = ["transport", "codegen", "prost"]
 codegen = ["async-trait"]
 transport = [
+    "h2",
     "hyper",
     "tokio",
     "tower",
@@ -64,6 +65,7 @@ prost-derive = { version = "0.6", optional = true }
 async-trait = { version = "0.1.13", optional = true }
 
 # transport
+h2    = { version = "0.2.2", optional = true }
 hyper = { version = "0.13.4", features = ["stream"], optional = true }
 tokio = { version = "0.2.13", features = ["tcp"], optional = true }
 tower = { version = "0.3", optional = true}
