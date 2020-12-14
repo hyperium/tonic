@@ -103,7 +103,11 @@ impl<T> Grpc<T> {
 
         let message = body
             .try_next()
-            .await?
+            .await
+            .map_err(|mut status| {
+                status.metadata_mut().merge(parts.clone());
+                status
+            })?
             .ok_or_else(|| Status::new(Code::Internal, "Missing response message."))?;
 
         if let Some(trailers) = body.trailers().await? {
