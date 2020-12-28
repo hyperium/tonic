@@ -15,7 +15,7 @@ use std::{
     fmt,
     time::Duration,
 };
-use tower_make::MakeConnection;
+use tower::make::MakeConnection;
 
 /// Channel builder.
 ///
