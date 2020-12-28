@@ -1,5 +1,5 @@
 use std::time::Duration;
-use tokio::time::delay_for;
+use tokio::time::sleep;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -20,7 +20,7 @@ impl Greeter for MyGreeter {
     ) -> Result<Response<HelloReply>, Status> {
         println!("Got a request from {:?}", request.remote_addr());
 
-        delay_for(Duration::from_millis(5000)).await;
+        sleep(Duration::from_millis(5000)).await;
 
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),

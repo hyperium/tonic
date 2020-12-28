@@ -1,6 +1,6 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
-use futures::stream::TryStreamExt;
+use futures::TryFutureExt;
 use std::path::Path;
 #[cfg(unix)]
 use tokio::net::UnixListener;
@@ -40,13 +40,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tokio::fs::create_dir_all(Path::new(path).parent().unwrap()).await?;
 
-    let mut uds = UnixListener::bind(path)?;
-
     let greeter = MyGreeter::default();
+
+    let incoming = {
+        let uds = UnixListener::bind(path)?;
+
+        async_stream::stream! {
+            while let item = uds.accept().map_ok(|(st, _)| unix::UnixStream(st)).await {
+                yield item;
+            }
+        }
+    };
 
     Server::builder()
         .add_service(GreeterServer::new(greeter))
-        .serve_with_incoming(uds.incoming().map_ok(unix::UnixStream))
+        .serve_with_incoming(incoming)
         .await?;
 
     Ok(())
@@ -59,7 +67,7 @@ mod unix {
         task::{Context, Poll},
     };
 
-    use tokio::io::{AsyncRead, AsyncWrite};
+    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tonic::transport::server::Connected;
 
     #[derive(Debug)]
@@ -71,8 +79,8 @@ mod unix {
         fn poll_read(
             mut self: Pin<&mut Self>,
             cx: &mut Context<'_>,
-            buf: &mut [u8],
-        ) -> Poll<std::io::Result<usize>> {
+            buf: &mut ReadBuf<'_>,
+        ) -> Poll<std::io::Result<()>> {
             Pin::new(&mut self.0).poll_read(cx, buf)
         }
     }

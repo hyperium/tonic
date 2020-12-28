@@ -166,7 +166,7 @@ impl Channel {
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
-        D::Key: Send + Clone + Hash,
+        D::Key: Hash + Send + Clone,
     {
         let svc = Balance::new(discover);
 

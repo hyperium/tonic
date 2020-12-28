@@ -6,8 +6,8 @@ use crate::ServingStatus;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::stream::{Stream, StreamExt};
 use tokio::sync::{watch, RwLock};
+use tokio_stream::Stream;
 #[cfg(feature = "transport")]
 use tonic::transport::NamedService;
 use tonic::{Request, Response, Status};
@@ -80,20 +80,15 @@ impl HealthReporter {
         let service_name = service_name.as_ref();
         let mut writer = self.statuses.write().await;
         match writer.get(service_name) {
-            None => {
-                let _ = writer.insert(service_name.to_string(), watch::channel(status));
-            }
-            Some((tx, rx)) => {
-                let mut rx = rx.clone();
-                if rx.recv().await == Some(status) {
-                    return;
-                }
-
+            Some((tx, _)) => {
                 // We only ever hand out clones of the receiver, so the originally-created
                 // receiver should always be present, only being dropped when clearing the
-                // service status. Consequently, `tx.broadcast` should not fail, making use
+                // service status. Consequently, `tx.send` should not fail, making use
                 // of `expect` here safe.
-                tx.broadcast(status).expect("channel should not be closed");
+                tx.send(status).expect("channel should not be closed");
+            }
+            None => {
+                writer.insert(service_name.to_string(), watch::channel(status));
             }
         };
     }
@@ -116,10 +111,7 @@ impl HealthService {
 
     async fn service_health(&self, service_name: &str) -> Option<ServingStatus> {
         let reader = self.statuses.read().await;
-        match reader.get(service_name).map(|p| p.1.clone()) {
-            None => None,
-            Some(mut receiver) => receiver.recv().await,
-        }
+        reader.get(service_name).map(|p| *p.1.borrow())
     }
 }
 
@@ -148,15 +140,21 @@ impl Health for HealthService {
         request: Request<HealthCheckRequest>,
     ) -> Result<Response<Self::WatchStream>, Status> {
         let service_name = request.get_ref().service.as_str();
-        let status_rx = match self.statuses.read().await.get(service_name) {
+        let mut status_rx = match self.statuses.read().await.get(service_name) {
             None => return Err(Status::not_found("service not registered")),
             Some(pair) => pair.1.clone(),
         };
 
-        let output = status_rx.map(|status| {
-            let status = crate::proto::health_check_response::ServingStatus::from(status) as i32;
-            Ok(HealthCheckResponse { status })
-        });
+        let output = async_stream::try_stream! {
+            // yield the current value
+            let status = crate::proto::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
+            yield HealthCheckResponse{ status };
+
+            while let Ok(_) = status_rx.changed().await {
+                let status = crate::proto::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
+                yield HealthCheckResponse{ status };
+            }
+        };
 
         Ok(Response::new(Box::pin(output) as Self::WatchStream))
     }
@@ -170,8 +168,8 @@ mod tests {
     use crate::ServingStatus;
     use std::collections::HashMap;
     use std::sync::Arc;
-    use tokio::stream::StreamExt;
     use tokio::sync::{watch, RwLock};
+    use tokio_stream::StreamExt;
     use tonic::{Code, Request, Status};
 
     fn assert_serving_status(wire: i32, expected: ServingStatus) {
@@ -269,6 +267,7 @@ mod tests {
         reporter
             .set_service_status("TestService", ServingStatus::NotServing)
             .await;
+
         let item = resp
             .next()
             .await

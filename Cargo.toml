@@ -1,20 +1,20 @@
 [workspace]
 members = [
     "tonic",
-#    "tonic-build",
-#    "tonic-health",
-#    "tonic-types",
-#
-#    # Non-published crates
-#    "examples",
-#    "interop",
-#
-#    # Tests
-#    "tests/included_service",
-#    "tests/same_name",
-#    "tests/wellknown",
-#    "tests/extern_path/uuid",
-#    "tests/ambiguous_methods",
-#    "tests/extern_path/my_application",
-#    "tests/integration_tests"
+    "tonic-build",
+    "tonic-health",
+    "tonic-types",
+
+    # Non-published crates
+    "examples",
+    "interop",
+
+    # Tests
+    "tests/included_service",
+    "tests/same_name",
+    "tests/wellknown",
+    "tests/extern_path/uuid",
+    "tests/ambiguous_methods",
+    "tests/extern_path/my_application",
+    "tests/integration_tests"
 ]

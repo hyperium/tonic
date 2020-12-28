@@ -41,7 +41,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
 
 async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let mut rng = rand::thread_rng();
-    let point_count: i32 = rng.gen_range(2, 100);
+    let point_count: i32 = rng.gen_range(2..100);
 
     let mut points = vec![];
     for _ in 0..=point_count {
@@ -115,8 +115,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn random_point(rng: &mut ThreadRng) -> Point {
-    let latitude = (rng.gen_range(0, 180) - 90) * 10_000_000;
-    let longitude = (rng.gen_range(0, 360) - 180) * 10_000_000;
+    let latitude = (rng.gen_range(0..180) - 90) * 10_000_000;
+    let longitude = (rng.gen_range(0..360) - 180) * 10_000_000;
     Point {
         latitude,
         longitude,

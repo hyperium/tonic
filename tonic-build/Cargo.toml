@@ -16,7 +16,7 @@ keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
 
 
 [dependencies]
-prost-build = { version = "0.6", optional = true }
+prost-build = { version = "0.7", optional = true }
 syn = "1.0"
 quote = "1.0"
 proc-macro2 = "1.0"
