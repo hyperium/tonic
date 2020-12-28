@@ -4,7 +4,7 @@ use super::io::BoxedIo;
 use super::tls::TlsConnector;
 use http::Uri;
 use std::task::{Context, Poll};
-use tower_make::MakeConnection;
+use tower::make::MakeConnection;
 use tower_service::Service;
 
 #[cfg(not(feature = "tls"))]

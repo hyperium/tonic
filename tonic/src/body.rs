@@ -160,7 +160,7 @@ where
             Pin::new_unchecked(&mut me.0).poll_data(cx)
         };
         match futures_util::ready!(v) {
-            Some(Ok(mut i)) => Poll::Ready(Some(Ok(i.to_bytes()))),
+            Some(Ok(mut i)) => Poll::Ready(Some(Ok(i.copy_to_bytes(i.remaining())))),
             Some(Err(e)) => {
                 let err = Status::map_error(e.into());
                 Poll::Ready(Some(Err(err)))

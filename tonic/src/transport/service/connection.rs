@@ -10,6 +10,7 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
+use tower::load::Load;
 use tower::{
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
@@ -17,7 +18,6 @@ use tower::{
     util::BoxService,
     ServiceBuilder, ServiceExt,
 };
-use tower_load::Load;
 use tower_service::Service;
 
 pub(crate) type Request = http::Request<BoxBody>;

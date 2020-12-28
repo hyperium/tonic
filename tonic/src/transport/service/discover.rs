@@ -7,9 +7,10 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::{stream::Stream, sync::mpsc::Receiver};
+use tokio::sync::mpsc::Receiver;
 
-use tower::discover::{Change, Discover};
+use tokio_stream::Stream;
+use tower::discover::Change;
 
 type DiscoverResult<K, S, E> = Result<Change<K, S>, E>;
 
@@ -23,17 +24,12 @@ impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
     }
 }
 
-impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
-    type Key = K;
-    type Service = Connection;
-    type Error = crate::Error;
+impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
+    type Item = DiscoverResult<K, Connection, crate::Error>;
 
-    fn poll_discover(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<DiscoverResult<Self::Key, Self::Service, Self::Error>> {
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let c = &mut self.changes;
-        match Pin::new(&mut *c).poll_next(cx) {
+        match Pin::new(&mut *c).poll_recv(cx) {
             Poll::Pending | Poll::Ready(None) => Poll::Pending,
             Poll::Ready(Some(change)) => match change {
                 Change::Insert(k, endpoint) => {
@@ -48,9 +44,9 @@ impl<K: Hash + Eq + Clone> Discover for DynamicServiceStream<K> {
                     let connector = service::connector(http);
                     let connection = Connection::lazy(connector, endpoint);
                     let change = Ok(Change::Insert(k, connection));
-                    Poll::Ready(change)
+                    Poll::Ready(Some(change))
                 }
-                Change::Remove(k) => Poll::Ready(Ok(Change::Remove(k))),
+                Change::Remove(k) => Poll::Ready(Some(Ok(Change::Remove(k)))),
             },
         }
     }

@@ -1,5 +1,5 @@
+use bytes::buf::UninitSlice;
 use bytes::{Buf, BufMut, BytesMut};
-use std::mem::MaybeUninit;
 
 /// A specialized buffer to decode gRPC messages from.
 #[derive(Debug)]
@@ -27,8 +27,8 @@ impl Buf for DecodeBuf<'_> {
     }
 
     #[inline]
-    fn bytes(&self) -> &[u8] {
-        let ret = self.buf.bytes();
+    fn chunk(&self) -> &[u8] {
+        let ret = self.buf.chunk();
 
         if ret.len() > self.len {
             &ret[..self.len]
@@ -63,7 +63,7 @@ impl EncodeBuf<'_> {
     }
 }
 
-impl BufMut for EncodeBuf<'_> {
+unsafe impl BufMut for EncodeBuf<'_> {
     #[inline]
     fn remaining_mut(&self) -> usize {
         self.buf.remaining_mut()
@@ -75,8 +75,8 @@ impl BufMut for EncodeBuf<'_> {
     }
 
     #[inline]
-    fn bytes_mut(&mut self) -> &mut [MaybeUninit<u8>] {
-        self.buf.bytes_mut()
+    fn chunk_mut(&mut self) -> &mut UninitSlice {
+        self.buf.chunk_mut()
     }
 }
 
@@ -92,7 +92,7 @@ mod tests {
 
         assert_eq!(buf.len, 20);
         assert_eq!(buf.remaining(), 20);
-        assert_eq!(buf.bytes().len(), 20);
+        assert_eq!(buf.chunk().len(), 20);
 
         buf.advance(10);
         assert_eq!(buf.remaining(), 10);
@@ -100,9 +100,9 @@ mod tests {
         let mut out = [0; 5];
         buf.copy_to_slice(&mut out);
         assert_eq!(buf.remaining(), 5);
-        assert_eq!(buf.bytes().len(), 5);
+        assert_eq!(buf.chunk().len(), 5);
 
-        assert_eq!(buf.to_bytes().len(), 5);
+        assert_eq!(buf.copy_to_bytes(5).len(), 5);
         assert!(!buf.has_remaining());
     }
 
