@@ -6,6 +6,7 @@ mod io;
 mod layer;
 mod reconnect;
 mod router;
+mod timeout;
 #[cfg(feature = "tls")]
 mod tls;
 mod user_agent;
@@ -17,6 +18,7 @@ pub(crate) use self::discover::DynamicServiceStream;
 pub(crate) use self::io::ServerIo;
 pub(crate) use self::layer::ServiceBuilderExt;
 pub(crate) use self::router::{Or, Routes};
+pub(crate) use self::timeout::Timeout;
 #[cfg(feature = "tls")]
 pub(crate) use self::tls::{TlsAcceptor, TlsConnector};
 pub(crate) use self::user_agent::UserAgent;
