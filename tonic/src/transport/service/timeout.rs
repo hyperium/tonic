@@ -83,6 +83,13 @@ mod headers {
             Some(val) => {
                 let str_val = val.to_str().map_err(|_| val)?;
                 let (timeout_value, timeout_unit) = try_split_last(str_val).map_err(|_| val)?;
+
+                // gRPC spec specifies `TimeoutValue` will be at most 8 digits
+                // Caping this at 8 digits also prevents integer overflow from ever occurring
+                if timeout_value.len() > 8 {
+                    return Err(val);
+                }
+
                 let timeout_value: u64 = timeout_value.parse().map_err(|_| val)?;
 
                 let duration = match timeout_unit {
@@ -212,5 +219,103 @@ mod future {
                 }
             }
         }
+    }
+}
+
+// Unit tests related to timeouts, mainly testing header parsing
+#[cfg(test)]
+mod tests {
+    use http::{
+        HeaderMap,
+        HeaderValue,
+    };
+    use std::time::Duration;
+    use super::headers::try_parse_grpc_timeout;
+
+    const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
+
+    // Helper function to reduce the boiler plate of our test cases
+    fn setup_map_try_parse(val: Option<&'static str>) -> Result<Option<Duration>, HeaderValue> {
+        let mut hm = HeaderMap::new();
+        if let Some(v) = val {
+            let hv = HeaderValue::from_static(v);
+            hm.insert(GRPC_TIMEOUT_HEADER, hv);
+        };
+
+        try_parse_grpc_timeout(&hm).map_err(|e| e.clone())
+    }
+
+    #[test]
+    fn test_hours() {
+        let parsed_duration = setup_map_try_parse(Some("3H")).unwrap().unwrap();
+        assert_eq!(Duration::from_secs(3 * 60 * 60), parsed_duration);
+    }
+
+    #[test]
+    fn test_minutes() {
+        let parsed_duration = setup_map_try_parse(Some("1M")).unwrap().unwrap();
+        assert_eq!(Duration::from_secs(1 * 60), parsed_duration);
+    }
+
+    #[test]
+    fn test_seconds() {
+        let parsed_duration = setup_map_try_parse(Some("42S")).unwrap().unwrap();
+        assert_eq!(Duration::from_secs(42), parsed_duration);
+    }
+
+    #[test]
+    fn test_milliseconds() {
+        let parsed_duration = setup_map_try_parse(Some("13m")).unwrap().unwrap();
+        assert_eq!(Duration::from_millis(13), parsed_duration);
+    }
+
+    #[test]
+    fn test_microseconds() {
+        let parsed_duration = setup_map_try_parse(Some("2u")).unwrap().unwrap();
+        assert_eq!(Duration::from_micros(2), parsed_duration);
+    }
+
+    #[test]
+    fn test_nanoseconds() {
+        let parsed_duration = setup_map_try_parse(Some("82n")).unwrap().unwrap();
+        assert_eq!(Duration::from_nanos(82), parsed_duration);
+    }
+
+    #[test]
+    fn test_header_not_present() {
+        let parsed_duration = setup_map_try_parse(None).unwrap();
+        assert!(parsed_duration.is_none());
+    }
+
+    #[test]
+    #[should_panic(expected = "82f")]
+    fn test_invalid_unit() {
+        // "f" is not a valid TimeoutUnit
+        setup_map_try_parse(Some("82f")).unwrap().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "123456789H")]
+    fn test_too_many_digits() {
+        // gRPC spec states TimeoutValue will be at most 8 digits
+        setup_map_try_parse(Some("123456789H")).unwrap().unwrap();
+    }
+
+    #[test]
+    #[should_panic(expected = "oneH")]
+    fn test_invalid_digits() {
+        // gRPC spec states TimeoutValue will be at most 8 digits
+        setup_map_try_parse(Some("oneH")).unwrap().unwrap();
+    }
+
+    #[test]
+    fn test_non_ascii_unit() {
+        let hv = unsafe { HeaderValue::from_maybe_shared_unchecked("1П".as_bytes()) };
+        let mut hm = HeaderMap::new();
+        hm.insert(GRPC_TIMEOUT_HEADER, hv);
+
+        // Splitting the last character which is non-ASCII, should be an error, but shouldn't
+        // cause a panic.
+        assert!(try_parse_grpc_timeout(&hm).is_err());
     }
 }
