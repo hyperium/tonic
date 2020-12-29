@@ -225,12 +225,9 @@ mod future {
 // Unit tests related to timeouts, mainly testing header parsing
 #[cfg(test)]
 mod tests {
-    use http::{
-        HeaderMap,
-        HeaderValue,
-    };
-    use std::time::Duration;
     use super::headers::try_parse_grpc_timeout;
+    use http::{HeaderMap, HeaderValue};
+    use std::time::Duration;
 
     const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 

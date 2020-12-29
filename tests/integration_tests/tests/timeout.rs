@@ -2,10 +2,7 @@ use futures_util::FutureExt;
 use integration_tests::pb::{test_client, test_server, Input, Output};
 use std::time::Duration;
 use tokio::sync::oneshot;
-use tonic::{
-    transport::Server,
-    Request, Response, Status,
-};
+use tonic::{transport::Server, Request, Response, Status};
 
 #[tokio::test]
 async fn cancelation_on_timeout() {
@@ -39,7 +36,8 @@ async fn cancelation_on_timeout() {
         .unwrap();
 
     let mut req = Request::new(Input {});
-    req.metadata_mut().insert("grpc-timeout", "500m".parse().unwrap());
+    req.metadata_mut()
+        .insert("grpc-timeout", "500m".parse().unwrap());
 
     let err = client.unary_call(req).await.unwrap_err();
     assert!(err.message().contains("Timeout expired"));
