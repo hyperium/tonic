@@ -10,7 +10,7 @@ pub use endpoint::Endpoint;
 pub use tls::ClientTlsConfig;
 
 use super::service::{Connection, DynamicServiceStream};
-use crate::{body::BoxBody, client::GrpcService};
+use crate::body::BoxBody;
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},
@@ -177,17 +177,18 @@ impl Channel {
     }
 }
 
-impl GrpcService<BoxBody> for Channel {
-    type ResponseBody = hyper::Body;
+impl Service<http::Request<BoxBody>> for Channel {
+    type Response = http::Response<super::Body>;
     type Error = super::Error;
     type Future = ResponseFuture;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        GrpcService::poll_ready(&mut self.svc, cx).map_err(super::Error::from_source)
+        Service::poll_ready(&mut self.svc, cx).map_err(super::Error::from_source)
     }
 
-    fn call(&mut self, request: Request<BoxBody>) -> Self::Future {
-        let inner = GrpcService::call(&mut self.svc, request);
+    fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
+        let inner = Service::call(&mut self.svc, request);
+
         ResponseFuture { inner }
     }
 }
