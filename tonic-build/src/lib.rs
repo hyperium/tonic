@@ -147,7 +147,11 @@ pub trait Method {
     /// Get comments about this item.
     fn comment(&self) -> &[Self::Comment];
     /// Type name of request and response.
-    fn request_response_name(&self, proto_path: &str) -> (TokenStream, TokenStream);
+    fn request_response_name(
+        &self,
+        proto_path: &str,
+        compile_well_known_types: bool,
+    ) -> (TokenStream, TokenStream);
 }
 
 /// Format files under the out_dir with rustfmt
