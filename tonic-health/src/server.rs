@@ -6,7 +6,7 @@ use crate::ServingStatus;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
-use tokio::stream::Stream;
+use tokio::stream::{Stream, StreamExt};
 use tokio::sync::{watch, RwLock};
 #[cfg(feature = "transport")]
 use tonic::transport::NamedService;
@@ -148,18 +148,15 @@ impl Health for HealthService {
         request: Request<HealthCheckRequest>,
     ) -> Result<Response<Self::WatchStream>, Status> {
         let service_name = request.get_ref().service.as_str();
-        let mut status_rx = match self.statuses.read().await.get(service_name) {
+        let status_rx = match self.statuses.read().await.get(service_name) {
             None => return Err(Status::not_found("service not registered")),
             Some(pair) => pair.1.clone(),
         };
 
-        let output = async_stream::try_stream! {
-            while let Some(status) = status_rx.recv().await {
-                yield HealthCheckResponse{
-                    status: crate::proto::health_check_response::ServingStatus::from(status) as i32,
-                };
-            }
-        };
+        let output = status_rx.map(|status| {
+            let status = crate::proto::health_check_response::ServingStatus::from(status) as i32;
+            Ok(HealthCheckResponse { status })
+        });
 
         Ok(Response::new(Box::pin(output) as Self::WatchStream))
     }
