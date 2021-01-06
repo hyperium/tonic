@@ -169,7 +169,6 @@ hyper = "0.13"
 warp = { version = "0.2", default-features = false }
 http = "0.2"
 http-body = "0.3"
-pin-project = "0.4.17"
 # Health example
 tonic-health = { path = "../tonic-health" }
 listenfd = "0.3"
