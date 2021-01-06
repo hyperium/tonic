@@ -186,7 +186,6 @@ futures-core = "0.3"
 futures-util = "0.3"
 tokio = { version = "0.2", features = ["macros", "sync", "stream", "time"] }
 
-async-stream = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 rand = "0.7"
@@ -487,6 +486,7 @@ of `RouteNote`s and returns  a stream of `RouteNote`s.
 
 ```rust
 use std::collections::HashMap;
+use futures_util::stream::{StreamExt, TryStreamExt};
 ```
 
 ```rust
@@ -499,38 +499,23 @@ async fn route_chat(
     request: Request<tonic::Streaming<RouteNote>>,
 ) -> Result<Response<Self::RouteChatStream>, Status> {
     let mut notes = HashMap::new();
-    let mut stream = request.into_inner();
-
-    let output = async_stream::try_stream! {
-        while let Some(note) = stream.next().await {
-            let note = note?;
-
+    let output = request
+        .into_inner()
+        .map_ok(move |note| {
             let location = note.location.clone().unwrap();
-
-            let location_notes = notes.entry(location).or_insert(vec![]);
+            let location_notes = notes.entry(location).or_default();
             location_notes.push(note);
+            stream::iter(location_notes.clone()).map(Ok)
+        })
+        .try_flatten();
 
-            for note in location_notes {
-                yield note.clone();
-            }
-        }
-    };
-
-    Ok(Response::new(Box::pin(output)
-        as Self::RouteChatStream))
-
+    Ok(Response::new(Box::pin(output)))
 }
 ```
 
-`route_chat` uses the [async-stream] crate to perform an asynchronous transformation
-from one (input) stream to another (output) stream. As the input is processed, each value is
-inserted into the notes map, yielding a clone of the original `RouteNote`. The resulting stream
-is then returned to the caller. Neat.
-
-**Note**: The funky `as` cast is needed due to a limitation in the rust compiler. This is expected
-to be fixed soon.
-
-[async-stream]: https://github.com/tokio-rs/async-stream
+`route_chat` performs an asynchronous transformation from one (input) stream to another (output)
+stream. As the input is processed, each value is inserted into the notes map, yielding a clone of
+the original `RouteNote`. The resulting stream is then returned to the caller. Neat.
 
 ### Starting the server
 
@@ -746,28 +731,23 @@ of `RouteNotes` and returns either another stream of `RouteNotes` or an error.
 ```rust
 use std::time::Duration;
 use tokio::time;
+use futures_util::stream::StreamExt;
 ```
 
 ```rust
 async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let start = time::Instant::now();
-
-    let outbound = async_stream::stream! {
-        let mut interval = time::interval(Duration::from_secs(1));
-
-        while let time = interval.tick().await {
-            let elapsed = time.duration_since(start);
-            let note = RouteNote {
-                location: Some(Point {
-                    latitude: 409146138 + elapsed.as_secs() as i32,
-                    longitude: -746188906,
-                }),
-                message: format!("at {:?}", elapsed),
-            };
-
-            yield note;
+    let interval = time::interval(Duration::from_secs(1));
+    let outbound = interval.map(move |time| {
+        let elapsed = time.duration_since(start);
+        RouteNote {
+            location: Some(Point {
+                latitude: 409146138 + elapsed.as_secs() as i32,
+                longitude: -746188906,
+            }),
+            message: format!("at {:?}", elapsed),
         }
-    };
+    });
 
     let response = client.route_chat(Request::new(outbound)).await?;
     let mut inbound = response.into_inner();
@@ -779,9 +759,9 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
     Ok(())
 }
 ```
-In this case, we use the [async-stream] crate to generate our outbound stream, yielding
-`RouteNote` values in one second intervals. We then iterate over the stream returned by
-the server, printing each value in the stream.
+In this case, we generate our outbound stream by yielding `RouteNote` values in one second
+intervals. We then iterate over the stream returned by the server, printing each value in the
+stream.
 
 ## Try it out!
 

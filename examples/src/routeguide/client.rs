@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::time::Duration;
 
-use futures::stream;
+use futures::{stream, StreamExt};
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use tokio::time;
@@ -61,23 +61,17 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 
 async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let start = time::Instant::now();
-
-    let outbound = async_stream::stream! {
-        let mut interval = time::interval(Duration::from_secs(1));
-
-        while let time = interval.tick().await {
-            let elapsed = time.duration_since(start);
-            let note = RouteNote {
-                location: Some(Point {
-                    latitude: 409146138 + elapsed.as_secs() as i32,
-                    longitude: -746188906,
-                }),
-                message: format!("at {:?}", elapsed),
-            };
-
-            yield note;
+    let interval = time::interval(Duration::from_secs(1));
+    let outbound = interval.map(move |time| {
+        let elapsed = time.duration_since(start);
+        RouteNote {
+            location: Some(Point {
+                latitude: 409146138 + elapsed.as_secs() as i32,
+                longitude: -746188906,
+            }),
+            message: format!("at {:?}", elapsed),
         }
-    };
+    });
 
     let response = client.route_chat(Request::new(outbound)).await?;
     let mut inbound = response.into_inner();

@@ -23,22 +23,18 @@ where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
-    async_stream::try_stream! {
-        futures_util::pin_mut!(incoming);
-
-        while let Some(stream) = incoming.try_next().await? {
+    incoming
+        .map_ok(move |stream| {
             #[cfg(feature = "tls")]
             {
                 if let Some(tls) = &server.tls {
                     let io = tls.accept(stream);
-                    yield ServerIo::new(io);
-                    continue;
+                    return ServerIo::new(io);
                 }
             }
-
-            yield ServerIo::new(stream);
-        }
-    }
+            ServerIo::new(stream)
+        })
+        .err_into()
 }
 
 pub(crate) struct TcpIncoming {

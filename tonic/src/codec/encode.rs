@@ -44,35 +44,28 @@ where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
 {
-    async_stream::stream! {
-        let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
-        futures_util::pin_mut!(source);
-
-        loop {
-            match source.next().await {
-                Some(Ok(item)) => {
-                    buf.reserve(5);
-                    unsafe {
-                        buf.advance_mut(5);
-                    }
-                    encoder.encode(item, &mut EncodeBuf::new(&mut buf)).map_err(drop).unwrap();
-
-                    // now that we know length, we can write the header
-                    let len = buf.len() - 5;
-                    assert!(len <= std::u32::MAX as usize);
-                    {
-                        let mut buf = &mut buf[..5];
-                        buf.put_u8(0); // byte must be 0, reserve doesn't auto-zero
-                        buf.put_u32(len as u32);
-                    }
-
-                    yield Ok(buf.split_to(len + 5).freeze());
-                },
-                Some(Err(status)) => yield Err(status),
-                None => break,
-            }
+    let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
+    source.map_ok(move |item| {
+        buf.reserve(5);
+        unsafe {
+            buf.advance_mut(5);
         }
-    }
+        encoder
+            .encode(item, &mut EncodeBuf::new(&mut buf))
+            .map_err(drop)
+            .unwrap();
+
+        // now that we know length, we can write the header
+        let len = buf.len() - 5;
+        assert!(len <= std::u32::MAX as usize);
+        {
+            let mut buf = &mut buf[..5];
+            buf.put_u8(0); // byte must be 0, reserve doesn't auto-zero
+            buf.put_u32(len as u32);
+        }
+
+        buf.split_to(len + 5).freeze()
+    })
 }
 
 #[derive(Debug)]

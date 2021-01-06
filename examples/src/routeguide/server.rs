@@ -3,7 +3,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
-use futures::{Stream, StreamExt};
+use futures::{stream, Stream, StreamExt, TryStreamExt};
 use tokio::sync::mpsc;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
@@ -110,25 +110,18 @@ impl RouteGuide for RouteGuideService {
     ) -> Result<Response<Self::RouteChatStream>, Status> {
         println!("RouteChat");
 
-        let mut notes = HashMap::new();
-        let mut stream = request.into_inner();
-
-        let output = async_stream::try_stream! {
-            while let Some(note) = stream.next().await {
-                let note = note?;
-
+        let mut notes = HashMap::<_, Vec<_>>::new();
+        let output = request
+            .into_inner()
+            .map_ok(move |note| {
                 let location = note.location.clone().unwrap();
-
-                let location_notes = notes.entry(location).or_insert(vec![]);
+                let location_notes = notes.entry(location).or_default();
                 location_notes.push(note);
+                stream::iter(location_notes.clone()).map(Ok)
+            })
+            .try_flatten();
 
-                for note in location_notes {
-                    yield note.clone();
-                }
-            }
-        };
-
-        Ok(Response::new(Box::pin(output) as Self::RouteChatStream))
+        Ok(Response::new(Box::pin(output)))
     }
 }
 
