@@ -189,7 +189,7 @@ tokio = { version = "0.2", features = ["macros", "sync", "stream", "time"] }
 async-stream = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rand = "0.7"
+rand = "0.8"
 
 [build-dependencies]
 tonic-build = "0.3"
@@ -702,7 +702,7 @@ use futures_util::stream;
 ```rust
 async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let mut rng = rand::thread_rng();
-    let point_count: i32 = rng.gen_range(2, 100);
+    let point_count: i32 = rng.gen_range(2..100);
 
     let mut points = vec![];
     for _ in 0..=point_count {
@@ -723,8 +723,8 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 
 ```rust
 fn random_point(rng: &mut ThreadRng) -> Point {
-    let latitude = (rng.gen_range(0, 180) - 90) * 10_000_000;
-    let longitude = (rng.gen_range(0, 360) - 180) * 10_000_000;
+    let latitude = (rng.gen_range(0..180) - 90) * 10_000_000;
+    let longitude = (rng.gen_range(0..360) - 180) * 10_000_000;
     Point {
         latitude,
         longitude,

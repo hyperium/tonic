@@ -81,7 +81,7 @@ rustls-native-certs = { version = "0.4", optional = true }
 [dev-dependencies]
 tokio = { version = "0.2", features = ["rt-core", "macros"] }
 static_assertions = "1.0"
-rand = "0.7"
+rand = "0.8"
 bencher = "0.1.5"
 
 [package.metadata.docs.rs]
