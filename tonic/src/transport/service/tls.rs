@@ -58,7 +58,10 @@ impl TlsConnector {
 
         #[cfg(feature = "tls-roots")]
         {
-            config.root_store = rustls_native_certs::load_native_certs().map_err(|(_, e)| e)?;
+            config.root_store = match rustls_native_certs::load_native_certs() {
+                Ok(store) | Err((Some(store), _)) => store,
+                Err((None, error)) => Err(error)?,
+            };
         }
 
         if let Some(cert) = ca_cert {
