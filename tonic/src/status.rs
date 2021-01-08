@@ -114,7 +114,7 @@ impl Code {
     /// Get description of this `Code`.
     /// ```
     /// fn make_grpc_request() -> tonic::Code {
-    ///     // ...   
+    ///     // ...
     ///     tonic::Code::Ok
     /// }
     /// let code = make_grpc_request();
@@ -308,7 +308,7 @@ impl Status {
         Status::new(Code::Unauthenticated, message)
     }
 
-    #[cfg_attr(not(feature = "h2"), allow(dead_code))]
+    #[cfg_attr(not(feature = "transport"), allow(dead_code))]
     pub(crate) fn from_error(err: &(dyn Error + 'static)) -> Status {
         Status::try_from_error(err).unwrap_or_else(|| Status::new(Code::Unknown, err.to_string()))
     }
@@ -326,7 +326,7 @@ impl Status {
                 });
             }
 
-            #[cfg(feature = "h2")]
+            #[cfg(feature = "transport")]
             {
                 if let Some(h2) = err.downcast_ref::<h2::Error>() {
                     return Some(Status::from_h2_error(h2));
@@ -340,7 +340,7 @@ impl Status {
     }
 
     // FIXME: bubble this into `transport` and expose generic http2 reasons.
-    #[cfg(feature = "h2")]
+    #[cfg(feature = "transport")]
     fn from_h2_error(err: &h2::Error) -> Status {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors
         let code = match err.reason() {
@@ -362,7 +362,7 @@ impl Status {
         Status::new(code, format!("h2 protocol error: {}", err))
     }
 
-    #[cfg(feature = "h2")]
+    #[cfg(feature = "transport")]
     fn to_h2_error(&self) -> h2::Error {
         // conservatively transform to h2 error codes...
         let reason = match self.code {
@@ -557,14 +557,14 @@ fn invalid_header_value_byte<Error: fmt::Display>(err: Error) -> Status {
     )
 }
 
-#[cfg(feature = "h2")]
+#[cfg(feature = "transport")]
 impl From<h2::Error> for Status {
     fn from(err: h2::Error) -> Self {
         Status::from_h2_error(&err)
     }
 }
 
-#[cfg(feature = "h2")]
+#[cfg(feature = "transport")]
 impl From<Status> for h2::Error {
     fn from(status: Status) -> Self {
         status.to_h2_error()
@@ -572,8 +572,29 @@ impl From<Status> for h2::Error {
 }
 
 impl From<std::io::Error> for Status {
-    fn from(_io: std::io::Error) -> Self {
-        unimplemented!()
+    fn from(err: std::io::Error) -> Self {
+        use std::io::ErrorKind;
+        let code = match err.kind() {
+            ErrorKind::BrokenPipe
+            | ErrorKind::WouldBlock
+            | ErrorKind::WriteZero
+            | ErrorKind::Interrupted => Code::Internal,
+            ErrorKind::ConnectionRefused
+            | ErrorKind::ConnectionReset
+            | ErrorKind::NotConnected
+            | ErrorKind::AddrInUse
+            | ErrorKind::AddrNotAvailable => Code::Unavailable,
+            ErrorKind::AlreadyExists => Code::AlreadyExists,
+            ErrorKind::ConnectionAborted => Code::Aborted,
+            ErrorKind::InvalidData => Code::DataLoss,
+            ErrorKind::InvalidInput => Code::InvalidArgument,
+            ErrorKind::NotFound => Code::NotFound,
+            ErrorKind::PermissionDenied => Code::PermissionDenied,
+            ErrorKind::TimedOut => Code::DeadlineExceeded,
+            ErrorKind::UnexpectedEof => Code::OutOfRange,
+            _ => Code::Unknown,
+        };
+        Status::new(code, err.to_string())
     }
 }
 
@@ -773,7 +794,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "h2")]
+    #[cfg(feature = "transport")]
     fn from_error_h2() {
         let orig = h2::Error::from(h2::Reason::CANCEL);
         let found = Status::from_error(&orig);
@@ -782,7 +803,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "h2")]
+    #[cfg(feature = "transport")]
     fn to_h2_error() {
         let orig = Status::new(Code::Cancelled, "stop eet!");
         let err = orig.to_h2_error();

@@ -51,6 +51,8 @@ use tracing_futures::{Instrument, Instrumented};
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static>;
 
+const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
+
 /// A default batteries included `transport` server.
 ///
 /// This is a wrapper around [`hyper::Server`] and provides an easy builder
@@ -71,6 +73,8 @@ pub struct Server {
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
     tcp_nodelay: bool,
+    http2_keepalive_interval: Option<Duration>,
+    http2_keepalive_timeout: Option<Duration>,
     max_frame_size: Option<u32>,
 }
 
@@ -222,6 +226,36 @@ impl Server {
         }
     }
 
+    /// Set whether HTTP2 Ping frames are enabled on accepted connections.
+    ///
+    /// If `None` is specified, HTTP2 keepalive is disabled, otherwise the duration
+    /// specified will be the time interval between HTTP2 Ping frames.
+    /// The timeout for receiving an acknowledgement of the keepalive ping
+    /// can be set with [`Server::http2_keepalive_timeout`].
+    ///
+    /// Default is no HTTP2 keepalive (`None`)
+    ///
+    pub fn http2_keepalive_interval(self, http2_keepalive_interval: Option<Duration>) -> Self {
+        Server {
+            http2_keepalive_interval,
+            ..self
+        }
+    }
+
+    /// Sets a timeout for receiving an acknowledgement of the keepalive ping.
+    ///
+    /// If the ping is not acknowledged within the timeout, the connection will be closed.
+    /// Does nothing if http2_keep_alive_interval is disabled.
+    ///
+    /// Default is 20 seconds.
+    ///
+    pub fn http2_keepalive_timeout(self, http2_keepalive_timeout: Option<Duration>) -> Self {
+        Server {
+            http2_keepalive_timeout,
+            ..self
+        }
+    }
+
     /// Set whether TCP keepalive messages are enabled on accepted connections.
     ///
     /// If `None` is specified, keepalive is disabled, otherwise the duration
@@ -335,6 +369,11 @@ impl Server {
         let max_concurrent_streams = self.max_concurrent_streams;
         let timeout = self.timeout;
         let max_frame_size = self.max_frame_size;
+  
+        let http2_keepalive_interval = self.http2_keepalive_interval;
+        let http2_keepalive_timeout = self
+            .http2_keepalive_timeout
+
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
@@ -351,6 +390,8 @@ impl Server {
             .http2_initial_connection_window_size(init_connection_window_size)
             .http2_initial_stream_window_size(init_stream_window_size)
             .http2_max_concurrent_streams(max_concurrent_streams)
+            .http2_keep_alive_interval(http2_keepalive_interval)
+            .http2_keep_alive_timeout(http2_keepalive_timeout)
             .http2_max_frame_size(max_frame_size);
 
         if let Some(signal) = signal {
