@@ -369,11 +369,11 @@ impl Server {
         let max_concurrent_streams = self.max_concurrent_streams;
         let timeout = self.timeout;
         let max_frame_size = self.max_frame_size;
-  
+
         let http2_keepalive_interval = self.http2_keepalive_interval;
         let http2_keepalive_timeout = self
             .http2_keepalive_timeout
-
+            .unwrap_or(Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
