@@ -71,6 +71,7 @@ pub struct Server {
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
     tcp_nodelay: bool,
+    max_frame_size: Option<u32>,
 }
 
 /// A stack based `Service` router.
@@ -244,6 +245,18 @@ impl Server {
         }
     }
 
+    /// Sets the maximum frame size to use for HTTP2.
+    ///
+    /// Passing `None` will do nothing.
+    ///
+    /// If not set, will default from underlying transport.
+    pub fn max_frame_size(self, frame_size: impl Into<Option<u32>>) -> Self {
+        Server {
+            max_frame_size: frame_size.into(),
+            ..self
+        }
+    }
+
     /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
     pub fn trace_fn<F>(self, f: F) -> Self
     where
@@ -321,6 +334,7 @@ impl Server {
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
         let timeout = self.timeout;
+        let max_frame_size = self.max_frame_size;
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
@@ -336,7 +350,8 @@ impl Server {
             .http2_only(true)
             .http2_initial_connection_window_size(init_connection_window_size)
             .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams);
+            .http2_max_concurrent_streams(max_concurrent_streams)
+            .http2_max_frame_size(max_frame_size);
 
         if let Some(signal) = signal {
             server
