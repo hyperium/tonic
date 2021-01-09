@@ -1,5 +1,5 @@
+use tower::layer::util::Stack;
 use tower::{layer::Layer, util::Either, ServiceBuilder};
-use tower_layer::Stack;
 
 pub(crate) trait ServiceBuilderExt<L> {
     fn layer_fn<F: Fn(S) -> Out, S, Out>(self, f: F) -> ServiceBuilder<Stack<LayerFn<F>, L>>;

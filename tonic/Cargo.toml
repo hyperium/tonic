@@ -30,9 +30,6 @@ transport = [
     "hyper",
     "tokio",
     "tower",
-    "tower-balance",
-    "tower-layer",
-    "tower-load",
     "tracing-futures",
 ]
 tls = ["transport", "tokio-rustls"]
@@ -71,10 +68,6 @@ hyper = { version = "0.14.2", features = ["full"], optional = true }
 tokio = { version = "1.0.1", features = ["net"], optional = true }
 tokio-stream = "0.1"
 tower = { version = "0.4", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
-tower-make = { version = "0.3", features = ["connect"] }
-tower-balance =  { version = "0.3", optional = true }
-tower-layer = { version = "0.3", optional = true }
-tower-load = { version = "0.3", optional = true }
 tracing-futures = { version = "0.2", optional = true }
 
 # rustls
