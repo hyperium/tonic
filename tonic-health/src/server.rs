@@ -148,11 +148,11 @@ impl Health for HealthService {
         let output = async_stream::try_stream! {
             // yield the current value
             let status = crate::proto::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
-            yield HealthCheckResponse{ status };
+            yield HealthCheckResponse { status };
 
             while let Ok(_) = status_rx.changed().await {
                 let status = crate::proto::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
-                yield HealthCheckResponse{ status };
+                yield HealthCheckResponse { status };
             }
         };
 
