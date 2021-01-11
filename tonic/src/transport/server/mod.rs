@@ -163,7 +163,7 @@ impl Server {
     /// ```
     /// # use tonic::transport::Server;
     /// # use tower_service::Service;
-    /// # let mut builder = Server::builder();
+    /// # let builder = Server::builder();
     /// builder.concurrency_limit_per_connection(32);
     /// ```
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {

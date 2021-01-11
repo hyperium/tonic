@@ -30,8 +30,6 @@ transport = [
     "hyper",
     "tokio",
     "tower",
-    "tower-balance",
-    "tower-load",
     "tracing-futures",
 ]
 tls = ["transport", "tokio-rustls"]
@@ -43,45 +41,43 @@ prost = ["prost1", "prost-derive"]
 # harness = false
 
 [dependencies]
-bytes = "0.5"
+bytes = "1.0"
 futures-core = { version = "0.3", default-features = false }
 futures-util = { version = "0.3", default-features = false }
 tracing = "0.1"
 http = "0.2"
-base64 = "0.12"
+base64 = "0.13"
 
-percent-encoding = "2.0"
+percent-encoding = "2.1"
 tower-service = "0.3"
-tokio-util = { version = "0.3", features = ["codec"] }
-async-stream = "0.2"
-http-body = "0.3"
-pin-project = "0.4.17"
+tokio-util = { version = "0.6", features = ["codec"] }
+async-stream = "0.3"
+http-body = "0.4"
+pin-project = "1.0"
 
 # prost
-prost1 = { package = "prost", version = "0.6", optional = true }
-prost-derive = { version = "0.6", optional = true }
+prost1 = { package = "prost", version = "0.7", optional = true }
+prost-derive = { version = "0.7", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
 
 # transport
-h2    = { version = "0.2.2", optional = true }
-hyper = { version = "0.13.4", features = ["stream"], optional = true }
-tokio = { version = "0.2.13", features = ["tcp"], optional = true }
-tower = { version = "0.3", optional = true}
-tower-make = { version = "0.3", features = ["connect"] }
-tower-balance =  { version = "0.3", optional = true }
-tower-load = { version = "0.3", optional = true }
+h2    = { version = "0.3", optional = true }
+hyper = { version = "0.14.2", features = ["full"], optional = true }
+tokio = { version = "1.0.1", features = ["net"], optional = true }
+tokio-stream = "0.1"
+tower = { version = "0.4", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
 tracing-futures = { version = "0.2", optional = true }
 
 # rustls
-tokio-rustls = { version = "0.14", optional = true }
-rustls-native-certs = { version = "0.4", optional = true }
+tokio-rustls = { version = "0.22", optional = true }
+rustls-native-certs = { version = "0.5", optional = true }
 
 [dev-dependencies]
-tokio = { version = "0.2", features = ["rt-core", "macros"] }
+tokio = { version = "1.0", features = ["rt", "macros"] }
 static_assertions = "1.0"
-rand = "0.7"
+rand = "0.8"
 bencher = "0.1.5"
 
 [package.metadata.docs.rs]
@@ -91,4 +87,3 @@ rustdoc-args = ["--cfg", "docsrs"]
 [[bench]]
 name = "decode"
 harness = false
-

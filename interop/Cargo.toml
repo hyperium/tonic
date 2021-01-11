@@ -15,23 +15,24 @@ name = "server"
 path = "src/bin/server.rs"
 
 [dependencies]
-tokio = { version = "0.2", features = ["rt-threaded", "time", "macros", "stream", "fs"] }
+tokio = { version = "1.0", features = ["rt-multi-thread", "time", "macros", "fs"] }
+tokio-stream = "0.1"
+async-stream = "0.3"
 tonic = { path = "../tonic", features = ["tls"] }
-prost = "0.6"
-prost-derive = "0.6"
-bytes = "0.5"
+prost = "0.7"
+prost-derive = "0.7"
+bytes = "1.0"
 http = "0.2"
 futures-core = "0.3"
 futures-util = "0.3"
-async-stream = "0.2"
-tower = "0.3"
-http-body = "0.3"
-hyper = "0.13"
-console = "0.9"
+tower = { version = "0.4" }
+http-body = "0.4"
+hyper = "0.14"
+console = "0.14"
 structopt = "0.3"
 tracing = "0.1"
-tracing-subscriber = "0.2.0-alpha"
-tracing-log = "0.1.0"
+tracing-subscriber = "0.2"
+tracing-log = "0.1"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }

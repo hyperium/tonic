@@ -68,10 +68,7 @@ pub enum TestAssertion {
 
 impl TestAssertion {
     pub fn is_failed(&self) -> bool {
-        match self {
-            TestAssertion::Failed { .. } => true,
-            _ => false,
-        }
+        matches!(self, TestAssertion::Failed { .. })
     }
 }
 

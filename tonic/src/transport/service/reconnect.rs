@@ -6,7 +6,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tower_make::MakeService;
+use tower::make::MakeService;
 use tower_service::Service;
 use tracing::trace;
 

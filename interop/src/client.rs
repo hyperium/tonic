@@ -154,7 +154,11 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
     let (tx, rx) = mpsc::unbounded_channel();
     tx.send(make_ping_pong_request(0)).unwrap();
 
-    let result = client.full_duplex_call(Request::new(rx)).await;
+    let result = client
+        .full_duplex_call(Request::new(
+            tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+        ))
+        .await;
 
     assertions.push(test_assert!(
         "call must be successful",

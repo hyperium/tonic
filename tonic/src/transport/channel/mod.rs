@@ -29,13 +29,13 @@ use tokio::{
     sync::mpsc::{channel, Sender},
 };
 
+use tower::balance::p2c::Balance;
 use tower::{
     buffer::{self, Buffer},
     discover::{Change, Discover},
     util::{BoxService, Either},
     Service,
 };
-use tower_balance::p2c::Balance;
 
 type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
 
@@ -109,7 +109,7 @@ impl Channel {
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
     pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
-        let (channel, mut tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
+        let (channel, tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
         list.for_each(|endpoint| {
             tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint))
                 .unwrap();
@@ -166,9 +166,9 @@ impl Channel {
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
-        D::Key: Send + Clone,
+        D::Key: Hash + Send + Clone,
     {
-        let svc = Balance::from_entropy(discover);
+        let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
         let svc = Buffer::new(Either::B(svc), buffer_size);

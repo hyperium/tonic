@@ -41,14 +41,14 @@ async fn connect_returns_err_via_call_after_connected() {
             .unwrap();
     });
 
-    tokio::time::delay_for(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     let mut client = TestClient::connect("http://127.0.0.1:1338").await.unwrap();
 
     // First call should pass, then shutdown the server
     client.unary_call(Request::new(Input {})).await.unwrap();
 
-    tokio::time::delay_for(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
 
     let res = client.unary_call(Request::new(Input {})).await;
 
@@ -81,11 +81,11 @@ async fn connect_lazy_reconnects_after_first_failure() {
             .unwrap();
     });
 
-    tokio::time::delay_for(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
     client.unary_call(Request::new(Input {})).await.unwrap();
 
     // The server shut down, third call should fail
-    tokio::time::delay_for(Duration::from_millis(100)).await;
+    tokio::time::sleep(Duration::from_millis(100)).await;
     client.unary_call(Request::new(Input {})).await.unwrap_err();
 
     jh.await.unwrap();
