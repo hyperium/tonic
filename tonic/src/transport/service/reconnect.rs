@@ -1,7 +1,6 @@
 use crate::Error;
 use pin_project::pin_project;
 use std::fmt;
-use std::fmt::Debug;
 use std::{
     future::Future,
     pin::Pin,
@@ -14,7 +13,7 @@ use tracing::trace;
 pub(crate) struct Reconnect<M, Target>
 where
     M: Service<Target>,
-    M::Error: Debug,
+    M::Error: Into<Error>,
 {
     mk_service: M,
     state: State<M::Future, M::Response>,
@@ -34,7 +33,7 @@ enum State<F, S> {
 impl<M, Target> Reconnect<M, Target>
 where
     M: Service<Target>,
-    M::Error: Debug,
+    M::Error: Into<Error>,
 {
     pub(crate) fn new(mk_service: M, target: Target, is_lazy: bool) -> Self {
         Reconnect {
@@ -55,7 +54,7 @@ where
     M::Future: Unpin,
     Error: From<M::Error> + From<S::Error>,
     Target: Clone,
-    <M as tower_service::Service<Target>>::Error: std::fmt::Debug,
+    <M as tower_service::Service<Target>>::Error: fmt::Debug,
 {
     type Response = S::Response;
     type Error = Error;
@@ -102,8 +101,9 @@ where
                             if !(self.has_been_connected || self.is_lazy) {
                                 return Poll::Ready(Err(e.into()));
                             } else {
-                                tracing::error!("reconnect::poll_ready: {:?}", e);
-                                self.error = Some(e);
+                                let error = e.into();
+                                tracing::error!("reconnect::poll_ready: {:?}", error);
+                                self.error = Some(error);
                                 break;
                             }
                         }
@@ -161,7 +161,7 @@ where
     M::Future: fmt::Debug,
     M::Response: fmt::Debug,
     Target: fmt::Debug,
-    <M as tower_service::Service<Target>>::Error: std::fmt::Debug,
+    <M as tower_service::Service<Target>>::Error: Into<Error>,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Reconnect")
