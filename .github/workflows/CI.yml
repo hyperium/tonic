@@ -33,12 +33,12 @@ jobs:
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
 
-  deny-check:
-    name: cargo-deny check
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v1
-    - uses: EmbarkStudios/cargo-deny-action@v1
+  # deny-check:
+  #   name: cargo-deny check
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #   - uses: actions/checkout@v1
+  #   - uses: EmbarkStudios/cargo-deny-action@v1
 
   test:
     runs-on: ${{ matrix.os }}
