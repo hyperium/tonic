@@ -14,7 +14,7 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 
-#[cfg_attr(not(feature = "tls"), allow(unused_variables))]
+#[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
     server: Server,
@@ -26,19 +26,105 @@ where
     async_stream::try_stream! {
         futures_util::pin_mut!(incoming);
 
+
         while let Some(stream) = incoming.try_next().await? {
-            #[cfg(feature = "tls")]
-            {
-                if let Some(tls) = &server.tls {
-                    let io = tls.accept(stream);
-                    yield ServerIo::new(io);
-                    continue;
-                }
-            }
 
             yield ServerIo::new(stream);
         }
     }
+}
+
+#[cfg(feature = "tls")]
+pub(crate) fn tcp_incoming<IO, IE>(
+    incoming: impl Stream<Item = Result<IO, IE>>,
+    server: Server,
+) -> impl Stream<Item = Result<ServerIo, crate::Error>>
+where
+    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+    IE: Into<crate::Error>,
+{
+    async_stream::try_stream! {
+        futures_util::pin_mut!(incoming);
+
+        #[cfg(feature = "tls")]
+        let mut tasks = futures_util::stream::futures_unordered::FuturesUnordered::new();
+
+        loop {
+            match select(&mut incoming, &mut tasks).await {
+                SelectOutput::Incoming(stream) => {
+                    if let Some(tls) = &server.tls {
+                        let tls = tls.clone();
+
+                        let accept = Box::pin(async move {
+                            let io = tls.accept(stream).await?;
+                            Ok(ServerIo::new(io))
+                        });
+
+                        tasks.push(accept);
+                    } else {
+                        yield ServerIo::new(stream);
+                    }
+                }
+
+                SelectOutput::Io(Ok(io)) => {
+                    yield io;
+                }
+
+                SelectOutput::Io(Err(e)) => {
+                    tracing::error!(message = "Accept loop error.", error = %e);
+                }
+
+                SelectOutput::Done => {
+                    break;
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+async fn select<IO, IE>(
+    incoming: &mut (impl Stream<Item = Result<IO, IE>> + Unpin),
+    tasks: &mut futures_util::stream::futures_unordered::FuturesUnordered<
+        futures_util::future::BoxFuture<'static, Result<ServerIo, crate::Error>>,
+    >,
+) -> SelectOutput<IO>
+where
+    IE: Into<crate::Error>,
+{
+    use futures_util::StreamExt;
+
+    if tasks.is_empty() {
+        return match incoming.try_next().await {
+            Ok(Some(stream)) => SelectOutput::Incoming(stream),
+            Ok(None) => SelectOutput::Done,
+            Err(e) => SelectOutput::Io(Err(e.into())),
+        };
+    }
+
+    tokio::select! {
+        stream = incoming.try_next() => {
+            match stream {
+                Ok(Some(stream)) => SelectOutput::Incoming(stream),
+                Ok(None) => SelectOutput::Done,
+                Err(e) => SelectOutput::Io(Err(e.into())),
+            }
+        }
+
+        accept = tasks.next() => {
+            match accept.expect("FuturesUnordered stream should never end") {
+                Ok(io) => SelectOutput::Io(Ok(io)),
+                Err(e) => SelectOutput::Io(Err(e)),
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+enum SelectOutput<A> {
+    Incoming(A),
+    Io(Result<ServerIo, crate::Error>),
+    Done,
 }
 
 pub(crate) struct TcpIncoming {
@@ -63,108 +149,5 @@ impl Stream for TcpIncoming {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.inner).poll_accept(cx)
-    }
-}
-
-// tokio_rustls::server::TlsStream doesn't expose constructor methods,
-// so we have to TlsAcceptor::accept and handshake to have access to it
-// TlsStream implements AsyncRead/AsyncWrite handshaking tokio_rustls::Accept first
-#[cfg(feature = "tls")]
-pub(crate) struct TlsStream<IO> {
-    state: State<IO>,
-}
-
-#[cfg(feature = "tls")]
-enum State<IO> {
-    Handshaking(tokio_rustls::Accept<IO>),
-    Streaming(tokio_rustls::server::TlsStream<IO>),
-}
-
-#[cfg(feature = "tls")]
-impl<IO> TlsStream<IO> {
-    pub(crate) fn new(accept: tokio_rustls::Accept<IO>) -> Self {
-        TlsStream {
-            state: State::Handshaking(accept),
-        }
-    }
-
-    pub(crate) fn get_ref(&self) -> Option<(&IO, &tokio_rustls::rustls::ServerSession)> {
-        if let State::Streaming(tls) = &self.state {
-            Some(tls.get_ref())
-        } else {
-            None
-        }
-    }
-}
-
-#[cfg(feature = "tls")]
-impl<IO> AsyncRead for TlsStream<IO>
-where
-    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
-{
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        use std::future::Future;
-
-        let pin = self.get_mut();
-        match pin.state {
-            State::Handshaking(ref mut accept) => {
-                match futures_core::ready!(Pin::new(accept).poll(cx)) {
-                    Ok(mut stream) => {
-                        let result = Pin::new(&mut stream).poll_read(cx, buf);
-                        pin.state = State::Streaming(stream);
-                        result
-                    }
-                    Err(err) => Poll::Ready(Err(err)),
-                }
-            }
-            State::Streaming(ref mut stream) => Pin::new(stream).poll_read(cx, buf),
-        }
-    }
-}
-
-#[cfg(feature = "tls")]
-impl<IO> AsyncWrite for TlsStream<IO>
-where
-    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
-{
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        use std::future::Future;
-
-        let pin = self.get_mut();
-        match pin.state {
-            State::Handshaking(ref mut accept) => {
-                match futures_core::ready!(Pin::new(accept).poll(cx)) {
-                    Ok(mut stream) => {
-                        let result = Pin::new(&mut stream).poll_write(cx, buf);
-                        pin.state = State::Streaming(stream);
-                        result
-                    }
-                    Err(err) => Poll::Ready(Err(err)),
-                }
-            }
-            State::Streaming(ref mut stream) => Pin::new(stream).poll_write(cx, buf),
-        }
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        match self.state {
-            State::Handshaking(_) => Poll::Ready(Ok(())),
-            State::Streaming(ref mut stream) => Pin::new(stream).poll_flush(cx),
-        }
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        match self.state {
-            State::Handshaking(_) => Poll::Ready(Ok(())),
-            State::Streaming(ref mut stream) => Pin::new(stream).poll_shutdown(cx),
-        }
     }
 }

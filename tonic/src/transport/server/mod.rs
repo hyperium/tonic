@@ -16,7 +16,7 @@ use super::service::TlsAcceptor;
 use incoming::TcpIncoming;
 
 #[cfg(feature = "tls")]
-pub(crate) use incoming::TlsStream;
+pub(crate) use tokio_rustls::server::TlsStream;
 
 #[cfg(feature = "tls")]
 use crate::transport::Error;
