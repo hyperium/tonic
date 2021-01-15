@@ -162,14 +162,12 @@ impl TlsAcceptor {
         })
     }
 
-    pub(crate) fn accept<IO>(&self, io: IO) -> TlsStream<IO>
+    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<TlsStream<IO>, crate::Error>
     where
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     {
         let acceptor = RustlsAcceptor::from(self.inner.clone());
-        let accept = acceptor.accept(io);
-
-        TlsStream::new(accept)
+        acceptor.accept(io).await.map_err(Into::into)
     }
 }
 
