@@ -31,6 +31,7 @@ transport = [
     "tokio",
     "tower",
     "tracing-futures",
+    "tokio/macros"
 ]
 tls = ["transport", "tokio-rustls"]
 tls-roots = ["tls", "rustls-native-certs"]
