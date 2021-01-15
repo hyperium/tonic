@@ -1,4 +1,39 @@
+# [0.4.0](https://github.com/hyperium/tonic/compare/v0.3.1...v0.4.0) (2021-01-15)
+
+This version brings Tonic inline with Tokio 1.0 and Prost 0.7! This release also includes new versions of `tonic-types`, `tonic-build`, and `tonic-health`.
+
+### Bug Fixes
+
+* **transport:** return Poll::ready until error is consumed  ([#536](https://github.com/hyperium/tonic/issues/536)) ([dafea9a](https://github.com/hyperium/tonic/commit/dafea9adeec5626ee780bc3ad7dc69691db51a82))
+* gracefully handle bad native certs ([#520](https://github.com/hyperium/tonic/issues/520)) ([fe4d5b9](https://github.com/hyperium/tonic/commit/fe4d5b9d9a0fdcf414bbe31c2fcad59e8cc03da8)), closes [#519](https://github.com/hyperium/tonic/issues/519)
+* **build:** Add content-type for generated unimplemented service ([#441](https://github.com/hyperium/tonic/issues/441)) ([62c1230](https://github.com/hyperium/tonic/commit/62c1230117bcaa6f45cb0fa0697b89b9255a94a5))
+* **build:** Match namespace code with other generated packages ([#472](https://github.com/hyperium/tonic/issues/472)) ([1b03ece](https://github.com/hyperium/tonic/commit/1b03ece2a81cb7e8b1922b3c3c1f496bd402d76c))
+* **transport:** Add content-type for Unimplemented ([#434](https://github.com/hyperium/tonic/issues/434)) ([594a542](https://github.com/hyperium/tonic/commit/594a542b8a9e8f9f4c3bd1d0a08e87ce74a850e5))
+* **transport:** reconnect lazy connections after first failure ([#458](https://github.com/hyperium/tonic/issues/458)) ([e9910d1](https://github.com/hyperium/tonic/commit/e9910d10a7c1287a2247a236b45dbf31eceb08bd)), closes [#452](https://github.com/hyperium/tonic/issues/452)
+* **client:** Merge trailer and initla headers into status on err ([#510](https://github.com/hyperium/tonic/pull/510))
+* **transport:** Fix TLS accept w/ peer certs ([#535](https://github.com/hyperium/tonic/issues/535)) ([41c51f1](https://github.com/hyperium/tonic/commit/41c51f1c61ac957e439ced4302f09160c850787e))
+
+### Features
+
+* **status:** implement From<io::Error> for Status ([#500](https://github.com/hyperium/tonic/issues/500)) ([fc86563](https://github.com/hyperium/tonic/commit/fc86563b369d0b73a79d3e8dc9a84d5ce1513303))
+* **transport:** Add `Router::into_service` ([#419](https://github.com/hyperium/tonic/issues/419)) ([37f6733](https://github.com/hyperium/tonic/commit/37f6733f85a42e828c124026c3a0f21919549b12))
+* **transport:** add max http2 frame size to server. ([#529](https://github.com/hyperium/tonic/issues/529)) ([31936e0](https://github.com/hyperium/tonic/commit/31936e0513a41e83c8137786bd417fe57ecd05eb)), closes [#264](https://github.com/hyperium/tonic/issues/264)
+* **transport:** add user-agent header to client requests. ([#457](https://github.com/hyperium/tonic/issues/457)) ([d4899df](https://github.com/hyperium/tonic/commit/d4899df83287a4eb1a91754c2e2955000d13c5f4)), closes [#453](https://github.com/hyperium/tonic/issues/453)
+* **transport:** Connect lazily in the load balanced channel ([#493](https://github.com/hyperium/tonic/issues/493)) ([2e964c7](https://github.com/hyperium/tonic/commit/2e964c78c666ecd6e6cfc37689d30300cad81f4c))
+* **transport:** expose HTTP2 server keepalive interval and timeout ([#486](https://github.com/hyperium/tonic/issues/486)) ([2b9cdb9](https://github.com/hyperium/tonic/commit/2b9cdb9779eb5cb7d3862e1ce95ab63f847ec223)), closes [#474](https://github.com/hyperium/tonic/issues/474)
+* **transport:** Move error! to debug! ([#537](https://github.com/hyperium/tonic/issues/537)) ([a7778ad](https://github.com/hyperium/tonic/commit/a7778ad16611b7ade64c33256eecf9825408f06a))
+* **transport:** Do not panic when building and Endpoint with an invali… (#438) ([26ce9d1](https://github.com/hyperium/tonic/commit/26ce9d12bf1765e5a7acb07cab05b6bd75bd4e4d)), closes [#438](https://github.com/hyperium/tonic/issues/438)
+
+
+### BREAKING CHANGES
+
+* `TryFrom` API has been changed.
+* Upgraded to `tokio 1.0` and `prost 0.7`.
+* `Channel` now implements `Service` instead of `GrpcService`.
+
+
 # [0.3.1](https://github.com/hyperium/tonic/compare/v0.3.0...v0.3.1) (2020-08-20)
+
 
 ### Bug Fixes
 
