@@ -17,7 +17,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
-    server: Server,
+    _server: Server,
 ) -> impl Stream<Item = Result<ServerIo, crate::Error>>
 where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
