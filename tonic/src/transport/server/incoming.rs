@@ -71,7 +71,7 @@ where
                 }
 
                 SelectOutput::Err(e) => {
-                    tracing::error!(message = "Accept loop error.", error = %e);
+                    tracing::debug!(message = "Accept loop error.", error = %e);
                 }
 
                 SelectOutput::Done => {
