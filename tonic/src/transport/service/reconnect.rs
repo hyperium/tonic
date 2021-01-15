@@ -102,7 +102,7 @@ where
                                 return Poll::Ready(Err(e.into()));
                             } else {
                                 let error = e.into();
-                                tracing::error!("reconnect::poll_ready: {:?}", error);
+                                tracing::debug!("reconnect::poll_ready: {:?}", error);
                                 self.error = Some(error);
                                 break;
                             }
@@ -141,7 +141,7 @@ where
     fn call(&mut self, request: Request) -> Self::Future {
         tracing::trace!("Reconnect::call");
         if let Some(error) = self.error.take() {
-            tracing::error!("error: {:?}", error);
+            tracing::debug!("error: {}", error);
             return ResponseFuture::error(error.into());
         }
 
