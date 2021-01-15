@@ -55,7 +55,7 @@ where
                     if let Some(tls) = &server.tls {
                         let tls = tls.clone();
 
-                        let accept = Box::pin(async move {
+                        let accept = tokio::spawn(async move {
                             let io = tls.accept(stream).await?;
                             Ok(ServerIo::new(io))
                         });
@@ -66,11 +66,11 @@ where
                     }
                 }
 
-                SelectOutput::Io(Ok(io)) => {
+                SelectOutput::Io(io) => {
                     yield io;
                 }
 
-                SelectOutput::Io(Err(e)) => {
+                SelectOutput::Err(e) => {
                     tracing::error!(message = "Accept loop error.", error = %e);
                 }
 
@@ -86,7 +86,7 @@ where
 async fn select<IO, IE>(
     incoming: &mut (impl Stream<Item = Result<IO, IE>> + Unpin),
     tasks: &mut futures_util::stream::futures_unordered::FuturesUnordered<
-        futures_util::future::BoxFuture<'static, Result<ServerIo, crate::Error>>,
+        tokio::task::JoinHandle<Result<ServerIo, crate::Error>>,
     >,
 ) -> SelectOutput<IO>
 where
@@ -98,7 +98,7 @@ where
         return match incoming.try_next().await {
             Ok(Some(stream)) => SelectOutput::Incoming(stream),
             Ok(None) => SelectOutput::Done,
-            Err(e) => SelectOutput::Io(Err(e.into())),
+            Err(e) => SelectOutput::Err(e.into()),
         };
     }
 
@@ -107,14 +107,15 @@ where
             match stream {
                 Ok(Some(stream)) => SelectOutput::Incoming(stream),
                 Ok(None) => SelectOutput::Done,
-                Err(e) => SelectOutput::Io(Err(e.into())),
+                Err(e) => SelectOutput::Err(e.into()),
             }
         }
 
         accept = tasks.next() => {
             match accept.expect("FuturesUnordered stream should never end") {
-                Ok(io) => SelectOutput::Io(Ok(io)),
-                Err(e) => SelectOutput::Io(Err(e)),
+                Ok(Ok(io)) => SelectOutput::Io(io),
+                Ok(Err(e)) => SelectOutput::Err(e),
+                Err(e) => SelectOutput::Err(e.into()),
             }
         }
     }
@@ -123,7 +124,8 @@ where
 #[cfg(feature = "tls")]
 enum SelectOutput<A> {
     Incoming(A),
-    Io(Result<ServerIo, crate::Error>),
+    Io(ServerIo),
+    Err(crate::Error),
     Done,
 }
 
