@@ -17,9 +17,11 @@ pub struct EchoServer;
 #[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
-        if let Some(certs) = request.peer_certs() {
-            println!("Got {} peer certs!", certs.len());
-        }
+        let certs = request
+            .peer_certs()
+            .expect("Client did not send its certs!");
+
+        println!("Got {} peer certs!", certs.len());
 
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
@@ -68,7 +70,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .client_ca_root(client_ca_cert);
 
     Server::builder()
-        .tls_config(tls)
+        .tls_config(tls)?
         .add_service(pb::echo_server::EchoServer::new(server))
         .serve(addr)
         .await?;

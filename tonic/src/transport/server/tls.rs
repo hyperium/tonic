@@ -7,7 +7,7 @@ use std::fmt;
 /// Configures TLS settings for servers.
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ServerTlsConfig {
     identity: Option<Identity>,
     client_ca_root: Option<Certificate>,

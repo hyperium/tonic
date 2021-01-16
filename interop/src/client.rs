@@ -154,7 +154,11 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
     let (tx, rx) = mpsc::unbounded_channel();
     tx.send(make_ping_pong_request(0)).unwrap();
 
-    let result = client.full_duplex_call(Request::new(rx)).await;
+    let result = client
+        .full_duplex_call(Request::new(
+            tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+        ))
+        .await;
 
     assertions.push(test_assert!(
         "call must be successful",
@@ -251,7 +255,6 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
         response_status: Some(EchoStatus {
             code: 2,
             message: TEST_STATUS_MESSAGE.to_string(),
-            ..Default::default()
         }),
         ..Default::default()
     };
@@ -260,7 +263,6 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
         response_status: Some(EchoStatus {
             code: 2,
             message: TEST_STATUS_MESSAGE.to_string(),
-            ..Default::default()
         }),
         ..Default::default()
     };
@@ -286,7 +288,6 @@ pub async fn special_status_message(client: &mut TestClient, assertions: &mut Ve
         response_status: Some(EchoStatus {
             code: 2,
             message: SPECIAL_TEST_STATUS_MESSAGE.to_string(),
-            ..Default::default()
         }),
         ..Default::default()
     };

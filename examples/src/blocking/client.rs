@@ -24,11 +24,7 @@ impl BlockingClient {
         D: std::convert::TryInto<tonic::transport::Endpoint>,
         D::Error: Into<StdError>,
     {
-        let mut rt = Builder::new()
-            .basic_scheduler()
-            .enable_all()
-            .build()
-            .unwrap();
+        let rt = Builder::new_multi_thread().enable_all().build().unwrap();
         let client = rt.block_on(GreeterClient::connect(dst))?;
 
         Ok(Self { rt, client })

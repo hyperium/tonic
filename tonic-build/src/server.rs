@@ -18,7 +18,16 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let service_doc = generate_doc_comments(service.comment());
 
     // Transport based implementations
-    let path = format!("{}.{}", service.package(), service.identifier());
+    let path = format!(
+        "{}{}{}",
+        service.package(),
+        if service.package().is_empty() {
+            ""
+        } else {
+            "."
+        },
+        service.identifier()
+    );
     let transport = generate_transport(&server_service, &server_trait, &path);
 
     quote! {
@@ -75,6 +84,7 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
                             Ok(http::Response::builder()
                                .status(200)
                                .header("grpc-status", "12")
+                               .header("content-type", "application/grpc")
                                .body(tonic::body::BoxBody::empty())
                                .unwrap())
                         }),
@@ -216,8 +226,13 @@ fn generate_methods<T: Service>(service: &T, proto_path: &str) -> TokenStream {
 
     for method in service.methods() {
         let path = format!(
-            "/{}.{}/{}",
+            "/{}{}{}/{}",
             service.package(),
+            if service.package().is_empty() {
+                ""
+            } else {
+                "."
+            },
             service.identifier(),
             method.identifier()
         );

@@ -1,4 +1,73 @@
-# [0.2.1](https://github.com/hyperium/tonic/compare/v0.2.0...v0.2.1) (2020-05-07)
+# [0.4.0](https://github.com/hyperium/tonic/compare/v0.3.1...v0.4.0) (2021-01-15)
+
+This version brings Tonic inline with Tokio 1.0 and Prost 0.7! This release also includes new versions of `tonic-types`, `tonic-build`, and `tonic-health`.
+
+### Bug Fixes
+
+* **transport:** return Poll::ready until error is consumed  ([#536](https://github.com/hyperium/tonic/issues/536)) ([dafea9a](https://github.com/hyperium/tonic/commit/dafea9adeec5626ee780bc3ad7dc69691db51a82))
+* gracefully handle bad native certs ([#520](https://github.com/hyperium/tonic/issues/520)) ([fe4d5b9](https://github.com/hyperium/tonic/commit/fe4d5b9d9a0fdcf414bbe31c2fcad59e8cc03da8)), closes [#519](https://github.com/hyperium/tonic/issues/519)
+* **build:** Add content-type for generated unimplemented service ([#441](https://github.com/hyperium/tonic/issues/441)) ([62c1230](https://github.com/hyperium/tonic/commit/62c1230117bcaa6f45cb0fa0697b89b9255a94a5))
+* **build:** Match namespace code with other generated packages ([#472](https://github.com/hyperium/tonic/issues/472)) ([1b03ece](https://github.com/hyperium/tonic/commit/1b03ece2a81cb7e8b1922b3c3c1f496bd402d76c))
+* **transport:** Add content-type for Unimplemented ([#434](https://github.com/hyperium/tonic/issues/434)) ([594a542](https://github.com/hyperium/tonic/commit/594a542b8a9e8f9f4c3bd1d0a08e87ce74a850e5))
+* **transport:** reconnect lazy connections after first failure ([#458](https://github.com/hyperium/tonic/issues/458)) ([e9910d1](https://github.com/hyperium/tonic/commit/e9910d10a7c1287a2247a236b45dbf31eceb08bd)), closes [#452](https://github.com/hyperium/tonic/issues/452)
+* **client:** Merge trailer and initla headers into status on err ([#510](https://github.com/hyperium/tonic/pull/510))
+* **transport:** Fix TLS accept w/ peer certs ([#535](https://github.com/hyperium/tonic/issues/535)) ([41c51f1](https://github.com/hyperium/tonic/commit/41c51f1c61ac957e439ced4302f09160c850787e))
+
+### Features
+
+* **status:** implement From<io::Error> for Status ([#500](https://github.com/hyperium/tonic/issues/500)) ([fc86563](https://github.com/hyperium/tonic/commit/fc86563b369d0b73a79d3e8dc9a84d5ce1513303))
+* **transport:** Add `Router::into_service` ([#419](https://github.com/hyperium/tonic/issues/419)) ([37f6733](https://github.com/hyperium/tonic/commit/37f6733f85a42e828c124026c3a0f21919549b12))
+* **transport:** add max http2 frame size to server. ([#529](https://github.com/hyperium/tonic/issues/529)) ([31936e0](https://github.com/hyperium/tonic/commit/31936e0513a41e83c8137786bd417fe57ecd05eb)), closes [#264](https://github.com/hyperium/tonic/issues/264)
+* **transport:** add user-agent header to client requests. ([#457](https://github.com/hyperium/tonic/issues/457)) ([d4899df](https://github.com/hyperium/tonic/commit/d4899df83287a4eb1a91754c2e2955000d13c5f4)), closes [#453](https://github.com/hyperium/tonic/issues/453)
+* **transport:** Connect lazily in the load balanced channel ([#493](https://github.com/hyperium/tonic/issues/493)) ([2e964c7](https://github.com/hyperium/tonic/commit/2e964c78c666ecd6e6cfc37689d30300cad81f4c))
+* **transport:** expose HTTP2 server keepalive interval and timeout ([#486](https://github.com/hyperium/tonic/issues/486)) ([2b9cdb9](https://github.com/hyperium/tonic/commit/2b9cdb9779eb5cb7d3862e1ce95ab63f847ec223)), closes [#474](https://github.com/hyperium/tonic/issues/474)
+* **transport:** Move error! to debug! ([#537](https://github.com/hyperium/tonic/issues/537)) ([a7778ad](https://github.com/hyperium/tonic/commit/a7778ad16611b7ade64c33256eecf9825408f06a))
+* **transport:** Do not panic when building and Endpoint with an invali… (#438) ([26ce9d1](https://github.com/hyperium/tonic/commit/26ce9d12bf1765e5a7acb07cab05b6bd75bd4e4d)), closes [#438](https://github.com/hyperium/tonic/issues/438)
+
+
+### BREAKING CHANGES
+
+* `TryFrom` API has been changed.
+* Upgraded to `tokio 1.0` and `prost 0.7`.
+* `Channel` now implements `Service` instead of `GrpcService`.
+
+
+# [0.3.1](https://github.com/hyperium/tonic/compare/v0.3.0...v0.3.1) (2020-08-20)
+
+
+### Bug Fixes
+
+* **transport:** Return connection error on `Channel::connect` ([#413](https://github.com/hyperium/tonic/issues/413)) ([2ea17b2](https://github.com/hyperium/tonic/commit/2ea17b2ecfc40a20f4d9608f807b3d099a8f415d)), closes [#403](https://github.com/hyperium/tonic/issues/403)
+
+
+
+# [0.3.0](https://github.com/hyperium/tonic/compare/v0.2.1...v0.3.0) (2020-07-13)
+
+
+### Bug Fixes
+
+* `Status::details` leaking base64 encoding ([#395](https://github.com/hyperium/tonic/issues/395)) ([2c4c544](https://github.com/hyperium/tonic/commit/2c4c544d902c588fc0654910fba1f0d21d78eab3)), closes [#379](https://github.com/hyperium/tonic/issues/379)
+* **build:** Allow empty packages ([#382](https://github.com/hyperium/tonic/issues/382)) ([f085aba](https://github.com/hyperium/tonic/commit/f085aba302001986fd04219d2843f659f73c4031)), closes [#381](https://github.com/hyperium/tonic/issues/381)
+* **build:** Make generated server service public ([#347](https://github.com/hyperium/tonic/issues/347)) ([8cd6f05](https://github.com/hyperium/tonic/commit/8cd6f0506429cfbe59e63b0216f208482d12358a))
+* **transport:** Propagate errors in tls_config instead of unwrap/panic ([#385](https://github.com/hyperium/tonic/issues/385)) ([3b9d6a6](https://github.com/hyperium/tonic/commit/3b9d6a6262b62f30b8c9953f0da8e403be53216e))
+* Remove uses of pin_project::project attribute ([#367](https://github.com/hyperium/tonic/issues/367)) ([5bda615](https://github.com/hyperium/tonic/commit/5bda6156328bd2c94bc274588871b666f1b72d6e))
+
+
+### Features
+
+* **codec:** Improve compression flag log ([#374](https://github.com/hyperium/tonic/issues/374)) ([d68dd36](https://github.com/hyperium/tonic/commit/d68dd365321764aceaf4e37a106a519797926495))
+* **transport:** Add Endpoint::connect_lazy method ([#392](https://github.com/hyperium/tonic/issues/392)) ([ec9046d](https://github.com/hyperium/tonic/commit/ec9046dfc23d63828363d9555cd7b96811ad442d)), closes [#167](https://github.com/hyperium/tonic/issues/167)
+* **transport:** Add optional service methods ([#275](https://github.com/hyperium/tonic/issues/275)) ([2b997b0](https://github.com/hyperium/tonic/commit/2b997b0c5f37d69f3cd8b5b566b64df110d9f4eb))
+* **transport:** Dynamic load balancing ([#341](https://github.com/hyperium/tonic/issues/341)) ([85ae0a4](https://github.com/hyperium/tonic/commit/85ae0a4733b9e99edaa05e65160d98f21f288fc1))
+* **types:** Add `tonic-types` crate ([#391](https://github.com/hyperium/tonic/issues/391)) ([ea7fe66](https://github.com/hyperium/tonic/commit/ea7fe66b145e01891f1c1f16d247e02524d98fae))
+* Add `Display` implementation for `Code` ([#386](https://github.com/hyperium/tonic/issues/386)) ([ab1de44](https://github.com/hyperium/tonic/commit/ab1de44771f3fa6ac283485bdbf1035d6407ac1a))
+* Add `Status::to_http` ([#376](https://github.com/hyperium/tonic/issues/376)) ([327b4ff](https://github.com/hyperium/tonic/commit/327b4fffa3381345ee4620df7e9998efe2aa9454))
+* Add metadata to error responses ([#348](https://github.com/hyperium/tonic/issues/348)) ([372da52](https://github.com/hyperium/tonic/commit/372da52e96114ca76cc221f3c598be82bfae970c))
+* add new method get_uri for Endpoint ([#371](https://github.com/hyperium/tonic/issues/371)) ([54d7a7a](https://github.com/hyperium/tonic/commit/54d7a7af6b6530b80353c5741586c38cca8382c9))
+
+
+
+## [0.2.1](https://github.com/hyperium/tonic/compare/v0.2.0...v0.2.1) (2020-05-07)
 
 
 ### Bug Fixes
@@ -11,6 +80,7 @@
 ### Features
 
 * **transport:** Add AsRef impl for Certificate ([#326](https://github.com/hyperium/tonic/issues/326)) ([d2ad8df](https://github.com/hyperium/tonic/commit/d2ad8df629a349cc151a0a4ede96f04356f73839))
+
 
 
 # [0.2.0](https://github.com/hyperium/tonic/compare/v0.1.1...v0.2.0) (2020-04-01)
@@ -38,13 +108,8 @@
 * **transport:** Expose http2 keep-alive support ([#307](https://github.com/hyperium/tonic/issues/307)) ([012fa3c](https://github.com/hyperium/tonic/commit/012fa3cb4a0e010dafa28305416fab6c4278fc7b))
 
 
-### BREAKING CHANGES
 
-* Bumped `rustls` to `0.17`.
-* Removed deprecated `Error::description` implementations.
-
-
-# [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v0.1.1) (2020-01-20)
+## [0.1.1](https://github.com/hyperium/tonic/compare/v0.1.0...v0.1.1) (2020-01-20)
 
 
 ### Bug Fixes

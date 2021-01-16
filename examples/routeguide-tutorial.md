@@ -180,8 +180,8 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.2"
-prost = "0.6"
+tonic = "0.4"
+prost = "0.7"
 futures-core = "0.3"
 futures-util = "0.3"
 tokio = { version = "0.2", features = ["macros", "sync", "stream", "time"] }
@@ -192,7 +192,7 @@ serde_json = "1.0"
 rand = "0.7"
 
 [build-dependencies]
-tonic-build = "0.2"
+tonic-build = "0.4"
 ```
 
 Create a `build.rs` file at the root of your crate:
@@ -315,7 +315,7 @@ uses [async-trait] internally. You can learn more about `async fn` in traits in 
 
 [cargo book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 [async-trait]: https://github.com/dtolnay/async-trait
-[async book]: https://rust-lang.github.io/async-book/07_workarounds/06_async_in_traits.html
+[async book]: https://rust-lang.github.io/async-book/07_workarounds/05_async_in_traits.html
 
 ### Server state
 Our service needs access to an immutable list of features. When the server starts, we are going to
@@ -517,9 +517,7 @@ async fn route_chat(
     };
 
     Ok(Response::new(Box::pin(output)
-        as Pin<
-            Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>,
-        >))
+        as Self::RouteChatStream))
 
 }
 ```
@@ -704,7 +702,7 @@ use futures_util::stream;
 ```rust
 async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
     let mut rng = rand::thread_rng();
-    let point_count: i32 = rng.gen_range(2, 100);
+    let point_count: i32 = rng.gen_range(2..100);
 
     let mut points = vec![];
     for _ in 0..=point_count {
@@ -725,8 +723,8 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 
 ```rust
 fn random_point(rng: &mut ThreadRng) -> Point {
-    let latitude = (rng.gen_range(0, 180) - 90) * 10_000_000;
-    let longitude = (rng.gen_range(0, 360) - 180) * 10_000_000;
+    let latitude = (rng.gen_range(0..180) - 90) * 10_000_000;
+    let longitude = (rng.gen_range(0..360) - 180) * 10_000_000;
     Point {
         latitude,
         longitude,

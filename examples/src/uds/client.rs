@@ -17,7 +17,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // We will ignore this uri because uds do not use it
     // if your connector does use the uri it will be provided
     // as the request to the `MakeConnection`.
-    let channel = Endpoint::try_from("lttp://[::]:50051")?
+    let channel = Endpoint::try_from("http://[::]:50051")?
         .connect_with_connector(service_fn(|_: Uri| {
             let path = "/tmp/tonic/helloworld";
 

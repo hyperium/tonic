@@ -21,6 +21,7 @@ type Streaming<T> = Request<tonic::Streaming<T>>;
 type Stream<T> = Pin<
     Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + Sync + 'static>,
 >;
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'static>>;
 
 #[tonic::async_trait]
 impl pb::test_service_server::TestService for TestService {
@@ -71,7 +72,7 @@ impl pb::test_service_server::TestService for TestService {
 
         let stream = try_stream! {
             for param in response_parameters {
-                tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
+                tokio::time::sleep(Duration::from_micros(param.interval_us as u64)).await;
 
                 let payload = crate::server_payload(param.size as usize);
                 yield StreamingOutputCallResponse { payload: Some(payload) };
@@ -89,7 +90,7 @@ impl pb::test_service_server::TestService for TestService {
     ) -> Result<StreamingInputCallResponse> {
         let mut stream = req.into_inner();
 
-        let mut aggregated_payload_size = 0 as i32;
+        let mut aggregated_payload_size = 0;
         while let Some(msg) = stream.try_next().await? {
             aggregated_payload_size += msg.payload.unwrap().body.len() as i32;
         }
@@ -126,7 +127,7 @@ impl pb::test_service_server::TestService for TestService {
                     }
 
                     for param in msg.response_parameters {
-                        tokio::time::delay_for(Duration::from_micros(param.interval_us as u64)).await;
+                        tokio::time::sleep(Duration::from_micros(param.interval_us as u64)).await;
 
                         let payload = crate::server_payload(param.size as usize);
                         yield StreamingOutputCallResponse { payload: Some(payload) };
@@ -187,9 +188,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = Pin<
-        Box<dyn Future<Output = std::result::Result<Self::Response, Self::Error>> + Send + 'static>,
-    >;
+    type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
         Ok(()).into()
@@ -215,11 +214,12 @@ where
             if let Some(echo_header) = echo_header {
                 res.headers_mut()
                     .insert("x-grpc-test-echo-initial", echo_header);
+                Ok(res
+                    .map(|b| MergeTrailers::new(b, echo_trailer))
+                    .map(BoxBody::new))
+            } else {
+                Ok(res)
             }
-
-            Ok(res
-                .map(|b| MergeTrailers::new(b, echo_trailer))
-                .map(BoxBody::new))
         })
     }
 }

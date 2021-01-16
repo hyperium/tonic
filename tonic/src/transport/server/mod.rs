@@ -16,13 +16,19 @@ use super::service::TlsAcceptor;
 use incoming::TcpIncoming;
 
 #[cfg(feature = "tls")]
-pub(crate) use incoming::TlsStream;
+pub(crate) use tokio_rustls::server::TlsStream;
 
-use super::service::{Or, Routes, ServerIo, ServiceBuilderExt};
+#[cfg(feature = "tls")]
+use crate::transport::Error;
+
+use super::{
+    service::{Or, Routes, ServerIo, ServiceBuilderExt},
+    BoxFuture,
+};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
-    future::{self, MapErr},
+    future::{self, Either as FutureEither, MapErr},
     TryFutureExt,
 };
 use http::{HeaderMap, Request, Response};
@@ -31,19 +37,21 @@ use std::{
     fmt,
     future::Future,
     net::SocketAddr,
-    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
-    limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer, Service, ServiceBuilder,
+    limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer, util::Either, Service,
+    ServiceBuilder,
 };
 use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static>;
+
+const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 
 /// A default batteries included `transport` server.
 ///
@@ -65,6 +73,9 @@ pub struct Server {
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
     tcp_nodelay: bool,
+    http2_keepalive_interval: Option<Duration>,
+    http2_keepalive_timeout: Option<Duration>,
+    max_frame_size: Option<u32>,
 }
 
 /// A stack based `Service` router.
@@ -74,6 +85,44 @@ pub struct Router<A, B> {
     routes: Routes<A, B, Request<Body>>,
 }
 
+/// A service that is produced from a Tonic `Router`.
+///
+/// This service implementation will route between multiple Tonic
+/// gRPC endpoints and can be consumed with the rest of the `tower`
+/// ecosystem.
+#[derive(Debug)]
+pub struct RouterService<A, B> {
+    router: Router<A, B>,
+}
+
+impl<A, B> Service<Request<Body>> for RouterService<A, B>
+where
+    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    A::Future: Send + 'static,
+    A::Error: Into<crate::Error> + Send,
+    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    B::Future: Send + 'static,
+    B::Error: Into<crate::Error> + Send,
+{
+    type Response = Response<BoxBody>;
+    type Error = crate::Error;
+
+    #[allow(clippy::type_complexity)]
+    type Future = FutureEither<
+        MapErr<A::Future, fn(A::Error) -> crate::Error>,
+        MapErr<B::Future, fn(B::Error) -> crate::Error>,
+    >;
+
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    #[inline]
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        self.router.routes.call(req)
+    }
+}
+
 /// A trait to provide a static reference to the service's
 /// name. This is used for routing service's within the router.
 pub trait NamedService {
@@ -81,6 +130,10 @@ pub trait NamedService {
     ///
     /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
     const NAME: &'static str;
+}
+
+impl<S: NamedService, T> NamedService for Either<S, T> {
+    const NAME: &'static str = S::NAME;
 }
 
 impl Server {
@@ -97,11 +150,11 @@ impl Server {
     /// Configure TLS for this server.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-    pub fn tls_config(self, tls_config: ServerTlsConfig) -> Self {
-        Server {
-            tls: Some(tls_config.tls_acceptor().unwrap()),
+    pub fn tls_config(self, tls_config: ServerTlsConfig) -> Result<Self, Error> {
+        Ok(Server {
+            tls: Some(tls_config.tls_acceptor().map_err(Error::from_source)?),
             ..self
-        }
+        })
     }
 
     /// Set the concurrency limit applied to on requests inbound per connection.
@@ -111,7 +164,7 @@ impl Server {
     /// ```
     /// # use tonic::transport::Server;
     /// # use tower_service::Service;
-    /// # let mut builder = Server::builder();
+    /// # let builder = Server::builder();
     /// builder.concurrency_limit_per_connection(32);
     /// ```
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
@@ -173,6 +226,36 @@ impl Server {
         }
     }
 
+    /// Set whether HTTP2 Ping frames are enabled on accepted connections.
+    ///
+    /// If `None` is specified, HTTP2 keepalive is disabled, otherwise the duration
+    /// specified will be the time interval between HTTP2 Ping frames.
+    /// The timeout for receiving an acknowledgement of the keepalive ping
+    /// can be set with [`Server::http2_keepalive_timeout`].
+    ///
+    /// Default is no HTTP2 keepalive (`None`)
+    ///
+    pub fn http2_keepalive_interval(self, http2_keepalive_interval: Option<Duration>) -> Self {
+        Server {
+            http2_keepalive_interval,
+            ..self
+        }
+    }
+
+    /// Sets a timeout for receiving an acknowledgement of the keepalive ping.
+    ///
+    /// If the ping is not acknowledged within the timeout, the connection will be closed.
+    /// Does nothing if http2_keep_alive_interval is disabled.
+    ///
+    /// Default is 20 seconds.
+    ///
+    pub fn http2_keepalive_timeout(self, http2_keepalive_timeout: Option<Duration>) -> Self {
+        Server {
+            http2_keepalive_timeout,
+            ..self
+        }
+    }
+
     /// Set whether TCP keepalive messages are enabled on accepted connections.
     ///
     /// If `None` is specified, keepalive is disabled, otherwise the duration
@@ -192,6 +275,18 @@ impl Server {
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Server {
             tcp_nodelay: enabled,
+            ..self
+        }
+    }
+
+    /// Sets the maximum frame size to use for HTTP2.
+    ///
+    /// Passing `None` will do nothing.
+    ///
+    /// If not set, will default from underlying transport.
+    pub fn max_frame_size(self, frame_size: impl Into<Option<u32>>) -> Self {
+        Server {
+            max_frame_size: frame_size.into(),
             ..self
         }
     }
@@ -224,6 +319,34 @@ impl Server {
         Router::new(self.clone(), svc)
     }
 
+    /// Create a router with the optional `S` typed service as the first service.
+    ///
+    /// This will clone the `Server` builder and create a router that will
+    /// route around different services.
+    ///
+    /// # Note
+    /// Even when the argument given is `None` this will capture *all* requests to this service name.
+    /// As a result, one cannot use this to toggle between two identically named implementations.
+    pub fn add_optional_service<S>(
+        &mut self,
+        svc: Option<S>,
+    ) -> Router<Either<S, Unimplemented>, Unimplemented>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let svc = match svc {
+            Some(some) => Either::A(some),
+            None => Either::B(Unimplemented::default()),
+        };
+        Router::new(self.clone(), svc)
+    }
+
     pub(crate) async fn serve_with_shutdown<S, I, F, IO, IE>(
         self,
         svc: S,
@@ -244,7 +367,13 @@ impl Server {
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
+        let max_frame_size = self.max_frame_size;
+
+        let http2_keepalive_interval = self.http2_keepalive_interval;
+        let http2_keepalive_timeout = self
+            .http2_keepalive_timeout
+            .unwrap_or(Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
@@ -260,7 +389,10 @@ impl Server {
             .http2_only(true)
             .http2_initial_connection_window_size(init_connection_window_size)
             .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams);
+            .http2_max_concurrent_streams(max_concurrent_streams)
+            .http2_keep_alive_interval(http2_keepalive_interval)
+            .http2_keep_alive_timeout(http2_keepalive_timeout)
+            .http2_max_frame_size(max_frame_size);
 
         if let Some(signal) = signal {
             server
@@ -335,6 +467,42 @@ where
         Router { server, routes }
     }
 
+    /// Add a new optional service to this router.
+    ///
+    /// # Note
+    /// Even when the argument given is `None` this will capture *all* requests to this service name.
+    /// As a result, one cannot use this to toggle between two identically named implementations.
+    pub fn add_optional_service<S>(
+        self,
+        svc: Option<S>,
+    ) -> Router<Either<S, Unimplemented>, Or<A, B, Request<Body>>>
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let Self { routes, server } = self;
+
+        let svc_name = <S as NamedService>::NAME;
+        let svc_route = format!("/{}", svc_name);
+        let pred = move |req: &Request<Body>| {
+            let path = req.uri().path();
+
+            path.starts_with(&svc_route)
+        };
+        let svc = match svc {
+            Some(some) => Either::A(some),
+            None => Either::B(Unimplemented::default()),
+        };
+        let routes = routes.push(pred, svc);
+
+        Router { server, routes }
+    }
+
     /// Consume this [`Server`] creating a future that will execute the server
     /// on [`tokio`]'s default executor.
     ///
@@ -400,6 +568,11 @@ where
             .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
     }
+
+    /// Create a tower service out of a router.
+    pub fn into_service(self) -> RouterService<A, B> {
+        RouterService { router: self }
+    }
 }
 
 impl fmt::Debug for Server {
@@ -421,6 +594,8 @@ where
 {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
+
+    #[allow(clippy::type_complexity)]
     type Future = MapErr<Instrumented<S::Future>, fn(S::Error) -> crate::Error>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -461,8 +636,7 @@ where
 {
     type Response = BoxService;
     type Error = crate::Error;
-    type Future =
-        Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send + 'static>>;
+    type Future = BoxFuture<Self::Response, Self::Error>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Ok(()).into()
@@ -476,7 +650,7 @@ where
 
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
         let span = self.span.clone();
 
         Box::pin(async move {
@@ -516,6 +690,7 @@ impl Service<Request<Body>> for Unimplemented {
             http::Response::builder()
                 .status(200)
                 .header("grpc-status", "12")
+                .header("content-type", "application/grpc")
                 .body(BoxBody::empty())
                 .unwrap(),
         )

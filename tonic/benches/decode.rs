@@ -11,8 +11,7 @@ use tonic::{codec::DecodeBuf, codec::Decoder, Status, Streaming};
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {
         fn $name(b: &mut Bencher) {
-            let mut rt = tokio::runtime::Builder::new()
-                .basic_scheduler()
+            let rt = tokio::runtime::Builder::new_multi_thread()
                 .build()
                 .expect("runtime");
 
@@ -102,7 +101,7 @@ impl Decoder for MockDecoder {
     type Error = Status;
 
     fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-        let out = Vec::from(buf.bytes());
+        let out = Vec::from(buf.chunk());
         buf.advance(self.message_size);
         Ok(Some(out))
     }

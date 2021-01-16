@@ -10,7 +10,7 @@ pub use endpoint::Endpoint;
 pub use tls::ClientTlsConfig;
 
 use super::service::{Connection, DynamicServiceStream};
-use crate::{body::BoxBody, client::GrpcService};
+use crate::body::BoxBody;
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},
@@ -29,13 +29,13 @@ use tokio::{
     sync::mpsc::{channel, Sender},
 };
 
+use tower::balance::p2c::Balance;
 use tower::{
     buffer::{self, Buffer},
     discover::{Change, Discover},
     util::{BoxService, Either},
     Service,
 };
-use tower_balance::p2c::Balance;
 
 type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
 
@@ -49,7 +49,7 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 /// # Multiplexing requests
 ///
 /// Sending a request on a channel requires a `&mut self` and thus can only send
-/// on request in flight. This is intentional and is required to follow the `Service`
+/// one request in flight. This is intentional and is required to follow the `Service`
 /// contract from the `tower` library which this channel implementation is built on
 /// top of.
 ///
@@ -109,7 +109,7 @@ impl Channel {
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
     pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
-        let (channel, mut tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
+        let (channel, tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
         list.for_each(|endpoint| {
             tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint))
                 .unwrap();
@@ -130,6 +130,21 @@ impl Channel {
         (Self::balance(list, DEFAULT_BUFFER_SIZE), tx)
     }
 
+    pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Self
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::Error> + Send,
+        C::Future: Unpin + Send,
+        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+    {
+        let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
+
+        let svc = Connection::lazy(connector, endpoint);
+        let svc = Buffer::new(Either::A(svc), buffer_size);
+
+        Channel { svc }
+    }
+
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
@@ -139,10 +154,9 @@ impl Channel {
     {
         let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
 
-        let svc = Connection::new(connector, endpoint)
+        let svc = Connection::connect(connector, endpoint)
             .await
-            .map_err(|e| super::Error::from_source(e))?;
-
+            .map_err(super::Error::from_source)?;
         let svc = Buffer::new(Either::A(svc), buffer_size);
 
         Ok(Channel { svc })
@@ -152,9 +166,9 @@ impl Channel {
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
-        D::Key: Send + Clone,
+        D::Key: Hash + Send + Clone,
     {
-        let svc = Balance::from_entropy(discover);
+        let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
         let svc = Buffer::new(Either::B(svc), buffer_size);
@@ -163,17 +177,18 @@ impl Channel {
     }
 }
 
-impl GrpcService<BoxBody> for Channel {
-    type ResponseBody = hyper::Body;
+impl Service<http::Request<BoxBody>> for Channel {
+    type Response = http::Response<super::Body>;
     type Error = super::Error;
     type Future = ResponseFuture;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        GrpcService::poll_ready(&mut self.svc, cx).map_err(|e| super::Error::from_source(e))
+        Service::poll_ready(&mut self.svc, cx).map_err(super::Error::from_source)
     }
 
-    fn call(&mut self, request: Request<BoxBody>) -> Self::Future {
-        let inner = GrpcService::call(&mut self.svc, request);
+    fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
+        let inner = Service::call(&mut self.svc, request);
+
         ResponseFuture { inner }
     }
 }
@@ -183,7 +198,7 @@ impl Future for ResponseFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let val = futures_util::ready!(Pin::new(&mut self.inner).poll(cx))
-            .map_err(|e| super::Error::from_source(e))?;
+            .map_err(super::Error::from_source)?;
         Ok(val).into()
     }
 }

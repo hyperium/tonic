@@ -9,7 +9,7 @@ use std::fmt;
 /// Configures TLS settings for endpoints.
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
     cert: Option<Certificate>,
@@ -41,8 +41,6 @@ impl ClientTlsConfig {
     }
 
     /// Sets the domain name against which to verify the server's TLS certificate.
-    ///
-    /// This has no effect if `rustls_client_config` is used to configure Rustls.
     pub fn domain_name(self, domain_name: impl Into<String>) -> Self {
         ClientTlsConfig {
             domain: Some(domain_name.into()),
@@ -82,7 +80,7 @@ impl ClientTlsConfig {
 
     pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
-            None => uri.host().ok_or(Error::new_invalid_uri())?.to_string(),
+            None => uri.host().ok_or_else(Error::new_invalid_uri)?.to_string(),
             Some(domain) => domain.clone(),
         };
         match &self.rustls_raw {

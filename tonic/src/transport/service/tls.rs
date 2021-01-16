@@ -58,7 +58,10 @@ impl TlsConnector {
 
         #[cfg(feature = "tls-roots")]
         {
-            config.root_store = rustls_native_certs::load_native_certs().map_err(|(_, e)| e)?;
+            config.root_store = match rustls_native_certs::load_native_certs() {
+                Ok(store) | Err((Some(store), _)) => store,
+                Err((None, error)) => Err(error)?,
+            };
         }
 
         if let Some(cert) = ca_cert {
@@ -133,10 +136,9 @@ impl TlsAcceptor {
                 let mut cert = std::io::Cursor::new(&cert.pem[..]);
 
                 let mut client_root_cert_store = tokio_rustls::rustls::RootCertStore::empty();
-                match client_root_cert_store.add_pem_file(&mut cert) {
-                    Err(_) => return Err(Box::new(TlsError::CertificateParseError)),
-                    _ => (),
-                };
+                if client_root_cert_store.add_pem_file(&mut cert).is_err() {
+                    return Err(Box::new(TlsError::CertificateParseError));
+                }
 
                 let client_auth =
                     tokio_rustls::rustls::AllowAnyAuthenticatedClient::new(client_root_cert_store);
@@ -160,14 +162,12 @@ impl TlsAcceptor {
         })
     }
 
-    pub(crate) fn accept<IO>(&self, io: IO) -> TlsStream<IO>
+    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<TlsStream<IO>, crate::Error>
     where
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     {
         let acceptor = RustlsAcceptor::from(self.inner.clone());
-        let accept = acceptor.accept(io);
-
-        TlsStream::new(accept)
+        acceptor.accept(io).await.map_err(Into::into)
     }
 }
 
@@ -204,7 +204,7 @@ mod rustls_keys {
     ) -> Result<PrivateKey, crate::Error> {
         // First attempt to load the private key assuming it is PKCS8-encoded
         if let Ok(mut keys) = pemfile::pkcs8_private_keys(&mut cursor) {
-            if keys.len() > 0 {
+            if !keys.is_empty() {
                 return Ok(keys.remove(0));
             }
         }
@@ -212,7 +212,7 @@ mod rustls_keys {
         // If it not, try loading the private key as an RSA key
         cursor.set_position(0);
         if let Ok(mut keys) = pemfile::rsa_private_keys(&mut cursor) {
-            if keys.len() > 0 {
+            if !keys.is_empty() {
                 return Ok(keys.remove(0));
             }
         }

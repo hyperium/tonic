@@ -94,6 +94,14 @@ $ cargo run --bin tls-server
 $ cargo run --bin health-server
 ```
 
+## Tower Middleware
+
+### Server
+
+```bash
+$ cargo run --bin tower-server
+```
+
 ## Autoreloading Server
 
 ### Server

@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::hash::{Hash, Hasher};
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
@@ -37,7 +36,8 @@ impl RouteGuide for RouteGuideService {
         Ok(Response::new(Feature::default()))
     }
 
-    type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+    type ListFeaturesStream =
+        Pin<Box<dyn Stream<Item = Result<Feature, Status>> + Send + Sync + 'static>>;
 
     async fn list_features(
         &self,
@@ -45,7 +45,7 @@ impl RouteGuide for RouteGuideService {
     ) -> Result<Response<Self::ListFeaturesStream>, Status> {
         println!("ListFeatures = {:?}", request);
 
-        let (mut tx, rx) = mpsc::channel(4);
+        let (tx, rx) = mpsc::channel(4);
         let features = self.features.clone();
 
         tokio::spawn(async move {
@@ -59,7 +59,9 @@ impl RouteGuide for RouteGuideService {
             println!(" /// done sending");
         });
 
-        Ok(Response::new(rx))
+        Ok(Response::new(Box::pin(
+            tokio_stream::wrappers::ReceiverStream::new(rx),
+        )))
     }
 
     async fn record_route(
@@ -148,17 +150,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Server::builder().add_service(svc).serve(addr).await?;
 
     Ok(())
-}
-
-// Implement hash for Point
-impl Hash for Point {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: Hasher,
-    {
-        self.latitude.hash(state);
-        self.longitude.hash(state);
-    }
 }
 
 impl Eq for Point {}

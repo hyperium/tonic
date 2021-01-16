@@ -40,7 +40,22 @@
 //!         )?;
 //!    Ok(())
 //! }
+//!```
+//!
+//! ## NixOS related hints
+//!
+//! On NixOS, it is better to specify the location of `PROTOC` and `PROTOC_INCLUDE` explicitly.
+//!
+//! ```bash
+//! $ export PROTOBUF_LOCATION=$(nix-env -q protobuf --out-path --no-name)
+//! $ export PROTOC=$PROTOBUF_LOCATION/bin/protoc
+//! $ export PROTOC_INCLUDE=$PROTOBUF_LOCATION/include
+//! $ cargo build
 //! ```
+//!
+//! The reason being that if `prost_build::compile_protos` fails to generate the resultant package,
+//! the failure is not obvious until the `include!(concat!(env!("OUT_DIR"), "/resultant.rs"));`
+//! fails with `No such file or directory` error.
 
 #![recursion_limit = "256"]
 #![warn(
@@ -50,9 +65,9 @@
     unreachable_pub
 )]
 #![doc(
-    html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
+    html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.2.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.4.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
