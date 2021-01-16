@@ -18,7 +18,8 @@ mod proto {
     #![allow(unreachable_pub)]
     tonic::include_proto!("grpc.reflection.v1alpha");
 
-    pub(crate) const FILE_DESCRIPTOR_SET: &'static [u8] = tonic::include_file_descriptor_set!();
+    pub(crate) const REFLECTION_DESCRIPTOR_SET: &'static [u8] =
+        include_bytes!(concat!(env!("OUT_DIR"), "/reflection_descriptor.bin"));
 }
 
 /// Implementation of the server component of gRPC Server Reflection.

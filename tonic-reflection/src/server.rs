@@ -1,3 +1,18 @@
+use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
+use std::pin::Pin;
+use std::sync::Arc;
+
+use prost::{DecodeError, Message};
+use prost_types::{
+    DescriptorProto, EnumDescriptorProto, FieldDescriptorProto, FileDescriptorProto,
+    FileDescriptorSet,
+};
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::{Stream, StreamExt};
+use tonic::{Request, Response, Status, Streaming};
+
 use crate::proto::server_reflection_request::MessageRequest;
 use crate::proto::server_reflection_response::MessageResponse;
 use crate::proto::server_reflection_server::{ServerReflection, ServerReflectionServer};
@@ -5,17 +20,6 @@ use crate::proto::{
     FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest, ServerReflectionResponse,
     ServiceResponse,
 };
-use prost::{DecodeError, Message};
-use prost_types::{
-    DescriptorProto, EnumDescriptorProto, FieldDescriptorProto, FileDescriptorProto,
-    FileDescriptorSet,
-};
-use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
-use std::sync::Arc;
-use tokio::stream::StreamExt;
-use tokio::sync::mpsc;
-use tonic::{Request, Response, Status, Streaming};
 
 /// Represents an error in the construction of a gRPC Reflection Service.
 #[derive(Debug)]
@@ -78,6 +82,8 @@ impl<'b> Builder<'b> {
 
     /// Registers a byte slice containing an encoded `prost_types::FileDescriptorSet` with
     /// the gRPC Reflection Service builder.
+    ///
+    /// This can be called multiple times to append new descriptors to the serivce.
     pub fn register_encoded_file_descriptor_set(
         mut self,
         encoded_file_descriptor_set: &'b [u8],
@@ -97,7 +103,8 @@ impl<'b> Builder<'b> {
     /// Build a gRPC Reflection Service to be served via Tonic.
     pub fn build(mut self) -> Result<ServerReflectionServer<impl ServerReflection>, Error> {
         if self.include_reflection_service {
-            self = self.register_encoded_file_descriptor_set(crate::proto::FILE_DESCRIPTOR_SET);
+            self =
+                self.register_encoded_file_descriptor_set(crate::proto::REFLECTION_DESCRIPTOR_SET);
         }
 
         for encoded in &self.encoded_file_descriptor_sets {
@@ -304,14 +311,16 @@ struct ReflectionService {
 
 #[tonic::async_trait]
 impl ServerReflection for ReflectionService {
-    type ServerReflectionInfoStream = mpsc::Receiver<Result<ServerReflectionResponse, Status>>;
+    type ServerReflectionInfoStream = Pin<
+        Box<dyn Stream<Item = Result<ServerReflectionResponse, Status>> + Send + Sync + 'static>,
+    >;
 
     async fn server_reflection_info(
         &self,
         req: Request<Streaming<ServerReflectionRequest>>,
     ) -> Result<Response<Self::ServerReflectionInfoStream>, Status> {
         let mut req_rx = req.into_inner();
-        let (mut resp_tx, resp_rx) = mpsc::channel::<Result<ServerReflectionResponse, Status>>(1);
+        let (resp_tx, resp_rx) = mpsc::channel::<Result<ServerReflectionResponse, Status>>(1);
 
         let state = self.state.clone();
 
@@ -330,10 +339,10 @@ impl ServerReflection for ReflectionService {
                         MessageRequest::FileByFilename(s) => state.file_by_filename(&s),
                         MessageRequest::FileContainingSymbol(s) => state.symbol_by_name(&s),
                         MessageRequest::FileContainingExtension(_) => {
-                            Err(Status::not_found("extensions are not supported"))
+                            Err(Status::unimplemented("extensions are not supported"))
                         }
                         MessageRequest::AllExtensionNumbersOfType(_) => {
-                            Err(Status::not_found("extensions are not supported"))
+                            Err(Status::unimplemented("extensions are not supported"))
                         }
                         MessageRequest::ListServices(_) => Ok(state.list_services()),
                     },
@@ -356,6 +365,6 @@ impl ServerReflection for ReflectionService {
             }
         });
 
-        Ok(Response::new(resp_rx))
+        Ok(Response::new(Box::pin(ReceiverStream::new(resp_rx))))
     }
 }

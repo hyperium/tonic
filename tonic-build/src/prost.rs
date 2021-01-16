@@ -12,7 +12,7 @@ pub fn configure() -> Builder {
     Builder {
         build_client: true,
         build_server: true,
-        include_file_descriptor_set: false,
+        file_descriptor_set_path: None,
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
@@ -181,7 +181,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 pub struct Builder {
     pub(crate) build_client: bool,
     pub(crate) build_server: bool,
-    pub(crate) include_file_descriptor_set: bool,
+    pub(crate) file_descriptor_set_path: Option<PathBuf>,
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
@@ -207,8 +207,8 @@ impl Builder {
 
     /// Generate a file containing the encoded `prost_types::FileDescriptorSet` for protocol buffers
     /// modules. This is required for implementing gRPC Server Reflection.
-    pub fn include_file_descriptor_set(mut self, include: bool) -> Self {
-        self.include_file_descriptor_set = include;
+    pub fn file_descriptor_set_path(mut self, path: impl AsRef<Path>) -> Self {
+        self.file_descriptor_set_path = Some(path.as_ref().to_path_buf());
         self
     }
 
@@ -296,9 +296,11 @@ impl Builder {
         let format = self.format;
 
         config.out_dir(out_dir.clone());
-        if self.include_file_descriptor_set {
-            config.include_file_descriptor_set();
+
+        if let Some(path) = self.file_descriptor_set_path.as_ref() {
+            config.file_descriptor_set_path(path);
         }
+
         for (proto_path, rust_path) in self.extern_path.iter() {
             config.extern_path(proto_path, rust_path);
         }
