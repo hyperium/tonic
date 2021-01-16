@@ -2,7 +2,8 @@ use std::future::Future;
 use std::net::SocketAddr;
 
 use tokio::net::TcpListener;
-use tokio::stream::{self, StreamExt};
+use tokio_stream::{self as stream, StreamExt};
+use tokio_stream::wrappers::TcpListenerStream;
 use tokio::time::Duration;
 use tokio::{join, try_join};
 use tonic::transport::{Channel, Error, Server};
@@ -104,7 +105,7 @@ async fn grpc(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, Stri
     let fut = Server::builder()
         .accept_http1(accept_h1)
         .add_service(TestServer::new(Svc))
-        .serve_with_incoming(listener);
+        .serve_with_incoming(TcpListenerStream::new(listener));
 
     (fut, url)
 }
@@ -119,7 +120,7 @@ async fn grpc_web(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, 
     let fut = Server::builder()
         .accept_http1(accept_h1)
         .add_service(svc)
-        .serve_with_incoming(listener);
+        .serve_with_incoming(TcpListenerStream::new(listener));
 
     (fut, url)
 }
@@ -132,7 +133,7 @@ async fn spawn() -> Result<(C, C, C, C), Error> {
 
     let _ = tokio::spawn(async move { join!(s1, s2, s3, s4) });
 
-    tokio::time::delay_for(Duration::from_millis(30)).await;
+    tokio::time::sleep(Duration::from_millis(30)).await;
 
     try_join!(
         TestClient::connect(u1),

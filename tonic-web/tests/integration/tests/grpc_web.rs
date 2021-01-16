@@ -5,6 +5,7 @@ use hyper::http::{header, StatusCode};
 use hyper::{Body, Client, Method, Request, Uri};
 use prost::Message;
 use tokio::net::TcpListener;
+use tokio_stream::wrappers::TcpListenerStream;
 use tonic::transport::Server;
 
 use integration::pb::{test_server::TestServer, Input, Output};
@@ -67,10 +68,12 @@ async fn origin_not_allowed() {
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
 
+
 async fn spawn(allowed_origin: &str) -> String {
     let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = TcpListener::bind(addr).await.expect("listener");
     let url = format!("http://{}", listener.local_addr().unwrap());
+    let listener_stream = TcpListenerStream::new(listener);
 
     let svc = tonic_web::config()
         .allow_origins(vec![allowed_origin])
@@ -80,7 +83,7 @@ async fn spawn(allowed_origin: &str) -> String {
         Server::builder()
             .accept_http1(true)
             .add_service(svc)
-            .serve_with_incoming(listener)
+            .serve_with_incoming(listener_stream)
             .await
             .unwrap()
     });

@@ -289,7 +289,17 @@ impl Server {
         }
     }
 
-    /// Intercept inbound requests and add a [`tracing::Span`] to each response future.
+    /// Allow this server to accept http1 requests.
+    ///
+    /// Default is `false`.
+    pub fn accept_http1(self, accept_http1: bool) -> Self {
+        Server {
+            accept_http1,
+            ..self
+        }
+    }
+
+    /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
     pub fn trace_fn<F>(self, f: F) -> Self
     where
         F: Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static,

@@ -1,6 +1,6 @@
 use std::pin::Pin;
 
-use tokio::stream::{self, Stream, StreamExt};
+use tokio_stream::{self as stream, StreamExt, Stream};
 use tonic::{Request, Response, Status, Streaming};
 
 use pb::{test_server::Test, Input, Output};
