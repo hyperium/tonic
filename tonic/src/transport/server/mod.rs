@@ -367,6 +367,7 @@ impl Server {
         let max_concurrent_streams = self.max_concurrent_streams;
         let timeout = self.timeout;
         let max_frame_size = self.max_frame_size;
+        let http2_only = !self.accept_http1;
 
         let http2_keepalive_interval = self.http2_keepalive_interval;
         let http2_keepalive_timeout = self
