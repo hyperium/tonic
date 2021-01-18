@@ -101,7 +101,13 @@ impl<'b> Builder<'b> {
     }
 
     /// Build a gRPC Reflection Service to be served via Tonic.
-    pub fn build(mut self) -> Result<ServerReflectionServer<impl ServerReflection>, Error> {
+    pub fn build(self) -> Result<ServerReflectionServer<impl ServerReflection>, Error> {
+        let service = self.build_service()?;
+        Ok(ServerReflectionServer::new(service))
+    }
+
+    /// Construct the reflection service
+    fn build_service(mut self) -> Result<ReflectionService, Error> {
         if self.include_reflection_service {
             self =
                 self.register_encoded_file_descriptor_set(crate::proto::REFLECTION_DESCRIPTOR_SET);
@@ -141,13 +147,13 @@ impl<'b> Builder<'b> {
             .map(|name| ServiceResponse { name: name.clone() })
             .collect();
 
-        Ok(ServerReflectionServer::new(ReflectionService {
-            state: Arc::new(ReflectionServiceState {
+        Ok(ReflectionService {
+            state: Arc::new(State {
                 service_names,
                 files,
                 symbols: self.symbols,
             }),
-        }))
+        })
     }
 
     fn process_file(&mut self, fd: Arc<FileDescriptorProto>) -> Result<(), Error> {
@@ -254,13 +260,13 @@ fn extract_name(
 }
 
 #[derive(Debug)]
-struct ReflectionServiceState {
+struct State {
     service_names: Vec<ServiceResponse>,
     files: HashMap<String, Arc<FileDescriptorProto>>,
     symbols: HashMap<String, Arc<FileDescriptorProto>>,
 }
 
-impl ReflectionServiceState {
+impl State {
     fn list_services(&self) -> MessageResponse {
         MessageResponse::ListServicesResponse(ListServiceResponse {
             service: self.service_names.clone(),
@@ -306,7 +312,7 @@ impl ReflectionServiceState {
 
 #[derive(Debug)]
 struct ReflectionService {
-    state: Arc<ReflectionServiceState>,
+    state: Arc<State>,
 }
 
 #[tonic::async_trait]
@@ -366,5 +372,227 @@ impl ServerReflection for ReflectionService {
         });
 
         Ok(Response::new(Box::pin(ReceiverStream::new(resp_rx))))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use prost::bytes::Bytes;
+    use tonic::codec::{Codec, ProstCodec};
+    use tonic::IntoStreamingRequest;
+
+    /// Encode a message as byte buffer
+    ///
+    /// Implementation cribbed from https://github.com/hyperium/tonic/issues/462#issuecomment-751887539
+    ///
+    /// FIXME(ergo): This function is a bit arcane and should be replaced once we have a better
+    ///     story around testing Streaming APIs
+    fn message_to_stream(msg: impl Message) -> Result<Bytes, prost::EncodeError> {
+        use bytes::{BufMut, BytesMut};
+        let mut buf = BytesMut::new();
+        // See below comment on spec.
+        use std::mem::size_of;
+        const PREFIX_BYTES: usize = size_of::<u8>() + size_of::<u32>();
+        for _ in 0..PREFIX_BYTES {
+            // Advance our buffer first.
+            // We will backfill it once we know the size of the message.
+            buf.put_u8(0);
+        }
+
+        msg.encode(&mut buf)?;
+        let len = buf.len() - PREFIX_BYTES;
+        {
+            let mut buf = &mut buf[0..PREFIX_BYTES];
+            // See: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#:~:text=Compressed-Flag
+            // for more details on spec.
+            // Compressed-Flag -> 0 / 1 # encoded as 1 byte unsigned integer.
+            buf.put_u8(0);
+            // Message-Length -> {length of Message} # encoded as 4 byte unsigned integer (big endian).
+            buf.put_u32(len as u32);
+            // Message -> *{binary octet}.
+        }
+
+        Ok(buf.freeze())
+    }
+
+    /// Dispatch a `ReflectionService::server_reflection_info` request
+    async fn dispatch_request(
+        service: &ReflectionService,
+        req: &ServerReflectionRequest,
+    ) -> Result<ServerReflectionResponse, Status> {
+        let req_as_bytes = message_to_stream(req.clone()).unwrap();
+
+        // create the codec
+        let mut codec: ProstCodec<ServerReflectionRequest, ServerReflectionRequest> =
+            ProstCodec::default();
+        // wrap the codec in a `Streaming` obj
+        let streaming =
+            Streaming::new_request(codec.decoder(), tonic::transport::Body::from(req_as_bytes))
+                .into_streaming_request();
+
+        // dispatch the request
+        let mut stream = service
+            .server_reflection_info(streaming)
+            .await
+            .expect("Failed to perform request")
+            .into_inner();
+
+        stream.next().await.expect("Stream is missing response")
+    }
+
+    /// Build the ReflectionService w/ the provided descriptor_sets
+    fn build_service(descriptor_sets: &[&[u8]]) -> ReflectionService {
+        descriptor_sets
+            .iter()
+            .fold(
+                Builder::configure().include_reflection_service(false),
+                |builder, ds| builder.register_encoded_file_descriptor_set(ds),
+            )
+            .build_service()
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn test_list_with_disabled_builtins() {
+        // test builtins
+        let service = build_service(&[]);
+
+        let request = ServerReflectionRequest {
+            message_request: Some(MessageRequest::ListServices(String::new())),
+            ..Default::default()
+        };
+
+        let resp = dispatch_request(&service, &request).await.unwrap();
+
+        let service_responses: Vec<ServiceResponse> = match resp.message_response.unwrap() {
+            MessageResponse::ListServicesResponse(ListServiceResponse { service }) => service,
+            other => panic!("Invalid response type {:?}", other),
+        };
+
+        assert_eq!(service_responses.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_with_reflection() {
+        let service = build_service(&[crate::proto::REFLECTION_DESCRIPTOR_SET]);
+
+        let resp = dispatch_request(
+            &service,
+            &ServerReflectionRequest {
+                message_request: Some(MessageRequest::ListServices(Default::default())),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let service_responses: Vec<ServiceResponse> = match resp.message_response.unwrap() {
+            MessageResponse::ListServicesResponse(ListServiceResponse { service }) => service,
+            other => panic!("Unexpected message_response {:?}", other),
+        };
+
+        assert_eq!(service_responses.len(), 1);
+        assert_eq!(
+            service_responses[0].name.as_str(),
+            "grpc.reflection.v1alpha.ServerReflection"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_file_containing_symbol() {
+        let service = build_service(&[crate::proto::REFLECTION_DESCRIPTOR_SET]);
+
+        let symbol_name = "grpc.reflection.v1alpha.ListServiceResponse";
+        let resp = dispatch_request(
+            &service,
+            &ServerReflectionRequest {
+                message_request: Some(MessageRequest::FileContainingSymbol(
+                    symbol_name.to_string(),
+                )),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let protos = match resp.message_response.unwrap() {
+            MessageResponse::FileDescriptorResponse(FileDescriptorResponse {
+                file_descriptor_proto,
+            }) => file_descriptor_proto,
+            other => panic!("Unexpected message_response {:?}", other),
+        };
+
+        assert_eq!(protos.len(), 1);
+
+        let expected_proto = service.state.symbols.get(symbol_name).map(|fd| {
+            let mut encoded = Vec::new();
+            fd.encode(&mut encoded).unwrap();
+            encoded
+        });
+        assert_eq!(protos.iter().next(), expected_proto.as_ref())
+    }
+
+    #[tokio::test]
+    async fn test_file_by_filename() {
+        let service = build_service(&[crate::proto::REFLECTION_DESCRIPTOR_SET]);
+
+        let filename = "reflection.proto";
+
+        let resp = dispatch_request(
+            &service,
+            &ServerReflectionRequest {
+                message_request: Some(MessageRequest::FileByFilename(filename.to_string())),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+
+        let protos = match resp.message_response.unwrap() {
+            MessageResponse::FileDescriptorResponse(FileDescriptorResponse {
+                file_descriptor_proto,
+            }) => file_descriptor_proto,
+            other => panic!("Unexpected message_response {:?}", other),
+        };
+
+        assert_eq!(protos.len(), 1);
+
+        let expected_proto = service.state.files.get(filename).map(|fd| {
+            let mut encoded = Vec::new();
+            fd.encode(&mut encoded).unwrap();
+            encoded
+        });
+
+        assert_eq!(protos.iter().next(), expected_proto.as_ref())
+    }
+
+    #[tokio::test]
+    async fn test_unimplemented() {
+        let service = build_service(&[]);
+        let reqs = [
+            ServerReflectionRequest {
+                message_request: Some(MessageRequest::FileContainingExtension(Default::default())),
+                ..Default::default()
+            },
+            ServerReflectionRequest {
+                message_request: Some(
+                    MessageRequest::AllExtensionNumbersOfType(Default::default()),
+                ),
+                ..Default::default()
+            },
+        ];
+
+        for req in &reqs {
+            match dispatch_request(&service, req).await {
+                Ok(_) => panic!("Should be error"),
+                Err(status) if status.code() == tonic::Code::Unimplemented => {}
+                Err(other) => panic!(
+                    "Expected status `Unimplemented`. Received --  `{:?}`",
+                    other
+                ),
+            }
+        }
     }
 }

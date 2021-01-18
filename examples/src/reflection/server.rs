@@ -28,7 +28,7 @@ impl proto::greeter_server::Greeter for MyGreeter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let reflection_service = tonic_reflection::server::Builder::configure()
+    let reflection_server = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::HELLO_WORLD_DESCRIPTOR_SET)
         .build()
         .unwrap();
@@ -37,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let greeter = MyGreeter::default();
 
     Server::builder()
-        .add_service(reflection_service)
+        .add_service(reflection_server)
         .add_service(proto::greeter_server::GreeterServer::new(greeter))
         .serve(addr)
         .await?;
