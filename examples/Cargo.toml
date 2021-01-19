@@ -167,7 +167,7 @@ tracing-futures = "0.2"
 prost-types = "0.7"
 # Hyper example
 hyper = "0.14"
-warp = { git = "https://github.com/seanmonstar/warp",  default-features = false }
+warp = "0.3"
 http = "0.2"
 http-body = "0.4"
 pin-project = "1.0"
