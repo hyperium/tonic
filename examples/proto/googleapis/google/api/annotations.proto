@@ -16,7 +16,7 @@ syntax = "proto3";
 
 package google.api;
 
-import "http.proto";
+import "google/api/http.proto";
 import "google/protobuf/descriptor.proto";
 
 option go_package = "google.golang.org/genproto/googleapis/api/annotations;annotations";
