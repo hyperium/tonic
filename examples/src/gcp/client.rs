@@ -1,11 +1,8 @@
-pub mod google;
-use google::pubsub::v1::{publisher_client::PublisherClient, ListTopicsRequest};
-// If proto files are compiled with default output locations, use the mod reference blow instead above one
-// pub mod api {
-//     tonic::include_proto!("google.pubsub.v1");
-// }
-// use api::{publisher_client::PublisherClient, ListTopicsRequest};
+pub mod api {
+    tonic::include_proto!("google.pubsub.v1");
+}
 
+use api::{publisher_client::PublisherClient, ListTopicsRequest};
 use tonic::{
     metadata::MetadataValue,
     transport::{Certificate, Channel, ClientTlsConfig},

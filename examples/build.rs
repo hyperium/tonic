@@ -9,7 +9,6 @@ fn main() {
 
     tonic_build::configure()
         .build_server(false)
-        .out_dir("src/gcp/google") // comment this line to generate code to the default location
         .compile(
             &["proto/googleapis/google/pubsub/v1/pubsub.proto"],
             &["proto/googleapis"],

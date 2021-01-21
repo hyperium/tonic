@@ -73,7 +73,7 @@ Then we can generate Rust code via this setup in our `build.rs`
 fn main() {
     tonic_build::configure()
         .build_server(false)
-        //.out_dir("src/gcp/google")  // you can change the generated code's location
+        //.out_dir("src/google")  // you can change the generated code's location
         .compile(
             &["proto/googleapis/google/pubsub/v1/pubsub.proto"],
             &["proto/googleapis"], // specify the root location to search proto dependencies
@@ -87,5 +87,18 @@ pub mod api {
     tonic::include_proto!("google.pubsub.v1");
 }
 use api::{publisher_client::PublisherClient, ListTopicsRequest};
+```
+
+Or if you want to save the generated code in your own code base,
+you can uncomment the line `.out_dir(...)` above, and in your lib file
+config a mod like this:
+```rust
+pub mod google {
+    #[path = ""]
+    pub mod pubsub {
+        #[path = "google.pubsub.v1.rs"]
+        pub mod v1;
+    }
+}
 ```
 See [the example here](https://github.com/hyperium/tonic/tree/master/examples/src/gcp)
