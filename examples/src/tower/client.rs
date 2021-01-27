@@ -1,6 +1,6 @@
 use futures::TryFutureExt;
-use hello_world::HelloRequest;
 use hello_world::greeter_client::GreeterClient;
+use hello_world::HelloRequest;
 use service::AuthSvc;
 
 use tonic::transport::Channel;
