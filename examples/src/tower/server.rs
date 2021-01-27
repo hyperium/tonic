@@ -1,3 +1,4 @@
+use futures::TryFutureExt;
 use hyper::{Body, Request as HyperRequest, Response as HyperResponse};
 use std::task::{Context, Poll};
 use tonic::{
@@ -71,13 +72,9 @@ where
     }
 
     fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
-        let mut svc = self.inner.clone();
+        // Do async work here....
 
-        Box::pin(async move {
-            // Do async work here....
-
-            svc.call(req).await
-        })
+        Box::pin(self.inner.call(req).err_into::<Self::Error>())
     }
 }
 

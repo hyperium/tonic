@@ -1,5 +1,6 @@
-use hello_world::greeter_client::GreeterClient;
+use futures::TryFutureExt;
 use hello_world::HelloRequest;
+use hello_world::greeter_client::GreeterClient;
 use service::AuthSvc;
 
 use tonic::transport::Channel;
@@ -57,13 +58,9 @@ mod service {
         }
 
         fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
-            let mut channel = self.inner.clone();
+            // Do extra async work here...
 
-            Box::pin(async move {
-                // Do extra async work here...
-
-                channel.call(req).await.map_err(Into::into)
-            })
+            Box::pin(self.inner.call(req).err_into::<Self::Error>())
         }
     }
 }
