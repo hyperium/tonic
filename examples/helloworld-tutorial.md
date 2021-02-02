@@ -115,7 +115,7 @@ path = "src/client.rs"
 [dependencies]
 tonic = "0.4"
 prost = "0.7"
-tokio = { version = "0.2", features = ["macros"] }
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
 tonic-build = "0.4"
