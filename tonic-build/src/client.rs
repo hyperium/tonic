@@ -7,10 +7,10 @@ use quote::{format_ident, quote};
 ///
 /// This takes some `Service` and will generate a `TokenStream` that contains
 /// a public module with the generated client.
-pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
+pub fn generate<T: Service>(service: &T, emit_package: bool, proto_path: &str) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
     let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name()));
-    let methods = generate_methods(service, proto_path);
+    let methods = generate_methods(service, emit_package, proto_path);
 
     let connect = generate_connect(&service_ident);
     let service_doc = generate_doc_comments(service.comment());
@@ -87,18 +87,15 @@ fn generate_connect(_service_ident: &syn::Ident) -> TokenStream {
     TokenStream::new()
 }
 
-fn generate_methods<T: Service>(service: &T, proto_path: &str) -> TokenStream {
+fn generate_methods<T: Service>(service: &T, emit_package: bool, proto_path: &str) -> TokenStream {
     let mut stream = TokenStream::new();
+    let package = if emit_package { service.package() } else { "" };
 
     for method in service.methods() {
         let path = format!(
             "/{}{}{}/{}",
-            service.package(),
-            if service.package().is_empty() {
-                ""
-            } else {
-                "."
-            },
+            package,
+            if package.is_empty() { "" } else { "." },
             service.identifier(),
             method.identifier()
         );

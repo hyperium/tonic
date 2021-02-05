@@ -8,7 +8,7 @@ use syn::{Ident, Lit, LitStr};
 ///
 /// This takes some `Service` and will generate a `TokenStream` that contains
 /// a public module containing the server service and handler trait.
-pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
+pub fn generate<T: Service>(service: &T, emit_package: bool, proto_path: &str) -> TokenStream {
     let methods = generate_methods(service, proto_path);
 
     let server_service = quote::format_ident!("{}Server", service.name());
@@ -16,16 +16,12 @@ pub fn generate<T: Service>(service: &T, proto_path: &str) -> TokenStream {
     let server_mod = quote::format_ident!("{}_server", naive_snake_case(&service.name()));
     let generated_trait = generate_trait(service, proto_path, server_trait.clone());
     let service_doc = generate_doc_comments(service.comment());
-
+    let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
     let path = format!(
         "{}{}{}",
-        service.package(),
-        if service.package().is_empty() {
-            ""
-        } else {
-            "."
-        },
+        package,
+        if package.is_empty() { "" } else { "." },
         service.identifier()
     );
     let transport = generate_transport(&server_service, &server_trait, &path);
