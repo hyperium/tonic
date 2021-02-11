@@ -13,6 +13,7 @@ use http::{
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
+    str::FromStr,
     time::Duration,
 };
 use tower::make::MakeConnection;
@@ -349,5 +350,13 @@ impl TryFrom<&'static str> for Endpoint {
 impl fmt::Debug for Endpoint {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Endpoint").finish()
+    }
+}
+
+impl FromStr for Endpoint {
+    type Err = InvalidUri;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s.to_string())
     }
 }
