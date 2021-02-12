@@ -19,6 +19,7 @@ pub fn configure() -> Builder {
         proto_path: "super".to_string(),
         #[cfg(feature = "rustfmt")]
         format: true,
+        emit_package: true,
     }
 }
 
@@ -136,12 +137,20 @@ impl ServiceGenerator {
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
         if self.builder.build_server {
-            let server = server::generate(&service, &self.builder.proto_path);
+            let server = server::generate(
+                &service,
+                self.builder.emit_package,
+                &self.builder.proto_path,
+            );
             self.servers.extend(server);
         }
 
         if self.builder.build_client {
-            let client = client::generate(&service, &self.builder.proto_path);
+            let client = client::generate(
+                &service,
+                self.builder.emit_package,
+                &self.builder.proto_path,
+            );
             self.clients.extend(client);
         }
     }
@@ -184,6 +193,7 @@ pub struct Builder {
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
     pub(crate) proto_path: String,
+    pub(crate) emit_package: bool,
 
     out_dir: Option<PathBuf>,
     #[cfg(feature = "rustfmt")]
@@ -255,6 +265,14 @@ impl Builder {
     /// This defaults to `super` since tonic will generate code in a module.
     pub fn proto_path(mut self, proto_path: impl AsRef<str>) -> Self {
         self.proto_path = proto_path.as_ref().to_string();
+        self
+    }
+
+    /// Emits GRPC endpoints with no attached package. Effectively ignores protofile package declaration from grpc context.
+    ///
+    /// This effectively sets prost's exported package to an empty string.
+    pub fn disable_package_emission(mut self) -> Self {
+        self.emit_package = false;
         self
     }
 
