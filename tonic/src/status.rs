@@ -746,6 +746,13 @@ impl From<i32> for Code {
     }
 }
 
+impl From<Code> for i32 {
+    #[inline]
+    fn from(code: Code) -> i32 {
+        code as i32
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
