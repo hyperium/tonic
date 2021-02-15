@@ -1,3 +1,12 @@
+# [0.4.1](https://github.com/hyperium/tonic/compare/v0.4.0...v0.4.1) (2021-02-15)
+
+### Bug Fixes
+
+* Depend on at least tower 0.4.4 ([#554](https://github.com/hyperium/tonic/pull/554)) ([ca3b9a1](https://github.com/hyperium/tonic/commit/ca3b9a1df12f32a425926a6cd7d04e1692f8f503)), closes ([#553](https://github.com/hyperium/tonic/issues/553)) and ([#552](https://github.com/hyperium/tonic/issues/552)) 
+### Features
+
+* **build** Add disable_package_emission option to tonic-build ([#556](https://github.com/hyperium/tonic/pull/556)) ([4f5e160](https://github.com/hyperium/tonic/commit/4f5e160679bf1ac37c7d3094a65690ce59986fc3))
+
 # [0.4.0](https://github.com/hyperium/tonic/compare/v0.3.1...v0.4.0) (2021-01-15)
 
 This version brings Tonic inline with Tokio 1.0 and Prost 0.7! This release also includes new versions of `tonic-types`, `tonic-build`, and `tonic-health`.
