@@ -131,6 +131,10 @@ name = "health-server"
 path = "src/health/server.rs"
 
 [[bin]]
+name = "reflection-server"
+path = "src/reflection/server.rs"
+
+[[bin]]
 name = "autoreload-server"
 path = "src/autoreload/server.rs"
 
@@ -173,6 +177,8 @@ http-body = "0.4"
 pin-project = "1.0"
 # Health example
 tonic-health = { path = "../tonic-health" }
+# Reflection example
+tonic-reflection = { path = "../tonic-reflection" }
 listenfd = "0.3"
 
 [build-dependencies]
