@@ -8,7 +8,7 @@ use quote::{format_ident, quote};
 /// This takes some `Service` and will generate a `TokenStream` that contains
 /// a public module with the generated client.
 pub fn generate<T: Service>(
-    service: &T,A
+    service: &T,
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
