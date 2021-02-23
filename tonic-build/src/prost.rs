@@ -18,6 +18,7 @@ pub fn configure() -> Builder {
         field_attributes: Vec::new(),
         type_attributes: Vec::new(),
         proto_path: "super".to_string(),
+        compile_well_known_types: false,
         #[cfg(feature = "rustfmt")]
         format: true,
         emit_package: true,
@@ -94,8 +95,13 @@ impl crate::Method for Method {
         &self.comments.leading[..]
     }
 
-    fn request_response_name(&self, proto_path: &str) -> (TokenStream, TokenStream) {
-        let request = if self.input_proto_type.starts_with(".google.protobuf")
+    fn request_response_name(
+        &self,
+        proto_path: &str,
+        compile_well_known_types: bool,
+    ) -> (TokenStream, TokenStream) {
+        let request = if (self.input_proto_type.starts_with(".google.protobuf")
+            && !compile_well_known_types)
             || self.input_type.starts_with("::")
         {
             self.input_type.parse::<TokenStream>().unwrap()
@@ -105,7 +111,8 @@ impl crate::Method for Method {
                 .to_token_stream()
         };
 
-        let response = if self.output_proto_type.starts_with(".google.protobuf")
+        let response = if (self.output_proto_type.starts_with(".google.protobuf")
+            && !compile_well_known_types)
             || self.output_type.starts_with("::")
         {
             self.output_type.parse::<TokenStream>().unwrap()
@@ -142,6 +149,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 &service,
                 self.builder.emit_package,
                 &self.builder.proto_path,
+                self.builder.compile_well_known_types,
             );
             self.servers.extend(server);
         }
@@ -151,6 +159,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 &service,
                 self.builder.emit_package,
                 &self.builder.proto_path,
+                self.builder.compile_well_known_types,
             );
             self.clients.extend(client);
         }
@@ -196,6 +205,7 @@ pub struct Builder {
     pub(crate) type_attributes: Vec<(String, String)>,
     pub(crate) proto_path: String,
     pub(crate) emit_package: bool,
+    pub(crate) compile_well_known_types: bool,
 
     out_dir: Option<PathBuf>,
     #[cfg(feature = "rustfmt")]
@@ -285,6 +295,15 @@ impl Builder {
         self
     }
 
+    /// Enable or disable directing Prost to compile well-known protobuf types instead
+    /// of using the already-compiled versions available in the `prost-types` crate.
+    ///
+    /// This defaults to `false`.
+    pub fn compile_well_known_types(mut self, compile_well_known_types: bool) -> Self {
+        self.compile_well_known_types = compile_well_known_types;
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile<P>(self, protos: &[P], includes: &[P]) -> io::Result<()>
     where
@@ -325,6 +344,9 @@ impl Builder {
         }
         for (prost_path, attr) in self.type_attributes.iter() {
             config.type_attribute(prost_path, attr);
+        }
+        if self.compile_well_known_types {
+            config.compile_well_known_types();
         }
         config.service_generator(Box::new(ServiceGenerator::new(self)));
 
