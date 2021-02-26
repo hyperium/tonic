@@ -1,9 +1,6 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
-use futures::TryFutureExt;
 use std::path::Path;
-#[cfg(unix)]
-use tokio::net::UnixListener;
 use tonic::{transport::Server, Request, Response, Status};
 
 pub mod hello_world {
@@ -42,19 +39,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let greeter = MyGreeter::default();
 
-    let incoming = {
-        let uds = UnixListener::bind(path)?;
-
-        async_stream::stream! {
-            while let item = uds.accept().map_ok(|(st, _)| unix::UnixStream(st)).await {
-                yield item;
-            }
-        }
-    };
-
     Server::builder()
         .add_service(GreeterServer::new(greeter))
-        .serve_with_incoming(incoming)
+        .serve_with_incoming(unix::UnixIncoming::bind(path)?)
         .await?;
 
     Ok(())
@@ -69,6 +56,33 @@ mod unix {
 
     use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
     use tonic::transport::server::Connected;
+
+    pub struct UnixIncoming {
+        inner: tokio::net::UnixListener,
+    }
+
+    impl UnixIncoming {
+        pub fn bind<P>(path: P) -> std::io::Result<Self>
+        where
+            P: AsRef<std::path::Path>,
+        {
+            Ok(Self {
+                inner: tokio::net::UnixListener::bind(path)?,
+            })
+        }
+    }
+
+    impl futures::Stream for UnixIncoming {
+        type Item = Result<UnixStream, std::io::Error>;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+            let result = futures::ready!(self
+                .inner
+                .poll_accept(cx)
+                .map(|result| result.map(|(sock, _addr)| UnixStream(sock))));
+            Poll::Ready(Some(result))
+        }
+    }
 
     #[derive(Debug)]
     pub struct UnixStream(pub tokio::net::UnixStream);
