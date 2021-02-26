@@ -158,6 +158,14 @@ pub trait Method {
 #[cfg(feature = "rustfmt")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rustfmt")))]
 pub fn fmt(out_dir: &str) {
+    // Since fmt is public, preserve the API of fmt by dispatching to a helper function that is
+    // called within the crate.
+    format_with("rustfmt", &out_dir);
+}
+
+#[cfg(feature = "rustfmt")]
+#[cfg_attr(docsrs, doc(cfg(feature = "rustfmt")))]
+fn format_with(rustfmt_path: impl AsRef<std::ffi::OsStr>, out_dir: &str) {
     let dir = std::fs::read_dir(out_dir).unwrap();
 
     for entry in dir {
@@ -165,7 +173,7 @@ pub fn fmt(out_dir: &str) {
         if !file.ends_with(".rs") {
             continue;
         }
-        let result = Command::new("rustfmt")
+        let result = Command::new(rustfmt_path.as_ref())
             .arg("--emit")
             .arg("files")
             .arg("--edition")

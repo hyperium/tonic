@@ -21,6 +21,8 @@ pub fn configure() -> Builder {
         compile_well_known_types: false,
         #[cfg(feature = "rustfmt")]
         format: true,
+        #[cfg(feature = "rustfmt")]
+        rustfmt_path: None,
         emit_package: true,
     }
 }
@@ -210,6 +212,8 @@ pub struct Builder {
     out_dir: Option<PathBuf>,
     #[cfg(feature = "rustfmt")]
     format: bool,
+    #[cfg(feature = "rustfmt")]
+    rustfmt_path: Option<PathBuf>,
 }
 
 impl Builder {
@@ -236,6 +240,13 @@ impl Builder {
     #[cfg(feature = "rustfmt")]
     pub fn format(mut self, run: bool) -> Self {
         self.format = run;
+        self
+    }
+
+    /// The path that should be used to find rustfmt, if format is enabled.
+    #[cfg(feature = "rustfmt")]
+    pub fn format_with(mut self, path: impl AsRef<Path>) -> Self {
+        self.rustfmt_path = Some(path.as_ref().to_path_buf());
         self
     }
 
@@ -331,6 +342,11 @@ impl Builder {
 
         #[cfg(feature = "rustfmt")]
         let format = self.format;
+        #[cfg(feature = "rustfmt")]
+        let rustfmt_path = self
+            .rustfmt_path
+            .clone()
+            .unwrap_or_else(|| "rustfmt".into());
 
         config.out_dir(out_dir.clone());
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
@@ -355,7 +371,10 @@ impl Builder {
         #[cfg(feature = "rustfmt")]
         {
             if format {
-                super::fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+                super::format_with(
+                    rustfmt_path,
+                    out_dir.to_str().expect("Expected utf8 out_dir"),
+                );
             }
         }
 
