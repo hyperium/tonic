@@ -50,6 +50,8 @@ A good way to use Google API is probably using git submodules.
 So suppose in our `proto` folder we do:
 ```
 git submodule add https://github.com/googleapis/googleapis
+
+git submodule update --remote
 ```
 
 And a bunch of Google proto files in structure will be like this:
