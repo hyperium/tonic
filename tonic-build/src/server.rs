@@ -338,11 +338,8 @@ fn generate_unary<T: Method>(
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
-    #[cfg(feature = "transport")]
     let named_method_impl =
         generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
-    #[cfg(not(feature = "transport"))]
-    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -402,11 +399,8 @@ fn generate_server_streaming<T: Method>(
 
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
 
-    #[cfg(feature = "transport")]
     let named_method_impl =
         generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
-    #[cfg(not(feature = "transport"))]
-    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -465,11 +459,8 @@ fn generate_client_streaming<T: Method>(
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
 
-    #[cfg(feature = "transport")]
     let named_method_impl =
         generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
-    #[cfg(not(feature = "transport"))]
-    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -531,11 +522,8 @@ fn generate_streaming<T: Method>(
 
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
 
-    #[cfg(feature = "transport")]
     let named_method_impl =
         generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
-    #[cfg(not(feature = "transport"))]
-    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -581,6 +569,7 @@ fn generate_streaming<T: Method>(
     }
 }
 
+#[cfg(feature = "transport")]
 fn generate_named_method_impl(
     server_service: &Ident,
     server_trait: &Ident,
@@ -593,4 +582,14 @@ fn generate_named_method_impl(
             const METHOD_NAME: &'static str = #method_name;
         }
     }
+}
+
+#[cfg(not(feature = "transport"))]
+fn generate_named_method_impl(
+    _server_service: &Ident,
+    _server_trait: &Ident,
+    _service_path: &str,
+    _method_name: &str,
+) -> TokenStream {
+    TokenStream::new()
 }
