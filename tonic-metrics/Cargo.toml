@@ -1,0 +1,21 @@
+[package]
+name = "tonic-metrics"
+version = "0.0.1"
+authors = [
+    "James Nugent <james@jen20.com>",
+    "Samani G. Gikandi <samani@gojulas.com>"
+]
+edition = "2018"
+license = "MIT"
+repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/hyperium/tonic"
+description = """
+Metrics module of `tonic` gRPC implementation.
+"""
+readme = "README.md"
+categories = ["network-programming", "asynchronous"]
+keywords = ["rpc", "grpc", "async", "reflection"]
+
+[dependencies]
+metrics = "0.14"
+tonic = { version = "0.4", path = "../tonic" }

@@ -202,9 +202,9 @@ impl<T> Grpc<T> {
 
         let response = response.map(|body| {
             if expect_additional_trailers {
-                Streaming::new_response(codec.decoder(), body, status_code)
+                Streaming::new_response(codec.decoder(), body, status_code, None)
             } else {
-                Streaming::new_empty(codec.decoder(), body)
+                Streaming::new_empty(codec.decoder(), body, None)
             }
         });
 

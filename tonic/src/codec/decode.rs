@@ -1,10 +1,12 @@
 use super::{DecodeBuf, Decoder};
+use crate::reporter::ReporterCallback;
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
 use http_body::Body;
+use std::sync::Arc;
 use std::{
     fmt,
     pin::Pin,
@@ -25,6 +27,7 @@ pub struct Streaming<T> {
     direction: Direction,
     buf: BytesMut,
     trailers: Option<MetadataMap>,
+    reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
 }
 
 impl<T> Unpin for Streaming<T> {}
@@ -43,35 +46,58 @@ enum Direction {
 }
 
 impl<T> Streaming<T> {
-    pub(crate) fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
+    pub(crate) fn new_response<B, D>(
+        decoder: D,
+        body: B,
+        status_code: StatusCode,
+        reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Response(status_code))
+        Self::new(
+            decoder,
+            body,
+            Direction::Response(status_code),
+            reporter_callback,
+        )
     }
 
-    pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
+    pub(crate) fn new_empty<B, D>(
+        decoder: D,
+        body: B,
+        reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::EmptyResponse)
+        Self::new(decoder, body, Direction::EmptyResponse, reporter_callback)
     }
 
     #[doc(hidden)]
-    pub fn new_request<B, D>(decoder: D, body: B) -> Self
+    pub fn new_request<B, D>(
+        decoder: D,
+        body: B,
+        reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Request)
+        Self::new(decoder, body, Direction::Request, reporter_callback)
     }
 
-    fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
+    fn new<B, D>(
+        decoder: D,
+        body: B,
+        direction: Direction,
+        reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
@@ -84,6 +110,7 @@ impl<T> Streaming<T> {
             direction,
             buf: BytesMut::with_capacity(BUFFER_SIZE),
             trailers: None,
+            reporter_callback,
         }
     }
 }
@@ -220,6 +247,14 @@ impl<T> Stream for Streaming<T> {
             // the consumer of this stream will only poll for the first message.
             // This means we skip the poll_trailers step.
             if let Some(item) = self.decode_chunk()? {
+                if let Some(ref r) = self.reporter_callback {
+                    match &self.direction {
+                        Direction::Request => r.stream_message_received(),
+                        Direction::Response(_) => r.stream_message_sent(),
+                        Direction::EmptyResponse => (),
+                    }
+                }
+
                 return Poll::Ready(Some(Ok(item)));
             }
 

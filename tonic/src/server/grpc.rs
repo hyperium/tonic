@@ -2,13 +2,17 @@ use crate::{
     body::BoxBody,
     codec::{encode_server, Codec, Streaming},
     interceptor::Interceptor,
-    server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
+    reporter::{Reporter, ReporterCallback, RpcType},
+    server::{
+        ClientStreamingService, NamedMethod, ServerStreamingService, StreamingService, UnaryService,
+    },
     Code, Request, Status,
 };
 use futures_core::TryStream;
 use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
 use std::fmt;
+use std::sync::Arc;
 
 // A try! type macro for intercepting requests
 macro_rules! t {
@@ -32,6 +36,7 @@ macro_rules! t {
 pub struct Grpc<T> {
     codec: T,
     interceptor: Option<Interceptor>,
+    reporter: Option<Reporter>,
 }
 
 impl<T> Grpc<T>
@@ -44,6 +49,7 @@ where
         Self {
             codec,
             interceptor: None,
+            reporter: None,
         }
     }
 
@@ -53,6 +59,31 @@ where
         Self {
             codec,
             interceptor: Some(interceptor.into()),
+            reporter: None,
+        }
+    }
+
+    /// Creates a new gRPC server with the provided [`Codec`] and will apply the provided
+    /// reporter to all requests.
+    pub fn with_reporter(codec: T, reporter: impl Into<Reporter>) -> Self {
+        Self {
+            codec,
+            interceptor: None,
+            reporter: Some(reporter.into()),
+        }
+    }
+
+    /// Creates a new gRPC server with the provided [`Codec`] and will apply the provided
+    /// interceptor on each inbound request and reporter to all requests.
+    pub fn with_interceptor_reporter(
+        codec: T,
+        interceptor: impl Into<Interceptor>,
+        reporter: impl Into<Reporter>,
+    ) -> Self {
+        Self {
+            codec,
+            interceptor: Some(interceptor.into()),
+            reporter: Some(reporter.into()),
         }
     }
 
@@ -63,17 +94,23 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: UnaryService<T::Decode, Response = T::Encode>,
+        S: UnaryService<T::Decode, Response = T::Encode> + NamedMethod,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let request = match self.map_request_unary(req).await {
+        let reporter_callback = self.report_rpc_start::<S>(RpcType::Unary);
+
+        let request = match self
+            .map_request_unary(req, reporter_callback.as_ref().cloned())
+            .await
+        {
             Ok(r) => r,
             Err(status) => {
                 return self
-                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(Err(
-                        status,
-                    ));
+                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
+                        Err(status),
+                        reporter_callback,
+                    );
             }
         };
 
@@ -84,7 +121,7 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response)
+        self.map_response(response, reporter_callback)
     }
 
     /// Handle a server side streaming request.
@@ -94,15 +131,20 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: ServerStreamingService<T::Decode, Response = T::Encode>,
+        S: ServerStreamingService<T::Decode, Response = T::Encode> + NamedMethod,
         S::ResponseStream: Send + Sync + 'static,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let request = match self.map_request_unary(req).await {
+        let reporter_callback = self.report_rpc_start::<S>(RpcType::ServerStreaming);
+
+        let request = match self
+            .map_request_unary(req, reporter_callback.as_ref().cloned())
+            .await
+        {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status));
+                return self.map_response::<S::ResponseStream>(Err(status), reporter_callback);
             }
         };
 
@@ -110,7 +152,7 @@ where
 
         let response = service.call(request).await;
 
-        self.map_response(response)
+        self.map_response(response, reporter_callback)
     }
 
     /// Handle a client side streaming gRPC request.
@@ -120,17 +162,18 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: ClientStreamingService<T::Decode, Response = T::Encode>,
+        S: ClientStreamingService<T::Decode, Response = T::Encode> + NamedMethod,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
-        let request = self.map_request_streaming(req);
+        let reporter_callback = self.report_rpc_start::<S>(RpcType::ClientStreaming);
+        let request = self.map_request_streaming(req, reporter_callback.as_ref().cloned());
         let request = t!(self.intercept_request(request));
         let response = service
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-        self.map_response(response)
+        self.map_response(response, reporter_callback)
     }
 
     /// Handle a bi-directional streaming gRPC request.
@@ -140,27 +183,29 @@ where
         req: http::Request<B>,
     ) -> http::Response<BoxBody>
     where
-        S: StreamingService<T::Decode, Response = T::Encode> + Send,
+        S: StreamingService<T::Decode, Response = T::Encode> + NamedMethod + Send,
         S::ResponseStream: Send + Sync + 'static,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let request = self.map_request_streaming(req);
+        let reporter_callback = self.report_rpc_start::<S>(RpcType::Streaming);
+        let request = self.map_request_streaming(req, reporter_callback.as_ref().cloned());
         let request = t!(self.intercept_request(request));
         let response = service.call(request).await;
-        self.map_response(response)
+        self.map_response(response, reporter_callback)
     }
 
     async fn map_request_unary<B>(
         &mut self,
         request: http::Request<B>,
+        reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
     ) -> Result<Request<T::Decode>, Status>
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
         let (parts, body) = request.into_parts();
-        let stream = Streaming::new_request(self.codec.decoder(), body);
+        let stream = Streaming::new_request(self.codec.decoder(), body, reporter_callback);
 
         futures_util::pin_mut!(stream);
 
@@ -181,23 +226,30 @@ where
     fn map_request_streaming<B>(
         &mut self,
         request: http::Request<B>,
+        reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
     ) -> Request<Streaming<T::Decode>>
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        Request::from_http(request.map(|body| Streaming::new_request(self.codec.decoder(), body)))
+        Request::from_http(
+            request
+                .map(|body| Streaming::new_request(self.codec.decoder(), body, reporter_callback)),
+        )
     }
 
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
+        reporter_callback: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
     {
         match response {
             Ok(r) => {
+                self.report_rpc_complete(reporter_callback.clone(), &Status::ok(""));
+
                 let (mut parts, body) = r.into_http().into_parts();
 
                 // Set the content type
@@ -206,11 +258,20 @@ where
                     http::header::HeaderValue::from_static("application/grpc"),
                 );
 
-                let body = encode_server(self.codec.encoder(), body.into_stream());
+                let callback = reporter_callback.clone();
+                let body = body.into_stream().inspect_ok(move |_| {
+                    if let Some(ref r) = callback {
+                        r.stream_message_sent();
+                    }
+                });
+                let body = encode_server(self.codec.encoder(), body);
 
                 http::Response::from_parts(parts, BoxBody::new(body))
             }
-            Err(status) => status.to_http(),
+            Err(status) => {
+                self.report_rpc_complete(reporter_callback, &status);
+                status.to_http()
+            }
         }
     }
 
@@ -222,6 +283,31 @@ where
             }
         } else {
             Ok(req)
+        }
+    }
+
+    fn report_rpc_start<M: NamedMethod>(
+        &self,
+        rpc_type: RpcType,
+    ) -> Option<Arc<dyn ReporterCallback + Send + Sync + 'static>> {
+        self.reporter.as_ref().map(|r| {
+            let callback = r.report_rpc_start(
+                <M as NamedMethod>::SERVICE_NAME,
+                <M as NamedMethod>::METHOD_NAME,
+                rpc_type,
+            );
+            let callback: Arc<dyn ReporterCallback + Send + Sync + 'static> = Arc::from(callback);
+            callback
+        })
+    }
+
+    fn report_rpc_complete(
+        &self,
+        reporter_guard: Option<Arc<dyn ReporterCallback + Send + Sync + 'static>>,
+        status: &Status,
+    ) {
+        if let Some(r) = reporter_guard {
+            r.rpc_complete(status.clone());
         }
     }
 }

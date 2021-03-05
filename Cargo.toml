@@ -3,6 +3,7 @@ members = [
     "tonic",
     "tonic-build",
     "tonic-health",
+    "tonic-metrics",
     "tonic-types",
     "tonic-reflection",
 

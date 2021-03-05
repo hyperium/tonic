@@ -14,7 +14,16 @@ pub fn generate<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
 ) -> TokenStream {
-    let methods = generate_methods(service, proto_path, compile_well_known_types);
+    let package = if emit_package { service.package() } else { "" };
+
+    let service_path = format!(
+        "{}{}{}",
+        package,
+        if package.is_empty() { "" } else { "." },
+        service.identifier()
+    );
+
+    let methods = generate_methods(service, proto_path, compile_well_known_types, &service_path);
 
     let server_service = quote::format_ident!("{}Server", service.name());
     let server_trait = quote::format_ident!("{}", service.name());
@@ -26,15 +35,9 @@ pub fn generate<T: Service>(
         server_trait.clone(),
     );
     let service_doc = generate_doc_comments(service.comment());
-    let package = if emit_package { service.package() } else { "" };
-    // Transport based implementations
-    let path = format!(
-        "{}{}{}",
-        package,
-        if package.is_empty() { "" } else { "." },
-        service.identifier()
-    );
-    let transport = generate_transport(&server_service, &server_trait, &path);
+
+    // Transport-based implementations
+    let transport = generate_transport(&server_service, &server_trait, &service_path);
 
     quote! {
         /// Generated server implementations.
@@ -50,18 +53,30 @@ pub fn generate<T: Service>(
                 inner: _Inner<T>,
             }
 
-            struct _Inner<T>(Arc<T>, Option<tonic::Interceptor>);
+            struct _Inner<T>(Arc<T>, Option<tonic::Interceptor>, Option<tonic::reporter::Reporter>);
 
             impl<T: #server_trait> #server_service<T> {
                 pub fn new(inner: T) -> Self {
                     let inner = Arc::new(inner);
-                    let inner = _Inner(inner, None);
+                    let inner = _Inner(inner, None, None);
                     Self { inner }
                 }
 
                 pub fn with_interceptor(inner: T, interceptor: impl Into<tonic::Interceptor>) -> Self {
                     let inner = Arc::new(inner);
-                    let inner = _Inner(inner, Some(interceptor.into()));
+                    let inner = _Inner(inner, Some(interceptor.into()), None);
+                    Self { inner }
+                }
+
+                pub fn with_reporter(inner: T, reporter: impl Into<tonic::reporter::Reporter>) -> Self {
+                    let inner = Arc::new(inner);
+                    let inner = _Inner(inner, None, Some(reporter.into()));
+                    Self { inner }
+                }
+
+                pub fn with_interceptor_reporter(inner: T, interceptor: impl Into<tonic::Interceptor>, reporter: impl Into<tonic::reporter::Reporter>) -> Self {
+                    let inner = Arc::new(inner);
+                    let inner = _Inner(inner, Some(interceptor.into()), Some(reporter.into()));
                     Self { inner }
                 }
             }
@@ -107,7 +122,7 @@ pub fn generate<T: Service>(
 
             impl<T: #server_trait> Clone for _Inner<T> {
                 fn clone(&self) -> Self {
-                    Self(self.0.clone(), self.1.clone())
+                    Self(self.0.clone(), self.1.clone(), self.2.clone())
                 }
             }
 
@@ -241,6 +256,7 @@ fn generate_methods<T: Service>(
     service: &T,
     proto_path: &str,
     compile_well_known_types: bool,
+    service_path: &str,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -267,6 +283,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident,
                 server_trait,
+                service_path,
             ),
 
             (false, true) => generate_server_streaming(
@@ -275,6 +292,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident.clone(),
                 server_trait,
+                service_path,
             ),
             (true, false) => generate_client_streaming(
                 method,
@@ -282,6 +300,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident.clone(),
                 server_trait,
+                service_path,
             ),
 
             (true, true) => generate_streaming(
@@ -290,6 +309,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident.clone(),
                 server_trait,
+                service_path,
             ),
         };
 
@@ -310,12 +330,19 @@ fn generate_unary<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    service_path: &str,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
+
+    #[cfg(feature = "transport")]
+    let named_method_impl =
+        generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
+    #[cfg(not(feature = "transport"))]
+    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -334,17 +361,21 @@ fn generate_unary<T: Method>(
             }
         }
 
+        #named_method_impl
+
         let inner = self.inner.clone();
         let fut = async move {
             let interceptor = inner.1.clone();
+            let reporter = inner.2.clone();
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
+            let mut grpc = match (interceptor, reporter) {
+                (Some(interceptor), Some(reporter)) => tonic::server::Grpc::with_interceptor_reporter(codec, interceptor, reporter),
+                (Some(interceptor), None) => tonic::server::Grpc::with_interceptor(codec, interceptor),
+                (None, Some(reporter)) => tonic::server::Grpc::with_reporter(codec, reporter),
+                _ => tonic::server::Grpc::new(codec),
             };
 
             let res = grpc.unary(method, req).await;
@@ -361,6 +392,7 @@ fn generate_server_streaming<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    service_path: &str,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
 
@@ -369,6 +401,12 @@ fn generate_server_streaming<T: Method>(
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
+
+    #[cfg(feature = "transport")]
+    let named_method_impl =
+        generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
+    #[cfg(not(feature = "transport"))]
+    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -389,17 +427,21 @@ fn generate_server_streaming<T: Method>(
             }
         }
 
+        #named_method_impl
+
         let inner = self.inner.clone();
         let fut = async move {
             let interceptor = inner.1;
+            let reporter = inner.2;
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
+            let mut grpc = match (interceptor, reporter) {
+                (Some(interceptor), Some(reporter)) => tonic::server::Grpc::with_interceptor_reporter(codec, interceptor, reporter),
+                (Some(interceptor), None) => tonic::server::Grpc::with_interceptor(codec, interceptor),
+                (None, Some(reporter)) => tonic::server::Grpc::with_reporter(codec, reporter),
+                _ => tonic::server::Grpc::new(codec),
             };
 
             let res = grpc.server_streaming(method, req).await;
@@ -416,11 +458,18 @@ fn generate_client_streaming<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    service_path: &str,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+
+    #[cfg(feature = "transport")]
+    let named_method_impl =
+        generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
+    #[cfg(not(feature = "transport"))]
+    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -441,17 +490,21 @@ fn generate_client_streaming<T: Method>(
             }
         }
 
+        #named_method_impl
+
         let inner = self.inner.clone();
         let fut = async move {
             let interceptor = inner.1;
+            let reporter = inner.2;
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
+            let mut grpc = match (interceptor, reporter) {
+                (Some(interceptor), Some(reporter)) => tonic::server::Grpc::with_interceptor_reporter(codec, interceptor, reporter),
+                (Some(interceptor), None) => tonic::server::Grpc::with_interceptor(codec, interceptor),
+                (None, Some(reporter)) => tonic::server::Grpc::with_reporter(codec, reporter),
+                _ => tonic::server::Grpc::new(codec),
             };
 
             let res = grpc.client_streaming(method, req).await;
@@ -468,6 +521,7 @@ fn generate_streaming<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    service_path: &str,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
 
@@ -476,6 +530,12 @@ fn generate_streaming<T: Method>(
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
+
+    #[cfg(feature = "transport")]
+    let named_method_impl =
+        generate_named_method_impl(&service_ident, &server_trait, service_path, method.name());
+    #[cfg(not(feature = "transport"))]
+    let named_method_impl = TokenStream::new();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -496,17 +556,21 @@ fn generate_streaming<T: Method>(
             }
         }
 
+        #named_method_impl
+
         let inner = self.inner.clone();
         let fut = async move {
             let interceptor = inner.1;
+            let reporter = inner.2;
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
+            let mut grpc = match (interceptor, reporter) {
+                (Some(interceptor), Some(reporter)) => tonic::server::Grpc::with_interceptor_reporter(codec, interceptor, reporter),
+                (Some(interceptor), None) => tonic::server::Grpc::with_interceptor(codec, interceptor),
+                (None, Some(reporter)) => tonic::server::Grpc::with_reporter(codec, reporter),
+                _ => tonic::server::Grpc::new(codec),
             };
 
             let res = grpc.streaming(method, req).await;
@@ -514,5 +578,19 @@ fn generate_streaming<T: Method>(
         };
 
         Box::pin(fut)
+    }
+}
+
+fn generate_named_method_impl(
+    server_service: &Ident,
+    server_trait: &Ident,
+    service_path: &str,
+    method_name: &str,
+) -> TokenStream {
+    quote! {
+        impl<T: #server_trait> ::tonic::server::NamedMethod for #server_service<T> {
+            const SERVICE_NAME: &'static str = #service_path;
+            const METHOD_NAME: &'static str = #method_name;
+        }
     }
 }

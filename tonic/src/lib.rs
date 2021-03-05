@@ -80,6 +80,7 @@ pub mod body;
 pub mod client;
 pub mod codec;
 pub mod metadata;
+pub mod reporter;
 pub mod server;
 
 #[cfg(feature = "transport")]

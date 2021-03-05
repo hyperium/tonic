@@ -120,3 +120,18 @@ where
         Service::call(self, request)
     }
 }
+
+/// Provides a static reference to the name of a service and method. This is useful
+/// for gRPC handlers that need to know the name of a method as well as its service,
+/// e.g. to emit time-series metrics.
+pub trait NamedMethod {
+    /// The `Service-Name` as described [here].
+    ///
+    /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
+    const SERVICE_NAME: &'static str;
+
+    /// The method name as described [here].
+    ///
+    /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
+    const METHOD_NAME: &'static str;
+}
