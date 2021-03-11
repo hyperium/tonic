@@ -165,13 +165,14 @@ pub fn fmt(out_dir: &str) {
         if !file.ends_with(".rs") {
             continue;
         }
-        let result = Command::new("rustfmt")
-            .arg("--emit")
-            .arg("files")
-            .arg("--edition")
-            .arg("2018")
-            .arg(format!("{}/{}", out_dir, file))
-            .output();
+        let result =
+            Command::new(std::env::var("RUSTFMT").unwrap_or_else(|_| "rustfmt".to_owned()))
+                .arg("--emit")
+                .arg("files")
+                .arg("--edition")
+                .arg("2018")
+                .arg(format!("{}/{}", out_dir, file))
+                .output();
 
         match result {
             Err(e) => {
