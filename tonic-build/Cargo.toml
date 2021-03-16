@@ -1,10 +1,10 @@
 [package]
 name = "tonic-build"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 license = "MIT"
-documentation = "https://docs.rs/tonic-build/0.4.0/tonic_build/"
+documentation = "https://docs.rs/tonic-build/0.4.1/tonic_build/"
 repository = "https://github.com/hyperium/tonic"
 homepage = "https://github.com/hyperium/tonic"
 description = """

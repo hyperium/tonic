@@ -1,3 +1,17 @@
+# [0.4.1](https://github.com/hyperium/tonic/compare/v0.3.1...v0.4.1) (2021-03-16)
+
+### Features
+
+* feat(reflection): Implement gRPC Reflection Service (#340) ([c54f247](https://github.com/hyperium/tonic/commit/c54f247)), closes [#340](https://github.com/hyperium/tonic/issues/340)
+* feat(build): Add disable_package_emission option to tonic-build (#556) ([4f5e160](https://github.com/hyperium/tonic/commit/4f5e160)), closes [#556](https://github.com/hyperium/tonic/issues/556)
+* feat(build): Support compiling well-known protobuf types (#522) ([61555ff](https://github.com/hyperium/tonic/commit/61555ff)), closes [#522](https://github.com/hyperium/tonic/issues/522)
+* feat(build): Use `RUSTFMT` to find `rustfmt` binary (#566) ([ea56e2e](https://github.com/hyperium/tonic/commit/ea56e2e)), closes [#566](https://github.com/hyperium/tonic/issues/566)
+* chore: add FromStr for Endpoint (#558) ([f49d4bd](https://github.com/hyperium/tonic/commit/f49d4bd)), closes [#558](https://github.com/hyperium/tonic/issues/558)
+
+### Bug Fixes
+
+* fix: Depend on at least tower 0.4.4 (#554) ([ca3b9a1](https://github.com/hyperium/tonic/commit/ca3b9a1)), closes [#554](https://github.com/hyperium/tonic/issues/554) [#553](https://github.com/hyperium/tonic/issues/553) [#552](https://github.com/hyperium/tonic/issues/552) [#553](https://github.com/hyperium/tonic/issues/553) [#552](https://github.com/hyperium/tonic/issues/552)
+
 # [0.4.0](https://github.com/hyperium/tonic/compare/v0.3.1...v0.4.0) (2021-01-15)
 
 This version brings Tonic inline with Tokio 1.0 and Prost 0.7! This release also includes new versions of `tonic-types`, `tonic-build`, and `tonic-health`.
