@@ -273,6 +273,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status};
+use tokio_stream::wrappers::ReceiverStream;
 ```
 
 ```rust
@@ -282,7 +283,7 @@ impl RouteGuide for RouteGuideService {
         unimplemented!()
     }
 
-    type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+    type ListFeaturesStream = ReceiverStream<Result<Feature, Status>>;
 
     async fn list_features(
         &self,
@@ -402,7 +403,7 @@ Now let's look at one of our streaming RPCs. `list_features` is a server-side st
 need to send back multiple `Feature`s to our client.
 
 ```rust
-type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+type ListFeaturesStream = ReceiverStream<Result<Feature, Status>>;
 
 async fn list_features(
     &self,
