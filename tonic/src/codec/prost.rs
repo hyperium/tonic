@@ -77,13 +77,10 @@ fn from_decode_error(error: prost1::DecodeError) -> crate::Status {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::buffer::DecodeBuf;
-    use crate::codec::EncodeBuf;
-    use crate::codec::{encode_server, Decoder, Encoder, Streaming};
+    use crate::codec::{encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming};
     use crate::Status;
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
-    use std::io::Read;
 
     const LEN: usize = 10000;
 
