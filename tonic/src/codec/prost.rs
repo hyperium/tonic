@@ -75,11 +75,9 @@ fn from_decode_error(error: prost1::DecodeError) -> crate::Status {
     Status::new(Code::Internal, error.to_string())
 }
 
-#[cfg(tests)]
+#[cfg(test)]
 mod tests {
-    use super::{encode_server, Decoder, Encoder, Streaming};
-    use crate::codec::buffer::DecodeBuf;
-    use crate::codec::EncodeBuf;
+    use crate::codec::{encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming};
     use crate::Status;
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
@@ -151,7 +149,7 @@ mod tests {
         type Error = Status;
 
         fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-            let out = Vec::from(buf.bytes());
+            let out = Vec::from(buf.chunk());
             buf.advance(LEN);
             Ok(Some(out))
         }
