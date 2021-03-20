@@ -420,7 +420,7 @@ async fn list_features(
         }
     });
 
-    Ok(Response::new(rx))
+    Ok(Response::new(ReceiverStream::new(rx)))
 }
 ```
 
