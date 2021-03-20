@@ -5,9 +5,9 @@ use std::time::Instant;
 
 use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
-use tokio_stream::wrappers::ReceiverStream;
 
 use routeguide::route_guide_server::{RouteGuide, RouteGuideServer};
 use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
@@ -59,9 +59,7 @@ impl RouteGuide for RouteGuideService {
             println!(" /// done sending");
         });
 
-        Ok(Response::new(
-            ReceiverStream::new(rx),
-        ))
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 
     async fn record_route(
