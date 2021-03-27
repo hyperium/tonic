@@ -1,7 +1,7 @@
 //! Codegen exports used by `tonic-build`.
 
 pub use async_trait::async_trait;
-pub use futures_core::Stream;
+pub use futures_core;
 pub use futures_util::future::{ok, poll_fn, Ready};
 
 pub use http_body::Body as HttpBody;
