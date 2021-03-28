@@ -1,0 +1,10 @@
+syntax = "proto3";
+package StreamConflict;
+
+message Message {
+  bool ok = 1;
+}
+
+service Stream {
+  rpc RunStream(Message) returns (stream Message);
+}
