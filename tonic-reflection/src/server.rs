@@ -87,7 +87,7 @@ impl<'b> Builder<'b> {
         self
     }
 
-    /// Serve the gRPC Refection Service descriptor via the Reflection Service. This is enabled
+    /// Serve the gRPC Reflection Service descriptor via the Reflection Service. This is enabled
     /// by default - set `include` to false to disable.
     pub fn include_reflection_service(mut self, include: bool) -> Self {
         self.include_reflection_service = include;
