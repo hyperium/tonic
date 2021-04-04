@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
@@ -36,8 +37,7 @@ impl RouteGuide for RouteGuideService {
         Ok(Response::new(Feature::default()))
     }
 
-    type ListFeaturesStream =
-        Pin<Box<dyn Stream<Item = Result<Feature, Status>> + Send + Sync + 'static>>;
+    type ListFeaturesStream = ReceiverStream<Result<Feature, Status>>;
 
     async fn list_features(
         &self,
@@ -59,9 +59,7 @@ impl RouteGuide for RouteGuideService {
             println!(" /// done sending");
         });
 
-        Ok(Response::new(Box::pin(
-            tokio_stream::wrappers::ReceiverStream::new(rx),
-        )))
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 
     async fn record_route(

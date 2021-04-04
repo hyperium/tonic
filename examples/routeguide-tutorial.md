@@ -185,6 +185,7 @@ prost = "0.7"
 futures-core = "0.3"
 futures-util = "0.3"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-stream = "0.1"
 
 async-stream = "0.2"
 serde = { version = "1.0", features = ["derive"] }
@@ -273,6 +274,7 @@ use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status};
+use tokio_stream::wrappers::ReceiverStream;
 ```
 
 ```rust
@@ -282,7 +284,7 @@ impl RouteGuide for RouteGuideService {
         unimplemented!()
     }
 
-    type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+    type ListFeaturesStream = ReceiverStream<Result<Feature, Status>>;
 
     async fn list_features(
         &self,
@@ -402,7 +404,7 @@ Now let's look at one of our streaming RPCs. `list_features` is a server-side st
 need to send back multiple `Feature`s to our client.
 
 ```rust
-type ListFeaturesStream = mpsc::Receiver<Result<Feature, Status>>;
+type ListFeaturesStream = ReceiverStream<Result<Feature, Status>>;
 
 async fn list_features(
     &self,
@@ -419,7 +421,7 @@ async fn list_features(
         }
     });
 
-    Ok(Response::new(rx))
+    Ok(Response::new(ReceiverStream::new(rx)))
 }
 ```
 
