@@ -185,6 +185,7 @@ prost = "0.7"
 futures-core = "0.3"
 futures-util = "0.3"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tokio-stream = "0.1"
 
 async-stream = "0.2"
 serde = { version = "1.0", features = ["derive"] }
