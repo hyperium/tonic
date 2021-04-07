@@ -2,6 +2,7 @@ use super::{client, server};
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
+use std::ffi::OsString;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -22,6 +23,7 @@ pub fn configure() -> Builder {
         #[cfg(feature = "rustfmt")]
         format: true,
         emit_package: true,
+        protoc_args: Vec::new(),
     }
 }
 
@@ -206,6 +208,7 @@ pub struct Builder {
     pub(crate) proto_path: String,
     pub(crate) emit_package: bool,
     pub(crate) compile_well_known_types: bool,
+    pub(crate) protoc_args: Vec<OsString>,
 
     out_dir: Option<PathBuf>,
     #[cfg(feature = "rustfmt")]
@@ -287,6 +290,14 @@ impl Builder {
         self
     }
 
+    /// Configure Prost `protoc_args` build arguments.
+    ///
+    /// Note: Enabling `--experimental_allow_proto3_optional` requires protobuf >= 3.12.
+    pub fn protoc_arg<A: AsRef<str>>(mut self, arg: A) -> Self {
+        self.protoc_args.push(arg.as_ref().into());
+        self
+    }
+
     /// Emits GRPC endpoints with no attached package. Effectively ignores protofile package declaration from grpc context.
     ///
     /// This effectively sets prost's exported package to an empty string.
@@ -348,6 +359,11 @@ impl Builder {
         if self.compile_well_known_types {
             config.compile_well_known_types();
         }
+
+        for arg in self.protoc_args.iter() {
+            config.protoc_arg(arg);
+        }
+
         config.service_generator(Box::new(ServiceGenerator::new(self)));
 
         config.compile_protos(protos, includes)?;
