@@ -77,7 +77,7 @@ pub struct ResponseFuture {
 }
 
 impl Channel {
-    /// Create a [`Endpoint`] builder that can create [`Channel`]s.
+    /// Create an [`Endpoint`] builder that can create [`Channel`]s.
     pub fn builder(uri: Uri) -> Endpoint {
         Endpoint::from(uri)
     }
