@@ -380,7 +380,8 @@ impl Status {
         Status::from_error(&*err.into())
     }
 
-    pub(crate) fn from_header_map(header_map: &HeaderMap) -> Option<Status> {
+    /// Extract a `Status` from a hyper `HeaderMap`.
+    pub fn from_header_map(header_map: &HeaderMap) -> Option<Status> {
         header_map.get(GRPC_STATUS_HEADER_CODE).map(|code| {
             let code = Code::from_bytes(code.as_ref());
             let error_message = header_map
@@ -661,7 +662,10 @@ impl Code {
         Code::from(i)
     }
 
-    pub(crate) fn from_bytes(bytes: &[u8]) -> Code {
+    /// Convert the string representation of a `Code` (as stored, for example, in the `grpc-status`
+    /// header in a response) into a `Code`. Returns `Code::Unknown` if the code string is not a
+    /// valid gRPC status code.
+    pub fn from_bytes(bytes: &[u8]) -> Code {
         match bytes.len() {
             1 => match bytes[0] {
                 b'0' => Code::Ok,
