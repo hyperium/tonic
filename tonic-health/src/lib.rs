@@ -22,8 +22,10 @@
 
 use std::fmt::{Display, Formatter};
 
-mod proto {
+/// These are the generated types from our health check proto file.
+pub mod proto {
     #![allow(unreachable_pub)]
+    #![allow(missing_docs)]
     tonic::include_proto!("grpc.health.v1");
 }
 
