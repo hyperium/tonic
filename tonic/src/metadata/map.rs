@@ -198,11 +198,10 @@ pub struct OccupiedEntry<'a, VE: ValueEncoding> {
 
 impl MetadataMap {
     // Headers reserved by the gRPC protocol.
-    pub(crate) const GRPC_RESERVED_HEADERS: [&'static str; 8] = [
+    pub(crate) const GRPC_RESERVED_HEADERS: [&'static str; 7] = [
         "te",
         "user-agent",
         "content-type",
-        "grpc-timeout",
         "grpc-message",
         "grpc-encoding",
         "grpc-message-type",
