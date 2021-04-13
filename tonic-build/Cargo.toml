@@ -1,6 +1,6 @@
 [package]
 name = "tonic-build"
-version = "0.4.1"
+version = "0.4.2"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
 license = "MIT"

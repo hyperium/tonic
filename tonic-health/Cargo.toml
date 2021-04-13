@@ -1,11 +1,12 @@
 [package]
 name = "tonic-health"
-version = "0.3.0"
+version = "0.3.1"
 authors = ["James Nugent <james@jen20.com>"]
 edition = "2018"
 license = "MIT"
 repository = "https://github.com/hyperium/tonic"
 homepage = "https://github.com/hyperium/tonic"
+documentation = "https://docs.rs/tonic-health/0.3.1/tonic-health/"
 description = """
 Health Checking module of `tonic` gRPC implementation.
 """
