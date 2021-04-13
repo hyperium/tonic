@@ -22,8 +22,10 @@
 
 use std::fmt::{Display, Formatter};
 
-mod proto {
+/// Generated protobuf types from the `grpc.healthy.v1` package.
+pub mod proto {
     #![allow(unreachable_pub)]
+    #![allow(missing_docs)]
     tonic::include_proto!("grpc.health.v1");
 }
 
