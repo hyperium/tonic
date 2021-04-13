@@ -1,3 +1,18 @@
+# [0.4.2](https://github.com/hyperium/tonic/compare/v0.4.1...v0.4.2) (2021-04-13)
+
+### Bug Fixes
+
+* **codec:** Allocate inbound buffer once ([#578](https://github.com/hyperium/tonic/issues/578)) ([1d2754f](https://github.com/hyperium/tonic/commit/1d2754feba6b49bfc813f41e8e8e42ffaf8ab0dd))
+* **reflection:** Depend on correct version of build ([#582](https://github.com/hyperium/tonic/issues/582)) ([db09093](https://github.com/hyperium/tonic/commit/db0909382b8ab1a385c1352feeea663844b7d799))
+
+
+### Features
+
+* **health:** Expose proto and client ([#471](https://github.com/hyperium/tonic/issues/471)) ([#602](https://github.com/hyperium/tonic/issues/602)) ([49f6137](https://github.com/hyperium/tonic/commit/49f613767341656cad1cc4883ff0e89b03d378ae))
+* Expose status constructors ([#579](https://github.com/hyperium/tonic/issues/579)) ([0d05aa0](https://github.com/hyperium/tonic/commit/0d05aa0d02bd3037e81c72dcf7fa5168d5a62097))
+* **build:** Add `prostoc_args` ([#577](https://github.com/hyperium/tonic/issues/577)) ([480a794](https://github.com/hyperium/tonic/commit/480a79409c4cb9a1c680e57d0f74ad1d4f18beaa))
+
+
 # [0.4.1](https://github.com/hyperium/tonic/compare/v0.3.1...v0.4.1) (2021-03-16)
 
 ### Features
