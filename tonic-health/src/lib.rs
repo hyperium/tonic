@@ -22,7 +22,7 @@
 
 use std::fmt::{Display, Formatter};
 
-/// These are the generated types from our health check proto file.
+/// Generated protobuf types from the `grpc.healthy.v1` package.
 pub mod proto {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
