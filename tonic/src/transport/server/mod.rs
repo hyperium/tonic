@@ -22,7 +22,7 @@ pub(crate) use tokio_rustls::server::TlsStream;
 use crate::transport::Error;
 
 use super::{
-    service::{Or, Routes, ServerIo, ServiceBuilderExt},
+    service::{Or, Routes, ServerIo},
     BoxFuture,
 };
 use crate::{body::BoxBody, request::ConnectionInfo};
@@ -655,8 +655,8 @@ where
 
         Box::pin(async move {
             let svc = ServiceBuilder::new()
-                .optional_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
-                .optional_layer(timeout.map(TimeoutLayer::new))
+                .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
+                .option_layer(timeout.map(TimeoutLayer::new))
                 .service(svc);
 
             let svc = BoxService::new(Svc {

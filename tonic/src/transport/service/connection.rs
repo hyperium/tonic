@@ -1,5 +1,5 @@
 use super::super::BoxFuture;
-use super::{layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin, UserAgent};
+use super::{reconnect::Reconnect, AddOrigin, UserAgent};
 use crate::{body::BoxBody, transport::Endpoint};
 use http::Uri;
 use hyper::client::conn::Builder;
@@ -53,9 +53,9 @@ impl Connection {
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
             .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
-            .optional_layer(endpoint.timeout.map(TimeoutLayer::new))
-            .optional_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
-            .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
+            .option_layer(endpoint.timeout.map(TimeoutLayer::new))
+            .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
+            .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
         let connector = HyperConnect::new(connector, settings);
