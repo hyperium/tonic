@@ -6,6 +6,7 @@ mod io;
 mod layer;
 mod reconnect;
 mod router;
+mod timeout;
 #[cfg(feature = "tls")]
 mod tls;
 mod user_agent;
