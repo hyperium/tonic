@@ -10,7 +10,7 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use tower::{layer::layer_fn, load::Load};
+use tower::load::Load;
 use tower::{
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
@@ -51,8 +51,8 @@ impl Connection {
         }
 
         let stack = ServiceBuilder::new()
-            .layer(layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone())))
-            .layer(layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone())))
+            .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
+            .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
             .option_layer(endpoint.timeout.map(TimeoutLayer::new))
             .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
             .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
