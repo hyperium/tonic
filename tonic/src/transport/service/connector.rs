@@ -36,6 +36,26 @@ impl<C> Connector<C> {
     fn new(inner: C, tls: Option<TlsConnector>) -> Self {
         Self { inner, tls }
     }
+
+    #[cfg(feature = "tls-roots")]
+    fn tls_or_default(&self, scheme: Option<&str>, host: Option<&str>) -> Option<TlsConnector> {
+        use tokio_rustls::webpki::DNSNameRef;
+
+        if self.tls.is_some() {
+            return self.tls.clone();
+        }
+
+        match (scheme, host) {
+            (Some("https"), Some(host)) => {
+                if DNSNameRef::try_from_ascii(host.as_bytes()).is_ok() {
+                    TlsConnector::new_with_rustls_cert(None, None, host.to_owned()).ok()
+                } else {
+                    None
+                }
+            }
+            _ => None,
+        }
+    }
 }
 
 impl<C> Service<Uri> for Connector<C>
@@ -54,10 +74,13 @@ where
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        let connect = self.inner.make_connection(uri);
-
-        #[cfg(feature = "tls")]
+        #[cfg(all(feature = "tls", not(feature = "tls-roots")))]
         let tls = self.tls.clone();
+
+        #[cfg(feature = "tls-roots")]
+        let tls = self.tls_or_default(uri.scheme_str(), uri.host());
+
+        let connect = self.inner.make_connection(uri);
 
         Box::pin(async move {
             let io = connect.await?;
