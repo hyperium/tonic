@@ -33,7 +33,6 @@ const GRPC_STATUS_DETAILS_HEADER: &str = "grpc-status-details-bin";
 /// assert_eq!(status1.code(), Code::InvalidArgument);
 /// assert_eq!(status1.code(), status2.code());
 /// ```
-#[derive(Clone)]
 pub struct Status {
     /// The gRPC status code, found in the `grpc-status` header.
     code: Code,
@@ -45,6 +44,29 @@ pub struct Status {
     /// If the metadata contains any headers with names reserved either by the gRPC spec
     /// or by `Status` fields above, they will be ignored.
     metadata: MetadataMap,
+    /// Optional underlying `h2::Error` if this `Status` was converted from a `h2::Error`.
+    h2_error: Option<h2::Error>,
+}
+
+impl Clone for Status {
+    fn clone(&self) -> Self {
+        Status {
+            code: self.code.clone(),
+            message: self.message.clone(),
+            details: self.details.clone(),
+            metadata: self.metadata.clone(),
+            // The following contortion to clone `h2_error` is required because `h2::Error`
+            // cannot implement `Clone` because one of the `Kind` variants  stores a
+            // `std::io::Error` (which does not implement `Clone`). Since we know that
+            // `h2_error` will always have a reason, just extract the reason and create a new
+            // `h2::Error` from it.
+            h2_error: self
+                .h2_error
+                .as_ref()
+                .and_then(|err| err.reason())
+                .map(h2::Error::from),
+        }
+    }
 }
 
 /// gRPC status codes used by [`Status`].
@@ -162,6 +184,7 @@ impl Status {
             message: message.into(),
             details: Bytes::new(),
             metadata: MetadataMap::new(),
+            h2_error: None,
         }
     }
 
@@ -316,6 +339,7 @@ impl Status {
                     message: status.message.clone(),
                     details: status.details.clone(),
                     metadata: status.metadata.clone(),
+                    h2_error: None,
                 });
             }
 
@@ -356,7 +380,9 @@ impl Status {
             _ => Code::Unknown,
         };
 
-        Status::new(code, format!("h2 protocol error: {}", err))
+        let mut status = Self::new(code, format!("h2 protocol error: {}", err));
+        status.h2_error = err.reason().map(h2::Error::from);
+        status
     }
 
     #[cfg(feature = "transport")]
@@ -410,6 +436,7 @@ impl Status {
                     message,
                     details,
                     metadata: MetadataMap::from_headers(other_headers),
+                    h2_error: None,
                 },
                 Err(err) => {
                     warn!("Error deserializing status message header: {}", err);
@@ -418,6 +445,7 @@ impl Status {
                         message: format!("Error deserializing status message header: {}", err),
                         details,
                         metadata: MetadataMap::from_headers(other_headers),
+                        h2_error: None,
                     }
                 }
             }
@@ -505,6 +533,7 @@ impl Status {
             message: message.into(),
             details,
             metadata,
+            h2_error: None,
         }
     }
 
@@ -541,6 +570,10 @@ impl fmt::Debug for Status {
 
         if !self.metadata.is_empty() {
             builder.field("metadata", &self.metadata);
+        }
+
+        if self.h2_error.is_some() {
+            builder.field("h2_reason", &self.h2_error);
         }
 
         builder.finish()
@@ -609,7 +642,13 @@ impl fmt::Display for Status {
     }
 }
 
-impl Error for Status {}
+impl Error for Status {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        self.h2_error
+            .as_ref()
+            .map(|err| err as &(dyn Error + 'static))
+    }
+}
 
 ///
 /// Take the `Status` value from `trailers` if it is available, else from `status_code`.
@@ -754,6 +793,8 @@ impl From<Code> for i32 {
 
 #[cfg(test)]
 mod tests {
+    use std::error::Error as _;
+
     use super::*;
     use crate::Error;
 
@@ -806,6 +847,12 @@ mod tests {
         let found = Status::from_error(&orig);
 
         assert_eq!(found.code(), Code::Cancelled);
+
+        let source = found
+            .source()
+            .and_then(|err| err.downcast_ref::<h2::Error>())
+            .unwrap();
+        assert_eq!(orig.reason(), source.reason());
     }
 
     #[test]
