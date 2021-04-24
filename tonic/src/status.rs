@@ -45,13 +45,14 @@ pub struct Status {
     /// or by `Status` fields above, they will be ignored.
     metadata: MetadataMap,
     /// Optional underlying `h2::Error` if this `Status` was converted from a `h2::Error`.
+    #[cfg(feature = "transport")]
     h2_error: Option<h2::Error>,
 }
 
 impl Clone for Status {
     fn clone(&self) -> Self {
         Status {
-            code: self.code.clone(),
+            code: self.code,
             message: self.message.clone(),
             details: self.details.clone(),
             metadata: self.metadata.clone(),
@@ -60,6 +61,7 @@ impl Clone for Status {
             // `std::io::Error` (which does not implement `Clone`). Since we know that
             // `h2_error` will always have a reason, just extract the reason and create a new
             // `h2::Error` from it.
+            #[cfg(feature = "transport")]
             h2_error: self
                 .h2_error
                 .as_ref()
@@ -184,6 +186,7 @@ impl Status {
             message: message.into(),
             details: Bytes::new(),
             metadata: MetadataMap::new(),
+            #[cfg(feature = "transport")]
             h2_error: None,
         }
     }
@@ -339,6 +342,7 @@ impl Status {
                     message: status.message.clone(),
                     details: status.details.clone(),
                     metadata: status.metadata.clone(),
+                    #[cfg(feature = "transport")]
                     h2_error: None,
                 });
             }
@@ -436,6 +440,7 @@ impl Status {
                     message,
                     details,
                     metadata: MetadataMap::from_headers(other_headers),
+                    #[cfg(feature = "transport")]
                     h2_error: None,
                 },
                 Err(err) => {
@@ -445,6 +450,7 @@ impl Status {
                         message: format!("Error deserializing status message header: {}", err),
                         details,
                         metadata: MetadataMap::from_headers(other_headers),
+                        #[cfg(feature = "transport")]
                         h2_error: None,
                     }
                 }
@@ -533,6 +539,7 @@ impl Status {
             message: message.into(),
             details,
             metadata,
+            #[cfg(feature = "transport")]
             h2_error: None,
         }
     }
@@ -572,8 +579,11 @@ impl fmt::Debug for Status {
             builder.field("metadata", &self.metadata);
         }
 
-        if self.h2_error.is_some() {
-            builder.field("h2_reason", &self.h2_error);
+        #[cfg(feature = "transport")]
+        {
+            if self.h2_error.is_some() {
+                builder.field("h2_error", &self.h2_error);
+            }
         }
 
         builder.finish()
@@ -643,6 +653,7 @@ impl fmt::Display for Status {
 }
 
 impl Error for Status {
+    #[cfg(feature = "transport")]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         self.h2_error
             .as_ref()
@@ -793,8 +804,6 @@ impl From<Code> for i32 {
 
 #[cfg(test)]
 mod tests {
-    use std::error::Error as _;
-
     use super::*;
     use crate::Error;
 
@@ -843,6 +852,8 @@ mod tests {
     #[test]
     #[cfg(feature = "transport")]
     fn from_error_h2() {
+        use std::error::Error as _;
+
         let orig = h2::Error::from(h2::Reason::CANCEL);
         let found = Status::from_error(&orig);
 
