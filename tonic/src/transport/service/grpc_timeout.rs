@@ -1,9 +1,9 @@
-use http::Request;
-use http::{HeaderMap, HeaderValue};
+use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
-use std::{fmt, pin::Pin};
 use std::{
+    fmt,
     future::Future,
+    pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
