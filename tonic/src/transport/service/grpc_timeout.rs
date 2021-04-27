@@ -179,12 +179,14 @@ impl std::error::Error for TimeoutExpired {}
 #[cfg(test)]
 mod tests {
     use super::*;
+    use quickcheck::{Arbitrary, Gen};
+    use quickcheck_macros::quickcheck;
 
     // Helper function to reduce the boiler plate of our test cases
-    fn setup_map_try_parse(val: Option<&'static str>) -> Result<Option<Duration>, HeaderValue> {
+    fn setup_map_try_parse(val: Option<&str>) -> Result<Option<Duration>, HeaderValue> {
         let mut hm = HeaderMap::new();
         if let Some(v) = val {
-            let hv = HeaderValue::from_static(v);
+            let hv = HeaderValue::from_str(v).unwrap();
             hm.insert(GRPC_TIMEOUT_HEADER, hv);
         };
 
@@ -252,5 +254,40 @@ mod tests {
     fn test_invalid_digits() {
         // gRPC spec states TimeoutValue will be at most 8 digits
         setup_map_try_parse(Some("oneH")).unwrap().unwrap();
+    }
+
+    #[quickcheck]
+    fn fuzz(header_value: HeaderValueGen) -> bool {
+        let header_value = header_value.0;
+
+        // this just shouldn't panic
+        let _ = setup_map_try_parse(Some(&header_value));
+
+        true
+    }
+
+    /// Newtype to implement `Arbitrary` for generating `String`s that are valid `HeaderValue`s.
+    #[derive(Clone, Debug)]
+    struct HeaderValueGen(String);
+
+    impl Arbitrary for HeaderValueGen {
+        fn arbitrary(g: &mut Gen) -> Self {
+            let max = g.choose(&(1..70).collect::<Vec<_>>()).copied().unwrap();
+            Self(gen_string(g, 0, max))
+        }
+    }
+
+    // copied from https://github.com/hyperium/http/blob/master/tests/header_map_fuzz.rs
+    fn gen_string(g: &mut Gen, min: usize, max: usize) -> String {
+        let bytes: Vec<_> = (min..max)
+            .map(|_| {
+                // Chars to pick from
+                g.choose(b"ABCDEFGHIJKLMNOPQRSTUVabcdefghilpqrstuvwxyz----")
+                    .copied()
+                    .unwrap()
+            })
+            .collect();
+
+        String::from_utf8(bytes).unwrap()
     }
 }

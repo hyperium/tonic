@@ -49,6 +49,8 @@ jobs:
 
     env:
       RUSTFLAGS: "-D warnings"
+      # run a lot of quickcheck iterations
+      QUICKCHECK_TESTS: 1000
 
     steps:
     - uses: hecrj/setup-rust-action@master
