@@ -1,7 +1,5 @@
 use super::super::BoxFuture;
-use super::{
-    grpc_timeout::GrpcTimeout, layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin, UserAgent,
-};
+use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
 use crate::{body::BoxBody, transport::Endpoint};
 use http::Uri;
 use hyper::client::conn::Builder;
@@ -55,8 +53,8 @@ impl Connection {
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
             .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
             .layer_fn(|s| GrpcTimeout::new(s, endpoint.timeout))
-            .optional_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
-            .optional_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
+            .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
+            .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
         let connector = HyperConnect::new(connector, settings);
