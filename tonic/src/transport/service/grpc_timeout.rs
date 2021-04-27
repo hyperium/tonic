@@ -1,3 +1,4 @@
+use crate::metadata::GRPC_TIMEOUT_HEADER;
 use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
 use std::{
@@ -101,8 +102,6 @@ enum OptionPin<T> {
     Some(#[pin] T),
     None,
 }
-
-const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 const SECONDS_IN_HOUR: u64 = 60 * 60;
 const SECONDS_IN_MINUTE: u64 = 60;

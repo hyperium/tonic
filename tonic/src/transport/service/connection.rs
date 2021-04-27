@@ -1,6 +1,6 @@
 use super::super::BoxFuture;
 use super::{
-    layer::ServiceBuilderExt, reconnect::Reconnect, grpc_timeout::GrpcTimeout, AddOrigin, UserAgent,
+    grpc_timeout::GrpcTimeout, layer::ServiceBuilderExt, reconnect::Reconnect, AddOrigin, UserAgent,
 };
 use crate::{body::BoxBody, transport::Endpoint};
 use http::Uri;
