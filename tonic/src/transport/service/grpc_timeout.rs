@@ -16,7 +16,7 @@ pub(crate) struct GrpcTimeout<S> {
     server_timeout: Option<Duration>,
 }
 
-impl<S> Timeout<S> {
+impl<S> GrpcTimeout<S> {
     pub(crate) fn new(inner: S, server_timeout: Option<Duration>) -> Self {
         Self {
             inner,
@@ -25,7 +25,7 @@ impl<S> Timeout<S> {
     }
 }
 
-impl<S, ReqBody> Service<Request<ReqBody>> for Timeout<S>
+impl<S, ReqBody> Service<Request<ReqBody>> for GrpcTimeout<S>
 where
     S: Service<Request<ReqBody>>,
     S::Error: Into<crate::Error>,
@@ -40,7 +40,7 @@ where
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         let client_timeout = try_parse_grpc_timeout(req.headers()).unwrap_or_else(|e| {
-            tracing::trace!("Error parsing `grpc-timeout` header {}", e);
+            tracing::trace!("Error parsing `grpc-timeout` header {:?}", e);
             None
         });
 
@@ -89,7 +89,7 @@ where
 
         if let OptionPinProj::Some(sleep) = this.sleep.project() {
             futures_util::ready!(sleep.poll(cx));
-            return Poll::Ready(Err(TimeoutExpired.into()));
+            return Poll::Ready(Err(TimeoutExpired(()).into()));
         }
 
         Poll::Pending
@@ -157,10 +157,16 @@ fn try_parse_grpc_timeout(
     }
 }
 
-// Note: The wrapped Duration should only be used for logging purposes. It is **not** the
-// actual duration that elapsed, resulting in a timeout, instead it is a close approximation
+/// Error returned if a request didn't complete within the configured timeout.
+///
+/// Timeouts can be configured either with [`Endpoint::timeout`], [`Server::timeout`], or by
+/// setting the [`grpc-timeout` metadata value][spec].
+///
+/// [`Endpoint::timeout`]: crate::transport::server::Server::timeout
+/// [`Server::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 #[derive(Debug)]
-struct TimeoutExpired(());
+pub struct TimeoutExpired(());
 
 impl fmt::Display for TimeoutExpired {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

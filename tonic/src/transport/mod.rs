@@ -98,6 +98,8 @@ pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
 pub use self::server::{NamedService, Server};
+#[doc(inline)]
+pub use self::service::TimeoutExpired;
 pub use self::tls::{Certificate, Identity};
 pub use hyper::{Body, Uri};
 

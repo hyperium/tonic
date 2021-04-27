@@ -2,11 +2,11 @@ mod add_origin;
 mod connection;
 mod connector;
 mod discover;
+mod grpc_timeout;
 mod io;
 mod layer;
 mod reconnect;
 mod router;
-mod timeout;
 #[cfg(feature = "tls")]
 mod tls;
 mod user_agent;
@@ -21,3 +21,5 @@ pub(crate) use self::router::{Or, Routes};
 #[cfg(feature = "tls")]
 pub(crate) use self::tls::{TlsAcceptor, TlsConnector};
 pub(crate) use self::user_agent::UserAgent;
+
+pub use self::grpc_timeout::TimeoutExpired;
