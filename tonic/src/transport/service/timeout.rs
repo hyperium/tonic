@@ -11,7 +11,7 @@ use tokio::time::Sleep;
 use tower_service::Service;
 
 #[derive(Debug, Clone)]
-pub(crate) struct Timeout<S> {
+pub(crate) struct GrpcTimeout<S> {
     inner: S,
     server_timeout: Option<Duration>,
 }
@@ -40,7 +40,7 @@ where
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         let client_timeout = try_parse_grpc_timeout(req.headers()).unwrap_or_else(|e| {
-            tracing::trace!("Error parsing `grpc-timeout` header {:?}", e);
+            tracing::trace!("Error parsing `grpc-timeout` header {}", e);
             None
         });
 
@@ -160,7 +160,7 @@ fn try_parse_grpc_timeout(
 // Note: The wrapped Duration should only be used for logging purposes. It is **not** the
 // actual duration that elapsed, resulting in a timeout, instead it is a close approximation
 #[derive(Debug)]
-struct TimeoutExpired;
+struct TimeoutExpired(());
 
 impl fmt::Display for TimeoutExpired {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
