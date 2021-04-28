@@ -331,6 +331,10 @@ impl Status {
                 if let Some(h2) = err.downcast_ref::<h2::Error>() {
                     return Some(Status::from_h2_error(h2));
                 }
+
+                if let Some(timeout) = err.downcast_ref::<crate::transport::TimeoutExpired>() {
+                    return Some(Status::cancelled(timeout.to_string()));
+                }
             }
 
             cause = err.source();

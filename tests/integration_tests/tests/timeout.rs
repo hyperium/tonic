@@ -4,7 +4,6 @@ use tokio::net::TcpListener;
 use tonic::{transport::Server, Code, Request, Response, Status};
 
 #[tokio::test]
-#[ignore]
 async fn cancelation_on_timeout() {
     struct Svc;
 
@@ -39,13 +38,9 @@ async fn cancelation_on_timeout() {
         .insert("grpc-timeout", "500m".parse().unwrap());
 
     let res = client.unary_call(req).await;
-    dbg!(&res);
 
     let err = res.unwrap_err();
     assert!(err.message().contains("Timeout expired"));
-
-    // TODO(david): make this work. Will require mapping `TimeoutExpired` errors into
-    // `Code::Cancelled` but can't quite figure out how to do that.
     assert_eq!(err.code(), Code::Cancelled);
 }
 
