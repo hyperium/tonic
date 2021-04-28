@@ -14,6 +14,7 @@ pub(crate) use self::add_origin::AddOrigin;
 pub(crate) use self::connection::Connection;
 pub(crate) use self::connector::connector;
 pub(crate) use self::discover::DynamicServiceStream;
+pub(crate) use self::grpc_timeout::GrpcTimeout;
 pub(crate) use self::io::ServerIo;
 pub(crate) use self::router::{Or, Routes};
 #[cfg(feature = "tls")]

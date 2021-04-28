@@ -69,7 +69,7 @@ h2    = { version = "0.3", optional = true }
 hyper = { version = "0.14.2", features = ["full"], optional = true }
 tokio = { version = "1.0.1", features = ["net"], optional = true }
 tokio-stream = "0.1"
-tower = { version = "0.4.4", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true }
+tower = { version = "0.4.7", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true }
 tracing-futures = { version = "0.2", optional = true }
 
 # rustls

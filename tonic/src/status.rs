@@ -313,7 +313,7 @@ impl Status {
         Status::try_from_error(err).unwrap_or_else(|| Status::new(Code::Unknown, err.to_string()))
     }
 
-    fn try_from_error(err: &(dyn Error + 'static)) -> Option<Status> {
+    pub(crate) fn try_from_error(err: &(dyn Error + 'static)) -> Option<Status> {
         let mut cause = Some(err);
 
         while let Some(err) = cause {
