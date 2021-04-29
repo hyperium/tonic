@@ -112,7 +112,7 @@ impl<B> GrpcWebCall<B> {
 
         let trailers = self.encode_trailers(trailers);
         let len = trailers.len();
-        assert!(len <= std::u32::MAX as usize);
+        assert!(len <= u32::MAX as usize);
 
         let mut frame = Vec::with_capacity(len + HEADER_SIZE);
         frame.push(GRPC_WEB_TRAILERS_BIT);

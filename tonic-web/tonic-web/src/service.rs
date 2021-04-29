@@ -23,15 +23,29 @@ pub struct GrpcWeb<S> {
 
 #[derive(Debug, PartialEq)]
 enum RequestKind<'a> {
+    // The request is considered a grpc-web request if its `content-type`
+    // header is exactly one of:
+    //
+    //  - "application/grpc-web"
+    //  - "application/grpc-web+proto"
+    //  - "application/grpc-web-text"
+    //  - "application/grpc-web-text+proto"
     GrpcWeb {
         method: &'a Method,
         encoding: Encoding,
         accept: Encoding,
     },
+    // The request is considered a grpc-web preflight request if all these
+    // conditions are met:
+    //
+    // - the request method is `OPTIONS`
+    // - request headers include `origin`
+    // - `access-control-request-headers` header is present and includes `x-grpc-web`
     GrpcWebPreflight {
         origin: &'a HeaderValue,
         request_headers: &'a HeaderValue,
     },
+    // All other requests, including `application/grpc`
     Other(http::Version),
 }
 
@@ -84,7 +98,16 @@ where
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        match request_kind(req.headers(), req.method(), req.version()) {
+        match RequestKind::new(req.headers(), req.method(), req.version()) {
+            // A valid grpc-web request, regardless of HTTP version.
+            //
+            // If the request includes an `origin` header, we verify it is allowed
+            // to access the resource, an HTTP 403 response is returned otherwise.
+            //
+            // If the origin is allowed to access the resource or there is no
+            // `origin` header present, translate the request into a grpc request,
+            // call the inner service, and translate the response back to
+            // grpc-web.
             RequestKind::GrpcWeb {
                 method: &Method::POST,
                 encoding,
@@ -107,11 +130,16 @@ where
                 }
             },
 
+            // The request's content-type matches one of the 4 supported grpc-web
+            // content-types, but the request method is not `POST`.
+            // This is not a valid grpc-web request, return HTTP 405.
             RequestKind::GrpcWeb { .. } => {
                 debug!(kind = "simple", error="method not allowed", method = ?req.method());
                 self.response(StatusCode::METHOD_NOT_ALLOWED)
             }
 
+            // A valid grpc-web preflight request, regardless of HTTP version.
+            // This is handled by the cors module.
             RequestKind::GrpcWebPreflight {
                 origin,
                 request_headers,
@@ -126,11 +154,14 @@ where
                 }
             },
 
+            // All http/2 requests that are not grpc-web or grpc-web preflight
+            // are passed through to the inner service, whatever they are.
             RequestKind::Other(Version::HTTP_2) => {
                 debug!(kind = "other h2", content_type = ?req.headers().get(header::CONTENT_TYPE));
                 Box::pin(self.inner.call(req))
             }
 
+            // Return HTTP 400 for all other requests.
             RequestKind::Other(_) => {
                 debug!(kind = "other h1", content_type = ?req.headers().get(header::CONTENT_TYPE));
                 self.response(StatusCode::BAD_REQUEST)
@@ -143,34 +174,32 @@ impl<S: NamedService> NamedService for GrpcWeb<S> {
     const NAME: &'static str = S::NAME;
 }
 
-fn request_kind<'a>(
-    headers: &'a HeaderMap,
-    method: &'a Method,
-    version: Version,
-) -> RequestKind<'a> {
-    if is_grpc_web(headers) {
-        return RequestKind::GrpcWeb {
-            method,
-            encoding: Encoding::from_content_type(headers),
-            accept: Encoding::from_accept(headers),
-        };
-    }
-
-    if let (&Method::OPTIONS, Some(origin), Some(value)) =
-        (method, headers.get(ORIGIN), headers.get(REQUEST_HEADERS))
-    {
-        match value.to_str() {
-            Ok(h) if h.contains("x-grpc-web") => {
-                return RequestKind::GrpcWebPreflight {
-                    origin,
-                    request_headers: value,
-                };
-            }
-            _ => {}
+impl<'a> RequestKind<'a> {
+    fn new(headers: &'a HeaderMap, method: &'a Method, version: Version) -> Self {
+        if is_grpc_web(headers) {
+            return RequestKind::GrpcWeb {
+                method,
+                encoding: Encoding::from_content_type(headers),
+                accept: Encoding::from_accept(headers),
+            };
         }
-    }
 
-    RequestKind::Other(version)
+        if let (&Method::OPTIONS, Some(origin), Some(value)) =
+            (method, headers.get(ORIGIN), headers.get(REQUEST_HEADERS))
+        {
+            match value.to_str() {
+                Ok(h) if h.contains("x-grpc-web") => {
+                    return RequestKind::GrpcWebPreflight {
+                        origin,
+                        request_headers: value,
+                    };
+                }
+                _ => {}
+            }
+        }
+
+        RequestKind::Other(version)
+    }
 }
 
 // Mutating request headers to conform to a gRPC request is not really
