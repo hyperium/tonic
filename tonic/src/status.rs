@@ -313,7 +313,7 @@ impl Status {
         Status::try_from_error(err).unwrap_or_else(|| Status::new(Code::Unknown, err.to_string()))
     }
 
-    fn try_from_error(err: &(dyn Error + 'static)) -> Option<Status> {
+    pub(crate) fn try_from_error(err: &(dyn Error + 'static)) -> Option<Status> {
         let mut cause = Some(err);
 
         while let Some(err) = cause {
@@ -330,6 +330,10 @@ impl Status {
             {
                 if let Some(h2) = err.downcast_ref::<h2::Error>() {
                     return Some(Status::from_h2_error(h2));
+                }
+
+                if let Some(timeout) = err.downcast_ref::<crate::transport::TimeoutExpired>() {
+                    return Some(Status::cancelled(timeout.to_string()));
                 }
             }
 

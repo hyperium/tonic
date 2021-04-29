@@ -2,6 +2,7 @@
 
 mod conn;
 mod incoming;
+mod recover_error;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
@@ -21,8 +22,9 @@ pub(crate) use tokio_rustls::server::TlsStream;
 #[cfg(feature = "tls")]
 use crate::transport::Error;
 
+use self::recover_error::RecoverError;
 use super::{
-    service::{Or, Routes, ServerIo},
+    service::{GrpcTimeout, Or, Routes, ServerIo},
     BoxFuture,
 };
 use crate::{body::BoxBody, request::ConnectionInfo};
@@ -42,10 +44,7 @@ use std::{
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use tower::{
-    limit::concurrency::ConcurrencyLimitLayer, timeout::TimeoutLayer, util::Either, Service,
-    ServiceBuilder,
-};
+use tower::{limit::concurrency::ConcurrencyLimitLayer, util::Either, Service, ServiceBuilder};
 use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
@@ -655,8 +654,9 @@ where
 
         Box::pin(async move {
             let svc = ServiceBuilder::new()
+                .layer_fn(RecoverError::new)
                 .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
-                .option_layer(timeout.map(TimeoutLayer::new))
+                .layer_fn(|s| GrpcTimeout::new(s, timeout))
                 .service(svc);
 
             let svc = BoxService::new(Svc {
