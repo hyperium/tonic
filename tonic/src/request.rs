@@ -225,6 +225,30 @@ impl<T> Request<T> {
     /// Set the max duration the request is allowed to take.
     ///
     /// Requires the server to support the `grpc-timeout` metadata, which Tonic does.
+    ///
+    /// The duration will be formatted according to [the spec] and use the most precise unit
+    /// possible.
+    ///
+    /// Example:
+    ///
+    /// ```rust
+    /// use std::time::Duration;
+    /// use tonic::Request;
+    ///
+    /// let mut request = Request::new(());
+    ///
+    /// request.set_timeout(Duration::from_secs(30));
+    ///
+    /// let value = request.metadata().get("grpc-timeout").unwrap();
+    ///
+    /// assert_eq!(
+    ///     value,
+    ///     // equivalent to 30 seconds
+    ///     "30000000u"
+    /// );
+    /// ```
+    ///
+    /// [the spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
     pub fn set_timeout(&mut self, deadline: Duration) {
         let value = MetadataValue::from_str(&duration_to_grpc_timeout(deadline)).unwrap();
         self.metadata_mut()
@@ -325,14 +349,6 @@ mod tests {
 
         let http_request = r.into_http(Uri::default());
         assert!(http_request.headers().is_empty());
-    }
-
-    #[test]
-    fn setting_request_timeout() {
-        let mut req = Request::new(());
-        req.set_timeout(Duration::from_secs(30));
-
-        assert!(req.metadata().contains_key("grpc-timeout"));
     }
 
     #[test]
