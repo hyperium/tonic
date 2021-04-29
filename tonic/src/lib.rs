@@ -68,6 +68,7 @@
     rust_2018_idioms,
     unreachable_pub
 )]
+#![deny(broken_intra_doc_links)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
