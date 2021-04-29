@@ -1,11 +1,11 @@
-use crate::metadata::MetadataMap;
+use crate::metadata::{MetadataMap, MetadataValue};
 #[cfg(feature = "transport")]
 use crate::transport::Certificate;
 use futures_core::Stream;
 use http::Extensions;
-use std::net::SocketAddr;
 #[cfg(feature = "transport")]
 use std::sync::Arc;
+use std::{net::SocketAddr, time::Duration};
 
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
@@ -221,6 +221,15 @@ impl<T> Request<T> {
     pub(crate) fn get<I: Send + Sync + 'static>(&self) -> Option<&I> {
         self.extensions.get::<I>()
     }
+
+    /// Set the max duration the request is allowed to take.
+    ///
+    /// Requires the server to support the `grpc-timeout` metadata, which Tonic does.
+    pub fn set_timeout(&mut self, deadline: Duration) {
+        let value = MetadataValue::from_str(&duration_to_grpc_timeout(deadline)).unwrap();
+        self.metadata_mut()
+            .insert(crate::metadata::GRPC_TIMEOUT_HEADER, value);
+    }
 }
 
 impl<T> IntoRequest<T> for T {
@@ -265,6 +274,40 @@ mod sealed {
     pub trait Sealed {}
 }
 
+fn duration_to_grpc_timeout(duration: Duration) -> String {
+    fn try_format<T: Into<u128>>(
+        duration: Duration,
+        unit: char,
+        convert: impl FnOnce(Duration) -> T,
+    ) -> Option<String> {
+        // The gRPC spec specifies that the timeout most be at most 8 digits. So this is the largest a
+        // value can be before we need to use a bigger unit.
+        let max_size: u128 = 99_999_999; // exactly 8 digits
+
+        let value = convert(duration).into();
+        if value > max_size {
+            None
+        } else {
+            Some(format!("{}{}", value, unit))
+        }
+    }
+
+    // pick the most precise unit that is less than or equal to 8 digits as per the gRPC spec
+    try_format(duration, 'n', |d| d.as_nanos())
+        .or_else(|| try_format(duration, 'u', |d| d.as_micros()))
+        .or_else(|| try_format(duration, 'm', |d| d.as_millis()))
+        .or_else(|| try_format(duration, 'S', |d| d.as_secs()))
+        .or_else(|| try_format(duration, 'M', |d| d.as_secs() / 60))
+        .or_else(|| {
+            try_format(duration, 'H', |d| {
+                let minutes = d.as_secs() / 60;
+                minutes / 60
+            })
+        })
+        // duration has to be more than 11_415 years for this to happen
+        .expect("duration is unrealistically large")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -282,5 +325,34 @@ mod tests {
 
         let http_request = r.into_http(Uri::default());
         assert!(http_request.headers().is_empty());
+    }
+
+    #[test]
+    fn setting_request_timeout() {
+        let mut req = Request::new(());
+        req.set_timeout(Duration::from_secs(30));
+
+        assert!(req.metadata().contains_key("grpc-timeout"));
+    }
+
+    #[test]
+    fn duration_to_grpc_timeout_less_than_second() {
+        let timeout = Duration::from_millis(500);
+        let value = duration_to_grpc_timeout(timeout);
+        assert_eq!(value, format!("{}u", timeout.as_micros()));
+    }
+
+    #[test]
+    fn duration_to_grpc_timeout_more_than_second() {
+        let timeout = Duration::from_secs(30);
+        let value = duration_to_grpc_timeout(timeout);
+        assert_eq!(value, format!("{}u", timeout.as_micros()));
+    }
+
+    #[test]
+    fn duration_to_grpc_timeout_a_very_long_time() {
+        let one_hour = Duration::from_secs(60 * 60);
+        let value = duration_to_grpc_timeout(one_hour);
+        assert_eq!(value, format!("{}m", one_hour.as_millis()));
     }
 }
