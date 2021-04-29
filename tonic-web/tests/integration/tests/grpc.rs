@@ -150,11 +150,6 @@ fn input() -> Input {
     }
 }
 
-// The metadata map includes a timestamp like: `Mon, 19 Oct 2020 14:17:53 GMT`.
-// Will this give us flaky tests?
-//   a) yes and no
-//   b) no or maybe
-//   c) I don't know
 fn meta<T>(r: &Response<T>) -> String {
     format!("{:?}", r.metadata())
 }
