@@ -1,3 +1,11 @@
+# [0.4.3](https://github.com/hyperium/tonic/compare/v0.4.2...v0.4.3) (2021-04-29)
+
+### Features
+
+* **client:** Add `Request::set_timeout` ([#615](https://github.com/hyperium/tonic/issues/615)) ([dae31d0](https://github.com/hyperium/tonic/commit/dae31d0))
+* **transport:** Configure TLS automatically when possible ([#445](https://github.com/hyperium/tonic/issues/445)) ([b04c1c6](https://github.com/hyperium/tonic/commit/b04c1c6))
+* **transport:** Support timeouts with `grpc-timeout` header ([#606](https://github.com/hyperium/tonic/issues/606)) ([9ff4f7b](https://github.com/hyperium/tonic/commit/9ff4f7b))
+
 # [0.4.2](https://github.com/hyperium/tonic/compare/v0.4.1...v0.4.2) (2021-04-13)
 
 ### Bug Fixes
