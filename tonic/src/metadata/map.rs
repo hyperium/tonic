@@ -194,6 +194,7 @@ pub struct OccupiedEntry<'a, VE: ValueEncoding> {
     phantom: PhantomData<VE>,
 }
 
+#[cfg(feature = "transport")]
 pub(crate) const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 // ===== impl MetadataMap =====
