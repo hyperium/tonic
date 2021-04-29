@@ -29,6 +29,7 @@ pub use self::value::AsciiMetadataValue;
 pub use self::value::BinaryMetadataValue;
 pub use self::value::MetadataValue;
 
+#[cfg(feature = "transport")]
 pub(crate) use self::map::GRPC_TIMEOUT_HEADER;
 
 /// The metadata::errors module contains types for errors that can occur
