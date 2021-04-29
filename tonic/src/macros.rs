@@ -67,6 +67,8 @@ macro_rules! include_proto {
 ///     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("/relative/protobuf/directory/descriptor_name.bin");
 /// }
 /// ```
+///
+/// [`OUT_DIR`]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 #[macro_export]
 macro_rules! include_file_descriptor_set {
     ($package: tt) => {
