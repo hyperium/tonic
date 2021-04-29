@@ -113,7 +113,7 @@ where
     config().enable(service)
 }
 
-/// returns a default `Config` instance for configuring services.
+/// returns a default [`Config`] instance for configuring services.
 ///
 /// ## Example
 ///

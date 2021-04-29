@@ -21,15 +21,15 @@ const DEFAULT_EXPOSED_HEADERS: [&str; 2] = ["grpc-status", "grpc-message"];
 /// with grpc-web compliant clients only, some cors options have specific default values and not
 /// all settings are configurable.
 ///
-/// ## Default values an configuration options
+/// ## Default values and configuration options
 ///
-/// * `allow-origin`: All origins allowed by default. Configurable but null and wildcard origins
+/// * `allow-origin`: All origins allowed by default. Configurable, but null and wildcard origins
 ///    are not supported.
-/// * `allow-methods`: "POST,OPTIONS". Not configurable.
+/// * `allow-methods`: `[POST,OPTIONS]`. Not configurable.
 /// * `allow-headers`: Set to whatever the `OPTIONS` request carries. Not configurable.
-/// * `allow-credentials`: "true". Configurable.
-/// * `max-age`: "86400". Configurable.
-/// * `expose-headers`: "grpc-status,grpc-message". Configurable but values can only be added.
+/// * `allow-credentials`: `true`. Configurable.
+/// * `max-age`: `86400`. Configurable.
+/// * `expose-headers`: `grpc-status,grpc-message`. Configurable but values can only be added.
 ///    `grpc-status` and `grpc-message` will always be exposed.
 #[derive(Debug, Clone)]
 pub struct Config {
