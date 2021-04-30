@@ -28,6 +28,10 @@ pub mod proto {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
     tonic::include_proto!("grpc.health.v1");
+
+    #[allow(dead_code)]
+    pub const GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET: &'static [u8] =
+        tonic::include_file_descriptor_set!("grpc_health_v1");
 }
 
 pub mod server;
