@@ -37,9 +37,9 @@ pub fn generate<T: Service>(
 
             impl<T> #service_ident<T>
             where T: tonic::client::GrpcService<tonic::body::BoxBody>,
-                  T::ResponseBody: Body + HttpBody + Send + 'static,
+                  T::ResponseBody: Body + Send + Sync + 'static,
                   T::Error: Into<StdError>,
-                  <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send, {
+                  <T::ResponseBody as Body>::Error: Into<StdError> + Send, {
                 pub fn new(inner: T) -> Self {
                     let inner = tonic::client::Grpc::new(inner);
                     Self { inner }

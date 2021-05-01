@@ -32,10 +32,10 @@ pub mod client {
     impl<T> GreeterClient<T>
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
+        T::ResponseBody: Body + Send + 'static,
         T::Error: Into<StdError>,
-        <T::ResponseBody as HttpBody>::Error: Into<StdError> + Send,
-        <T::ResponseBody as HttpBody>::Data: Into<bytes::Bytes> + Send,
+        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+        <T::ResponseBody as Body>::Data: Into<bytes::Bytes> + Send,
     {
         pub fn new(inner: T) -> Self {
             let inner = tonic::client::Grpc::new(inner);
@@ -158,7 +158,7 @@ pub mod server {
                     Ok(http::Response::builder()
                         .status(200)
                         .header("grpc-status", "12")
-                        .body(tonic::body::BoxBody::empty())
+                        .body(empty_body())
                         .unwrap())
                 }),
             }

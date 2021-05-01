@@ -691,7 +691,7 @@ impl Service<Request<Body>> for Unimplemented {
                 .status(200)
                 .header("grpc-status", "12")
                 .header("content-type", "application/grpc")
-                .body(BoxBody::empty())
+                .body(crate::body::empty_body())
                 .unwrap(),
         )
     }

@@ -527,7 +527,7 @@ impl Status {
 
         self.add_header(&mut parts.headers).unwrap();
 
-        http::Response::from_parts(parts, BoxBody::empty())
+        http::Response::from_parts(parts, crate::body::empty_body())
     }
 }
 

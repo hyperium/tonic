@@ -79,7 +79,10 @@ impl<T> Streaming<T> {
     {
         Self {
             decoder: Box::new(decoder),
-            body: BoxBody::map_from(body),
+            body: body
+                .map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
+                .map_err(|err| Status::map_error(err.into()))
+                .boxed(),
             state: State::ReadHeader,
             direction,
             buf: BytesMut::with_capacity(BUFFER_SIZE),

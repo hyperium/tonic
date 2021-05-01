@@ -1,5 +1,5 @@
 use crate::{
-    body::{Body, BoxBody},
+    body::BoxBody,
     client::GrpcService,
     codec::{encode_client, Codec, Streaming},
     interceptor::Interceptor,
@@ -11,7 +11,7 @@ use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
     uri::{Parts, PathAndQuery, Uri},
 };
-use http_body::Body as HttpBody;
+use http_body::Body;
 use std::fmt;
 
 /// A gRPC client dispatcher.
@@ -71,8 +71,8 @@ impl<T> Grpc<T> {
     ) -> Result<Response<M2>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -90,8 +90,8 @@ impl<T> Grpc<T> {
     ) -> Result<Response<M2>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -126,8 +126,8 @@ impl<T> Grpc<T> {
     ) -> Result<Response<Streaming<M2>>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -145,8 +145,8 @@ impl<T> Grpc<T> {
     ) -> Result<Response<Streaming<M2>>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
