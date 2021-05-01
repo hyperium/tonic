@@ -182,6 +182,7 @@ pub fn fmt(out_dir: &str) {
             }
             Ok(output) => {
                 if !output.status.success() {
+                    io::stdout().write_all(&output.stdout).unwrap();
                     io::stderr().write_all(&output.stderr).unwrap();
                     exit(output.status.code().unwrap_or(1))
                 }
