@@ -56,12 +56,17 @@ mod service {
         }
 
         fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
-            let mut channel = self.inner.clone();
+            // This is necessary because tonic internally uses `tower::buffer::Buffer`.
+            // See https://github.com/tower-rs/tower/issues/547#issuecomment-767629149
+            // for details on why this is necessary
+            let clone = self.inner.clone();
+            let mut inner = std::mem::replace(&mut self.inner, clone);
 
             Box::pin(async move {
                 // Do extra async work here...
+                let response = inner.call(req).await?;
 
-                channel.call(req).await.map_err(Into::into)
+                Ok(response)
             })
         }
     }
