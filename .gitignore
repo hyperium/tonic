@@ -2,6 +2,3 @@ target/
 **/*.rs.bk
 Cargo.lock
 tags
-
-# intellij IDE
-.idea
