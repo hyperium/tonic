@@ -57,10 +57,11 @@ impl Clone for Status {
             details: self.details.clone(),
             metadata: self.metadata.clone(),
             // The following contortion to clone `h2_error` is required because `h2::Error`
-            // cannot implement `Clone` because one of the `Kind` variants  stores a
-            // `std::io::Error` (which does not implement `Clone`). Since we know that
-            // `h2_error` will always have a reason, just extract the reason and create a new
-            // `h2::Error` from it.
+            // cannot implement `Clone` because one of the `Kind` variants stores a
+            // `std::io::Error` (which does not implement `Clone`).
+            //
+            // We know that, if `h2_error` is a `Some`, then it will have a `reason` since it was
+            // created from that `reason`. If it is a `None`, this clone will not change anything.
             #[cfg(feature = "transport")]
             h2_error: self
                 .h2_error
@@ -581,9 +582,7 @@ impl fmt::Debug for Status {
 
         #[cfg(feature = "transport")]
         {
-            if self.h2_error.is_some() {
-                builder.field("h2_error", &self.h2_error);
-            }
+            builder.field("h2_error", &self.h2_error);
         }
 
         builder.finish()
