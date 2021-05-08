@@ -9,7 +9,7 @@
 //!
 //! ```toml
 //! [dependencies]
-//! tonic_web = { version = "0.1" }
+//! tonic_web = "0.1"
 //! ```
 //!
 //! ## Enabling tonic services

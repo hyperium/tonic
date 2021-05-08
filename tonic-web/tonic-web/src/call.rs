@@ -30,7 +30,9 @@ pub(crate) mod content_types {
     }
 }
 
-const BUFFER_SIZE: usize = 2 * 1024;
+const BUFFER_SIZE: usize = 8 * 1024;
+
+const FRAME_HEADER_SIZE: usize = 5;
 
 // 8th (MSB) bit of the 1st gRPC frame byte
 // denotes an uncompressed trailer (as part of the body)
@@ -108,13 +110,11 @@ impl<B> GrpcWebCall<B> {
     }
 
     fn make_trailers_frame(&self, trailers: HeaderMap) -> Vec<u8> {
-        const HEADER_SIZE: usize = 5;
-
         let trailers = self.encode_trailers(trailers);
         let len = trailers.len();
         assert!(len <= u32::MAX as usize);
 
-        let mut frame = Vec::with_capacity(len + HEADER_SIZE);
+        let mut frame = Vec::with_capacity(len + FRAME_HEADER_SIZE);
         frame.push(GRPC_WEB_TRAILERS_BIT);
         frame.put_u32(len as u32);
         frame.extend(trailers);
@@ -264,7 +264,7 @@ impl Encoding {
 }
 
 fn internal_error(e: impl std::fmt::Display) -> Status {
-    Status::internal(e.to_string())
+    Status::internal(format!("tonic-web: {}", e))
 }
 
 #[cfg(test)]

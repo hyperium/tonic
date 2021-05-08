@@ -2,10 +2,10 @@ use std::future::Future;
 use std::net::SocketAddr;
 
 use tokio::net::TcpListener;
-use tokio_stream::{self as stream, StreamExt};
-use tokio_stream::wrappers::TcpListenerStream;
 use tokio::time::Duration;
 use tokio::{join, try_join};
+use tokio_stream::wrappers::TcpListenerStream;
+use tokio_stream::{self as stream, StreamExt};
 use tonic::transport::{Channel, Error, Server};
 use tonic::{Response, Streaming};
 
@@ -125,9 +125,9 @@ async fn grpc_web(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, 
     (fut, url)
 }
 
-type C = TestClient<Channel>;
+type Client = TestClient<Channel>;
 
-async fn spawn() -> Result<(C, C, C, C), Error> {
+async fn spawn() -> Result<(Client, Client, Client, Client), Error> {
     let ((s1, u1), (s2, u2), (s3, u3), (s4, u4)) =
         join!(grpc(true), grpc(false), grpc_web(true), grpc_web(false));
 
