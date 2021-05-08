@@ -173,7 +173,7 @@ prost-types = "0.7"
 hyper = "0.14"
 warp = "0.3"
 http = "0.2"
-http-body = "0.4"
+http-body = "0.4.2"
 pin-project = "1.0"
 # Health example
 tonic-health = { path = "../tonic-health" }
