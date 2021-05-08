@@ -74,6 +74,8 @@ implementation.
 - [`tonic-types`](https://github.com/hyperium/tonic/tree/master/tonic-types): [`prost`] based grpc utility types.
 - [`tonic-health`](https://github.com/hyperium/tonic/tree/master/tonic-health): Implementation of the standard [gRPC
 health checking service][healthcheck]. Also serves as an example of both unary and response streaming.
+- [`tonic-reflection`](https://github.com/hyperium/tonic/tree/master/tonic-reflection): A tonic based gRPC
+reflection implementation.
 - [`examples`](https://github.com/hyperium/tonic/tree/master/examples): Example gRPC implementations showing off
 tls, load balancing and bi-directional streaming.
 - [`interop`](https://github.com/hyperium/tonic/tree/master/interop): Interop tests implementation.
