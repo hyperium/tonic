@@ -33,7 +33,7 @@ use futures_util::{
     future::{self, Either as FutureEither, MapErr},
     TryFutureExt,
 };
-use http::{HeaderMap, Request, Response};
+use http::{Request, Response};
 use hyper::{server::accept, Body};
 use std::{
     fmt,
@@ -48,7 +48,7 @@ use tower::{limit::concurrency::ConcurrencyLimitLayer, util::Either, Service, Se
 use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
-type TraceInterceptor = Arc<dyn Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static>;
+type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
 const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 
@@ -290,10 +290,10 @@ impl Server {
         }
     }
 
-    /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
+    /// Intercept inbound requests and add a [`tracing::Span`] to each response future.
     pub fn trace_fn<F>(self, f: F) -> Self
     where
-        F: Fn(&HeaderMap) -> tracing::Span + Send + Sync + 'static,
+        F: Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static,
     {
         Server {
             trace_interceptor: Some(Arc::new(f)),
@@ -361,7 +361,7 @@ impl Server {
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
     {
-        let span = self.trace_interceptor.clone();
+        let trace_interceptor = self.trace_interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
@@ -381,7 +381,7 @@ impl Server {
             inner: svc,
             concurrency_limit,
             timeout,
-            span,
+            trace_interceptor,
         };
 
         let server = hyper::Server::builder(incoming)
@@ -582,7 +582,7 @@ impl fmt::Debug for Server {
 
 struct Svc<S> {
     inner: S,
-    span: Option<TraceInterceptor>,
+    trace_interceptor: Option<TraceInterceptor>,
     conn_info: ConnectionInfo,
 }
 
@@ -602,8 +602,16 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
-        let span = if let Some(trace_interceptor) = &self.span {
-            trace_interceptor(req.headers())
+        let span = if let Some(trace_interceptor) = &self.trace_interceptor {
+            let (parts, body) = req.into_parts();
+            let bodyless_request = Request::from_parts(parts, ());
+
+            let span = trace_interceptor(&bodyless_request);
+
+            let (parts, _) = bodyless_request.into_parts();
+            req = Request::from_parts(parts, body);
+
+            span
         } else {
             tracing::Span::none()
         };
@@ -624,7 +632,7 @@ struct MakeSvc<S> {
     concurrency_limit: Option<usize>,
     timeout: Option<Duration>,
     inner: S,
-    span: Option<TraceInterceptor>,
+    trace_interceptor: Option<TraceInterceptor>,
 }
 
 impl<S> Service<&ServerIo> for MakeSvc<S>
@@ -650,7 +658,7 @@ where
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
         let timeout = self.timeout;
-        let span = self.span.clone();
+        let trace_interceptor = self.trace_interceptor.clone();
 
         Box::pin(async move {
             let svc = ServiceBuilder::new()
@@ -661,7 +669,7 @@ where
 
             let svc = BoxService::new(Svc {
                 inner: svc,
-                span,
+                trace_interceptor,
                 conn_info,
             });
 
