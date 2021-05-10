@@ -6,6 +6,7 @@ use bytes::{Buf, BufMut, Bytes, BytesMut};
 use futures_core::{ready, Stream};
 use http::{header, HeaderMap, HeaderValue};
 use http_body::{Body, SizeHint};
+use pin_project::pin_project;
 use tonic::Status;
 
 use self::content_types::*;
@@ -50,7 +51,9 @@ pub(crate) enum Encoding {
     None,
 }
 
+#[pin_project]
 pub(crate) struct GrpcWebCall<B> {
+    #[pin]
     inner: B,
     buf: BytesMut,
     direction: Direction,
@@ -85,7 +88,7 @@ impl<B> GrpcWebCall<B> {
         (self.buf.len() / 4) * 4
     }
 
-    fn decode_chunk(&mut self) -> Result<Option<Bytes>, Status> {
+    fn decode_chunk(mut self: Pin<&mut Self>) -> Result<Option<Bytes>, Status> {
         // not enough bytes to decode
         if self.buf.is_empty() || self.buf.len() < 4 {
             return Ok(None);
@@ -93,39 +96,17 @@ impl<B> GrpcWebCall<B> {
 
         // Split `buf` at the largest index that is multiple of 4. Decode the
         // returned `Bytes`, keeping the rest for the next attempt to decode.
-        base64::decode(self.buf.split_to(self.max_decodable()).freeze())
+        let index = self.max_decodable();
+
+        base64::decode(self.as_mut().project().buf.split_to(index))
             .map(|decoded| Some(Bytes::from(decoded)))
             .map_err(internal_error)
-    }
-
-    // Key-value pairs encoded as a HTTP/1 headers block (without the terminating newline)
-    fn encode_trailers(&self, trailers: HeaderMap) -> Vec<u8> {
-        trailers.iter().fold(Vec::new(), |mut acc, (key, value)| {
-            acc.put_slice(key.as_ref());
-            acc.push(b':');
-            acc.put_slice(value.as_bytes());
-            acc.put_slice(b"\r\n");
-            acc
-        })
-    }
-
-    fn make_trailers_frame(&self, trailers: HeaderMap) -> Vec<u8> {
-        let trailers = self.encode_trailers(trailers);
-        let len = trailers.len();
-        assert!(len <= u32::MAX as usize);
-
-        let mut frame = Vec::with_capacity(len + FRAME_HEADER_SIZE);
-        frame.push(GRPC_WEB_TRAILERS_BIT);
-        frame.put_u32(len as u32);
-        frame.extend(trailers);
-
-        frame
     }
 }
 
 impl<B> GrpcWebCall<B>
 where
-    B: Body<Data = Bytes> + Unpin,
+    B: Body<Data = Bytes>,
     B::Error: Error,
 {
     fn poll_decode(
@@ -134,15 +115,17 @@ where
     ) -> Poll<Option<Result<B::Data, Status>>> {
         match self.encoding {
             Encoding::Base64 => loop {
-                if let Some(bytes) = self.decode_chunk()? {
+                if let Some(bytes) = self.as_mut().decode_chunk()? {
                     return Poll::Ready(Some(Ok(bytes)));
                 }
 
-                match ready!(Pin::new(&mut self.inner).poll_data(cx)) {
-                    Some(Ok(data)) => self.buf.put(data),
+                let mut this = self.as_mut().project();
+
+                match ready!(this.inner.as_mut().poll_data(cx)) {
+                    Some(Ok(data)) => this.buf.put(data),
                     Some(Err(e)) => return Poll::Ready(Some(Err(internal_error(e)))),
                     None => {
-                        return if self.buf.has_remaining() {
+                        return if this.buf.has_remaining() {
                             Poll::Ready(Some(Err(internal_error("malformed base64 request"))))
                         } else {
                             Poll::Ready(None)
@@ -151,7 +134,7 @@ where
                 }
             },
 
-            Encoding::None => match ready!(Pin::new(&mut self.inner).poll_data(cx)) {
+            Encoding::None => match ready!(self.project().inner.poll_data(cx)) {
                 Some(res) => Poll::Ready(Some(res.map_err(internal_error))),
                 None => Poll::Ready(None),
             },
@@ -162,8 +145,10 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<B::Data, Status>>> {
-        if let Some(mut res) = ready!(Pin::new(&mut self.inner).poll_data(cx)) {
-            if self.encoding == Encoding::Base64 {
+        let mut this = self.as_mut().project();
+
+        if let Some(mut res) = ready!(this.inner.as_mut().poll_data(cx)) {
+            if *this.encoding == Encoding::Base64 {
                 res = res.map(|b| base64::encode(b).into())
             }
 
@@ -172,16 +157,16 @@ where
 
         // this flag is needed because the inner stream never
         // returns Poll::Ready(None) when polled for trailers
-        if self.poll_trailers {
-            return match ready!(Pin::new(&mut self.inner).poll_trailers(cx)) {
+        if *this.poll_trailers {
+            return match ready!(this.inner.poll_trailers(cx)) {
                 Ok(Some(map)) => {
-                    let mut frame = self.make_trailers_frame(map);
+                    let mut frame = make_trailers_frame(map);
 
-                    if self.encoding == Encoding::Base64 {
+                    if *this.encoding == Encoding::Base64 {
                         frame = base64::encode(frame).into_bytes();
                     }
 
-                    self.poll_trailers = false;
+                    *this.poll_trailers = false;
                     Poll::Ready(Some(Ok(frame.into())))
                 }
                 Ok(None) => Poll::Ready(None),
@@ -195,7 +180,7 @@ where
 
 impl<B> Body for GrpcWebCall<B>
 where
-    B: Body<Data = Bytes> + Unpin,
+    B: Body<Data = Bytes>,
     B::Error: Error,
 {
     type Data = Bytes;
@@ -229,7 +214,7 @@ where
 
 impl<B> Stream for GrpcWebCall<B>
 where
-    B: Body<Data = Bytes> + Unpin,
+    B: Body<Data = Bytes>,
     B::Error: Error,
 {
     type Item = Result<Bytes, Status>;
@@ -265,6 +250,30 @@ impl Encoding {
 
 fn internal_error(e: impl std::fmt::Display) -> Status {
     Status::internal(format!("tonic-web: {}", e))
+}
+
+// Key-value pairs encoded as a HTTP/1 headers block (without the terminating newline)
+fn encode_trailers(trailers: HeaderMap) -> Vec<u8> {
+    trailers.iter().fold(Vec::new(), |mut acc, (key, value)| {
+        acc.put_slice(key.as_ref());
+        acc.push(b':');
+        acc.put_slice(value.as_bytes());
+        acc.put_slice(b"\r\n");
+        acc
+    })
+}
+
+fn make_trailers_frame(trailers: HeaderMap) -> Vec<u8> {
+    let trailers = encode_trailers(trailers);
+    let len = trailers.len();
+    assert!(len <= u32::MAX as usize);
+
+    let mut frame = Vec::with_capacity(len + FRAME_HEADER_SIZE);
+    frame.push(GRPC_WEB_TRAILERS_BIT);
+    frame.put_u32(len as u32);
+    frame.extend(trailers);
+
+    frame
 }
 
 #[cfg(test)]

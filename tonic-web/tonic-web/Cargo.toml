@@ -14,6 +14,7 @@ hyper = "0.14"
 http-body = "0.4"
 tower-service = "0.3"
 tracing = "0.1"
+pin-project = "1"
 
 [dev-dependencies]
 tokio = { version = "1.0.1", features = ["macros", "rt"] }
