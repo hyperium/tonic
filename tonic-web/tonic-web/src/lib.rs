@@ -36,8 +36,8 @@
 //! This will apply a default configuration that works well with grpc-web clients out of the box.
 //! See the [`Config`] documentation for details.
 //!
-//! Alternatively, if you have a tls enabled server, there is no need for the server to accept
-//! HTTP/1.1 requests:
+//! Alternatively, if you have a tls enabled server, you could skip setting `accept_http1` to `true`.
+//! This works because the browser will handle `ALPN`.
 //!
 //! ```ignore
 //! #[tokio::main]
@@ -59,7 +59,6 @@
 //!    Ok(())
 //! }
 //! ```
-//! This works because the browser will handle `ALPN`.
 //!
 //! ## Limitations
 //!
