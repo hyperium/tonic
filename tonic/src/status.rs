@@ -104,10 +104,6 @@ pub enum Code {
 
     /// The request does not have valid authentication credentials
     Unauthenticated = 16,
-
-    // New Codes may be added in the future, so never exhaustively match!
-    #[doc(hidden)]
-    __NonExhaustive,
 }
 
 impl Code {
@@ -146,9 +142,6 @@ impl Code {
             Code::Unavailable => "The service is currently unavailable",
             Code::DataLoss => "Unrecoverable data loss or corruption",
             Code::Unauthenticated => "The request does not have valid authentication credentials",
-            Code::__NonExhaustive => {
-                unreachable!("__NonExhaustive variant must not be constructed")
-            }
         }
     }
 }
@@ -717,8 +710,6 @@ impl Code {
             Code::Unavailable => HeaderValue::from_static("14"),
             Code::DataLoss => HeaderValue::from_static("15"),
             Code::Unauthenticated => HeaderValue::from_static("16"),
-
-            Code::__NonExhaustive => unreachable!("Code::__NonExhaustive"),
         }
     }
 
@@ -830,7 +821,7 @@ mod tests {
     fn code_from_i32() {
         // This for loop should catch if we ever add a new variant and don't
         // update From<i32>.
-        for i in 0..(Code::__NonExhaustive as i32) {
+        for i in 0..(Code::Unauthenticated as i32) {
             let code = Code::from(i);
             assert_eq!(
                 i, code as i32,
@@ -840,7 +831,6 @@ mod tests {
         }
 
         assert_eq!(Code::from(-1), Code::Unknown);
-        assert_eq!(Code::from(Code::__NonExhaustive as i32), Code::Unknown);
     }
 
     #[test]
