@@ -1,8 +1,15 @@
 use crate::{Request, Status};
+use std::panic::{RefUnwindSafe, UnwindSafe};
 use std::{fmt, sync::Arc};
 
-type InterceptorFn =
-    Arc<dyn Fn(Request<()>) -> Result<Request<()>, Status> + Send + Sync + 'static>;
+type InterceptorFn = Arc<
+    dyn Fn(Request<()>) -> Result<Request<()>, Status>
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
+>;
 
 /// Represents a gRPC interceptor.
 ///
@@ -25,7 +32,12 @@ pub struct Interceptor {
 impl Interceptor {
     /// Create a new `Interceptor` from the provided function.
     pub fn new(
-        f: impl Fn(Request<()>) -> Result<Request<()>, Status> + Send + Sync + 'static,
+        f: impl Fn(Request<()>) -> Result<Request<()>, Status>
+            + Send
+            + Sync
+            + UnwindSafe
+            + RefUnwindSafe
+            + 'static,
     ) -> Self {
         Interceptor { f: Arc::new(f) }
     }
@@ -43,7 +55,12 @@ impl Interceptor {
 
 impl<F> From<F> for Interceptor
 where
-    F: Fn(Request<()>) -> Result<Request<()>, Status> + Send + Sync + 'static,
+    F: Fn(Request<()>) -> Result<Request<()>, Status>
+        + Send
+        + Sync
+        + UnwindSafe
+        + RefUnwindSafe
+        + 'static,
 {
     fn from(f: F) -> Self {
         Interceptor::new(f)
@@ -53,5 +70,17 @@ where
 impl fmt::Debug for Interceptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Interceptor").finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+
+    #[test]
+    fn interceptor_fn_is_unwind_safe() {
+        fn is_unwind_safe<T: UnwindSafe + RefUnwindSafe>() {}
+        is_unwind_safe::<InterceptorFn>();
     }
 }
