@@ -1244,9 +1244,6 @@ impl<'a> Iterator for Iter<'a> {
     }
 }
 
-unsafe impl<'a> Sync for Iter<'a> {}
-unsafe impl<'a> Send for Iter<'a> {}
-
 // ===== impl IterMut =====
 
 impl<'a> Iterator for IterMut<'a> {
@@ -1274,9 +1271,6 @@ impl<'a> Iterator for IterMut<'a> {
     }
 }
 
-unsafe impl<'a> Sync for IterMut<'a> {}
-unsafe impl<'a> Send for IterMut<'a> {}
-
 // ===== impl ValueDrain =====
 
 impl<'a, VE: ValueEncoding> Iterator for ValueDrain<'a, VE> {
@@ -1292,9 +1286,6 @@ impl<'a, VE: ValueEncoding> Iterator for ValueDrain<'a, VE> {
         self.inner.size_hint()
     }
 }
-
-unsafe impl<'a, VE: ValueEncoding> Sync for ValueDrain<'a, VE> {}
-unsafe impl<'a, VE: ValueEncoding> Send for ValueDrain<'a, VE> {}
 
 // ===== impl Keys =====
 
@@ -1424,9 +1415,6 @@ where
             .map(&MetadataValue::unchecked_from_mut_header_value_ref)
     }
 }
-
-unsafe impl<'a, VE: ValueEncoding> Sync for ValueIterMut<'a, VE> {}
-unsafe impl<'a, VE: ValueEncoding> Send for ValueIterMut<'a, VE> {}
 
 // ===== impl Entry =====
 
@@ -2724,5 +2712,19 @@ mod tests {
             }
         }
         assert!(found_x_word_bin);
+    }
+
+    #[allow(dead_code)]
+    fn value_drain_is_send_sync() {
+        fn is_send_sync<T: Send + Sync>() {}
+
+        is_send_sync::<Iter<'_>>();
+        is_send_sync::<IterMut<'_>>();
+
+        is_send_sync::<ValueDrain<'_, Ascii>>();
+        is_send_sync::<ValueDrain<'_, Binary>>();
+
+        is_send_sync::<ValueIterMut<'_, Ascii>>();
+        is_send_sync::<ValueIterMut<'_, Binary>>();
     }
 }
