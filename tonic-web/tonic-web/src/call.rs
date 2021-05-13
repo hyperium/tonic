@@ -83,6 +83,8 @@ impl<B> GrpcWebCall<B> {
         }
     }
 
+    // This is to avoid passing a slice of bytes with a length that the base64
+    // decoder would consider invalid.
     #[inline]
     fn max_decodable(&self) -> usize {
         (self.buf.len() / 4) * 4

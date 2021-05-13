@@ -9,8 +9,8 @@ use tracing::{debug, trace};
 
 use crate::call::content_types::is_grpc_web;
 use crate::call::{Encoding, GrpcWebCall};
-use crate::cors::headers::{ORIGIN, REQUEST_HEADERS};
 use crate::cors::Cors;
+use crate::cors::{ORIGIN, REQUEST_HEADERS};
 use crate::{BoxError, BoxFuture, Config};
 
 const GRPC: &str = "application/grpc";
@@ -351,7 +351,7 @@ mod tests {
 
     mod options {
         use super::*;
-        use crate::cors::headers::{REQUEST_HEADERS, REQUEST_METHOD};
+        use crate::cors::{REQUEST_HEADERS, REQUEST_METHOD};
         use http::HeaderValue;
 
         const SUCCESS: StatusCode = StatusCode::NO_CONTENT;

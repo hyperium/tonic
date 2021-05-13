@@ -1,22 +1,18 @@
 use std::sync::Arc;
 
+pub(crate) use http::header::ACCESS_CONTROL_ALLOW_CREDENTIALS as ALLOW_CREDENTIALS;
+pub(crate) use http::header::ACCESS_CONTROL_ALLOW_HEADERS as ALLOW_HEADERS;
+pub(crate) use http::header::ACCESS_CONTROL_ALLOW_METHODS as ALLOW_METHODS;
+pub(crate) use http::header::ACCESS_CONTROL_ALLOW_ORIGIN as ALLOW_ORIGIN;
+pub(crate) use http::header::ACCESS_CONTROL_EXPOSE_HEADERS as EXPOSE_HEADERS;
+pub(crate) use http::header::ACCESS_CONTROL_MAX_AGE as MAX_AGE;
+pub(crate) use http::header::ACCESS_CONTROL_REQUEST_HEADERS as REQUEST_HEADERS;
+pub(crate) use http::header::ACCESS_CONTROL_REQUEST_METHOD as REQUEST_METHOD;
+pub(crate) use http::header::ORIGIN;
 use http::{header, HeaderMap, HeaderValue, Method};
 use tracing::debug;
 
-use self::headers::*;
 use crate::config::Config;
-
-pub(crate) mod headers {
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_CREDENTIALS as ALLOW_CREDENTIALS;
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_HEADERS as ALLOW_HEADERS;
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_METHODS as ALLOW_METHODS;
-    pub(crate) use http::header::ACCESS_CONTROL_ALLOW_ORIGIN as ALLOW_ORIGIN;
-    pub(crate) use http::header::ACCESS_CONTROL_EXPOSE_HEADERS as EXPOSE_HEADERS;
-    pub(crate) use http::header::ACCESS_CONTROL_MAX_AGE as MAX_AGE;
-    pub(crate) use http::header::ACCESS_CONTROL_REQUEST_HEADERS as REQUEST_HEADERS;
-    pub(crate) use http::header::ACCESS_CONTROL_REQUEST_METHOD as REQUEST_METHOD;
-    pub(crate) use http::header::ORIGIN;
-}
 
 const DEFAULT_ALLOWED_METHODS: &[Method; 2] = &[Method::POST, Method::OPTIONS];
 

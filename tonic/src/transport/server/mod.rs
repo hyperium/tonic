@@ -291,6 +291,11 @@ impl Server {
 
     /// Allow this server to accept http1 requests.
     ///
+    /// Accepting http1 requests is only useful when developing `grpc-web`
+    /// enabled services. If this setting is set to `true` but services are
+    /// not correctly configured to handle grpc-web requests, your server may
+    /// return confusing (but correct) protocol errors.
+    ///
     /// Default is `false`.
     pub fn accept_http1(self, accept_http1: bool) -> Self {
         Server {
