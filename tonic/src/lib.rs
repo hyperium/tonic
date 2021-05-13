@@ -62,6 +62,7 @@
 //! [`transport`]: transport/index.html
 
 #![recursion_limit = "256"]
+#![allow(clippy::inconsistent_struct_constructor)]
 #![warn(
     missing_debug_implementations,
     missing_docs,
@@ -87,6 +88,7 @@ pub mod server;
 #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 pub mod transport;
 
+mod extensions;
 mod interceptor;
 mod macros;
 mod request;
@@ -100,6 +102,7 @@ pub use async_trait::async_trait;
 
 #[doc(inline)]
 pub use codec::Streaming;
+pub use extensions::Extensions;
 pub use interceptor::Interceptor;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;

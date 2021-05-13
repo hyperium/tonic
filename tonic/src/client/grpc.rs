@@ -97,7 +97,8 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let (mut parts, body) = self.streaming(request, path, codec).await?.into_parts();
+        let (mut parts, body, extensions) =
+            self.streaming(request, path, codec).await?.into_parts();
 
         futures_util::pin_mut!(body);
 
@@ -114,7 +115,7 @@ impl<T> Grpc<T> {
             parts.merge(trailers);
         }
 
-        Ok(Response::from_parts(parts, message))
+        Ok(Response::from_parts(parts, message, extensions))
     }
 
     /// Send a server side streaming gRPC request.

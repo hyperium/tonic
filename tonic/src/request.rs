@@ -1,8 +1,8 @@
 use crate::metadata::{MetadataMap, MetadataValue};
 #[cfg(feature = "transport")]
 use crate::transport::Certificate;
+use crate::Extensions;
 use futures_core::Stream;
-use http::Extensions;
 #[cfg(feature = "transport")]
 use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
@@ -116,7 +116,7 @@ impl<T> Request<T> {
         Request {
             metadata: MetadataMap::new(),
             message,
-            extensions: Extensions::default(),
+            extensions: Extensions::new(),
         }
     }
 
@@ -161,7 +161,7 @@ impl<T> Request<T> {
         Request {
             metadata: MetadataMap::from_headers(parts.headers),
             message,
-            extensions: parts.extensions,
+            extensions: Extensions::from_http(parts.extensions),
         }
     }
 
@@ -178,7 +178,7 @@ impl<T> Request<T> {
         *request.method_mut() = http::Method::POST;
         *request.uri_mut() = uri;
         *request.headers_mut() = self.metadata.into_sanitized_headers();
-        *request.extensions_mut() = self.extensions;
+        *request.extensions_mut() = self.extensions.into_http();
 
         request
     }
@@ -193,7 +193,7 @@ impl<T> Request<T> {
         Request {
             metadata: self.metadata,
             message,
-            extensions: Extensions::default(),
+            extensions: Extensions::new(),
         }
     }
 
@@ -253,6 +253,60 @@ impl<T> Request<T> {
         let value = MetadataValue::from_str(&duration_to_grpc_timeout(deadline)).unwrap();
         self.metadata_mut()
             .insert(crate::metadata::GRPC_TIMEOUT_HEADER, value);
+    }
+
+    /// Returns a reference to the associated extensions.
+    pub fn extensions(&self) -> &Extensions {
+        &self.extensions
+    }
+
+    /// Returns a mutable reference to the associated extensions.
+    ///
+    /// # Example
+    ///
+    /// Extensions can be set in interceptors:
+    ///
+    /// ```no_run
+    /// use tonic::{Request, Interceptor};
+    ///
+    /// struct MyExtension {
+    ///     some_piece_of_data: String,
+    /// }
+    ///
+    /// Interceptor::new(|mut request: Request<()>| {
+    ///     request.extensions_mut().insert(MyExtension {
+    ///         some_piece_of_data: "foo".to_string(),
+    ///     });
+    ///
+    ///     Ok(request)
+    /// });
+    /// ```
+    ///
+    /// And picked up by RPCs:
+    ///
+    /// ```no_run
+    /// use tonic::{async_trait, Status, Request, Response};
+    /// #
+    /// # struct Output {}
+    /// # struct Input;
+    /// # struct MyService;
+    /// # struct MyExtension;
+    /// # #[async_trait]
+    /// # trait TestService {
+    /// #     async fn handler(&self, req: Request<Input>) -> Result<Response<Output>, Status>;
+    /// # }
+    ///
+    /// #[async_trait]
+    /// impl TestService for MyService {
+    ///     async fn handler(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
+    ///         let value: &MyExtension = req.extensions().get::<MyExtension>().unwrap();
+    ///
+    ///         Ok(Response::new(Output {}))
+    ///     }
+    /// }
+    /// ```
+    pub fn extensions_mut(&mut self) -> &mut Extensions {
+        &mut self.extensions
     }
 }
 

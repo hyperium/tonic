@@ -1,10 +1,11 @@
-use crate::metadata::MetadataMap;
+use crate::{metadata::MetadataMap, Extensions};
 
 /// A gRPC response and metadata from an RPC call.
 #[derive(Debug)]
 pub struct Response<T> {
     metadata: MetadataMap,
     message: T,
+    extensions: Extensions,
 }
 
 impl<T> Response<T> {
@@ -24,6 +25,7 @@ impl<T> Response<T> {
         Response {
             metadata: MetadataMap::new(),
             message,
+            extensions: Extensions::new(),
         }
     }
 
@@ -52,12 +54,16 @@ impl<T> Response<T> {
         self.message
     }
 
-    pub(crate) fn into_parts(self) -> (MetadataMap, T) {
-        (self.metadata, self.message)
+    pub(crate) fn into_parts(self) -> (MetadataMap, T, Extensions) {
+        (self.metadata, self.message, self.extensions)
     }
 
-    pub(crate) fn from_parts(metadata: MetadataMap, message: T) -> Self {
-        Self { metadata, message }
+    pub(crate) fn from_parts(metadata: MetadataMap, message: T, extensions: Extensions) -> Self {
+        Self {
+            metadata,
+            message,
+            extensions,
+        }
     }
 
     pub(crate) fn from_http(res: http::Response<T>) -> Self {
@@ -65,6 +71,7 @@ impl<T> Response<T> {
         Response {
             metadata: MetadataMap::from_headers(head.headers),
             message,
+            extensions: Extensions::from_http(head.extensions),
         }
     }
 
@@ -73,6 +80,7 @@ impl<T> Response<T> {
 
         *res.version_mut() = http::Version::HTTP_2;
         *res.headers_mut() = self.metadata.into_sanitized_headers();
+        *res.extensions_mut() = self.extensions.into_http();
 
         res
     }
@@ -86,7 +94,18 @@ impl<T> Response<T> {
         Response {
             metadata: self.metadata,
             message,
+            extensions: self.extensions,
         }
+    }
+
+    /// Returns a reference to the associated extensions.
+    pub fn extensions(&self) -> &Extensions {
+        &self.extensions
+    }
+
+    /// Returns a mutable reference to the associated extensions.
+    pub fn extensions_mut(&mut self) -> &mut Extensions {
+        &mut self.extensions
     }
 }
 
