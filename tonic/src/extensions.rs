@@ -7,11 +7,15 @@ use std::fmt;
 ///
 /// [`Interceptor`]: crate::Interceptor
 /// [`Request`]: crate::Request
-pub struct Extensions(http::Extensions);
+pub struct Extensions {
+    inner: http::Extensions,
+}
 
 impl Extensions {
     pub(crate) fn new() -> Self {
-        Self(http::Extensions::new())
+        Self {
+            inner: http::Extensions::new(),
+        }
     }
 
     /// Insert a type into this `Extensions`.
@@ -20,19 +24,19 @@ impl Extensions {
     /// be returned.
     #[inline]
     pub fn insert<T: Send + Sync + 'static>(&mut self, val: T) -> Option<T> {
-        self.0.insert(val)
+        self.inner.insert(val)
     }
 
     /// Get a reference to a type previously inserted on this `Extensions`.
     #[inline]
     pub fn get<T: Send + Sync + 'static>(&self) -> Option<&T> {
-        self.0.get()
+        self.inner.get()
     }
 
     /// Get a mutable reference to a type previously inserted on this `Extensions`.
     #[inline]
     pub fn get_mut<T: Send + Sync + 'static>(&mut self) -> Option<&mut T> {
-        self.0.get_mut()
+        self.inner.get_mut()
     }
 
     /// Remove a type from this `Extensions`.
@@ -40,23 +44,23 @@ impl Extensions {
     /// If a extension of this type existed, it will be returned.
     #[inline]
     pub fn remove<T: Send + Sync + 'static>(&mut self) -> Option<T> {
-        self.0.remove()
+        self.inner.remove()
     }
 
     /// Clear the `Extensions` of all inserted extensions.
     #[inline]
     pub fn clear(&mut self) {
-        self.0.clear()
+        self.inner.clear()
     }
 
     #[inline]
     pub(crate) fn from_http(http: http::Extensions) -> Self {
-        Self(http)
+        Self { inner: http }
     }
 
     #[inline]
     pub(crate) fn into_http(self) -> http::Extensions {
-        self.0
+        self.inner
     }
 }
 

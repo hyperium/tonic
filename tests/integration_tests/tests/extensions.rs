@@ -53,10 +53,7 @@ async fn setting_extension_from_interceptor() {
 
     let mut client = test_client::TestClient::new(channel);
 
-    match client.unary_call(Input {}).await {
-        Ok(_) => {}
-        Err(status) => panic!("{}", status.message()),
-    }
+    client.unary_call(Input {}).await.unwrap();
 
     tx.send(()).unwrap();
 
@@ -100,10 +97,7 @@ async fn setting_extension_from_tower() {
 
     let mut client = test_client::TestClient::new(channel);
 
-    match client.unary_call(Input {}).await {
-        Ok(_) => {}
-        Err(status) => panic!("{}", status.message()),
-    }
+    client.unary_call(Input {}).await.unwrap();
 
     tx.send(()).unwrap();
 
