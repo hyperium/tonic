@@ -72,6 +72,7 @@ pub struct Server {
     http2_keepalive_interval: Option<Duration>,
     http2_keepalive_timeout: Option<Duration>,
     max_frame_size: Option<u32>,
+    accept_http1: bool,
 }
 
 /// A stack based `Service` router.
@@ -137,6 +138,7 @@ impl Server {
     pub fn builder() -> Self {
         Server {
             tcp_nodelay: true,
+            accept_http1: false,
             ..Default::default()
         }
     }
@@ -287,7 +289,22 @@ impl Server {
         }
     }
 
-    /// Intercept inbound requests and add a [`tracing::Span`] to each response future.
+    /// Allow this server to accept http1 requests.
+    ///
+    /// Accepting http1 requests is only useful when developing `grpc-web`
+    /// enabled services. If this setting is set to `true` but services are
+    /// not correctly configured to handle grpc-web requests, your server may
+    /// return confusing (but correct) protocol errors.
+    ///
+    /// Default is `false`.
+    pub fn accept_http1(self, accept_http1: bool) -> Self {
+        Server {
+            accept_http1,
+            ..self
+        }
+    }
+
+    /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
     pub fn trace_fn<F>(self, f: F) -> Self
     where
         F: Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static,
@@ -365,6 +382,7 @@ impl Server {
         let max_concurrent_streams = self.max_concurrent_streams;
         let timeout = self.timeout;
         let max_frame_size = self.max_frame_size;
+        let http2_only = !self.accept_http1;
 
         let http2_keepalive_interval = self.http2_keepalive_interval;
         let http2_keepalive_timeout = self
@@ -382,7 +400,7 @@ impl Server {
         };
 
         let server = hyper::Server::builder(incoming)
-            .http2_only(true)
+            .http2_only(http2_only)
             .http2_initial_connection_window_size(init_connection_window_size)
             .http2_initial_stream_window_size(init_stream_window_size)
             .http2_max_concurrent_streams(max_concurrent_streams)

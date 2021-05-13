@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package test;
+
+service Test {
+  rpc UnaryCall(Input) returns (Output);
+  rpc ServerStream(Input) returns (stream Output);
+  rpc ClientStream(stream Input) returns (Output);
+}
+
+message Input {
+  int32 id = 1;
+  string desc = 2;
+}
+
+message Output {
+  int32 id = 1;
+  string desc = 2;
+}

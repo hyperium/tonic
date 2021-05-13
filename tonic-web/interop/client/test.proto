@@ -1,0 +1,68 @@
+
+// Copyright 2015-2016 gRPC authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Adapted from https://github.com/grpc/grpc-web/tree/master/src/proto/grpc/testing
+
+syntax = "proto3";
+
+package grpc.testing;
+
+service TestService {
+  rpc EmptyCall(grpc.testing.Empty) returns (grpc.testing.Empty);
+  rpc UnaryCall(SimpleRequest) returns (SimpleResponse);
+  rpc StreamingOutputCall(StreamingOutputCallRequest)
+      returns (stream StreamingOutputCallResponse);
+  rpc UnimplementedCall(grpc.testing.Empty) returns (grpc.testing.Empty);
+}
+
+message Empty {}
+
+message BoolValue {
+  bool value = 1;
+}
+
+message Payload {
+  bytes body = 2;
+}
+
+message EchoStatus {
+  int32 code = 1;
+  string message = 2;
+}
+
+message SimpleRequest {
+  int32 response_size = 2;
+  Payload payload = 3;
+  EchoStatus response_status = 7;
+}
+
+message SimpleResponse {
+  Payload payload = 1;
+}
+
+message ResponseParameters {
+  int32 size = 1;
+  int32 interval_us = 2;
+}
+
+message StreamingOutputCallRequest {
+  repeated ResponseParameters response_parameters = 2;
+  Payload payload = 3;
+  EchoStatus response_status = 7;
+}
+
+message StreamingOutputCallResponse {
+  Payload payload = 1;
+}

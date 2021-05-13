@@ -1,0 +1,13 @@
+[package]
+name = "web-interop"
+version = "0.1.0"
+authors = ["Juan Alvarez <j@yabit.io>"]
+publish = false
+edition = "2018"
+
+[dependencies]
+interop = { path = "../../interop" }
+tonic = { path = "../../tonic" }
+tonic-web = { path = "../tonic-web" }
+tokio = { version = "1.0.1", features = ["rt-multi-thread", "macros"] }
+
