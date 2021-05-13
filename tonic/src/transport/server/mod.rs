@@ -23,10 +23,7 @@ pub(crate) use tokio_rustls::server::TlsStream;
 use crate::transport::Error;
 
 use self::recover_error::RecoverError;
-use super::{
-    service::{GrpcTimeout, Or, Routes, ServerIo},
-    BoxFuture,
-};
+use super::service::{GrpcTimeout, Or, Routes, ServerIo};
 use crate::{body::BoxBody, request::ConnectionInfo};
 use futures_core::Stream;
 use futures_util::{
@@ -643,7 +640,7 @@ where
 {
     type Response = BoxService;
     type Error = crate::Error;
-    type Future = BoxFuture<Self::Response, Self::Error>;
+    type Future = future::Ready<Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Ok(()).into()
@@ -660,21 +657,19 @@ where
         let timeout = self.timeout;
         let trace_interceptor = self.trace_interceptor.clone();
 
-        Box::pin(async move {
-            let svc = ServiceBuilder::new()
-                .layer_fn(RecoverError::new)
-                .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
-                .layer_fn(|s| GrpcTimeout::new(s, timeout))
-                .service(svc);
+        let svc = ServiceBuilder::new()
+            .layer_fn(RecoverError::new)
+            .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
+            .layer_fn(|s| GrpcTimeout::new(s, timeout))
+            .service(svc);
 
-            let svc = BoxService::new(Svc {
-                inner: svc,
-                trace_interceptor,
-                conn_info,
-            });
+        let svc = BoxService::new(Svc {
+            inner: svc,
+            trace_interceptor,
+            conn_info,
+        });
 
-            Ok(svc)
-        })
+        future::ready(Ok(svc))
     }
 }
 
