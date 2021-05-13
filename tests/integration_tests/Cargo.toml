@@ -17,6 +17,9 @@ bytes = "1.0"
 [dev-dependencies]
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "net"] }
 tokio-stream = { version = "0.1.5", features = ["net"] }
+tower-service = "0.3"
+hyper = "0.14"
+futures = "0.3"
 
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }

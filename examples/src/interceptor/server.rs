@@ -16,6 +16,9 @@ impl Greeter for MyGreeter {
         &self,
         request: Request<HelloRequest>,
     ) -> Result<Response<HelloReply>, Status> {
+        let extension = request.extensions().get::<MyExtension>().unwrap();
+        println!("extension data = {}", extension.some_piece_of_data);
+
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
@@ -40,7 +43,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// This function will get called on each inbound request, if a `Status`
 /// is returned, it will cancel the request and return that status to the
 /// client.
-fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
+fn intercept(mut req: Request<()>) -> Result<Request<()>, Status> {
     println!("Intercepting request: {:?}", req);
+
+    // Set an extension that can be retrieved by `say_hello`
+    req.extensions_mut().insert(MyExtension {
+        some_piece_of_data: "foo".to_string(),
+    });
+
     Ok(req)
+}
+
+struct MyExtension {
+    some_piece_of_data: String,
 }
