@@ -6,7 +6,10 @@ use futures::Stream;
 use pb::{EchoRequest, EchoResponse};
 use std::pin::Pin;
 use tonic::{
-    transport::{Identity, Server, ServerTlsConfig},
+    transport::{
+        server::{TcpConnectInfo, TlsConnectInfo},
+        Identity, Server, ServerTlsConfig,
+    },
     Request, Response, Status, Streaming,
 };
 
@@ -19,6 +22,16 @@ pub struct EchoServer;
 #[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
+        let conn_info = request
+            .extensions()
+            .get::<TlsConnectInfo<TcpConnectInfo>>()
+            .unwrap();
+        println!(
+            "Got a request from {:?} with info {:?}",
+            request.remote_addr(),
+            conn_info
+        );
+
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
     }
