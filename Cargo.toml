@@ -5,6 +5,7 @@ members = [
     "tonic-health",
     "tonic-types",
     "tonic-reflection",
+    "tonic-web",
 
     # Non-published crates
     "examples",
@@ -21,5 +22,6 @@ members = [
     "tests/integration_tests",
     "tests/stream_conflict",
     "tests/root-crate-path",
+    "tonic-web/tests/integration"
 ]
 
