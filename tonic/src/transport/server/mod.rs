@@ -35,13 +35,19 @@ use hyper::{server::accept, Body};
 use std::{
     fmt,
     future::Future,
+    marker::PhantomData,
     net::SocketAddr,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use tower::{limit::concurrency::ConcurrencyLimitLayer, util::Either, Service, ServiceBuilder};
+use tower::{
+    layer::{util::Identity, Layer},
+    limit::concurrency::ConcurrencyLimitLayer,
+    util::Either,
+    Service, ServiceBuilder,
+};
 use tracing_futures::{Instrument, Instrumented};
 
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
@@ -58,7 +64,7 @@ const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 /// reference implementation that should be a good starting point for anyone
 /// wanting to create a more complex and/or specific implementation.
 #[derive(Default, Clone)]
-pub struct Server {
+pub struct Server<L = Identity> {
     trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
     timeout: Option<Duration>,
@@ -73,12 +79,14 @@ pub struct Server {
     http2_keepalive_timeout: Option<Duration>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
+    layer: L,
 }
 
 /// A stack based `Service` router.
 #[derive(Debug)]
-pub struct Router<A, B> {
-    server: Server,
+pub struct Router<L, A, B> {
+    server: Server<()>,
+    layer: L,
     routes: Routes<A, B, Request<Body>>,
 }
 
@@ -89,7 +97,7 @@ pub struct Router<A, B> {
 /// ecosystem.
 #[derive(Debug)]
 pub struct RouterService<A, B> {
-    router: Router<A, B>,
+    router: Router<(), A, B>,
 }
 
 impl<A, B> Service<Request<Body>> for RouterService<A, B>
@@ -144,7 +152,7 @@ impl Server {
     }
 }
 
-impl Server {
+impl<L> Server<L> {
     /// Configure TLS for this server.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
@@ -315,21 +323,41 @@ impl Server {
         }
     }
 
+    pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<NewLayer> {
+        Server {
+            layer: new_layer,
+            trace_interceptor: self.trace_interceptor,
+            concurrency_limit: self.concurrency_limit,
+            timeout: self.timeout,
+            #[cfg(feature = "tls")]
+            tls: self.tls,
+            init_stream_window_size: self.init_stream_window_size,
+            init_connection_window_size: self.init_connection_window_size,
+            max_concurrent_streams: self.max_concurrent_streams,
+            tcp_keepalive: self.tcp_keepalive,
+            tcp_nodelay: self.tcp_nodelay,
+            http2_keepalive_interval: self.http2_keepalive_interval,
+            http2_keepalive_timeout: self.http2_keepalive_timeout,
+            max_frame_size: self.max_frame_size,
+            accept_http1: self.accept_http1,
+        }
+    }
+
     /// Create a router with the `S` typed service as the first service.
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services.
-    pub fn add_service<S>(&mut self, svc: S) -> Router<S, Unimplemented>
+    pub fn add_service<S>(&mut self, svc: S) -> Router<L, Named<S, L::Service>, Unimplemented>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
+        S: NamedService + Clone + Send + 'static,
+        L: Layer<S> + Clone,
+        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
     {
-        Router::new(self.clone(), svc)
+        let (server, layer) = self.clone().into_parts();
+        let svc = NamedLayer::new(&layer).layer(svc);
+        Router::new(server, layer, svc)
     }
 
     /// Create a router with the optional `S` typed service as the first service.
@@ -343,23 +371,53 @@ impl Server {
     pub fn add_optional_service<S>(
         &mut self,
         svc: Option<S>,
-    ) -> Router<Either<S, Unimplemented>, Unimplemented>
+    ) -> Router<L, Named<Either<S, Unimplemented>, L::Service>, Unimplemented>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
+        S: NamedService + Clone + Send + 'static,
+        L: Layer<Either<S, Unimplemented>> + Clone,
+        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        <<L as Layer<Either<S, Unimplemented>>>::Service as Service<Request<Body>>>::Future:
+            Send + 'static,
+        <<L as Layer<Either<S, Unimplemented>>>::Service as Service<Request<Body>>>::Error:
+            Into<crate::Error> + Send,
     {
         let svc = match svc {
             Some(some) => Either::A(some),
             None => Either::B(Unimplemented::default()),
         };
-        Router::new(self.clone(), svc)
+
+        let (server, layer) = self.clone().into_parts();
+        let svc = NamedLayer::new(&layer).layer(svc);
+        Router::new(server, layer, svc)
     }
 
+    fn into_parts(self) -> (Server<()>, L)
+    where
+        L: Clone,
+    {
+        let layer = self.layer;
+        let server = Server {
+            layer: (),
+            trace_interceptor: self.trace_interceptor,
+            concurrency_limit: self.concurrency_limit,
+            timeout: self.timeout,
+            #[cfg(feature = "tls")]
+            tls: self.tls,
+            init_stream_window_size: self.init_stream_window_size,
+            init_connection_window_size: self.init_connection_window_size,
+            max_concurrent_streams: self.max_concurrent_streams,
+            tcp_keepalive: self.tcp_keepalive,
+            tcp_nodelay: self.tcp_nodelay,
+            http2_keepalive_interval: self.http2_keepalive_interval,
+            http2_keepalive_timeout: self.http2_keepalive_timeout,
+            max_frame_size: self.max_frame_size,
+            accept_http1: self.accept_http1,
+        };
+        (server, layer)
+    }
+}
+
+impl Server<()> {
     pub(crate) async fn serve_with_shutdown<S, I, F, IO, IE>(
         self,
         svc: S,
@@ -422,8 +480,8 @@ impl Server {
     }
 }
 
-impl<S> Router<S, Unimplemented> {
-    pub(crate) fn new(server: Server, svc: S) -> Self
+impl<L, S> Router<L, S, Unimplemented> {
+    pub(crate) fn new(server: Server<()>, layer: L, svc: S) -> Self
     where
         S: Service<Request<Body>, Response = Response<BoxBody>>
             + NamedService
@@ -442,12 +500,13 @@ impl<S> Router<S, Unimplemented> {
         };
         Self {
             server,
+            layer,
             routes: Routes::new(pred, svc, Unimplemented::default()),
         }
     }
 }
 
-impl<A, B> Router<A, B>
+impl<L, A, B> Router<L, A, B>
 where
     A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
     A::Future: Send + 'static,
@@ -457,17 +516,20 @@ where
     B::Error: Into<crate::Error> + Send,
 {
     /// Add a new service to this router.
-    pub fn add_service<S>(self, svc: S) -> Router<S, Or<A, B, Request<Body>>>
+    #[allow(clippy::type_complexity)]
+    pub fn add_service<S>(self, svc: S) -> Router<L, Named<S, L::Service>, Or<A, B, Request<Body>>>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
+        S: NamedService + Clone + Send + 'static,
+        L: Layer<S> + Clone,
+        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
     {
-        let Self { routes, server } = self;
+        let Self {
+            routes,
+            server,
+            layer,
+        } = self;
 
         let svc_name = <S as NamedService>::NAME;
         let svc_route = format!("/{}", svc_name);
@@ -476,9 +538,14 @@ where
 
             path.starts_with(&svc_route)
         };
+        let svc = NamedLayer::new(&layer).layer(svc);
         let routes = routes.push(pred, svc);
 
-        Router { server, routes }
+        Router {
+            server,
+            routes,
+            layer,
+        }
     }
 
     /// Add a new optional service to this router.
@@ -486,20 +553,25 @@ where
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
     /// As a result, one cannot use this to toggle between two identically named implementations.
+    #[allow(clippy::type_complexity)]
     pub fn add_optional_service<S>(
         self,
         svc: Option<S>,
-    ) -> Router<Either<S, Unimplemented>, Or<A, B, Request<Body>>>
+    ) -> Router<L, Named<Either<S, Unimplemented>, L::Service>, Or<A, B, Request<Body>>>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
+        S: NamedService + Clone + Send + 'static,
+        L: Layer<Either<S, Unimplemented>> + Clone,
+        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        <<L as Layer<Either<S, Unimplemented>>>::Service as Service<Request<Body>>>::Future:
+            Send + 'static,
+        <<L as Layer<Either<S, Unimplemented>>>::Service as Service<Request<Body>>>::Error:
+            Into<crate::Error> + Send,
     {
-        let Self { routes, server } = self;
+        let Self {
+            routes,
+            server,
+            layer,
+        } = self;
 
         let svc_name = <S as NamedService>::NAME;
         let svc_route = format!("/{}", svc_name);
@@ -512,9 +584,14 @@ where
             Some(some) => Either::A(some),
             None => Either::B(Unimplemented::default()),
         };
+        let svc = NamedLayer::new(&layer).layer(svc);
         let routes = routes.push(pred, svc);
 
-        Router { server, routes }
+        Router {
+            server,
+            routes,
+            layer,
+        }
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
@@ -585,11 +662,16 @@ where
 
     /// Create a tower service out of a router.
     pub fn into_service(self) -> RouterService<A, B> {
-        RouterService { router: self }
+        let router = Router {
+            layer: (),
+            server: self.server,
+            routes: self.routes,
+        };
+        RouterService { router }
     }
 }
 
-impl fmt::Debug for Server {
+impl<L> fmt::Debug for Server<L> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Builder").finish()
     }
@@ -715,5 +797,88 @@ impl Service<Request<Body>> for Unimplemented {
                 .body(BoxBody::empty())
                 .unwrap(),
         )
+    }
+}
+
+struct NamedLayer<'a, L> {
+    layer: &'a L,
+}
+
+impl<'a, L> NamedLayer<'a, L> {
+    fn new(layer: &'a L) -> Self {
+        Self { layer }
+    }
+}
+
+impl<'a, S, L> Layer<S> for NamedLayer<'a, L>
+where
+    L: Layer<S>,
+    S: NamedService,
+{
+    type Service = Named<S, L::Service>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        Named::new(self.layer.layer(inner))
+    }
+}
+
+pub struct Named<A, B> {
+    inner: B,
+    _name: PhantomData<fn() -> A>,
+}
+
+impl<A, B> Named<A, B> {
+    fn new(inner: B) -> Self {
+        Self {
+            inner,
+            _name: PhantomData,
+        }
+    }
+}
+
+impl<R, A, B> Service<R> for Named<A, B>
+where
+    B: Service<R>,
+{
+    type Response = B::Response;
+    type Error = B::Error;
+    type Future = B::Future;
+
+    #[inline]
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    #[inline]
+    fn call(&mut self, req: R) -> Self::Future {
+        self.inner.call(req)
+    }
+}
+
+impl<A, B> NamedService for Named<A, B>
+where
+    A: NamedService,
+{
+    const NAME: &'static str = A::NAME;
+}
+
+impl<A, B> Clone for Named<A, B>
+where
+    B: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _name: PhantomData,
+        }
+    }
+}
+
+impl<A, B> fmt::Debug for Named<A, B>
+where
+    B: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Named").field("inner", &self.inner).finish()
     }
 }
