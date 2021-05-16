@@ -357,7 +357,7 @@ impl<L> Server<L> {
         <<L as Layer<S>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
     {
         let (server, layer) = self.clone().into_parts();
-        let svc = NamedLayer::new(&layer).layer(svc);
+        let svc = Named::new(layer.layer(svc));
         Router::new(server, layer, svc)
     }
 
@@ -388,7 +388,7 @@ impl<L> Server<L> {
         };
 
         let (server, layer) = self.clone().into_parts();
-        let svc = NamedLayer::new(&layer).layer(svc);
+        let svc = Named::new(layer.layer(svc));
         Router::new(server, layer, svc)
     }
 
@@ -539,7 +539,7 @@ where
 
             path.starts_with(&svc_route)
         };
-        let svc = NamedLayer::new(&layer).layer(svc);
+        let svc = Named::new(layer.layer(svc));
         let routes = routes.push(pred, svc);
 
         Router {
@@ -585,7 +585,7 @@ where
             Some(some) => Either::A(some),
             None => Either::B(Unimplemented::default()),
         };
-        let svc = NamedLayer::new(&layer).layer(svc);
+        let svc = Named::new(layer.layer(svc));
         let routes = routes.push(pred, svc);
 
         Router {
@@ -798,28 +798,6 @@ impl Service<Request<Body>> for Unimplemented {
                 .body(BoxBody::empty())
                 .unwrap(),
         )
-    }
-}
-
-struct NamedLayer<'a, L> {
-    layer: &'a L,
-}
-
-impl<'a, L> NamedLayer<'a, L> {
-    fn new(layer: &'a L) -> Self {
-        Self { layer }
-    }
-}
-
-impl<'a, S, L> Layer<S> for NamedLayer<'a, L>
-where
-    L: Layer<S>,
-    S: NamedService,
-{
-    type Service = Named<S, L::Service>;
-
-    fn layer(&self, inner: S) -> Self::Service {
-        Named::new(self.layer.layer(inner))
     }
 }
 
