@@ -323,6 +323,7 @@ impl<L> Server<L> {
         }
     }
 
+    /// TODO(david): docs
     pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<NewLayer> {
         Server {
             layer: new_layer,
@@ -822,6 +823,7 @@ where
     }
 }
 
+/// TODO(david): docs
 pub struct Named<A, B> {
     inner: B,
     _name: PhantomData<fn() -> A>,
