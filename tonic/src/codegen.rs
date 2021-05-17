@@ -12,6 +12,7 @@ pub use std::task::{Context, Poll};
 pub use tower_service::Service;
 pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub use crate::body::Body;
+pub use crate::service::interceptor::InterceptedService;
 
 pub type BoxFuture<T, E> = self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
 pub type BoxStream<T> =

@@ -90,7 +90,6 @@ pub mod service;
 pub mod transport;
 
 mod extensions;
-mod interceptor;
 mod macros;
 mod request;
 mod response;
@@ -104,7 +103,6 @@ pub use async_trait::async_trait;
 #[doc(inline)]
 pub use codec::Streaming;
 pub use extensions::Extensions;
-pub use interceptor::Interceptor;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, Status};

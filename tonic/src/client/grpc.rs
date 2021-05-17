@@ -2,7 +2,6 @@ use crate::{
     body::{Body, BoxBody},
     client::GrpcService,
     codec::{encode_client, Codec, Streaming},
-    interceptor::Interceptor,
     Code, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -29,25 +28,12 @@ use std::fmt;
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
     inner: T,
-    interceptor: Option<Interceptor>,
 }
 
 impl<T> Grpc<T> {
     /// Creates a new gRPC client with the provided [`GrpcService`].
     pub fn new(inner: T) -> Self {
-        Self {
-            inner,
-            interceptor: None,
-        }
-    }
-
-    /// Creates a new gRPC client with the provided [`GrpcService`] and will apply
-    /// the provided interceptor on each request.
-    pub fn with_interceptor(inner: T, interceptor: impl Into<Interceptor>) -> Self {
-        Self {
-            inner,
-            interceptor: Some(interceptor.into()),
-        }
+        Self { inner }
     }
 
     /// Check if the inner [`GrpcService`] is able to accept a  new request.
@@ -153,12 +139,6 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = if let Some(interceptor) = &self.interceptor {
-            interceptor.call(request)?
-        } else {
-            request
-        };
-
         let mut parts = Parts::default();
         parts.path_and_query = Some(path);
 
@@ -217,7 +197,6 @@ impl<T: Clone> Clone for Grpc<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            interceptor: self.interceptor.clone(),
         }
     }
 }
