@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 // An interceptor function.
 fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
-    println!("{} called!", req.uri().path());
+    println!("received {:?}", req);
     Ok(req)
 }
 
