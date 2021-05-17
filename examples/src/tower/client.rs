@@ -1,8 +1,9 @@
 use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
 use service::AuthSvc;
+use tower::ServiceBuilder;
 
-use tonic::transport::Channel;
+use tonic::{transport::Channel, Request, Status};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -11,9 +12,12 @@ pub mod hello_world {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let channel = Channel::from_static("http://[::1]:50051").connect().await?;
-    let auth = AuthSvc::new(channel);
+    let channel = ServiceBuilder::new()
+        .layer(tonic::service::interceptor_fn(intercept))
+        .layer_fn(AuthSvc::new)
+        .service(channel);
 
-    let mut client = GreeterClient::new(auth);
+    let mut client = GreeterClient::new(channel);
 
     let request = tonic::Request::new(HelloRequest {
         name: "Tonic".into(),
@@ -24,6 +28,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("RESPONSE={:?}", response);
 
     Ok(())
+}
+
+fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
+    Ok(req)
 }
 
 mod service {

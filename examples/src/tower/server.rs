@@ -48,6 +48,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .concurrency_limit(42)
         // some custom middleware we wrote
         .layer(MyMiddlewareLayer::default())
+        // interceptors can be applied as well
+        .layer(tonic::service::interceptor_fn(intercept))
         .into_inner();
 
     Server::builder()
@@ -60,6 +62,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await?;
 
     Ok(())
+}
+
+fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
+    Ok(req)
 }
 
 #[derive(Debug, Clone, Default)]
