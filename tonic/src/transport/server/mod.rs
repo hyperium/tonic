@@ -25,17 +25,21 @@ use crate::transport::Error;
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, Or, Routes, ServerIo};
 use crate::{body::BoxBody, request::ConnectionInfo};
+use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::{
     future::{self, MapErr},
-    TryFutureExt,
+    ready, TryFutureExt,
 };
 use http::{Request, Response};
+use http_body::Body as _;
 use hyper::{server::accept, Body};
+use pin_project::pin_project;
 use std::{
     fmt,
     future::Future,
     net::SocketAddr,
+    pin::Pin,
     sync::Arc,
     task::{Context, Poll},
     time::Duration,
@@ -45,9 +49,9 @@ use tower::{
     layer::util::Identity, layer::Layer, limit::concurrency::ConcurrencyLimitLayer, util::Either,
     Service, ServiceBuilder,
 };
-use tracing_futures::{Instrument, Instrumented};
 
-type BoxService = tower::util::BoxService<Request<Body>, Response<BoxBody>, crate::Error>;
+type BoxHttpBody = http_body::combinators::BoxBody<Bytes, crate::Error>;
+type BoxService = tower::util::BoxService<Request<Body>, Response<BoxHttpBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
 const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
@@ -381,7 +385,7 @@ impl<L> Server<L> {
         }
     }
 
-    pub(crate) async fn serve_with_shutdown<S, I, F, IO, IE>(
+    pub(crate) async fn serve_with_shutdown<S, I, F, IO, IE, ResBody>(
         self,
         svc: S,
         incoming: I,
@@ -389,13 +393,15 @@ impl<L> Server<L> {
     ) -> Result<(), super::Error>
     where
         L: Layer<S>,
-        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send + 'static,
         <<L as Layer<S>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
+        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody::Error: Into<crate::Error>,
     {
         let trace_interceptor = self.trace_interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
@@ -546,19 +552,25 @@ where
     /// on [`tokio`]'s default executor.
     ///
     /// [`Server`]: struct.Server.html
-    pub async fn serve(self, addr: SocketAddr) -> Result<(), super::Error>
+    pub async fn serve<ResBody>(self, addr: SocketAddr) -> Result<(), super::Error>
     where
         L: Layer<Routes<A, B, Request<Body>>>,
-        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
+        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
         self.server
-            .serve_with_shutdown::<_, _, future::Ready<()>, _, _>(self.routes, incoming, None)
+            .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
+                self.routes,
+                incoming,
+                None,
+            )
             .await
     }
 
@@ -567,18 +579,20 @@ where
     /// is received.
     ///
     /// [`Server`]: struct.Server.html
-    pub async fn serve_with_shutdown<F: Future<Output = ()>>(
+    pub async fn serve_with_shutdown<F: Future<Output = ()>, ResBody>(
         self,
         addr: SocketAddr,
         signal: F,
     ) -> Result<(), super::Error>
     where
         L: Layer<Routes<A, B, Request<Body>>>,
-        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
+        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
@@ -591,20 +605,29 @@ where
     /// the provided incoming stream of `AsyncRead + AsyncWrite`.
     ///
     /// [`Server`]: struct.Server.html
-    pub async fn serve_with_incoming<I, IO, IE>(self, incoming: I) -> Result<(), super::Error>
+    pub async fn serve_with_incoming<I, IO, IE, ResBody>(
+        self,
+        incoming: I,
+    ) -> Result<(), super::Error>
     where
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::Error>,
         L: Layer<Routes<A, B, Request<Body>>>,
-        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
+        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody::Error: Into<crate::Error>,
     {
         self.server
-            .serve_with_shutdown::<_, _, future::Ready<()>, _, _>(self.routes, incoming, None)
+            .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
+                self.routes,
+                incoming,
+                None,
+            )
             .await
     }
 
@@ -614,7 +637,7 @@ where
     /// gracefully shutdown the server.
     ///
     /// [`Server`]: struct.Server.html
-    pub async fn serve_with_incoming_shutdown<I, IO, IE, F>(
+    pub async fn serve_with_incoming_shutdown<I, IO, IE, F, ResBody>(
         self,
         incoming: I,
         signal: F,
@@ -625,11 +648,13 @@ where
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
         L: Layer<Routes<A, B, Request<Body>>>,
-        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
+        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody::Error: Into<crate::Error>,
     {
         self.server
             .serve_with_shutdown(self.routes, incoming, Some(signal))
@@ -637,14 +662,16 @@ where
     }
 
     /// Create a tower service out of a router.
-    pub fn into_service(self) -> RouterService<L::Service>
+    pub fn into_service<ResBody>(self) -> RouterService<L::Service>
     where
         L: Layer<Routes<A, B, Request<Body>>>,
-        L::Service: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
+        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody::Error: Into<crate::Error>,
     {
         let inner = self.server.layer.layer(self.routes);
         RouterService { inner }
@@ -663,16 +690,16 @@ struct Svc<S> {
     conn_info: ConnectionInfo,
 }
 
-impl<S> Service<Request<Body>> for Svc<S>
+impl<S, ResBody> Service<Request<Body>> for Svc<S>
 where
-    S: Service<Request<Body>, Response = Response<BoxBody>>,
+    S: Service<Request<Body>, Response = Response<ResBody>>,
     S::Error: Into<crate::Error>,
+    ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+    ResBody::Error: Into<crate::Error>,
 {
-    type Response = Response<BoxBody>;
+    type Response = Response<BoxHttpBody>;
     type Error = crate::Error;
-
-    #[allow(clippy::type_complexity)]
-    type Future = MapErr<Instrumented<S::Future>, fn(S::Error) -> crate::Error>;
+    type Future = SvcFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx).map_err(Into::into)
@@ -695,7 +722,36 @@ where
 
         req.extensions_mut().insert(self.conn_info.clone());
 
-        self.inner.call(req).instrument(span).map_err(|e| e.into())
+        SvcFuture {
+            inner: self.inner.call(req),
+            span,
+        }
+    }
+}
+
+#[pin_project]
+struct SvcFuture<F> {
+    #[pin]
+    inner: F,
+    span: tracing::Span,
+}
+
+impl<F, E, ResBody> Future for SvcFuture<F>
+where
+    F: Future<Output = Result<Response<ResBody>, E>>,
+    E: Into<crate::Error>,
+    ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+    ResBody::Error: Into<crate::Error>,
+{
+    type Output = Result<Response<BoxHttpBody>, crate::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let this = self.project();
+        let _guard = this.span.enter();
+
+        let response: Response<ResBody> = ready!(this.inner.poll(cx)).map_err(Into::into)?;
+        let response = response.map(|body| body.map_err(Into::into).boxed());
+        Poll::Ready(Ok(response))
     }
 }
 
@@ -712,11 +768,13 @@ struct MakeSvc<S> {
     trace_interceptor: Option<TraceInterceptor>,
 }
 
-impl<S> Service<&ServerIo> for MakeSvc<S>
+impl<S, ResBody> Service<&ServerIo> for MakeSvc<S>
 where
-    S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::Error> + Send,
+    ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+    ResBody::Error: Into<crate::Error>,
 {
     type Response = BoxService;
     type Error = crate::Error;
@@ -743,11 +801,13 @@ where
             .layer_fn(|s| GrpcTimeout::new(s, timeout))
             .service(svc);
 
-        let svc = BoxService::new(Svc {
+        let svc = Svc {
             inner: svc,
             trace_interceptor,
             conn_info,
-        });
+        };
+
+        let svc = BoxService::new(svc);
 
         future::ready(Ok(svc))
     }
