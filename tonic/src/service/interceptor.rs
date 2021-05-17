@@ -5,7 +5,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tower::Layer;
+use tower_layer::Layer;
 use tower_service::Service;
 
 pub fn interceptor_fn<F>(f: F) -> InterceptorFn<F>

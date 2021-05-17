@@ -52,6 +52,7 @@ base64 = "0.13"
 
 percent-encoding = "2.1"
 tower-service = "0.3"
+tower-layer = "0.3"
 tokio-util = { version = "0.6", features = ["codec"] }
 async-stream = "0.3"
 http-body = "0.4"
