@@ -12,7 +12,9 @@ pub mod hello_world {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let channel = Channel::from_static("http://[::1]:50051").connect().await?;
+
     let channel = ServiceBuilder::new()
+        // Interceptors can be also be applied as middleware
         .layer(tonic::service::interceptor_fn(intercept))
         .layer_fn(AuthSvc::new)
         .service(channel);
@@ -30,7 +32,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
+// An interceptor function.
 fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
+    println!("{} called!", req.uri().path());
     Ok(req)
 }
 

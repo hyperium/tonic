@@ -40,30 +40,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let svc = GreeterServer::new(greeter);
 
-    // some large layer who's output service _doesn't_
-    // implement `NamedService`
+    // The stack of middleware that our service will be wrapped in
     let layer = tower::ServiceBuilder::new()
-        // good old tower middlewares
+        // Apply middleware from tower
         .timeout(Duration::from_secs(30))
-        .concurrency_limit(42)
-        // some custom middleware we wrote
+        // Apply our own middleware
         .layer(MyMiddlewareLayer::default())
-        // interceptors can be applied as well
+        // Interceptors can be also be applied as middleware
         .layer(tonic::service::interceptor_fn(intercept))
         .into_inner();
 
     Server::builder()
-        // wrap all services in the layer
+        // Wrap all services in the middleware stack
         .layer(layer)
-        .add_service(svc.clone())
-        // also supports optional services
-        .add_optional_service(Some(svc))
+        .add_service(svc)
         .serve(addr)
         .await?;
 
     Ok(())
 }
 
+// An interceptor function.
 fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
     Ok(req)
 }
