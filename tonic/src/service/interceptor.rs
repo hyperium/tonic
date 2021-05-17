@@ -3,6 +3,7 @@
 use crate::Status;
 use pin_project::pin_project;
 use std::{
+    fmt,
     future::Future,
     pin::Pin,
     task::{Context, Poll},
@@ -61,8 +62,7 @@ where
 /// A service wrapped in an interceptor middleware.
 ///
 /// See [`interceptor_fn`] for more details.
-// TODO(david): don't derive Debug
-#[derive(Debug, Clone, Copy)]
+#[derive(Clone, Copy)]
 pub struct InterceptedService<S, F> {
     inner: S,
     f: F,
@@ -76,6 +76,18 @@ impl<S, F> InterceptedService<S, F> {
         F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
     {
         Self { inner: service, f }
+    }
+}
+
+impl<S, F> fmt::Debug for InterceptedService<S, F>
+where
+    S: fmt::Debug,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("InterceptedService")
+            .field("inner", &self.inner)
+            .field("f", &format_args!("{}", std::any::type_name::<F>()))
+            .finish()
     }
 }
 
@@ -111,6 +123,7 @@ where
     }
 }
 
+// required to use `InterceptedService` with `Router`
 #[cfg(feature = "transport")]
 impl<S, F> crate::transport::NamedService for InterceptedService<S, F>
 where
@@ -119,6 +132,7 @@ where
     const NAME: &'static str = S::NAME;
 }
 
+/// Response future for [`InterceptedService`].
 #[pin_project]
 #[derive(Debug)]
 pub struct ResponseFuture<F> {
