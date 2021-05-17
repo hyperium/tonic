@@ -23,15 +23,12 @@ pub struct InterceptorFn<F> {
 
 impl<S, F> Layer<S> for InterceptorFn<F>
 where
-    F: Clone,
+    F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status> + Clone,
 {
     type Service = InterceptedService<S, F>;
 
     fn layer(&self, service: S) -> Self::Service {
-        InterceptedService {
-            inner: service,
-            f: self.f.clone(),
-        }
+        InterceptedService::new(service, self.f.clone())
     }
 }
 
@@ -40,6 +37,15 @@ where
 pub struct InterceptedService<S, F> {
     inner: S,
     f: F,
+}
+
+impl<S, F> InterceptedService<S, F> {
+    pub fn new(service: S, f: F) -> Self
+    where
+        F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
+    {
+        Self { inner: service, f }
+    }
 }
 
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
@@ -72,6 +78,14 @@ where
             Err(status) => ResponseFuture::error(status),
         }
     }
+}
+
+#[cfg(feature = "transport")]
+impl<S, F> crate::transport::NamedService for InterceptedService<S, F>
+where
+    S: crate::transport::NamedService,
+{
+    const NAME: &'static str = S::NAME;
 }
 
 #[pin_project]
