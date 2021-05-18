@@ -84,6 +84,7 @@ rand = "0.8"
 bencher = "0.1.5"
 quickcheck = "1.0"
 quickcheck_macros = "1.0"
+tower = { version = "0.4.7", features = ["full"] }
 
 [package.metadata.docs.rs]
 all-features = true

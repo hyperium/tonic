@@ -9,6 +9,7 @@ use std::{
 };
 use tower_service::Service;
 
+#[doc(hidden)]
 #[derive(Debug)]
 pub struct Routes<A, B, Request> {
     routes: Or<A, B, Request>,

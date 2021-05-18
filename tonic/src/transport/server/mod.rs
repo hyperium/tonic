@@ -364,7 +364,67 @@ impl<L> Server<L> {
         Router::new(self.clone(), svc)
     }
 
-    /// TODO(david): docs
+    /// Set the [Tower] [`Layer`] all services will be wrapped in.
+    ///
+    /// This enables using middleware from the [Tower ecosystem][eco].
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// use tower::timeout::TimeoutLayer;
+    /// use std::time::Duration;
+    ///
+    /// # let mut builder = Server::builder();
+    /// builder.layer(TimeoutLayer::new(Duration::from_secs(30)));
+    /// ```
+    ///
+    /// Note that timeouts should be set using [`Server::timeout`]. `TimeoutLayer` is only used
+    /// here as an example.
+    ///
+    /// You can build more complex layers using [`ServiceBuilder`]. Those layers can include
+    /// [interceptors]:
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// use tower::ServiceBuilder;
+    /// use std::time::Duration;
+    /// use tonic::{Request, Status, service::interceptor_fn};
+    ///
+    /// fn auth_interceptor(request: Request<()>) -> Result<Request<()>, Status> {
+    ///     if valid_credentials(&request) {
+    ///         Ok(request)
+    ///     } else {
+    ///         Err(Status::unauthenticated("invalid credentials"))
+    ///     }
+    /// }
+    ///
+    /// fn valid_credentials(request: &Request<()>) -> bool {
+    ///     // ...
+    ///     # true
+    /// }
+    ///
+    /// fn some_other_interceptor(request: Request<()>) -> Result<Request<()>, Status> {
+    ///     Ok(request)
+    /// }
+    ///
+    /// let layer = ServiceBuilder::new()
+    ///     .load_shed()
+    ///     .timeout(Duration::from_secs(30))
+    ///     .layer(interceptor_fn(auth_interceptor))
+    ///     .layer(interceptor_fn(some_other_interceptor))
+    ///     .into_inner();
+    ///
+    /// Server::builder().layer(layer);
+    /// ```
+    ///
+    /// [Tower]: https://github.com/tower-rs/tower
+    /// [`Layer`]: tower::layer::Layer
+    /// [eco]: https://github.com/tower-rs
+    /// [`ServiceBuilder`]: tower::ServiceBuilder
+    /// [interceptors]: crate::service::interceptor_fn
     pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<NewLayer> {
         Server {
             layer: new_layer,
@@ -415,7 +475,7 @@ impl<L> Server<L> {
         let http2_keepalive_interval = self.http2_keepalive_interval;
         let http2_keepalive_timeout = self
             .http2_keepalive_timeout
-            .unwrap_or(Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
+            .unwrap_or_else(|| Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
 
         let svc = self.layer.layer(svc);
 
