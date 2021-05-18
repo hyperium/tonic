@@ -17,7 +17,7 @@ async fn complex_tower_layers_work() {
     #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
-            todo!()
+            unimplemented!()
         }
     }
 
@@ -36,7 +36,7 @@ struct MyServiceLayer {}
 
 impl MyServiceLayer {
     fn new() -> Self {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -44,7 +44,7 @@ impl<S> Layer<S> for MyServiceLayer {
     type Service = MyService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -62,11 +62,11 @@ where
     type Future = MyFuture<S::Future, ResBody>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        todo!()
+        unimplemented!()
     }
 
     fn call(&mut self, req: R) -> Self::Future {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -82,7 +82,7 @@ where
     type Output = Result<http::Response<MyBody<B>>, BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        todo!()
+        unimplemented!()
     }
 }
 
@@ -101,13 +101,13 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        todo!()
+        unimplemented!()
     }
 
     fn poll_trailers(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        todo!()
+        unimplemented!()
     }
 }
