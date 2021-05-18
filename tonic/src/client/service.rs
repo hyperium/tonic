@@ -1,5 +1,4 @@
-use crate::body::Body;
-use http_body::Body as HttpBody;
+use http_body::Body;
 use std::future::Future;
 use std::task::{Context, Poll};
 use tower_service::Service;
@@ -13,7 +12,7 @@ use tower_service::Service;
 /// [`tower_service`]: https://docs.rs/tower-service
 pub trait GrpcService<ReqBody> {
     /// Responses body given by the service.
-    type ResponseBody: Body + HttpBody;
+    type ResponseBody: Body;
     /// Errors produced by the service.
     type Error: Into<crate::Error>;
     /// The future response value.
@@ -34,8 +33,8 @@ impl<T, ReqBody, ResBody> GrpcService<ReqBody> for T
 where
     T: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
     T::Error: Into<crate::Error>,
-    ResBody: Body + HttpBody,
-    <ResBody as HttpBody>::Error: Into<crate::Error>,
+    ResBody: Body,
+    <ResBody as Body>::Error: Into<crate::Error>,
 {
     type ResponseBody = ResBody;
     type Error = T::Error;
