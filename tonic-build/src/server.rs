@@ -69,7 +69,7 @@ pub fn generate<T: Service>(
             impl<T, B> Service<http::Request<B>> for #server_service<T>
                 where
                     T: #server_trait,
-                    B: HttpBody + Send + Sync + 'static,
+                    B: Body + Send + Sync + 'static,
                     B::Error: Into<StdError> + Send + 'static,
             {
                 type Response = http::Response<tonic::body::BoxBody>;
@@ -91,7 +91,7 @@ pub fn generate<T: Service>(
                                .status(200)
                                .header("grpc-status", "12")
                                .header("content-type", "application/grpc")
-                               .body(tonic::body::BoxBody::empty())
+                               .body(empty_body())
                                .unwrap())
                         }),
                     }

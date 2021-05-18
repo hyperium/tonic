@@ -63,7 +63,7 @@ where
             Ok(res) => Poll::Ready(Ok(res)),
             Err(err) => {
                 if let Some(status) = Status::try_from_error(&*err) {
-                    let mut res = Response::new(BoxBody::empty());
+                    let mut res = Response::new(crate::body::empty_body());
                     status.add_header(res.headers_mut()).unwrap();
                     Poll::Ready(Ok(res))
                 } else {
