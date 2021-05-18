@@ -609,9 +609,10 @@ where
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
-    /// on [`tokio`]'s default executor.
+    /// on [tokio]'s default executor.
     ///
     /// [`Server`]: struct.Server.html
+    /// [tokio]: https://docs.rs/tokio
     pub async fn serve<ResBody>(self, addr: SocketAddr) -> Result<(), super::Error>
     where
         L: Layer<Routes<A, B, Request<Body>>>,
@@ -635,10 +636,11 @@ where
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
-    /// on [`tokio`]'s default executor. And shutdown when the provided signal
+    /// on [tokio]'s default executor. And shutdown when the provided signal
     /// is received.
     ///
     /// [`Server`]: struct.Server.html
+    /// [tokio]: https://docs.rs/tokio
     pub async fn serve_with_shutdown<F: Future<Output = ()>, ResBody>(
         self,
         addr: SocketAddr,
