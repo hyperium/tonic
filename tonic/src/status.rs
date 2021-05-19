@@ -44,32 +44,8 @@ pub struct Status {
     /// If the metadata contains any headers with names reserved either by the gRPC spec
     /// or by `Status` fields above, they will be ignored.
     metadata: MetadataMap,
-    /// Optional underlying `h2::Error` if this `Status` was converted from a `h2::Error`.
-    #[cfg(feature = "transport")]
-    h2_error: Option<h2::Error>,
-}
-
-impl Clone for Status {
-    fn clone(&self) -> Self {
-        Status {
-            code: self.code,
-            message: self.message.clone(),
-            details: self.details.clone(),
-            metadata: self.metadata.clone(),
-            // The following contortion to clone `h2_error` is required because `h2::Error`
-            // cannot implement `Clone` because one of the `Kind` variants stores a
-            // `std::io::Error` (which does not implement `Clone`).
-            //
-            // We know that, if `h2_error` is a `Some`, then it will have a `reason` since it was
-            // created from that `reason`. If it is a `None`, this clone will not change anything.
-            #[cfg(feature = "transport")]
-            h2_error: self
-                .h2_error
-                .as_ref()
-                .and_then(|err| err.reason())
-                .map(h2::Error::from),
-        }
-    }
+    /// Optional underlying error.
+    source: Option<Box<(dyn Error + Send + Sync + 'static)>>,
 }
 
 /// gRPC status codes used by [`Status`].
@@ -187,8 +163,7 @@ impl Status {
             message: message.into(),
             details: Bytes::new(),
             metadata: MetadataMap::new(),
-            #[cfg(feature = "transport")]
-            h2_error: None,
+            source: None,
         }
     }
 
@@ -343,8 +318,9 @@ impl Status {
                     message: status.message.clone(),
                     details: status.details.clone(),
                     metadata: status.metadata.clone(),
-                    #[cfg(feature = "transport")]
-                    h2_error: None,
+                    // Since `Status` is not `Clone`, any `source` on the original Status
+                    // cannot be cloned so must remain with the original `Status`.
+                    source: None,
                 });
             }
 
@@ -386,7 +362,7 @@ impl Status {
         };
 
         let mut status = Self::new(code, format!("h2 protocol error: {}", err));
-        status.h2_error = err.reason().map(h2::Error::from);
+        status.source = Some(Box::new(err.reason().map(h2::Error::from)));
         status
     }
 
@@ -441,8 +417,7 @@ impl Status {
                     message,
                     details,
                     metadata: MetadataMap::from_headers(other_headers),
-                    #[cfg(feature = "transport")]
-                    h2_error: None,
+                    source: None,
                 },
                 Err(err) => {
                     warn!("Error deserializing status message header: {}", err);
@@ -451,8 +426,7 @@ impl Status {
                         message: format!("Error deserializing status message header: {}", err),
                         details,
                         metadata: MetadataMap::from_headers(other_headers),
-                        #[cfg(feature = "transport")]
-                        h2_error: None,
+                        source: None,
                     }
                 }
             }
@@ -540,8 +514,7 @@ impl Status {
             message: message.into(),
             details,
             metadata,
-            #[cfg(feature = "transport")]
-            h2_error: None,
+            source: None,
         }
     }
 
@@ -580,10 +553,7 @@ impl fmt::Debug for Status {
             builder.field("metadata", &self.metadata);
         }
 
-        #[cfg(feature = "transport")]
-        {
-            builder.field("h2_error", &self.h2_error);
-        }
+        builder.field("source", &self.source);
 
         builder.finish()
     }
@@ -652,11 +622,9 @@ impl fmt::Display for Status {
 }
 
 impl Error for Status {
-    #[cfg(feature = "transport")]
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.h2_error
-            .as_ref()
-            .map(|err| err as &(dyn Error + 'static))
+        self.source
+            .map(|s| s.as_ref() as &(dyn std::error::Error + 'static))
     }
 }
 
