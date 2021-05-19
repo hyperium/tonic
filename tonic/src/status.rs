@@ -3,7 +3,7 @@ use crate::metadata::MetadataMap;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
-use std::{borrow::Borrow, borrow::Cow, error::Error, fmt};
+use std::{borrow::Cow, error::Error, fmt};
 use tracing::{debug, trace, warn};
 
 const ENCODING_SET: &AsciiSet = &CONTROLS
@@ -627,7 +627,7 @@ impl fmt::Display for Status {
 
 impl Error for Status {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source.map(|err| err.borrow())
+        self.source.as_ref().map(|err| (&**err) as _)
     }
 }
 
