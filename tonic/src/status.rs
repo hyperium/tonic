@@ -3,7 +3,7 @@ use crate::metadata::MetadataMap;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
-use std::{borrow::Cow, error::Error, fmt};
+use std::{borrow::Borrow, borrow::Cow, error::Error, fmt};
 use tracing::{debug, trace, warn};
 
 const ENCODING_SET: &AsciiSet = &CONTROLS
@@ -45,7 +45,7 @@ pub struct Status {
     /// or by `Status` fields above, they will be ignored.
     metadata: MetadataMap,
     /// Optional underlying error.
-    source: Option<Box<(dyn Error + Send + Sync + 'static)>>,
+    source: Option<Box<dyn Error + Send + Sync + 'static>>,
 }
 
 /// gRPC status codes used by [`Status`].
@@ -362,7 +362,11 @@ impl Status {
         };
 
         let mut status = Self::new(code, format!("h2 protocol error: {}", err));
-        status.source = Some(Box::new(err.reason().map(h2::Error::from)));
+        let error: Option<Box<dyn Error + Send + Sync + 'static>> = err
+            .reason()
+            .map(h2::Error::from)
+            .map(|err| Box::new(err) as Box<dyn Error + Send + Sync + 'static>);
+        status.source = error;
         status
     }
 
@@ -623,8 +627,7 @@ impl fmt::Display for Status {
 
 impl Error for Status {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source
-            .map(|s| s.as_ref() as &(dyn std::error::Error + 'static))
+        self.source.map(|err| err.borrow())
     }
 }
 
