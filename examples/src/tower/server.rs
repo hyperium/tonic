@@ -1,11 +1,10 @@
-use hyper::{Body, Request as HyperRequest, Response as HyperResponse};
-use std::task::{Context, Poll};
-use tonic::{
-    body::BoxBody,
-    transport::{NamedService, Server},
-    Request, Response, Status,
+use hyper::Body;
+use std::{
+    task::{Context, Poll},
+    time::Duration,
 };
-use tower::Service;
+use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tower::{Layer, Service};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -39,27 +38,52 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("GreeterServer listening on {}", addr);
 
-    let svc = InterceptedService {
-        inner: GreeterServer::new(greeter),
-    };
+    let svc = GreeterServer::new(greeter);
 
-    Server::builder().add_service(svc).serve(addr).await?;
+    // The stack of middleware that our service will be wrapped in
+    let layer = tower::ServiceBuilder::new()
+        // Apply middleware from tower
+        .timeout(Duration::from_secs(30))
+        // Apply our own middleware
+        .layer(MyMiddlewareLayer::default())
+        // Interceptors can be also be applied as middleware
+        .layer(tonic::service::interceptor_fn(intercept))
+        .into_inner();
+
+    Server::builder()
+        // Wrap all services in the middleware stack
+        .layer(layer)
+        .add_service(svc)
+        .serve(addr)
+        .await?;
 
     Ok(())
 }
 
+// An interceptor function.
+fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
+    Ok(req)
+}
+
+#[derive(Debug, Clone, Default)]
+struct MyMiddlewareLayer;
+
+impl<S> Layer<S> for MyMiddlewareLayer {
+    type Service = MyMiddleware<S>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        MyMiddleware { inner: service }
+    }
+}
+
 #[derive(Debug, Clone)]
-struct InterceptedService<S> {
+struct MyMiddleware<S> {
     inner: S,
 }
 
-impl<S> Service<HyperRequest<Body>> for InterceptedService<S>
+impl<S> Service<hyper::Request<Body>> for MyMiddleware<S>
 where
-    S: Service<HyperRequest<Body>, Response = HyperResponse<BoxBody>>
-        + NamedService
-        + Clone
-        + Send
-        + 'static,
+    S: Service<hyper::Request<Body>, Response = hyper::Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -70,7 +94,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: HyperRequest<Body>) -> Self::Future {
+    fn call(&mut self, req: hyper::Request<Body>) -> Self::Future {
         // This is necessary because tonic internally uses `tower::buffer::Buffer`.
         // See https://github.com/tower-rs/tower/issues/547#issuecomment-767629149
         // for details on why this is necessary
@@ -84,8 +108,4 @@ where
             Ok(response)
         })
     }
-}
-
-impl<S: NamedService> NamedService for InterceptedService<S> {
-    const NAME: &'static str = S::NAME;
 }

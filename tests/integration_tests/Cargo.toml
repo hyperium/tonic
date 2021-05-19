@@ -20,6 +20,9 @@ tokio-stream = { version = "0.1.5", features = ["net"] }
 tower-service = "0.3"
 hyper = "0.14"
 futures = "0.3"
+tower = { version = "0.4", features = [] }
+http-body = "0.4"
+http = "0.2"
 
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }

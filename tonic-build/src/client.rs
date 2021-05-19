@@ -36,18 +36,24 @@ pub fn generate<T: Service>(
             #connect
 
             impl<T> #service_ident<T>
-            where T: tonic::client::GrpcService<tonic::body::BoxBody>,
-                  T::ResponseBody: Body + Send + Sync + 'static,
-                  T::Error: Into<StdError>,
-                  <T::ResponseBody as Body>::Error: Into<StdError> + Send, {
+            where
+                T: tonic::client::GrpcService<tonic::body::BoxBody>,
+                T::ResponseBody: Body + Send + Sync + 'static,
+                T::Error: Into<StdError>,
+                <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+            {
                 pub fn new(inner: T) -> Self {
                     let inner = tonic::client::Grpc::new(inner);
                     Self { inner }
                 }
 
-                pub fn with_interceptor(inner: T, interceptor: impl Into<tonic::Interceptor>) -> Self {
-                    let inner = tonic::client::Grpc::with_interceptor(inner, interceptor);
-                    Self { inner }
+                pub fn with_interceptor<F>(inner: T, interceptor: F) -> #service_ident<InterceptedService<T, F>>
+                where
+                    F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
+                    T: Service<http::Request<tonic::body::BoxBody>, Response = http::Response<T::ResponseBody>>,
+                    <T as Service<http::Request<tonic::body::BoxBody>>>::Error: Into<StdError> + Send + Sync,
+                {
+                    #service_ident::new(InterceptedService::new(inner, interceptor))
                 }
 
                 #methods

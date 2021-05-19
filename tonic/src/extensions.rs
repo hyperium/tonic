@@ -2,10 +2,10 @@ use std::fmt;
 
 /// A type map of protocol extensions.
 ///
-/// `Extensions` can be used by [`Interceptor`] and [`Request`] to store extra data derived from
+/// `Extensions` can be used by [`interceptor_fn`] and [`Request`] to store extra data derived from
 /// the underlying protocol.
 ///
-/// [`Interceptor`]: crate::Interceptor
+/// [`interceptor_fn`]: crate::service::interceptor_fn
 /// [`Request`]: crate::Request
 pub struct Extensions {
     inner: http::Extensions,

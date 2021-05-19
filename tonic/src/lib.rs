@@ -83,17 +83,18 @@ pub mod client;
 pub mod codec;
 pub mod metadata;
 pub mod server;
+pub mod service;
 
 #[cfg(feature = "transport")]
 #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 pub mod transport;
 
 mod extensions;
-mod interceptor;
 mod macros;
 mod request;
 mod response;
 mod status;
+mod util;
 
 /// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
 #[cfg(feature = "codegen")]
@@ -103,7 +104,6 @@ pub use async_trait::async_trait;
 #[doc(inline)]
 pub use codec::Streaming;
 pub use extensions::Extensions;
-pub use interceptor::Interceptor;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, Status};

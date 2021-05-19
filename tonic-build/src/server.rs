@@ -50,19 +50,20 @@ pub fn generate<T: Service>(
                 inner: _Inner<T>,
             }
 
-            struct _Inner<T>(Arc<T>, Option<tonic::Interceptor>);
+            struct _Inner<T>(Arc<T>);
 
             impl<T: #server_trait> #server_service<T> {
                 pub fn new(inner: T) -> Self {
                     let inner = Arc::new(inner);
-                    let inner = _Inner(inner, None);
+                    let inner = _Inner(inner);
                     Self { inner }
                 }
 
-                pub fn with_interceptor(inner: T, interceptor: impl Into<tonic::Interceptor>) -> Self {
-                    let inner = Arc::new(inner);
-                    let inner = _Inner(inner, Some(interceptor.into()));
-                    Self { inner }
+                pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
+                where
+                    F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
+                {
+                    InterceptedService::new(Self::new(inner), interceptor)
                 }
             }
 
@@ -107,7 +108,7 @@ pub fn generate<T: Service>(
 
             impl<T: #server_trait> Clone for _Inner<T> {
                 fn clone(&self) -> Self {
-                    Self(self.0.clone(), self.1.clone())
+                    Self(self.0.clone())
                 }
             }
 
@@ -336,16 +337,11 @@ fn generate_unary<T: Method>(
 
         let inner = self.inner.clone();
         let fut = async move {
-            let interceptor = inner.1.clone();
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
-            };
+            let mut grpc = tonic::server::Grpc::new(codec);
 
             let res = grpc.unary(method, req).await;
             Ok(res)
@@ -391,16 +387,11 @@ fn generate_server_streaming<T: Method>(
 
         let inner = self.inner.clone();
         let fut = async move {
-            let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
-            };
+            let mut grpc = tonic::server::Grpc::new(codec);
 
             let res = grpc.server_streaming(method, req).await;
             Ok(res)
@@ -443,16 +434,11 @@ fn generate_client_streaming<T: Method>(
 
         let inner = self.inner.clone();
         let fut = async move {
-            let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
-            };
+            let mut grpc = tonic::server::Grpc::new(codec);
 
             let res = grpc.client_streaming(method, req).await;
             Ok(res)
@@ -498,16 +484,11 @@ fn generate_streaming<T: Method>(
 
         let inner = self.inner.clone();
         let fut = async move {
-            let interceptor = inner.1;
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = if let Some(interceptor) = interceptor {
-                tonic::server::Grpc::with_interceptor(codec, interceptor)
-            } else {
-                tonic::server::Grpc::new(codec)
-            };
+            let mut grpc = tonic::server::Grpc::new(codec);
 
             let res = grpc.streaming(method, req).await;
             Ok(res)
