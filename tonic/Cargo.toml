@@ -35,7 +35,9 @@ transport = [
     "tokio/time",
 ]
 tls = ["transport", "tokio-rustls"]
-tls-roots = ["tls", "rustls-native-certs"]
+tls-roots-common = ["tls"]
+tls-roots = ["tls-roots-common", "rustls-native-certs"]
+tls-webpki-roots = ["tls-roots-common", "webpki-roots"]
 prost = ["prost1", "prost-derive"]
 
 # [[bench]]
@@ -76,6 +78,7 @@ tracing-futures = { version = "0.2", optional = true }
 # rustls
 tokio-rustls = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.5", optional = true }
+webpki-roots = { version = "0.21.1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["rt", "macros"] }
