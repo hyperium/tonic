@@ -304,7 +304,7 @@ impl Status {
     }
 
     #[cfg_attr(not(feature = "transport"), allow(dead_code))]
-    pub(crate) fn from_error(err: &(dyn Error + 'static)) -> Status {
+    pub(crate) fn from_error(err: Box<dyn Error + 'static>) -> Status {
         Status::try_from_error(err).unwrap_or_else(|| Status::new(Code::Unknown, err.to_string()))
     }
 
@@ -318,9 +318,7 @@ impl Status {
                     message: status.message.clone(),
                     details: status.details.clone(),
                     metadata: status.metadata.clone(),
-                    // Since `Status` is not `Clone`, any `source` on the original Status
-                    // cannot be cloned so must remain with the original `Status`.
-                    source: None,
+                    source: Some(err),
                 });
             }
 
@@ -569,6 +567,12 @@ fn invalid_header_value_byte<Error: fmt::Display>(err: Error) -> Status {
         Code::Internal,
         "Couldn't serialize non-text grpc status header".to_string(),
     )
+}
+
+impl From<Box<dyn Error + Send + Sync + 'static>> for Status {
+    fn from(err: Box<dyn Error + Send + Sync>) -> Self {
+        Status::from_error()
+    }
 }
 
 #[cfg(feature = "transport")]
