@@ -114,3 +114,26 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 #[cfg(feature = "codegen")]
 #[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;
+
+mod headers {
+    use http::header::HeaderValue;
+    use once_cell::sync::Lazy;
+
+    pub(crate) fn application_grpc() -> HeaderValue {
+        static VALUE: Lazy<HeaderValue> =
+            Lazy::new(|| HeaderValue::from_static("application/grpc"));
+        VALUE.clone()
+    }
+
+    pub(crate) const TONIC_USER_AGENT: &str = concat!("tonic/", env!("CARGO_PKG_VERSION"));
+
+    pub(crate) fn user_agent() -> HeaderValue {
+        static VALUE: Lazy<HeaderValue> = Lazy::new(|| HeaderValue::from_static(TONIC_USER_AGENT));
+        VALUE.clone()
+    }
+
+    pub(crate) fn code_ok() -> HeaderValue {
+        static VALUE: Lazy<HeaderValue> = Lazy::new(|| HeaderValue::from_static("0"));
+        VALUE.clone()
+    }
+}

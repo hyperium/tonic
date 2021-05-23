@@ -173,7 +173,7 @@ where
                 // Set the content type
                 parts.headers.insert(
                     http::header::CONTENT_TYPE,
-                    http::header::HeaderValue::from_static("application/grpc"),
+                    crate::headers::application_grpc(),
                 );
 
                 let body = encode_server(self.codec.encoder(), body.into_stream());

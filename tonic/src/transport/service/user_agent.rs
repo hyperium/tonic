@@ -1,8 +1,7 @@
+use crate::headers::TONIC_USER_AGENT;
 use http::{header::USER_AGENT, HeaderValue, Request};
 use std::task::{Context, Poll};
 use tower_service::Service;
-
-const TONIC_USER_AGENT: &str = concat!("tonic/", env!("CARGO_PKG_VERSION"));
 
 #[derive(Debug)]
 pub(crate) struct UserAgent<T> {
@@ -20,7 +19,8 @@ impl<T> UserAgent<T> {
                 buf.extend(TONIC_USER_AGENT.as_bytes());
                 HeaderValue::from_bytes(&buf).expect("user-agent should be valid")
             })
-            .unwrap_or_else(|| HeaderValue::from_static(TONIC_USER_AGENT));
+            .unwrap_or_else(crate::headers::user_agent);
+        // .unwrap_or_else(|| HeaderValue::from_static(TONIC_USER_AGENT));
 
         Self { inner, user_agent }
     }

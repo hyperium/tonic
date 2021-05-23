@@ -515,7 +515,8 @@ impl Status {
 
         parts.headers.insert(
             http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
+            crate::headers::application_grpc(),
+            // http::header::HeaderValue::from_static("application/grpc"),
         );
 
         self.add_header(&mut parts.headers).unwrap();
@@ -693,7 +694,10 @@ impl Code {
 
     fn to_header_value(&self) -> HeaderValue {
         match self {
-            Code::Ok => HeaderValue::from_static("0"),
+            Code::Ok => {
+                crate::headers::code_ok()
+                // HeaderValue::from_static("0")
+            }
             Code::Cancelled => HeaderValue::from_static("1"),
             Code::Unknown => HeaderValue::from_static("2"),
             Code::InvalidArgument => HeaderValue::from_static("3"),
