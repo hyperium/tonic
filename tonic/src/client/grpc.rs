@@ -1,8 +1,7 @@
 use crate::{
-    body::{Body, BoxBody},
+    body::BoxBody,
     client::GrpcService,
     codec::{encode_client, Codec, Streaming},
-    interceptor::Interceptor,
     Code, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -11,7 +10,7 @@ use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
     uri::{Parts, PathAndQuery, Uri},
 };
-use http_body::Body as HttpBody;
+use http_body::Body;
 use std::fmt;
 
 /// A gRPC client dispatcher.
@@ -29,25 +28,12 @@ use std::fmt;
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
     inner: T,
-    interceptor: Option<Interceptor>,
 }
 
 impl<T> Grpc<T> {
     /// Creates a new gRPC client with the provided [`GrpcService`].
     pub fn new(inner: T) -> Self {
-        Self {
-            inner,
-            interceptor: None,
-        }
-    }
-
-    /// Creates a new gRPC client with the provided [`GrpcService`] and will apply
-    /// the provided interceptor on each request.
-    pub fn with_interceptor(inner: T, interceptor: impl Into<Interceptor>) -> Self {
-        Self {
-            inner,
-            interceptor: Some(interceptor.into()),
-        }
+        Self { inner }
     }
 
     /// Check if the inner [`GrpcService`] is able to accept a  new request.
@@ -71,8 +57,8 @@ impl<T> Grpc<T> {
     ) -> Result<Response<M2>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -90,8 +76,8 @@ impl<T> Grpc<T> {
     ) -> Result<Response<M2>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -127,8 +113,8 @@ impl<T> Grpc<T> {
     ) -> Result<Response<Streaming<M2>>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -146,19 +132,13 @@ impl<T> Grpc<T> {
     ) -> Result<Response<Streaming<M2>>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + HttpBody + Send + 'static,
-        <T::ResponseBody as HttpBody>::Error: Into<crate::Error>,
+        T::ResponseBody: Body + Send + Sync + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + Sync + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = if let Some(interceptor) = &self.interceptor {
-            interceptor.call(request)?
-        } else {
-            request
-        };
-
         let mut parts = Parts::default();
         parts.path_and_query = Some(path);
 
@@ -217,7 +197,6 @@ impl<T: Clone> Clone for Grpc<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            interceptor: self.interceptor.clone(),
         }
     }
 }

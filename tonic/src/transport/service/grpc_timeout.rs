@@ -1,4 +1,5 @@
 use crate::metadata::GRPC_TIMEOUT_HEADER;
+use crate::util::{OptionPin, OptionPinProj};
 use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
 use std::{
@@ -95,12 +96,6 @@ where
 
         Poll::Pending
     }
-}
-
-#[pin_project(project = OptionPinProj)]
-enum OptionPin<T> {
-    Some(#[pin] T),
-    None,
 }
 
 const SECONDS_IN_HOUR: u64 = 60 * 60;

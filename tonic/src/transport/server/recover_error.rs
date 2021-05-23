@@ -1,4 +1,7 @@
-use crate::{body::BoxBody, Status};
+use crate::{
+    util::{OptionPin, OptionPinProj},
+    Status,
+};
 use futures_util::ready;
 use http::Response;
 use pin_project::pin_project;
@@ -22,12 +25,12 @@ impl<S> RecoverError<S> {
     }
 }
 
-impl<S, R> Service<R> for RecoverError<S>
+impl<S, R, ResBody> Service<R> for RecoverError<S>
 where
-    S: Service<R, Response = Response<BoxBody>>,
+    S: Service<R, Response = Response<ResBody>>,
     S::Error: Into<crate::Error>,
 {
-    type Response = Response<BoxBody>;
+    type Response = Response<MaybeEmptyBody<ResBody>>;
     type Error = crate::Error;
     type Future = ResponseFuture<S::Future>;
 
@@ -48,28 +51,86 @@ pub(crate) struct ResponseFuture<F> {
     inner: F,
 }
 
-impl<F, E> Future for ResponseFuture<F>
+impl<F, E, ResBody> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<BoxBody>, E>>,
+    F: Future<Output = Result<Response<ResBody>, E>>,
     E: Into<crate::Error>,
 {
-    type Output = Result<Response<BoxBody>, crate::Error>;
+    type Output = Result<Response<MaybeEmptyBody<ResBody>>, crate::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let result: Result<Response<BoxBody>, crate::Error> =
+        let result: Result<Response<_>, crate::Error> =
             ready!(self.project().inner.poll(cx)).map_err(Into::into);
 
         match result {
-            Ok(res) => Poll::Ready(Ok(res)),
+            Ok(response) => {
+                let response = response.map(MaybeEmptyBody::full);
+                Poll::Ready(Ok(response))
+            }
             Err(err) => {
                 if let Some(status) = Status::try_from_error(&*err) {
-                    let mut res = Response::new(BoxBody::empty());
+                    let mut res = Response::new(MaybeEmptyBody::empty());
                     status.add_header(res.headers_mut()).unwrap();
                     Poll::Ready(Ok(res))
                 } else {
                     Poll::Ready(Err(err))
                 }
             }
+        }
+    }
+}
+
+#[pin_project]
+pub(crate) struct MaybeEmptyBody<B> {
+    #[pin]
+    inner: OptionPin<B>,
+}
+
+impl<B> MaybeEmptyBody<B> {
+    fn full(inner: B) -> Self {
+        Self {
+            inner: OptionPin::Some(inner),
+        }
+    }
+
+    fn empty() -> Self {
+        Self {
+            inner: OptionPin::None,
+        }
+    }
+}
+
+impl<B> http_body::Body for MaybeEmptyBody<B>
+where
+    B: http_body::Body + Send,
+{
+    type Data = B::Data;
+    type Error = B::Error;
+
+    fn poll_data(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        match self.project().inner.project() {
+            OptionPinProj::Some(b) => b.poll_data(cx),
+            OptionPinProj::None => Poll::Ready(None),
+        }
+    }
+
+    fn poll_trailers(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
+        match self.project().inner.project() {
+            OptionPinProj::Some(b) => b.poll_trailers(cx),
+            OptionPinProj::None => Poll::Ready(Ok(None)),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match &self.inner {
+            OptionPin::Some(b) => b.is_end_stream(),
+            OptionPin::None => true,
         }
     }
 }
