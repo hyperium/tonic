@@ -177,7 +177,7 @@ impl<T> Streaming<T> {
                             f, status
                         )
                     } else {
-                        format!("protocol error: received with message with invalid compression flag: {} (valid flags are 0 and 1), while sending request", f)
+                        format!("protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1), while sending request", f)
                     };
                     return Err(Status::new(Code::Internal, message));
                 }
