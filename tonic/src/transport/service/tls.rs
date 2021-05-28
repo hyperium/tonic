@@ -64,6 +64,13 @@ impl TlsConnector {
             };
         }
 
+        #[cfg(feature = "tls-webpki-roots")]
+        {
+            config
+                .root_store
+                .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+        }
+
         if let Some(cert) = ca_cert {
             let mut buf = std::io::Cursor::new(&cert.pem[..]);
             config.root_store.add_pem_file(&mut buf).unwrap();

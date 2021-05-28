@@ -37,7 +37,7 @@ impl<C> Connector<C> {
         Self { inner, tls }
     }
 
-    #[cfg(feature = "tls-roots")]
+    #[cfg(feature = "tls-roots-common")]
     fn tls_or_default(&self, scheme: Option<&str>, host: Option<&str>) -> Option<TlsConnector> {
         use tokio_rustls::webpki::DNSNameRef;
 
@@ -74,10 +74,10 @@ where
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        #[cfg(all(feature = "tls", not(feature = "tls-roots")))]
+        #[cfg(all(feature = "tls", not(feature = "tls-roots-common")))]
         let tls = self.tls.clone();
 
-        #[cfg(feature = "tls-roots")]
+        #[cfg(feature = "tls-roots-common")]
         let tls = self.tls_or_default(uri.scheme_str(), uri.host());
 
         let connect = self.inner.make_connection(uri);

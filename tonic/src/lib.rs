@@ -25,6 +25,8 @@
 //! - `tls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
 //! `rustls-native-certs` crate. Not enabled by default. `tls` must be enabled to use
 //! `tls-roots`.
+//! - `tls-webpki-roots`: Add the standard trust roots from the `webpki-roots` crate to
+//! `rustls`-based gRPC clients. Not enabled by default.
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //!
 //! # Structure
