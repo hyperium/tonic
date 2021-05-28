@@ -7,9 +7,12 @@ mod recover_error;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
 
-pub use conn::Connected;
+pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
+
+#[cfg(feature = "tls")]
+pub use conn::TlsConnectInfo;
 
 #[cfg(feature = "tls")]
 use super::service::TlsAcceptor;
@@ -24,7 +27,7 @@ use crate::transport::Error;
 
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, Or, Routes, ServerIo};
-use crate::{body::BoxBody, request::ConnectionInfo};
+use crate::body::BoxBody;
 use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::{
@@ -38,6 +41,7 @@ use pin_project::pin_project;
 use std::{
     fmt,
     future::Future,
+    marker::PhantomData,
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
@@ -458,6 +462,7 @@ impl<L> Server<L> {
         <<L as Layer<S>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+        IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
         ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
@@ -487,6 +492,7 @@ impl<L> Server<L> {
             concurrency_limit,
             timeout,
             trace_interceptor,
+            _io: PhantomData,
         };
 
         let server = hyper::Server::builder(incoming)
@@ -674,6 +680,7 @@ where
     where
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+        IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         L: Layer<Routes<A, B, Request<Body>>>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
@@ -707,6 +714,7 @@ where
     where
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+        IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
         L: Layer<Routes<A, B, Request<Body>>>,
@@ -749,7 +757,6 @@ impl<L> fmt::Debug for Server<L> {
 struct Svc<S> {
     inner: S,
     trace_interceptor: Option<TraceInterceptor>,
-    conn_info: ConnectionInfo,
 }
 
 impl<S, ResBody> Service<Request<Body>> for Svc<S>
@@ -781,8 +788,6 @@ where
         } else {
             tracing::Span::none()
         };
-
-        req.extensions_mut().insert(self.conn_info.clone());
 
         SvcFuture {
             inner: self.inner.call(req),
@@ -823,15 +828,17 @@ impl<S> fmt::Debug for Svc<S> {
     }
 }
 
-struct MakeSvc<S> {
+struct MakeSvc<S, IO> {
     concurrency_limit: Option<usize>,
     timeout: Option<Duration>,
     inner: S,
     trace_interceptor: Option<TraceInterceptor>,
+    _io: PhantomData<fn() -> IO>,
 }
 
-impl<S, ResBody> Service<&ServerIo> for MakeSvc<S>
+impl<S, ResBody, IO> Service<&ServerIo<IO>> for MakeSvc<S, IO>
 where
+    IO: Connected,
     S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::Error> + Send,
@@ -846,11 +853,8 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, io: &ServerIo) -> Self::Future {
-        let conn_info = crate::request::ConnectionInfo {
-            remote_addr: io.remote_addr(),
-            peer_certs: io.peer_certs().map(Arc::new),
-        };
+    fn call(&mut self, io: &ServerIo<IO>) -> Self::Future {
+        let conn_info = io.connect_info();
 
         let svc = self.inner.clone();
         let concurrency_limit = self.concurrency_limit;
@@ -863,13 +867,35 @@ where
             .layer_fn(|s| GrpcTimeout::new(s, timeout))
             .service(svc);
 
-        let svc = Svc {
-            inner: svc,
-            trace_interceptor,
-            conn_info,
-        };
+        let svc = ServiceBuilder::new()
+            .layer(BoxService::layer())
+            .map_request(move |mut request: Request<Body>| {
+                match &conn_info {
+                    tower::util::Either::A(inner) => {
+                        request.extensions_mut().insert(inner.clone());
+                    }
+                    tower::util::Either::B(inner) => {
+                        #[cfg(feature = "tls")]
+                        {
+                            request.extensions_mut().insert(inner.clone());
+                            request.extensions_mut().insert(inner.get_ref().clone());
+                        }
 
-        let svc = BoxService::new(svc);
+                        #[cfg(not(feature = "tls"))]
+                        {
+                            // just a type check to make sure we didn't forget to
+                            // insert this into the extensions
+                            let _: &() = inner;
+                        }
+                    }
+                }
+
+                request
+            })
+            .service(Svc {
+                inner: svc,
+                trace_interceptor,
+            });
 
         future::ready(Ok(svc))
     }

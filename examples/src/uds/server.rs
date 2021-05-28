@@ -24,7 +24,11 @@ impl Greeter for MyGreeter {
         &self,
         request: Request<HelloRequest>,
     ) -> Result<Response<HelloReply>, Status> {
-        println!("Got a request: {:?}", request);
+        #[cfg(unix)]
+        {
+            let conn_info = request.extensions().get::<unix::UdsConnectInfo>().unwrap();
+            println!("Got a request {:?} with info {:?}", request, conn_info);
+        }
 
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
@@ -64,6 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 mod unix {
     use std::{
         pin::Pin,
+        sync::Arc,
         task::{Context, Poll},
     };
 
@@ -73,7 +78,22 @@ mod unix {
     #[derive(Debug)]
     pub struct UnixStream(pub tokio::net::UnixStream);
 
-    impl Connected for UnixStream {}
+    impl Connected for UnixStream {
+        type ConnectInfo = UdsConnectInfo;
+
+        fn connect_info(&self) -> Self::ConnectInfo {
+            UdsConnectInfo {
+                peer_addr: self.0.peer_addr().ok().map(Arc::new),
+                peer_cred: self.0.peer_cred().ok(),
+            }
+        }
+    }
+
+    #[derive(Clone, Debug)]
+    pub struct UdsConnectInfo {
+        pub peer_addr: Option<Arc<tokio::net::unix::SocketAddr>>,
+        pub peer_cred: Option<tokio::net::unix::UCred>,
+    }
 
     impl AsyncRead for UnixStream {
         fn poll_read(
