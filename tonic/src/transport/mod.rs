@@ -90,7 +90,7 @@ pub mod channel;
 pub mod server;
 
 mod error;
-mod service;
+pub mod service;
 mod tls;
 
 #[doc(inline)]
