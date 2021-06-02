@@ -2,7 +2,7 @@ use std::task::{Context, Poll};
 
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
 use hyper::Body;
-use tonic::body::BoxBody;
+use tonic::body::{BoxBody, empty_body};
 use tonic::transport::NamedService;
 use tower_service::Service;
 use tracing::{debug, trace};
@@ -65,7 +65,7 @@ where
     fn no_content(&self, headers: HeaderMap) -> BoxFuture<S::Response, S::Error> {
         let mut res = Response::builder()
             .status(StatusCode::NO_CONTENT)
-            .body(BoxBody::empty())
+            .body(empty_body())
             .unwrap();
 
         res.headers_mut().extend(headers);
@@ -77,7 +77,7 @@ where
         Box::pin(async move {
             Ok(Response::builder()
                 .status(status)
-                .body(BoxBody::empty())
+                .body(empty_body())
                 .unwrap())
         })
     }
