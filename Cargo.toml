@@ -20,5 +20,6 @@ members = [
     "tests/extern_path/my_application",
     "tests/integration_tests",
     "tests/stream_conflict",
+    "tests/root-crate-path",
 ]
 
