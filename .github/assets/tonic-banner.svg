@@ -4,6 +4,7 @@
 	 viewBox="0 0 1500 350" style="enable-background:new 0 0 1500 350;" xml:space="preserve">
 <style type="text/css">
 	.st0{fill:#231F20;}
+	@media(prefers-color-scheme:dark){.st0{fill:#F0F6FC;}}
 </style>
 <g>
 	<g>
