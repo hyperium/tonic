@@ -71,7 +71,8 @@ question. If that doesn't work, try opening an [issue] with the question.
 - [`tonic`](https://github.com/hyperium/tonic/tree/master/tonic): Generic gRPC and HTTP/2 client/server
 implementation.
 - [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic-build): [`prost`] based service codegen.
-- [`tonic-types`](https://github.com/hyperium/tonic/tree/master/tonic-types): [`prost`] based grpc utility types.
+- [`tonic-types`](https://github.com/hyperium/tonic/tree/master/tonic-types): [`prost`] based grpc utility types
+  including support for gRPC Well Known Types.
 - [`tonic-health`](https://github.com/hyperium/tonic/tree/master/tonic-health): Implementation of the standard [gRPC
 health checking service][healthcheck]. Also serves as an example of both unary and response streaming.
 - [`tonic-reflection`](https://github.com/hyperium/tonic/tree/master/tonic-reflection): A tonic based gRPC
