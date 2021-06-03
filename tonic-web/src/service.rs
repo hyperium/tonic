@@ -255,7 +255,7 @@ mod tests {
         }
 
         fn call(&mut self, _: Request<Body>) -> Self::Future {
-            Box::pin(async { Ok(Response::new(BoxBody::empty())) })
+            Box::pin(async { Ok(Response::new(empty_body())) })
         }
     }
 
