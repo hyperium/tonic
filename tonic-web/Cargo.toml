@@ -1,6 +1,21 @@
-[workspace]
-members = [
-    "tonic-web",
-    "interop",
-    "tests/integration"
-]
+[package]
+name = "tonic-web"
+version = "0.1.0"
+authors = ["Juan Alvarez <j@yabit.io>"]
+edition = "2018"
+
+[dependencies]
+tonic = { path = "../tonic", default-features = false, features = ["transport"] }
+http = "0.2"
+base64 = "0.13"
+futures-core = "0.3"
+bytes = "1.0"
+hyper = "0.14"
+http-body = "0.4"
+tower-service = "0.3"
+tracing = "0.1"
+pin-project = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+tonic = { path = "../tonic", default-features = false, features = ["transport", "tls"] }

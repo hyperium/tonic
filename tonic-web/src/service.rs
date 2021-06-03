@@ -2,7 +2,7 @@ use std::task::{Context, Poll};
 
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
 use hyper::Body;
-use tonic::body::{BoxBody, empty_body};
+use tonic::body::{empty_body, BoxBody};
 use tonic::transport::NamedService;
 use tower_service::Service;
 use tracing::{debug, trace};
@@ -255,7 +255,7 @@ mod tests {
         }
 
         fn call(&mut self, _: Request<Body>) -> Self::Future {
-            Box::pin(async { Ok(Response::new(BoxBody::empty())) })
+            Box::pin(async { Ok(Response::new(empty_body())) })
         }
     }
 
