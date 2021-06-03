@@ -1,8 +1,18 @@
 [package]
 name = "tonic-web"
 version = "0.1.0"
-authors = ["Juan Alvarez <j@yabit.io>"]
+authors = ["Juan Alvarez <alce@me.com>"]
 edition = "2018"
+license = "MIT"
+documentation = "https://docs.rs/tonic-web/0.1.0/tonic-web/"
+repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/hyperium/tonic"
+description = """
+grpc-web protocol translation for tonic services.
+"""
+readme = "README.md"
+categories = ["network-programming", "asynchronous"]
+keywords = ["rpc", "grpc", "grpc-web"]
 
 [dependencies]
 tonic = { path = "../tonic", default-features = false, features = ["transport"] }
