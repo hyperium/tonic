@@ -1,6 +1,6 @@
 # tonic-web
 
-enables tonic servers to handle requests from grpc-web clients directly, without the need of an
+Enables tonic servers to handle requests from `grpc-web` clients directly, without the need of an
 external proxy. 
 
 ## Getting Started
