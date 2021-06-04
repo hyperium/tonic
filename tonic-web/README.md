@@ -41,7 +41,6 @@ just by swapping the channel implementation.
 
 When the client is compiled for desktop, ios or android, a  grpc `ClientChannel` implementation is used.
 When compiled for the web, a `GrpcWebClientChannel.xhr` implementation is used instead.``
-****
 [1]: https://github.com/alce/tonic-web-demo
 [2]: https://github.com/alce/conduit
 [3]: https://github.com/gothinkster/realworld
