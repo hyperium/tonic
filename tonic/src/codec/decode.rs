@@ -149,9 +149,9 @@ impl<T> Streaming<T> {
         // them manually.
         let map = future::poll_fn(|cx| Pin::new(&mut self.body).poll_trailers(cx))
             .await
-            .map_err(|e| Status::from_error(&e))?;
+            .map_err(|e| Status::from_error(Box::new(e)));
 
-        Ok(map.map(MetadataMap::from_headers))
+        map.map(|x| x.map(MetadataMap::from_headers))
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
@@ -232,7 +232,7 @@ impl<T> Stream for Streaming<T> {
                 Some(Err(e)) => {
                     let err: crate::Error = e.into();
                     debug!("decoder inner stream error: {:?}", err);
-                    let status = Status::from_error(&*err);
+                    let status = Status::from_error(err);
                     return Poll::Ready(Some(Err(status)));
                 }
                 None => None,
@@ -266,7 +266,7 @@ impl<T> Stream for Streaming<T> {
                 Err(e) => {
                     let err: crate::Error = e.into();
                     debug!("decoder inner trailers error: {:?}", err);
-                    let status = Status::from_error(&*err);
+                    let status = Status::from_error(err);
                     return Some(Err(status)).into();
                 }
             }

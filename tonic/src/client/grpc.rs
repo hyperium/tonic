@@ -160,7 +160,11 @@ impl<T> Grpc<T> {
             .headers_mut()
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
-        let response = self.inner.call(request).await.map_err(|err| err.into())?;
+        let response = self
+            .inner
+            .call(request)
+            .await
+            .map_err(|err| Status::from_error(err.into()))?;
 
         let status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());

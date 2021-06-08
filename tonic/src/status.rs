@@ -3,6 +3,7 @@ use crate::metadata::MetadataMap;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
+use std::convert::TryFrom;
 use std::{borrow::Cow, error::Error, fmt};
 use tracing::{debug, trace, warn};
 
@@ -305,38 +306,31 @@ impl Status {
 
     #[cfg_attr(not(feature = "transport"), allow(dead_code))]
     pub(crate) fn from_error(err: Box<dyn Error + 'static>) -> Status {
-        Status::try_from_error(err).unwrap_or_else(|| Status::new(Code::Unknown, err.to_string()))
+        Status::try_from_error(err)
+            .unwrap_or_else(|err| Status::new(Code::Unknown, err.to_string()))
     }
 
-    pub(crate) fn try_from_error(err: &(dyn Error + 'static)) -> Option<Status> {
-        let mut cause = Some(err);
-
-        while let Some(err) = cause {
-            if let Some(status) = err.downcast_ref::<Status>() {
-                return Some(Status {
-                    code: status.code,
-                    message: status.message.clone(),
-                    details: status.details.clone(),
-                    metadata: status.metadata.clone(),
-                    source: Some(err),
-                });
+    pub(crate) fn try_from_error(err: Box<dyn Error + 'static>) -> Result<Status, Box<dyn Error + 'static>> {
+        let err = match err.downcast::<Status>() {
+            Ok(status) => {
+                return Ok(*status);
             }
+            Err(err) => err,
+        };
 
-            #[cfg(feature = "transport")]
-            {
-                if let Some(h2) = err.downcast_ref::<h2::Error>() {
-                    return Some(Status::from_h2_error(h2));
-                }
-
-                if let Some(timeout) = err.downcast_ref::<crate::transport::TimeoutExpired>() {
-                    return Some(Status::cancelled(timeout.to_string()));
-                }
+        #[cfg(feature = "transport")]
+        let err = match err.downcast::<h2::Error>() {
+            Ok(h2) => {
+                return Ok(Status::from_h2_error(&*h2));
             }
+            Err(err) => err,
+        };
 
-            cause = err.source();
+        if let Some(status) = find_status_in_cause_chain(&*err) {
+            return Ok(status);
         }
 
-        None
+        Err(err)
     }
 
     // FIXME: bubble this into `transport` and expose generic http2 reasons.
@@ -383,7 +377,8 @@ impl Status {
     where
         E: Into<Box<dyn Error + Send + Sync>>,
     {
-        Status::from_error(&*err.into())
+        let err: Box<dyn Error + Send + Sync> = err.into();
+        Status::from_error(err)
     }
 
     /// Extract a `Status` from a hyper `HeaderMap`.
@@ -536,6 +531,27 @@ impl Status {
     }
 }
 
+pub(crate) fn find_status_in_cause_chain(err: &(dyn Error + 'static)) -> Option<Status> {
+    let mut cause = Some(err);
+
+    while let Some(err) = cause {
+        if let Some(status) = err.downcast_ref::<Status>() {
+            return Some(Status {
+                code: status.code,
+                message: status.message.clone(),
+                details: status.details.clone(),
+                metadata: status.metadata.clone(),
+                // Since `Status` is not `Clone`, any `source` on the original Status
+                // cannot be cloned so must remain with the original `Status`.
+                source: None,
+            });
+        }
+
+        cause = err.source();
+    }
+
+    None
+}
 impl fmt::Debug for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // A manual impl to reduce the noise of frequently empty fields.
@@ -569,9 +585,11 @@ fn invalid_header_value_byte<Error: fmt::Display>(err: Error) -> Status {
     )
 }
 
-impl From<Box<dyn Error + Send + Sync + 'static>> for Status {
-    fn from(err: Box<dyn Error + Send + Sync>) -> Self {
-        Status::from_error()
+impl TryFrom<Box<dyn Error + Send + Sync + 'static>> for Status {
+    type Error = Box<dyn Error + 'static>;
+
+    fn try_from(err: Box<dyn Error + Send + Sync>) -> Result<Self, Self::Error> {
+        Status::try_from_error(err)
     }
 }
 
@@ -799,25 +817,25 @@ mod tests {
     #[test]
     fn from_error_status() {
         let orig = Status::new(Code::OutOfRange, "weeaboo");
-        let found = Status::from_error(&orig);
+        let found = Status::from_error(Box::new(orig));
 
-        assert_eq!(orig.code(), found.code());
-        assert_eq!(orig.message(), found.message());
+        assert_eq!(found.code(), Code::OutOfRange);
+        assert_eq!(found.message(), "weeaboo");
     }
 
     #[test]
     fn from_error_unknown() {
         let orig: Error = "peek-a-boo".into();
-        let found = Status::from_error(&*orig);
+        let found = Status::from_error(orig);
 
         assert_eq!(found.code(), Code::Unknown);
-        assert_eq!(found.message(), orig.to_string());
+        assert_eq!(found.message(), "peek-a-boo".to_string());
     }
 
     #[test]
     fn from_error_nested() {
         let orig = Nested(Box::new(Status::new(Code::OutOfRange, "weeaboo")));
-        let found = Status::from_error(&orig);
+        let found = Status::from_error(Box::new(orig));
 
         assert_eq!(found.code(), Code::OutOfRange);
         assert_eq!(found.message(), "weeaboo");
@@ -829,7 +847,7 @@ mod tests {
         use std::error::Error as _;
 
         let orig = h2::Error::from(h2::Reason::CANCEL);
-        let found = Status::from_error(&orig);
+        let found = Status::from_error(Box::new(orig));
 
         assert_eq!(found.code(), Code::Cancelled);
 
@@ -837,7 +855,7 @@ mod tests {
             .source()
             .and_then(|err| err.downcast_ref::<h2::Error>())
             .unwrap();
-        assert_eq!(orig.reason(), source.reason());
+        assert_eq!(source.reason(), Some(h2::Reason::CANCEL));
     }
 
     #[test]
