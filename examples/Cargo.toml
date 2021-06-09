@@ -158,6 +158,11 @@ path = "src/compression/server.rs"
 name = "compression-client"
 path = "src/compression/client.rs"
 
+[[bin]]
+name = "mock"
+path = "src/mock/mock.rs"
+
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls"] }
 prost = "0.7"
