@@ -326,7 +326,7 @@ impl Status {
             Err(err) => err,
         };
 
-        if let Some(status) = find_status_in_cause_chain(&*err) {
+        if let Some(status) = find_status_in_source_chain(&*err) {
             return Ok(status);
         }
 
@@ -531,10 +531,10 @@ impl Status {
     }
 }
 
-pub(crate) fn find_status_in_cause_chain(err: &(dyn Error + 'static)) -> Option<Status> {
-    let mut cause = Some(err);
+fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
+    let mut source = Some(err);
 
-    while let Some(err) = cause {
+    while let Some(err) = source {
         if let Some(status) = err.downcast_ref::<Status>() {
             return Some(Status {
                 code: status.code,
@@ -547,7 +547,7 @@ pub(crate) fn find_status_in_cause_chain(err: &(dyn Error + 'static)) -> Option<
             });
         }
 
-        cause = err.source();
+        source = err.source();
     }
 
     None
