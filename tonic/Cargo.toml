@@ -27,9 +27,11 @@ default = ["transport", "codegen", "prost"]
 codegen = ["async-trait"]
 transport = [
     "h2",
-    "hyper",
+    "hyper/full",
     "tokio",
+    "tokio/net",
     "tower",
+    "tower/balance",
     "tracing-futures",
     "tokio/macros",
     "tokio/time",
@@ -39,6 +41,13 @@ tls-roots-common = ["tls"]
 tls-roots = ["tls-roots-common", "rustls-native-certs"]
 tls-webpki-roots = ["tls-roots-common", "webpki-roots"]
 prost = ["prost1", "prost-derive"]
+client = [
+    "h2",
+    "hyper/client",
+    "hyper/http2",
+    "tokio",
+    "tower",
+]
 
 # [[bench]]
 # name = "bench_main"
@@ -69,8 +78,8 @@ async-trait = { version = "0.1.13", optional = true }
 
 # transport
 h2    = { version = "0.3", optional = true }
-hyper = { version = "0.14.2", features = ["full"], optional = true }
-tokio = { version = "1.0.1", features = ["net"], optional = true }
+hyper = { version = "0.14.2", default-features = false, optional = true }
+tokio = { version = "1.0.1", default-features = false, optional = true }
 tokio-stream = "0.1"
 tower = { version = "0.4.7", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true }
 tracing-futures = { version = "0.2", optional = true }
@@ -79,6 +88,9 @@ tracing-futures = { version = "0.2", optional = true }
 tokio-rustls = { version = "0.22", optional = true }
 rustls-native-certs = { version = "0.5", optional = true }
 webpki-roots = { version = "0.21.1", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen-futures = "0.4.18"
 
 [dev-dependencies]
 tokio = { version = "1.0", features = ["rt", "macros"] }

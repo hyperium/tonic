@@ -34,23 +34,34 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let mut settings = Builder::new()
+        let mut settings = Builder::new();
+        settings
             .http2_initial_stream_window_size(endpoint.init_stream_window_size)
             .http2_initial_connection_window_size(endpoint.init_connection_window_size)
-            .http2_only(true)
-            .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
-            .clone();
-
-        if let Some(val) = endpoint.http2_keep_alive_timeout {
-            settings.http2_keep_alive_timeout(val);
-        }
-
-        if let Some(val) = endpoint.http2_keep_alive_while_idle {
-            settings.http2_keep_alive_while_idle(val);
-        }
+            .http2_only(true);
 
         if let Some(val) = endpoint.http2_adaptive_window {
             settings.http2_adaptive_window(val);
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            settings
+                .executor(wasm::Executor)
+                // reset streams require `Instant::now` which is not available on wasm
+                .http2_max_concurrent_reset_streams(0);
+        }
+
+        #[cfg(feature = "transport")]
+        {
+            settings.http2_keep_alive_interval(endpoint.http2_keep_alive_interval);
+            if let Some(val) = endpoint.http2_keep_alive_timeout {
+                settings.http2_keep_alive_timeout(val);
+            }
+
+            if let Some(val) = endpoint.http2_keep_alive_while_idle {
+                settings.http2_keep_alive_while_idle(val);
+            }
         }
 
         let stack = ServiceBuilder::new()
@@ -81,6 +92,7 @@ impl Connection {
         Self::new(connector, endpoint, false).ready_oneshot().await
     }
 
+    #[cfg(feature = "transport")]
     pub(crate) fn lazy<C>(connector: C, endpoint: Endpoint) -> Self
     where
         C: Service<Uri> + Send + 'static,
@@ -117,5 +129,21 @@ impl Load for Connection {
 impl fmt::Debug for Connection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Connection").finish()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use std::future::Future;
+    use std::pin::Pin;
+
+    type BoxSendFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+    pub(crate) struct Executor;
+
+    impl hyper::rt::Executor<BoxSendFuture> for Executor {
+        fn execute(&self, fut: BoxSendFuture) {
+            wasm_bindgen_futures::spawn_local(fut)
+        }
     }
 }
