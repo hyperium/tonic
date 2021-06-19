@@ -155,6 +155,68 @@ pub trait Method {
     ) -> (TokenStream, TokenStream);
 }
 
+/// Attributes that will be added to `mod` and `struct` items.
+#[derive(Debug, Default, Clone)]
+pub struct Attributes {
+    /// `mod` attributes.
+    module: Vec<(String, String)>,
+    /// `struct` attributes.
+    structure: Vec<(String, String)>,
+}
+
+impl Attributes {
+    fn for_mod(&self, name: &str) -> Vec<syn::Attribute> {
+        generate_attributes(name, &self.module)
+    }
+
+    fn for_struct(&self, name: &str) -> Vec<syn::Attribute> {
+        generate_attributes(name, &self.structure)
+    }
+
+    /// Add an attribute that will be added to `mod` items matching the given pattern.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tonic_build::*;
+    /// let mut attributes = Attributes::default();
+    /// attributes.push_mod("my.proto.package", r#"#[cfg(feature = "server")]"#);
+    /// ```
+    pub fn push_mod(&mut self, pattern: impl Into<String>, attr: impl Into<String>) {
+        self.module.push((pattern.into(), attr.into()));
+    }
+
+    /// Add an attribute that will be added to `struct` items matching the given pattern.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tonic_build::*;
+    /// let mut attributes = Attributes::default();
+    /// attributes.push_struct("EchoService", "#[derive(PartialEq)]");
+    /// ```
+    pub fn push_struct(&mut self, pattern: impl Into<String>, attr: impl Into<String>) {
+        self.structure.push((pattern.into(), attr.into()));
+    }
+}
+
+// Generates attributes given a list of (`pattern`, `attribute`) pairs. If `pattern` matches `name`, `attribute` will be included.
+fn generate_attributes<'a>(
+    name: &str,
+    attrs: impl IntoIterator<Item = &'a (String, String)>,
+) -> Vec<syn::Attribute> {
+    attrs
+        .into_iter()
+        .filter(|(matcher, _)| match_name(matcher, name))
+        .flat_map(|(_, attr)| {
+            // attributes cannot be parsed directly, so we pretend they're on a struct
+            syn::parse_str::<syn::DeriveInput>(&format!("{}\nstruct fake;", attr))
+                .unwrap()
+                .attrs
+        })
+        .collect::<Vec<_>>()
+}
+
 /// Format files under the out_dir with rustfmt
 #[cfg(feature = "rustfmt")]
 #[cfg_attr(docsrs, doc(cfg(feature = "rustfmt")))]
@@ -218,6 +280,34 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
     stream
 }
 
+// Checks whether a path pattern matches a given path.
+pub(crate) fn match_name(pattern: &str, path: &str) -> bool {
+    if pattern.is_empty() {
+        false
+    } else if pattern == "." {
+        true
+    } else if pattern == path {
+        true
+    } else {
+        let pattern_segments = pattern.split('.').collect::<Vec<_>>();
+        let path_segments = path.split('.').collect::<Vec<_>>();
+
+        if &pattern[..1] == "." {
+            // prefix match
+            if pattern_segments.len() > path_segments.len() {
+                false
+            } else {
+                pattern_segments[..] == path_segments[..pattern_segments.len()]
+            }
+        // suffix match
+        } else if pattern_segments.len() > path_segments.len() {
+            false
+        } else {
+            pattern_segments[..] == path_segments[path_segments.len() - pattern_segments.len()..]
+        }
+    }
+}
+
 fn naive_snake_case(name: &str) -> String {
     let mut s = String::new();
     let mut it = name.chars().peekable();
@@ -234,14 +324,40 @@ fn naive_snake_case(name: &str) -> String {
     s
 }
 
-#[test]
-fn test_snake_case() {
-    for case in &[
-        ("Service", "service"),
-        ("ThatHasALongName", "that_has_a_long_name"),
-        ("greeter", "greeter"),
-        ("ABCServiceX", "a_b_c_service_x"),
-    ] {
-        assert_eq!(naive_snake_case(case.0), case.1)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_match_name() {
+        assert!(match_name(".", ".my.protos"));
+        assert!(match_name(".", ".protos"));
+
+        assert!(match_name(".my", ".my"));
+        assert!(match_name(".my", ".my.protos"));
+        assert!(match_name(".my.protos.Service", ".my.protos.Service"));
+
+        assert!(match_name("Service", ".my.protos.Service"));
+
+        assert!(!match_name(".m", ".my.protos"));
+        assert!(!match_name(".p", ".protos"));
+
+        assert!(!match_name(".my", ".myy"));
+        assert!(!match_name(".protos", ".my.protos"));
+        assert!(!match_name(".Service", ".my.protos.Service"));
+
+        assert!(!match_name("service", ".my.protos.Service"));
+    }
+
+    #[test]
+    fn test_snake_case() {
+        for case in &[
+            ("Service", "service"),
+            ("ThatHasALongName", "that_has_a_long_name"),
+            ("greeter", "greeter"),
+            ("ABCServiceX", "a_b_c_service_x"),
+        ] {
+            assert_eq!(naive_snake_case(case.0), case.1)
+        }
     }
 }

@@ -1,4 +1,4 @@
-use super::{client, server};
+use super::{client, server, Attributes};
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
@@ -18,6 +18,8 @@ pub fn configure() -> Builder {
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
         type_attributes: Vec::new(),
+        server_attributes: Attributes::default(),
+        client_attributes: Attributes::default(),
         proto_path: "super".to_string(),
         compile_well_known_types: false,
         #[cfg(feature = "rustfmt")]
@@ -162,6 +164,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 self.builder.emit_package,
                 &self.builder.proto_path,
                 self.builder.compile_well_known_types,
+                &self.builder.server_attributes,
             );
             self.servers.extend(server);
         }
@@ -172,6 +175,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 self.builder.emit_package,
                 &self.builder.proto_path,
                 self.builder.compile_well_known_types,
+                &self.builder.client_attributes,
             );
             self.clients.extend(client);
         }
@@ -215,6 +219,8 @@ pub struct Builder {
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
+    pub(crate) server_attributes: Attributes,
+    pub(crate) client_attributes: Attributes,
     pub(crate) proto_path: String,
     pub(crate) emit_package: bool,
     pub(crate) compile_well_known_types: bool,
@@ -288,6 +294,42 @@ impl Builder {
     pub fn type_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
         self.type_attributes
             .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
+    /// Add additional attribute to matched server `mod`s. Matches on the package name.
+    pub fn server_mod_attribute<P: AsRef<str>, A: AsRef<str>>(
+        mut self,
+        path: P,
+        attribute: A,
+    ) -> Self {
+        self.server_attributes
+            .push_mod(path.as_ref().to_string(), attribute.as_ref().to_string());
+        self
+    }
+
+    /// Add additional attribute to matched service servers. Matches on the service name.
+    pub fn server_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.server_attributes
+            .push_struct(path.as_ref().to_string(), attribute.as_ref().to_string());
+        self
+    }
+
+    /// Add additional attribute to matched client `mod`s. Matches on the package name.
+    pub fn client_mod_attribute<P: AsRef<str>, A: AsRef<str>>(
+        mut self,
+        path: P,
+        attribute: A,
+    ) -> Self {
+        self.client_attributes
+            .push_mod(path.as_ref().to_string(), attribute.as_ref().to_string());
+        self
+    }
+
+    /// Add additional attribute to matched service clients. Matches on the service name.
+    pub fn client_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.client_attributes
+            .push_struct(path.as_ref().to_string(), attribute.as_ref().to_string());
         self
     }
 
