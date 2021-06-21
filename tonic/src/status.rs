@@ -617,13 +617,13 @@ impl Error for Status {}
 pub(crate) fn infer_grpc_status(
     trailers: Option<&HeaderMap>,
     status_code: http::StatusCode,
-) -> Result<(), Status> {
+) -> Result<(), Option<Status>> {
     if let Some(trailers) = trailers {
         if let Some(status) = Status::from_header_map(&trailers) {
             if status.code() == Code::Ok {
                 return Ok(());
             } else {
-                return Err(status);
+                return Err(status.into());
             }
         }
     }
@@ -638,6 +638,13 @@ pub(crate) fn infer_grpc_status(
         | http::StatusCode::BAD_GATEWAY
         | http::StatusCode::SERVICE_UNAVAILABLE
         | http::StatusCode::GATEWAY_TIMEOUT => Code::Unavailable,
+        // We got a 200 but no trailers, we can infer that this request is finished.
+        //
+        // This can happen when a streaming response sends two Status but
+        // gRPC requires that we end the stream after the first status.
+        //
+        // https://github.com/hyperium/tonic/issues/681
+        http::StatusCode::OK => return Err(None),
         _ => Code::Unknown,
     };
 
@@ -646,7 +653,7 @@ pub(crate) fn infer_grpc_status(
         status_code.as_u16(),
     );
     let status = Status::new(code, msg);
-    Err(status)
+    Err(status.into())
 }
 
 // ===== impl Code =====

@@ -258,7 +258,11 @@ impl<T> Stream for Streaming<T> {
             match ready!(Pin::new(&mut self.body).poll_trailers(cx)) {
                 Ok(trailer) => {
                     if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
-                        return Some(Err(e)).into();
+                        if let Some(e) = e {
+                            return Some(Err(e)).into();
+                        } else {
+                            return Poll::Ready(None);
+                        }
                     } else {
                         self.trailers = trailer.map(MetadataMap::from_headers);
                     }

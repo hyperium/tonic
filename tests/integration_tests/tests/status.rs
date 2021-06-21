@@ -1,6 +1,9 @@
 use bytes::Bytes;
 use futures_util::FutureExt;
-use integration_tests::pb::{test_client, test_server, Input, Output};
+use integration_tests::pb::{
+    test_client, test_server, test_stream_client, test_stream_server, Input, InputStream, Output,
+    OutputStream,
+};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::metadata::{MetadataMap, MetadataValue};
@@ -116,4 +119,62 @@ async fn status_with_metadata() {
     tx.send(()).unwrap();
 
     jh.await.unwrap();
+}
+
+type Stream<T> = std::pin::Pin<
+    Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + Sync + 'static>,
+>;
+
+#[tokio::test]
+async fn status_from_server_stream() {
+    trace_init();
+
+    struct Svc;
+
+    #[tonic::async_trait]
+    impl test_stream_server::TestStream for Svc {
+        type StreamCallStream = Stream<OutputStream>;
+
+        async fn stream_call(
+            &self,
+            _: Request<InputStream>,
+        ) -> Result<Response<Self::StreamCallStream>, Status> {
+            let s = futures::stream::iter(vec![
+                Err::<OutputStream, _>(Status::unavailable("foo")),
+                Err::<OutputStream, _>(Status::unavailable("bar")),
+            ]);
+            Ok(Response::new(Box::pin(s) as Self::StreamCallStream))
+        }
+    }
+
+    let svc = test_stream_server::TestStreamServer::new(Svc);
+
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve("127.0.0.1:1339".parse().unwrap())
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let mut client = test_stream_client::TestStreamClient::connect("http://127.0.0.1:1339")
+        .await
+        .unwrap();
+
+    let mut stream = client
+        .stream_call(InputStream {})
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert_eq!(stream.message().await.unwrap_err().message(), "foo");
+    assert_eq!(stream.message().await.unwrap(), None);
+}
+
+fn trace_init() {
+    let _ = tracing_subscriber::FmtSubscriber::builder()
+        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+        .try_init();
 }
