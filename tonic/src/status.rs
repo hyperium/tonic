@@ -321,12 +321,6 @@ impl Status {
         };
 
         #[cfg(feature = "transport")]
-        let err = match err.downcast::<crate::transport::TimeoutExpired>() {
-            Ok(timeout) => return Ok(Status::cancelled(timeout.to_string())),
-            Err(err) => err,
-        };
-
-        #[cfg(feature = "transport")]
         let err = match err.downcast::<h2::Error>() {
             Ok(h2) => {
                 return Ok(Status::from_h2_error(&*h2));
@@ -553,6 +547,11 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
                 // cannot be cloned so must remain with the original `Status`.
                 source: None,
             });
+        }
+
+        #[cfg(feature = "transport")]
+        if let Some(timeout) = err.downcast_ref::<crate::transport::TimeoutExpired>() {
+            return Some(Status::cancelled(timeout.to_string()));
         }
 
         source = err.source();
