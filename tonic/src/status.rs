@@ -592,14 +592,6 @@ fn invalid_header_value_byte<Error: fmt::Display>(err: Error) -> Status {
     )
 }
 
-impl TryFrom<Box<dyn Error + Send + Sync + 'static>> for Status {
-    type Error = Box<dyn Error + Send + Sync + 'static>;
-
-    fn try_from(err: Box<dyn Error + Send + Sync + 'static>) -> Result<Self, Self::Error> {
-        Status::try_from_error(err)
-    }
-}
-
 #[cfg(feature = "transport")]
 impl From<h2::Error> for Status {
     fn from(err: h2::Error) -> Self {
