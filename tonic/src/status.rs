@@ -355,7 +355,7 @@ impl Status {
         };
 
         let mut status = Self::new(code, format!("h2 protocol error: {}", err));
-        let error: Option<Box<dyn Error + Send + Sync + 'static>> = err
+        let error = err
             .reason()
             .map(h2::Error::from)
             .map(|err| Box::new(err) as Box<dyn Error + Send + Sync + 'static>);
