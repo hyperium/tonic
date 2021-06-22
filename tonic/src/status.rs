@@ -305,16 +305,24 @@ impl Status {
     }
 
     #[cfg_attr(not(feature = "transport"), allow(dead_code))]
-    pub(crate) fn from_error(err: Box<dyn Error + 'static>) -> Status {
+    pub(crate) fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
         Status::try_from_error(err)
             .unwrap_or_else(|err| Status::new(Code::Unknown, err.to_string()))
     }
 
-    pub(crate) fn try_from_error(err: Box<dyn Error + 'static>) -> Result<Status, Box<dyn Error + 'static>> {
+    pub(crate) fn try_from_error(
+        err: Box<dyn Error + Send + Sync + 'static>,
+    ) -> Result<Status, Box<dyn Error + Send + Sync + 'static>> {
         let err = match err.downcast::<Status>() {
             Ok(status) => {
                 return Ok(*status);
             }
+            Err(err) => err,
+        };
+
+        #[cfg(feature = "transport")]
+        let err = match err.downcast::<crate::transport::TimeoutExpired>() {
+            Ok(timeout) => return Ok(Status::cancelled(timeout.to_string())),
             Err(err) => err,
         };
 
@@ -586,9 +594,9 @@ fn invalid_header_value_byte<Error: fmt::Display>(err: Error) -> Status {
 }
 
 impl TryFrom<Box<dyn Error + Send + Sync + 'static>> for Status {
-    type Error = Box<dyn Error + 'static>;
+    type Error = Box<dyn Error + Send + Sync + 'static>;
 
-    fn try_from(err: Box<dyn Error + Send + Sync>) -> Result<Self, Self::Error> {
+    fn try_from(err: Box<dyn Error + Send + Sync + 'static>) -> Result<Self, Self::Error> {
         Status::try_from_error(err)
     }
 }
