@@ -3,7 +3,6 @@ use crate::metadata::MetadataMap;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
-use std::convert::TryFrom;
 use std::{borrow::Cow, error::Error, fmt};
 use tracing::{debug, trace, warn};
 
