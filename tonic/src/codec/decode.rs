@@ -1,4 +1,4 @@
-use super::{DecodeBuf, Decoder};
+use super::{compression::Encoding, DecodeBuf, Decoder};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -24,7 +24,9 @@ pub struct Streaming<T> {
     state: State,
     direction: Direction,
     buf: BytesMut,
+    decompress_buf: BytesMut,
     trailers: Option<MetadataMap>,
+    encoding: Option<Encoding>,
 }
 
 impl<T> Unpin for Streaming<T> {}
@@ -43,13 +45,18 @@ enum Direction {
 }
 
 impl<T> Streaming<T> {
-    pub(crate) fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
+    pub(crate) fn new_response<B, D>(
+        decoder: D,
+        body: B,
+        status_code: StatusCode,
+        encoding: Option<Encoding>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Response(status_code))
+        Self::new(decoder, body, Direction::Response(status_code), encoding)
     }
 
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
@@ -58,7 +65,7 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::EmptyResponse)
+        Self::new(decoder, body, Direction::EmptyResponse, None)
     }
 
     #[doc(hidden)]
@@ -68,10 +75,10 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Request)
+        Self::new(decoder, body, Direction::Request, None)
     }
 
-    fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
+    fn new<B, D>(decoder: D, body: B, direction: Direction, encoding: Option<Encoding>) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
@@ -86,7 +93,9 @@ impl<T> Streaming<T> {
             state: State::ReadHeader,
             direction,
             buf: BytesMut::with_capacity(BUFFER_SIZE),
+            decompress_buf: BytesMut::new(),
             trailers: None,
+            encoding,
         }
     }
 }
@@ -162,13 +171,7 @@ impl<T> Streaming<T> {
 
             let is_compressed = match self.buf.get_u8() {
                 0 => false,
-                1 => {
-                    trace!("message compressed, compression not supported yet");
-                    return Err(Status::new(
-                        Code::Unimplemented,
-                        "Message compressed, compression not supported yet.".to_string(),
-                    ));
-                }
+                1 => true,
                 f => {
                     trace!("unexpected compression flag");
                     let message = if let Direction::Response(status) = self.direction {
@@ -191,24 +194,51 @@ impl<T> Streaming<T> {
             }
         }
 
-        if let State::ReadBody { len, .. } = &self.state {
+        if let State::ReadBody { len, compression } = &self.state {
             // if we haven't read enough of the message then return and keep
             // reading
             if self.buf.remaining() < *len || self.buf.len() < *len {
                 return Ok(None);
             }
 
-            return match self
-                .decoder
-                .decode(&mut DecodeBuf::new(&mut self.buf, *len))
-            {
-                Ok(Some(msg)) => {
-                    self.state = State::ReadHeader;
-                    Ok(Some(msg))
+            let result = if *compression {
+                if let Err(err) = super::compression::decompress(
+                    // TODO(david): handle missing self.encoding
+                    self.encoding.unwrap(),
+                    &mut self.buf,
+                    &mut self.decompress_buf,
+                    *len,
+                ) {
+                    let message = if let Direction::Response(status) = self.direction {
+                        format!(
+                            "Error decompressing: {}, while receiving response with status: {}",
+                            err, status
+                        )
+                    } else {
+                        format!("Error decompressing: {}, while sending request", err)
+                    };
+                    return Err(Status::new(Code::Internal, message));
                 }
-                Ok(None) => Ok(None),
-                Err(e) => Err(e),
+                let uncompressed_len = self.decompress_buf.len();
+                self.decoder.decode(&mut DecodeBuf::new(
+                    &mut self.decompress_buf,
+                    uncompressed_len,
+                ))
+            } else {
+                match self
+                    .decoder
+                    .decode(&mut DecodeBuf::new(&mut self.buf, *len))
+                {
+                    Ok(Some(msg)) => {
+                        self.state = State::ReadHeader;
+                        Ok(Some(msg))
+                    }
+                    Ok(None) => Ok(None),
+                    Err(e) => Err(e),
+                }
             };
+
+            return result;
         }
 
         Ok(None)

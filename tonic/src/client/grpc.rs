@@ -1,7 +1,7 @@
 use crate::{
     body::BoxBody,
     client::GrpcService,
-    codec::{encode_client, Codec, Streaming},
+    codec::{compression::Encoding, encode_client, Codec, Streaming},
     Code, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -166,6 +166,8 @@ impl<T> Grpc<T> {
             .await
             .map_err(|err| Status::from_error(err.into()))?;
 
+        let encoding = Encoding::from_encoding_header(response.headers());
+
         let status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());
 
@@ -183,7 +185,7 @@ impl<T> Grpc<T> {
 
         let response = response.map(|body| {
             if expect_additional_trailers {
-                Streaming::new_response(codec.decoder(), body, status_code)
+                Streaming::new_response(codec.decoder(), body, status_code, encoding)
             } else {
                 Streaming::new_empty(codec.decoder(), body)
             }

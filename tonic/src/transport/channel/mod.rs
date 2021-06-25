@@ -10,7 +10,7 @@ pub use endpoint::Endpoint;
 pub use tls::ClientTlsConfig;
 
 use super::service::{Connection, DynamicServiceStream};
-use crate::body::BoxBody;
+use crate::{body::BoxBody, codec::compression::AcceptEncoding};
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},
@@ -29,15 +29,16 @@ use tokio::{
     sync::mpsc::{channel, Sender},
 };
 
-use tower::balance::p2c::Balance;
 use tower::{
+    balance::p2c::Balance,
     buffer::{self, Buffer},
     discover::{Change, Discover},
-    util::{BoxService, Either},
+    util::BoxService,
     Service,
 };
+use tower_http::set_header::SetRequestHeader;
 
-type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
+type Svc = BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
@@ -137,10 +138,13 @@ impl Channel {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
+        let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
+        let accept_encoding = endpoint.accept_encoding;
 
         let svc = Connection::lazy(connector, endpoint);
-        let svc = Buffer::new(Either::A(svc), buffer_size);
+        let svc = with_accept_encoding(svc, accept_encoding);
+        let svc = BoxService::new(svc);
+        let svc = Buffer::new(svc, buffer_size);
 
         Channel { svc }
     }
@@ -152,12 +156,15 @@ impl Channel {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
+        let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
+        let accept_encoding = endpoint.accept_encoding;
 
         let svc = Connection::connect(connector, endpoint)
             .await
             .map_err(super::Error::from_source)?;
-        let svc = Buffer::new(Either::A(svc), buffer_size);
+        let svc = with_accept_encoding(svc, accept_encoding);
+        let svc = BoxService::new(svc);
+        let svc = Buffer::new(svc, buffer_size);
 
         Ok(Channel { svc })
     }
@@ -171,10 +178,22 @@ impl Channel {
         let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
-        let svc = Buffer::new(Either::B(svc), buffer_size);
+        let svc = Buffer::new(svc, buffer_size);
 
         Channel { svc }
     }
+}
+
+fn with_accept_encoding<S>(
+    svc: S,
+    accept_encoding: AcceptEncoding,
+) -> SetRequestHeader<S, http::HeaderValue> {
+    let header_value = accept_encoding.into_header_value();
+    SetRequestHeader::overriding(
+        svc,
+        http::header::HeaderName::from_static(crate::codec::compression::ACCEPT_ENCODING_HEADER),
+        header_value,
+    )
 }
 
 impl Service<http::Request<BoxBody>> for Channel {

@@ -30,6 +30,7 @@ transport = [
     "hyper",
     "tokio",
     "tower",
+    "tower-http",
     "tracing-futures",
     "tokio/macros",
     "tokio/time",
@@ -59,6 +60,7 @@ tokio-util = { version = "0.6", features = ["codec"] }
 async-stream = "0.3"
 http-body = "0.4.2"
 pin-project = "1.0"
+flate2 = "1.0"
 
 # prost
 prost1 = { package = "prost", version = "0.7", optional = true }
@@ -73,6 +75,7 @@ hyper = { version = "0.14.2", features = ["full"], optional = true }
 tokio = { version = "1.0.1", features = ["net"], optional = true }
 tokio-stream = "0.1"
 tower = { version = "0.4.7", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true }
+tower-http = { version = "0.1", features = ["set-header"], optional = true }
 tracing-futures = { version = "0.2", optional = true }
 
 # rustls

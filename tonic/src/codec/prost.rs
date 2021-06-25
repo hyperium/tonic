@@ -119,7 +119,7 @@ mod tests {
         let messages = std::iter::repeat_with(move || Ok::<_, Status>(msg.clone())).take(10000);
         let source = futures_util::stream::iter(messages);
 
-        let body = encode_server(encoder, source);
+        let body = encode_server(encoder, source, None);
 
         futures_util::pin_mut!(body);
 
@@ -216,6 +216,7 @@ mod tests {
                 }
             }
 
+            #[allow(clippy::drop_ref)]
             fn poll_trailers(
                 self: Pin<&mut Self>,
                 cx: &mut Context<'_>,

@@ -1,6 +1,6 @@
 use crate::{
     body::BoxBody,
-    codec::{encode_server, Codec, Streaming},
+    codec::{compression::Encoding, encode_server, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
 };
@@ -43,13 +43,16 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        let requested_encoding = Encoding::from_accept_encoding_header(req.headers());
+
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
                 return self
-                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(Err(
-                        status,
-                    ));
+                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
+                        Err(status),
+                        requested_encoding,
+                    );
             }
         };
 
@@ -58,7 +61,7 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response)
+        self.map_response(response, requested_encoding)
     }
 
     /// Handle a server side streaming request.
@@ -73,16 +76,18 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        // TODO(david): requested_encoding
+
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status));
+                return self.map_response::<S::ResponseStream>(Err(status), None);
             }
         };
 
         let response = service.call(request).await;
 
-        self.map_response(response)
+        self.map_response(response, None)
     }
 
     /// Handle a client side streaming gRPC request.
@@ -96,12 +101,14 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
+        // TODO(david): requested_encoding
+
         let request = self.map_request_streaming(req);
         let response = service
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-        self.map_response(response)
+        self.map_response(response, None)
     }
 
     /// Handle a bi-directional streaming gRPC request.
@@ -116,9 +123,10 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        // TODO(david): requested_encoding
         let request = self.map_request_streaming(req);
         let response = service.call(request).await;
-        self.map_response(response)
+        self.map_response(response, None)
     }
 
     async fn map_request_unary<B>(
@@ -162,26 +170,35 @@ where
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
+        requested_encoding: Option<Encoding>,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
     {
-        match response {
-            Ok(r) => {
-                let (mut parts, body) = r.into_http().into_parts();
+        let response = match response {
+            Ok(r) => r,
+            Err(status) => return status.to_http(),
+        };
 
-                // Set the content type
-                parts.headers.insert(
-                    http::header::CONTENT_TYPE,
-                    http::header::HeaderValue::from_static("application/grpc"),
-                );
+        let (mut parts, body) = response.into_http().into_parts();
 
-                let body = encode_server(self.codec.encoder(), body.into_stream());
+        // Set the content type
+        parts.headers.insert(
+            http::header::CONTENT_TYPE,
+            http::header::HeaderValue::from_static("application/grpc"),
+        );
 
-                http::Response::from_parts(parts, BoxBody::new(body))
-            }
-            Err(status) => status.to_http(),
+        if let Some(encoding) = requested_encoding {
+            // Set the content encoding
+            parts.headers.insert(
+                crate::codec::compression::ENCODING_HEADER,
+                encoding.into_header_value(),
+            );
         }
+
+        let body = encode_server(self.codec.encoder(), body.into_stream(), requested_encoding);
+
+        http::Response::from_parts(parts, BoxBody::new(body))
     }
 }
 

@@ -4,6 +4,7 @@
 //! and a protobuf codec based on prost.
 
 mod buffer;
+pub(crate) mod compression;
 mod decode;
 mod encode;
 #[cfg(feature = "prost")]
