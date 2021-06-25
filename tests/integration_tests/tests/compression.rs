@@ -11,19 +11,21 @@ use tower::Service;
 // TODO(david): server streaming
 // TODO(david): bidirectional streaming
 
+// TODO(david): somehow verify that compression is actually happening
+
+struct Svc;
+
+#[tonic::async_trait]
+impl test_server::Test for Svc {
+    async fn unary_call(&self, _req: Request<Input>) -> Result<Response<Output>, Status> {
+        Ok(Response::new(Output {}))
+    }
+}
+
 // TODO(david): document that using a multi threaded tokio runtime is
 // required (because of `block_in_place`)
 #[tokio::test(flavor = "multi_thread")]
 async fn server_compressing_messages() {
-    struct Svc;
-
-    #[tonic::async_trait]
-    impl test_server::Test for Svc {
-        async fn unary_call(&self, _req: Request<Input>) -> Result<Response<Output>, Status> {
-            Ok(Response::new(Output {}))
-        }
-    }
-
     #[derive(Clone, Copy)]
     struct AssertCorrectAcceptEncoding<S>(S);
 
@@ -43,9 +45,7 @@ async fn server_compressing_messages() {
         }
 
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
-            println!("test middleware called");
             assert_eq!(req.headers().get("grpc-accept-encoding").unwrap(), "gzip");
-
             self.0.call(req)
         }
     }
@@ -80,15 +80,6 @@ async fn server_compressing_messages() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_disabled() {
-    struct Svc;
-
-    #[tonic::async_trait]
-    impl test_server::Test for Svc {
-        async fn unary_call(&self, _req: Request<Input>) -> Result<Response<Output>, Status> {
-            Ok(Response::new(Output {}))
-        }
-    }
-
     let svc = test_server::TestServer::new(Svc);
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -118,15 +109,6 @@ async fn client_enabled_server_disabled() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_disabled() {
-    struct Svc;
-
-    #[tonic::async_trait]
-    impl test_server::Test for Svc {
-        async fn unary_call(&self, _req: Request<Input>) -> Result<Response<Output>, Status> {
-            Ok(Response::new(Output {}))
-        }
-    }
-
     #[derive(Clone, Copy)]
     struct AssertCorrectAcceptEncoding<S>(S);
 
@@ -147,7 +129,6 @@ async fn client_disabled() {
 
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             assert!(req.headers().get("grpc-accept-encoding").is_none());
-
             self.0.call(req)
         }
     }
