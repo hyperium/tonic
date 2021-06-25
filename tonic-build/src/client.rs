@@ -153,10 +153,10 @@ fn generate_unary<T: Method>(
             &mut self,
             request: impl tonic::IntoRequest<#request>,
         ) -> Result<tonic::Response<#response>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                        tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = #codec_name::default();
+           self.inner.ready().await.map_err(|e| {
+               tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+           })?;
+           let codec = #codec_name::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.unary(request.into_request(), path, codec).await
         }

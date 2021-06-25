@@ -27,7 +27,7 @@ use crate::transport::Error;
 
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, Or, Routes, ServerIo};
-use crate::body::BoxBody;
+use crate::{body::BoxBody, codec::compression::EnabledEncodings};
 use bytes::Bytes;
 use futures_core::Stream;
 use futures_util::{
@@ -85,6 +85,7 @@ pub struct Server<L = Identity> {
     max_frame_size: Option<u32>,
     accept_http1: bool,
     layer: L,
+    encodings: EnabledEncodings,
 }
 
 /// A stack based `Service` router.
@@ -321,6 +322,14 @@ impl<L> Server<L> {
         }
     }
 
+    /// Compress outgoing messages with `gzip` if supported by the client.
+    pub fn send_gzip(self) -> Self {
+        Server {
+            encodings: self.encodings.gzip(),
+            ..self
+        }
+    }
+
     /// Create a router with the `S` typed service as the first service.
     ///
     /// This will clone the `Server` builder and create a router that will
@@ -446,6 +455,7 @@ impl<L> Server<L> {
             http2_keepalive_timeout: self.http2_keepalive_timeout,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
+            encodings: EnabledEncodings::default(),
         }
     }
 
@@ -476,6 +486,7 @@ impl<L> Server<L> {
         let timeout = self.timeout;
         let max_frame_size = self.max_frame_size;
         let http2_only = !self.accept_http1;
+        let encodings = self.encodings;
 
         let http2_keepalive_interval = self.http2_keepalive_interval;
         let http2_keepalive_timeout = self
@@ -492,6 +503,7 @@ impl<L> Server<L> {
             concurrency_limit,
             timeout,
             trace_interceptor,
+            encodings,
             _io: PhantomData,
         };
 
@@ -757,6 +769,7 @@ impl<L> fmt::Debug for Server<L> {
 struct Svc<S> {
     inner: S,
     trace_interceptor: Option<TraceInterceptor>,
+    encodings: EnabledEncodings,
 }
 
 impl<S, ResBody> Service<Request<Body>> for Svc<S>
@@ -788,6 +801,11 @@ where
         } else {
             tracing::Span::none()
         };
+
+        // remove disabled disablings from `grpc-accept-encoding` so the inner service doesn't even
+        // seen them.
+        self.encodings
+            .remove_disabled_encodings_from_accept_encoding(req.headers_mut());
 
         SvcFuture {
             inner: self.inner.call(req),
@@ -833,6 +851,7 @@ struct MakeSvc<S, IO> {
     timeout: Option<Duration>,
     inner: S,
     trace_interceptor: Option<TraceInterceptor>,
+    encodings: EnabledEncodings,
     _io: PhantomData<fn() -> IO>,
 }
 
@@ -860,6 +879,7 @@ where
         let concurrency_limit = self.concurrency_limit;
         let timeout = self.timeout;
         let trace_interceptor = self.trace_interceptor.clone();
+        let encodings = self.encodings;
 
         let svc = ServiceBuilder::new()
             .layer_fn(RecoverError::new)
@@ -895,6 +915,7 @@ where
             .service(Svc {
                 inner: svc,
                 trace_interceptor,
+                encodings,
             });
 
         future::ready(Ok(svc))

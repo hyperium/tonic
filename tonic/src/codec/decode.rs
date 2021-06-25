@@ -1,4 +1,7 @@
-use super::{compression::Encoding, DecodeBuf, Decoder};
+use super::{
+    compression::{decompress, Encoding},
+    DecodeBuf, Decoder,
+};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -202,7 +205,7 @@ impl<T> Streaming<T> {
             }
 
             let result = if *compression {
-                if let Err(err) = super::compression::decompress(
+                if let Err(err) = decompress(
                     // TODO(david): handle missing self.encoding
                     self.encoding.unwrap(),
                     &mut self.buf,

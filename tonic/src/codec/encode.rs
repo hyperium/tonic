@@ -75,8 +75,17 @@ where
                         compression_buf.clear();
                         encoder.encode(item, &mut EncodeBuf::new(&mut compression_buf)).map_err(drop).unwrap();
                         let compressed_len = compression_buf.len();
-                        // TODO(david): handle error
-                        compress(encoding.unwrap(), &mut compression_buf, &mut buf, compressed_len).expect("compression failed");
+
+                        let compress_result = compress(
+                            encoding.unwrap(),
+                            &mut compression_buf,
+                            &mut buf,
+                            compressed_len,
+                        );
+
+                        if let Err(err) = compress_result {
+                            yield Err(Status::internal(format!("Error compressing: {}", err)))
+                        }
                     } else {
                         encoder.encode(item, &mut EncodeBuf::new(&mut buf)).map_err(drop).unwrap();
                     }

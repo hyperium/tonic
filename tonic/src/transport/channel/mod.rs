@@ -10,7 +10,7 @@ pub use endpoint::Endpoint;
 pub use tls::ClientTlsConfig;
 
 use super::service::{Connection, DynamicServiceStream};
-use crate::{body::BoxBody, codec::compression::AcceptEncoding};
+use crate::{body::BoxBody, codec::compression::EnabledEncodings};
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},
@@ -186,9 +186,9 @@ impl Channel {
 
 fn with_accept_encoding<S>(
     svc: S,
-    accept_encoding: AcceptEncoding,
+    accept_encoding: EnabledEncodings,
 ) -> SetRequestHeader<S, http::HeaderValue> {
-    let header_value = accept_encoding.into_header_value();
+    let header_value = accept_encoding.into_accept_encoding_header_value();
     SetRequestHeader::overriding(
         svc,
         http::header::HeaderName::from_static(crate::codec::compression::ACCEPT_ENCODING_HEADER),
