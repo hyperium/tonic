@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package test;
+
+service Test {
+  rpc UnaryCall(Input) returns (Output);
+}
+
+message Input {}
+
+message Output {
+  // include a bunch of data so there actually is something to compress
+  bytes data = 1;
+}
