@@ -43,7 +43,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let requested_encoding = Encoding::from_accept_encoding_header(req.headers());
+        let encoding = Encoding::from_accept_encoding_header(req.headers());
 
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
@@ -51,7 +51,7 @@ where
                 return self
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
                         Err(status),
-                        requested_encoding,
+                        encoding,
                     );
             }
         };
@@ -61,7 +61,7 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response, requested_encoding)
+        self.map_response(response, encoding)
     }
 
     /// Handle a server side streaming request.
@@ -76,7 +76,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        // TODO(david): requested_encoding
+        // TODO(david): encoding
 
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
@@ -101,7 +101,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
-        // TODO(david): requested_encoding
+        // TODO(david): encoding
 
         let request = self.map_request_streaming(req);
         let response = service
@@ -123,7 +123,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        // TODO(david): requested_encoding
+        // TODO(david): encoding
         let request = self.map_request_streaming(req);
         let response = service.call(request).await;
         self.map_response(response, None)
@@ -170,7 +170,7 @@ where
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
-        requested_encoding: Option<Encoding>,
+        encoding: Option<Encoding>,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
@@ -188,7 +188,7 @@ where
             http::header::HeaderValue::from_static("application/grpc"),
         );
 
-        if let Some(encoding) = requested_encoding {
+        if let Some(encoding) = encoding {
             // Set the content encoding
             parts.headers.insert(
                 crate::codec::compression::ENCODING_HEADER,
@@ -196,7 +196,7 @@ where
             );
         }
 
-        let body = encode_server(self.codec.encoder(), body.into_stream(), requested_encoding);
+        let body = encode_server(self.codec.encoder(), body.into_stream(), encoding);
 
         http::Response::from_parts(parts, BoxBody::new(body))
     }

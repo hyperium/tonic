@@ -100,6 +100,7 @@ pub(crate) enum Encoding {
 }
 
 impl Encoding {
+    /// Based on the `grpc-accept-encoding` header, pick an encoding to use.
     pub(crate) fn from_accept_encoding_header(map: &http::HeaderMap) -> Option<Self> {
         let header_value = map.get(ACCEPT_ENCODING_HEADER)?;
         let header_value_str = header_value.to_str().ok()?;
