@@ -85,7 +85,8 @@ pub struct Server<L = Identity> {
     max_frame_size: Option<u32>,
     accept_http1: bool,
     layer: L,
-    encodings: EnabledEncodings,
+    send_encodings: EnabledEncodings,
+    accept_encodings: EnabledEncodings,
 }
 
 /// A stack based `Service` router.
@@ -325,7 +326,15 @@ impl<L> Server<L> {
     /// Compress outgoing messages with `gzip` if supported by the client.
     pub fn send_gzip(self) -> Self {
         Server {
-            encodings: self.encodings.gzip(),
+            send_encodings: self.send_encodings.gzip(),
+            ..self
+        }
+    }
+
+    /// Accept requests compressed with `gzip`.
+    pub fn accept_gzip(self) -> Self {
+        Server {
+            accept_encodings: self.accept_encodings.gzip(),
             ..self
         }
     }
@@ -455,7 +464,8 @@ impl<L> Server<L> {
             http2_keepalive_timeout: self.http2_keepalive_timeout,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
-            encodings: EnabledEncodings::default(),
+            send_encodings: EnabledEncodings::default(),
+            accept_encodings: EnabledEncodings::default(),
         }
     }
 
@@ -486,7 +496,7 @@ impl<L> Server<L> {
         let timeout = self.timeout;
         let max_frame_size = self.max_frame_size;
         let http2_only = !self.accept_http1;
-        let encodings = self.encodings;
+        let encodings = self.send_encodings;
 
         let http2_keepalive_interval = self.http2_keepalive_interval;
         let http2_keepalive_timeout = self
@@ -788,6 +798,12 @@ where
     }
 
     fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+        if let Some(value) = req.headers().get("grpc-encoding") {
+            if value == "gzip" {
+                todo!()
+            }
+        }
+
         let span = if let Some(trace_interceptor) = &self.trace_interceptor {
             let (parts, body) = req.into_parts();
             let bodyless_request = Request::from_parts(parts, ());
@@ -802,7 +818,7 @@ where
             tracing::Span::none()
         };
 
-        // remove disabled disablings from `grpc-accept-encoding` so the inner service doesn't even
+        // remove disabled encodings from `grpc-accept-encoding` so the inner service doesn't even
         // seen them.
         self.encodings
             .remove_disabled_encodings_from_accept_encoding(req.headers_mut());

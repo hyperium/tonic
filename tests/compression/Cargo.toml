@@ -16,10 +16,11 @@ tower = { version = "0.4", features = [] }
 http-body = "0.4"
 http = "0.2"
 tokio-stream = { version = "0.1.5", features = ["net"] }
-tower-http = { version = "0.1", features = ["map-response-body"] }
+tower-http = { version = "0.1", features = ["map-response-body", "map-request-body"] }
 bytes = "1"
 futures = "0.3"
 pin-project = "1.0"
+hyper = "0.14"
 
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }

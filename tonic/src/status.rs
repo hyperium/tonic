@@ -334,6 +334,17 @@ impl Status {
         Err(err)
     }
 
+    /// Set the source error of the status
+    pub(crate) fn with_source<T>(self, source: T) -> Self
+    where
+        T: Into<Box<dyn Error + Send + Sync + 'static>>,
+    {
+        Self {
+            source: Some(source.into()),
+            ..self
+        }
+    }
+
     // FIXME: bubble this into `transport` and expose generic http2 reasons.
     #[cfg(feature = "transport")]
     fn from_h2_error(err: &h2::Error) -> Status {

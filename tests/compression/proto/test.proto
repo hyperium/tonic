@@ -2,13 +2,14 @@ syntax = "proto3";
 
 package test;
 
+import "google/protobuf/empty.proto";
+
 service Test {
-  rpc UnaryCall(Input) returns (Output);
+  rpc CompressOutput(google.protobuf.Empty) returns (SomeData);
+  rpc CompressInput(SomeData) returns (google.protobuf.Empty);
 }
 
-message Input {}
-
-message Output {
+message SomeData {
   // include a bunch of data so there actually is something to compress
   bytes data = 1;
 }

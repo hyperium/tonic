@@ -133,19 +133,22 @@ fn split_by_comma(s: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Compress `len` bytes from `in_buffer` into `out_buffer`.
-pub(crate) fn compress(
+pub(crate) fn compress<B>(
     encoding: Encoding,
-    in_buffer: &mut BytesMut,
+    in_buffer: &mut B,
     out_buffer: &mut BytesMut,
     len: usize,
-) -> Result<(), std::io::Error> {
+) -> Result<(), std::io::Error>
+where
+    B: AsRef<[u8]> + bytes::Buf,
+{
     let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
     out_buffer.reserve(capacity);
 
     match encoding {
         Encoding::Gzip => {
             let mut gzip_decoder = GzEncoder::new(
-                &in_buffer[0..len],
+                &in_buffer.as_ref()[0..len],
                 // FIXME: support customizing the compression level
                 flate2::Compression::new(6),
             );
@@ -155,6 +158,8 @@ pub(crate) fn compress(
         }
     }
 
+    // TODO(david): is this necessary? test sending multiple requests and
+    // responses on the same channel
     in_buffer.advance(len);
 
     Ok(())
