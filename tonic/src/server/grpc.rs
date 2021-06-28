@@ -184,9 +184,15 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        let accept_encoding = CompressionEncoding::from_accept_encoding_header(
+            req.headers(),
+            self.accept_compression_encodings,
+        );
+
         let request = t!(self.map_request_streaming(req));
+
         let response = service.call(request).await;
-        self.map_response(response, None)
+        self.map_response(response, accept_encoding)
     }
 
     async fn map_request_unary<B>(
@@ -236,7 +242,7 @@ where
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
-        encoding: Option<CompressionEncoding>,
+        accept_encoding: Option<CompressionEncoding>,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
@@ -254,7 +260,7 @@ where
             http::header::HeaderValue::from_static("application/grpc"),
         );
 
-        if let Some(encoding) = encoding {
+        if let Some(encoding) = accept_encoding {
             // Set the content encoding
             parts.headers.insert(
                 crate::codec::compression::ENCODING_HEADER,
@@ -262,7 +268,7 @@ where
             );
         }
 
-        let body = encode_server(self.codec.encoder(), body.into_stream(), encoding);
+        let body = encode_server(self.codec.encoder(), body.into_stream(), accept_encoding);
 
         http::Response::from_parts(parts, BoxBody::new(body))
     }

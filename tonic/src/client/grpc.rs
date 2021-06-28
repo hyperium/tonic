@@ -244,10 +244,10 @@ impl<T: Clone> Clone for Grpc<T> {
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
+impl<T> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Grpc")
-            .field("inner", &self.inner)
+            .field("inner", &format_args!("{}", std::any::type_name::<T>()))
             .field("compression_encoding", &self.send_compression_encodings)
             .field(
                 "accept_compression_encodings",

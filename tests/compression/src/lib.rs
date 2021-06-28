@@ -17,6 +17,7 @@ use tonic::{
 use tower::{layer::layer_fn, Service, ServiceBuilder};
 use tower_http::{map_request_body::MapRequestBodyLayer, map_response_body::MapResponseBodyLayer};
 
+mod bidirectional_stream;
 mod client_stream;
 mod compressing_request;
 mod compressing_response;
@@ -25,8 +26,7 @@ mod util;
 
 tonic::include_proto!("test");
 
-// TODO(david): bidirectional streaming
-
+#[derive(Debug)]
 struct Svc;
 
 const UNCOMPRESSED_MIN_BODY_SIZE: usize = 1024;
@@ -66,5 +66,22 @@ impl test_server::Test for Svc {
             item.unwrap();
         }
         Ok(Response::new(()))
+    }
+
+    type CompressInputOutputBidirectionalStreamStream =
+        Pin<Box<dyn Stream<Item = Result<SomeData, Status>> + Send + Sync + 'static>>;
+
+    async fn compress_input_output_bidirectional_stream(
+        &self,
+        req: Request<Streaming<SomeData>>,
+    ) -> Result<Response<Self::CompressInputOutputBidirectionalStreamStream>, Status> {
+        let mut stream = req.into_inner();
+        while let Some(item) = stream.next().await {
+            item.unwrap();
+        }
+
+        let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
+        let stream = futures::stream::repeat(SomeData { data }).map(Ok::<_, Status>);
+        Ok(Response::new(Box::pin(stream)))
     }
 }

@@ -20,8 +20,6 @@ pub fn generate<T: Service>(
     let connect = generate_connect(&service_ident);
     let service_doc = generate_doc_comments(service.comment());
 
-    let struct_debug = format!("{} {{{{ ... }}}}", &service_ident);
-
     quote! {
         /// Generated client implementations.
         pub mod #client_mod {
@@ -29,6 +27,7 @@ pub fn generate<T: Service>(
             use tonic::codegen::*;
 
             #service_doc
+            #[derive(Debug, Clone)]
             pub struct #service_ident<T> {
                 inner: tonic::client::Grpc<T>,
             }
@@ -72,20 +71,6 @@ pub fn generate<T: Service>(
                 }
 
                 #methods
-            }
-
-            impl<T: Clone> Clone for #service_ident<T> {
-                fn clone(&self) -> Self {
-                    Self {
-                        inner: self.inner.clone(),
-                    }
-                }
-            }
-
-            impl<T> std::fmt::Debug for #service_ident<T> {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                   write!(f, #struct_debug)
-                }
             }
         }
     }
