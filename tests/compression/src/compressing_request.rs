@@ -106,5 +106,8 @@ async fn client_enabled_server_disabled() {
         .unwrap_err();
 
     assert_eq!(status.code(), tonic::Code::Unimplemented);
-    assert_eq!(status.message(), "Request is compressed with `gzip` which the server doesn't support");
+    assert_eq!(
+        status.message(),
+        "Request is compressed with `gzip` which the server doesn't support"
+    );
 }

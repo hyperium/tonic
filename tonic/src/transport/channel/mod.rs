@@ -10,10 +10,7 @@ pub use endpoint::Endpoint;
 pub use tls::ClientTlsConfig;
 
 use super::service::{Connection, DynamicServiceStream};
-use crate::{
-    body::BoxBody,
-    codec::compression::{CompressionEncoding, EnabledCompressionEncodings},
-};
+use crate::body::BoxBody;
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},

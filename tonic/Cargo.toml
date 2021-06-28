@@ -30,7 +30,6 @@ transport = [
     "hyper",
     "tokio",
     "tower",
-    "tower-http",
     "tracing-futures",
     "tokio/macros",
     "tokio/time",
@@ -75,7 +74,6 @@ hyper = { version = "0.14.2", features = ["full"], optional = true }
 tokio = { version = "1.0.1", features = ["net", "rt-multi-thread"], optional = true }
 tokio-stream = "0.1"
 tower = { version = "0.4.7", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true }
-tower-http = { version = "0.1", features = ["set-header"], optional = true }
 tracing-futures = { version = "0.2", optional = true }
 
 # rustls

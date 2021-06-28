@@ -18,7 +18,6 @@ mod util;
 
 tonic::include_proto!("test");
 
-// TODO(david): client copmressing messages
 // TODO(david): client streaming
 // TODO(david): server streaming
 // TODO(david): bidirectional streaming
