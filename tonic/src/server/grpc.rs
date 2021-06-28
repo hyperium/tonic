@@ -277,24 +277,10 @@ where
         &self,
         request: &http::Request<B>,
     ) -> Result<Option<CompressionEncoding>, Status> {
-        if let Some(request_compression_encoding) =
-            CompressionEncoding::from_encoding_header(request.headers())
-        {
-            let encoding_supported = match request_compression_encoding {
-                CompressionEncoding::Gzip => self.accept_compression_encodings.gzip(),
-            };
-
-            if encoding_supported {
-                Ok(Some(request_compression_encoding))
-            } else {
-                Err(Status::unimplemented(format!(
-                    "Request is compressed with `{}` which the server doesn't support",
-                    request_compression_encoding
-                )))
-            }
-        } else {
-            Ok(None)
-        }
+        CompressionEncoding::from_encoding_header(
+            request.headers(),
+            self.accept_compression_encodings,
+        )
     }
 }
 

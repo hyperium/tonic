@@ -1,8 +1,6 @@
 use super::*;
 use http_body::Body as _;
 
-// TODO(david): send_gzip on channel, but disabling compression of a message
-
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
     let svc = test_server::TestServer::new(Svc).accept_gzip();
@@ -89,6 +87,6 @@ async fn client_enabled_server_disabled() {
     assert_eq!(status.code(), tonic::Code::Unimplemented);
     assert_eq!(
         status.message(),
-        "Request is compressed with `gzip` which the server doesn't support"
+        "Content is compressed with `gzip` which isn't supported"
     );
 }

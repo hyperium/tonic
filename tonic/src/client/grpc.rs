@@ -204,8 +204,10 @@ impl<T> Grpc<T> {
             .await
             .map_err(|err| Status::from_error(err.into()))?;
 
-        // TODO(david): server compressing with algorithm the client doesn't know
-        let encoding = CompressionEncoding::from_encoding_header(response.headers());
+        let encoding = CompressionEncoding::from_encoding_header(
+            response.headers(),
+            self.accept_compression_encodings,
+        )?;
 
         let status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());

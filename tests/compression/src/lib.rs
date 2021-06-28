@@ -1,5 +1,9 @@
 #![allow(unused_imports)]
 
+// TODO(david): document that using a multi threaded tokio runtime is
+// required (because of `block_in_place`)
+// TODO(david): send_gzip on channel, but disabling compression of a message
+
 use self::util::*;
 use futures::{Stream, StreamExt};
 use std::{

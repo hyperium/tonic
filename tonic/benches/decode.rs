@@ -22,7 +22,6 @@ macro_rules! bench {
             b.iter(|| {
                 rt.block_on(async {
                     let decoder = MockDecoder::new($message_size);
-                    // TODO(david): add benchmark with compression
                     let mut stream = Streaming::new_request(decoder, body.clone(), None);
 
                     let mut count = 0;

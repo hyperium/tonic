@@ -1,3 +1,5 @@
+use crate::Status;
+
 use super::encode::BUFFER_SIZE;
 use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::{GzDecoder, GzEncoder};
@@ -50,19 +52,39 @@ impl CompressionEncoding {
         let header_value = map.get(ACCEPT_ENCODING_HEADER)?;
         let header_value_str = header_value.to_str().ok()?;
 
+        let EnabledCompressionEncodings { gzip } = enabled_encodings;
+
         split_by_comma(header_value_str).find_map(|value| match value {
-            "gzip" if enabled_encodings.gzip() => Some(CompressionEncoding::Gzip),
+            "gzip" if gzip => Some(CompressionEncoding::Gzip),
             _ => None,
         })
     }
 
-    pub(crate) fn from_encoding_header(map: &http::HeaderMap) -> Option<Self> {
-        let header_value = map.get(ENCODING_HEADER)?;
-        let header_value_str = header_value.to_str().ok()?;
+    /// Get the value of `grpc-encoding` header. Returns an error if the encoding isn't supported.
+    pub(crate) fn from_encoding_header(
+        map: &http::HeaderMap,
+        enabled_encodings: EnabledCompressionEncodings,
+    ) -> Result<Option<Self>, Status> {
+        let header_value = if let Some(value) = map.get(ENCODING_HEADER) {
+            value
+        } else {
+            return Ok(None);
+        };
+
+        let header_value_str = if let Ok(value) = header_value.to_str() {
+            value
+        } else {
+            return Ok(None);
+        };
+
+        let EnabledCompressionEncodings { gzip } = enabled_encodings;
 
         match header_value_str {
-            "gzip" => Some(CompressionEncoding::Gzip),
-            _ => None,
+            "gzip" if gzip => Ok(Some(CompressionEncoding::Gzip)),
+            other => Err(Status::unimplemented(format!(
+                "Content is compressed with `{}` which isn't supported",
+                other
+            ))),
         }
     }
 
@@ -85,10 +107,10 @@ fn split_by_comma(s: &str) -> impl Iterator<Item = &str> {
     s.trim().split(',').map(|s| s.trim())
 }
 
-/// Compress `len` bytes from `in_buffer` into `out_buffer`.
+/// Compress `len` bytes from `decompressed_buf` into `out_buf`.
 pub(crate) fn compress(
     encoding: CompressionEncoding,
-    uncompressed_buf: &mut BytesMut,
+    decompressed_buf: &mut BytesMut,
     out_buf: &mut BytesMut,
     len: usize,
 ) -> Result<(), std::io::Error> {
@@ -98,7 +120,7 @@ pub(crate) fn compress(
     match encoding {
         CompressionEncoding::Gzip => {
             let mut gzip_encoder = GzEncoder::new(
-                &uncompressed_buf[0..len],
+                &decompressed_buf[0..len],
                 // FIXME: support customizing the compression level
                 flate2::Compression::new(6),
             );
@@ -108,13 +130,12 @@ pub(crate) fn compress(
         }
     }
 
-    // TODO(david): is this necessary? test sending multiple requests and
-    // responses on the same channel
-    uncompressed_buf.advance(len);
+    decompressed_buf.advance(len);
 
     Ok(())
 }
 
+/// Decompress `len` bytes from `compressed_buf` into `out_buf`.
 pub(crate) fn decompress(
     encoding: CompressionEncoding,
     compressed_buf: &mut BytesMut,
@@ -134,8 +155,6 @@ pub(crate) fn decompress(
         }
     }
 
-    // TODO(david): is this necessary? test sending multiple requests and
-    // responses on the same channel
     compressed_buf.advance(len);
 
     Ok(())

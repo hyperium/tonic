@@ -213,9 +213,9 @@ impl<T> Streaming<T> {
                 self.decompress_buf.clear();
 
                 if let Err(err) = decompress(
-                    // TODO(david): handle missing self.encoding
-                    self.encoding
-                        .expect("message was compressed but compression not enabled on server"),
+                    self.encoding.unwrap_or_else(|| {
+                        unreachable!("message was compressed but `Streaming.encoding` was `None`. This is a bug in Tonic. Please file an issue")
+                    }),
                     &mut self.buf,
                     &mut self.decompress_buf,
                     *len,

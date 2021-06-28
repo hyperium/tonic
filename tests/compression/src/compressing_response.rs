@@ -1,7 +1,5 @@
 use super::*;
 
-// TODO(david): document that using a multi threaded tokio runtime is
-// required (because of `block_in_place`)
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
     #[derive(Clone, Copy)]
@@ -189,4 +187,46 @@ async fn client_disabled() {
 
     let bytes_sent = bytes_sent_counter.load(Relaxed);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn server_replying_with_unsupported_encoding() {
+    let svc = test_server::TestServer::new(Svc).send_gzip();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    fn add_weird_content_encoding<B>(mut response: http::Response<B>) -> http::Response<B> {
+        response
+            .headers_mut()
+            .insert("grpc-encoding", "br".parse().unwrap());
+        response
+    }
+
+    tokio::spawn(async move {
+        Server::builder()
+            .layer(
+                ServiceBuilder::new()
+                    .map_response(add_weird_content_encoding)
+                    .into_inner(),
+            )
+            .add_service(svc)
+            .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+            .await
+            .unwrap();
+    });
+
+    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = test_client::TestClient::new(channel).accept_gzip();
+    let status: Status = client.compress_output_unary(()).await.unwrap_err();
+
+    assert_eq!(status.code(), tonic::Code::Unimplemented);
+    assert_eq!(
+        status.message(),
+        "Content is compressed with `br` which isn't supported"
+    );
 }
