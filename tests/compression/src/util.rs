@@ -10,6 +10,7 @@ use std::{
     },
     task::{Context, Poll},
 };
+use tower_http::map_request_body::MapRequestBodyLayer;
 
 /// A body that tracks how many bytes passes through it
 #[pin_project]
@@ -55,4 +56,28 @@ where
     fn size_hint(&self) -> http_body::SizeHint {
         self.inner.size_hint()
     }
+}
+
+#[allow(dead_code)]
+pub fn measure_request_body_size_layer(
+    bytes_sent_counter: Arc<AtomicUsize>,
+) -> MapRequestBodyLayer<impl Fn(hyper::Body) -> hyper::Body + Clone> {
+    MapRequestBodyLayer::new(move |mut body: hyper::Body| {
+        let (mut tx, new_body) = hyper::Body::channel();
+
+        let bytes_sent_counter = bytes_sent_counter.clone();
+        tokio::spawn(async move {
+            while let Some(chunk) = body.data().await {
+                let chunk = chunk.unwrap();
+                bytes_sent_counter.fetch_add(chunk.len(), Relaxed);
+                tx.send_data(chunk).await.unwrap();
+            }
+
+            if let Some(trailers) = body.trailers().await.unwrap() {
+                tx.send_trailers(trailers).await.unwrap();
+            }
+        });
+
+        new_body
+    })
 }

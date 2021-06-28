@@ -12,49 +12,30 @@ async fn client_enabled_server_enabled() {
 
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
-    let measure_request_body_size_layer = {
-        let bytes_sent_counter = bytes_sent_counter.clone();
-        MapRequestBodyLayer::new(move |mut body: hyper::Body| {
-            let (mut tx, new_body) = hyper::Body::channel();
-
-            let bytes_sent_counter = bytes_sent_counter.clone();
-            tokio::spawn(async move {
-                while let Some(chunk) = body.data().await {
-                    let chunk = chunk.unwrap();
-                    bytes_sent_counter.fetch_add(chunk.len(), Relaxed);
-                    tx.send_data(chunk).await.unwrap();
-                }
-
-                if let Some(trailers) = body.trailers().await.unwrap() {
-                    tx.send_trailers(trailers).await.unwrap();
-                }
-            });
-
-            new_body
-        })
-    };
-
     fn assert_right_encoding<B>(req: http::Request<B>) -> http::Request<B> {
         assert_eq!(req.headers().get("grpc-encoding").unwrap(), "gzip");
         req
     }
 
-    tokio::spawn(async move {
-        Server::builder()
-            .layer(
-                ServiceBuilder::new()
-                    .layer(
-                        ServiceBuilder::new()
-                            .map_request(assert_right_encoding)
-                            .layer(measure_request_body_size_layer)
-                            .into_inner(),
-                    )
-                    .into_inner(),
-            )
-            .add_service(svc)
-            .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
-            .await
-            .unwrap();
+    tokio::spawn({
+        let bytes_sent_counter = bytes_sent_counter.clone();
+        async move {
+            Server::builder()
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(
+                            ServiceBuilder::new()
+                                .map_request(assert_right_encoding)
+                                .layer(measure_request_body_size_layer(bytes_sent_counter))
+                                .into_inner(),
+                        )
+                        .into_inner(),
+                )
+                .add_service(svc)
+                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .await
+                .unwrap();
+        }
     });
 
     let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())

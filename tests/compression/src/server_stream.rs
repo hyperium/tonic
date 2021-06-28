@@ -38,7 +38,7 @@ async fn client_enabled_server_enabled() {
 
     let mut client = test_client::TestClient::new(channel).accept_gzip();
 
-    let res = client.compress_output_stream(()).await.unwrap();
+    let res = client.compress_output_server_stream(()).await.unwrap();
 
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
 
@@ -96,7 +96,7 @@ async fn client_disabled_server_enabled() {
 
     let mut client = test_client::TestClient::new(channel);
 
-    let res = client.compress_output_stream(()).await.unwrap();
+    let res = client.compress_output_server_stream(()).await.unwrap();
 
     assert!(res.metadata().get("grpc-encoding").is_none());
 
@@ -147,7 +147,7 @@ async fn client_enabled_server_disabled() {
 
     let mut client = test_client::TestClient::new(channel).accept_gzip();
 
-    let res = client.compress_output_stream(()).await.unwrap();
+    let res = client.compress_output_server_stream(()).await.unwrap();
 
     assert!(res.metadata().get("grpc-encoding").is_none());
 

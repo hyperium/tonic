@@ -12,6 +12,15 @@ use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
 use std::fmt;
 
+macro_rules! t {
+    ($result:expr) => {
+        match $result {
+            Ok(value) => value,
+            Err(status) => return status.to_http(),
+        }
+    };
+}
+
 /// A gRPC Server handler.
 ///
 /// This will wrap some inner [`Codec`] and provide utilities to handle
@@ -85,7 +94,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let encoding = CompressionEncoding::from_accept_encoding_header(
+        let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
             self.send_compression_encodings,
         );
@@ -96,7 +105,7 @@ where
                 return self
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
                         Err(status),
-                        encoding,
+                        accept_encoding,
                     );
             }
         };
@@ -106,7 +115,7 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response, encoding)
+        self.map_response(response, accept_encoding)
     }
 
     /// Handle a server side streaming request.
@@ -121,7 +130,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let encoding = CompressionEncoding::from_accept_encoding_header(
+        let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
             self.send_compression_encodings,
         );
@@ -129,13 +138,13 @@ where
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status), encoding);
+                return self.map_response::<S::ResponseStream>(Err(status), accept_encoding);
             }
         };
 
         let response = service.call(request).await;
 
-        self.map_response(response, encoding)
+        self.map_response(response, accept_encoding)
     }
 
     /// Handle a client side streaming gRPC request.
@@ -149,14 +158,18 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
-        // TODO(david): encoding
+        let accept_encoding = CompressionEncoding::from_accept_encoding_header(
+            req.headers(),
+            self.accept_compression_encodings,
+        );
 
-        let request = self.map_request_streaming(req);
+        let request = t!(self.map_request_streaming(req));
+
         let response = service
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-        self.map_response(response, None)
+        self.map_response(response, accept_encoding)
     }
 
     /// Handle a bi-directional streaming gRPC request.
@@ -171,8 +184,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        // TODO(david): encoding
-        let request = self.map_request_streaming(req);
+        let request = t!(self.map_request_streaming(req));
         let response = service.call(request).await;
         self.map_response(response, None)
     }
@@ -185,25 +197,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        // TODO(david): probably should set this directly on `Grpc`, like the client
-        let request_compression_encoding = if let Some(request_compression_encoding) =
-            CompressionEncoding::from_encoding_header(request.headers())
-        {
-            let encoding_supported = match request_compression_encoding {
-                CompressionEncoding::Gzip => self.accept_compression_encodings.gzip(),
-            };
-
-            if encoding_supported {
-                Some(request_compression_encoding)
-            } else {
-                return Err(Status::unimplemented(format!(
-                    "Request is compressed with `{}` which the server doesn't support",
-                    request_compression_encoding
-                )));
-            }
-        } else {
-            None
-        };
+        let request_compression_encoding = self.request_encoding_if_supported(&request)?;
 
         let (parts, body) = request.into_parts();
         let stream =
@@ -228,15 +222,15 @@ where
     fn map_request_streaming<B>(
         &mut self,
         request: http::Request<B>,
-    ) -> Request<Streaming<T::Decode>>
+    ) -> Result<Request<Streaming<T::Decode>>, Status>
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        Request::from_http(request.map(|body| {
-            // TODO(david): get compression encoding from request and don't hard code `None`
-            Streaming::new_request(self.codec.decoder(), body, None)
-        }))
+        let encoding = self.request_encoding_if_supported(&request)?;
+        let request =
+            request.map(|body| Streaming::new_request(self.codec.decoder(), body, encoding));
+        Ok(Request::from_http(request))
     }
 
     fn map_response<B>(
@@ -271,6 +265,30 @@ where
         let body = encode_server(self.codec.encoder(), body.into_stream(), encoding);
 
         http::Response::from_parts(parts, BoxBody::new(body))
+    }
+
+    fn request_encoding_if_supported<B>(
+        &self,
+        request: &http::Request<B>,
+    ) -> Result<Option<CompressionEncoding>, Status> {
+        if let Some(request_compression_encoding) =
+            CompressionEncoding::from_encoding_header(request.headers())
+        {
+            let encoding_supported = match request_compression_encoding {
+                CompressionEncoding::Gzip => self.accept_compression_encodings.gzip(),
+            };
+
+            if encoding_supported {
+                Ok(Some(request_compression_encoding))
+            } else {
+                Err(Status::unimplemented(format!(
+                    "Request is compressed with `{}` which the server doesn't support",
+                    request_compression_encoding
+                )))
+            }
+        } else {
+            Ok(None)
+        }
     }
 }
 
