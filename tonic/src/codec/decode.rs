@@ -1,6 +1,6 @@
 use super::{
     compression::{decompress, CompressionEncoding},
-    DecodeBuf, Decoder,
+    DecodeBuf, Decoder, HEADER_SIZE,
 };
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
@@ -173,7 +173,7 @@ impl<T> Streaming<T> {
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
         if let State::ReadHeader = self.state {
-            if self.buf.remaining() < 5 {
+            if self.buf.remaining() < HEADER_SIZE {
                 return Ok(None);
             }
 
@@ -209,7 +209,9 @@ impl<T> Streaming<T> {
                 return Ok(None);
             }
 
-            let result = if *compression {
+            let decoding_result = if *compression {
+                self.decompress_buf.clear();
+
                 if let Err(err) = decompress(
                     // TODO(david): handle missing self.encoding
                     self.encoding
@@ -228,26 +230,24 @@ impl<T> Streaming<T> {
                     };
                     return Err(Status::new(Code::Internal, message));
                 }
-                let uncompressed_len = self.decompress_buf.len();
+                let decompressed_len = self.decompress_buf.len();
                 self.decoder.decode(&mut DecodeBuf::new(
                     &mut self.decompress_buf,
-                    uncompressed_len,
+                    decompressed_len,
                 ))
             } else {
-                match self
-                    .decoder
+                self.decoder
                     .decode(&mut DecodeBuf::new(&mut self.buf, *len))
-                {
-                    Ok(Some(msg)) => {
-                        self.state = State::ReadHeader;
-                        Ok(Some(msg))
-                    }
-                    Ok(None) => Ok(None),
-                    Err(e) => Err(e),
-                }
             };
 
-            return result;
+            return match decoding_result {
+                Ok(Some(msg)) => {
+                    self.state = State::ReadHeader;
+                    Ok(Some(msg))
+                }
+                Ok(None) => Ok(None),
+                Err(e) => Err(e),
+            };
         }
 
         Ok(None)

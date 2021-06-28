@@ -1,6 +1,6 @@
 use super::{
     compression::{compress, CompressionEncoding},
-    EncodeBuf, Encoder,
+    EncodeBuf, Encoder, HEADER_SIZE,
 };
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
@@ -56,7 +56,7 @@ where
     async_stream::stream! {
         let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
 
-        let (compression_enabled, mut compression_buf) = match compression_encoding {
+        let (compression_enabled, mut uncompression_buf) = match compression_encoding {
             Some(CompressionEncoding::Gzip) => (true, BytesMut::with_capacity(BUFFER_SIZE)),
             None => (false, BytesMut::new()),
         };
@@ -66,42 +66,40 @@ where
         loop {
             match source.next().await {
                 Some(Ok(item)) => {
-                    buf.reserve(5);
+                    buf.reserve(HEADER_SIZE);
                     unsafe {
-                        buf.advance_mut(5);
+                        buf.advance_mut(HEADER_SIZE);
                     }
 
                     if compression_enabled {
-                        compression_buf.clear();
-                        encoder.encode(item, &mut EncodeBuf::new(&mut compression_buf)).map_err(drop).unwrap();
-                        let compressed_len = compression_buf.len();
+                        uncompression_buf.clear();
 
-                        let compress_result = compress(
+                        encoder.encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
+                            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+
+                        let uncompressed_len = uncompression_buf.len();
+
+                        compress(
                             compression_encoding.unwrap(),
-                            &mut compression_buf,
+                            &mut uncompression_buf,
                             &mut buf,
-                            compressed_len,
-                        );
-
-                        if let Err(err) = compress_result {
-                            yield Err(Status::internal(format!("Error compressing: {}", err)))
-                        }
+                            uncompressed_len,
+                        ).map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
                     } else {
-                        encoder.encode(item, &mut EncodeBuf::new(&mut buf)).map_err(drop).unwrap();
+                        encoder.encode(item, &mut EncodeBuf::new(&mut buf))
+                            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
                     }
 
                     // now that we know length, we can write the header
-                    let len = buf.len() - 5;
+                    let len = buf.len() - HEADER_SIZE;
                     assert!(len <= std::u32::MAX as usize);
                     {
-                        let mut buf = &mut buf[..5];
-
+                        let mut buf = &mut buf[..HEADER_SIZE];
                         buf.put_u8(compression_enabled as u8);
-
                         buf.put_u32(len as u32);
                     }
 
-                    yield Ok(buf.split_to(len + 5).freeze());
+                    yield Ok(buf.split_to(len + HEADER_SIZE).freeze());
                 },
                 Some(Err(status)) => yield Err(status),
                 None => break,

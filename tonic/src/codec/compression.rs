@@ -86,52 +86,49 @@ fn split_by_comma(s: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Compress `len` bytes from `in_buffer` into `out_buffer`.
-pub(crate) fn compress<B>(
+pub(crate) fn compress(
     encoding: CompressionEncoding,
-    in_buffer: &mut B,
-    out_buffer: &mut BytesMut,
+    uncompressed_buf: &mut BytesMut,
+    out_buf: &mut BytesMut,
     len: usize,
-) -> Result<(), std::io::Error>
-where
-    B: AsRef<[u8]> + bytes::Buf,
-{
+) -> Result<(), std::io::Error> {
     let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
-    out_buffer.reserve(capacity);
+    out_buf.reserve(capacity);
 
     match encoding {
         CompressionEncoding::Gzip => {
-            let mut gzip_decoder = GzEncoder::new(
-                &in_buffer.as_ref()[0..len],
+            let mut gzip_encoder = GzEncoder::new(
+                &uncompressed_buf[0..len],
                 // FIXME: support customizing the compression level
                 flate2::Compression::new(6),
             );
-            let mut out_writer = out_buffer.writer();
+            let mut out_writer = out_buf.writer();
 
-            tokio::task::block_in_place(|| std::io::copy(&mut gzip_decoder, &mut out_writer))?;
+            tokio::task::block_in_place(|| std::io::copy(&mut gzip_encoder, &mut out_writer))?;
         }
     }
 
     // TODO(david): is this necessary? test sending multiple requests and
     // responses on the same channel
-    in_buffer.advance(len);
+    uncompressed_buf.advance(len);
 
     Ok(())
 }
 
 pub(crate) fn decompress(
     encoding: CompressionEncoding,
-    in_buffer: &mut BytesMut,
-    out_buffer: &mut BytesMut,
+    compressed_buf: &mut BytesMut,
+    out_buf: &mut BytesMut,
     len: usize,
 ) -> Result<(), std::io::Error> {
     let estimate_decompressed_len = len * 2;
     let capacity = ((estimate_decompressed_len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
-    out_buffer.reserve(capacity);
+    out_buf.reserve(capacity);
 
     match encoding {
         CompressionEncoding::Gzip => {
-            let mut gzip_decoder = GzDecoder::new(&in_buffer[0..len]);
-            let mut out_writer = out_buffer.writer();
+            let mut gzip_decoder = GzDecoder::new(&compressed_buf[0..len]);
+            let mut out_writer = out_buf.writer();
 
             tokio::task::block_in_place(|| std::io::copy(&mut gzip_decoder, &mut out_writer))?;
         }
@@ -139,7 +136,7 @@ pub(crate) fn decompress(
 
     // TODO(david): is this necessary? test sending multiple requests and
     // responses on the same channel
-    in_buffer.advance(len);
+    compressed_buf.advance(len);
 
     Ok(())
 }

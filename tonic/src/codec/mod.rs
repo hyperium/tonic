@@ -22,6 +22,13 @@ pub use self::decode::Streaming;
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
 
+// 5 bytes
+const HEADER_SIZE: usize =
+    // compression flag
+    std::mem::size_of::<u8>() +
+    // data length
+    std::mem::size_of::<u32>();
+
 /// Trait that knows how to encode and decode gRPC messages.
 pub trait Codec: Default {
     /// The encodable message.

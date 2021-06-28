@@ -121,18 +121,21 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        // TODO(david): encoding
+        let encoding = CompressionEncoding::from_accept_encoding_header(
+            req.headers(),
+            self.send_compression_encodings,
+        );
 
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status), None);
+                return self.map_response::<S::ResponseStream>(Err(status), encoding);
             }
         };
 
         let response = service.call(request).await;
 
-        self.map_response(response, None)
+        self.map_response(response, encoding)
     }
 
     /// Handle a client side streaming gRPC request.

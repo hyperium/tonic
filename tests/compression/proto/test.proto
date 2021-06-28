@@ -5,8 +5,9 @@ package test;
 import "google/protobuf/empty.proto";
 
 service Test {
-  rpc CompressOutput(google.protobuf.Empty) returns (SomeData);
-  rpc CompressInput(SomeData) returns (google.protobuf.Empty);
+  rpc CompressOutputUnary(google.protobuf.Empty) returns (SomeData);
+  rpc CompressInputUnary(SomeData) returns (google.protobuf.Empty);
+  rpc CompressOutputStream(google.protobuf.Empty) returns (stream SomeData);
 }
 
 message SomeData {

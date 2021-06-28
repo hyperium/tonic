@@ -64,16 +64,16 @@ async fn client_enabled_server_enabled() {
 
     let mut client = test_client::TestClient::new(channel).send_gzip();
 
-    client
-        .compress_input(SomeData {
-            data: [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
-        })
-        .await
-        .unwrap();
-
-    let bytes_sent = bytes_sent_counter.load(Relaxed);
-    dbg!(&bytes_sent);
-    assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
+    for _ in 0..3 {
+        client
+            .compress_input_unary(SomeData {
+                data: [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
+            })
+            .await
+            .unwrap();
+        let bytes_sent = bytes_sent_counter.load(Relaxed);
+        assert!(dbg!(bytes_sent) < UNCOMPRESSED_MIN_BODY_SIZE);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -99,7 +99,7 @@ async fn client_enabled_server_disabled() {
     let mut client = test_client::TestClient::new(channel).send_gzip();
 
     let status = client
-        .compress_input(SomeData {
+        .compress_input_unary(SomeData {
             data: [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
         })
         .await

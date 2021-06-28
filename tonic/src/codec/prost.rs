@@ -77,7 +77,9 @@ fn from_decode_error(error: prost1::DecodeError) -> crate::Status {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::{encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming};
+    use crate::codec::{
+        encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
+    };
     use crate::Status;
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
@@ -92,7 +94,7 @@ mod tests {
 
         let mut buf = BytesMut::new();
 
-        buf.reserve(msg.len() + 5);
+        buf.reserve(msg.len() + HEADER_SIZE);
         buf.put_u8(0);
         buf.put_u32(msg.len() as u32);
 
