@@ -1,5 +1,5 @@
 use super::{
-    compression::{compress, Encoding},
+    compression::{compress, CompressionEncoding},
     EncodeBuf, Encoder,
 };
 use crate::{Code, Status};
@@ -19,35 +19,35 @@ pub(super) const BUFFER_SIZE: usize = 8 * 1024;
 pub(crate) fn encode_server<T, U>(
     encoder: T,
     source: U,
-    encoding: Option<Encoding>,
+    compression_encoding: Option<CompressionEncoding>,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status> + Send + Sync + 'static,
     T::Item: Send + Sync,
     U: Stream<Item = Result<T::Item, Status>> + Send + Sync + 'static,
 {
-    let stream = encode(encoder, source, encoding).into_stream();
+    let stream = encode(encoder, source, compression_encoding).into_stream();
     EncodeBody::new_server(stream)
 }
 
 pub(crate) fn encode_client<T, U>(
     encoder: T,
     source: U,
+    compression_encoding: Option<CompressionEncoding>,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status> + Send + Sync + 'static,
     T::Item: Send + Sync,
     U: Stream<Item = T::Item> + Send + Sync + 'static,
 {
-    // TODO(david): get encoding as argument?
-    let stream = encode(encoder, source.map(Ok), None).into_stream();
+    let stream = encode(encoder, source.map(Ok), compression_encoding).into_stream();
     EncodeBody::new_client(stream)
 }
 
 fn encode<T, U>(
     mut encoder: T,
     source: U,
-    encoding: Option<Encoding>,
+    compression_encoding: Option<CompressionEncoding>,
 ) -> impl TryStream<Ok = Bytes, Error = Status>
 where
     T: Encoder<Error = Status>,
@@ -56,8 +56,8 @@ where
     async_stream::stream! {
         let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
 
-        let (compression_enabled, mut compression_buf) = match encoding {
-            Some(Encoding::Gzip) => (true, BytesMut::with_capacity(BUFFER_SIZE)),
+        let (compression_enabled, mut compression_buf) = match compression_encoding {
+            Some(CompressionEncoding::Gzip) => (true, BytesMut::with_capacity(BUFFER_SIZE)),
             None => (false, BytesMut::new()),
         };
 
@@ -77,7 +77,7 @@ where
                         let compressed_len = compression_buf.len();
 
                         let compress_result = compress(
-                            encoding.unwrap(),
+                            compression_encoding.unwrap(),
                             &mut compression_buf,
                             &mut buf,
                             compressed_len,

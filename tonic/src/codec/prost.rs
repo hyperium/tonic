@@ -100,7 +100,7 @@ mod tests {
 
         let body = body::MockBody::new(&buf[..], 10005, 0);
 
-        let mut stream = Streaming::new_request(decoder, body);
+        let mut stream = Streaming::new_request(decoder, body, None);
 
         let mut i = 0usize;
         while let Some(output_msg) = stream.message().await.unwrap() {

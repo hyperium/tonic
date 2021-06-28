@@ -10,15 +10,17 @@ mod encode;
 #[cfg(feature = "prost")]
 mod prost;
 
+use crate::Status;
 use std::io;
 
-pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
+
+pub use self::buffer::{DecodeBuf, EncodeBuf};
+pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
+pub use self::decode::Streaming;
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
-use crate::Status;
-pub use buffer::{DecodeBuf, EncodeBuf};
 
 /// Trait that knows how to encode and decode gRPC messages.
 pub trait Codec: Default {

@@ -1,7 +1,10 @@
 use crate::{
     body::BoxBody,
     client::GrpcService,
-    codec::{compression::Encoding, encode_client, Codec, Streaming},
+    codec::{
+        compression::CompressionEncoding, encode_client, Codec, EnabledCompressionEncodings,
+        Streaming,
+    },
     Code, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -28,12 +31,30 @@ use std::fmt;
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
     inner: T,
+    /// Which compression encodings does the client accept?
+    accept_compression_encodings: EnabledCompressionEncodings,
+    /// The compression encoding that will be applied to requests.
+    send_compression_encodings: Option<CompressionEncoding>,
 }
 
 impl<T> Grpc<T> {
     /// Creates a new gRPC client with the provided [`GrpcService`].
     pub fn new(inner: T) -> Self {
-        Self { inner }
+        Self {
+            inner,
+            send_compression_encodings: None,
+            accept_compression_encodings: EnabledCompressionEncodings::default(),
+        }
+    }
+
+    pub fn send_gzip(mut self) -> Self {
+        self.send_compression_encodings = Some(CompressionEncoding::Gzip);
+        self
+    }
+
+    pub fn accept_gzip(mut self) -> Self {
+        self.accept_compression_encodings.enable_gzip();
+        self
     }
 
     /// Check if the inner [`GrpcService`] is able to accept a  new request.
@@ -145,7 +166,7 @@ impl<T> Grpc<T> {
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
         let request = request
-            .map(|s| encode_client(codec.encoder(), s))
+            .map(|s| encode_client(codec.encoder(), s, self.send_compression_encodings))
             .map(BoxBody::new);
 
         let mut request = request.into_http(uri);
@@ -160,13 +181,31 @@ impl<T> Grpc<T> {
             .headers_mut()
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
+        if let Some(encoding) = self.send_compression_encodings {
+            request.headers_mut().insert(
+                crate::codec::compression::ENCODING_HEADER,
+                encoding.into_header_value(),
+            );
+        }
+
+        if let Some(header_value) = self
+            .accept_compression_encodings
+            .into_accept_encoding_header_value()
+        {
+            request.headers_mut().insert(
+                crate::codec::compression::ACCEPT_ENCODING_HEADER,
+                header_value,
+            );
+        }
+
         let response = self
             .inner
             .call(request)
             .await
             .map_err(|err| Status::from_error(err.into()))?;
 
-        let encoding = Encoding::from_encoding_header(response.headers());
+        // TODO(david): server compressing with algorithm the client doesn't know
+        let encoding = CompressionEncoding::from_encoding_header(response.headers());
 
         let status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());
@@ -199,12 +238,21 @@ impl<T: Clone> Clone for Grpc<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+            send_compression_encodings: self.send_compression_encodings,
+            accept_compression_encodings: self.accept_compression_encodings,
         }
     }
 }
 
 impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Grpc").field("inner", &self.inner).finish()
+        f.debug_struct("Grpc")
+            .field("inner", &self.inner)
+            .field("compression_encoding", &self.send_compression_encodings)
+            .field(
+                "accept_compression_encodings",
+                &self.accept_compression_encodings,
+            )
+            .finish()
     }
 }

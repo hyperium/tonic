@@ -59,6 +59,18 @@ pub fn generate<T: Service>(
                     #service_ident::new(InterceptedService::new(inner, interceptor))
                 }
 
+                // TODO(david): docs
+                pub fn send_gzip(mut self) -> Self {
+                    self.inner = self.inner.send_gzip();
+                    self
+                }
+
+                // TODO(david): docs
+                pub fn accept_gzip(mut self) -> Self {
+                    self.inner = self.inner.accept_gzip();
+                    self
+                }
+
                 #methods
             }
 

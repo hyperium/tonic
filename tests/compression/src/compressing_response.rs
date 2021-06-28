@@ -23,12 +23,15 @@ async fn client_enabled_server_enabled() {
         }
 
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
-            assert_eq!(req.headers().get("grpc-accept-encoding").unwrap(), "gzip");
+            assert_eq!(
+                req.headers().get("grpc-accept-encoding").unwrap(),
+                "gzip,identity"
+            );
             self.0.call(req)
         }
     }
 
-    let svc = test_server::TestServer::new(Svc);
+    let svc = test_server::TestServer::new(Svc).send_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -50,7 +53,6 @@ async fn client_enabled_server_enabled() {
                         }))
                         .into_inner(),
                 )
-                .send_gzip()
                 .add_service(svc)
                 .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
                 .await
@@ -59,12 +61,11 @@ async fn client_enabled_server_enabled() {
     });
 
     let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .accept_gzip()
         .connect()
         .await
         .unwrap();
 
-    let mut client = test_client::TestClient::new(channel);
+    let mut client = test_client::TestClient::new(channel).accept_gzip();
 
     let res = client.compress_output(()).await.unwrap();
 
@@ -106,12 +107,11 @@ async fn client_enabled_server_disabled() {
     });
 
     let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .accept_gzip()
         .connect()
         .await
         .unwrap();
 
-    let mut client = test_client::TestClient::new(channel);
+    let mut client = test_client::TestClient::new(channel).accept_gzip();
 
     let res = client.compress_output(()).await.unwrap();
 
@@ -147,7 +147,7 @@ async fn client_disabled() {
         }
     }
 
-    let svc = test_server::TestServer::new(Svc);
+    let svc = test_server::TestServer::new(Svc).send_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -169,7 +169,6 @@ async fn client_disabled() {
                         }))
                         .into_inner(),
                 )
-                .send_gzip()
                 .add_service(svc)
                 .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
                 .await

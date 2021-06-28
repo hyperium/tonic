@@ -1,6 +1,9 @@
 use crate::{
     body::BoxBody,
-    codec::{compression::Encoding, encode_server, Codec, Streaming},
+    codec::{
+        compression::{CompressionEncoding, EnabledCompressionEncodings},
+        encode_server, Codec, Streaming,
+    },
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
 };
@@ -20,6 +23,10 @@ use std::fmt;
 /// implements some [`Body`].
 pub struct Grpc<T> {
     codec: T,
+    /// Which compression encodings does the server accept for requests?
+    accept_compression_encodings: EnabledCompressionEncodings,
+    /// Which compression encodings might the server use for responses.
+    send_compression_encodings: EnabledCompressionEncodings,
 }
 
 impl<T> Grpc<T>
@@ -29,7 +36,42 @@ where
 {
     /// Creates a new gRPC server with the provided [`Codec`].
     pub fn new(codec: T) -> Self {
-        Self { codec }
+        Self {
+            codec,
+            accept_compression_encodings: EnabledCompressionEncodings::default(),
+            send_compression_encodings: EnabledCompressionEncodings::default(),
+        }
+    }
+
+    pub fn accept_gzip(mut self) -> Self {
+        self.accept_compression_encodings.enable_gzip();
+        self
+    }
+
+    pub fn send_gzip(mut self) -> Self {
+        self.send_compression_encodings.enable_gzip();
+        self
+    }
+
+    #[doc(hidden)]
+    pub fn apply_compression_config(
+        self,
+        accept_encodings: EnabledCompressionEncodings,
+        send_encodings: EnabledCompressionEncodings,
+    ) -> Self {
+        let mut this = self;
+
+        let EnabledCompressionEncodings { gzip: accept_gzip } = accept_encodings;
+        if accept_gzip {
+            this = this.accept_gzip();
+        }
+
+        let EnabledCompressionEncodings { gzip: send_gzip } = send_encodings;
+        if send_gzip {
+            this = this.send_gzip();
+        }
+
+        this
     }
 
     /// Handle a single unary gRPC request.
@@ -43,7 +85,10 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        let encoding = Encoding::from_accept_encoding_header(req.headers());
+        let encoding = CompressionEncoding::from_accept_encoding_header(
+            req.headers(),
+            self.send_compression_encodings,
+        );
 
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
@@ -137,8 +182,29 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        // TODO(david): probably should set this directly on `Grpc`, like the client
+        let request_compression_encoding = if let Some(request_compression_encoding) =
+            CompressionEncoding::from_encoding_header(request.headers())
+        {
+            let encoding_supported = match request_compression_encoding {
+                CompressionEncoding::Gzip => self.accept_compression_encodings.gzip(),
+            };
+
+            if encoding_supported {
+                Some(request_compression_encoding)
+            } else {
+                return Err(Status::unimplemented(format!(
+                    "Request is compressed with `{}` which the server doesn't support",
+                    request_compression_encoding
+                )));
+            }
+        } else {
+            None
+        };
+
         let (parts, body) = request.into_parts();
-        let stream = Streaming::new_request(self.codec.decoder(), body);
+        let stream =
+            Streaming::new_request(self.codec.decoder(), body, request_compression_encoding);
 
         futures_util::pin_mut!(stream);
 
@@ -164,13 +230,16 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
-        Request::from_http(request.map(|body| Streaming::new_request(self.codec.decoder(), body)))
+        Request::from_http(request.map(|body| {
+            // TODO(david): get compression encoding from request and don't hard code `None`
+            Streaming::new_request(self.codec.decoder(), body, None)
+        }))
     }
 
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
-        encoding: Option<Encoding>,
+        encoding: Option<CompressionEncoding>,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,

@@ -12,16 +12,14 @@ pub use tls::ClientTlsConfig;
 use super::service::{Connection, DynamicServiceStream};
 use crate::{
     body::BoxBody,
-    codec::compression::{EnabledEncodings, Encoding},
+    codec::compression::{CompressionEncoding, EnabledCompressionEncodings},
 };
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},
     Request, Response,
 };
-use http_body::Body as _;
 use hyper::client::connect::Connection as HyperConnection;
-use pin_project::pin_project;
 use std::{
     fmt,
     future::Future,
@@ -41,7 +39,6 @@ use tower::{
     util::BoxService,
     Service,
 };
-use tower_http::set_header::SetRequestHeader;
 
 type Svc = BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>;
 
@@ -73,8 +70,6 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 #[derive(Clone)]
 pub struct Channel {
     svc: Buffer<Svc, Request<BoxBody>>,
-    /// The encoding that request bodies will be compressed with.
-    send_encoding: Option<Encoding>,
 }
 
 /// A future that resolves to an HTTP response.
@@ -146,15 +141,12 @@ impl Channel {
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
-        let accept_encoding = endpoint.accept_encoding;
-        let send_encoding = endpoint.send_encoding;
 
         let svc = Connection::lazy(connector, endpoint);
-        let svc = with_accept_encoding(svc, accept_encoding);
         let svc = BoxService::new(svc);
         let svc = Buffer::new(svc, buffer_size);
 
-        Channel { svc, send_encoding }
+        Channel { svc }
     }
 
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
@@ -165,17 +157,14 @@ impl Channel {
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
-        let accept_encoding = endpoint.accept_encoding;
-        let send_encoding = endpoint.send_encoding;
 
         let svc = Connection::connect(connector, endpoint)
             .await
             .map_err(super::Error::from_source)?;
-        let svc = with_accept_encoding(svc, accept_encoding);
         let svc = BoxService::new(svc);
         let svc = Buffer::new(svc, buffer_size);
 
-        Ok(Channel { svc, send_encoding })
+        Ok(Channel { svc })
     }
 
     pub(crate) fn balance<D>(discover: D, buffer_size: usize) -> Self
@@ -189,23 +178,8 @@ impl Channel {
         let svc = BoxService::new(svc);
         let svc = Buffer::new(svc, buffer_size);
 
-        Channel {
-            svc,
-            send_encoding: None,
-        }
+        Channel { svc }
     }
-}
-
-fn with_accept_encoding<S>(
-    svc: S,
-    accept_encoding: EnabledEncodings,
-) -> SetRequestHeader<S, http::HeaderValue> {
-    let header_value = accept_encoding.into_accept_encoding_header_value();
-    SetRequestHeader::overriding(
-        svc,
-        http::header::HeaderName::from_static(crate::codec::compression::ACCEPT_ENCODING_HEADER),
-        header_value,
-    )
 }
 
 impl Service<http::Request<BoxBody>> for Channel {
@@ -218,25 +192,6 @@ impl Service<http::Request<BoxBody>> for Channel {
     }
 
     fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
-        let (mut parts, body) = request.into_parts();
-
-        let new_body = if let Some(encoding) = self.send_encoding {
-            parts.headers.insert(
-                crate::codec::compression::ENCODING_HEADER,
-                encoding.into_header_value(),
-            );
-
-            CompressEachChunkBody {
-                inner: body,
-                encoding,
-                encoding_buf: BytesMut::with_capacity(DEFAULT_BUFFER_SIZE),
-            }
-            .boxed()
-        } else {
-            body
-        };
-
-        let request = http::Request::from_parts(parts, new_body);
         let inner = Service::call(&mut self.svc, request);
         ResponseFuture { inner }
     }
@@ -262,65 +217,4 @@ impl fmt::Debug for ResponseFuture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ResponseFuture").finish()
     }
-}
-
-/// A `http_body::Body` that compresses each chunk with a given encoding.
-#[pin_project]
-struct CompressEachChunkBody<B> {
-    #[pin]
-    inner: B,
-    encoding: Encoding,
-    encoding_buf: BytesMut,
-}
-
-impl<B> http_body::Body for CompressEachChunkBody<B>
-where
-    B: http_body::Body<Data = Bytes, Error = crate::Status>,
-{
-    type Data = Bytes;
-    type Error = crate::Status;
-
-    fn poll_data(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let this = self.project();
-        match futures_util::ready!(this.inner.poll_data(cx)) {
-            Some(Ok(mut chunk)) => {
-                let len = chunk.len();
-
-                this.encoding_buf.clear();
-
-                if let Err(err) = crate::codec::compression::compress(
-                    *this.encoding,
-                    &mut chunk,
-                    this.encoding_buf,
-                    len,
-                ) {
-                    let status =
-                        crate::Status::internal("Failed to compress body chunk").with_source(err);
-                    return Poll::Ready(Some(Err(status)));
-                }
-
-                let chunk = this.encoding_buf.clone().freeze();
-
-                Poll::Ready(Some(Ok(chunk)))
-            }
-            other => Poll::Ready(other),
-        }
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        self.project().inner.poll_trailers(cx)
-    }
-
-    fn is_end_stream(&self) -> bool {
-        self.inner.is_end_stream()
-    }
-
-    // we don't define `size_hint` because we compress each
-    // chunk and dunno the size
 }

@@ -1,5 +1,5 @@
 use super::{
-    compression::{decompress, Encoding},
+    compression::{decompress, CompressionEncoding},
     DecodeBuf, Decoder,
 };
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
@@ -29,7 +29,7 @@ pub struct Streaming<T> {
     buf: BytesMut,
     decompress_buf: BytesMut,
     trailers: Option<MetadataMap>,
-    encoding: Option<Encoding>,
+    encoding: Option<CompressionEncoding>,
 }
 
 impl<T> Unpin for Streaming<T> {}
@@ -52,7 +52,7 @@ impl<T> Streaming<T> {
         decoder: D,
         body: B,
         status_code: StatusCode,
-        encoding: Option<Encoding>,
+        encoding: Option<CompressionEncoding>,
     ) -> Self
     where
         B: Body + Send + Sync + 'static,
@@ -72,16 +72,21 @@ impl<T> Streaming<T> {
     }
 
     #[doc(hidden)]
-    pub fn new_request<B, D>(decoder: D, body: B) -> Self
+    pub fn new_request<B, D>(decoder: D, body: B, encoding: Option<CompressionEncoding>) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Request, None)
+        Self::new(decoder, body, Direction::Request, encoding)
     }
 
-    fn new<B, D>(decoder: D, body: B, direction: Direction, encoding: Option<Encoding>) -> Self
+    fn new<B, D>(
+        decoder: D,
+        body: B,
+        direction: Direction,
+        encoding: Option<CompressionEncoding>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
@@ -207,7 +212,8 @@ impl<T> Streaming<T> {
             let result = if *compression {
                 if let Err(err) = decompress(
                     // TODO(david): handle missing self.encoding
-                    self.encoding.unwrap(),
+                    self.encoding
+                        .expect("message was compressed but compression not enabled on server"),
                     &mut self.buf,
                     &mut self.decompress_buf,
                     *len,

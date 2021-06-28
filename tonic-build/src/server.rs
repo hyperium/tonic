@@ -48,6 +48,8 @@ pub fn generate<T: Service>(
             #[derive(Debug)]
             pub struct #server_service<T: #server_trait> {
                 inner: _Inner<T>,
+                accept_compression_encodings: EnabledCompressionEncodings,
+                send_compression_encodings: EnabledCompressionEncodings,
             }
 
             struct _Inner<T>(Arc<T>);
@@ -56,7 +58,11 @@ pub fn generate<T: Service>(
                 pub fn new(inner: T) -> Self {
                     let inner = Arc::new(inner);
                     let inner = _Inner(inner);
-                    Self { inner }
+                    Self {
+                        inner,
+                        accept_compression_encodings: Default::default(),
+                        send_compression_encodings: Default::default(),
+                    }
                 }
 
                 pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
@@ -64,6 +70,18 @@ pub fn generate<T: Service>(
                     F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
                 {
                     InterceptedService::new(Self::new(inner), interceptor)
+                }
+
+                // TODO(david): docs
+                pub fn accept_gzip(mut self) -> Self {
+                    self.accept_compression_encodings.enable_gzip();
+                    self
+                }
+
+                // TODO(david): docs
+                pub fn send_gzip(mut self) -> Self {
+                    self.send_compression_encodings.enable_gzip();
+                    self
                 }
             }
 
@@ -102,7 +120,11 @@ pub fn generate<T: Service>(
             impl<T: #server_trait> Clone for #server_service<T> {
                 fn clone(&self) -> Self {
                     let inner = self.inner.clone();
-                    Self { inner }
+                    Self {
+                        inner,
+                        accept_compression_encodings: self.accept_compression_encodings,
+                        send_compression_encodings: self.send_compression_encodings,
+                    }
                 }
             }
 
@@ -335,13 +357,16 @@ fn generate_unary<T: Method>(
             }
         }
 
+        let accept_compression_encodings = self.accept_compression_encodings;
+        let send_compression_encodings = self.send_compression_encodings;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec);
+            let mut grpc = tonic::server::Grpc::new(codec)
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
 
             let res = grpc.unary(method, req).await;
             Ok(res)
@@ -379,19 +404,21 @@ fn generate_server_streaming<T: Method>(
                 let inner = self.0.clone();
                 let fut = async move {
                     (*inner).#method_ident(request).await
-
                 };
                 Box::pin(fut)
             }
         }
 
+        let accept_compression_encodings = self.accept_compression_encodings;
+        let send_compression_encodings = self.send_compression_encodings;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec);
+            let mut grpc = tonic::server::Grpc::new(codec)
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
 
             let res = grpc.server_streaming(method, req).await;
             Ok(res)
@@ -432,13 +459,16 @@ fn generate_client_streaming<T: Method>(
             }
         }
 
+        let accept_compression_encodings = self.accept_compression_encodings;
+        let send_compression_encodings = self.send_compression_encodings;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec);
+            let mut grpc = tonic::server::Grpc::new(codec)
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
 
             let res = grpc.client_streaming(method, req).await;
             Ok(res)
@@ -482,13 +512,16 @@ fn generate_streaming<T: Method>(
             }
         }
 
+        let accept_compression_encodings = self.accept_compression_encodings;
+        let send_compression_encodings = self.send_compression_encodings;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
-            let mut grpc = tonic::server::Grpc::new(codec);
+            let mut grpc = tonic::server::Grpc::new(codec)
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
 
             let res = grpc.streaming(method, req).await;
             Ok(res)

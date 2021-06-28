@@ -3,7 +3,7 @@ use http_body::Body as _;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
-    let svc = test_server::TestServer::new(Svc);
+    let svc = test_server::TestServer::new(Svc).accept_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -44,7 +44,6 @@ async fn client_enabled_server_enabled() {
                     )
                     .into_inner(),
             )
-            .accept_gzip()
             .add_service(svc)
             .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
             .await
@@ -52,12 +51,11 @@ async fn client_enabled_server_enabled() {
     });
 
     let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .send_gzip()
         .connect()
         .await
         .unwrap();
 
-    let mut client = test_client::TestClient::new(channel);
+    let mut client = test_client::TestClient::new(channel).send_gzip();
 
     client
         .compress_input(SomeData {

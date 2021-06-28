@@ -2,7 +2,6 @@ use super::super::service;
 use super::Channel;
 #[cfg(feature = "tls")]
 use super::ClientTlsConfig;
-use crate::codec::compression::{EnabledEncodings, Encoding};
 #[cfg(feature = "tls")]
 use crate::transport::service::TlsConnector;
 use crate::transport::Error;
@@ -40,8 +39,6 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
     pub(crate) http2_adaptive_window: Option<bool>,
-    pub(crate) accept_encoding: EnabledEncodings,
-    pub(crate) send_encoding: Option<Encoding>,
 }
 
 impl Endpoint {
@@ -243,33 +240,6 @@ impl Endpoint {
         }
     }
 
-    /// Enable `gzip` compressed responses.
-    ///
-    /// This will tell the server that `gzip` compression is accepted. Messages will be
-    /// automatically decompressed.
-    ///
-    /// This does not compress messages sent by the client.
-    ///
-    /// Compression is not enabled by default.
-    // TODO(david): disabling compression on individual messages
-    pub fn accept_gzip(self) -> Self {
-        Endpoint {
-            accept_encoding: self.accept_encoding.gzip(),
-            ..self
-        }
-    }
-
-    /// Compress requests with `gzip`.
-    ///
-    /// This requires the server to accept `gzip` compressed requests otherwise it might
-    /// respond with an error.
-    pub fn send_gzip(self) -> Self {
-        Endpoint {
-            send_encoding: Some(Encoding::Gzip),
-            ..self
-        }
-    }
-
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
@@ -359,8 +329,6 @@ impl From<Uri> for Endpoint {
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
             http2_adaptive_window: None,
-            accept_encoding: EnabledEncodings::default(),
-            send_encoding: None,
         }
     }
 }
