@@ -29,15 +29,15 @@ use tokio::{
     sync::mpsc::{channel, Sender},
 };
 
+use tower::balance::p2c::Balance;
 use tower::{
-    balance::p2c::Balance,
     buffer::{self, Buffer},
     discover::{Change, Discover},
-    util::BoxService,
+    util::{BoxService, Either},
     Service,
 };
 
-type Svc = BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>;
+type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
@@ -137,11 +137,10 @@ impl Channel {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
+        let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
 
         let svc = Connection::lazy(connector, endpoint);
-        let svc = BoxService::new(svc);
-        let svc = Buffer::new(svc, buffer_size);
+        let svc = Buffer::new(Either::A(svc), buffer_size);
 
         Channel { svc }
     }
@@ -153,13 +152,12 @@ impl Channel {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
+        let buffer_size = endpoint.buffer_size.clone().unwrap_or(DEFAULT_BUFFER_SIZE);
 
         let svc = Connection::connect(connector, endpoint)
             .await
             .map_err(super::Error::from_source)?;
-        let svc = BoxService::new(svc);
-        let svc = Buffer::new(svc, buffer_size);
+        let svc = Buffer::new(Either::A(svc), buffer_size);
 
         Ok(Channel { svc })
     }
@@ -173,7 +171,7 @@ impl Channel {
         let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
-        let svc = Buffer::new(svc, buffer_size);
+        let svc = Buffer::new(Either::B(svc), buffer_size);
 
         Channel { svc }
     }
@@ -190,6 +188,7 @@ impl Service<http::Request<BoxBody>> for Channel {
 
     fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
         let inner = Service::call(&mut self.svc, request);
+
         ResponseFuture { inner }
     }
 }

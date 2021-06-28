@@ -27,7 +27,7 @@ impl BlockingClient {
         let rt = Builder::new_multi_thread().enable_all().build().unwrap();
         let client = rt.block_on(GreeterClient::connect(dst))?;
 
-        Ok(Self { client, rt })
+        Ok(Self { rt, client })
     }
 
     pub fn say_hello(

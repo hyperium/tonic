@@ -1,6 +1,5 @@
-use crate::Status;
-
 use super::encode::BUFFER_SIZE;
+use crate::Status;
 use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::{GzDecoder, GzEncoder};
 use std::fmt;
