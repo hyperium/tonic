@@ -3,7 +3,7 @@ use tonic::Streaming;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
-    let svc = test_server::TestServer::new(Svc).send_gzip();
+    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -61,7 +61,7 @@ async fn client_enabled_server_enabled() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_disabled_server_enabled() {
-    let svc = test_server::TestServer::new(Svc).send_gzip();
+    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -112,7 +112,7 @@ async fn client_disabled_server_enabled() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_disabled() {
-    let svc = test_server::TestServer::new(Svc);
+    let svc = test_server::TestServer::new(Svc::default());
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();

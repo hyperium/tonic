@@ -31,17 +31,38 @@ mod util;
 tonic::include_proto!("test");
 
 #[derive(Debug)]
-struct Svc;
+struct Svc {
+    disable_compressing_on_response: bool,
+}
+
+impl Default for Svc {
+    fn default() -> Self {
+        Self {
+            disable_compressing_on_response: false,
+        }
+    }
+}
 
 const UNCOMPRESSED_MIN_BODY_SIZE: usize = 1024;
+
+impl Svc {
+    fn prepare_response<B>(&self, mut res: Response<B>) -> Response<B> {
+        if self.disable_compressing_on_response {
+            res.disable_compression();
+        }
+
+        res
+    }
+}
 
 #[tonic::async_trait]
 impl test_server::Test for Svc {
     async fn compress_output_unary(&self, _req: Request<()>) -> Result<Response<SomeData>, Status> {
         let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE];
-        Ok(Response::new(SomeData {
+
+        Ok(self.prepare_response(Response::new(SomeData {
             data: data.to_vec(),
-        }))
+        })))
     }
 
     async fn compress_input_unary(&self, req: Request<SomeData>) -> Result<Response<()>, Status> {
@@ -58,7 +79,7 @@ impl test_server::Test for Svc {
     ) -> Result<Response<Self::CompressOutputServerStreamStream>, Status> {
         let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
         let stream = futures::stream::repeat(SomeData { data }).map(Ok::<_, Status>);
-        Ok(Response::new(Box::pin(stream)))
+        Ok(self.prepare_response(Response::new(Box::pin(stream))))
     }
 
     async fn compress_input_client_stream(
@@ -69,7 +90,23 @@ impl test_server::Test for Svc {
         while let Some(item) = stream.next().await {
             item.unwrap();
         }
-        Ok(Response::new(()))
+        Ok(self.prepare_response(Response::new(())))
+    }
+
+    async fn compress_output_client_stream(
+        &self,
+        req: Request<Streaming<SomeData>>,
+    ) -> Result<Response<SomeData>, Status> {
+        let mut stream = req.into_inner();
+        while let Some(item) = stream.next().await {
+            item.unwrap();
+        }
+
+        let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE];
+
+        Ok(self.prepare_response(Response::new(SomeData {
+            data: data.to_vec(),
+        })))
     }
 
     type CompressInputOutputBidirectionalStreamStream =
@@ -86,6 +123,6 @@ impl test_server::Test for Svc {
 
         let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
         let stream = futures::stream::repeat(SomeData { data }).map(Ok::<_, Status>);
-        Ok(Response::new(Box::pin(stream)))
+        Ok(self.prepare_response(Response::new(Box::pin(stream))))
     }
 }

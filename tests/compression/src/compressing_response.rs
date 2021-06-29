@@ -29,7 +29,7 @@ async fn client_enabled_server_enabled() {
         }
     }
 
-    let svc = test_server::TestServer::new(Svc).send_gzip();
+    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -75,7 +75,7 @@ async fn client_enabled_server_enabled() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_disabled() {
-    let svc = test_server::TestServer::new(Svc);
+    let svc = test_server::TestServer::new(Svc::default());
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -145,7 +145,7 @@ async fn client_disabled() {
         }
     }
 
-    let svc = test_server::TestServer::new(Svc).send_gzip();
+    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -191,7 +191,7 @@ async fn client_disabled() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn server_replying_with_unsupported_encoding() {
-    let svc = test_server::TestServer::new(Svc).send_gzip();
+    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -229,4 +229,160 @@ async fn server_replying_with_unsupported_encoding() {
         status.message(),
         "Content is compressed with `br` which isn't supported"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn disabling_compression_on_single_response() {
+    let svc = test_server::TestServer::new(Svc {
+        disable_compressing_on_response: true,
+    })
+    .send_gzip();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+
+    tokio::spawn({
+        let bytes_sent_counter = bytes_sent_counter.clone();
+        async move {
+            Server::builder()
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(MapResponseBodyLayer::new(move |body| {
+                            util::CountBytesBody {
+                                inner: body,
+                                counter: bytes_sent_counter.clone(),
+                            }
+                        }))
+                        .into_inner(),
+                )
+                .add_service(svc)
+                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .await
+                .unwrap();
+        }
+    });
+
+    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = test_client::TestClient::new(channel).accept_gzip();
+
+    let res = client.compress_output_unary(()).await.unwrap();
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
+    let bytes_sent = bytes_sent_counter.load(Relaxed);
+    assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
+    let svc = test_server::TestServer::new(Svc {
+        disable_compressing_on_response: true,
+    })
+    .send_gzip();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+
+    tokio::spawn({
+        let bytes_sent_counter = bytes_sent_counter.clone();
+        async move {
+            Server::builder()
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(MapResponseBodyLayer::new(move |body| {
+                            util::CountBytesBody {
+                                inner: body,
+                                counter: bytes_sent_counter.clone(),
+                            }
+                        }))
+                        .into_inner(),
+                )
+                .add_service(svc)
+                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .await
+                .unwrap();
+        }
+    });
+
+    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = test_client::TestClient::new(channel).accept_gzip();
+
+    let res = client.compress_output_server_stream(()).await.unwrap();
+
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
+
+    let mut stream: Streaming<SomeData> = res.into_inner();
+
+    stream
+        .next()
+        .await
+        .expect("stream empty")
+        .expect("item was error");
+    assert!(dbg!(bytes_sent_counter.load(Relaxed)) < UNCOMPRESSED_MIN_BODY_SIZE);
+
+    stream
+        .next()
+        .await
+        .expect("stream empty")
+        .expect("item was error");
+    assert!(dbg!(bytes_sent_counter.load(Relaxed)) < UNCOMPRESSED_MIN_BODY_SIZE);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn disabling_compression_on_response_from_client_stream() {
+    let svc = test_server::TestServer::new(Svc {
+        disable_compressing_on_response: true,
+    })
+    .send_gzip();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+
+    tokio::spawn({
+        let bytes_sent_counter = bytes_sent_counter.clone();
+        async move {
+            Server::builder()
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(MapResponseBodyLayer::new(move |body| {
+                            util::CountBytesBody {
+                                inner: body,
+                                counter: bytes_sent_counter.clone(),
+                            }
+                        }))
+                        .into_inner(),
+                )
+                .add_service(svc)
+                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .await
+                .unwrap();
+        }
+    });
+
+    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = test_client::TestClient::new(channel).accept_gzip();
+
+    let stream = futures::stream::iter(vec![]);
+    let req = Request::new(Box::pin(stream));
+
+    let res = client.compress_output_client_stream(req).await.unwrap();
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
+    let bytes_sent = bytes_sent_counter.load(Relaxed);
+    assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }

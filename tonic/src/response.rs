@@ -1,4 +1,6 @@
-use crate::{metadata::MetadataMap, Extensions};
+use crate::{
+    codec::compression::SingleMessageCompressionOverride, metadata::MetadataMap, Extensions,
+};
 
 /// A gRPC response and metadata from an RPC call.
 #[derive(Debug)]
@@ -106,6 +108,12 @@ impl<T> Response<T> {
     /// Returns a mutable reference to the associated extensions.
     pub fn extensions_mut(&mut self) -> &mut Extensions {
         &mut self.extensions
+    }
+
+    // TODO(david): docs
+    pub fn disable_compression(&mut self) {
+        self.extensions_mut()
+            .insert(SingleMessageCompressionOverride::Disable);
     }
 }
 

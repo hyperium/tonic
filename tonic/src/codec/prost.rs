@@ -77,6 +77,7 @@ fn from_decode_error(error: prost1::DecodeError) -> crate::Status {
 
 #[cfg(test)]
 mod tests {
+    use crate::codec::compression::SingleMessageCompressionOverride;
     use crate::codec::{
         encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
     };
@@ -121,7 +122,12 @@ mod tests {
         let messages = std::iter::repeat_with(move || Ok::<_, Status>(msg.clone())).take(10000);
         let source = futures_util::stream::iter(messages);
 
-        let body = encode_server(encoder, source, None);
+        let body = encode_server(
+            encoder,
+            source,
+            None,
+            SingleMessageCompressionOverride::default(),
+        );
 
         futures_util::pin_mut!(body);
 

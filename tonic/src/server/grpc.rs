@@ -1,7 +1,9 @@
 use crate::{
     body::BoxBody,
     codec::{
-        compression::{CompressionEncoding, EnabledCompressionEncodings},
+        compression::{
+            CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
+        },
         encode_server, Codec, Streaming,
     },
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
@@ -106,6 +108,7 @@ where
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
                         Err(status),
                         accept_encoding,
+                        SingleMessageCompressionOverride::default(),
                     );
             }
         };
@@ -115,7 +118,9 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
-        self.map_response(response, accept_encoding)
+        let compression_override = compression_override_from_response(&response);
+
+        self.map_response(response, accept_encoding, compression_override)
     }
 
     /// Handle a server side streaming request.
@@ -138,13 +143,23 @@ where
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self.map_response::<S::ResponseStream>(Err(status), accept_encoding);
+                return self.map_response::<S::ResponseStream>(
+                    Err(status),
+                    accept_encoding,
+                    SingleMessageCompressionOverride::default(),
+                );
             }
         };
 
         let response = service.call(request).await;
 
-        self.map_response(response, accept_encoding)
+        self.map_response(
+            response,
+            accept_encoding,
+            // disabling compression of individual stream items must be done on
+            // the items themselves
+            SingleMessageCompressionOverride::default(),
+        )
     }
 
     /// Handle a client side streaming gRPC request.
@@ -157,10 +172,11 @@ where
         S: ClientStreamingService<T::Decode, Response = T::Encode>,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
+        T: std::fmt::Debug,
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
-            self.accept_compression_encodings,
+            self.send_compression_encodings,
         );
 
         let request = t!(self.map_request_streaming(req));
@@ -169,7 +185,10 @@ where
             .call(request)
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
-        self.map_response(response, accept_encoding)
+
+        let compression_override = compression_override_from_response(&response);
+
+        self.map_response(response, accept_encoding, compression_override)
     }
 
     /// Handle a bi-directional streaming gRPC request.
@@ -186,13 +205,18 @@ where
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
-            self.accept_compression_encodings,
+            self.send_compression_encodings,
         );
 
         let request = t!(self.map_request_streaming(req));
 
         let response = service.call(request).await;
-        self.map_response(response, accept_encoding)
+
+        self.map_response(
+            response,
+            accept_encoding,
+            SingleMessageCompressionOverride::default(),
+        )
     }
 
     async fn map_request_unary<B>(
@@ -243,6 +267,7 @@ where
         &mut self,
         response: Result<crate::Response<B>, Status>,
         accept_encoding: Option<CompressionEncoding>,
+        compression_override: SingleMessageCompressionOverride,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
@@ -268,7 +293,12 @@ where
             );
         }
 
-        let body = encode_server(self.codec.encoder(), body.into_stream(), accept_encoding);
+        let body = encode_server(
+            self.codec.encoder(),
+            body.into_stream(),
+            accept_encoding,
+            compression_override,
+        );
 
         http::Response::from_parts(parts, BoxBody::new(body))
     }
@@ -286,6 +316,30 @@ where
 
 impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Grpc").field("codec", &self.codec).finish()
+        f.debug_struct("Grpc")
+            .field("codec", &self.codec)
+            .field(
+                "accept_compression_encodings",
+                &self.accept_compression_encodings,
+            )
+            .field(
+                "send_compression_encodings",
+                &self.send_compression_encodings,
+            )
+            .finish()
     }
+}
+
+fn compression_override_from_response<B, E>(
+    res: &Result<crate::Response<B>, E>,
+) -> SingleMessageCompressionOverride {
+    res.as_ref()
+        .ok()
+        .and_then(|response| {
+            response
+                .extensions()
+                .get::<SingleMessageCompressionOverride>()
+                .copied()
+        })
+        .unwrap_or_default()
 }

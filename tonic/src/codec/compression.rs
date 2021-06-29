@@ -158,3 +158,20 @@ pub(crate) fn decompress(
 
     Ok(())
 }
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum SingleMessageCompressionOverride {
+    /// Inherit whatever compression is already configured. If the stream is compressed this
+    /// message will also be configured.
+    ///
+    /// This is the default.
+    Inherit,
+    /// Don't compress this message, even if compression is enabled on the stream.
+    Disable,
+}
+
+impl Default for SingleMessageCompressionOverride {
+    fn default() -> Self {
+        Self::Inherit
+    }
+}

@@ -9,6 +9,7 @@ service Test {
   rpc CompressInputUnary(SomeData) returns (google.protobuf.Empty);
   rpc CompressOutputServerStream(google.protobuf.Empty) returns (stream SomeData);
   rpc CompressInputClientStream(stream SomeData) returns (google.protobuf.Empty);
+  rpc CompressOutputClientStream(stream SomeData) returns (SomeData);
   rpc CompressInputOutputBidirectionalStream(stream SomeData) returns (stream SomeData);
 }
 
