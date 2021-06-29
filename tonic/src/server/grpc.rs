@@ -131,7 +131,9 @@ where
     #[doc(hidden)]
     #[cfg(not(feature = "compression"))]
     pub fn send_gzip(self) -> Self {
-        panic!("`send_gzip` called on a server but the `compression` feature is not enabled on tonic");
+        panic!(
+            "`send_gzip` called on a server but the `compression` feature is not enabled on tonic"
+        );
     }
 
     #[cfg(feature = "compression")]
