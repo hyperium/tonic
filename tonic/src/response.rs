@@ -110,7 +110,13 @@ impl<T> Response<T> {
         &mut self.extensions
     }
 
-    // TODO(david): docs
+    /// Disable compression of the response body.
+    ///
+    /// This disables compression of this response's body, even if compression is enabled on the
+    /// server.
+    ///
+    /// **Note** this only has effect on responses to unary requests. Response streams will still
+    /// be compressed according to the configuration of the server.
     pub fn disable_compression(&mut self) {
         self.extensions_mut()
             .insert(SingleMessageCompressionOverride::Disable);
