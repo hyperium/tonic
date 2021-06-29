@@ -46,13 +46,13 @@ pub fn generate<T: Service>(
 
     let configure_compression_methods = if compression_enabled {
         quote! {
-            // TODO(david): docs
+            /// Enable decompressing requests with `gzip`.
             pub fn accept_gzip(mut self) -> Self {
                 self.accept_compression_encodings.enable_gzip();
                 self
             }
 
-            // TODO(david): docs
+            /// Compress responses with `gzip`, if the client supports it.
             pub fn send_gzip(mut self) -> Self {
                 self.send_compression_encodings.enable_gzip();
                 self
