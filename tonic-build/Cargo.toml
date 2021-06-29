@@ -26,6 +26,7 @@ default = ["transport", "rustfmt", "prost"]
 rustfmt = []
 transport = []
 prost = ["prost-build"]
+compression = []
 
 [package.metadata.docs.rs]
 all-features = true

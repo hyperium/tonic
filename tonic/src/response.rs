@@ -1,6 +1,4 @@
-use crate::{
-    codec::compression::SingleMessageCompressionOverride, metadata::MetadataMap, Extensions,
-};
+use crate::{metadata::MetadataMap, Extensions};
 
 /// A gRPC response and metadata from an RPC call.
 #[derive(Debug)]
@@ -117,9 +115,11 @@ impl<T> Response<T> {
     ///
     /// **Note** this only has effect on responses to unary requests. Response streams will still
     /// be compressed according to the configuration of the server.
+    #[cfg(feature = "compression")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
     pub fn disable_compression(&mut self) {
         self.extensions_mut()
-            .insert(SingleMessageCompressionOverride::Disable);
+            .insert(crate::codec::compression::SingleMessageCompressionOverride::Disable);
     }
 }
 

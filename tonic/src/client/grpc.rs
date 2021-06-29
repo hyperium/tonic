@@ -1,10 +1,9 @@
+#[cfg(feature = "compression")]
+use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings};
 use crate::{
     body::BoxBody,
     client::GrpcService,
-    codec::{
-        compression::CompressionEncoding, encode_client, Codec, EnabledCompressionEncodings,
-        Streaming,
-    },
+    codec::{encode_client, Codec, Streaming},
     Code, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -31,8 +30,10 @@ use std::fmt;
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
     inner: T,
+    #[cfg(feature = "compression")]
     /// Which compression encodings does the client accept?
     accept_compression_encodings: EnabledCompressionEncodings,
+    #[cfg(feature = "compression")]
     /// The compression encoding that will be applied to requests.
     send_compression_encodings: Option<CompressionEncoding>,
 }
@@ -42,7 +43,9 @@ impl<T> Grpc<T> {
     pub fn new(inner: T) -> Self {
         Self {
             inner,
+            #[cfg(feature = "compression")]
             send_compression_encodings: None,
+            #[cfg(feature = "compression")]
             accept_compression_encodings: EnabledCompressionEncodings::default(),
         }
     }
@@ -72,9 +75,17 @@ impl<T> Grpc<T> {
     /// let client = TestClient::new(channel).send_gzip();
     /// # };
     /// ```
+    #[cfg(feature = "compression")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
     pub fn send_gzip(mut self) -> Self {
         self.send_compression_encodings = Some(CompressionEncoding::Gzip);
         self
+    }
+
+    #[doc(hidden)]
+    #[cfg(not(feature = "compression"))]
+    pub fn send_gzip(self) -> Self {
+        panic!("`send_gzip` called on a server but the `compression` feature is not enabled on tonic");
     }
 
     /// Enable accepting `gzip` compressed responses.
@@ -102,9 +113,17 @@ impl<T> Grpc<T> {
     /// let client = TestClient::new(channel).accept_gzip();
     /// # };
     /// ```
+    #[cfg(feature = "compression")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
     pub fn accept_gzip(mut self) -> Self {
         self.accept_compression_encodings.enable_gzip();
         self
+    }
+
+    #[doc(hidden)]
+    #[cfg(not(feature = "compression"))]
+    pub fn accept_gzip(self) -> Self {
+        panic!("`accept_gzip` called on a client but the `compression` feature is not enabled on tonic");
     }
 
     /// Check if the inner [`GrpcService`] is able to accept a  new request.
@@ -216,7 +235,14 @@ impl<T> Grpc<T> {
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
         let request = request
-            .map(|s| encode_client(codec.encoder(), s, self.send_compression_encodings))
+            .map(|s| {
+                encode_client(
+                    codec.encoder(),
+                    s,
+                    #[cfg(feature = "compression")]
+                    self.send_compression_encodings,
+                )
+            })
             .map(BoxBody::new);
 
         let mut request = request.into_http(uri);
@@ -231,21 +257,24 @@ impl<T> Grpc<T> {
             .headers_mut()
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
-        if let Some(encoding) = self.send_compression_encodings {
-            request.headers_mut().insert(
-                crate::codec::compression::ENCODING_HEADER,
-                encoding.into_header_value(),
-            );
-        }
-
-        if let Some(header_value) = self
-            .accept_compression_encodings
-            .into_accept_encoding_header_value()
+        #[cfg(feature = "compression")]
         {
-            request.headers_mut().insert(
-                crate::codec::compression::ACCEPT_ENCODING_HEADER,
-                header_value,
-            );
+            if let Some(encoding) = self.send_compression_encodings {
+                request.headers_mut().insert(
+                    crate::codec::compression::ENCODING_HEADER,
+                    encoding.into_header_value(),
+                );
+            }
+
+            if let Some(header_value) = self
+                .accept_compression_encodings
+                .into_accept_encoding_header_value()
+            {
+                request.headers_mut().insert(
+                    crate::codec::compression::ACCEPT_ENCODING_HEADER,
+                    header_value,
+                );
+            }
         }
 
         let response = self
@@ -254,6 +283,7 @@ impl<T> Grpc<T> {
             .await
             .map_err(|err| Status::from_error(err.into()))?;
 
+        #[cfg(feature = "compression")]
         let encoding = CompressionEncoding::from_encoding_header(
             response.headers(),
             self.accept_compression_encodings,
@@ -276,7 +306,13 @@ impl<T> Grpc<T> {
 
         let response = response.map(|body| {
             if expect_additional_trailers {
-                Streaming::new_response(codec.decoder(), body, status_code, encoding)
+                Streaming::new_response(
+                    codec.decoder(),
+                    body,
+                    status_code,
+                    #[cfg(feature = "compression")]
+                    encoding,
+                )
             } else {
                 Streaming::new_empty(codec.decoder(), body)
             }
@@ -290,7 +326,9 @@ impl<T: Clone> Clone for Grpc<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+            #[cfg(feature = "compression")]
             send_compression_encodings: self.send_compression_encodings,
+            #[cfg(feature = "compression")]
             accept_compression_encodings: self.accept_compression_encodings,
         }
     }
@@ -298,13 +336,19 @@ impl<T: Clone> Clone for Grpc<T> {
 
 impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Grpc")
-            .field("inner", &self.inner)
-            .field("compression_encoding", &self.send_compression_encodings)
-            .field(
-                "accept_compression_encodings",
-                &self.accept_compression_encodings,
-            )
-            .finish()
+        let mut f = f.debug_struct("Grpc");
+
+        f.field("inner", &self.inner);
+
+        #[cfg(feature = "compression")]
+        f.field("compression_encoding", &self.send_compression_encodings);
+
+        #[cfg(feature = "compression")]
+        f.field(
+            "accept_compression_encodings",
+            &self.accept_compression_encodings,
+        );
+
+        f.finish()
     }
 }

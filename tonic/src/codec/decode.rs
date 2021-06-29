@@ -1,7 +1,6 @@
-use super::{
-    compression::{decompress, CompressionEncoding},
-    DecodeBuf, Decoder, HEADER_SIZE,
-};
+#[cfg(feature = "compression")]
+use super::compression::{decompress, CompressionEncoding};
+use super::{DecodeBuf, Decoder, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -27,8 +26,10 @@ pub struct Streaming<T> {
     state: State,
     direction: Direction,
     buf: BytesMut,
-    decompress_buf: BytesMut,
     trailers: Option<MetadataMap>,
+    #[cfg(feature = "compression")]
+    decompress_buf: BytesMut,
+    #[cfg(feature = "compression")]
     encoding: Option<CompressionEncoding>,
 }
 
@@ -52,14 +53,20 @@ impl<T> Streaming<T> {
         decoder: D,
         body: B,
         status_code: StatusCode,
-        encoding: Option<CompressionEncoding>,
+        #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
     ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Response(status_code), encoding)
+        Self::new(
+            decoder,
+            body,
+            Direction::Response(status_code),
+            #[cfg(feature = "compression")]
+            encoding,
+        )
     }
 
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
@@ -68,24 +75,40 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::EmptyResponse, None)
+        Self::new(
+            decoder,
+            body,
+            Direction::EmptyResponse,
+            #[cfg(feature = "compression")]
+            None,
+        )
     }
 
     #[doc(hidden)]
-    pub fn new_request<B, D>(decoder: D, body: B, encoding: Option<CompressionEncoding>) -> Self
+    pub fn new_request<B, D>(
+        decoder: D,
+        body: B,
+        #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Request, encoding)
+        Self::new(
+            decoder,
+            body,
+            Direction::Request,
+            #[cfg(feature = "compression")]
+            encoding,
+        )
     }
 
     fn new<B, D>(
         decoder: D,
         body: B,
         direction: Direction,
-        encoding: Option<CompressionEncoding>,
+        #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
     ) -> Self
     where
         B: Body + Send + Sync + 'static,
@@ -101,8 +124,10 @@ impl<T> Streaming<T> {
             state: State::ReadHeader,
             direction,
             buf: BytesMut::with_capacity(BUFFER_SIZE),
-            decompress_buf: BytesMut::new(),
             trailers: None,
+            #[cfg(feature = "compression")]
+            decompress_buf: BytesMut::new(),
+            #[cfg(feature = "compression")]
             encoding,
         }
     }
@@ -179,7 +204,16 @@ impl<T> Streaming<T> {
 
             let is_compressed = match self.buf.get_u8() {
                 0 => false,
-                1 => true,
+                1 => {
+                    if cfg!(feature = "compression") {
+                        true
+                    } else {
+                        return Err(Status::new(
+                            Code::Unimplemented,
+                            "Message compressed, compression support not enabled.".to_string(),
+                        ));
+                    }
+                }
                 f => {
                     trace!("unexpected compression flag");
                     let message = if let Direction::Response(status) = self.direction {
@@ -210,31 +244,37 @@ impl<T> Streaming<T> {
             }
 
             let decoding_result = if *compression {
-                self.decompress_buf.clear();
+                #[cfg(feature = "compression")]
+                {
+                    self.decompress_buf.clear();
 
-                if let Err(err) = decompress(
-                    self.encoding.unwrap_or_else(|| {
-                        unreachable!("message was compressed but `Streaming.encoding` was `None`. This is a bug in Tonic. Please file an issue")
-                    }),
-                    &mut self.buf,
-                    &mut self.decompress_buf,
-                    *len,
-                ) {
-                    let message = if let Direction::Response(status) = self.direction {
-                        format!(
-                            "Error decompressing: {}, while receiving response with status: {}",
-                            err, status
-                        )
-                    } else {
-                        format!("Error decompressing: {}, while sending request", err)
-                    };
-                    return Err(Status::new(Code::Internal, message));
+                    if let Err(err) = decompress(
+                        self.encoding.unwrap_or_else(|| {
+                            unreachable!("message was compressed but `Streaming.encoding` was `None`. This is a bug in Tonic. Please file an issue")
+                        }),
+                        &mut self.buf,
+                        &mut self.decompress_buf,
+                        *len,
+                    ) {
+                        let message = if let Direction::Response(status) = self.direction {
+                            format!(
+                                "Error decompressing: {}, while receiving response with status: {}",
+                                err, status
+                            )
+                        } else {
+                            format!("Error decompressing: {}, while sending request", err)
+                        };
+                        return Err(Status::new(Code::Internal, message));
+                    }
+                    let decompressed_len = self.decompress_buf.len();
+                    self.decoder.decode(&mut DecodeBuf::new(
+                        &mut self.decompress_buf,
+                        decompressed_len,
+                    ))
                 }
-                let decompressed_len = self.decompress_buf.len();
-                self.decoder.decode(&mut DecodeBuf::new(
-                    &mut self.decompress_buf,
-                    decompressed_len,
-                ))
+
+                #[cfg(not(feature = "compression"))]
+                unreachable!("should not take this branch if compression is disabled")
             } else {
                 self.decoder
                     .decode(&mut DecodeBuf::new(&mut self.buf, *len))

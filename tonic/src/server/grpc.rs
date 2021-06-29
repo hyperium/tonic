@@ -1,11 +1,10 @@
+#[cfg(feature = "compression")]
+use crate::codec::compression::{
+    CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
+};
 use crate::{
     body::BoxBody,
-    codec::{
-        compression::{
-            CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
-        },
-        encode_server, Codec, Streaming,
-    },
+    codec::{encode_server, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
 };
@@ -35,8 +34,10 @@ macro_rules! t {
 pub struct Grpc<T> {
     codec: T,
     /// Which compression encodings does the server accept for requests?
+    #[cfg(feature = "compression")]
     accept_compression_encodings: EnabledCompressionEncodings,
     /// Which compression encodings might the server use for responses.
+    #[cfg(feature = "compression")]
     send_compression_encodings: EnabledCompressionEncodings,
 }
 
@@ -49,7 +50,9 @@ where
     pub fn new(codec: T) -> Self {
         Self {
             codec,
+            #[cfg(feature = "compression")]
             accept_compression_encodings: EnabledCompressionEncodings::default(),
+            #[cfg(feature = "compression")]
             send_compression_encodings: EnabledCompressionEncodings::default(),
         }
     }
@@ -80,9 +83,17 @@ where
     ///
     /// let service = ExampleServer::new(Svc).accept_gzip();
     /// ```
+    #[cfg(feature = "compression")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
     pub fn accept_gzip(mut self) -> Self {
         self.accept_compression_encodings.enable_gzip();
         self
+    }
+
+    #[doc(hidden)]
+    #[cfg(not(feature = "compression"))]
+    pub fn accept_gzip(self) -> Self {
+        panic!("`accept_gzip` called on a server but the `compression` feature is not enabled on tonic");
     }
 
     /// Enable sending `gzip` compressed responses.
@@ -110,11 +121,20 @@ where
     ///
     /// let service = ExampleServer::new(Svc).send_gzip();
     /// ```
+    #[cfg(feature = "compression")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
     pub fn send_gzip(mut self) -> Self {
         self.send_compression_encodings.enable_gzip();
         self
     }
 
+    #[doc(hidden)]
+    #[cfg(not(feature = "compression"))]
+    pub fn send_gzip(self) -> Self {
+        panic!("`send_gzip` called on a server but the `compression` feature is not enabled on tonic");
+    }
+
+    #[cfg(feature = "compression")]
     #[doc(hidden)]
     pub fn apply_compression_config(
         self,
@@ -136,6 +156,13 @@ where
         this
     }
 
+    #[cfg(not(feature = "compression"))]
+    #[doc(hidden)]
+    #[allow(unused_variables)]
+    pub fn apply_compression_config(self, accept_encodings: (), send_encodings: ()) -> Self {
+        self
+    }
+
     /// Handle a single unary gRPC request.
     pub async fn unary<S, B>(
         &mut self,
@@ -147,6 +174,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        #[cfg(feature = "compression")]
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
             self.send_compression_encodings,
@@ -158,7 +186,9 @@ where
                 return self
                     .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
                         Err(status),
+                        #[cfg(feature = "compression")]
                         accept_encoding,
+                        #[cfg(feature = "compression")]
                         SingleMessageCompressionOverride::default(),
                     );
             }
@@ -169,9 +199,16 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
+        #[cfg(feature = "compression")]
         let compression_override = compression_override_from_response(&response);
 
-        self.map_response(response, accept_encoding, compression_override)
+        self.map_response(
+            response,
+            #[cfg(feature = "compression")]
+            accept_encoding,
+            #[cfg(feature = "compression")]
+            compression_override,
+        )
     }
 
     /// Handle a server side streaming request.
@@ -186,6 +223,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        #[cfg(feature = "compression")]
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
             self.send_compression_encodings,
@@ -196,7 +234,9 @@ where
             Err(status) => {
                 return self.map_response::<S::ResponseStream>(
                     Err(status),
+                    #[cfg(feature = "compression")]
                     accept_encoding,
+                    #[cfg(feature = "compression")]
                     SingleMessageCompressionOverride::default(),
                 );
             }
@@ -206,9 +246,11 @@ where
 
         self.map_response(
             response,
+            #[cfg(feature = "compression")]
             accept_encoding,
             // disabling compression of individual stream items must be done on
             // the items themselves
+            #[cfg(feature = "compression")]
             SingleMessageCompressionOverride::default(),
         )
     }
@@ -225,6 +267,7 @@ where
         B::Error: Into<crate::Error> + Send + 'static,
         T: std::fmt::Debug,
     {
+        #[cfg(feature = "compression")]
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
             self.send_compression_encodings,
@@ -237,9 +280,16 @@ where
             .await
             .map(|r| r.map(|m| stream::once(future::ok(m))));
 
+        #[cfg(feature = "compression")]
         let compression_override = compression_override_from_response(&response);
 
-        self.map_response(response, accept_encoding, compression_override)
+        self.map_response(
+            response,
+            #[cfg(feature = "compression")]
+            accept_encoding,
+            #[cfg(feature = "compression")]
+            compression_override,
+        )
     }
 
     /// Handle a bi-directional streaming gRPC request.
@@ -254,6 +304,7 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        #[cfg(feature = "compression")]
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
             self.send_compression_encodings,
@@ -265,7 +316,9 @@ where
 
         self.map_response(
             response,
+            #[cfg(feature = "compression")]
             accept_encoding,
+            #[cfg(feature = "compression")]
             SingleMessageCompressionOverride::default(),
         )
     }
@@ -278,11 +331,17 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        #[cfg(feature = "compression")]
         let request_compression_encoding = self.request_encoding_if_supported(&request)?;
 
         let (parts, body) = request.into_parts();
+
+        #[cfg(feature = "compression")]
         let stream =
             Streaming::new_request(self.codec.decoder(), body, request_compression_encoding);
+
+        #[cfg(not(feature = "compression"))]
+        let stream = Streaming::new_request(self.codec.decoder(), body);
 
         futures_util::pin_mut!(stream);
 
@@ -308,17 +367,24 @@ where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send,
     {
+        #[cfg(feature = "compression")]
         let encoding = self.request_encoding_if_supported(&request)?;
+
+        #[cfg(feature = "compression")]
         let request =
             request.map(|body| Streaming::new_request(self.codec.decoder(), body, encoding));
+
+        #[cfg(not(feature = "compression"))]
+        let request = request.map(|body| Streaming::new_request(self.codec.decoder(), body));
+
         Ok(Request::from_http(request))
     }
 
     fn map_response<B>(
         &mut self,
         response: Result<crate::Response<B>, Status>,
-        accept_encoding: Option<CompressionEncoding>,
-        compression_override: SingleMessageCompressionOverride,
+        #[cfg(feature = "compression")] accept_encoding: Option<CompressionEncoding>,
+        #[cfg(feature = "compression")] compression_override: SingleMessageCompressionOverride,
     ) -> http::Response<BoxBody>
     where
         B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
@@ -336,6 +402,7 @@ where
             http::header::HeaderValue::from_static("application/grpc"),
         );
 
+        #[cfg(feature = "compression")]
         if let Some(encoding) = accept_encoding {
             // Set the content encoding
             parts.headers.insert(
@@ -347,13 +414,16 @@ where
         let body = encode_server(
             self.codec.encoder(),
             body.into_stream(),
+            #[cfg(feature = "compression")]
             accept_encoding,
+            #[cfg(feature = "compression")]
             compression_override,
         );
 
         http::Response::from_parts(parts, BoxBody::new(body))
     }
 
+    #[cfg(feature = "compression")]
     fn request_encoding_if_supported<B>(
         &self,
         request: &http::Request<B>,
@@ -367,20 +437,27 @@ where
 
 impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Grpc")
-            .field("codec", &self.codec)
-            .field(
-                "accept_compression_encodings",
-                &self.accept_compression_encodings,
-            )
-            .field(
-                "send_compression_encodings",
-                &self.send_compression_encodings,
-            )
-            .finish()
+        let mut f = f.debug_struct("Grpc");
+
+        f.field("codec", &self.codec);
+
+        #[cfg(feature = "compression")]
+        f.field(
+            "accept_compression_encodings",
+            &self.accept_compression_encodings,
+        );
+
+        #[cfg(feature = "compression")]
+        f.field(
+            "send_compression_encodings",
+            &self.send_compression_encodings,
+        );
+
+        f.finish()
     }
 }
 
+#[cfg(feature = "compression")]
 fn compression_override_from_response<B, E>(
     res: &Result<crate::Response<B>, E>,
 ) -> SingleMessageCompressionOverride {

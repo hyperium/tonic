@@ -4,6 +4,7 @@
 //! and a protobuf codec based on prost.
 
 mod buffer;
+#[cfg(feature = "compression")]
 pub(crate) mod compression;
 mod decode;
 mod encode;
@@ -16,6 +17,8 @@ use std::io;
 pub(crate) use self::encode::{encode_client, encode_server};
 
 pub use self::buffer::{DecodeBuf, EncodeBuf};
+#[cfg(feature = "compression")]
+#[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
 pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
 pub use self::decode::Streaming;
 #[cfg(feature = "prost")]

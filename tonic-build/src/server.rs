@@ -36,6 +36,32 @@ pub fn generate<T: Service>(
     );
     let transport = generate_transport(&server_service, &server_trait, &path);
 
+    let compression_enabled = cfg!(feature = "compression");
+
+    let compression_config_ty = if compression_enabled {
+        quote! { EnabledCompressionEncodings }
+    } else {
+        quote! { () }
+    };
+
+    let configure_compression_methods = if compression_enabled {
+        quote! {
+            // TODO(david): docs
+            pub fn accept_gzip(mut self) -> Self {
+                self.accept_compression_encodings.enable_gzip();
+                self
+            }
+
+            // TODO(david): docs
+            pub fn send_gzip(mut self) -> Self {
+                self.send_compression_encodings.enable_gzip();
+                self
+            }
+        }
+    } else {
+        quote! {}
+    };
+
     quote! {
         /// Generated server implementations.
         pub mod #server_mod {
@@ -48,8 +74,8 @@ pub fn generate<T: Service>(
             #[derive(Debug)]
             pub struct #server_service<T: #server_trait> {
                 inner: _Inner<T>,
-                accept_compression_encodings: EnabledCompressionEncodings,
-                send_compression_encodings: EnabledCompressionEncodings,
+                accept_compression_encodings: #compression_config_ty,
+                send_compression_encodings: #compression_config_ty,
             }
 
             struct _Inner<T>(Arc<T>);
@@ -72,17 +98,7 @@ pub fn generate<T: Service>(
                     InterceptedService::new(Self::new(inner), interceptor)
                 }
 
-                // TODO(david): docs
-                pub fn accept_gzip(mut self) -> Self {
-                    self.accept_compression_encodings.enable_gzip();
-                    self
-                }
-
-                // TODO(david): docs
-                pub fn send_gzip(mut self) -> Self {
-                    self.send_compression_encodings.enable_gzip();
-                    self
-                }
+                #configure_compression_methods
             }
 
             impl<T, B> Service<http::Request<B>> for #server_service<T>

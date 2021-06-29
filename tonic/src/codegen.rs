@@ -10,6 +10,7 @@ pub use std::sync::Arc;
 pub use std::task::{Context, Poll};
 pub use tower_service::Service;
 pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
+#[cfg(feature = "compression")]
 pub use crate::codec::{CompressionEncoding, EnabledCompressionEncodings};
 pub use crate::service::interceptor::InterceptedService;
 pub use http_body::Body;
