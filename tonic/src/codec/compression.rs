@@ -1,5 +1,5 @@
 use super::encode::BUFFER_SIZE;
-use crate::Status;
+use crate::{metadata::MetadataValue, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::{GzDecoder, GzEncoder};
 use std::fmt;
@@ -80,10 +80,22 @@ impl CompressionEncoding {
 
         match header_value_str {
             "gzip" if gzip => Ok(Some(CompressionEncoding::Gzip)),
-            other => Err(Status::unimplemented(format!(
-                "Content is compressed with `{}` which isn't supported",
-                other
-            ))),
+            other => {
+                let mut status = Status::unimplemented(format!(
+                    "Content is compressed with `{}` which isn't supported",
+                    other
+                ));
+
+                let header_value = enabled_encodings
+                    .into_accept_encoding_header_value()
+                    .map(MetadataValue::unchecked_from_header_value)
+                    .unwrap_or_else(|| MetadataValue::from_static("identity"));
+                status
+                    .metadata_mut()
+                    .insert(ACCEPT_ENCODING_HEADER, header_value);
+
+                Err(status)
+            }
         }
     }
 

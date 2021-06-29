@@ -90,8 +90,8 @@ async fn client_enabled_server_disabled() {
         "Content is compressed with `gzip` which isn't supported"
     );
 
-    // TODO(david): include header with which encodings are supported as per the spec:
-    //
-    // > The server will then include a grpc-accept-encoding response header which specifies the
-    //   algorithms that the server accepts.
+    assert_eq!(
+        status.metadata().get("grpc-accept-encoding").unwrap(),
+        "identity"
+    );
 }
