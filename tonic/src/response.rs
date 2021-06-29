@@ -110,11 +110,12 @@ impl<T> Response<T> {
 
     /// Disable compression of the response body.
     ///
-    /// This disables compression of this response's body, even if compression is enabled on the
-    /// server.
+    /// This disables compression of the body of this response, even if compression is enabled on
+    /// the server.
     ///
-    /// **Note** this only has effect on responses to unary requests. Response streams will still
-    /// be compressed according to the configuration of the server.
+    /// **Note**: This only has effect on responses to unary requests and responses to client to
+    /// server streams. Response streams (server to client stream and bidirectional streams) will
+    /// still be compressed according to the configuration of the server.
     #[cfg(feature = "compression")]
     #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
     pub fn disable_compression(&mut self) {
