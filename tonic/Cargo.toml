@@ -33,6 +33,7 @@ transport = [
     "tracing-futures",
     "tokio/macros",
     "tokio/time",
+    "hyper-timeout",
 ]
 tls = ["transport", "tokio-rustls"]
 tls-roots-common = ["tls"]
@@ -74,6 +75,7 @@ tokio = { version = "1.0.1", features = ["net"], optional = true }
 tokio-stream = "0.1"
 tower = { version = "0.4.7", features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true }
 tracing-futures = { version = "0.2", optional = true }
+hyper-timeout = { version = "0.4", optional = true }
 
 # rustls
 tokio-rustls = { version = "0.22", optional = true }

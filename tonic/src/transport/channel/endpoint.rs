@@ -38,6 +38,7 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_interval: Option<Duration>,
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
+    pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
 }
 
@@ -115,6 +116,23 @@ impl Endpoint {
     pub fn timeout(self, dur: Duration) -> Self {
         Endpoint {
             timeout: Some(dur),
+            ..self
+        }
+    }
+
+    /// Apply a timeout to connecting to the uri.
+    ///
+    /// Defaults to no timeout.
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # use std::time::Duration;
+    /// # let mut builder = Endpoint::from_static("https://example.com");
+    /// builder.connect_timeout(Duration::from_secs(5));
+    /// ```
+    pub fn connect_timeout(self, dur: Duration) -> Self {
+        Endpoint {
+            connect_timeout: Some(dur),
             ..self
         }
     }
@@ -253,7 +271,13 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(http);
 
-        Channel::connect(connector, self.clone()).await
+        if let Some(connect_timeout) = self.connect_timeout {
+            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
+            connector.set_connect_timeout(Some(connect_timeout));
+            Channel::connect(connector, self.clone()).await
+        } else {
+            Channel::connect(connector, self.clone()).await
+        }
     }
 
     /// Create a channel from this config.
@@ -272,7 +296,13 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(http);
 
-        Ok(Channel::new(connector, self.clone()))
+        if let Some(connect_timeout) = self.connect_timeout {
+            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
+            connector.set_connect_timeout(Some(connect_timeout));
+            Ok(Channel::new(connector, self.clone()))
+        } else {
+            Ok(Channel::new(connector, self.clone()))
+        }
     }
 
     /// Connect with a custom connector.
@@ -280,6 +310,8 @@ impl Endpoint {
     /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport.
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
+    ///
+    /// The [`connect_timeout`](Endpoint::connect_timeout) will still be applied.
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
         C: MakeConnection<Uri> + Send + 'static,
@@ -293,7 +325,13 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(connector);
 
-        Channel::connect(connector, self.clone()).await
+        if let Some(connect_timeout) = self.connect_timeout {
+            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
+            connector.set_connect_timeout(Some(connect_timeout));
+            Channel::connect(connector, self.clone()).await
+        } else {
+            Channel::connect(connector, self.clone()).await
+        }
     }
 
     /// Get the endpoint uri.
@@ -328,6 +366,7 @@ impl From<Uri> for Endpoint {
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
+            connect_timeout: None,
             http2_adaptive_window: None,
         }
     }
