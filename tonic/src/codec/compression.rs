@@ -137,7 +137,8 @@ pub(crate) fn compress(
             );
             let mut out_writer = out_buf.writer();
 
-            tokio::task::block_in_place(|| std::io::copy(&mut gzip_encoder, &mut out_writer))?;
+            let len =
+                tokio::task::block_in_place(|| std::io::copy(&mut gzip_encoder, &mut out_writer))?;
         }
     }
 

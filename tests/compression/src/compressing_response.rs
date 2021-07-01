@@ -2,6 +2,8 @@ use super::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
     #[derive(Clone, Copy)]
     struct AssertCorrectAcceptEncoding<S>(S);
 
@@ -31,9 +33,6 @@ async fn client_enabled_server_enabled() {
 
     let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
@@ -52,33 +51,29 @@ async fn client_enabled_server_enabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
 
     for _ in 0..3 {
         let res = client.compress_output_unary(()).await.unwrap();
         assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
-        let bytes_sent = bytes_sent_counter.load(Relaxed);
+        let bytes_sent = bytes_sent_counter.load(SeqCst);
         assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_disabled() {
-    let svc = test_server::TestServer::new(Svc::default());
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
+    let svc = test_server::TestServer::new(Svc::default());
 
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
@@ -98,29 +93,28 @@ async fn client_enabled_server_disabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
 
     let res = client.compress_output_unary(()).await.unwrap();
 
     assert!(res.metadata().get("grpc-encoding").is_none());
 
-    let bytes_sent = bytes_sent_counter.load(Relaxed);
+    let bytes_sent = bytes_sent_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_disabled() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
     #[derive(Clone, Copy)]
     struct AssertCorrectAcceptEncoding<S>(S);
 
@@ -147,9 +141,6 @@ async fn client_disabled() {
 
     let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
-
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
@@ -168,33 +159,29 @@ async fn client_disabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel);
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await);
 
     let res = client.compress_output_unary(()).await.unwrap();
 
     assert!(res.metadata().get("grpc-encoding").is_none());
 
-    let bytes_sent = bytes_sent_counter.load(Relaxed);
+    let bytes_sent = bytes_sent_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn server_replying_with_unsupported_encoding() {
-    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
+    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
     fn add_weird_content_encoding<B>(mut response: http::Response<B>) -> http::Response<B> {
         response
@@ -211,17 +198,14 @@ async fn server_replying_with_unsupported_encoding() {
                     .into_inner(),
             )
             .add_service(svc)
-            .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                MockStream(server),
+            )]))
             .await
             .unwrap();
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
     let status: Status = client.compress_output_unary(()).await.unwrap_err();
 
     assert_eq!(status.code(), tonic::Code::Unimplemented);
@@ -233,13 +217,12 @@ async fn server_replying_with_unsupported_encoding() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn disabling_compression_on_single_response() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
     let svc = test_server::TestServer::new(Svc {
         disable_compressing_on_response: true,
     })
     .send_gzip();
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
 
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
@@ -258,34 +241,30 @@ async fn disabling_compression_on_single_response() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
 
     let res = client.compress_output_unary(()).await.unwrap();
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
-    let bytes_sent = bytes_sent_counter.load(Relaxed);
+    let bytes_sent = bytes_sent_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
     let svc = test_server::TestServer::new(Svc {
         disable_compressing_on_response: true,
     })
     .send_gzip();
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
 
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
@@ -304,18 +283,15 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 
@@ -328,25 +304,24 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(Relaxed)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(bytes_sent_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
 
     stream
         .next()
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(Relaxed)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(bytes_sent_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn disabling_compression_on_response_from_client_stream() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
     let svc = test_server::TestServer::new(Svc {
         disable_compressing_on_response: true,
     })
     .send_gzip();
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
 
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
@@ -365,24 +340,21 @@ async fn disabling_compression_on_response_from_client_stream() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
 
     let stream = futures::stream::iter(vec![]);
     let req = Request::new(Box::pin(stream));
 
     let res = client.compress_output_client_stream(req).await.unwrap();
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
-    let bytes_sent = bytes_sent_counter.load(Relaxed);
+    let bytes_sent = bytes_sent_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }

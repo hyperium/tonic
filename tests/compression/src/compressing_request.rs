@@ -3,10 +3,9 @@ use http_body::Body as _;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
-    let svc = test_server::TestServer::new(Svc::default()).accept_gzip();
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
+    let svc = test_server::TestServer::new(Svc::default()).accept_gzip();
 
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
@@ -30,18 +29,15 @@ async fn client_enabled_server_enabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).send_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).send_gzip();
 
     for _ in 0..3 {
         client
@@ -50,32 +46,28 @@ async fn client_enabled_server_enabled() {
             })
             .await
             .unwrap();
-        let bytes_sent = bytes_sent_counter.load(Relaxed);
+        let bytes_sent = bytes_sent_counter.load(SeqCst);
         assert!(dbg!(bytes_sent) < UNCOMPRESSED_MIN_BODY_SIZE);
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_disabled() {
-    let svc = test_server::TestServer::new(Svc::default());
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
+    let svc = test_server::TestServer::new(Svc::default());
 
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                MockStream(server),
+            )]))
             .await
             .unwrap();
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel).send_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await).send_gzip();
 
     let status = client
         .compress_input_unary(SomeData {

@@ -2,12 +2,11 @@ use super::*;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
     let svc = test_server::TestServer::new(Svc::default())
         .accept_gzip()
         .send_gzip();
-
-    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
-    let addr = listener.local_addr().unwrap();
 
     let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
 
@@ -33,18 +32,15 @@ async fn client_enabled_server_enabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
                 .await
                 .unwrap();
         }
     });
 
-    let channel = Channel::builder(format!("http://{}", addr).parse().unwrap())
-        .connect()
-        .await
-        .unwrap();
-
-    let mut client = test_client::TestClient::new(channel)
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
         .send_gzip()
         .accept_gzip();
 
@@ -73,6 +69,6 @@ async fn client_enabled_server_enabled() {
         .expect("stream empty")
         .expect("item was error");
 
-    let bytes_sent = bytes_sent_counter.load(Relaxed);
-    assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
+    let bytes_sent = bytes_sent_counter.load(SeqCst);
+    assert!(dbg!(bytes_sent) < UNCOMPRESSED_MIN_BODY_SIZE);
 }
