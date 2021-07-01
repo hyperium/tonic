@@ -69,7 +69,7 @@ pub struct InterceptedService<S, F> {
 }
 
 impl<S, F> InterceptedService<S, F> {
-    /// Create a new `InterceptedService` thats wraps `S` and intercepts each request with the
+    /// Create a new `InterceptedService` that wraps `S` and intercepts each request with the
     /// function `F`.
     pub fn new(service: S, f: F) -> Self
     where
@@ -102,8 +102,8 @@ where
     type Future = ResponseFuture<S::Future>;
 
     #[inline]
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {

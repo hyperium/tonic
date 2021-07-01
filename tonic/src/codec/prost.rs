@@ -116,7 +116,7 @@ mod tests {
 
         let msg = Vec::from(&[0u8; 1024][..]);
 
-        let messages = std::iter::repeat(Ok::<_, Status>(msg)).take(10000);
+        let messages = std::iter::repeat_with(move || Ok::<_, Status>(msg.clone())).take(10000);
         let source = futures_util::stream::iter(messages);
 
         let body = encode_server(encoder, source);

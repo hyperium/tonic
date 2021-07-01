@@ -68,7 +68,6 @@ async fn origin_not_allowed() {
     assert_eq!(res.status(), StatusCode::FORBIDDEN);
 }
 
-
 async fn spawn(allowed_origin: &str) -> String {
     let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = TcpListener::bind(addr).await.expect("listener");

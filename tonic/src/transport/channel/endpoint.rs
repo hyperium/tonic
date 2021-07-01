@@ -39,6 +39,7 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
     pub(crate) connect_timeout: Option<Duration>,
+    pub(crate) http2_adaptive_window: Option<bool>,
 }
 
 impl Endpoint {
@@ -249,6 +250,14 @@ impl Endpoint {
         }
     }
 
+    /// Sets whether to use an adaptive flow control. Uses `hyper`'s default otherwise.
+    pub fn http2_adaptive_window(self, enabled: bool) -> Self {
+        Endpoint {
+            http2_adaptive_window: Some(enabled),
+            ..self
+        }
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
@@ -358,6 +367,7 @@ impl From<Uri> for Endpoint {
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
             connect_timeout: None,
+            http2_adaptive_window: None,
         }
     }
 }

@@ -164,7 +164,7 @@ impl<T> Grpc<T> {
             .inner
             .call(request)
             .await
-            .map_err(|err| Status::from_error(&*(err.into())))?;
+            .map_err(|err| Status::from_error(err.into()))?;
 
         let status_code = response.status();
         let trailers_only_status = Status::from_header_map(response.headers());

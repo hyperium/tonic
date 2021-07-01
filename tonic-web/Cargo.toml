@@ -1,6 +1,31 @@
-[workspace]
-members = [
-    "tonic-web",
-    "interop",
-    "tests/integration"
-]
+[package]
+name = "tonic-web"
+version = "0.1.0"
+authors = ["Juan Alvarez <alce@me.com>"]
+edition = "2018"
+license = "MIT"
+documentation = "https://docs.rs/tonic-web/0.1.0/tonic-web/"
+repository = "https://github.com/hyperium/tonic"
+homepage = "https://github.com/hyperium/tonic"
+description = """
+grpc-web protocol translation for tonic services.
+"""
+readme = "README.md"
+categories = ["network-programming", "asynchronous"]
+keywords = ["rpc", "grpc", "grpc-web"]
+
+[dependencies]
+tonic = { path = "../tonic", default-features = false, features = ["transport"] }
+http = "0.2"
+base64 = "0.13"
+futures-core = "0.3"
+bytes = "1.0"
+hyper = "0.14"
+http-body = "0.4"
+tower-service = "0.3"
+tracing = "0.1"
+pin-project = "1"
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt"] }
+tonic = { path = "../tonic", default-features = false, features = ["transport", "tls"] }

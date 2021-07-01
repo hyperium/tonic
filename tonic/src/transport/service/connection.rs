@@ -49,6 +49,10 @@ impl Connection {
             settings.http2_keep_alive_while_idle(val);
         }
 
+        if let Some(val) = endpoint.http2_adaptive_window {
+            settings.http2_adaptive_window(val);
+        }
+
         let stack = ServiceBuilder::new()
             .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
             .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))

@@ -1,6 +1,8 @@
 use crate::metadata::{MetadataMap, MetadataValue};
+#[cfg(all(feature = "transport", feature = "tls"))]
+use crate::transport::server::TlsConnectInfo;
 #[cfg(feature = "transport")]
-use crate::transport::Certificate;
+use crate::transport::{server::TcpConnectInfo, Certificate};
 use crate::Extensions;
 use futures_core::Stream;
 #[cfg(feature = "transport")]
@@ -13,13 +15,6 @@ pub struct Request<T> {
     metadata: MetadataMap,
     message: T,
     extensions: Extensions,
-}
-
-#[derive(Clone)]
-pub(crate) struct ConnectionInfo {
-    pub(crate) remote_addr: Option<SocketAddr>,
-    #[cfg(feature = "transport")]
-    pub(crate) peer_certs: Option<Arc<Vec<Certificate>>>,
 }
 
 /// Trait implemented by RPC request types.
@@ -203,7 +198,32 @@ impl<T> Request<T> {
     /// does not implement `Connected`. This currently,
     /// only works on the server side.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        self.get::<ConnectionInfo>()?.remote_addr
+        #[cfg(feature = "transport")]
+        {
+            #[cfg(feature = "tls")]
+            {
+                self.extensions()
+                    .get::<TcpConnectInfo>()
+                    .and_then(|i| i.remote_addr())
+                    .or_else(|| {
+                        self.extensions()
+                            .get::<TlsConnectInfo<TcpConnectInfo>>()
+                            .and_then(|i| i.get_ref().remote_addr())
+                    })
+            }
+
+            #[cfg(not(feature = "tls"))]
+            {
+                self.extensions()
+                    .get::<TcpConnectInfo>()
+                    .and_then(|i| i.remote_addr())
+            }
+        }
+
+        #[cfg(not(feature = "transport"))]
+        {
+            None
+        }
     }
 
     /// Get the peer certificates of the connected client.
@@ -215,11 +235,17 @@ impl<T> Request<T> {
     #[cfg(feature = "transport")]
     #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
     pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
-        self.get::<ConnectionInfo>()?.peer_certs.clone()
-    }
+        #[cfg(feature = "tls")]
+        {
+            self.extensions()
+                .get::<TlsConnectInfo<TcpConnectInfo>>()
+                .and_then(|i| i.peer_certs())
+        }
 
-    pub(crate) fn get<I: Send + Sync + 'static>(&self) -> Option<&I> {
-        self.extensions.get::<I>()
+        #[cfg(not(feature = "tls"))]
+        {
+            None
+        }
     }
 
     /// Set the max duration the request is allowed to take.

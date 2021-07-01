@@ -67,15 +67,14 @@ where
                 let response = response.map(MaybeEmptyBody::full);
                 Poll::Ready(Ok(response))
             }
-            Err(err) => {
-                if let Some(status) = Status::try_from_error(&*err) {
+            Err(err) => match Status::try_from_error(err) {
+                Ok(status) => {
                     let mut res = Response::new(MaybeEmptyBody::empty());
                     status.add_header(res.headers_mut()).unwrap();
                     Poll::Ready(Ok(res))
-                } else {
-                    Poll::Ready(Err(err))
                 }
-            }
+                Err(err) => Poll::Ready(Err(err)),
+            },
         }
     }
 }

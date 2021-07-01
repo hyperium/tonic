@@ -18,7 +18,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 pub(crate) fn tcp_incoming<IO, IE, L>(
     incoming: impl Stream<Item = Result<IO, IE>>,
     _server: Server<L>,
-) -> impl Stream<Item = Result<ServerIo, crate::Error>>
+) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
@@ -26,10 +26,8 @@ where
     async_stream::try_stream! {
         futures_util::pin_mut!(incoming);
 
-
         while let Some(stream) = incoming.try_next().await? {
-
-            yield ServerIo::new(stream);
+            yield ServerIo::new_io(stream);
         }
     }
 }
@@ -38,7 +36,7 @@ where
 pub(crate) fn tcp_incoming<IO, IE, L>(
     incoming: impl Stream<Item = Result<IO, IE>>,
     server: Server<L>,
-) -> impl Stream<Item = Result<ServerIo, crate::Error>>
+) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
@@ -57,12 +55,12 @@ where
 
                         let accept = tokio::spawn(async move {
                             let io = tls.accept(stream).await?;
-                            Ok(ServerIo::new(io))
+                            Ok(ServerIo::new_tls_io(io))
                         });
 
                         tasks.push(accept);
                     } else {
-                        yield ServerIo::new(stream);
+                        yield ServerIo::new_io(stream);
                     }
                 }
 
@@ -86,7 +84,7 @@ where
 async fn select<IO, IE>(
     incoming: &mut (impl Stream<Item = Result<IO, IE>> + Unpin),
     tasks: &mut futures_util::stream::futures_unordered::FuturesUnordered<
-        tokio::task::JoinHandle<Result<ServerIo, crate::Error>>,
+        tokio::task::JoinHandle<Result<ServerIo<IO>, crate::Error>>,
     >,
 ) -> SelectOutput<IO>
 where
@@ -124,7 +122,7 @@ where
 #[cfg(feature = "tls")]
 enum SelectOutput<A> {
     Incoming(A),
-    Io(ServerIo),
+    Io(ServerIo<A>),
     Err(crate::Error),
     Done,
 }
