@@ -8,7 +8,8 @@ async fn client_enabled_server_enabled() {
         .accept_gzip()
         .send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let request_bytes_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     fn assert_right_encoding<B>(req: http::Request<B>) -> http::Request<B> {
         assert_eq!(req.headers().get("grpc-encoding").unwrap(), "gzip");
@@ -16,17 +17,20 @@ async fn client_enabled_server_enabled() {
     }
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let request_bytes_counter = request_bytes_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
                     ServiceBuilder::new()
                         .map_request(assert_right_encoding)
-                        .layer(measure_request_body_size_layer(bytes_sent_counter.clone()))
+                        .layer(measure_request_body_size_layer(
+                            request_bytes_counter.clone(),
+                        ))
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -69,6 +73,6 @@ async fn client_enabled_server_enabled() {
         .expect("stream empty")
         .expect("item was error");
 
-    let bytes_sent = bytes_sent_counter.load(SeqCst);
-    assert!(dbg!(bytes_sent) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(request_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
 }

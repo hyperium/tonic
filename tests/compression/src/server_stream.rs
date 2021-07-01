@@ -7,10 +7,10 @@ async fn client_enabled_server_enabled() {
 
     let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -18,7 +18,7 @@ async fn client_enabled_server_enabled() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -45,14 +45,14 @@ async fn client_enabled_server_enabled() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
 
     stream
         .next()
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -61,10 +61,10 @@ async fn client_disabled_server_enabled() {
 
     let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -72,7 +72,7 @@ async fn client_disabled_server_enabled() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -99,7 +99,7 @@ async fn client_disabled_server_enabled() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(SeqCst)) > UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(response_bytes_counter.load(SeqCst)) > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -108,10 +108,10 @@ async fn client_enabled_server_disabled() {
 
     let svc = test_server::TestServer::new(Svc::default());
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -119,7 +119,7 @@ async fn client_enabled_server_disabled() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -146,5 +146,5 @@ async fn client_enabled_server_disabled() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(SeqCst)) > UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(response_bytes_counter.load(SeqCst)) > UNCOMPRESSED_MIN_BODY_SIZE);
 }

@@ -33,10 +33,10 @@ async fn client_enabled_server_enabled() {
 
     let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -45,7 +45,7 @@ async fn client_enabled_server_enabled() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -64,7 +64,7 @@ async fn client_enabled_server_enabled() {
     for _ in 0..3 {
         let res = client.compress_output_unary(()).await.unwrap();
         assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
-        let bytes_sent = bytes_sent_counter.load(SeqCst);
+        let bytes_sent = response_bytes_counter.load(SeqCst);
         assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
     }
 }
@@ -75,10 +75,10 @@ async fn client_enabled_server_disabled() {
 
     let svc = test_server::TestServer::new(Svc::default());
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 // no compression enable on the server so responses should not be compressed
@@ -87,7 +87,7 @@ async fn client_enabled_server_disabled() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -107,7 +107,7 @@ async fn client_enabled_server_disabled() {
 
     assert!(res.metadata().get("grpc-encoding").is_none());
 
-    let bytes_sent = bytes_sent_counter.load(SeqCst);
+    let bytes_sent = response_bytes_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
@@ -141,10 +141,10 @@ async fn client_disabled() {
 
     let svc = test_server::TestServer::new(Svc::default()).send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -153,7 +153,7 @@ async fn client_disabled() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -173,7 +173,7 @@ async fn client_disabled() {
 
     assert!(res.metadata().get("grpc-encoding").is_none());
 
-    let bytes_sent = bytes_sent_counter.load(SeqCst);
+    let bytes_sent = response_bytes_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
@@ -224,10 +224,10 @@ async fn disabling_compression_on_single_response() {
     })
     .send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -235,7 +235,7 @@ async fn disabling_compression_on_single_response() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -253,7 +253,7 @@ async fn disabling_compression_on_single_response() {
 
     let res = client.compress_output_unary(()).await.unwrap();
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
-    let bytes_sent = bytes_sent_counter.load(SeqCst);
+    let bytes_sent = response_bytes_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
@@ -266,10 +266,10 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
     })
     .send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -277,7 +277,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -304,14 +304,14 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
 
     stream
         .next()
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(bytes_sent_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -323,10 +323,10 @@ async fn disabling_compression_on_response_from_client_stream() {
     })
     .send_gzip();
 
-    let bytes_sent_counter = Arc::new(AtomicUsize::new(0));
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     tokio::spawn({
-        let bytes_sent_counter = bytes_sent_counter.clone();
+        let response_bytes_counter = response_bytes_counter.clone();
         async move {
             Server::builder()
                 .layer(
@@ -334,7 +334,7 @@ async fn disabling_compression_on_response_from_client_stream() {
                         .layer(MapResponseBodyLayer::new(move |body| {
                             util::CountBytesBody {
                                 inner: body,
-                                counter: bytes_sent_counter.clone(),
+                                counter: response_bytes_counter.clone(),
                             }
                         }))
                         .into_inner(),
@@ -355,6 +355,6 @@ async fn disabling_compression_on_response_from_client_stream() {
 
     let res = client.compress_output_client_stream(req).await.unwrap();
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
-    let bytes_sent = bytes_sent_counter.load(SeqCst);
+    let bytes_sent = response_bytes_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
