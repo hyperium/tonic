@@ -124,6 +124,7 @@ impl AsyncWrite for MockStream {
     }
 }
 
+#[allow(dead_code)]
 pub async fn mock_io_channel(client: tokio::io::DuplexStream) -> Channel {
     let mut client = Some(client);
 
