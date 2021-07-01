@@ -88,6 +88,7 @@ pub(crate) struct EncodeBody<S> {
     inner: S,
     error: Option<Status>,
     role: Role,
+    is_end_stream: bool,
 }
 
 impl<S> EncodeBody<S>
@@ -99,6 +100,7 @@ where
             inner,
             error: None,
             role: Role::Client,
+            is_end_stream: false,
         }
     }
 
@@ -107,6 +109,7 @@ where
             inner,
             error: None,
             role: Role::Server,
+            is_end_stream: false,
         }
     }
 }
@@ -119,7 +122,7 @@ where
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {
-        false
+        self.is_end_stream
     }
 
     fn poll_data(
@@ -148,7 +151,13 @@ where
             Role::Client => Poll::Ready(Ok(None)),
             Role::Server => {
                 let self_proj = self.project();
+
+                if *self_proj.is_end_stream {
+                    return Poll::Ready(Ok(None));
+                }
+
                 let status = if let Some(status) = self_proj.error.take() {
+                    *self_proj.is_end_stream = true;
                     status
                 } else {
                     Status::new(Code::Ok, "")
