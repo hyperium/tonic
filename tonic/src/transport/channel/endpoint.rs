@@ -334,6 +334,27 @@ impl Endpoint {
         }
     }
 
+    /// Connect with a custom connector lazily.
+    ///
+    /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport.
+    /// See the `uds` example for an example on how to use this function to build channel that
+    /// uses a Unix socket transport.
+    pub async fn connect_with_connector_lazy<C>(&self, connector: C) -> Result<Channel, Error>
+    where
+        C: MakeConnection<Uri> + Send + 'static,
+        C::Connection: Unpin + Send + 'static,
+        C::Future: Send + 'static,
+        crate::Error: From<C::Error> + Send + 'static,
+    {
+        #[cfg(feature = "tls")]
+        let connector = service::connector(connector, self.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = service::connector(connector);
+
+        Ok(Channel::new(connector, self.clone()))
+    }
+
     /// Get the endpoint uri.
     ///
     /// ```
