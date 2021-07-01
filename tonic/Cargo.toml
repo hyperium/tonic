@@ -39,7 +39,7 @@ tls-roots-common = ["tls"]
 tls-roots = ["tls-roots-common", "rustls-native-certs"]
 tls-webpki-roots = ["tls-roots-common", "webpki-roots"]
 prost = ["prost1", "prost-derive"]
-compression = ["tokio/rt-multi-thread", "flate2"]
+compression = ["flate2"]
 
 # [[bench]]
 # name = "bench_main"

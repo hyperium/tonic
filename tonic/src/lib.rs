@@ -30,8 +30,7 @@
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //! - `compression`: Enables compressing requests, responses, and streams. Note
 //! that you must enable the `compression` feature on both `tonic` and
-//! `tonic-build` to use it. Depends on `tokio`'s multi-threaded runtime and
-//! [flate2]. Not enabled by default.
+//! `tonic-build` to use it. Depends on [flate2]. Not enabled by default.
 //!
 //! # Structure
 //!

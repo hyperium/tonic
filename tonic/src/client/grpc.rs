@@ -86,7 +86,7 @@ impl<T> Grpc<T> {
     #[cfg(not(feature = "compression"))]
     pub fn send_gzip(self) -> Self {
         panic!(
-            "`send_gzip` called on a server but the `compression` feature is not enabled on tonic"
+            "`send_gzip` called on a client but the `compression` feature is not enabled on tonic"
         );
     }
 

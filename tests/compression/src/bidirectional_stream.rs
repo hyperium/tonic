@@ -50,7 +50,7 @@ async fn client_enabled_server_enabled() {
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
     let stream = futures::stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
-    let req = Request::new(Box::pin(stream));
+    let req = Request::new(stream);
 
     let res = client
         .compress_input_output_bidirectional_stream(req)
@@ -73,6 +73,6 @@ async fn client_enabled_server_enabled() {
         .expect("stream empty")
         .expect("item was error");
 
-    assert!(dbg!(request_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
-    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(request_bytes_counter.load(SeqCst) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(response_bytes_counter.load(SeqCst) < UNCOMPRESSED_MIN_BODY_SIZE);
 }

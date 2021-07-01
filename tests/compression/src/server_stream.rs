@@ -45,14 +45,14 @@ async fn client_enabled_server_enabled() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(response_bytes_counter.load(SeqCst) < UNCOMPRESSED_MIN_BODY_SIZE);
 
     stream
         .next()
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(response_bytes_counter.load(SeqCst)) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(response_bytes_counter.load(SeqCst) < UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -99,7 +99,7 @@ async fn client_disabled_server_enabled() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(response_bytes_counter.load(SeqCst)) > UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(response_bytes_counter.load(SeqCst) > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -146,5 +146,5 @@ async fn client_enabled_server_disabled() {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(dbg!(response_bytes_counter.load(SeqCst)) > UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(response_bytes_counter.load(SeqCst) > UNCOMPRESSED_MIN_BODY_SIZE);
 }

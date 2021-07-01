@@ -267,7 +267,6 @@ where
         S: ClientStreamingService<T::Decode, Response = T::Encode>,
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
-        T: std::fmt::Debug,
     {
         #[cfg(feature = "compression")]
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(

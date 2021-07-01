@@ -44,7 +44,7 @@ async fn client_enabled_server_enabled() {
     client.compress_input_client_stream(req).await.unwrap();
 
     let bytes_sent = request_bytes_counter.load(SeqCst);
-    assert!(dbg!(bytes_sent) < UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -90,7 +90,7 @@ async fn client_disabled_server_enabled() {
     client.compress_input_client_stream(req).await.unwrap();
 
     let bytes_sent = request_bytes_counter.load(SeqCst);
-    assert!(dbg!(bytes_sent) > UNCOMPRESSED_MIN_BODY_SIZE);
+    assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
 #[tokio::test(flavor = "multi_thread")]
