@@ -336,10 +336,12 @@ impl Endpoint {
 
     /// Connect with a custom connector lazily.
     ///
-    /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport.
+    /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport
+    /// connec to it lazily.
+    ///
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
-    pub async fn connect_with_connector_lazy<C>(&self, connector: C) -> Result<Channel, Error>
+    pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Result<Channel, Error>
     where
         C: MakeConnection<Uri> + Send + 'static,
         C::Connection: Unpin + Send + 'static,
