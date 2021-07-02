@@ -28,6 +28,9 @@
 //! - `tls-webpki-roots`: Add the standard trust roots from the `webpki-roots` crate to
 //! `rustls`-based gRPC clients. Not enabled by default.
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
+//! - `compression`: Enables compressing requests, responses, and streams. Note
+//! that you must enable the `compression` feature on both `tonic` and
+//! `tonic-build` to use it. Depends on [flate2]. Not enabled by default.
 //!
 //! # Structure
 //!
@@ -62,6 +65,7 @@
 //! [`rustls`]: https://docs.rs/rustls
 //! [`client`]: client/index.html
 //! [`transport`]: transport/index.html
+//! [flate2]: https://crates.io/crates/flate2
 
 #![recursion_limit = "256"]
 #![allow(clippy::inconsistent_struct_constructor)]

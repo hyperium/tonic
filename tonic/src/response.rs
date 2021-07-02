@@ -107,6 +107,21 @@ impl<T> Response<T> {
     pub fn extensions_mut(&mut self) -> &mut Extensions {
         &mut self.extensions
     }
+
+    /// Disable compression of the response body.
+    ///
+    /// This disables compression of the body of this response, even if compression is enabled on
+    /// the server.
+    ///
+    /// **Note**: This only has effect on responses to unary requests and responses to client to
+    /// server streams. Response streams (server to client stream and bidirectional streams) will
+    /// still be compressed according to the configuration of the server.
+    #[cfg(feature = "compression")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
+    pub fn disable_compression(&mut self) {
+        self.extensions_mut()
+            .insert(crate::codec::compression::SingleMessageCompressionOverride::Disable);
+    }
 }
 
 #[cfg(test)]

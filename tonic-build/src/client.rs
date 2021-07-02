@@ -20,8 +20,6 @@ pub fn generate<T: Service>(
     let connect = generate_connect(&service_ident);
     let service_doc = generate_doc_comments(service.comment());
 
-    let struct_debug = format!("{} {{{{ ... }}}}", &service_ident);
-
     quote! {
         /// Generated client implementations.
         pub mod #client_mod {
@@ -29,6 +27,7 @@ pub fn generate<T: Service>(
             use tonic::codegen::*;
 
             #service_doc
+            #[derive(Debug, Clone)]
             pub struct #service_ident<T> {
                 inner: tonic::client::Grpc<T>,
             }
@@ -59,21 +58,22 @@ pub fn generate<T: Service>(
                     #service_ident::new(InterceptedService::new(inner, interceptor))
                 }
 
+                /// Compress requests with `gzip`.
+                ///
+                /// This requires the server to support it otherwise it might respond with an
+                /// error.
+                pub fn send_gzip(mut self) -> Self {
+                    self.inner = self.inner.send_gzip();
+                    self
+                }
+
+                /// Enable decompressing responses with `gzip`.
+                pub fn accept_gzip(mut self) -> Self {
+                    self.inner = self.inner.accept_gzip();
+                    self
+                }
+
                 #methods
-            }
-
-            impl<T: Clone> Clone for #service_ident<T> {
-                fn clone(&self) -> Self {
-                    Self {
-                        inner: self.inner.clone(),
-                    }
-                }
-            }
-
-            impl<T> std::fmt::Debug for #service_ident<T> {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                   write!(f, #struct_debug)
-                }
             }
         }
     }
@@ -153,10 +153,10 @@ fn generate_unary<T: Method>(
             &mut self,
             request: impl tonic::IntoRequest<#request>,
         ) -> Result<tonic::Response<#response>, tonic::Status> {
-            self.inner.ready().await.map_err(|e| {
-                        tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
-            })?;
-            let codec = #codec_name::default();
+           self.inner.ready().await.map_err(|e| {
+               tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+           })?;
+           let codec = #codec_name::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            self.inner.unary(request.into_request(), path, codec).await
         }
@@ -204,7 +204,7 @@ fn generate_client_streaming<T: Method>(
         pub async fn #ident(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = #request>
-        ) -> Result<tonic::Response<#response>, tonic::Status> {
+        ) -> Result<tonic::Response<#response>, tonic::Status> where T: std::fmt::Debug {
             self.inner.ready().await.map_err(|e| {
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;

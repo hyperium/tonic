@@ -1,0 +1,24 @@
+[package]
+name = "compression"
+version = "0.1.0"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+edition = "2018"
+publish = false
+license = "MIT"
+
+[dependencies]
+tonic = { path = "../../tonic", features = ["compression"] }
+prost = "0.7"
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "net"] }
+tower = { version = "0.4", features = [] }
+http-body = "0.4"
+http = "0.2"
+tokio-stream = { version = "0.1.5", features = ["net"] }
+tower-http = { version = "0.1", features = ["map-response-body", "map-request-body"] }
+bytes = "1"
+futures = "0.3"
+pin-project = "1.0"
+hyper = "0.14"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build", features = ["compression"] }

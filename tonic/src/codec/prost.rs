@@ -77,7 +77,10 @@ fn from_decode_error(error: prost1::DecodeError) -> crate::Status {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::{encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming};
+    use crate::codec::compression::SingleMessageCompressionOverride;
+    use crate::codec::{
+        encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
+    };
     use crate::Status;
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
@@ -92,7 +95,7 @@ mod tests {
 
         let mut buf = BytesMut::new();
 
-        buf.reserve(msg.len() + 5);
+        buf.reserve(msg.len() + HEADER_SIZE);
         buf.put_u8(0);
         buf.put_u32(msg.len() as u32);
 
@@ -100,7 +103,7 @@ mod tests {
 
         let body = body::MockBody::new(&buf[..], 10005, 0);
 
-        let mut stream = Streaming::new_request(decoder, body);
+        let mut stream = Streaming::new_request(decoder, body, None);
 
         let mut i = 0usize;
         while let Some(output_msg) = stream.message().await.unwrap() {
@@ -119,7 +122,12 @@ mod tests {
         let messages = std::iter::repeat_with(move || Ok::<_, Status>(msg.clone())).take(10000);
         let source = futures_util::stream::iter(messages);
 
-        let body = encode_server(encoder, source);
+        let body = encode_server(
+            encoder,
+            source,
+            None,
+            SingleMessageCompressionOverride::default(),
+        );
 
         futures_util::pin_mut!(body);
 
@@ -216,6 +224,7 @@ mod tests {
                 }
             }
 
+            #[allow(clippy::drop_ref)]
             fn poll_trailers(
                 self: Pin<&mut Self>,
                 cx: &mut Context<'_>,

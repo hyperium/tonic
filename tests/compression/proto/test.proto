@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package test;
+
+import "google/protobuf/empty.proto";
+
+service Test {
+  rpc CompressOutputUnary(google.protobuf.Empty) returns (SomeData);
+  rpc CompressInputUnary(SomeData) returns (google.protobuf.Empty);
+  rpc CompressOutputServerStream(google.protobuf.Empty) returns (stream SomeData);
+  rpc CompressInputClientStream(stream SomeData) returns (google.protobuf.Empty);
+  rpc CompressOutputClientStream(stream SomeData) returns (SomeData);
+  rpc CompressInputOutputBidirectionalStream(stream SomeData) returns (stream SomeData);
+}
+
+message SomeData {
+  // include a bunch of data so there actually is something to compress
+  bytes data = 1;
+}

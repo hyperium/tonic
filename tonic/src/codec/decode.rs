@@ -1,4 +1,6 @@
-use super::{DecodeBuf, Decoder};
+#[cfg(feature = "compression")]
+use super::compression::{decompress, CompressionEncoding};
+use super::{DecodeBuf, Decoder, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -25,6 +27,10 @@ pub struct Streaming<T> {
     direction: Direction,
     buf: BytesMut,
     trailers: Option<MetadataMap>,
+    #[cfg(feature = "compression")]
+    decompress_buf: BytesMut,
+    #[cfg(feature = "compression")]
+    encoding: Option<CompressionEncoding>,
 }
 
 impl<T> Unpin for Streaming<T> {}
@@ -43,13 +49,24 @@ enum Direction {
 }
 
 impl<T> Streaming<T> {
-    pub(crate) fn new_response<B, D>(decoder: D, body: B, status_code: StatusCode) -> Self
+    pub(crate) fn new_response<B, D>(
+        decoder: D,
+        body: B,
+        status_code: StatusCode,
+        #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Response(status_code))
+        Self::new(
+            decoder,
+            body,
+            Direction::Response(status_code),
+            #[cfg(feature = "compression")]
+            encoding,
+        )
     }
 
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
@@ -58,20 +75,41 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::EmptyResponse)
+        Self::new(
+            decoder,
+            body,
+            Direction::EmptyResponse,
+            #[cfg(feature = "compression")]
+            None,
+        )
     }
 
     #[doc(hidden)]
-    pub fn new_request<B, D>(decoder: D, body: B) -> Self
+    pub fn new_request<B, D>(
+        decoder: D,
+        body: B,
+        #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
     {
-        Self::new(decoder, body, Direction::Request)
+        Self::new(
+            decoder,
+            body,
+            Direction::Request,
+            #[cfg(feature = "compression")]
+            encoding,
+        )
     }
 
-    fn new<B, D>(decoder: D, body: B, direction: Direction) -> Self
+    fn new<B, D>(
+        decoder: D,
+        body: B,
+        direction: Direction,
+        #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
+    ) -> Self
     where
         B: Body + Send + Sync + 'static,
         B::Error: Into<crate::Error>,
@@ -87,6 +125,10 @@ impl<T> Streaming<T> {
             direction,
             buf: BytesMut::with_capacity(BUFFER_SIZE),
             trailers: None,
+            #[cfg(feature = "compression")]
+            decompress_buf: BytesMut::new(),
+            #[cfg(feature = "compression")]
+            encoding,
         }
     }
 }
@@ -156,18 +198,21 @@ impl<T> Streaming<T> {
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
         if let State::ReadHeader = self.state {
-            if self.buf.remaining() < 5 {
+            if self.buf.remaining() < HEADER_SIZE {
                 return Ok(None);
             }
 
             let is_compressed = match self.buf.get_u8() {
                 0 => false,
                 1 => {
-                    trace!("message compressed, compression not supported yet");
-                    return Err(Status::new(
-                        Code::Unimplemented,
-                        "Message compressed, compression not supported yet.".to_string(),
-                    ));
+                    if cfg!(feature = "compression") {
+                        true
+                    } else {
+                        return Err(Status::new(
+                            Code::Unimplemented,
+                            "Message compressed, compression support not enabled.".to_string(),
+                        ));
+                    }
                 }
                 f => {
                     trace!("unexpected compression flag");
@@ -191,17 +236,51 @@ impl<T> Streaming<T> {
             }
         }
 
-        if let State::ReadBody { len, .. } = &self.state {
+        if let State::ReadBody { len, compression } = &self.state {
             // if we haven't read enough of the message then return and keep
             // reading
             if self.buf.remaining() < *len || self.buf.len() < *len {
                 return Ok(None);
             }
 
-            return match self
-                .decoder
-                .decode(&mut DecodeBuf::new(&mut self.buf, *len))
-            {
+            let decoding_result = if *compression {
+                #[cfg(feature = "compression")]
+                {
+                    self.decompress_buf.clear();
+
+                    if let Err(err) = decompress(
+                        self.encoding.unwrap_or_else(|| {
+                            unreachable!("message was compressed but `Streaming.encoding` was `None`. This is a bug in Tonic. Please file an issue")
+                        }),
+                        &mut self.buf,
+                        &mut self.decompress_buf,
+                        *len,
+                    ) {
+                        let message = if let Direction::Response(status) = self.direction {
+                            format!(
+                                "Error decompressing: {}, while receiving response with status: {}",
+                                err, status
+                            )
+                        } else {
+                            format!("Error decompressing: {}, while sending request", err)
+                        };
+                        return Err(Status::new(Code::Internal, message));
+                    }
+                    let decompressed_len = self.decompress_buf.len();
+                    self.decoder.decode(&mut DecodeBuf::new(
+                        &mut self.decompress_buf,
+                        decompressed_len,
+                    ))
+                }
+
+                #[cfg(not(feature = "compression"))]
+                unreachable!("should not take this branch if compression is disabled")
+            } else {
+                self.decoder
+                    .decode(&mut DecodeBuf::new(&mut self.buf, *len))
+            };
+
+            return match decoding_result {
                 Ok(Some(msg)) => {
                     self.state = State::ReadHeader;
                     Ok(Some(msg))

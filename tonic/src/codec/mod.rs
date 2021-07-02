@@ -4,20 +4,33 @@
 //! and a protobuf codec based on prost.
 
 mod buffer;
+#[cfg(feature = "compression")]
+pub(crate) mod compression;
 mod decode;
 mod encode;
 #[cfg(feature = "prost")]
 mod prost;
 
+use crate::Status;
 use std::io;
 
-pub use self::decode::Streaming;
 pub(crate) use self::encode::{encode_client, encode_server};
+
+pub use self::buffer::{DecodeBuf, EncodeBuf};
+#[cfg(feature = "compression")]
+#[cfg_attr(docsrs, doc(cfg(feature = "compression")))]
+pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
+pub use self::decode::Streaming;
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
-use crate::Status;
-pub use buffer::{DecodeBuf, EncodeBuf};
+
+// 5 bytes
+const HEADER_SIZE: usize =
+    // compression flag
+    std::mem::size_of::<u8>() +
+    // data length
+    std::mem::size_of::<u32>();
 
 /// Trait that knows how to encode and decode gRPC messages.
 pub trait Codec: Default {
