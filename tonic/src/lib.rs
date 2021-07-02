@@ -87,7 +87,7 @@ pub mod metadata;
 pub mod server;
 pub mod service;
 
-#[cfg(feature = "transport")]
+#[cfg(any(feature = "transport", feature = "client"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
 pub mod transport;
 
@@ -111,6 +111,15 @@ pub use response::Response;
 pub use status::{Code, Status};
 
 pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
+
+#[cfg(all(
+    any(feature = "transport", feature = "client"),
+    not(target_arch = "wasm32")
+))]
+pub(crate) use tokio::spawn;
+#[cfg(all(any(feature = "transport", feature = "client"), target_arch = "wasm32"))]
+#[cfg(target_arch = "wasm32")]
+pub(crate) use wasm_bindgen_futures::spawn_local as spawn;
 
 #[doc(hidden)]
 #[cfg(feature = "codegen")]

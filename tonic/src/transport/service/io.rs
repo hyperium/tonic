@@ -1,3 +1,4 @@
+#[cfg(feature = "transport")]
 use crate::transport::server::Connected;
 use hyper::client::connect::{Connected as HyperConnected, Connection};
 use std::io;
@@ -28,6 +29,7 @@ impl Connection for BoxedIo {
     }
 }
 
+#[cfg(feature = "transport")]
 impl Connected for BoxedIo {
     type ConnectInfo = NoneConnectInfo;
 
@@ -67,21 +69,24 @@ impl AsyncWrite for BoxedIo {
     }
 }
 
+#[cfg(feature = "transport")]
 pub(crate) enum ServerIo<IO> {
     Io(IO),
     #[cfg(feature = "tls")]
     TlsIo(TlsStream<IO>),
 }
 
+#[cfg(feature = "transport")]
 use tower::util::Either;
 
-#[cfg(feature = "tls")]
+#[cfg(all(feature = "transport", feature = "tls"))]
 type ServerIoConnectInfo<IO> =
     Either<<IO as Connected>::ConnectInfo, <TlsStream<IO> as Connected>::ConnectInfo>;
 
-#[cfg(not(feature = "tls"))]
+#[cfg(all(feature = "transport", not(feature = "tls")))]
 type ServerIoConnectInfo<IO> = Either<<IO as Connected>::ConnectInfo, ()>;
 
+#[cfg(feature = "transport")]
 impl<IO> ServerIo<IO> {
     pub(in crate::transport) fn new_io(io: IO) -> Self {
         Self::Io(io)
@@ -92,7 +97,7 @@ impl<IO> ServerIo<IO> {
         Self::TlsIo(io)
     }
 
-    #[cfg(feature = "tls")]
+    #[cfg(all(feature = "transport", feature = "tls"))]
     pub(in crate::transport) fn connect_info(&self) -> ServerIoConnectInfo<IO>
     where
         IO: Connected,
@@ -104,7 +109,7 @@ impl<IO> ServerIo<IO> {
         }
     }
 
-    #[cfg(not(feature = "tls"))]
+    #[cfg(all(feature = "transport", not(feature = "tls")))]
     pub(in crate::transport) fn connect_info(&self) -> ServerIoConnectInfo<IO>
     where
         IO: Connected,
@@ -115,6 +120,7 @@ impl<IO> ServerIo<IO> {
     }
 }
 
+#[cfg(feature = "transport")]
 impl<IO> AsyncRead for ServerIo<IO>
 where
     IO: AsyncWrite + AsyncRead + Unpin,
@@ -132,6 +138,7 @@ where
     }
 }
 
+#[cfg(feature = "transport")]
 impl<IO> AsyncWrite for ServerIo<IO>
 where
     IO: AsyncWrite + AsyncRead + Unpin,
