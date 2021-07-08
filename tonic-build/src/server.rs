@@ -1,4 +1,4 @@
-use super::{Method, Service};
+use super::{Attributes, Method, Service};
 use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -13,6 +13,7 @@ pub fn generate<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    attributes: &Attributes,
 ) -> TokenStream {
     let methods = generate_methods(service, proto_path, compile_well_known_types);
 
@@ -35,6 +36,8 @@ pub fn generate<T: Service>(
         service.identifier()
     );
     let transport = generate_transport(&server_service, &server_trait, &path);
+    let mod_attributes = attributes.for_mod(package);
+    let struct_attributes = attributes.for_struct(&path);
 
     let compression_enabled = cfg!(feature = "compression");
 
@@ -64,6 +67,7 @@ pub fn generate<T: Service>(
 
     quote! {
         /// Generated server implementations.
+        #(#mod_attributes)*
         pub mod #server_mod {
             #![allow(unused_variables, dead_code, missing_docs)]
             use tonic::codegen::*;
@@ -71,6 +75,7 @@ pub fn generate<T: Service>(
             #generated_trait
 
             #service_doc
+            #(#struct_attributes)*
             #[derive(Debug)]
             pub struct #server_service<T: #server_trait> {
                 inner: _Inner<T>,

@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package attrs;
+
+// EchoRequest is the request for echo.
+message EchoRequest {
+  string message = 1;
+}
+
+// EchoResponse is the response for echo.
+message EchoResponse {
+  string message = 1;
+}
+
+// Echo is the echo service.
+service Echo {
+  // UnaryEcho is unary echo.
+  rpc UnaryEcho(EchoRequest) returns (EchoResponse) {}
+}

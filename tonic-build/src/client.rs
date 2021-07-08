@@ -1,4 +1,4 @@
-use super::{Method, Service};
+use super::{Attributes, Method, Service};
 use crate::{generate_doc_comments, naive_snake_case};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -12,6 +12,7 @@ pub fn generate<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    attributes: &Attributes,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
     let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name()));
@@ -20,13 +21,26 @@ pub fn generate<T: Service>(
     let connect = generate_connect(&service_ident);
     let service_doc = generate_doc_comments(service.comment());
 
+    let package = if emit_package { service.package() } else { "" };
+    let path = format!(
+        "{}{}{}",
+        package,
+        if package.is_empty() { "" } else { "." },
+        service.identifier()
+    );
+
+    let mod_attributes = attributes.for_mod(package);
+    let struct_attributes = attributes.for_struct(&path);
+
     quote! {
         /// Generated client implementations.
+        #(#mod_attributes)*
         pub mod #client_mod {
             #![allow(unused_variables, dead_code, missing_docs)]
             use tonic::codegen::*;
 
             #service_doc
+            #(#struct_attributes)*
             #[derive(Debug, Clone)]
             pub struct #service_ident<T> {
                 inner: tonic::client::Grpc<T>,
