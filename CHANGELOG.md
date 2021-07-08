@@ -11,12 +11,9 @@ This release includes a new crate `tonic-web` which is versioned at `0.1` and su
 
 ### Bug Fixes
 
-* **build:** fix `with_interceptor` not building on Rust 1.51 ([#669](https://github.com/hyperium/tonic/issues/669)) ([9478fac](https://github.com/hyperium/tonic/commit/9478fac97984cf8291bf89c55eb9a02a06889e03))
 * **codec:** Fix streaming reponses w/ many status ([#689](https://github.com/hyperium/tonic/issues/689)) ([737ace3](https://github.com/hyperium/tonic/commit/737ace393d3d11fb179af939e5f1a5d16ebc2b82)), closes [#681](https://github.com/hyperium/tonic/issues/681)
 * **codec:** improve error message for invalid compression flag ([#663](https://github.com/hyperium/tonic/issues/663)) ([9cc14b7](https://github.com/hyperium/tonic/commit/9cc14b79fba9e789e215f7ea3fa40ccfaecc8e59))
 * **tonic:** don't include error's cause in Display impl ([#633](https://github.com/hyperium/tonic/issues/633)) ([31a3468](https://github.com/hyperium/tonic/commit/31a34681c7ba606e27615859d4b65dfcdcaa6f38))
-* **tonic:** don't remove reserved headers in interceptor ([#701](https://github.com/hyperium/tonic/issues/701)) ([6711b80](https://github.com/hyperium/tonic/commit/6711b8067457ed31f1844e3ec6571ef0c4589325))
-* **tonic:** make `Interceptor` `UnwindSafe` ([#641](https://github.com/hyperium/tonic/issues/641)) ([57509d3](https://github.com/hyperium/tonic/commit/57509d321ba49e6e9189efef345d59089875dff8))
 * **transport:** remove needless `BoxFuture` ([#644](https://github.com/hyperium/tonic/issues/644)) ([74ad0a9](https://github.com/hyperium/tonic/commit/74ad0a998fedb2507f6b2f035b961eb9bac5b494))
 * **web:** fix compilation ([#670](https://github.com/hyperium/tonic/issues/670)) ([e199387](https://github.com/hyperium/tonic/commit/e1993877c430906500aeda9ab1e3413e68ed483d))
 
