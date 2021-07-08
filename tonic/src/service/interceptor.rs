@@ -1,4 +1,6 @@
 //! gRPC interceptors which are a kind of middleware.
+//!
+//! See [`interceptor_fn`] for more details.
 
 use crate::{request::SanitizeHeaders, Status};
 use pin_project::pin_project;
@@ -13,26 +15,26 @@ use tower_service::Service;
 
 /// Create a new interceptor from a function.
 ///
-/// gRPC interceptors are similar to middleware but have less flexibility. This interceptor allows
+/// gRPC interceptors are similar to middleware but have less flexibility. An interceptor allows
 /// you to do two main things, one is to add/remove/check items in the `MetadataMap` of each
-/// request. Two, cancel a request with any `Status`.
+/// request. Two, cancel a request with a `Status`.
 ///
 /// An interceptor can be used on both the server and client side through the `tonic-build` crate's
 /// generated structs.
 ///
-/// These interceptors do not allow you to modify the `Message` of the request but allow you to
-/// check for metadata. If you would like to apply middleware like features to the body of the
-/// request, going through the [tower] abstraction is recommended.
-///
-/// Interceptors is not recommend should not be used to add logging to your service. For that a
-/// [tower] middleware is more appropriate since it can also act on the response.
-///
 /// See the [interceptor example][example] for more details.
+///
+/// If you need more powerful middleware, [tower] is the recommended approach. You can find
+/// examples of how to use tower with tonic [here][tower-example].
+///
+/// Additionally, interceptors is not the recommended way to add logging to your service. For that
+/// a [tower] middleware is more appropriate since it can also act on the response. For example
+/// tower-http's [`Trace`](https://docs.rs/tower-http/latest/tower_http/trace/index.html)
+/// middleware supports gRPC out of the box.
 ///
 /// [tower]: https://crates.io/crates/tower
 /// [example]: https://github.com/hyperium/tonic/tree/master/examples/src/interceptor
-// TODO: when tower-http is shipped update the docs to mention its `Trace` middleware which has
-// support for gRPC and is an easy to add logging
+/// [tower-example]: https://github.com/hyperium/tonic/tree/master/examples/src/tower
 pub fn interceptor_fn<F>(f: F) -> InterceptorFn<F>
 where
     F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
