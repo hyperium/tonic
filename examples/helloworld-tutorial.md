@@ -114,7 +114,7 @@ path = "src/client.rs"
 
 [dependencies]
 tonic = "0.4"
-prost = "0.7"
+prost = "0.8"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
