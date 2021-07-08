@@ -1,3 +1,47 @@
+# [0.5.0](https://github.com/hyperium/tonic/compare/v0.4.3...v0.5.0) (2021-07-08)
+
+This release includes a new crate `tonic-web` which is versioned at `0.1` and supports accepting `grpc-web`!
+
+### Breaking changes
+
+* `prost` bumped to `0.8`.
+* `BoxBody` was removed in favor of the version provided in `http-body`.
+* The `Connected` trait has been modified to support more generic `ConnectionInfo`.
+* `Streaming` fixed to now return `None` once the stream has observed a trailing `Status`, notifying the user that the stream has ended.
+
+### Bug Fixes
+
+* **build:** fix `with_interceptor` not building on Rust 1.51 ([#669](https://github.com/hyperium/tonic/issues/669)) ([9478fac](https://github.com/hyperium/tonic/commit/9478fac97984cf8291bf89c55eb9a02a06889e03))
+* **codec:** Fix streaming reponses w/ many status ([#689](https://github.com/hyperium/tonic/issues/689)) ([737ace3](https://github.com/hyperium/tonic/commit/737ace393d3d11fb179af939e5f1a5d16ebc2b82)), closes [#681](https://github.com/hyperium/tonic/issues/681)
+* **codec:** improve error message for invalid compression flag ([#663](https://github.com/hyperium/tonic/issues/663)) ([9cc14b7](https://github.com/hyperium/tonic/commit/9cc14b79fba9e789e215f7ea3fa40ccfaecc8e59))
+* **tonic:** don't include error's cause in Display impl ([#633](https://github.com/hyperium/tonic/issues/633)) ([31a3468](https://github.com/hyperium/tonic/commit/31a34681c7ba606e27615859d4b65dfcdcaa6f38))
+* **tonic:** don't remove reserved headers in interceptor ([#701](https://github.com/hyperium/tonic/issues/701)) ([6711b80](https://github.com/hyperium/tonic/commit/6711b8067457ed31f1844e3ec6571ef0c4589325))
+* **tonic:** make `Interceptor` `UnwindSafe` ([#641](https://github.com/hyperium/tonic/issues/641)) ([57509d3](https://github.com/hyperium/tonic/commit/57509d321ba49e6e9189efef345d59089875dff8))
+* **transport:** remove needless `BoxFuture` ([#644](https://github.com/hyperium/tonic/issues/644)) ([74ad0a9](https://github.com/hyperium/tonic/commit/74ad0a998fedb2507f6b2f035b961eb9bac5b494))
+* **web:** fix compilation ([#670](https://github.com/hyperium/tonic/issues/670)) ([e199387](https://github.com/hyperium/tonic/commit/e1993877c430906500aeda9ab1e3413e68ed483d))
+
+
+### Features
+
+* **build:** support adding attributes to clients and servers ([#684](https://github.com/hyperium/tonic/issues/684)) ([a948a8f](https://github.com/hyperium/tonic/commit/a948a8f884705b9f2a6df5c86d07cc6eb0bb1b7c))
+* **codec:** compression support ([#692](https://github.com/hyperium/tonic/issues/692)) ([0583cff](https://github.com/hyperium/tonic/commit/0583cff80f57ba071295416ee8828c3430851d0d))
+* **metadata:** expose `IterMut` and `ValuesMut` ([#639](https://github.com/hyperium/tonic/issues/639)) ([b0ec3ea](https://github.com/hyperium/tonic/commit/b0ec3ead344df44fc17e5ad22398ed2464768e63))
+* **metadata:** remove manual `Send + Sync` impls for metadata types ([#640](https://github.com/hyperium/tonic/issues/640)) ([e97f518](https://github.com/hyperium/tonic/commit/e97f5180250a567aead16fe9a8644216edc4bbb3))
+* **tonic:** add `h2::Error` as a `source` for `Status` ([#612](https://github.com/hyperium/tonic/issues/612)) ([b90bb7b](https://github.com/hyperium/tonic/commit/b90bb7bbc012207451fe2788a8efd69023312425))
+* **tonic:** add `Request` and `Response` extensions ([#642](https://github.com/hyperium/tonic/issues/642)) ([352b0f5](https://github.com/hyperium/tonic/commit/352b0f584be33bc49ca266698c9224d16a6825ff))
+* **tonic:** expose setting for `http2_adaptive_window` ([#657](https://github.com/hyperium/tonic/issues/657)) ([12815d0](https://github.com/hyperium/tonic/commit/12815d0a1d558eb9f661a85354336b04df1f5bab))
+* **tonic:** implement `From<Code>` for `i32` ([f33316d](https://github.com/hyperium/tonic/commit/f33316d5b32f6a44fa23ea12851f502c48bac5ea))
+* **tonic:** make it easier to add tower middleware to servers ([#651](https://github.com/hyperium/tonic/issues/651)) ([4d2667d](https://github.com/hyperium/tonic/commit/4d2667d1cb1b938756d20dafa3cccae1db23a831))
+* **tonic:** pass `trace_fn` the request rather than just the headers ([#634](https://github.com/hyperium/tonic/issues/634)) ([7862a22](https://github.com/hyperium/tonic/commit/7862a2259db8dc1af440604c6c582487a59a2709))
+* **tonic:** Use `BoxBody` from `http-body` crate ([#622](https://github.com/hyperium/tonic/issues/622)) ([4dda4cb](https://github.com/hyperium/tonic/commit/4dda4cbcca88fa46a7d8a6e4eabfb6d7c333617a))
+* **tonic-web:** implement grpc <-> grpc-web protocol translation ([#455](https://github.com/hyperium/tonic/issues/455)) ([c309063](https://github.com/hyperium/tonic/commit/c309063254dff42fd05afc5e56b0b0371b905758))
+* **transport:** Add `connect_with_connector_lazy` ([#696](https://github.com/hyperium/tonic/issues/696)) ([2a46ff5](https://github.com/hyperium/tonic/commit/2a46ff5c96415b217700353dadba74a80e5ad88c)), closes [#695](https://github.com/hyperium/tonic/issues/695)
+* **transport:** Add a tls-webpki-roots feature to add trust roots from webpki-roots ([#660](https://github.com/hyperium/tonic/issues/660)) ([32173dc](https://github.com/hyperium/tonic/commit/32173dc7f6521bad8f26b055b6a86d807348f151))
+* **transport:** add connect timeout to `Endpoint` ([#662](https://github.com/hyperium/tonic/issues/662)) ([2b60a00](https://github.com/hyperium/tonic/commit/2b60a00614c5c4260ce0acaaa599da89bebfd267))
+* **transport:** provide generic access to connect info ([#647](https://github.com/hyperium/tonic/issues/647)) ([e5e3118](https://github.com/hyperium/tonic/commit/e5e311853bff347355722bc829d40f54e8954aee))
+
+
+
 # [0.4.3](https://github.com/hyperium/tonic/compare/v0.4.2...v0.4.3) (2021-04-29)
 
 ### Features
