@@ -1,6 +1,6 @@
 [package]
 name = "tonic-reflection"
-version = "0.1.0"
+version = "0.2.0"
 authors = [
   "James Nugent <james@jen20.com>",
   "Samani G. Gikandi <samani@gojulas.com>"
@@ -22,10 +22,10 @@ prost = "0.8"
 prost-types = "0.8"
 tokio = { version = "1.0", features = ["sync"] }
 tokio-stream = { version = "0.1", features = ["net"] }
-tonic = { version = "0.4", path = "../tonic", features = ["codegen", "prost"] }
+tonic = { version = "0.5", path = "../tonic", features = ["codegen", "prost"] }
 
 [build-dependencies]
-tonic-build = { version = "0.4.1", path = "../tonic-build" }
+tonic-build = { version = "0.5", path = "../tonic-build" }
 
 [dev-dependencies]
 futures = "0.3"
