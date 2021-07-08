@@ -63,8 +63,8 @@ http-body = "0.4.2"
 pin-project = "1.0"
 
 # prost
-prost1 = { package = "prost", version = "0.7", optional = true }
-prost-derive = { version = "0.7", optional = true }
+prost1 = { package = "prost", version = "0.8", optional = true }
+prost-derive = { version = "0.8", optional = true }
 
 # codegen
 async-trait = { version = "0.1.13", optional = true }
