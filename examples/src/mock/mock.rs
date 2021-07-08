@@ -85,7 +85,12 @@ mod mock {
     #[derive(Debug)]
     pub struct MockStream(pub tokio::io::DuplexStream);
 
-    impl Connected for MockStream {}
+    impl Connected for MockStream {
+        type ConnectInfo = ();
+
+        /// Create type holding information about the connection.
+        fn connect_info(&self) -> Self::ConnectInfo {}
+    }
 
     impl AsyncRead for MockStream {
         fn poll_read(
