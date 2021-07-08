@@ -72,7 +72,6 @@ impl Greeter for MyGreeter {
     }
 }
 
-#[cfg(unix)]
 mod mock {
     use std::{
         pin::Pin,
