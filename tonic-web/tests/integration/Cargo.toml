@@ -8,7 +8,7 @@ edition = "2018"
 [dependencies]
 tonic = { path = "../../../tonic" }
 tonic-web = { path = "../../../tonic-web" }
-prost = "0.7"
+prost = "0.8"
 tokio = { version = "1", features = ["macros", "rt", "net"] }
 base64 = "0.13"
 bytes = "1.0"

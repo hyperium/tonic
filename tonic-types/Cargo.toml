@@ -15,8 +15,8 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "protobuf"]
 
 [dependencies]
-prost = "0.7"
-prost-types = "0.7"
+prost = "0.8"
+prost-types = "0.8"
 
 [build-dependencies]
-prost-build = "0.7"
+prost-build = "0.8"
