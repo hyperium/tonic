@@ -1,6 +1,6 @@
 //! gRPC interceptors which are a kind of middleware.
 
-use crate::Status;
+use crate::{request::SanitizeHeaders, Status};
 use pin_project::pin_project;
 use std::{
     fmt,
@@ -115,7 +115,7 @@ where
             Ok(req) => {
                 let (metadata, extensions, _) = req.into_parts();
                 let req = crate::Request::from_parts(metadata, extensions, msg);
-                let req = req.into_http(uri);
+                let req = req.into_http(uri, SanitizeHeaders::No);
                 ResponseFuture::future(self.inner.call(req))
             }
             Err(status) => ResponseFuture::error(status),
@@ -170,14 +170,51 @@ where
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().kind.project() {
-            KindProj::Future(future) => {
-                let response = futures_core::ready!(future.poll(cx).map_err(Into::into)?);
-                Poll::Ready(Ok(response))
-            }
+            KindProj::Future(future) => future.poll(cx).map_err(Into::into),
             KindProj::Error(status) => {
                 let error = status.take().unwrap().into();
                 Poll::Ready(Err(error))
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[allow(unused_imports)]
+    use super::*;
+    use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn doesnt_remove_headers() {
+        let svc = tower::service_fn(|request: http::Request<hyper::Body>| async move {
+            assert_eq!(
+                request
+                    .headers()
+                    .get("user-agent")
+                    .expect("missing in leaf service"),
+                "test-tonic"
+            );
+
+            Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::empty()))
+        });
+
+        let svc = InterceptedService::new(svc, |request: crate::Request<()>| {
+            assert_eq!(
+                request
+                    .metadata()
+                    .get("user-agent")
+                    .expect("missing in interceptor"),
+                "test-tonic"
+            );
+            Ok(request)
+        });
+
+        let request = http::Request::builder()
+            .header("user-agent", "test-tonic")
+            .body(hyper::Body::empty())
+            .unwrap();
+
+        svc.oneshot(request).await.unwrap();
     }
 }

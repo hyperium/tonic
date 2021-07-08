@@ -166,13 +166,20 @@ impl<T> Request<T> {
         Request::from_http_parts(parts, message)
     }
 
-    pub(crate) fn into_http(self, uri: http::Uri) -> http::Request<T> {
+    pub(crate) fn into_http(
+        self,
+        uri: http::Uri,
+        sanitize_headers: SanitizeHeaders,
+    ) -> http::Request<T> {
         let mut request = http::Request::new(self.message);
 
         *request.version_mut() = http::Version::HTTP_2;
         *request.method_mut() = http::Method::POST;
         *request.uri_mut() = uri;
-        *request.headers_mut() = self.metadata.into_sanitized_headers();
+        *request.headers_mut() = match sanitize_headers {
+            SanitizeHeaders::Yes => self.metadata.into_sanitized_headers(),
+            SanitizeHeaders::No => self.metadata.into_headers(),
+        };
         *request.extensions_mut() = self.extensions.into_http();
 
         request
@@ -412,6 +419,13 @@ fn duration_to_grpc_timeout(duration: Duration) -> String {
         .expect("duration is unrealistically large")
 }
 
+/// When converting a `tonic::Request` into a `http::Request` should reserved
+/// headers be removed?
+pub(crate) enum SanitizeHeaders {
+    Yes,
+    No,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -427,7 +441,7 @@ mod tests {
                 .insert(*header, MetadataValue::from_static("invalid"));
         }
 
-        let http_request = r.into_http(Uri::default());
+        let http_request = r.into_http(Uri::default(), SanitizeHeaders::Yes);
         assert!(http_request.headers().is_empty());
     }
 

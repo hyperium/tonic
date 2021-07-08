@@ -4,6 +4,7 @@ use crate::{
     body::BoxBody,
     client::GrpcService,
     codec::{encode_client, Codec, Streaming},
+    request::SanitizeHeaders,
     Code, Request, Response, Status,
 };
 use futures_core::Stream;
@@ -247,7 +248,7 @@ impl<T> Grpc<T> {
             })
             .map(BoxBody::new);
 
-        let mut request = request.into_http(uri);
+        let mut request = request.into_http(uri, SanitizeHeaders::Yes);
 
         // Add the gRPC related HTTP headers
         request
