@@ -38,8 +38,6 @@ This release includes a new crate `tonic-web` which is versioned at `0.1` and su
 * **transport:** Add a tls-webpki-roots feature to add trust roots from webpki-roots ([#660](https://github.com/hyperium/tonic/issues/660)) ([32173dc](https://github.com/hyperium/tonic/commit/32173dc7f6521bad8f26b055b6a86d807348f151))
 * **transport:** add connect timeout to `Endpoint` ([#662](https://github.com/hyperium/tonic/issues/662)) ([2b60a00](https://github.com/hyperium/tonic/commit/2b60a00614c5c4260ce0acaaa599da89bebfd267))
 * **transport:** provide generic access to connect info ([#647](https://github.com/hyperium/tonic/issues/647)) ([e5e3118](https://github.com/hyperium/tonic/commit/e5e311853bff347355722bc829d40f54e8954aee))
-* **transport:** Refactor Endpoint::connect_lazy method to return Channel directly instead of Result ([#392](https://github.com/hyperium/tonic/issues/708)) ([3b45565](https://github.com/3b45565b178a7298622c6b35bc6705b309beb410
-
 
 
 # [0.4.3](https://github.com/hyperium/tonic/compare/v0.4.2...v0.4.3) (2021-04-29)
