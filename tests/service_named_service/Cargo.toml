@@ -1,0 +1,16 @@
+[package]
+name = "service_named_service"
+version = "0.1.0"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+edition = "2018"
+publish = false
+license = "MIT"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+tonic = { path = "../../tonic" }
+prost = "0.8"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
