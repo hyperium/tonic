@@ -2524,8 +2524,7 @@ mod tests {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
-                    // Unexpected key
-                    assert!(false);
+                    panic!("Unexpected key");
                 }
             }
         }
@@ -2545,8 +2544,7 @@ mod tests {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {
-                    // Unexpected key
-                    assert!(false);
+                    panic!("Unexpected key");
                 }
             }
         }
@@ -2567,8 +2565,7 @@ mod tests {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
-                    // Unexpected key
-                    assert!(false);
+                    panic!("Unexpected key");
                 }
             }
         }
@@ -2588,8 +2585,7 @@ mod tests {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {
-                    // Unexpected key
-                    assert!(false);
+                    panic!("Unexpected key");
                 }
             }
         }
@@ -2610,8 +2606,7 @@ mod tests {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
-                    // Unexpected key
-                    assert!(false);
+                    panic!("Unexpected key");
                 }
             }
         }
@@ -2631,8 +2626,7 @@ mod tests {
                 if key.as_str() == "x-number-bin" {
                     found_x_number_bin = true;
                 } else {
-                    // Unexpected key
-                    assert!(false);
+                    panic!("Unexpected key");
                 }
             }
         }
@@ -2653,8 +2647,7 @@ mod tests {
                 if *value == "hello" {
                     found_x_word = true;
                 } else {
-                    // Unexpected key
-                    assert!(false);
+                    panic!("Unexpected key");
                 }
             }
         }

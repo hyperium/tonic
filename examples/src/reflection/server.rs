@@ -4,7 +4,7 @@ use tonic::{Request, Response, Status};
 mod proto {
     tonic::include_proto!("helloworld");
 
-    pub(crate) const FILE_DESCRIPTOR_SET: &'static [u8] =
+    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
         tonic::include_file_descriptor_set!("helloworld_descriptor");
 }
 

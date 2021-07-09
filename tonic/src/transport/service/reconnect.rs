@@ -142,7 +142,7 @@ where
         tracing::trace!("Reconnect::call");
         if let Some(error) = self.error.take() {
             tracing::debug!("error: {}", error);
-            return ResponseFuture::error(error.into());
+            return ResponseFuture::error(error);
         }
 
         let service = match self.state {
