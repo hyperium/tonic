@@ -77,6 +77,7 @@ implementation.
 health checking service][healthcheck]. Also serves as an example of both unary and response streaming.
 - [`tonic-reflection`](https://github.com/hyperium/tonic/tree/master/tonic-reflection): A tonic based gRPC
 reflection implementation.
+- [`tonic-web`](https://github.com/hyperium/tonic/tree/master/tonic-web): [grpc-web][grpc-web] protocol translation for Tonic services.
 - [`examples`](https://github.com/hyperium/tonic/tree/master/examples): Example gRPC implementations showing off
 tls, load balancing and bi-directional streaming.
 - [`interop`](https://github.com/hyperium/tonic/tree/master/interop): Interop tests implementation.
@@ -117,3 +118,4 @@ terms or conditions.
 [helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
 [healthcheck]: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 [rust-analyzer]: https://rust-analyzer.github.io
+[grpc-web]: https://github.com/grpc/grpc-web

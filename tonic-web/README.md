@@ -33,14 +33,15 @@ external proxy.
 
 ## Examples
 
-[tonic-web-demo][1]: React+Typescript app that talking to a tonic-web enabled service using HTTP/1 or TLS.
+[tonic-web-demo][tonic-web-demo]: React+Typescript app that talking to a tonic-web enabled service using HTTP/1 or TLS.
 
-[conduit][2]: An (in progress) implementation of the [realworld][3] demo in Tonic+Dart+Flutter. This app shows how
+[conduit][conduit]: An (in progress) implementation of the [realworld][realworld] demo in Tonic+Dart+Flutter. This app shows how
 the same client implementation can talk to the same tonic-web enabled server using both `grpc` and `grpc-web` protocols
 just by swapping the channel implementation. 
 
 When the client is compiled for desktop, ios or android, a  grpc `ClientChannel` implementation is used.
 When compiled for the web, a `GrpcWebClientChannel.xhr` implementation is used instead.``
-[1]: https://github.com/alce/tonic-web-demo
-[2]: https://github.com/alce/conduit
-[3]: https://github.com/gothinkster/realworld
+
+[tonic-web-demo]: https://github.com/alce/tonic-web-demo
+[conduit]: https://github.com/alce/conduit
+[realworld]: https://github.com/gothinkster/realworld
