@@ -162,9 +162,16 @@ path = "src/compression/client.rs"
 name = "mock"
 path = "src/mock/mock.rs"
 
+[[bin]]
+name = "grpc-web-server"
+path = "src/grpc-web/server.rs"
+
+[[bin]]
+name = "grpc-web-client"
+path = "src/grpc-web/client.rs"
 
 [dependencies]
-tonic = { path = "../tonic", features = ["tls"] }
+tonic = { path = "../tonic", features = ["tls", "compression"] }
 prost = "0.8"
 tokio = { version = "1.0", features = ["rt-multi-thread", "time", "fs", "macros", "net"] }
 tokio-stream = { version =  "0.1", features = ["net"] }
@@ -183,7 +190,7 @@ tracing-futures = "0.2"
 # Required for wellknown types
 prost-types = "0.8"
 # Hyper example
-hyper = "0.14"
+hyper = { version = "0.14", features = ["full"] }
 warp = "0.3"
 http = "0.2"
 http-body = "0.4.2"
@@ -193,6 +200,9 @@ tonic-health = { path = "../tonic-health" }
 # Reflection example
 tonic-reflection = { path = "../tonic-reflection" }
 listenfd = "0.3"
+# grpc-web example
+tonic-web = { path = "../tonic-web" }
+bytes = "1"
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build", features = ["prost"] }
+tonic-build = { path = "../tonic-build", features = ["prost", "compression"] }
