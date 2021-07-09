@@ -36,7 +36,13 @@ pub fn generate<T: Service>(
         /// Generated client implementations.
         #(#mod_attributes)*
         pub mod #client_mod {
-            #![allow(unused_variables, dead_code, missing_docs)]
+            #![allow(
+                unused_variables,
+                dead_code,
+                missing_docs,
+                // will trigger if compression is disabled
+                clippy::let_unit_value,
+            )]
             use tonic::codegen::*;
 
             #service_doc

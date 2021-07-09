@@ -69,7 +69,13 @@ pub fn generate<T: Service>(
         /// Generated server implementations.
         #(#mod_attributes)*
         pub mod #server_mod {
-            #![allow(unused_variables, dead_code, missing_docs)]
+            #![allow(
+                unused_variables,
+                dead_code,
+                missing_docs,
+                // will trigger if compression is disabled
+                clippy::let_unit_value,
+            )]
             use tonic::codegen::*;
 
             #generated_trait

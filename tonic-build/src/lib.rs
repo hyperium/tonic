@@ -284,9 +284,7 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
 pub(crate) fn match_name(pattern: &str, path: &str) -> bool {
     if pattern.is_empty() {
         false
-    } else if pattern == "." {
-        true
-    } else if pattern == path {
+    } else if pattern == "." || pattern == path {
         true
     } else {
         let pattern_segments = pattern.split('.').collect::<Vec<_>>();

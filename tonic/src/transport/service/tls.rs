@@ -49,7 +49,7 @@ impl TlsConnector {
         domain: String,
     ) -> Result<Self, crate::Error> {
         let mut config = ClientConfig::new();
-        config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
+        config.set_protocols(&[Vec::from(ALPN_H2)]);
 
         if let Some(identity) = identity {
             let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
@@ -60,7 +60,7 @@ impl TlsConnector {
         {
             config.root_store = match rustls_native_certs::load_native_certs() {
                 Ok(store) | Err((Some(store), _)) => store,
-                Err((None, error)) => Err(error)?,
+                Err((None, error)) => return Err(error.into()),
             };
         }
 
@@ -153,7 +153,7 @@ impl TlsAcceptor {
             }
         };
         config.set_single_cert(cert, key)?;
-        config.set_protocols(&[Vec::from(&ALPN_H2[..])]);
+        config.set_protocols(&[Vec::from(ALPN_H2)]);
 
         Ok(Self {
             inner: Arc::new(config),

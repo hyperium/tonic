@@ -65,7 +65,7 @@ async fn smoke_server_stream() {
     let r3 = stream(r3).await;
     let r4 = stream(r4).await;
 
-    assert!(&r1 == &r2 && &r2 == &r3 && &r3 == &r4);
+    assert!(r1 == r2 && r2 == r3 && r3 == r4);
 }
 #[tokio::test]
 async fn smoke_error() {

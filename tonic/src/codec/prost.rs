@@ -186,7 +186,7 @@ mod tests {
         impl MockBody {
             pub(super) fn new(b: &[u8], partial_len: usize, count: usize) -> Self {
                 MockBody {
-                    data: Bytes::copy_from_slice(&b[..]),
+                    data: Bytes::copy_from_slice(b),
                     partial_len,
                     count,
                 }

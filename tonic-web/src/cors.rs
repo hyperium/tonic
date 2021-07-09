@@ -161,7 +161,7 @@ mod tests {
         ($header:expr, $expected:expr) => {
             fn sorted(value: &str) -> Vec<&str> {
                 let mut vec = value.split(",").collect::<Vec<_>>();
-                vec.sort();
+                vec.sort_unstable();
                 vec
             }
 

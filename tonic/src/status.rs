@@ -738,7 +738,7 @@ impl Code {
         }
     }
 
-    fn to_header_value(&self) -> HeaderValue {
+    fn to_header_value(self) -> HeaderValue {
         match self {
             Code::Ok => HeaderValue::from_static("0"),
             Code::Cancelled => HeaderValue::from_static("1"),
@@ -921,16 +921,16 @@ mod tests {
 
         let status = Status::with_details(Code::Unavailable, "some message", DETAILS.into());
 
-        assert_eq!(&status.details()[..], DETAILS);
+        assert_eq!(status.details(), DETAILS);
 
         let header_map = status.to_header_map().unwrap();
 
-        let b64_details = base64::encode_config(&DETAILS[..], base64::STANDARD_NO_PAD);
+        let b64_details = base64::encode_config(DETAILS, base64::STANDARD_NO_PAD);
 
         assert_eq!(header_map[super::GRPC_STATUS_DETAILS_HEADER], b64_details);
 
         let status = Status::from_header_map(&header_map).unwrap();
 
-        assert_eq!(&status.details()[..], DETAILS);
+        assert_eq!(status.details(), DETAILS);
     }
 }
