@@ -300,13 +300,13 @@ impl<T> Request<T> {
     /// Extensions can be set in interceptors:
     ///
     /// ```no_run
-    /// use tonic::{Request, service::interceptor_fn};
+    /// use tonic::{Request, service::interceptor_layer};
     ///
     /// struct MyExtension {
     ///     some_piece_of_data: String,
     /// }
     ///
-    /// interceptor_fn(|mut request: Request<()>| {
+    /// interceptor_layer(|mut request: Request<()>| {
     ///     request.extensions_mut().insert(MyExtension {
     ///         some_piece_of_data: "foo".to_string(),
     ///     });
