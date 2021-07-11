@@ -99,7 +99,7 @@ pub struct Router<A, B, L = Identity> {
 /// This service implementation will route between multiple Tonic
 /// gRPC endpoints and can be consumed with the rest of the `tower`
 /// ecosystem.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct RouterService<S> {
     inner: S,
 }
