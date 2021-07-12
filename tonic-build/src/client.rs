@@ -224,7 +224,7 @@ fn generate_client_streaming<T: Method>(
         pub async fn #ident(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = #request>
-        ) -> Result<tonic::Response<#response>, tonic::Status> where T: std::fmt::Debug {
+        ) -> Result<tonic::Response<#response>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
