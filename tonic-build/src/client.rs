@@ -69,11 +69,11 @@ pub fn generate<T: Service>(
                 pub fn with_interceptor<F>(inner: T, interceptor: F) -> #service_ident<InterceptedService<T, F>>
                 where
                     F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
-                    T: Service<
+                    T: tonic::codegen::Service<
                         http::Request<tonic::body::BoxBody>,
                         Response = http::Response<<T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody>
                     >,
-                    <T as Service<http::Request<tonic::body::BoxBody>>>::Error: Into<StdError> + Send + Sync,
+                    <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error: Into<StdError> + Send + Sync,
                 {
                     #service_ident::new(InterceptedService::new(inner, interceptor))
                 }

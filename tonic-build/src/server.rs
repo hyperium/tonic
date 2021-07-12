@@ -112,7 +112,7 @@ pub fn generate<T: Service>(
                 #configure_compression_methods
             }
 
-            impl<T, B> Service<http::Request<B>> for #server_service<T>
+            impl<T, B> tonic::codegen::Service<http::Request<B>> for #server_service<T>
                 where
                     T: #server_trait,
                     B: Body + Send + Sync + 'static,

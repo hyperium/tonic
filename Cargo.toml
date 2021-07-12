@@ -14,6 +14,7 @@ members = [
     # Tests
     "tests/included_service",
     "tests/same_name",
+    "tests/service_named_service",
     "tests/wellknown",
     "tests/wellknown-compiled",
     "tests/extern_path/uuid",
