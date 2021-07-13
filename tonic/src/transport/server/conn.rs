@@ -98,6 +98,12 @@ impl Connected for TcpStream {
     }
 }
 
+impl Connected for tokio::io::DuplexStream {
+    type ConnectInfo = ();
+
+    fn connect_info(&self) -> Self::ConnectInfo {}
+}
+
 #[cfg(feature = "tls")]
 impl<T> Connected for TlsStream<T>
 where
