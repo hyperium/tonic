@@ -1,3 +1,10 @@
+# [0.5.1](https://github.com/hyperium/tonic/compare/v0.4.3...v0.5.0) (2021-07-12)
+
+### Bug Fixes
+
+* **build:** remove unnecessary `Debug` constraint for client streams ([#719](https://github.com/hyperium/tonic/issues/719)) ([167e8cb](https://github.com/hyperium/tonic/commit/167e8cb)), closes [#718](https://github.com/hyperium/tonic/issues/718)
+* **build:** allow services to be named `Service` ([#709](https://github.com/hyperium/tonic/issues/709)) ([380d81d](https://github.com/hyperium/tonic/commit/380d81d)), closes [#676](https://github.com/hyperium/tonic/issues/676)
+
 # [0.5.0](https://github.com/hyperium/tonic/compare/v0.4.3...v0.5.0) (2021-07-08)
 
 This release includes a new crate `tonic-web` which is versioned at `0.1` and supports accepting `grpc-web`!
