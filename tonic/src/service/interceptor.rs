@@ -55,23 +55,37 @@ where
 /// Create a new interceptor layer.
 ///
 /// See [`Interceptor`] for more details.
-pub fn interceptor_fn<F>(f: F) -> InterceptorFn<F>
+pub fn interceptor<F>(f: F) -> InterceptorLayer<F>
 where
     F: Interceptor,
 {
-    InterceptorFn { f }
+    InterceptorLayer { f }
+}
+
+#[deprecated(
+    since = "0.5.1",
+    note = "Please use the `interceptor` function instead"
+)]
+/// Create a new interceptor layer.
+///
+/// See [`Interceptor`] for more details.
+pub fn interceptor_fn<F>(f: F) -> InterceptorLayer<F>
+where
+    F: Interceptor,
+{
+    interceptor(f)
 }
 
 /// A gRPC interceptor that can be used as a [`Layer`],
-/// created by calling [`interceptor_fn`].
+/// created by calling [`interceptor`].
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Debug, Clone, Copy)]
-pub struct InterceptorFn<F> {
+pub struct InterceptorLayer<F> {
     f: F,
 }
 
-impl<S, F> Layer<S> for InterceptorFn<F>
+impl<S, F> Layer<S> for InterceptorLayer<F>
 where
     F: Interceptor + Clone,
 {
@@ -81,6 +95,16 @@ where
         InterceptedService::new(service, self.f.clone())
     }
 }
+
+#[deprecated(
+    since = "0.5.1",
+    note = "Please use the `InterceptorLayer` type instead"
+)]
+/// A gRPC interceptor that can be used as a [`Layer`],
+/// created by calling [`interceptor`].
+///
+/// See [`Interceptor`] for more details.
+pub type InterceptorFn<F> = InterceptorLayer<F>;
 
 /// A service wrapped in an interceptor middleware.
 ///
