@@ -55,23 +55,23 @@ where
 /// Create a new interceptor layer.
 ///
 /// See [`Interceptor`] for more details.
-pub fn interceptor_layer<F>(f: F) -> InterceptorLayer<F>
+pub fn interceptor_fn<F>(f: F) -> InterceptorFn<F>
 where
     F: Interceptor,
 {
-    InterceptorLayer { f }
+    InterceptorFn { f }
 }
 
 /// A gRPC interceptor that can be used as a [`Layer`],
-/// created by calling [`interceptor_layer`].
+/// created by calling [`interceptor_fn`].
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Debug, Clone, Copy)]
-pub struct InterceptorLayer<F> {
+pub struct InterceptorFn<F> {
     f: F,
 }
 
-impl<S, F> Layer<S> for InterceptorLayer<F>
+impl<S, F> Layer<S> for InterceptorFn<F>
 where
     F: Interceptor + Clone,
 {

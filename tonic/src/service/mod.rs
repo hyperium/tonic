@@ -3,4 +3,4 @@
 pub mod interceptor;
 
 #[doc(inline)]
-pub use self::interceptor::{interceptor_layer, Interceptor};
+pub use self::interceptor::{interceptor_fn, Interceptor};
