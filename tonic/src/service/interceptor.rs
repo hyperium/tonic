@@ -1,6 +1,6 @@
 //! gRPC interceptors which are a kind of middleware.
 //!
-//! See [`interceptor_fn`] for more details.
+//! See [`Interceptor`] for more details.
 
 use crate::{request::SanitizeHeaders, Status};
 use pin_project::pin_project;
@@ -13,11 +13,14 @@ use std::{
 use tower_layer::Layer;
 use tower_service::Service;
 
-/// Create a new interceptor from a function.
+/// A gRPC incerceptor.
 ///
 /// gRPC interceptors are similar to middleware but have less flexibility. An interceptor allows
 /// you to do two main things, one is to add/remove/check items in the `MetadataMap` of each
 /// request. Two, cancel a request with a `Status`.
+///
+/// Any function that satisfies the bound `FnMut(Request<()>) -> Result<Request<()>, Status>` can be
+/// used as an `Interceptor`.
 ///
 /// An interceptor can be used on both the server and client side through the `tonic-build` crate's
 /// generated structs.
@@ -35,24 +38,56 @@ use tower_service::Service;
 /// [tower]: https://crates.io/crates/tower
 /// [example]: https://github.com/hyperium/tonic/tree/master/examples/src/interceptor
 /// [tower-example]: https://github.com/hyperium/tonic/tree/master/examples/src/tower
-pub fn interceptor_fn<F>(f: F) -> InterceptorFn<F>
+pub trait Interceptor {
+    /// Intercept a request before it is sent, optionally cancelling it.
+    fn call(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status>;
+}
+
+impl<F> Interceptor for F
 where
     F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
 {
-    InterceptorFn { f }
+    fn call(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status> {
+        self(request)
+    }
 }
 
-/// An interceptor created from a function.
+/// Create a new interceptor layer.
 ///
-/// See [`interceptor_fn`] for more details.
+/// See [`Interceptor`] for more details.
+pub fn interceptor<F>(f: F) -> InterceptorLayer<F>
+where
+    F: Interceptor,
+{
+    InterceptorLayer { f }
+}
+
+#[deprecated(
+    since = "0.5.1",
+    note = "Please use the `interceptor` function instead"
+)]
+/// Create a new interceptor layer.
+///
+/// See [`Interceptor`] for more details.
+pub fn interceptor_fn<F>(f: F) -> InterceptorLayer<F>
+where
+    F: Interceptor,
+{
+    interceptor(f)
+}
+
+/// A gRPC interceptor that can be used as a [`Layer`],
+/// created by calling [`interceptor`].
+///
+/// See [`Interceptor`] for more details.
 #[derive(Debug, Clone, Copy)]
-pub struct InterceptorFn<F> {
+pub struct InterceptorLayer<F> {
     f: F,
 }
 
-impl<S, F> Layer<S> for InterceptorFn<F>
+impl<S, F> Layer<S> for InterceptorLayer<F>
 where
-    F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status> + Clone,
+    F: Interceptor + Clone,
 {
     type Service = InterceptedService<S, F>;
 
@@ -61,9 +96,19 @@ where
     }
 }
 
+#[deprecated(
+    since = "0.5.1",
+    note = "Please use the `InterceptorLayer` type instead"
+)]
+/// A gRPC interceptor that can be used as a [`Layer`],
+/// created by calling [`interceptor`].
+///
+/// See [`Interceptor`] for more details.
+pub type InterceptorFn<F> = InterceptorLayer<F>;
+
 /// A service wrapped in an interceptor middleware.
 ///
-/// See [`interceptor_fn`] for more details.
+/// See [`Interceptor`] for more details.
 #[derive(Clone, Copy)]
 pub struct InterceptedService<S, F> {
     inner: S,
@@ -75,7 +120,7 @@ impl<S, F> InterceptedService<S, F> {
     /// function `F`.
     pub fn new(service: S, f: F) -> Self
     where
-        F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
+        F: Interceptor,
     {
         Self { inner: service, f }
     }
@@ -95,7 +140,7 @@ where
 
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
 where
-    F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
+    F: Interceptor,
     S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
     S::Error: Into<crate::Error>,
 {
@@ -113,7 +158,10 @@ where
         let req = crate::Request::from_http(req);
         let (metadata, extensions, msg) = req.into_parts();
 
-        match (self.f)(crate::Request::from_parts(metadata, extensions, ())) {
+        match self
+            .f
+            .call(crate::Request::from_parts(metadata, extensions, ()))
+        {
             Ok(req) => {
                 let (metadata, extensions, _) = req.into_parts();
                 let req = crate::Request::from_parts(metadata, extensions, msg);

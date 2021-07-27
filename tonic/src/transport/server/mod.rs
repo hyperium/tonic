@@ -395,7 +395,7 @@ impl<L> Server<L> {
     /// # use tower_service::Service;
     /// use tower::ServiceBuilder;
     /// use std::time::Duration;
-    /// use tonic::{Request, Status, service::interceptor_fn};
+    /// use tonic::{Request, Status, service::interceptor};
     ///
     /// fn auth_interceptor(request: Request<()>) -> Result<Request<()>, Status> {
     ///     if valid_credentials(&request) {
@@ -417,8 +417,8 @@ impl<L> Server<L> {
     /// let layer = ServiceBuilder::new()
     ///     .load_shed()
     ///     .timeout(Duration::from_secs(30))
-    ///     .layer(interceptor_fn(auth_interceptor))
-    ///     .layer(interceptor_fn(some_other_interceptor))
+    ///     .layer(interceptor(auth_interceptor))
+    ///     .layer(interceptor(some_other_interceptor))
     ///     .into_inner();
     ///
     /// Server::builder().layer(layer);
@@ -428,7 +428,7 @@ impl<L> Server<L> {
     /// [`Layer`]: tower::layer::Layer
     /// [eco]: https://github.com/tower-rs
     /// [`ServiceBuilder`]: tower::ServiceBuilder
-    /// [interceptors]: crate::service::interceptor_fn
+    /// [interceptors]: crate::service::Interceptor
     pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<NewLayer> {
         Server {
             layer: new_layer,
