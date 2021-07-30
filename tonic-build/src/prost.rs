@@ -49,6 +49,9 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
 
 const PROST_CODEC_PATH: &str = "tonic::codec::ProstCodec";
 
+/// Non-path Rust types allowed for request/response types.
+const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
+
 impl crate::Service for Service {
     const CODEC_PATH: &'static str = PROST_CODEC_PATH;
 
@@ -108,6 +111,7 @@ impl crate::Method for Method {
         let convert_type = |proto_type: &str, rust_type: &str| -> TokenStream {
             if (is_google_type(proto_type) && !compile_well_known_types)
                 || rust_type.starts_with("::")
+                || NON_PATH_TYPE_ALLOWLIST.iter().any(|ty| *ty == rust_type)
             {
                 rust_type.parse::<TokenStream>().unwrap()
             } else if rust_type.starts_with("crate::") {
