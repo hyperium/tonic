@@ -105,34 +105,24 @@ impl crate::Method for Method {
         proto_path: &str,
         compile_well_known_types: bool,
     ) -> (TokenStream, TokenStream) {
-        let request = if (is_google_type(&self.input_proto_type) && !compile_well_known_types)
-            || self.input_type.starts_with("::")
-        {
-            self.input_type.parse::<TokenStream>().unwrap()
-        } else if self.input_type.starts_with("crate::") {
-            syn::parse_str::<syn::Path>(&self.input_type)
-                .unwrap()
-                .to_token_stream()
-        } else {
-            syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, self.input_type))
-                .unwrap()
-                .to_token_stream()
+        let convert_type = |proto_type: &str, rust_type: &str| -> TokenStream {
+            if (is_google_type(proto_type) && !compile_well_known_types)
+                || rust_type.starts_with("::")
+            {
+                rust_type.parse::<TokenStream>().unwrap()
+            } else if rust_type.starts_with("crate::") {
+                syn::parse_str::<syn::Path>(rust_type)
+                    .unwrap()
+                    .to_token_stream()
+            } else {
+                syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, rust_type))
+                    .unwrap()
+                    .to_token_stream()
+            }
         };
 
-        let response = if (is_google_type(&self.output_proto_type) && !compile_well_known_types)
-            || self.output_type.starts_with("::")
-        {
-            self.output_type.parse::<TokenStream>().unwrap()
-        } else if self.output_type.starts_with("crate::") {
-            syn::parse_str::<syn::Path>(&self.output_type)
-                .unwrap()
-                .to_token_stream()
-        } else {
-            syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, self.output_type))
-                .unwrap()
-                .to_token_stream()
-        };
-
+        let request = convert_type(&self.input_proto_type, &self.input_type);
+        let response = convert_type(&self.output_proto_type, &self.output_type);
         (request, response)
     }
 }
