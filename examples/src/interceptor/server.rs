@@ -31,6 +31,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
+    // See examples/src/interceptor/client.rs for an example of how to create a
+    // named interceptor that can be returned from functions or stored in
+    // structs.
     let svc = GreeterServer::with_interceptor(greeter, intercept);
 
     println!("GreeterServer listening on {}", addr);
