@@ -1,6 +1,6 @@
 [package]
 name = "tonic-health"
-version = "0.4.0"
+version = "0.4.1"
 authors = ["James Nugent <james@jen20.com>"]
 edition = "2018"
 license = "MIT"
