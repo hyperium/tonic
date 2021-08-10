@@ -1,9 +1,12 @@
+# [0.5.2](https://github.com/hyperium/tonic/compare/v0.5.1...v0.5.2) (2021-08-10)
+
+* **tonic:** add `Interceptor` trait (#713) ([#713](https://github.com/hyperium/tonic/issues/713)) ([8c8f4d1](https://github.com/hyperium/tonic/commit/8c8f4d1))
+
 # [0.5.1](https://github.com/hyperium/tonic/compare/v0.5.0...v0.5.1) (2021-08-09)
 
 ### Features
 
 * **health:** Expose grpc_health_v1 file descriptor set ([#620](https://github.com/hyperium/tonic/issues/620)) ([167e8cb](https://github.com/hyperium/tonic/commit/167e8cb)), closes [#619](https://github.com/hyperium/tonic/issues/619)
-* **tonic:** add `Interceptor` trait (#713) ([#713](https://github.com/hyperium/tonic/issues/713)) ([8c8f4d1](https://github.com/hyperium/tonic/commit/8c8f4d1))
 * **tonic:** derive `Clone` for `RouterService` (#714) ([#714](https://github.com/hyperium/tonic/issues/714)) ([0a06603](https://github.com/hyperium/tonic/commit/0a06603))
 * **transport:** Add `Connected` impl for `DuplexStream` (#722) ([#722](https://github.com/hyperium/tonic/issues/722)) ([0e33a02](https://github.com/hyperium/tonic/commit/0e33a02))
 
