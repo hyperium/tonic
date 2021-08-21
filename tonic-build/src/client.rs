@@ -136,7 +136,7 @@ fn generate_methods<T: Service>(
             package,
             if package.is_empty() { "" } else { "." },
             service.identifier(),
-            method.identifier()
+            safe_ident(method.identifier())
         );
 
         stream.extend(generate_doc_comments(method.comment()));
@@ -259,4 +259,13 @@ fn generate_streaming<T: Method>(
            self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
     }
+}
+
+fn safe_ident(s: &str) -> String {
+    let mut ident: String = s.into();
+    match ident.as_str() {
+        "connect" | "new" | "send_gzip" | "accept_gzip" => ident.insert_str(0, "r#"),
+        _ => (),
+    };
+    ident
 }
