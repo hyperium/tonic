@@ -13,7 +13,7 @@ use std::{
 use tower_layer::Layer;
 use tower_service::Service;
 
-/// A gRPC incerceptor.
+/// A gRPC interceptor.
 ///
 /// gRPC interceptors are similar to middleware but have less flexibility. An interceptor allows
 /// you to do two main things, one is to add/remove/check items in the `MetadataMap` of each
