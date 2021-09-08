@@ -264,7 +264,7 @@ use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
 ```
 
 **Note**: The token passed to the `include_proto` macro (in our case "routeguide") is the name of
-the package declared in in our `.proto` file, not a filename, e.g "routeguide.rs".
+the package declared in our `.proto` file, not a filename, e.g "routeguide.rs".
 
 With this in place, we can stub out our service implementation:
 
