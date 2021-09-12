@@ -807,6 +807,8 @@ impl From<Code> for i32 {
 
 #[cfg(test)]
 mod tests {
+    use std::io;
+
     use super::*;
     use crate::Error;
 
@@ -836,12 +838,33 @@ mod tests {
 
     #[test]
     fn from_error_unknown() {
+        use std::error::Error as _;
+
         let orig: Error = "peek-a-boo".into();
         let found = Status::from_error(orig);
 
         assert_eq!(found.code(), Code::Unknown);
         assert_eq!(found.message(), "peek-a-boo".to_string());
-        assert_eq!(std::error::Error::source(&found).unwrap().to_string(), "peek-a-boo");
+        assert_eq!(found.source().unwrap().to_string(), "peek-a-boo");
+    }
+
+    #[test]
+    fn from_error_io() {
+        use std::error::Error as _;
+
+        let orig: Error = "in-use".into();
+        let io_orig = io::Error::new(io::ErrorKind::AddrInUse, orig);
+        let found: Status = io_orig.into();
+
+        assert_eq!(found.code(), Code::Unavailable);
+        assert_eq!(found.message(), "in-use".to_string());
+
+        let source = found
+            .source()
+            .and_then(|err| err.downcast_ref::<io::Error>())
+            .unwrap();
+        assert_eq!(source.to_string(), "in-use");
+        assert_eq!(source.kind(), io::ErrorKind::AddrInUse);
     }
 
     #[test]
