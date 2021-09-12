@@ -306,7 +306,11 @@ impl Status {
     #[cfg_attr(not(feature = "transport"), allow(dead_code))]
     pub(crate) fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
         Status::try_from_error(err)
-            .unwrap_or_else(|err| Status::new(Code::Unknown, err.to_string()))
+            .unwrap_or_else(|err| {
+                let mut status = Status::new(Code::Unknown, err.to_string());
+                status.source = Some(err);
+                status
+            })
     }
 
     pub(crate) fn try_from_error(
@@ -628,7 +632,9 @@ impl From<std::io::Error> for Status {
             ErrorKind::UnexpectedEof => Code::OutOfRange,
             _ => Code::Unknown,
         };
-        Status::new(code, err.to_string())
+        let mut status = Status::new(code, err.to_string());
+        status.source = Some(Box::new(err));
+        status
     }
 }
 
@@ -835,6 +841,7 @@ mod tests {
 
         assert_eq!(found.code(), Code::Unknown);
         assert_eq!(found.message(), "peek-a-boo".to_string());
+        assert_eq!(std::error::Error::source(&found).unwrap().to_string(), "peek-a-boo");
     }
 
     #[test]
