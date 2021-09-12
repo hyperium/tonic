@@ -206,7 +206,15 @@ impl<T> Streaming<T> {
                 0 => false,
                 1 => {
                     if cfg!(feature = "compression") {
-                        true
+                        if self.encoding.is_some() {
+                            true
+                        } else {
+                            // https://grpc.github.io/grpc/core/md_doc_compression.html
+                            // An ill-constructed message with its Compressed-Flag bit set but lacking a grpc-encoding
+                            // entry different from identity in its metadata MUST fail with INTERNAL status,
+                            // its associated description indicating the invalid Compressed-Flag condition.
+                            return Err(Status::new(Code::Internal, "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
+                        }
                     } else {
                         return Err(Status::new(
                             Code::Unimplemented,
@@ -250,6 +258,7 @@ impl<T> Streaming<T> {
 
                     if let Err(err) = decompress(
                         self.encoding.unwrap_or_else(|| {
+                            // SAFETY: The check while in State::ReadHeader would already have returned Code::Internal
                             unreachable!("message was compressed but `Streaming.encoding` was `None`. This is a bug in Tonic. Please file an issue")
                         }),
                         &mut self.buf,

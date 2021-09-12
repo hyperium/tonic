@@ -87,3 +87,40 @@ async fn client_enabled_server_disabled() {
         "identity"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn client_mark_compressed_without_header_server_enabled() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
+    let svc = test_server::TestServer::new(Svc::default()).accept_gzip();
+
+    tokio::spawn({
+        async move {
+            Server::builder()
+                .add_service(svc)
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
+                    MockStream(server),
+                )]))
+                .await
+                .unwrap();
+        }
+    });
+
+    let mut client = test_client::TestClient::with_interceptor(mock_io_channel(client).await, move |mut req: Request<()>| {
+        req.metadata_mut().remove("grpc-encoding");
+        Ok(req)
+    }).send_gzip();
+
+    let status = client
+        .compress_input_unary(SomeData {
+            data: [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
+        })
+        .await
+        .unwrap_err();
+
+    assert_eq!(status.code(), tonic::Code::Internal);
+    assert_eq!(
+        status.message(),
+        "protocol error: received message with compressed-flag but no grpc-encoding was specified"
+    );
+}
