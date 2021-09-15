@@ -6,9 +6,9 @@ use futures::Stream;
 use pb::{EchoRequest, EchoResponse};
 use std::pin::Pin;
 use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status, Streaming};
+use tokio_stream::wrappers::ReceiverStream;
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
 
 #[derive(Default)]
 pub struct EchoServer;
@@ -20,13 +20,24 @@ impl pb::echo_server::Echo for EchoServer {
         Ok(Response::new(EchoResponse { message }))
     }
 
-    type ServerStreamingEchoStream = ResponseStream;
+    type ServerStreamingEchoStream = ReceiverStream<Result<EchoResponse, Status>>;
 
     async fn server_streaming_echo(
         &self,
-        _: Request<EchoRequest>,
+        request: Request<EchoRequest>,
     ) -> EchoResult<Self::ServerStreamingEchoStream> {
-        Err(Status::unimplemented("not implemented"))
+
+        let (tx, rx) = tokio::sync::mpsc::channel(4);
+        let message = request.into_inner().message;
+        let data: Vec<_> = (0..100).map(|x| EchoResponse{message: format!("{}: {}",message,x.to_string())}).collect();
+
+        tokio::spawn(async move {
+            for echos in data.into_iter() {
+                tx.send(Ok(echos.clone())).await.unwrap();
+            }
+        });
+
+        Ok(Response::new(ReceiverStream::new(rx)))
     }
 
     async fn client_streaming_echo(
@@ -36,7 +47,7 @@ impl pb::echo_server::Echo for EchoServer {
         Err(Status::unimplemented("not implemented"))
     }
 
-    type BidirectionalStreamingEchoStream = ResponseStream;
+    type BidirectionalStreamingEchoStream = ReceiverStream<Result<EchoResponse, Status>>;
 
     async fn bidirectional_streaming_echo(
         &self,
