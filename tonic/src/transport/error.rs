@@ -9,12 +9,12 @@ type Source = Box<dyn StdError + Send + Sync + 'static>;
 
 /// Error's that originate from the client or server;
 pub struct Error {
-    inner: ErrorImpl,
+    pub(crate) inner: ErrorImpl,
 }
 
-struct ErrorImpl {
+pub(crate) struct ErrorImpl {
     kind: Kind,
-    source: Option<Source>,
+    pub(crate) source: Option<Source>,
 }
 
 #[derive(Debug)]

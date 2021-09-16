@@ -312,6 +312,20 @@ impl Status {
     pub(crate) fn try_from_error(
         err: Box<dyn Error + Send + Sync + 'static>,
     ) -> Result<Status, Box<dyn Error + Send + Sync + 'static>> {
+        #[cfg(feature = "transport")]
+        let err = match err.downcast::<crate::transport::error::Error>() {
+            Ok(err) => {
+                return Ok(Status {
+                    code: Code::Unknown,
+                    message: err.to_string(),
+                    details: Bytes::new(),
+                    metadata: MetadataMap::new(),
+                    source: err.inner.source,
+                });
+            }
+            Err(err) => err,
+        };
+
         let err = match err.downcast::<Status>() {
             Ok(status) => {
                 return Ok(*status);

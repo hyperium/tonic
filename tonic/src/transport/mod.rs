@@ -89,7 +89,7 @@
 pub mod channel;
 pub mod server;
 
-mod error;
+pub(crate) mod error;
 mod service;
 mod tls;
 
