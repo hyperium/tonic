@@ -1,6 +1,6 @@
-use super::{Codec, DecodeBuf, Decoder, Encoder};
-use crate::codec::EncodeBuf;
+use super::{Codec, Decoder, Encoder};
 use crate::{Code, Status};
+use bytes::BytesMut;
 use prost1::Message;
 use std::marker::PhantomData;
 
@@ -40,11 +40,10 @@ where
 #[derive(Debug, Clone, Default)]
 pub struct ProstEncoder<T>(PhantomData<T>);
 
-impl<T: Message> Encoder for ProstEncoder<T> {
-    type Item = T;
+impl<T: Message> Encoder<T> for ProstEncoder<T> {
     type Error = Status;
 
-    fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
+    fn encode(&mut self, item: T, buf: &mut BytesMut) -> Result<(), Self::Error> {
         item.encode(buf)
             .expect("Message only errors if not enough space");
 
@@ -60,7 +59,7 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
     type Item = U;
     type Error = Status;
 
-    fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
+    fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
         let item = Message::decode(buf)
             .map(Option::Some)
             .map_err(from_decode_error)?;
@@ -79,10 +78,10 @@ fn from_decode_error(error: prost1::DecodeError) -> crate::Status {
 mod tests {
     use crate::codec::compression::SingleMessageCompressionOverride;
     use crate::codec::{
-        encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
+        encode_server, Decoder, Encoder, Streaming, HEADER_SIZE,
     };
     use crate::Status;
-    use bytes::{Buf, BufMut, BytesMut};
+    use bytes::{BufMut, Bytes, BytesMut};
     use http_body::Body;
 
     const LEN: usize = 10000;
@@ -117,7 +116,7 @@ mod tests {
     async fn encode() {
         let encoder = MockEncoder::default();
 
-        let msg = Vec::from(&[0u8; 1024][..]);
+        let msg = Bytes::from_static(&[0u8; 1024][..]);
 
         let messages = std::iter::repeat_with(move || Ok::<_, Status>(msg.clone())).take(10000);
         let source = futures_util::stream::iter(messages);
@@ -139,11 +138,10 @@ mod tests {
     #[derive(Debug, Clone, Default)]
     struct MockEncoder;
 
-    impl Encoder for MockEncoder {
-        type Item = Vec<u8>;
+    impl Encoder<Bytes> for MockEncoder {
         type Error = Status;
 
-        fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
+        fn encode(&mut self, item: Bytes, buf: &mut BytesMut) -> Result<(), Self::Error> {
             buf.put(&item[..]);
             Ok(())
         }
@@ -153,13 +151,12 @@ mod tests {
     struct MockDecoder;
 
     impl Decoder for MockDecoder {
-        type Item = Vec<u8>;
+        type Item = Bytes;
         type Error = Status;
 
-        fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-            let out = Vec::from(buf.chunk());
-            buf.advance(LEN);
-            Ok(Some(out))
+        fn decode(&mut self, buf: &mut BytesMut) -> Result<Option<Self::Item>, Self::Error> {
+            let item = buf.split_to(LEN).freeze();
+            Ok(Some(item))
         }
     }
 

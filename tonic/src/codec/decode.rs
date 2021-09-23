@@ -1,6 +1,6 @@
 #[cfg(feature = "compression")]
 use super::compression::{decompress, CompressionEncoding};
-use super::{DecodeBuf, Decoder, HEADER_SIZE};
+use super::{Decoder, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -266,18 +266,13 @@ impl<T> Streaming<T> {
                         };
                         return Err(Status::new(Code::Internal, message));
                     }
-                    let decompressed_len = self.decompress_buf.len();
-                    self.decoder.decode(&mut DecodeBuf::new(
-                        &mut self.decompress_buf,
-                        decompressed_len,
-                    ))
+                    self.decoder.decode(&mut self.decompress_buf)
                 }
 
                 #[cfg(not(feature = "compression"))]
                 unreachable!("should not take this branch if compression is disabled")
             } else {
-                self.decoder
-                    .decode(&mut DecodeBuf::new(&mut self.buf, *len))
+                self.decoder.decode(&mut self.buf)
             };
 
             return match decoding_result {
