@@ -30,3 +30,8 @@ compression = []
 
 [package.metadata.docs.rs]
 all-features = true
+
+[patch.crates-io]
+prost = { git = "https://github.com/tokio-rs/prost" }
+#prost-build = { git = "https://github.com/tokio-rs/prost" }
+prost-build = { path = "../prost/prost-build" }
