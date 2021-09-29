@@ -205,7 +205,8 @@ impl<T> Streaming<T> {
             let is_compressed = match self.buf.get_u8() {
                 0 => false,
                 1 => {
-                    if cfg!(feature = "compression") {
+                    #[cfg(feature = "compression")]
+                    {
                         if self.encoding.is_some() {
                             true
                         } else {
@@ -215,7 +216,9 @@ impl<T> Streaming<T> {
                             // its associated description indicating the invalid Compressed-Flag condition.
                             return Err(Status::new(Code::Internal, "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
                         }
-                    } else {
+                    }
+                    #[cfg(not(feature = "compression"))]
+                    {
                         return Err(Status::new(
                             Code::Unimplemented,
                             "Message compressed, compression support not enabled.".to_string(),
