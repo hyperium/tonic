@@ -195,7 +195,7 @@ impl<T> Request<T> {
         Request {
             metadata: self.metadata,
             message,
-            extensions: Extensions::new(),
+            extensions: self.extensions,
         }
     }
 
