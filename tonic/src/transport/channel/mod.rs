@@ -18,6 +18,7 @@ use http::{
 };
 use hyper::client::connect::Connection as HyperConnection;
 use std::{
+    convert::AsRef,
     fmt,
     future::Future,
     hash::Hash,
@@ -80,6 +81,25 @@ impl Channel {
     /// Create an [`Endpoint`] builder that can create [`Channel`]s.
     pub fn builder(uri: Uri) -> Endpoint {
         Endpoint::from(uri)
+    }
+
+
+    /// Create an `Endpoint` from String like types.
+    ///
+    /// ```
+    /// # use tonic::transport::Channel;
+    /// let url = "https://example.com";
+    /// Channel::from_static(url);
+    ///
+    /// let string_url =  "https://example.com".to_owned();
+    /// Channel::from_static(string_url);
+    ///
+    /// let string_url =  "https://example.com".to_owned();
+    /// Channel::from_static(&String_url);
+    /// ```
+    pub fn from_string<StringLike: AsRef<str>>(s: StringLike) -> Endpoint {
+        let uri = s.as_ref().to_string().parse::<Uri>().unwrap();
+        Self::builder(uri)
     }
 
     /// Create an `Endpoint` from a static string.
