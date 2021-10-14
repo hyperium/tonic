@@ -170,6 +170,14 @@ path = "src/grpc-web/server.rs"
 name = "grpc-web-client"
 path = "src/grpc-web/client.rs"
 
+[[bin]]
+name = "streaming-client"
+path = "src/streaming/client.rs"
+
+[[bin]]
+name = "streaming-server"
+path = "src/streaming/server.rs"
+
 [dependencies]
 tonic = { path = "../tonic", features = ["tls", "compression"] }
 prost = "0.8"
