@@ -22,7 +22,7 @@ transport = ["tonic/transport"]
 tokio = { version = "1.0", features = ["sync"] }
 tonic = { version = "0.5", path = "../tonic", features = ["codegen", "prost"] }
 bytes = "1.0"
-prost = "0.8"
+prost = "0.9"
 tokio-stream = "0.1"
 async-stream = "0.3"
 
