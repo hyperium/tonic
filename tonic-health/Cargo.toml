@@ -16,7 +16,7 @@ keywords = ["rpc", "grpc", "async", "healthcheck"]
 
 [features]
 default = ["transport", "rustfmt"]
-transport = ["tonic/transport"]
+transport = ["tonic/transport", "tonic-build/transport"]
 rustfmt = ["tonic-build/rustfmt"]
 
 [dependencies]
