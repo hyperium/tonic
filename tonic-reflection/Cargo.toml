@@ -16,6 +16,10 @@ readme = "README.md"
 categories = ["network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "async", "reflection"]
 
+[features]
+default = ["rustfmt"]
+rustfmt = ["tonic-build/rustfmt"]
+
 [dependencies]
 bytes = "1.0"
 prost = "0.9"
@@ -25,7 +29,7 @@ tokio-stream = { version = "0.1", features = ["net"] }
 tonic = { version = "0.6", path = "../tonic", features = ["codegen", "prost"] }
 
 [build-dependencies]
-tonic-build = { version = "0.6", path = "../tonic-build" }
+tonic-build = { version = "0.6", path = "../tonic-build", features = ["transport", "prost"] }
 
 [dev-dependencies]
 futures = "0.3"
