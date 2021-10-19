@@ -7,8 +7,6 @@ use integration_tests::pb::{
 };
 use std::convert::TryFrom;
 use std::error::Error;
-use std::pin::Pin;
-use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::metadata::{MetadataMap, MetadataValue};
