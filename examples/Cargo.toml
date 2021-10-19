@@ -180,7 +180,7 @@ path = "src/streaming/server.rs"
 
 [dependencies]
 tonic = { path = "../tonic", features = ["tls", "compression"] }
-prost = "0.8"
+prost = "0.9"
 tokio = { version = "1.0", features = ["rt-multi-thread", "time", "fs", "macros", "net"] }
 tokio-stream = { version =  "0.1", features = ["net"] }
 async-stream = "0.3"
@@ -196,7 +196,7 @@ tracing-subscriber = { version = "0.2", features = ["tracing-log"] }
 tracing-attributes = "0.1"
 tracing-futures = "0.2"
 # Required for wellknown types
-prost-types = "0.8"
+prost-types = "0.9"
 # Hyper example
 hyper = { version = "0.14", features = ["full"] }
 warp = "0.3"
