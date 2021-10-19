@@ -106,10 +106,14 @@ async fn client_mark_compressed_without_header_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::with_interceptor(mock_io_channel(client).await, move |mut req: Request<()>| {
-        req.metadata_mut().remove("grpc-encoding");
-        Ok(req)
-    }).send_gzip();
+    let mut client = test_client::TestClient::with_interceptor(
+        mock_io_channel(client).await,
+        move |mut req: Request<()>| {
+            req.metadata_mut().remove("grpc-encoding");
+            Ok(req)
+        },
+    )
+    .send_gzip();
 
     let status = client
         .compress_input_unary(SomeData {
