@@ -10,7 +10,7 @@ license = "MIT"
 
 [dependencies]
 tonic = { path = "../../tonic" }
-prost = "0.8"
+prost = "0.9"
 futures-util = "0.3"
 bytes = "1.0"
 
