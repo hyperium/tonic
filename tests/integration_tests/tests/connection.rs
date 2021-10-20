@@ -63,9 +63,7 @@ async fn connect_lazy_reconnects_after_first_failure() {
     let sender = Arc::new(Mutex::new(Some(tx)));
     let svc = test_server::TestServer::new(Svc(sender));
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1339")
-        .connect_lazy()
-        .unwrap();
+    let channel = Endpoint::from_static("http://127.0.0.1:1339").connect_lazy();
 
     let mut client = TestClient::new(channel);
 

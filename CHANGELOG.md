@@ -57,7 +57,6 @@ This release includes a new crate `tonic-web` which is versioned at `0.1` and su
 * **transport:** provide generic access to connect info ([#647](https://github.com/hyperium/tonic/issues/647)) ([e5e3118](https://github.com/hyperium/tonic/commit/e5e311853bff347355722bc829d40f54e8954aee))
 
 
-
 # [0.4.3](https://github.com/hyperium/tonic/compare/v0.4.2...v0.4.3) (2021-04-29)
 
 ### Features

@@ -284,7 +284,7 @@ impl Endpoint {
     ///
     /// The channel returned by this method does not attempt to connect to the endpoint until first
     /// use.
-    pub fn connect_lazy(&self) -> Result<Channel, Error> {
+    pub fn connect_lazy(&self) -> Channel {
         let mut http = hyper::client::connect::HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
@@ -299,9 +299,9 @@ impl Endpoint {
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
             connector.set_connect_timeout(Some(connect_timeout));
-            Ok(Channel::new(connector, self.clone()))
+            Channel::new(connector, self.clone())
         } else {
-            Ok(Channel::new(connector, self.clone()))
+            Channel::new(connector, self.clone())
         }
     }
 
