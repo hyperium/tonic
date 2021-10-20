@@ -1,5 +1,5 @@
 [package]
-name = "wellknown"
+name = "service_named_service"
 version = "0.1.0"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2018"
@@ -11,7 +11,6 @@ license = "MIT"
 [dependencies]
 tonic = { path = "../../tonic" }
 prost = "0.9"
-prost-types = "0.9"
 
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }

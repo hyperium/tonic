@@ -19,7 +19,7 @@ pub(crate) mod proto {
     #![allow(unreachable_pub)]
     tonic::include_proto!("grpc.reflection.v1alpha");
 
-    pub(crate) const FILE_DESCRIPTOR_SET: &'static [u8] =
+    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
         tonic::include_file_descriptor_set!("reflection_v1alpha1");
 }
 

@@ -20,12 +20,12 @@ mod pb {
 
     tonic::include_proto!("grpc.reflection.v1alpha");
 
-    pub(crate) const REFLECTION_SERVICE_DESCRIPTOR: &'static [u8] =
+    pub(crate) const REFLECTION_SERVICE_DESCRIPTOR: &[u8] =
         tonic::include_file_descriptor_set!("reflection_v1alpha1");
 
     pub(crate) fn get_encoded_reflection_service_fd() -> Vec<u8> {
         let mut expected = Vec::new();
-        &prost_types::FileDescriptorSet::decode(REFLECTION_SERVICE_DESCRIPTOR)
+        prost_types::FileDescriptorSet::decode(REFLECTION_SERVICE_DESCRIPTOR)
             .expect("decode reflection service file descriptor set")
             .file[0]
             .encode(&mut expected)

@@ -221,7 +221,7 @@ impl<'b> Builder<'b> {
         field: &FieldDescriptorProto,
     ) -> Result<(), Error> {
         let field_name = extract_name(prefix, "field", field.name.as_ref())?;
-        self.symbols.insert(field_name, fd.clone());
+        self.symbols.insert(field_name, fd);
         Ok(())
     }
 }
@@ -265,7 +265,7 @@ impl ReflectionServiceState {
             None => Err(Status::not_found(format!("symbol '{}' not found", symbol))),
             Some(fd) => {
                 let mut encoded_fd = Vec::new();
-                if let Err(_) = fd.clone().encode(&mut encoded_fd) {
+                if fd.clone().encode(&mut encoded_fd).is_err() {
                     return Err(Status::internal("encoding error"));
                 };
 
@@ -283,7 +283,7 @@ impl ReflectionServiceState {
             None => Err(Status::not_found(format!("file '{}' not found", filename))),
             Some(fd) => {
                 let mut encoded_fd = Vec::new();
-                if let Err(_) = fd.clone().encode(&mut encoded_fd) {
+                if fd.clone().encode(&mut encoded_fd).is_err() {
                     return Err(Status::internal("encoding error"));
                 }
 

@@ -104,9 +104,9 @@ terms or conditions.
 [`tonic`]: https://github.com/hyperium/tonic
 [`tokio`]: https://github.com/tokio-rs/tokio
 [`hyper`]: https://github.com/hyperium/hyper
-[`prost`]: https://github.com/danburkert/prost
+[`prost`]: https://github.com/tokio-rs/prost
 [`protobuf`]: https://developers.google.com/protocol-buffers
-[`rustls`]: https://github.com/ctz/rustls
+[`rustls`]: https://github.com/rustls/rustls
 [`examples`]: https://github.com/hyperium/tonic/tree/master/examples
 [`interop`]: https://github.com/hyperium/tonic/tree/master/interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/examples

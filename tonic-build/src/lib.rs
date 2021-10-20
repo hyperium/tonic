@@ -68,7 +68,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.5.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.5.2")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -284,9 +284,7 @@ fn generate_doc_comments<T: AsRef<str>>(comments: &[T]) -> TokenStream {
 pub(crate) fn match_name(pattern: &str, path: &str) -> bool {
     if pattern.is_empty() {
         false
-    } else if pattern == "." {
-        true
-    } else if pattern == path {
+    } else if pattern == "." || pattern == path {
         true
     } else {
         let pattern_segments = pattern.split('.').collect::<Vec<_>>();

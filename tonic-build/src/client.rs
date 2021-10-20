@@ -36,7 +36,13 @@ pub fn generate<T: Service>(
         /// Generated client implementations.
         #(#mod_attributes)*
         pub mod #client_mod {
-            #![allow(unused_variables, dead_code, missing_docs)]
+            #![allow(
+                unused_variables,
+                dead_code,
+                missing_docs,
+                // will trigger if compression is disabled
+                clippy::let_unit_value,
+            )]
             use tonic::codegen::*;
 
             #service_doc
@@ -62,12 +68,12 @@ pub fn generate<T: Service>(
 
                 pub fn with_interceptor<F>(inner: T, interceptor: F) -> #service_ident<InterceptedService<T, F>>
                 where
-                    F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
-                    T: Service<
+                    F: tonic::service::Interceptor,
+                    T: tonic::codegen::Service<
                         http::Request<tonic::body::BoxBody>,
                         Response = http::Response<<T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody>
                     >,
-                    <T as Service<http::Request<tonic::body::BoxBody>>>::Error: Into<StdError> + Send + Sync,
+                    <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error: Into<StdError> + Send + Sync,
                 {
                     #service_ident::new(InterceptedService::new(inner, interceptor))
                 }
@@ -218,7 +224,7 @@ fn generate_client_streaming<T: Method>(
         pub async fn #ident(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = #request>
-        ) -> Result<tonic::Response<#response>, tonic::Status> where T: std::fmt::Debug {
+        ) -> Result<tonic::Response<#response>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;

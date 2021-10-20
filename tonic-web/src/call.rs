@@ -235,7 +235,7 @@ impl Encoding {
         Self::from_header(headers.get(header::ACCEPT))
     }
 
-    pub(crate) fn to_content_type(&self) -> &'static str {
+    pub(crate) fn to_content_type(self) -> &'static str {
         match self {
             Encoding::Base64 => GRPC_WEB_TEXT_PROTO,
             Encoding::None => GRPC_WEB_PROTO,

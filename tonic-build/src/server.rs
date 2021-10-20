@@ -69,7 +69,13 @@ pub fn generate<T: Service>(
         /// Generated server implementations.
         #(#mod_attributes)*
         pub mod #server_mod {
-            #![allow(unused_variables, dead_code, missing_docs)]
+            #![allow(
+                unused_variables,
+                dead_code,
+                missing_docs,
+                // will trigger if compression is disabled
+                clippy::let_unit_value,
+            )]
             use tonic::codegen::*;
 
             #generated_trait
@@ -98,7 +104,7 @@ pub fn generate<T: Service>(
 
                 pub fn with_interceptor<F>(inner: T, interceptor: F) -> InterceptedService<Self, F>
                 where
-                    F: FnMut(tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status>,
+                    F: tonic::service::Interceptor,
                 {
                     InterceptedService::new(Self::new(inner), interceptor)
                 }
@@ -106,7 +112,7 @@ pub fn generate<T: Service>(
                 #configure_compression_methods
             }
 
-            impl<T, B> Service<http::Request<B>> for #server_service<T>
+            impl<T, B> tonic::codegen::Service<http::Request<B>> for #server_service<T>
                 where
                     T: #server_trait,
                     B: Body + Send + Sync + 'static,
