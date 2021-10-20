@@ -330,7 +330,8 @@ impl Status {
             Err(err) => err,
         };
 
-        if let Some(status) = find_status_in_source_chain(&*err) {
+        if let Some(mut status) = find_status_in_source_chain(&*err) {
+            status.source = Some(err);
             return Ok(status);
         }
 
