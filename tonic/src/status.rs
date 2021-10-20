@@ -330,7 +330,8 @@ impl Status {
             Err(err) => err,
         };
 
-        if let Some(status) = find_status_in_source_chain(&*err) {
+        if let Some(mut status) = find_status_in_source_chain(&*err) {
+            status.source = Some(err);
             return Ok(status);
         }
 
@@ -375,6 +376,31 @@ impl Status {
         };
 
         reason.into()
+    }
+
+    /// Handles hyper errors specifically, which expose a number of different parameters about the
+    /// http stream's error: https://docs.rs/hyper/0.14.11/hyper/struct.Error.html.
+    ///
+    /// Returns Some if there's a way to handle the error, or None if the information from this
+    /// hyper error, but perhaps not its source, should be ignored.
+    #[cfg(feature = "transport")]
+    fn from_hyper_error(err: &hyper::Error) -> Option<Status> {
+        // is_timeout results from hyper's keep-alive logic
+        // (https://docs.rs/hyper/0.14.11/src/hyper/error.rs.html#192-194).  Per the grpc spec
+        // > An expired client initiated PING will cause all calls to be closed with an UNAVAILABLE
+        // > status. Note that the frequency of PINGs is highly dependent on the network
+        // > environment, implementations are free to adjust PING frequency based on network and
+        // > application requirements, which is why it's mapped to unavailable here.
+        //
+        // Likewise, if we are unable to connect to the server, map this to UNAVAILABLE.  This is
+        // consistent with the behavior of a C++ gRPC client when the server is not running, and
+        // matches the spec of:
+        // > The service is currently unavailable. This is most likely a transient condition that
+        // > can be corrected if retried with a backoff.
+        if err.is_timeout() || err.is_connect() {
+            return Some(Status::unavailable(err.to_string()));
+        }
+        None
     }
 
     pub(crate) fn map_error<E>(err: E) -> Status
@@ -556,11 +582,20 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
             return Some(Status::cancelled(timeout.to_string()));
         }
 
+        #[cfg(feature = "transport")]
+        if let Some(hyper) = err
+            .downcast_ref::<hyper::Error>()
+            .and_then(Status::from_hyper_error)
+        {
+            return Some(hyper);
+        }
+
         source = err.source();
     }
 
     None
 }
+
 impl fmt::Debug for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // A manual impl to reduce the noise of frequently empty fields.
