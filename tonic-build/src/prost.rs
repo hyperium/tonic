@@ -381,24 +381,22 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    pub fn compile<P>(self, protos: &[P], includes: &[P]) -> io::Result<()>
-    where
-        P: AsRef<Path>,
-    {
+    pub fn compile(
+        self,
+        protos: &[impl AsRef<Path>],
+        includes: &[impl AsRef<Path>],
+    ) -> io::Result<()> {
         self.compile_with_config(Config::new(), protos, includes)
     }
 
     /// Compile the .proto files and execute code generation using a
     /// custom `prost_build::Config`.
-    pub fn compile_with_config<P>(
+    pub fn compile_with_config(
         self,
         mut config: Config,
-        protos: &[P],
-        includes: &[P],
-    ) -> io::Result<()>
-    where
-        P: AsRef<Path>,
-    {
+        protos: &[impl AsRef<Path>],
+        includes: &[impl AsRef<Path>],
+    ) -> io::Result<()> {
         let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
             out_dir.clone()
         } else {
