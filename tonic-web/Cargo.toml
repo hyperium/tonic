@@ -15,7 +15,7 @@ categories = ["network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "grpc-web"]
 
 [dependencies]
-tonic = { version = "0.5", path = "../tonic", default-features = false, features = ["transport"] }
+tonic = { version = "0.6", path = "../tonic", default-features = false, features = ["transport"] }
 http = "0.2"
 base64 = "0.13"
 futures-core = "0.3"

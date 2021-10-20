@@ -26,6 +26,7 @@ pub fn configure() -> Builder {
         format: true,
         emit_package: true,
         protoc_args: Vec::new(),
+        include_file: None,
     }
 }
 
@@ -225,6 +226,7 @@ pub struct Builder {
     pub(crate) emit_package: bool,
     pub(crate) compile_well_known_types: bool,
     pub(crate) protoc_args: Vec<OsString>,
+    pub(crate) include_file: Option<PathBuf>,
 
     out_dir: Option<PathBuf>,
     #[cfg(feature = "rustfmt")]
@@ -367,6 +369,17 @@ impl Builder {
         self
     }
 
+    /// Configures the optional module filename for easy inclusion of all generated Rust files
+    ///
+    /// If set, generates a file (inside the `OUT_DIR` or `out_dir()` as appropriate) which contains
+    /// a set of `pub mod XXX` statements combining to load all Rust files generated.  This can allow
+    /// for a shortcut where multiple related proto files have been compiled together resulting in
+    /// a semi-complex set of includes.
+    pub fn include_file(mut self, path: impl AsRef<Path>) -> Self {
+        self.include_file = Some(path.as_ref().to_path_buf());
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile<P>(self, protos: &[P], includes: &[P]) -> io::Result<()>
     where
@@ -410,6 +423,9 @@ impl Builder {
         }
         if self.compile_well_known_types {
             config.compile_well_known_types();
+        }
+        if let Some(path) = self.include_file.as_ref() {
+            config.include_file(path);
         }
 
         for arg in self.protoc_args.iter() {
