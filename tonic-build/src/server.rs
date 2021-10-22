@@ -115,7 +115,7 @@ pub fn generate<T: Service>(
             impl<T, B> tonic::codegen::Service<http::Request<B>> for #server_service<T>
                 where
                     T: #server_trait,
-                    B: Body + Send + Sync + 'static,
+                    B: Body + Send + 'static,
                     B::Error: Into<StdError> + Send + 'static,
             {
                 type Response = http::Response<tonic::body::BoxBody>;
@@ -232,7 +232,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + Sync + 'static;
+                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
@@ -248,7 +248,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + Sync + 'static;
+                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)

@@ -1,6 +1,7 @@
 use bytes::Bytes;
 use futures_util::FutureExt;
 use http::Uri;
+use integration_tests::mock::MockStream;
 use integration_tests::pb::{
     test_client, test_server, test_stream_client, test_stream_server, Input, InputStream, Output,
     OutputStream,
@@ -125,9 +126,8 @@ async fn status_with_metadata() {
     jh.await.unwrap();
 }
 
-type Stream<T> = std::pin::Pin<
-    Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + Sync + 'static>,
->;
+type Stream<T> =
+    std::pin::Pin<Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
 
 #[tokio::test]
 async fn status_from_server_stream() {
@@ -184,7 +184,7 @@ async fn status_from_server_stream_with_source() {
     let channel = Endpoint::try_from("http://[::]:50051")
         .unwrap()
         .connect_with_connector_lazy(tower::service_fn(move |_: Uri| async move {
-            Err::<mock::MockStream, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
+            Err::<MockStream, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
         }))
         .unwrap();
 
@@ -200,55 +200,4 @@ fn trace_init() {
     let _ = tracing_subscriber::FmtSubscriber::builder()
         .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
         .try_init();
-}
-
-mod mock {
-    use std::{
-        pin::Pin,
-        task::{Context, Poll},
-    };
-
-    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-    use tonic::transport::server::Connected;
-
-    #[derive(Debug)]
-    pub struct MockStream(pub tokio::io::DuplexStream);
-
-    impl Connected for MockStream {
-        type ConnectInfo = ();
-
-        /// Create type holding information about the connection.
-        fn connect_info(&self) -> Self::ConnectInfo {}
-    }
-
-    impl AsyncRead for MockStream {
-        fn poll_read(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &mut ReadBuf<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.0).poll_read(cx, buf)
-        }
-    }
-
-    impl AsyncWrite for MockStream {
-        fn poll_write(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &[u8],
-        ) -> Poll<std::io::Result<usize>> {
-            Pin::new(&mut self.0).poll_write(cx, buf)
-        }
-
-        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.0).poll_flush(cx)
-        }
-
-        fn poll_shutdown(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.0).poll_shutdown(cx)
-        }
-    }
 }

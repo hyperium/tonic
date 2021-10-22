@@ -44,7 +44,6 @@ pub struct Grpc<T> {
 impl<T> Grpc<T>
 where
     T: Codec,
-    T::Encode: Sync,
 {
     /// Creates a new gRPC server with the provided [`Codec`].
     pub fn new(codec: T) -> Self {
@@ -173,7 +172,7 @@ where
     ) -> http::Response<BoxBody>
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error> + Send,
     {
         #[cfg(feature = "compression")]
@@ -221,8 +220,8 @@ where
     ) -> http::Response<BoxBody>
     where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
-        S::ResponseStream: Send + Sync + 'static,
-        B: Body + Send + Sync + 'static,
+        S::ResponseStream: Send + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error> + Send,
     {
         #[cfg(feature = "compression")]
@@ -265,7 +264,7 @@ where
     ) -> http::Response<BoxBody>
     where
         S: ClientStreamingService<T::Decode, Response = T::Encode>,
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error> + Send + 'static,
     {
         #[cfg(feature = "compression")]
@@ -301,8 +300,8 @@ where
     ) -> http::Response<BoxBody>
     where
         S: StreamingService<T::Decode, Response = T::Encode> + Send,
-        S::ResponseStream: Send + Sync + 'static,
-        B: Body + Send + Sync + 'static,
+        S::ResponseStream: Send + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error> + Send,
     {
         #[cfg(feature = "compression")]
@@ -329,7 +328,7 @@ where
         request: http::Request<B>,
     ) -> Result<Request<T::Decode>, Status>
     where
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error> + Send,
     {
         #[cfg(feature = "compression")]
@@ -365,7 +364,7 @@ where
         request: http::Request<B>,
     ) -> Result<Request<Streaming<T::Decode>>, Status>
     where
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error> + Send,
     {
         #[cfg(feature = "compression")]
@@ -388,7 +387,7 @@ where
         #[cfg(feature = "compression")] compression_override: SingleMessageCompressionOverride,
     ) -> http::Response<BoxBody>
     where
-        B: TryStream<Ok = T::Encode, Error = Status> + Send + Sync + 'static,
+        B: TryStream<Ok = T::Encode, Error = Status> + Send + 'static,
     {
         let response = match response {
             Ok(r) => r,

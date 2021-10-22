@@ -12,7 +12,7 @@ use tonic::{transport::Server, Request, Response, Status, Streaming};
 use pb::{EchoRequest, EchoResponse};
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
 
 #[derive(Debug)]
 pub struct EchoServer {}

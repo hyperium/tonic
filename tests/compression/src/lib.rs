@@ -69,7 +69,7 @@ impl test_server::Test for Svc {
     }
 
     type CompressOutputServerStreamStream =
-        Pin<Box<dyn Stream<Item = Result<SomeData, Status>> + Send + Sync + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<SomeData, Status>> + Send + 'static>>;
 
     async fn compress_output_server_stream(
         &self,
@@ -110,7 +110,7 @@ impl test_server::Test for Svc {
     }
 
     type CompressInputOutputBidirectionalStreamStream =
-        Pin<Box<dyn Stream<Item = Result<SomeData, Status>> + Send + Sync + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<SomeData, Status>> + Send + 'static>>;
 
     async fn compress_input_output_bidirectional_stream(
         &self,

@@ -40,9 +40,9 @@ pub trait Codec: Default {
     type Decode: Send + 'static;
 
     /// The encoder that can encode a message.
-    type Encoder: Encoder<Item = Self::Encode, Error = Status> + Send + Sync + 'static;
+    type Encoder: Encoder<Item = Self::Encode, Error = Status> + Send + 'static;
     /// The encoder that can decode a message.
-    type Decoder: Decoder<Item = Self::Decode, Error = Status> + Send + Sync + 'static;
+    type Decoder: Decoder<Item = Self::Decode, Error = Status> + Send + 'static;
 
     /// Fetch the encoder.
     fn encoder(&mut self) -> Self::Encoder;
