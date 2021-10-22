@@ -24,5 +24,4 @@ members = [
 ]
 
 [patch.crates-io]
-http-body = {git = "https://github.com/hyperium/http-body"}
 hyper = {git = "https://github.com/hyperium/hyper"}
