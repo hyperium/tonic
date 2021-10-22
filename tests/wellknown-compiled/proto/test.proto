@@ -1,0 +1,11 @@
+syntax = "proto3";
+package test;
+
+import "google/protobuf/empty.proto";
+
+message Input {
+}
+
+service Service {
+  rpc Call(Input) returns (google.protobuf.Empty);
+}

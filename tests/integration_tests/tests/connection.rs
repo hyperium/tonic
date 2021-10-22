@@ -5,7 +5,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{
     transport::{Endpoint, Server},
-    Request, Response, Status,
+    Code, Request, Response, Status,
 };
 
 struct Svc(Arc<Mutex<Option<oneshot::Sender<()>>>>);
@@ -52,7 +52,8 @@ async fn connect_returns_err_via_call_after_connected() {
 
     let res = client.unary_call(Request::new(Input {})).await;
 
-    assert!(res.is_err());
+    let err = res.unwrap_err();
+    assert_eq!(err.code(), Code::Unavailable);
 
     jh.await.unwrap();
 }
@@ -84,7 +85,9 @@ async fn connect_lazy_reconnects_after_first_failure() {
 
     // The server shut down, third call should fail
     tokio::time::sleep(Duration::from_millis(100)).await;
-    client.unary_call(Request::new(Input {})).await.unwrap_err();
+    let err = client.unary_call(Request::new(Input {})).await.unwrap_err();
+
+    assert_eq!(err.code(), Code::Unavailable);
 
     jh.await.unwrap();
 }

@@ -1,3 +1,4 @@
+use futures_core::future::BoxFuture;
 use http::{Request, Uri};
 use std::task::{Context, Poll};
 use tower_service::Service;
@@ -17,13 +18,15 @@ impl<T> AddOrigin<T> {
 impl<T, ReqBody> Service<Request<ReqBody>> for AddOrigin<T>
 where
     T: Service<Request<ReqBody>>,
+    T::Future: Send + 'static,
+    T::Error: Into<crate::Error>,
 {
     type Response = T::Response;
-    type Error = T::Error;
-    type Future = T::Future;
+    type Error = crate::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx)
+        self.inner.poll_ready(cx).map_err(Into::into)
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
@@ -34,6 +37,11 @@ where
         let mut uri: http::uri::Parts = head.uri.into();
         let set_uri = self.origin.clone().into_parts();
 
+        if set_uri.scheme.is_none() || set_uri.authority.is_none() {
+            let err = crate::transport::Error::new_invalid_uri();
+            return Box::pin(async move { Err::<Self::Response, _>(err.into()) });
+        }
+
         // Update the URI parts, setting hte scheme and authority
         uri.scheme = Some(set_uri.scheme.expect("expected scheme"));
         uri.authority = Some(set_uri.authority.expect("expected authority"));
@@ -43,6 +51,8 @@ where
 
         let request = Request::from_parts(head, body);
 
-        self.inner.call(request)
+        let fut = self.inner.call(request);
+
+        Box::pin(async move { fut.await.map_err(Into::into) })
     }
 }
