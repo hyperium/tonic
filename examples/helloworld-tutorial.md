@@ -102,7 +102,7 @@ Now that have defined the protobuf for our application we can start writing our 
 [package]
 name = "helloworld-tonic"
 version = "0.1.0"
-edition = "2018"
+edition = "2021"
 
 [[bin]] # Bin to run the HelloWorld gRPC server
 name = "helloworld-server"
