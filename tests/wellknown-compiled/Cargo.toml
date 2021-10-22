@@ -16,4 +16,5 @@ tonic = { path = "../../tonic" }
 prost = "0.9"
 
 [build-dependencies]
+prost-build = "0.9"
 tonic-build = { path = "../../tonic-build" }
