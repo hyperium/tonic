@@ -133,7 +133,7 @@ impl Health for HealthService {
     }
 
     type WatchStream =
-        Pin<Box<dyn Stream<Item = Result<HealthCheckResponse, Status>> + Send + Sync + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<HealthCheckResponse, Status>> + Send + 'static>>;
 
     async fn watch(
         &self,

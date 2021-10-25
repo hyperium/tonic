@@ -21,7 +21,7 @@ const BUFFER_SIZE: usize = 8 * 1024;
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
 /// to fetch the message stream and trailing metadata
 pub struct Streaming<T> {
-    decoder: Box<dyn Decoder<Item = T, Error = Status> + Send + Sync + 'static>,
+    decoder: Box<dyn Decoder<Item = T, Error = Status> + Send + 'static>,
     body: BoxBody,
     state: State,
     direction: Direction,
@@ -56,9 +56,9 @@ impl<T> Streaming<T> {
         #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
     ) -> Self
     where
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         Self::new(
             decoder,
@@ -71,9 +71,9 @@ impl<T> Streaming<T> {
 
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         Self::new(
             decoder,
@@ -91,9 +91,9 @@ impl<T> Streaming<T> {
         #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
     ) -> Self
     where
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         Self::new(
             decoder,
@@ -111,16 +111,16 @@ impl<T> Streaming<T> {
         #[cfg(feature = "compression")] encoding: Option<CompressionEncoding>,
     ) -> Self
     where
-        B: Body + Send + Sync + 'static,
+        B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
-        D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
+        D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         Self {
             decoder: Box::new(decoder),
             body: body
                 .map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
                 .map_err(|err| Status::map_error(err.into()))
-                .boxed(),
+                .boxed_unsync(),
             state: State::ReadHeader,
             direction,
             buf: BytesMut::with_capacity(BUFFER_SIZE),
@@ -140,7 +140,7 @@ impl<T> Streaming<T> {
     /// # use std::fmt::Debug;
     /// # async fn next_message_ex<T, D>(mut request: Streaming<T>) -> Result<(), Status>
     /// # where T: Debug,
-    /// # D: Decoder<Item = T, Error = Status> + Send + Sync + 'static,
+    /// # D: Decoder<Item = T, Error = Status> + Send  + 'static,
     /// # {
     /// if let Some(next_message) = request.message().await? {
     ///     println!("{:?}", next_message);
@@ -378,4 +378,4 @@ impl<T> fmt::Debug for Streaming<T> {
 }
 
 #[cfg(test)]
-static_assertions::assert_impl_all!(Streaming<()>: Send, Sync);
+static_assertions::assert_impl_all!(Streaming<()>: Send);

@@ -54,7 +54,7 @@ use tower::{
     Service, ServiceBuilder,
 };
 
-type BoxHttpBody = http_body::combinators::BoxBody<Bytes, crate::Error>;
+type BoxHttpBody = http_body::combinators::UnsyncBoxBody<Bytes, crate::Error>;
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxHttpBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
@@ -465,7 +465,7 @@ impl<L> Server<L> {
         IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
-        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         let trace_interceptor = self.trace_interceptor.clone();
@@ -627,7 +627,7 @@ where
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
@@ -659,7 +659,7 @@ where
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
@@ -688,7 +688,7 @@ where
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         self.server
@@ -723,7 +723,7 @@ where
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         self.server
@@ -740,7 +740,7 @@ where
             Send + 'static,
         <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
             Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         let inner = self.server.layer.layer(self.routes);
@@ -763,7 +763,7 @@ impl<S, ResBody> Service<Request<Body>> for Svc<S>
 where
     S: Service<Request<Body>, Response = Response<ResBody>>,
     S::Error: Into<crate::Error>,
-    ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
     type Response = Response<BoxHttpBody>;
@@ -807,7 +807,7 @@ impl<F, E, ResBody> Future for SvcFuture<F>
 where
     F: Future<Output = Result<Response<ResBody>, E>>,
     E: Into<crate::Error>,
-    ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
     type Output = Result<Response<BoxHttpBody>, crate::Error>;
@@ -817,7 +817,7 @@ where
         let _guard = this.span.enter();
 
         let response: Response<ResBody> = ready!(this.inner.poll(cx)).map_err(Into::into)?;
-        let response = response.map(|body| body.map_err(Into::into).boxed());
+        let response = response.map(|body| body.map_err(Into::into).boxed_unsync());
         Poll::Ready(Ok(response))
     }
 }
@@ -842,7 +842,7 @@ where
     S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::Error> + Send,
-    ResBody: http_body::Body<Data = Bytes> + Send + Sync + 'static,
+    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
     type Response = BoxService;

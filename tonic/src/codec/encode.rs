@@ -22,9 +22,8 @@ pub(crate) fn encode_server<T, U>(
     #[cfg(feature = "compression")] compression_override: SingleMessageCompressionOverride,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
-    T: Encoder<Error = Status> + Send + Sync + 'static,
-    T::Item: Send + Sync,
-    U: Stream<Item = Result<T::Item, Status>> + Send + Sync + 'static,
+    T: Encoder<Error = Status>,
+    U: Stream<Item = Result<T::Item, Status>>,
 {
     let stream = encode(
         encoder,
@@ -45,9 +44,8 @@ pub(crate) fn encode_client<T, U>(
     #[cfg(feature = "compression")] compression_encoding: Option<CompressionEncoding>,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
-    T: Encoder<Error = Status> + Send + Sync + 'static,
-    T::Item: Send + Sync,
-    U: Stream<Item = T::Item> + Send + Sync + 'static,
+    T: Encoder<Error = Status>,
+    U: Stream<Item = T::Item>,
 {
     let stream = encode(
         encoder,
@@ -157,7 +155,7 @@ pub(crate) struct EncodeBody<S> {
 
 impl<S> EncodeBody<S>
 where
-    S: Stream<Item = Result<Bytes, Status>> + Send + Sync + 'static,
+    S: Stream<Item = Result<Bytes, Status>>,
 {
     pub(crate) fn new_client(inner: S) -> Self {
         Self {

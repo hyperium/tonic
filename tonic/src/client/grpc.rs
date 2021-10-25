@@ -150,7 +150,7 @@ impl<T> Grpc<T> {
     ) -> Result<Response<M2>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + Sync + 'static,
+        T::ResponseBody: Body + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -169,9 +169,9 @@ impl<T> Grpc<T> {
     ) -> Result<Response<M2>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + Sync + 'static,
+        T::ResponseBody: Body + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
-        S: Stream<Item = M1> + Send + Sync + 'static,
+        S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -206,7 +206,7 @@ impl<T> Grpc<T> {
     ) -> Result<Response<Streaming<M2>>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + Sync + 'static,
+        T::ResponseBody: Body + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -225,9 +225,9 @@ impl<T> Grpc<T> {
     ) -> Result<Response<Streaming<M2>>, Status>
     where
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + Sync + 'static,
+        T::ResponseBody: Body + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
-        S: Stream<Item = M1> + Send + Sync + 'static,
+        S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,

@@ -1,29 +1,24 @@
 [workspace]
 members = [
-    "tonic",
-    "tonic-build",
-    "tonic-health",
-    "tonic-types",
-    "tonic-reflection",
-    "tonic-web",
-
-    # Non-published crates
-    "examples",
-    "interop",
-
-    # Tests
-    "tests/included_service",
-    "tests/same_name",
-    "tests/service_named_service",
-    "tests/wellknown",
-    "tests/wellknown-compiled",
-    "tests/extern_path/uuid",
-    "tests/ambiguous_methods",
-    "tests/extern_path/my_application",
-    "tests/integration_tests",
-    "tests/stream_conflict",
-    "tests/root-crate-path",
-    "tests/compression",
-    "tonic-web/tests/integration"
+  "tonic",
+  "tonic-build",
+  "tonic-health",
+  "tonic-types",
+  "tonic-reflection",
+  "tonic-web", # Non-published crates
+  "examples",
+  "interop", # Tests
+  "tests/included_service",
+  "tests/same_name",
+  "tests/service_named_service",
+  "tests/wellknown",
+  "tests/wellknown-compiled",
+  "tests/extern_path/uuid",
+  "tests/ambiguous_methods",
+  "tests/extern_path/my_application",
+  "tests/integration_tests",
+  "tests/stream_conflict",
+  "tests/root-crate-path",
+  "tests/compression",
+  "tonic-web/tests/integration",
 ]
-

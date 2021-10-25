@@ -9,7 +9,7 @@ pub mod pb {
     tonic::include_proto!("test");
 }
 
-type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + Sync + 'static>>;
+type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send + 'static>>;
 
 pub struct Svc;
 

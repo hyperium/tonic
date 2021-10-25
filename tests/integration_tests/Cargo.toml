@@ -12,14 +12,15 @@ version = "0.1.0"
 bytes = "1.0"
 futures-util = "0.3"
 prost = "0.9"
+tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
 tonic = {path = "../../tonic"}
 
 [dev-dependencies]
+async-stream = "0.3"
 futures = "0.3"
 http = "0.2"
 http-body = "0.4"
 hyper = "0.14"
-tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
 tokio-stream = {version = "0.1.5", features = ["net"]}
 tower = {version = "0.4", features = []}
 tower-service = "0.3"

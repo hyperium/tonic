@@ -35,7 +35,7 @@ use echo::{
     EchoRequest, EchoResponse,
 };
 
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
 
 #[derive(Default)]
 pub struct MyGreeter {}

@@ -35,5 +35,7 @@ impl std::fmt::Display for Never {
 impl std::error::Error for Never {}
 
 pub fn empty_body() -> crate::body::BoxBody {
-    http_body::Empty::new().map_err(|err| match err {}).boxed()
+    http_body::Empty::new()
+        .map_err(|err| match err {})
+        .boxed_unsync()
 }

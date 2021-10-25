@@ -57,7 +57,7 @@ pub fn generate<T: Service>(
             impl<T> #service_ident<T>
             where
                 T: tonic::client::GrpcService<tonic::body::BoxBody>,
-                T::ResponseBody: Body + Send + Sync + 'static,
+                T::ResponseBody: Body + Send  + 'static,
                 T::Error: Into<StdError>,
                 <T::ResponseBody as Body>::Error: Into<StdError> + Send,
             {
@@ -203,8 +203,8 @@ fn generate_server_streaming<T: Method>(
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
-           let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.server_streaming(request.into_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static(#path);
+            self.inner.server_streaming(request.into_request(), path, codec).await
         }
     }
 }
@@ -255,8 +255,8 @@ fn generate_streaming<T: Method>(
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
-           let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.streaming(request.into_streaming_request(), path, codec).await
+            let path = http::uri::PathAndQuery::from_static(#path);
+            self.inner.streaming(request.into_streaming_request(), path, codec).await
         }
     }
 }

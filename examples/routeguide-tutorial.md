@@ -300,7 +300,7 @@ impl RouteGuide for RouteGuideService {
         unimplemented!()
     }
 
-    type RouteChatStream = Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>>;
+    type RouteChatStream = Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send  + 'static>>;
 
     async fn route_chat(
         &self,
@@ -493,7 +493,7 @@ use std::collections::HashMap;
 
 ```rust
 type RouteChatStream =
-    Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send + Sync + 'static>>;
+    Pin<Box<dyn Stream<Item = Result<RouteNote, Status>> + Send  + 'static>>;
 
 
 async fn route_chat(
