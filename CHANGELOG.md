@@ -1,3 +1,28 @@
+# [0.6.0](https://github.com/hyperium/tonic/compare/v0.5.2...v0.6.0) (2021-10-25)
+
+### Breaking changes
+
+* **tonic:** Remove `Sync` requirement for streams ([#804](https://github.com/hyperium/tonic/issues/804)) ([23c1392](https://github.com/hyperium/tonic/commit/23c1392fb7e0ac50bcdedc35509917061bc858e1))
+* **tonic:** change `connect_lazy` to be infallible ([#712](https://github.com/hyperium/tonic/issues/712)) ([2e47154](https://github.com/hyperium/tonic/commit/2e471548d89be98d26b2332d059a24a3fc15ec23))
+* **build:** split path types in compile ([#721](https://github.com/hyperium/tonic/issues/721)) ([53ecc1f](https://github.com/hyperium/tonic/commit/53ecc1f85e7f7eeb0dce4ab23432d6c36d8a46b0))
+* Update `prost` and friends to 0.9 ([#791](https://github.com/hyperium/tonic/issues/791)) ([09805ec](https://github.com/hyperium/tonic/commit/09805ece453047bf609b1a69c72931eae6e1144a))
+
+### Bug Fixes
+
+* **build:** Correctly convert `Empty` to `()` ([#734](https://github.com/hyperium/tonic/issues/734)) ([ff6a690](https://github.com/hyperium/tonic/commit/ff6a690cec9daca33984cabea66f9d370ac63462))
+* **tonic:** fix extensions disappearing during streaming requests ([5c1bb90](https://github.com/hyperium/tonic/commit/5c1bb90ce82ecf90843a7c959edd7ef8fc280f62)), closes [#770](https://github.com/hyperium/tonic/issues/770)
+* **tonic:** Status code to set correct source on unkown error ([#799](https://github.com/hyperium/tonic/issues/799)) ([4054d61](https://github.com/hyperium/tonic/commit/4054d61e14b9794a72b48de1a051c26129ec36b1))
+* **transport:** AddOrigin panic on invalid uri ([#801](https://github.com/hyperium/tonic/issues/801)) ([3ab00f3](https://github.com/hyperium/tonic/commit/3ab00f304dd204fccf00d1995e635fa6b2f8503b))
+* **transport:** Correctly map hyper errors ([#629](https://github.com/hyperium/tonic/issues/629)) ([4947b07](https://github.com/hyperium/tonic/commit/4947b076f5b0b5149ee7f6144515535b85f65db5))
+* **tonic:** compression: handle compression flag but no header (#763)
+
+
+### Features
+
+* **build:** Support prost's include_file option ([#774](https://github.com/hyperium/tonic/issues/774)) ([3f9ab80](https://github.com/hyperium/tonic/commit/3f9ab801f7ee50ec04ab0f73cd457898dc687e61))
+* **health, reflection:** make rustfmt dependency optional (#785)
+
+
 # [0.5.2](https://github.com/hyperium/tonic/compare/v0.5.1...v0.5.2) (2021-08-10)
 
 * **tonic:** add `Interceptor` trait (#713) ([#713](https://github.com/hyperium/tonic/issues/713)) ([8c8f4d1](https://github.com/hyperium/tonic/commit/8c8f4d1))
