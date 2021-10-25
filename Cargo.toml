@@ -22,6 +22,3 @@ members = [
   "tests/compression",
   "tonic-web/tests/integration",
 ]
-
-[patch.crates-io]
-hyper = {git = "https://github.com/hyperium/hyper"}

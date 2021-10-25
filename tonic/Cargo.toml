@@ -71,7 +71,7 @@ async-trait = {version = "0.1.13", optional = true}
 
 # transport
 h2 = {version = "0.3", optional = true}
-hyper = {version = "0.14.2", features = ["full"], optional = true}
+hyper = {version = "0.14.4", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
 tokio = {version = "1.0.1", features = ["net"], optional = true}
 tokio-stream = "0.1"
