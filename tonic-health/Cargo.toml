@@ -1,34 +1,34 @@
 [package]
-name = "tonic-health"
-version = "0.4.1"
 authors = ["James Nugent <james@jen20.com>"]
-edition = "2018"
-license = "MIT"
-repository = "https://github.com/hyperium/tonic"
-homepage = "https://github.com/hyperium/tonic"
-documentation = "https://docs.rs/tonic-health/0.4.0/tonic-health/"
+categories = ["network-programming", "asynchronous"]
 description = """
 Health Checking module of `tonic` gRPC implementation.
 """
-readme = "README.md"
-categories = ["network-programming", "asynchronous"]
+documentation = "https://docs.rs/tonic-health/0.4.0/tonic-health/"
+edition = "2021"
+homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "healthcheck"]
+license = "MIT"
+name = "tonic-health"
+readme = "README.md"
+repository = "https://github.com/hyperium/tonic"
+version = "0.4.1"
 
 [features]
 default = ["transport", "rustfmt"]
-transport = ["tonic/transport", "tonic-build/transport"]
 rustfmt = ["tonic-build/rustfmt"]
+transport = ["tonic/transport", "tonic-build/transport"]
 
 [dependencies]
-tokio = { version = "1.0", features = ["sync"] }
-tonic = { version = "0.6", path = "../tonic", features = ["codegen", "prost"] }
+async-stream = "0.3"
 bytes = "1.0"
 prost = "0.9"
+tokio = {version = "1.0", features = ["sync"]}
 tokio-stream = "0.1"
-async-stream = "0.3"
+tonic = {version = "0.6", path = "../tonic", features = ["codegen", "prost"]}
 
 [dev-dependencies]
-tokio = { version = "1.0", features = ["rt-multi-thread", "macros"]}
+tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
 
 [build-dependencies]
-tonic-build = { version = "0.6", path = "../tonic-build", features = ["prost"] }
+tonic-build = {version = "0.6", path = "../tonic-build", features = ["prost"]}

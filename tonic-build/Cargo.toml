@@ -1,32 +1,31 @@
 [package]
-name = "tonic-build"
-version = "0.6.0"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2018"
-license = "MIT"
-documentation = "https://docs.rs/tonic-build/0.6.0/tonic_build/"
-repository = "https://github.com/hyperium/tonic"
-homepage = "https://github.com/hyperium/tonic"
+categories = ["network-programming", "asynchronous"]
 description = """
 Codegen module of `tonic` gRPC implementation.
 """
-readme = "README.md"
-categories = ["network-programming", "asynchronous"]
+documentation = "https://docs.rs/tonic-build/0.6.0/tonic_build/"
+edition = "2021"
+homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
-
+license = "MIT"
+name = "tonic-build"
+readme = "README.md"
+repository = "https://github.com/hyperium/tonic"
+version = "0.6.0"
 
 [dependencies]
-prost-build = { version = "0.9", optional = true }
-syn = "1.0"
-quote = "1.0"
 proc-macro2 = "1.0"
+prost-build = {version = "0.9", optional = true}
+quote = "1.0"
+syn = "1.0"
 
 [features]
+compression = []
 default = ["transport", "rustfmt", "prost"]
+prost = ["prost-build"]
 rustfmt = []
 transport = []
-prost = ["prost-build"]
-compression = []
 
 [package.metadata.docs.rs]
 all-features = true

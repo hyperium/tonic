@@ -1,16 +1,16 @@
 [package]
-name = "ambiguous_methods"
-version = "0.1.0"
 authors = ["Yonathan Randolph <yonathan@gmail.com>"]
-edition = "2018"
-publish = false
+edition = "2021"
 license = "MIT"
+name = "ambiguous_methods"
+publish = false
+version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tonic = { path= "../../tonic" }
 prost = "0.9"
+tonic = {path = "../../tonic"}
 
 [build-dependencies]
-tonic-build = { path= "../../tonic-build" }
+tonic-build = {path = "../../tonic-build"}

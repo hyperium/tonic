@@ -1,19 +1,19 @@
 [package]
-name = "integration"
-version = "0.1.0"
 authors = ["Juan Alvarez <j@yabit.io>"]
+edition = "2021"
+name = "integration"
 publish = false
-edition = "2018"
+version = "0.1.0"
 
 [dependencies]
-tonic = { path = "../../../tonic" }
-tonic-web = { path = "../../../tonic-web" }
-prost = "0.9"
-tokio = { version = "1", features = ["macros", "rt", "net"] }
 base64 = "0.13"
 bytes = "1.0"
-tokio-stream = { version = "0.1", features = ["net"] }
 hyper = "0.14"
+prost = "0.9"
+tokio = {version = "1", features = ["macros", "rt", "net"]}
+tokio-stream = {version = "0.1", features = ["net"]}
+tonic = {path = "../../../tonic"}
+tonic-web = {path = "../../../tonic-web"}
 
 [build-dependencies]
-tonic-build = { path = "../../../tonic-build" }
+tonic-build = {path = "../../../tonic-build"}
