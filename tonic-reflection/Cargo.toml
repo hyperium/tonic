@@ -1,20 +1,20 @@
 [package]
-name = "tonic-reflection"
-version = "0.2.0"
 authors = [
   "James Nugent <james@jen20.com>",
-  "Samani G. Gikandi <samani@gojulas.com>"
+  "Samani G. Gikandi <samani@gojulas.com>",
 ]
-edition = "2018"
-license = "MIT"
-repository = "https://github.com/hyperium/tonic"
-homepage = "https://github.com/hyperium/tonic"
+categories = ["network-programming", "asynchronous"]
 description = """
 Server Reflection module of `tonic` gRPC implementation.
 """
-readme = "README.md"
-categories = ["network-programming", "asynchronous"]
+edition = "2021"
+homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "reflection"]
+license = "MIT"
+name = "tonic-reflection"
+readme = "README.md"
+repository = "https://github.com/hyperium/tonic"
+version = "0.2.0"
 
 [features]
 default = ["rustfmt"]
@@ -24,12 +24,12 @@ rustfmt = ["tonic-build/rustfmt"]
 bytes = "1.0"
 prost = "0.9"
 prost-types = "0.9"
-tokio = { version = "1.0", features = ["sync"] }
-tokio-stream = { version = "0.1", features = ["net"] }
-tonic = { version = "0.6", path = "../tonic", features = ["codegen", "prost"] }
+tokio = {version = "1.0", features = ["sync"]}
+tokio-stream = {version = "0.1", features = ["net"]}
+tonic = {version = "0.6", path = "../tonic", features = ["codegen", "prost"]}
 
 [build-dependencies]
-tonic-build = { version = "0.6", path = "../tonic-build", features = ["transport", "prost"] }
+tonic-build = {version = "0.6", path = "../tonic-build", features = ["transport", "prost"]}
 
 [dev-dependencies]
 futures = "0.3"
