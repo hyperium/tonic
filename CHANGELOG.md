@@ -1,3 +1,12 @@
+# [0.6.1](https://github.com/hyperium/tonic/compare/v0.6.0...v0.6.1) (2021-10-27)
+
+
+### Bug Fixes
+
+* **transport:** Bump hyper to 0.14.14 ([#813](https://github.com/hyperium/tonic/issues/813)) ([2a3e9b2](https://github.com/hyperium/tonic/commit/2a3e9b2f6fa459b065c5a4ebeab5f447a3515707))
+
+
+
 # [0.6.0](https://github.com/hyperium/tonic/compare/v0.5.2...v0.6.0) (2021-10-25)
 
 ### Breaking changes
