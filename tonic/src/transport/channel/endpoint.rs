@@ -113,6 +113,14 @@ impl Endpoint {
     /// # let mut builder = Endpoint::from_static("https://example.com");
     /// builder.timeout(Duration::from_secs(5));
     /// ```
+    ///
+    /// # Notes
+    ///
+    /// This does **not** set the timeout metadata (`grpc-timeout` header) on
+    /// the request, meaning the server will not be informed of this timeout,
+    /// for that use [`Request::set_timeout`].
+    ///
+    /// [`Request::set_timeout`]: crate::Request::set_timeout
     pub fn timeout(self, dur: Duration) -> Self {
         Endpoint {
             timeout: Some(dur),
