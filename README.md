@@ -41,8 +41,7 @@ the generated code.
 
 ### Rust Version
 
-`tonic` currently works on rust `1.39` and above as it requires support for the `async_await`
-feature.
+`tonic` currently works on Rust `1.56` and above as it requires support for the 2021 edition.
 
 ```bash
 $ rustup update
