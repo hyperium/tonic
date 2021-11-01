@@ -36,6 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     match listenfd::ListenFd::from_env().take_tcp_listener(0)? {
         Some(listener) => {
+            listener.set_nonblocking(true)?;
             let listener = tokio_stream::wrappers::TcpListenerStream::new(
                 tokio::net::TcpListener::from_std(listener)?,
             );
