@@ -1,132 +1,90 @@
-use futures_util::{
-    future::Either,
-    future::{MapErr, TryFutureExt},
+use crate::{
+    body::{box_body, BoxBody},
+    transport::NamedService,
 };
+use axum::handler::Handler;
+use http::{Request, Response};
+use hyper::Body;
+use pin_project::pin_project;
 use std::{
-    fmt,
-    sync::Arc,
+    convert::Infallible,
+    future::Future,
+    pin::Pin,
     task::{Context, Poll},
 };
+use tower::ServiceExt;
 use tower_service::Service;
 
-#[doc(hidden)]
-#[derive(Debug)]
-pub struct Routes<A, B, Request> {
-    routes: Or<A, B, Request>,
+/// A [`Service`] router.
+#[derive(Debug, Default, Clone)]
+pub struct Routes {
+    router: axum::Router,
 }
 
-impl<A, B, Request> Routes<A, B, Request> {
-    pub(crate) fn new(
-        predicate: impl Fn(&Request) -> bool + Send + Sync + 'static,
-        a: A,
-        b: B,
-    ) -> Self {
-        let routes = Or::new(predicate, a, b);
-        Self { routes }
-    }
-}
-
-impl<A, B, Request> Routes<A, B, Request> {
-    pub(crate) fn push<C>(
-        self,
-        predicate: impl Fn(&Request) -> bool + Send + Sync + 'static,
-        route: C,
-    ) -> Routes<C, Or<A, B, Request>, Request> {
-        let routes = Or::new(predicate, route, self.routes);
-        Routes { routes }
-    }
-}
-
-impl<A, B, Request> Service<Request> for Routes<A, B, Request>
-where
-    A: Service<Request>,
-    A::Future: Send + 'static,
-    A::Error: Into<crate::Error>,
-    B: Service<Request, Response = A::Response>,
-    B::Future: Send + 'static,
-    B::Error: Into<crate::Error>,
-{
-    type Response = A::Response;
-    type Error = crate::Error;
-    type Future = <Or<A, B, Request> as Service<Request>>::Future;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Ok(()).into()
-    }
-
-    fn call(&mut self, req: Request) -> Self::Future {
-        self.routes.call(req)
-    }
-}
-
-impl<A: Clone, B: Clone, Request> Clone for Routes<A, B, Request> {
-    fn clone(&self) -> Self {
-        Self {
-            routes: self.routes.clone(),
-        }
-    }
-}
-
-#[doc(hidden)]
-pub struct Or<A, B, Request> {
-    predicate: Arc<dyn Fn(&Request) -> bool + Send + Sync + 'static>,
-    a: A,
-    b: B,
-}
-
-impl<A, B, Request> Or<A, B, Request> {
-    pub(crate) fn new<F>(predicate: F, a: A, b: B) -> Self
+impl Routes {
+    pub(crate) fn new<S>(svc: S) -> Self
     where
-        F: Fn(&Request) -> bool + Send + Sync + 'static,
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
     {
-        let predicate = Arc::new(predicate);
-        Self { predicate, a, b }
+        let router = axum::Router::new().fallback(unimplemented.into_service());
+        Self { router }.add_service(svc)
+    }
+
+    pub(crate) fn add_service<S>(mut self, svc: S) -> Self
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let svc = svc.map_response(|res| res.map(axum::body::box_body));
+        self.router = self.router.route(&format!("/{}/*rest", S::NAME), svc);
+        self
     }
 }
 
-impl<A, B, Request> Service<Request> for Or<A, B, Request>
-where
-    A: Service<Request>,
-    A::Future: Send + 'static,
-    A::Error: Into<crate::Error>,
-    B: Service<Request, Response = A::Response>,
-    B::Future: Send + 'static,
-    B::Error: Into<crate::Error>,
-{
-    type Response = A::Response;
+async fn unimplemented() -> impl axum::response::IntoResponse {
+    let status = http::StatusCode::OK;
+    let headers =
+        axum::response::Headers([("grpc-status", "12"), ("content-type", "application/grpc")]);
+    (status, headers)
+}
+
+impl Service<Request<Body>> for Routes {
+    type Response = Response<BoxBody>;
     type Error = crate::Error;
+    type Future = RoutesFuture;
 
-    #[allow(clippy::type_complexity)]
-    type Future = Either<
-        MapErr<A::Future, fn(A::Error) -> crate::Error>,
-        MapErr<B::Future, fn(B::Error) -> crate::Error>,
-    >;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Ok(()).into()
+    #[inline]
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request) -> Self::Future {
-        if (self.predicate)(&req) {
-            Either::Left(self.a.call(req).map_err(|e| e.into()))
-        } else {
-            Either::Right(self.b.call(req).map_err(|e| e.into()))
-        }
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
+        RoutesFuture(self.router.call(req))
     }
 }
 
-impl<A: Clone, B: Clone, Request> Clone for Or<A, B, Request> {
-    fn clone(&self) -> Self {
-        Self {
-            predicate: self.predicate.clone(),
-            a: self.a.clone(),
-            b: self.b.clone(),
-        }
-    }
-}
+#[pin_project]
+#[derive(Debug)]
+pub struct RoutesFuture(#[pin] axum::routing::future::RouterFuture<Body>);
 
-impl<A, B, Request> fmt::Debug for Or<A, B, Request> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Or {{ .. }}")
+impl Future for RoutesFuture {
+    type Output = Result<Response<BoxBody>, crate::Error>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match futures_util::ready!(self.project().0.poll(cx)) {
+            Ok(res) => Ok(res.map(box_body)).into(),
+            Err(err) => match err {},
+        }
     }
 }

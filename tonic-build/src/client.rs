@@ -57,7 +57,8 @@ pub fn generate<T: Service>(
             impl<T> #service_ident<T>
             where
                 T: tonic::client::GrpcService<tonic::body::BoxBody>,
-                T::ResponseBody: Body + Send  + 'static,
+                T::ResponseBody: Body<Data = Bytes> + Send  + 'static,
+                <T::ResponseBody as Body>::Error: Into<StdError> + Send + 'static,
                 T::Error: Into<StdError>,
                 <T::ResponseBody as Body>::Error: Into<StdError> + Send,
             {
