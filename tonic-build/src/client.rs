@@ -15,7 +15,7 @@ pub fn generate<T: Service>(
     attributes: &Attributes,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
-    let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name()));
+    let client_mod = quote::format_ident!("{}_client", naive_snake_case(service.name()));
     let methods = generate_methods(service, emit_package, proto_path, compile_well_known_types);
 
     let connect = generate_connect(&service_ident);
@@ -57,8 +57,8 @@ pub fn generate<T: Service>(
             impl<T> #service_ident<T>
             where
                 T: tonic::client::GrpcService<tonic::body::BoxBody>,
-                T::ResponseBody: Body + Send  + 'static,
                 T::Error: Into<StdError>,
+                T::ResponseBody: Default + Body<Data = Bytes> + Send  + 'static,
                 <T::ResponseBody as Body>::Error: Into<StdError> + Send,
             {
                 pub fn new(inner: T) -> Self {
