@@ -5,7 +5,7 @@ description = """
 A collection of useful protobuf types that can be used with `tonic`.
 """
 documentation = "https://docs.rs/tonic-types/0.4.0/tonic-types/"
-edition = "2021"
+edition = "2018"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "protobuf"]
 license = "MIT"

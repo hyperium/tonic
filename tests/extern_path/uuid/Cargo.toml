@@ -1,6 +1,6 @@
 [package]
 authors = ["Danny Hua <danny@42layers.io>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "uuid1"
 publish = false
