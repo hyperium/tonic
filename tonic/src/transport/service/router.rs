@@ -1,5 +1,5 @@
 use crate::{
-    body::{box_body, BoxBody},
+    body::{boxed, BoxBody},
     transport::NamedService,
 };
 use axum::handler::Handler;
@@ -83,7 +83,7 @@ impl Future for RoutesFuture {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match futures_util::ready!(self.project().0.poll(cx)) {
-            Ok(res) => Ok(res.map(box_body)).into(),
+            Ok(res) => Ok(res.map(boxed)).into(),
             Err(err) => match err {},
         }
     }

@@ -3,7 +3,7 @@
 //! See [`Interceptor`] for more details.
 
 use crate::{
-    body::{box_body, BoxBody},
+    body::{boxed, BoxBody},
     request::SanitizeHeaders,
     Status,
 };
@@ -229,10 +229,10 @@ where
         match self.project().kind.project() {
             KindProj::Future(future) => future
                 .poll(cx)
-                .map(|result| result.map(|res| res.map(box_body)))
+                .map(|result| result.map(|res| res.map(boxed)))
                 .map_err(Into::into),
             KindProj::Status(status) => {
-                let res = status.take().unwrap().to_http().map(box_body);
+                let res = status.take().unwrap().to_http().map(boxed);
                 Poll::Ready(Ok(res))
             }
         }
