@@ -10,6 +10,7 @@ mod decode;
 mod encode;
 #[cfg(feature = "prost")]
 mod prost;
+mod json;
 
 use crate::Status;
 use std::io;
