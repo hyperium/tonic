@@ -10,6 +10,8 @@ mod decode;
 mod encode;
 #[cfg(feature = "prost")]
 mod prost;
+#[cfg(feature = "json-codec")]
+mod json;
 
 use crate::Status;
 use std::io;
@@ -24,6 +26,9 @@ pub use self::decode::Streaming;
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
+#[cfg(feature = "json-codec")]
+#[cfg_attr(docsrs, doc(cfg(feature = "json-codec")))]
+pub use self::json::JsonCodec;
 
 // 5 bytes
 const HEADER_SIZE: usize =

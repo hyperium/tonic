@@ -41,6 +41,7 @@ transport = [
   "tokio/time",
   "hyper-timeout",
 ]
+json-codec = ["serde", "serde_derive", "serde_json"]
 
 # [[bench]]
 # name = "bench_main"
@@ -65,6 +66,11 @@ tower-service = "0.3"
 # prost
 prost-derive = {version = "0.9", optional = true}
 prost1 = {package = "prost", version = "0.9", optional = true}
+
+# serde
+serde = {version = "1.0.104", optional = true}
+serde_derive = {version = "1.0.104", optional = true}
+serde_json = {version = "1.0", optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
