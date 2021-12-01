@@ -39,7 +39,7 @@ fn from_decode_error(error: serde_json::Error) -> crate::Status {
     Status::new(tonic::Code::Internal, error.to_string())
 }
 
-/// A [`Codec`] that implements `application/grpc+json` via the prost library.
+/// A [`Codec`] that implements `application/grpc+json` via the serde library.
 #[derive(Debug, Clone)]
 struct JsonCodec<T, U> {
     _pd: PhantomData<(T, U)>,
