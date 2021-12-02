@@ -46,7 +46,7 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let svc = svc.map_response(|res| res.map(axum::body::box_body));
+        let svc = svc.map_response(|res| res.map(axum::body::boxed));
         self.router = self.router.route(&format!("/{}/*rest", S::NAME), svc);
         self
     }
