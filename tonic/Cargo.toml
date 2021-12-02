@@ -69,6 +69,7 @@ prost1 = {package = "prost", version = "0.9", optional = true}
 # serde
 serde = "1.0.104"
 serde_derive = "1.0.104"
+serde_json = "1.0"
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
