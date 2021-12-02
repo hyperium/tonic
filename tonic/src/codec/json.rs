@@ -1,12 +1,13 @@
 use std::marker::PhantomData;
+use bytes::{Buf, BufMut};
+use prost::bytes::{Buf, BufMut};
 use crate::codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
 use crate::Status;
-use bytes::{Buf, BufMut};
 
 extern crate serde;
 extern crate serde_derive;
 
-struct JsonEncoder<T>(PhantomData<T>);
+pub struct JsonEncoder<T>(PhantomData<T>);
 
 impl<T: serde::Serialize> Encoder for JsonEncoder<T> {
     type Item = T;
@@ -27,13 +28,17 @@ impl<U: for<'a> serde::Deserialize<'a>> Decoder for JsonDecoder<U> {
     type Error = Status;
 
     fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-        let item = serde_json::from_reader(buf.reader()).map_err(from_decode_error)?;
-
+        let item = match serde_json::from_reader(buf.reader()) {
+            Ok(i) => i,
+            Err(e) => {
+                return Err(from_decode_error(e));
+            }
+        };
         Ok(item)
     }
 }
 
-fn from_decode_error(error: serde_json::Error) -> crate::Status {
+fn from_decode_error(error: serde_json::Error) -> Status {
     // Map Protobuf parse errors to an INTERNAL status code, as per
     // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
     Status::new(tonic::Code::Internal, error.to_string())
