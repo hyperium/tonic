@@ -10,6 +10,7 @@ mod decode;
 mod encode;
 #[cfg(feature = "prost")]
 mod prost;
+#[cfg(feature = "json-codec")]
 mod json;
 
 use crate::Status;
