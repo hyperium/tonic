@@ -41,7 +41,7 @@ fn from_decode_error(error: serde_json::Error) -> crate::Status {
 
 /// A [`Codec`] that implements `application/grpc+json` via the serde library.
 #[derive(Debug, Clone)]
-struct JsonCodec<T, U> {
+pub struct JsonCodec<T, U> {
     _pd: PhantomData<(T, U)>,
 }
 
