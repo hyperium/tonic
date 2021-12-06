@@ -18,13 +18,6 @@ use tokio_rustls::{
 #[cfg(feature = "tls")]
 const ALPN_H2: &str = "h2";
 
-#[derive(Debug, Clone)]
-pub(crate) struct Cert {
-    pub(crate) ca: Vec<u8>,
-    pub(crate) key: Option<Vec<u8>>,
-    pub(crate) domain: String,
-}
-
 #[derive(Debug)]
 enum TlsError {
     #[allow(dead_code)]
