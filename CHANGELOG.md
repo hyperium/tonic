@@ -1,3 +1,11 @@
+# [0.6.2](https://github.com/hyperium/tonic/compare/v0.6.1...v0.6.2) (2021-12-07)
+
+
+### Bug Fixes
+
+* **tonic:** revert to 2018 edition ([#843](https://github.com/hyperium/tonic/issues/843)) ([101f2f7](https://github.com/hyperium/tonic/commit/101f2f76d4a62757cac8ca209b1eb6b57094d524))
+
+
 # [0.6.1](https://github.com/hyperium/tonic/compare/v0.6.0...v0.6.1) (2021-10-27)
 
 
