@@ -100,7 +100,7 @@ pub use self::error::Error;
 pub use self::server::{NamedService, Server};
 #[doc(inline)]
 pub use self::service::TimeoutExpired;
-pub use self::tls::{Certificate, Identity};
+pub use self::tls::Certificate;
 pub use hyper::{Body, Uri};
 
 #[cfg(feature = "tls")]
@@ -109,6 +109,9 @@ pub use self::channel::ClientTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::server::ServerTlsConfig;
+#[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+pub use self::tls::Identity;
 
 type BoxFuture<T, E> =
     std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, E>> + Send + 'static>>;
