@@ -1,6 +1,6 @@
 [package]
 authors = ["Yonathan Randolph <yonathan@gmail.com>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "ambiguous_methods"
 publish = false

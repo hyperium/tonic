@@ -1,6 +1,6 @@
 [package]
 authors = ["Ben Sully <ben@bsull.io>"]
-edition = "2021"
+edition = "2018"
 name = "stream_conflict"
 publish = false
 version = "0.1.0"
