@@ -1,12 +1,12 @@
 use std::marker::PhantomData;
-use bytes::{Buf, BufMut};
-use prost::bytes::{Buf, BufMut};
+use prost1::bytes::{Buf, BufMut};
 use crate::codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
 use crate::Status;
 
-extern crate serde;
-extern crate serde_derive;
+use serde;
+use serde_json;
 
+#[derive(Debug)]
 pub struct JsonEncoder<T>(PhantomData<T>);
 
 impl<T: serde::Serialize> Encoder for JsonEncoder<T> {
@@ -21,9 +21,10 @@ impl<T: serde::Serialize> Encoder for JsonEncoder<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct JsonDecoder<U>(PhantomData<U>);
 
-impl<U: for<'a> serde::Deserialize<'a>> Decoder for JsonDecoder<U> {
+impl<U: serde::de::DeserializeOwned> Decoder for JsonDecoder<U> {
     type Item = U;
     type Error = Status;
 
@@ -41,7 +42,7 @@ impl<U: for<'a> serde::Deserialize<'a>> Decoder for JsonDecoder<U> {
 fn from_decode_error(error: serde_json::Error) -> Status {
     // Map Protobuf parse errors to an INTERNAL status code, as per
     // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
-    Status::new(tonic::Code::Internal, error.to_string())
+    Status::new(crate::Code::Internal, error.to_string())
 }
 
 /// A [`Codec`] that implements `application/grpc+json` via the serde library.
@@ -59,7 +60,7 @@ impl<T, U> Default for JsonCodec<T, U> {
 impl<T, U> Codec for JsonCodec<T, U>
     where
         T: serde::Serialize + Send + 'static,
-        U: for<'a> serde::Deserialize<'a> + Send + Default + 'static,
+        U: serde::de::DeserializeOwned + Send + Default + 'static,
 {
     type Encode = T;
     type Decode = U;
