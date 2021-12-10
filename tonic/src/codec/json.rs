@@ -60,7 +60,7 @@ impl<T, U> Default for JsonCodec<T, U> {
 impl<T, U> Codec for JsonCodec<T, U>
     where
         T: serde::Serialize + Send + 'static,
-        U: serde::de::DeserializeOwned + Send + Default + 'static,
+        U: serde::de::DeserializeOwned + Send + 'static,
 {
     type Encode = T;
     type Decode = U;
@@ -73,5 +73,34 @@ impl<T, U> Codec for JsonCodec<T, U>
 
     fn decoder(&mut self) -> Self::Decoder {
         JsonDecoder(PhantomData)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::codec::{Codec, Decoder, Encoder, JsonCodec};
+
+    #[derive(serde_derive::Deserialize, serde_derive::Serialize, Debug)]
+    struct Person {
+        name: String,
+    }
+
+    #[test]
+    fn json_codec() {
+        let mut c = JsonCodec::default();
+
+        let p = Person { name: "hello json-codec".into() };
+        let mut bytes = bytes::BytesMut::with_capacity(100);
+        let mut encode_buf = crate::codec::EncodeBuf::new(&mut bytes);
+        let mut encoder = c.encoder();
+        encoder.encode(p, &mut encode_buf).unwrap();
+        assert_eq!(&bytes[..], b"{\"name\":\"hello json-codec\"}");
+
+        let mut bytes = bytes::BytesMut::from(bytes);
+        let len = bytes.len();
+        let mut encode_buf = crate::codec::DecodeBuf::new(&mut bytes, len);
+        let mut decoder = c.decoder();
+        let p: Person = decoder.decode(&mut encode_buf).unwrap().unwrap();
+        assert_eq!(p.name, "hello json-codec")
     }
 }
