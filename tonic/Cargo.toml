@@ -13,14 +13,14 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-documentation = "https://docs.rs/tonic/0.6.1/tonic/"
-edition = "2021"
+documentation = "https://docs.rs/tonic/0.6.2/tonic/"
+edition = "2018"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.6.1"
+version = "0.6.2"
 
 [features]
 codegen = ["async-trait"]

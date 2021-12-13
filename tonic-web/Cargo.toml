@@ -5,7 +5,7 @@ description = """
 grpc-web protocol translation for tonic services.
 """
 documentation = "https://docs.rs/tonic-web/0.2.0/tonic-web/"
-edition = "2021"
+edition = "2018"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "grpc-web"]
 license = "MIT"
