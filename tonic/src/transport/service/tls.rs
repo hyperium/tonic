@@ -37,7 +37,7 @@ pub(crate) struct TlsConnector {
 
 impl TlsConnector {
     #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_cert(
+    pub(crate) fn new(
         ca_cert: Option<Certificate>,
         identity: Option<Identity>,
         domain: String,
@@ -82,14 +82,6 @@ impl TlsConnector {
         };
 
         config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
-        Self::new_with_rustls_raw(config, domain)
-    }
-
-    #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_raw(
-        config: tokio_rustls::rustls::ClientConfig,
-        domain: String,
-    ) -> Result<Self, crate::Error> {
         Ok(Self {
             config: Arc::new(config),
             domain: Arc::new(domain.as_str().try_into()?),
@@ -132,7 +124,7 @@ pub(crate) struct TlsAcceptor {
 
 impl TlsAcceptor {
     #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_identity(
+    pub(crate) fn new(
         identity: Identity,
         client_ca_root: Option<Certificate>,
     ) -> Result<Self, crate::Error> {
@@ -152,15 +144,6 @@ impl TlsAcceptor {
         let mut config = builder.with_single_cert(cert, key)?;
 
         config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
-        Ok(Self {
-            inner: Arc::new(config),
-        })
-    }
-
-    #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_raw(
-        config: tokio_rustls::rustls::ServerConfig,
-    ) -> Result<Self, crate::Error> {
         Ok(Self {
             inner: Arc::new(config),
         })

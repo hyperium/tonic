@@ -52,7 +52,7 @@ impl<C> Connector<C> {
 
         host.try_into()
             .ok()
-            .and_then(|dns| TlsConnector::new_with_rustls_cert(None, None, dns).ok())
+            .and_then(|dns| TlsConnector::new(None, None, dns).ok())
     }
 }
 

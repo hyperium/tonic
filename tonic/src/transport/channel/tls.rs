@@ -14,7 +14,6 @@ pub struct ClientTlsConfig {
     domain: Option<String>,
     cert: Option<Certificate>,
     identity: Option<Identity>,
-    rustls_raw: Option<tokio_rustls::rustls::ClientConfig>,
 }
 
 #[cfg(feature = "tls")]
@@ -36,7 +35,6 @@ impl ClientTlsConfig {
             domain: None,
             cert: None,
             identity: None,
-            rustls_raw: None,
         }
     }
 
@@ -49,8 +47,6 @@ impl ClientTlsConfig {
     }
 
     /// Sets the CA Certificate against which to verify the server's TLS certificate.
-    ///
-    /// This has no effect if `rustls_client_config` is used to configure Rustls.
     pub fn ca_certificate(self, ca_certificate: Certificate) -> Self {
         ClientTlsConfig {
             cert: Some(ca_certificate),
@@ -59,21 +55,9 @@ impl ClientTlsConfig {
     }
 
     /// Sets the client identity to present to the server.
-    ///
-    /// This has no effect if `rustls_client_config` is used to configure Rustls.
     pub fn identity(self, identity: Identity) -> Self {
         ClientTlsConfig {
             identity: Some(identity),
-            ..self
-        }
-    }
-
-    /// Use options specified by the given `ClientConfig` to configure TLS.
-    ///
-    /// This overrides all other TLS options set via other means.
-    pub fn rustls_client_config(self, config: tokio_rustls::rustls::ClientConfig) -> Self {
-        ClientTlsConfig {
-            rustls_raw: Some(config),
             ..self
         }
     }
@@ -83,11 +67,6 @@ impl ClientTlsConfig {
             None => uri.host().ok_or_else(Error::new_invalid_uri)?.to_string(),
             Some(domain) => domain.clone(),
         };
-        match &self.rustls_raw {
-            None => {
-                TlsConnector::new_with_rustls_cert(self.cert.clone(), self.identity.clone(), domain)
-            }
-            Some(c) => TlsConnector::new_with_rustls_raw(c.clone(), domain),
-        }
+        TlsConnector::new(self.cert.clone(), self.identity.clone(), domain)
     }
 }
