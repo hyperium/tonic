@@ -325,7 +325,7 @@ impl Status {
         #[cfg(feature = "transport")]
         let err = match err.downcast::<h2::Error>() {
             Ok(h2) => {
-                return Ok(Status::from_h2_error(&*h2));
+                return Ok(Status::from_h2_error(h2));
             }
             Err(err) => err,
         };
@@ -340,7 +340,7 @@ impl Status {
 
     // FIXME: bubble this into `transport` and expose generic http2 reasons.
     #[cfg(feature = "transport")]
-    fn from_h2_error(err: &h2::Error) -> Status {
+    fn from_h2_error(err: Box<h2::Error>) -> Status {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors
         let code = match err.reason() {
             Some(h2::Reason::NO_ERROR)
@@ -359,11 +359,7 @@ impl Status {
         };
 
         let mut status = Self::new(code, format!("h2 protocol error: {}", err));
-        let error = err
-            .reason()
-            .map(h2::Error::from)
-            .map(|err| Box::new(err) as Box<dyn Error + Send + Sync + 'static>);
-        status.source = error;
+        status.source = Some(err);
         status
     }
 
@@ -632,7 +628,7 @@ fn invalid_header_value_byte<Error: fmt::Display>(err: Error) -> Status {
 #[cfg(feature = "transport")]
 impl From<h2::Error> for Status {
     fn from(err: h2::Error) -> Self {
-        Status::from_h2_error(&err)
+        Status::from_h2_error(Box::new(err))
     }
 }
 
