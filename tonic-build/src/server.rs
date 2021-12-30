@@ -93,7 +93,10 @@ pub fn generate<T: Service>(
 
             impl<T: #server_trait> #server_service<T> {
                 pub fn new(inner: T) -> Self {
-                    let inner = Arc::new(inner);
+                    Self::from_arc(Arc::new(inner))
+                }
+
+                pub fn from_arc(inner: Arc<T>) -> Self {
                     let inner = _Inner(inner);
                     Self {
                         inner,
