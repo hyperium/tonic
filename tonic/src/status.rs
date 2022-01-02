@@ -498,7 +498,7 @@ impl Status {
 
         if !self.message.is_empty() {
             let to_write = Bytes::copy_from_slice(
-                Cow::from(percent_encode(&self.message().as_bytes(), ENCODING_SET)).as_bytes(),
+                Cow::from(percent_encode(self.message().as_bytes(), ENCODING_SET)).as_bytes(),
             );
 
             header_map.insert(
@@ -697,7 +697,7 @@ pub(crate) fn infer_grpc_status(
     status_code: http::StatusCode,
 ) -> Result<(), Option<Status>> {
     if let Some(trailers) = trailers {
-        if let Some(status) = Status::from_header_map(&trailers) {
+        if let Some(status) = Status::from_header_map(trailers) {
             if status.code() == Code::Ok {
                 return Ok(());
             } else {

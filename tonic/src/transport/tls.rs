@@ -24,7 +24,7 @@ impl Certificate {
 
     /// Get a immutable reference to underlying certificate
     pub fn get_ref(&self) -> &[u8] {
-        &self.pem.as_slice()
+        self.pem.as_slice()
     }
 
     /// Get a mutable reference to underlying certificate

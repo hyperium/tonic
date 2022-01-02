@@ -19,7 +19,7 @@ pub fn generate<T: Service>(
 
     let server_service = quote::format_ident!("{}Server", service.name());
     let server_trait = quote::format_ident!("{}", service.name());
-    let server_mod = quote::format_ident!("{}_server", naive_snake_case(&service.name()));
+    let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
         service,
         proto_path,

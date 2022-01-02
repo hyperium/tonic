@@ -7,6 +7,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tonic_build::configure()
         .file_descriptor_set_path(&reflection_descriptor)
+        .type_attribute(
+            "ServerReflectionResponse.message_response",
+            "#[allow(clippy::enum_variant_names)]",
+        )
         .build_server(true)
         .build_client(true) // Client is only used for tests
         .format(true)
