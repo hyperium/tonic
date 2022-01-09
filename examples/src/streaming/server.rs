@@ -6,13 +6,13 @@ use futures::Stream;
 use std::net::ToSocketAddrs;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::sync::oneshot;
+use tokio::sync::mpsc;
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
 use pb::{EchoRequest, EchoResponse};
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
 
 #[derive(Debug)]
 pub struct EchoServer {}
@@ -31,26 +31,17 @@ impl pb::echo_server::Echo for EchoServer {
     ) -> EchoResult<Self::ServerStreamingEchoStream> {
         println!("Client connected from: {:?}", req.remote_addr());
 
-        let (tx, rx) = oneshot::channel::<()>();
+        let (tx, rx) = mpsc::channel(100);
 
-        tokio::spawn(async move {
-            let _ = rx.await;
-            println!("The rx resolved therefore the client disconnected!");
-        });
+        let echo_request = req.into_inner();
+        let echo_response = EchoResponse {
+            message: echo_request.message,
+        };
 
-        struct ClientDisconnect(oneshot::Sender<()>);
-
-        impl Stream for ClientDisconnect {
-            type Item = Result<EchoResponse, Status>;
-
-            fn poll_next(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-                // A stream that never resolves to anything....
-                Poll::Pending
-            }
-        }
+        tx.send(echo_response).await.unwrap();
 
         Ok(Response::new(
-            Box::pin(ClientDisconnect(tx)) as Self::ServerStreamingEchoStream
+            Box::pin(ClientResponder(rx)) as Self::ServerStreamingEchoStream
         ))
     }
 
@@ -65,11 +56,66 @@ impl pb::echo_server::Echo for EchoServer {
 
     async fn bidirectional_streaming_echo(
         &self,
-        _: Request<Streaming<EchoRequest>>,
+        req: Request<Streaming<EchoRequest>>,
     ) -> EchoResult<Self::BidirectionalStreamingEchoStream> {
-        Err(Status::unimplemented("not implemented"))
+        println!("Client connected from: {:?}", req.remote_addr());
+
+        let (tx, rx) = mpsc::channel(100);
+
+        tokio::spawn(async move {
+            let mut receiving_stream = req.into_inner();
+
+            loop {
+                let incoming_message = receiving_stream.message().await;
+
+                match incoming_message {
+                    Ok(Some(echo_request)) => {
+                        let echo_response = EchoResponse {
+                            message: echo_request.message,
+                        };
+
+                        tx.send(echo_response).await.unwrap();
+                    }
+                    Ok(None) => {
+                        println!("No message passed");
+                        break;
+                    }
+                    Err(status) => {
+                        println!("Received status {}", status);
+                        break;
+                    }
+                }
+            }
+
+            println!("Stream finished");
+        });
+
+        Ok(Response::new(
+            Box::pin(ClientResponder(rx)) as Self::BidirectionalStreamingEchoStream
+        ))
     }
 }
+
+struct ClientResponder(mpsc::Receiver<EchoResponse>);
+
+impl Stream for ClientResponder {
+    type Item = Result<EchoResponse, Status>;
+
+    fn poll_next(self: Pin<&mut Self>, ctx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let outgoing_poll = Pin::new(&mut self.get_mut().0).poll_recv(ctx);
+
+        return match outgoing_poll {
+            Poll::Ready(Some(echo)) => {
+                println!("Server will echo: {}", echo.message);
+
+                Poll::Ready(Some(Ok(echo)))
+            }
+            Poll::Ready(None) => Poll::Ready(Some(Err(Status::cancelled("empty stream")))),
+            Poll::Pending => Poll::Pending,
+        };
+    }
+}
+
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
