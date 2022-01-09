@@ -12,7 +12,7 @@ use tonic::{transport::Server, Request, Response, Status, Streaming};
 use pb::{EchoRequest, EchoResponse};
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
+type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
 
 #[derive(Debug)]
 pub struct EchoServer {}
@@ -47,9 +47,26 @@ impl pb::echo_server::Echo for EchoServer {
 
     async fn client_streaming_echo(
         &self,
-        _: Request<Streaming<EchoRequest>>,
+        req: Request<Streaming<EchoRequest>>,
     ) -> EchoResult<EchoResponse> {
-        Err(Status::unimplemented("not implemented"))
+        println!("Client connected from: {:?}", req.remote_addr());
+
+        let mut receiving_stream = req.into_inner();
+
+        let incoming_message = receiving_stream.message().await;
+
+        // only echo first request in stream
+        return match incoming_message? {
+            Some(echo_request) => {
+                let echo_response = EchoResponse {
+                    message: echo_request.message,
+                };
+
+                println!("Server will echo: {}", echo_response.message);
+                Ok(Response::new(echo_response))
+            },
+            None => Err(Status::unavailable("No message received")),
+        }
     }
 
     type BidirectionalStreamingEchoStream = ResponseStream;
@@ -65,6 +82,7 @@ impl pb::echo_server::Echo for EchoServer {
         tokio::spawn(async move {
             let mut receiving_stream = req.into_inner();
 
+            // echo all requests in incoming stream
             loop {
                 let incoming_message = receiving_stream.message().await;
 
@@ -110,12 +128,11 @@ impl Stream for ClientResponder {
 
                 Poll::Ready(Some(Ok(echo)))
             }
-            Poll::Ready(None) => Poll::Ready(Some(Err(Status::cancelled("empty stream")))),
+            Poll::Ready(None) => Poll::Ready(Some(Err(Status::unavailable("empty stream")))),
             Poll::Pending => Poll::Pending,
         };
     }
 }
-
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
