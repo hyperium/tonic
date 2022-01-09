@@ -171,8 +171,16 @@ name = "grpc-web-client"
 path = "src/grpc-web/client.rs"
 
 [[bin]]
-name = "streaming-client"
-path = "src/streaming/client.rs"
+name = "streaming-client-server-streaming"
+path = "src/streaming/client_server_streaming.rs"
+
+[[bin]]
+name = "streaming-client-client-streaming"
+path = "src/streaming/client_client_streaming.rs"
+
+[[bin]]
+name = "streaming-client-bidirectional-streaming"
+path = "src/streaming/client_bidirectional_streaming.rs"
 
 [[bin]]
 name = "streaming-server"
