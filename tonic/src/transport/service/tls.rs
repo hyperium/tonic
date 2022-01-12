@@ -5,12 +5,13 @@ use crate::transport::{
 };
 #[cfg(feature = "tls-roots")]
 use rustls_native_certs;
+#[cfg(feature = "tls")]
+use std::convert::TryInto;
 use std::{fmt, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(feature = "tls")]
 use tokio_rustls::{
-    rustls::{ClientConfig, NoClientAuth, ServerConfig, Session},
-    webpki::DNSNameRef,
+    rustls::{ClientConfig, RootCertStore, ServerConfig, ServerName},
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
 
@@ -31,58 +32,59 @@ enum TlsError {
 #[derive(Clone)]
 pub(crate) struct TlsConnector {
     config: Arc<ClientConfig>,
-    domain: Arc<String>,
+    domain: Arc<ServerName>,
 }
 
 impl TlsConnector {
     #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_cert(
+    pub(crate) fn new(
         ca_cert: Option<Certificate>,
         identity: Option<Identity>,
         domain: String,
     ) -> Result<Self, crate::Error> {
-        let mut config = ClientConfig::new();
-        config.set_protocols(&[Vec::from(ALPN_H2)]);
-
-        if let Some(identity) = identity {
-            let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
-            config.set_single_client_cert(client_cert, client_key)?;
-        }
+        let builder = ClientConfig::builder().with_safe_defaults();
+        let mut roots = RootCertStore::empty();
 
         #[cfg(feature = "tls-roots")]
         {
-            config.root_store = match rustls_native_certs::load_native_certs() {
-                Ok(store) | Err((Some(store), _)) => store,
-                Err((None, error)) => return Err(error.into()),
+            match rustls_native_certs::load_native_certs() {
+                Ok(certs) => roots.add_parsable_certificates(
+                    &certs.into_iter().map(|cert| cert.0).collect::<Vec<_>>(),
+                ),
+                Err(error) => return Err(error.into()),
             };
         }
 
         #[cfg(feature = "tls-webpki-roots")]
         {
-            config
-                .root_store
-                .add_server_trust_anchors(&webpki_roots::TLS_SERVER_ROOTS);
+            use tokio_rustls::rustls::OwnedTrustAnchor;
+
+            roots.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+                OwnedTrustAnchor::from_subject_spki_name_constraints(
+                    ta.subject,
+                    ta.spki,
+                    ta.name_constraints,
+                )
+            }));
         }
 
         if let Some(cert) = ca_cert {
-            let mut buf = std::io::Cursor::new(&cert.pem[..]);
-            config.root_store.add_pem_file(&mut buf).unwrap();
+            rustls_keys::add_certs_from_pem(std::io::Cursor::new(&cert.pem[..]), &mut roots)?;
         }
 
-        Ok(Self {
-            config: Arc::new(config),
-            domain: Arc::new(domain),
-        })
-    }
+        let builder = builder.with_root_certificates(roots);
+        let mut config = match identity {
+            Some(identity) => {
+                let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
+                builder.with_single_cert(client_cert, client_key)?
+            }
+            None => builder.with_no_client_auth(),
+        };
 
-    #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_raw(
-        config: tokio_rustls::rustls::ClientConfig,
-        domain: String,
-    ) -> Result<Self, crate::Error> {
+        config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
         Ok(Self {
             config: Arc::new(config),
-            domain: Arc::new(domain),
+            domain: Arc::new(domain.as_str().try_into()?),
         })
     }
 
@@ -91,15 +93,13 @@ impl TlsConnector {
         I: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
         let tls_io = {
-            let dns = DNSNameRef::try_from_ascii_str(self.domain.as_str())?.to_owned();
-
             let io = RustlsConnector::from(self.config.clone())
-                .connect(dns.as_ref(), io)
+                .connect(self.domain.as_ref().to_owned(), io)
                 .await?;
 
             let (_, session) = io.get_ref();
 
-            match session.get_alpn_protocol() {
+            match session.alpn_protocol() {
                 Some(b) if b == b"h2" => (),
                 _ => return Err(TlsError::H2NotNegotiated.into()),
             };
@@ -124,39 +124,26 @@ pub(crate) struct TlsAcceptor {
 
 impl TlsAcceptor {
     #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_identity(
+    pub(crate) fn new(
         identity: Identity,
         client_ca_root: Option<Certificate>,
     ) -> Result<Self, crate::Error> {
-        let (cert, key) = rustls_keys::load_identity(identity)?;
+        let builder = ServerConfig::builder().with_safe_defaults();
 
-        let mut config = match client_ca_root {
-            None => ServerConfig::new(NoClientAuth::new()),
+        let builder = match client_ca_root {
+            None => builder.with_no_client_auth(),
             Some(cert) => {
-                let mut cert = std::io::Cursor::new(&cert.pem[..]);
-
-                let mut client_root_cert_store = tokio_rustls::rustls::RootCertStore::empty();
-                if client_root_cert_store.add_pem_file(&mut cert).is_err() {
-                    return Err(Box::new(TlsError::CertificateParseError));
-                }
-
-                let client_auth =
-                    tokio_rustls::rustls::AllowAnyAuthenticatedClient::new(client_root_cert_store);
-                ServerConfig::new(client_auth)
+                use tokio_rustls::rustls::server::AllowAnyAuthenticatedClient;
+                let mut roots = RootCertStore::empty();
+                rustls_keys::add_certs_from_pem(std::io::Cursor::new(&cert.pem[..]), &mut roots)?;
+                builder.with_client_cert_verifier(AllowAnyAuthenticatedClient::new(roots))
             }
         };
-        config.set_single_cert(cert, key)?;
-        config.set_protocols(&[Vec::from(ALPN_H2)]);
 
-        Ok(Self {
-            inner: Arc::new(config),
-        })
-    }
+        let (cert, key) = rustls_keys::load_identity(identity)?;
+        let mut config = builder.with_single_cert(cert, key)?;
 
-    #[cfg(feature = "tls")]
-    pub(crate) fn new_with_rustls_raw(
-        config: tokio_rustls::rustls::ServerConfig,
-    ) -> Result<Self, crate::Error> {
+        config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
         Ok(Self {
             inner: Arc::new(config),
         })
@@ -194,7 +181,9 @@ impl std::error::Error for TlsError {}
 
 #[cfg(feature = "tls")]
 mod rustls_keys {
-    use tokio_rustls::rustls::{internal::pemfile, Certificate, PrivateKey};
+    use std::io::Cursor;
+
+    use tokio_rustls::rustls::{Certificate, PrivateKey, RootCertStore};
 
     use crate::transport::service::tls::TlsError;
     use crate::transport::Identity;
@@ -203,17 +192,17 @@ mod rustls_keys {
         mut cursor: std::io::Cursor<&[u8]>,
     ) -> Result<PrivateKey, crate::Error> {
         // First attempt to load the private key assuming it is PKCS8-encoded
-        if let Ok(mut keys) = pemfile::pkcs8_private_keys(&mut cursor) {
-            if !keys.is_empty() {
-                return Ok(keys.remove(0));
+        if let Ok(mut keys) = rustls_pemfile::pkcs8_private_keys(&mut cursor) {
+            if let Some(key) = keys.pop() {
+                return Ok(PrivateKey(key));
             }
         }
 
         // If it not, try loading the private key as an RSA key
         cursor.set_position(0);
-        if let Ok(mut keys) = pemfile::rsa_private_keys(&mut cursor) {
-            if !keys.is_empty() {
-                return Ok(keys.remove(0));
+        if let Ok(mut keys) = rustls_pemfile::rsa_private_keys(&mut cursor) {
+            if let Some(key) = keys.pop() {
+                return Ok(PrivateKey(key));
             }
         }
 
@@ -226,8 +215,8 @@ mod rustls_keys {
     ) -> Result<(Vec<Certificate>, PrivateKey), crate::Error> {
         let cert = {
             let mut cert = std::io::Cursor::new(&identity.cert.pem[..]);
-            match pemfile::certs(&mut cert) {
-                Ok(certs) => certs,
+            match rustls_pemfile::certs(&mut cert) {
+                Ok(certs) => certs.into_iter().map(Certificate).collect(),
                 Err(_) => return Err(Box::new(TlsError::CertificateParseError)),
             }
         };
@@ -243,5 +232,16 @@ mod rustls_keys {
         };
 
         Ok((cert, key))
+    }
+
+    pub(crate) fn add_certs_from_pem(
+        mut certs: Cursor<&[u8]>,
+        roots: &mut RootCertStore,
+    ) -> Result<(), crate::Error> {
+        let (_, ignored) = roots.add_parsable_certificates(&rustls_pemfile::certs(&mut certs)?);
+        match ignored == 0 {
+            true => Ok(()),
+            false => Err(Box::new(TlsError::CertificateParseError)),
+        }
     }
 }
