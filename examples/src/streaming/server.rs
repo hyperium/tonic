@@ -64,9 +64,9 @@ impl pb::echo_server::Echo for EchoServer {
 
                 println!("Server will echo: {}", echo_response.message);
                 Ok(Response::new(echo_response))
-            },
+            }
             None => Err(Status::unavailable("No message received")),
-        }
+        };
     }
 
     type BidirectionalStreamingEchoStream = ResponseStream;

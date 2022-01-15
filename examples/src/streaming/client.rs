@@ -16,8 +16,7 @@ struct CountingStream {
 }
 
 impl CountingStream {
-
-   pub fn new(count_to: u32) -> CountingStream {
+    pub fn new(count_to: u32) -> CountingStream {
         CountingStream {
             counter: 0,
             count_to,
@@ -46,7 +45,8 @@ async fn run_server_streaming(client: &mut EchoClient<tonic::transport::Channel>
             message: "foo".into(),
         })
         .await
-        .unwrap().into_inner();
+        .unwrap()
+        .into_inner();
 
     let incoming_message = stream.message().await;
     match incoming_message {
