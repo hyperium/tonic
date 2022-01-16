@@ -11,6 +11,7 @@ use std::fmt;
 pub struct ServerTlsConfig {
     identity: Option<Identity>,
     client_ca_root: Option<Certificate>,
+    install_key_log_file: bool,
 }
 
 #[cfg(feature = "tls")]
@@ -27,6 +28,7 @@ impl ServerTlsConfig {
         ServerTlsConfig {
             identity: None,
             client_ca_root: None,
+            install_key_log_file: false,
         }
     }
 
@@ -46,7 +48,19 @@ impl ServerTlsConfig {
         }
     }
 
+    /// Per session TLS secrets will be written to a file given by the SSLKEYLOGFILE environment variable.
+    pub fn install_key_log_file(self, install_key_log_file: bool) -> Self {
+        ServerTlsConfig {
+            install_key_log_file,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::Error> {
-        TlsAcceptor::new(self.identity.clone().unwrap(), self.client_ca_root.clone())
+        TlsAcceptor::new(
+            self.identity.clone().unwrap(),
+            self.client_ca_root.clone(),
+            self.install_key_log_file,
+        )
     }
 }

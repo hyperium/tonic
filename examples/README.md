@@ -86,6 +86,12 @@ $ cargo run --bin tls-client
 $ cargo run --bin tls-server
 ```
 
+For [Wireshark TLS decryption](https://gitlab.com/wireshark/wireshark/-/wikis/TLS#using-the-pre-master-secret)
+
+```bash
+$ SSLKEYLOGFILE=./keylogfile.txt cargo run --bin tls-server
+```
+
 ## Health Checking
 
 ### Server

@@ -73,7 +73,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = EchoServer::default();
 
     Server::builder()
-        .tls_config(ServerTlsConfig::new().identity(identity))?
+        .tls_config(
+            ServerTlsConfig::new()
+                .identity(identity)
+                .install_key_log_file(cfg!(debug_assertions)),
+        )?
         .add_service(pb::echo_server::EchoServer::new(server))
         .serve(addr)
         .await?;

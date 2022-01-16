@@ -127,7 +127,10 @@ impl TlsAcceptor {
     pub(crate) fn new(
         identity: Identity,
         client_ca_root: Option<Certificate>,
+        install_key_log_file: bool,
     ) -> Result<Self, crate::Error> {
+        use tokio_rustls::rustls::KeyLogFile;
+
         let builder = ServerConfig::builder().with_safe_defaults();
 
         let builder = match client_ca_root {
@@ -142,6 +145,10 @@ impl TlsAcceptor {
 
         let (cert, key) = rustls_keys::load_identity(identity)?;
         let mut config = builder.with_single_cert(cert, key)?;
+
+        if install_key_log_file {
+            config.key_log = Arc::new(KeyLogFile::new());
+        }
 
         config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
         Ok(Self {
