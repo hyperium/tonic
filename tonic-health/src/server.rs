@@ -250,6 +250,21 @@ mod tests {
     async fn test_service_watch() {
         let (mut reporter, service) = make_test_service().await;
 
+        // Overall server health
+        let resp = service
+            .watch(Request::new(HealthCheckRequest {
+                service: "".to_string(),
+            }))
+            .await;
+        assert!(resp.is_ok());
+        let mut resp = resp.unwrap().into_inner();
+        let item = resp
+            .next()
+            .await
+            .expect("streamed response is Some")
+            .expect("response is ok");
+        assert_serving_status(item.status, ServingStatus::Serving);
+
         // Unregistered service
         let resp = service
             .watch(Request::new(HealthCheckRequest {
