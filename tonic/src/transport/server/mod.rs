@@ -191,12 +191,14 @@ impl<L> Server<L> {
     /// # use tonic::transport::Server;
     /// # use tower_service::Service;
     /// # use std::time::Duration;
-    /// # let mut builder = Server::builder();
+    /// # let builder = Server::builder();
     /// builder.timeout(Duration::from_secs(30));
     /// ```
-    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
-        self.timeout = Some(timeout);
-        self
+    pub fn timeout(self, timeout: Duration) -> Self {
+        Server {
+            timeout: Some(timeout),
+            ..self
+        }
     }
 
     /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
