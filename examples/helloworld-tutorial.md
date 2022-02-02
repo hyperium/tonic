@@ -26,7 +26,6 @@ feature.
 
 ```bash
 $ rustup update
-$ rustup component add rustfmt
 ```
 
 ## Defining the HelloWorld service

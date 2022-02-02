@@ -47,12 +47,6 @@ Change your current directory to Tonic's repository root:
 $ cd tonic
 ```
 
-Tonic uses `rustfmt` to tidy up the code it generates, so we'll make sure it's installed.
-
-```shell
-$ rustup component add rustfmt
-```
-
 Run the server
 ```shell
 $ cargo run --bin routeguide-server

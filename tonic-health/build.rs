@@ -8,7 +8,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .file_descriptor_set_path(grpc_health_v1_descriptor_set_path)
         .build_server(true)
         .build_client(true)
-        .format(false)
         .compile(&["proto/health.proto"], &["proto/"])?;
 
     Ok(())

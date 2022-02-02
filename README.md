@@ -45,7 +45,6 @@ the generated code.
 
 ```bash
 $ rustup update
-$ rustup component add rustfmt
 $ cargo build
 ```
 

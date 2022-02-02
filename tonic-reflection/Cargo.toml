@@ -16,10 +16,6 @@ readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
 version = "0.3.0"
 
-[features]
-default = ["rustfmt"]
-rustfmt = ["tonic-build/rustfmt"]
-
 [dependencies]
 bytes = "1.0"
 prost = "0.9"
