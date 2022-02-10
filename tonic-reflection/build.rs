@@ -13,7 +13,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .build_server(true)
         .build_client(true) // Client is only used for tests
-        .format(true)
         .compile(&["proto/reflection.proto"], &["proto/"])?;
 
     Ok(())

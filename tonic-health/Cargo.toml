@@ -15,8 +15,7 @@ repository = "https://github.com/hyperium/tonic"
 version = "0.5.0"
 
 [features]
-default = ["transport", "rustfmt"]
-rustfmt = ["tonic-build/rustfmt"]
+default = ["transport"]
 transport = ["tonic/transport", "tonic-build/transport"]
 
 [dependencies]
