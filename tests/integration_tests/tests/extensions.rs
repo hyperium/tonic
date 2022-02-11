@@ -8,6 +8,7 @@ use std::{
 use tokio::sync::oneshot;
 use tonic::{
     body::BoxBody,
+    service::{async_interceptor, interceptor},
     transport::{Endpoint, NamedService, Server},
     Request, Response, Status,
 };
@@ -47,6 +48,100 @@ async fn setting_extension_from_interceptor() {
     tokio::time::sleep(Duration::from_millis(100)).await;
 
     let channel = Endpoint::from_static("http://127.0.0.1:1323")
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = test_client::TestClient::new(channel);
+
+    client.unary_call(Input {}).await.unwrap();
+
+    tx.send(()).unwrap();
+
+    jh.await.unwrap();
+}
+
+#[tokio::test]
+async fn setting_extension_from_interceptor_layer() {
+    struct Svc;
+
+    #[tonic::async_trait]
+    impl test_server::Test for Svc {
+        async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
+            let value = req.extensions().get::<ExtensionValue>().unwrap();
+            assert_eq!(value.0, 42);
+
+            Ok(Response::new(Output {}))
+        }
+    }
+
+    let svc = test_server::TestServer::new(Svc);
+    let interceptor_layer = interceptor(|mut req: Request<()>| {
+        req.extensions_mut().insert(ExtensionValue(42));
+        Ok(req)
+    });
+
+    let (tx, rx) = oneshot::channel::<()>();
+
+    let jh = tokio::spawn(async move {
+        Server::builder()
+            .layer(interceptor_layer)
+            .add_service(svc)
+            .serve_with_shutdown("127.0.0.1:1325".parse().unwrap(), rx.map(drop))
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let channel = Endpoint::from_static("http://127.0.0.1:1325")
+        .connect()
+        .await
+        .unwrap();
+
+    let mut client = test_client::TestClient::new(channel);
+
+    client.unary_call(Input {}).await.unwrap();
+
+    tx.send(()).unwrap();
+
+    jh.await.unwrap();
+}
+
+#[tokio::test]
+async fn setting_extension_from_async_interceptor_layer() {
+    struct Svc;
+
+    #[tonic::async_trait]
+    impl test_server::Test for Svc {
+        async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
+            let value = req.extensions().get::<ExtensionValue>().unwrap();
+            assert_eq!(value.0, 42);
+
+            Ok(Response::new(Output {}))
+        }
+    }
+
+    let svc = test_server::TestServer::new(Svc);
+    let interceptor_layer = async_interceptor(|mut req: Request<()>| {
+        req.extensions_mut().insert(ExtensionValue(42));
+        futures::future::ok(req)
+    });
+
+    let (tx, rx) = oneshot::channel::<()>();
+
+    let jh = tokio::spawn(async move {
+        Server::builder()
+            .layer(interceptor_layer)
+            .add_service(svc)
+            .serve_with_shutdown("127.0.0.1:1326".parse().unwrap(), rx.map(drop))
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let channel = Endpoint::from_static("http://127.0.0.1:1326")
         .connect()
         .await
         .unwrap();
