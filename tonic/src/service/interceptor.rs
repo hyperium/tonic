@@ -157,7 +157,14 @@ where
     }
 
     fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
+        // It is bad practice to modify the body (i.e. Message) of the request via an interceptor.
+        // To avoid exposing the body of the request to the interceptor function, we first remove it
+        // here, allow the interceptor to modify the metadata and extensions, and then recreate the
+        // HTTP request with the body. Tonic requests do not preserve the URI, HTTP version, and
+        // HTTP method of the HTTP request, so we extract them here and then add them back in below.
         let uri = req.uri().clone();
+        let method = req.method().clone();
+        let version = req.version().clone();
         let req = crate::Request::from_http(req);
         let (metadata, extensions, msg) = req.into_parts();
 
@@ -168,7 +175,7 @@ where
             Ok(req) => {
                 let (metadata, extensions, _) = req.into_parts();
                 let req = crate::Request::from_parts(metadata, extensions, msg);
-                let req = req.into_http(uri, SanitizeHeaders::No);
+                let req = req.into_http(uri, method, version, SanitizeHeaders::No);
                 ResponseFuture::future(self.inner.call(req))
             }
             Err(status) => ResponseFuture::error(status),
@@ -321,5 +328,22 @@ mod tests {
         assert_eq!(expected.status(), response.status());
         assert_eq!(expected.version(), response.version());
         assert_eq!(expected.headers(), response.headers());
+    }
+
+    async fn doesnt_change_http_method() {
+        let svc = tower::service_fn(|request: http::Request<hyper::Body>| async move {
+            assert_eq!(request.method(), http::Method::OPTIONS);
+
+            Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::empty()))
+        });
+
+        let svc = InterceptedService::new(svc, |request: crate::Request<()>| Ok(request));
+
+        let request = http::Request::builder()
+            .method(http::Method::OPTIONS)
+            .body(hyper::Body::empty())
+            .unwrap();
+
+        svc.oneshot(request).await.unwrap();
     }
 }
