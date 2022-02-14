@@ -202,8 +202,8 @@ impl<T> Request<T> {
     /// Get the remote address of this connection.
     ///
     /// This will return `None` if the `IO` type used
-    /// does not implement `Connected`. This currently,
-    /// only works on the server side.
+    /// does not implement `Connected` or when using a unix domain socket.
+    /// This currently only works on the server side.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         #[cfg(feature = "transport")]
         {
