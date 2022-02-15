@@ -13,6 +13,7 @@ pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 #[cfg(feature = "compression")]
 pub use crate::codec::{CompressionEncoding, EnabledCompressionEncodings};
 pub use crate::service::interceptor::InterceptedService;
+pub use bytes::Bytes;
 pub use http_body::Body;
 
 pub type BoxFuture<T, E> = self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
