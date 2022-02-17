@@ -9,7 +9,12 @@ struct Opts {
     #[clap(name = "use_tls", long)]
     use_tls: bool,
 
-    #[clap(long = "test_case", use_delimiter = true, min_values = 1, arg_enum)]
+    #[clap(
+        long = "test_case",
+        use_value_delimiter = true,
+        min_values = 1,
+        arg_enum
+    )]
     test_case: Vec<Testcase>,
 }
 
