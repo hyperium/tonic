@@ -234,7 +234,12 @@ where
                 .poll(cx)
                 .map(|result| result.map(|res| res.map(boxed))),
             KindProj::Status(status) => {
-                let response = status.take().unwrap().to_http().map(|_| B::default()).map(boxed);
+                let response = status
+                    .take()
+                    .unwrap()
+                    .to_http()
+                    .map(|_| B::default())
+                    .map(boxed);
                 Poll::Ready(Ok(response))
             }
         }
