@@ -126,6 +126,7 @@ impl<L> Server<L> {
     /// Configure TLS for this server.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+    #[must_use]
     pub fn tls_config(self, tls_config: ServerTlsConfig) -> Result<Self, Error> {
         Ok(Server {
             tls: Some(tls_config.tls_acceptor().map_err(Error::from_source)?),
@@ -143,6 +144,7 @@ impl<L> Server<L> {
     /// # let builder = Server::builder();
     /// builder.concurrency_limit_per_connection(32);
     /// ```
+    #[must_use]
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
         Server {
             concurrency_limit: Some(limit),
@@ -158,12 +160,15 @@ impl<L> Server<L> {
     /// # use tonic::transport::Server;
     /// # use tower_service::Service;
     /// # use std::time::Duration;
-    /// # let mut builder = Server::builder();
+    /// # let builder = Server::builder();
     /// builder.timeout(Duration::from_secs(30));
     /// ```
-    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
-        self.timeout = Some(timeout);
-        self
+    #[must_use]
+    pub fn timeout(self, timeout: Duration) -> Self {
+        Server {
+            timeout: Some(timeout),
+            ..self
+        }
     }
 
     /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
@@ -172,6 +177,7 @@ impl<L> Server<L> {
     /// Default is 65,535
     ///
     /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    #[must_use]
     pub fn initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> Self {
         Server {
             init_stream_window_size: sz.into(),
@@ -182,6 +188,7 @@ impl<L> Server<L> {
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is 65,535
+    #[must_use]
     pub fn initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> Self {
         Server {
             init_connection_window_size: sz.into(),
@@ -195,6 +202,7 @@ impl<L> Server<L> {
     /// Default is no limit (`None`).
     ///
     /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_MAX_CONCURRENT_STREAMS
+    #[must_use]
     pub fn max_concurrent_streams(self, max: impl Into<Option<u32>>) -> Self {
         Server {
             max_concurrent_streams: max.into(),
@@ -211,6 +219,7 @@ impl<L> Server<L> {
     ///
     /// Default is no HTTP2 keepalive (`None`)
     ///
+    #[must_use]
     pub fn http2_keepalive_interval(self, http2_keepalive_interval: Option<Duration>) -> Self {
         Server {
             http2_keepalive_interval,
@@ -225,6 +234,7 @@ impl<L> Server<L> {
     ///
     /// Default is 20 seconds.
     ///
+    #[must_use]
     pub fn http2_keepalive_timeout(self, http2_keepalive_timeout: Option<Duration>) -> Self {
         Server {
             http2_keepalive_timeout,
@@ -240,6 +250,7 @@ impl<L> Server<L> {
     ///
     /// Default is no keepalive (`None`)
     ///
+    #[must_use]
     pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
         Server {
             tcp_keepalive,
@@ -248,6 +259,7 @@ impl<L> Server<L> {
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    #[must_use]
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Server {
             tcp_nodelay: enabled,
@@ -260,6 +272,7 @@ impl<L> Server<L> {
     /// Passing `None` will do nothing.
     ///
     /// If not set, will default from underlying transport.
+    #[must_use]
     pub fn max_frame_size(self, frame_size: impl Into<Option<u32>>) -> Self {
         Server {
             max_frame_size: frame_size.into(),
@@ -275,6 +288,7 @@ impl<L> Server<L> {
     /// return confusing (but correct) protocol errors.
     ///
     /// Default is `false`.
+    #[must_use]
     pub fn accept_http1(self, accept_http1: bool) -> Self {
         Server {
             accept_http1,
@@ -283,6 +297,7 @@ impl<L> Server<L> {
     }
 
     /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
+    #[must_use]
     pub fn trace_fn<F>(self, f: F) -> Self
     where
         F: Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static,
