@@ -4,8 +4,6 @@ Compiles proto files via prost and generates service stubs and proto definitione
 
 ## Features
 
-- rustfmt: This feature enables the use of rustfmt to format the output code this makes the code readable and the error messages nice. This requires that rustfmt is installed. This is enabled by default.
-
 Required dependencies
 
 ```toml

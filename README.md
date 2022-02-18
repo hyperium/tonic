@@ -41,11 +41,10 @@ the generated code.
 
 ### Rust Version
 
-`tonic` currently works on Rust `1.56` and above as it requires support for the 2021 edition.
+`tonic` currently works on Rust `1.56` and above as it requires support for the 2018 edition.
 
 ```bash
 $ rustup update
-$ rustup component add rustfmt
 $ cargo build
 ```
 

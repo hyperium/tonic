@@ -6,6 +6,8 @@ mod recover_error;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
+#[cfg(unix)]
+mod unix;
 
 pub use super::service::Routes;
 pub use conn::{Connected, TcpConnectInfo};
@@ -17,6 +19,9 @@ pub use conn::TlsConnectInfo;
 
 #[cfg(feature = "tls")]
 use super::service::TlsAcceptor;
+
+#[cfg(unix)]
+pub use unix::UdsConnectInfo;
 
 use incoming::TcpIncoming;
 

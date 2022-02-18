@@ -26,13 +26,12 @@ feature.
 
 ```bash
 $ rustup update
-$ rustup component add rustfmt
 ```
 
 ## Defining the HelloWorld service
 
 Our first step is to define the gRPC _service_ and the method _request_ and _response_ types using
-[protocol buffers]. We will keep our `.proto` files in a directory in our crate's root.
+[protocol buffers]. We will keep our `.proto` files in a directory in our project's root.
 Note that Tonic does not really care where our `.proto` definitions live.
 
 ```shell
@@ -125,7 +124,7 @@ We include `tonic-build` as a useful way to incorporate the generation of our cl
 
 ## Generating Server and Client code
 
-At the root of your crate, create a `build.rs` file and add the following code:
+At the root of your project, create a `build.rs` file and add the following code:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {

@@ -1,6 +1,6 @@
 [package]
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "examples"
 publish = false
@@ -194,7 +194,7 @@ serde_json = "1.0"
 tracing = "0.1.16"
 tracing-attributes = "0.1"
 tracing-futures = "0.2"
-tracing-subscriber = {version = "0.2", features = ["tracing-log"]}
+tracing-subscriber = {version = "0.3", features = ["tracing-log"]}
 # Required for wellknown types
 prost-types = "0.9"
 # Hyper example

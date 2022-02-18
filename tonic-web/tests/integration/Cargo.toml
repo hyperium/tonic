@@ -1,6 +1,6 @@
 [package]
 authors = ["Juan Alvarez <j@yabit.io>"]
-edition = "2021"
+edition = "2018"
 name = "integration"
 publish = false
 version = "0.1.0"

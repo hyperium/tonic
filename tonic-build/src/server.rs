@@ -19,7 +19,7 @@ pub fn generate<T: Service>(
 
     let server_service = quote::format_ident!("{}Server", service.name());
     let server_trait = quote::format_ident!("{}", service.name());
-    let server_mod = quote::format_ident!("{}_server", naive_snake_case(&service.name()));
+    let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
         service,
         proto_path,
@@ -50,12 +50,14 @@ pub fn generate<T: Service>(
     let configure_compression_methods = if compression_enabled {
         quote! {
             /// Enable decompressing requests with `gzip`.
+            #[must_use]
             pub fn accept_gzip(mut self) -> Self {
                 self.accept_compression_encodings.enable_gzip();
                 self
             }
 
             /// Compress responses with `gzip`, if the client supports it.
+            #[must_use]
             pub fn send_gzip(mut self) -> Self {
                 self.send_compression_encodings.enable_gzip();
                 self
@@ -93,7 +95,10 @@ pub fn generate<T: Service>(
 
             impl<T: #server_trait> #server_service<T> {
                 pub fn new(inner: T) -> Self {
-                    let inner = Arc::new(inner);
+                    Self::from_arc(Arc::new(inner))
+                }
+
+                pub fn from_arc(inner: Arc<T>) -> Self {
                     let inner = _Inner(inner);
                     Self {
                         inner,

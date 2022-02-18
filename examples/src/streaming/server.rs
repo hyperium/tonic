@@ -44,7 +44,7 @@ impl pb::echo_server::Echo for EchoServer {
             type Item = Result<EchoResponse, Status>;
 
             fn poll_next(self: Pin<&mut Self>, _: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-                // A stream that never resovlves to anything....
+                // A stream that never resolves to anything....
                 Poll::Pending
             }
         }

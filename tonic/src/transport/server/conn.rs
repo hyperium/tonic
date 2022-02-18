@@ -7,7 +7,7 @@ use crate::transport::Certificate;
 #[cfg(feature = "tls")]
 use std::sync::Arc;
 #[cfg(feature = "tls")]
-use tokio_rustls::{rustls::Session, server::TlsStream};
+use tokio_rustls::server::TlsStream;
 
 /// Trait that connected IO resources implement and use to produce info about the connection.
 ///
@@ -115,10 +115,10 @@ where
         let (inner, session) = self.get_ref();
         let inner = inner.connect_info();
 
-        let certs = if let Some(certs) = session.get_peer_certificates() {
+        let certs = if let Some(certs) = session.peer_certificates() {
             let certs = certs
                 .into_iter()
-                .map(|c| Certificate::from_pem(c.0))
+                .map(|c| Certificate::from_pem(c))
                 .collect();
             Some(Arc::new(certs))
         } else {

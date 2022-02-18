@@ -1,6 +1,6 @@
 [package]
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "same_name"
 publish = false

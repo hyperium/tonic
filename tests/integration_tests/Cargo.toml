@@ -1,6 +1,6 @@
 [package]
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "integration-tests"
 publish = false
@@ -24,7 +24,7 @@ hyper = "0.14"
 tokio-stream = {version = "0.1.5", features = ["net"]}
 tower = {version = "0.4", features = []}
 tower-service = "0.3"
-tracing-subscriber = "0.2"
+tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 
 [build-dependencies]
 tonic-build = {path = "../../tonic-build"}
