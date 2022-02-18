@@ -24,17 +24,6 @@ pub mod http {
     pub use http::*;
 }
 
-#[derive(Debug)]
-pub enum Never {}
-
-impl std::fmt::Display for Never {
-    fn fmt(&self, _: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match *self {}
-    }
-}
-
-impl std::error::Error for Never {}
-
 pub fn empty_body() -> crate::body::BoxBody {
     http_body::Empty::new()
         .map_err(|err| match err {})

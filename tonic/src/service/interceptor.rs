@@ -2,7 +2,11 @@
 //!
 //! See [`Interceptor`] for more details.
 
-use crate::{request::SanitizeHeaders, Status};
+use crate::{
+    body::{boxed, BoxBody},
+    request::SanitizeHeaders,
+    Status,
+};
 use bytes::Bytes;
 use pin_project::pin_project;
 use std::{
@@ -145,15 +149,16 @@ where
     F: Interceptor,
     S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
     S::Error: Into<crate::Error>,
+    ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
-    type Response = http::Response<ResBody>;
-    type Error = crate::Error;
+    type Response = http::Response<BoxBody>;
+    type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
     #[inline]
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
@@ -171,7 +176,7 @@ where
                 let req = req.into_http(uri, SanitizeHeaders::No);
                 ResponseFuture::future(self.inner.call(req))
             }
-            Err(status) => ResponseFuture::error(status),
+            Err(status) => ResponseFuture::status(status),
         }
     }
 }
@@ -200,9 +205,9 @@ impl<F> ResponseFuture<F> {
         }
     }
 
-    fn error(status: Status) -> Self {
+    fn status(status: Status) -> Self {
         Self {
-            kind: Kind::Error(Some(status)),
+            kind: Kind::Status(Some(status)),
         }
     }
 }
@@ -211,7 +216,7 @@ impl<F> ResponseFuture<F> {
 #[derive(Debug)]
 enum Kind<F> {
     Future(#[pin] F),
-    Error(Option<Status>),
+    Status(Option<Status>),
 }
 
 impl<F, E, B> Future for ResponseFuture<F>
@@ -221,14 +226,20 @@ where
     B: Default + http_body::Body<Data = Bytes> + Send + 'static,
     B::Error: Into<crate::Error>,
 {
-    type Output = Result<http::Response<B>, crate::Error>;
+    type Output = Result<http::Response<BoxBody>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().kind.project() {
-            KindProj::Future(future) => future.poll(cx).map_err(Into::into),
-            KindProj::Error(status) => {
-                let response = status.take().unwrap().to_http().map(|_| B::default());
-
+            KindProj::Future(future) => future
+                .poll(cx)
+                .map(|result| result.map(|res| res.map(boxed))),
+            KindProj::Status(status) => {
+                let response = status
+                    .take()
+                    .unwrap()
+                    .to_http()
+                    .map(|_| B::default())
+                    .map(boxed);
                 Poll::Ready(Ok(response))
             }
         }

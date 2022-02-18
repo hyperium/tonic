@@ -124,7 +124,7 @@ pub fn generate<T: Service>(
                     B::Error: Into<StdError> + Send + 'static,
             {
                 type Response = http::Response<tonic::body::BoxBody>;
-                type Error = Never;
+                type Error = std::convert::Infallible;
                 type Future = BoxFuture<Self::Response, Self::Error>;
 
                 fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
