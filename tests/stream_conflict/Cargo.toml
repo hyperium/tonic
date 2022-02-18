@@ -4,12 +4,13 @@ edition = "2018"
 name = "stream_conflict"
 publish = false
 version = "0.1.0"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 prost = "0.9"
-tonic = {path = "../../tonic"}
+tonic = { path = "../../tonic" }
 
 [build-dependencies]
-tonic-build = {path = "../../tonic-build"}
+tonic-build = { path = "../../tonic-build" }
