@@ -169,7 +169,7 @@ where
         let (metadata, extensions, msg) = req.into_parts();
 
         match self
-            .fg
+            .f
             .call(crate::Request::from_parts(metadata, extensions, ()))
         {
             Ok(req) => {
