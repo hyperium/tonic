@@ -330,6 +330,7 @@ mod tests {
         assert_eq!(expected.headers(), response.headers());
     }
 
+    #[tokio::test]
     async fn doesnt_change_http_method() {
         let svc = tower::service_fn(|request: http::Request<hyper::Body>| async move {
             assert_eq!(request.method(), http::Method::OPTIONS);
