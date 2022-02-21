@@ -53,7 +53,7 @@ pub struct Status {
 /// These variants match the [gRPC status codes].
 ///
 /// [gRPC status codes]: https://github.com/grpc/grpc/blob/master/doc/statuscodes.md#status-codes-and-their-use-in-grpc
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Code {
     /// The operation completed successfully.
     Ok = 0,
