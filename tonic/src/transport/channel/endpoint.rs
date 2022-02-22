@@ -6,10 +6,7 @@ use super::ClientTlsConfig;
 use crate::transport::service::TlsConnector;
 use crate::transport::Error;
 use bytes::Bytes;
-use http::{
-    uri::{InvalidUri, Uri},
-    HeaderValue,
-};
+use http::{uri::Uri, HeaderValue};
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
@@ -76,8 +73,8 @@ impl Endpoint {
     /// # use tonic::transport::Endpoint;
     /// Endpoint::from_shared("https://example.com".to_string());
     /// ```
-    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUri> {
-        let uri = Uri::from_maybe_shared(s.into())?;
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, Error> {
+        let uri = Uri::from_maybe_shared(s.into()).map_err(|e| Error::new_invalid_uri().with(e))?;
         Ok(Self::from(uri))
     }
 
@@ -404,7 +401,7 @@ impl From<Uri> for Endpoint {
 }
 
 impl TryFrom<Bytes> for Endpoint {
-    type Error = InvalidUri;
+    type Error = Error;
 
     fn try_from(t: Bytes) -> Result<Self, Self::Error> {
         Self::from_shared(t)
@@ -412,7 +409,7 @@ impl TryFrom<Bytes> for Endpoint {
 }
 
 impl TryFrom<String> for Endpoint {
-    type Error = InvalidUri;
+    type Error = Error;
 
     fn try_from(t: String) -> Result<Self, Self::Error> {
         Self::from_shared(t.into_bytes())
@@ -420,7 +417,7 @@ impl TryFrom<String> for Endpoint {
 }
 
 impl TryFrom<&'static str> for Endpoint {
-    type Error = InvalidUri;
+    type Error = Error;
 
     fn try_from(t: &'static str) -> Result<Self, Self::Error> {
         Self::from_shared(t.as_bytes())
@@ -434,7 +431,7 @@ impl fmt::Debug for Endpoint {
 }
 
 impl FromStr for Endpoint {
-    type Err = InvalidUri;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::try_from(s.to_string())
