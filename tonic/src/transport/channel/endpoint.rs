@@ -346,7 +346,7 @@ impl Endpoint {
     ///
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
-    pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Result<Channel, Error>
+    pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
     where
         C: MakeConnection<Uri> + Send + 'static,
         C::Connection: Unpin + Send + 'static,
@@ -359,7 +359,7 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(connector);
 
-        Ok(Channel::new(connector, self.clone()))
+        Channel::new(connector, self.clone())
     }
 
     /// Get the endpoint uri.
