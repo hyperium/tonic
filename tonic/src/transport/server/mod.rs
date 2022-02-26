@@ -105,6 +105,10 @@ pub trait NamedService {
     ///
     /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
     const NAME: &'static str;
+
+    fn name(&self) -> &'static str {
+        Self::NAME
+    }
 }
 
 impl<S: NamedService, T> NamedService for Either<S, T> {
