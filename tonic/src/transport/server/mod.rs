@@ -54,7 +54,10 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
-    layer::util::Identity, layer::Layer, limit::concurrency::ConcurrencyLimitLayer, util::Either,
+    layer::util::{Identity, Stack},
+    layer::Layer,
+    limit::concurrency::ConcurrencyLimitLayer,
+    util::Either,
     Service, ServiceBuilder,
 };
 
@@ -408,9 +411,9 @@ impl<L> Server<L> {
     /// [eco]: https://github.com/tower-rs
     /// [`ServiceBuilder`]: tower::ServiceBuilder
     /// [interceptors]: crate::service::Interceptor
-    pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<NewLayer> {
+    pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<Stack<L, NewLayer>> {
         Server {
-            layer: new_layer,
+            layer: Stack::new(self.layer, new_layer),
             trace_interceptor: self.trace_interceptor,
             concurrency_limit: self.concurrency_limit,
             timeout: self.timeout,
