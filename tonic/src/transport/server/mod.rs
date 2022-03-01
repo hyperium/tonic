@@ -54,7 +54,10 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
-    layer::util::Identity, layer::Layer, limit::concurrency::ConcurrencyLimitLayer, util::Either,
+    layer::util::{Identity, Stack},
+    layer::Layer,
+    limit::concurrency::ConcurrencyLimitLayer,
+    util::Either,
     Service, ServiceBuilder,
 };
 
@@ -72,7 +75,7 @@ const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 /// a very good out of the box http2 server for use with tonic but is also a
 /// reference implementation that should be a good starting point for anyone
 /// wanting to create a more complex and/or specific implementation.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct Server<L = Identity> {
     trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
@@ -88,7 +91,29 @@ pub struct Server<L = Identity> {
     http2_keepalive_timeout: Option<Duration>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
-    layer: L,
+    service_builder: ServiceBuilder<L>,
+}
+
+impl Default for Server<Identity> {
+    fn default() -> Self {
+        Self {
+            trace_interceptor: None,
+            concurrency_limit: None,
+            timeout: None,
+            #[cfg(feature = "tls")]
+            tls: None,
+            init_stream_window_size: None,
+            init_connection_window_size: None,
+            max_concurrent_streams: None,
+            tcp_keepalive: None,
+            tcp_nodelay: false,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
+            max_frame_size: None,
+            accept_http1: false,
+            service_builder: Default::default(),
+        }
+    }
 }
 
 /// A stack based `Service` router.
@@ -408,9 +433,9 @@ impl<L> Server<L> {
     /// [eco]: https://github.com/tower-rs
     /// [`ServiceBuilder`]: tower::ServiceBuilder
     /// [interceptors]: crate::service::Interceptor
-    pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<NewLayer> {
+    pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<Stack<NewLayer, L>> {
         Server {
-            layer: new_layer,
+            service_builder: self.service_builder.layer(new_layer),
             trace_interceptor: self.trace_interceptor,
             concurrency_limit: self.concurrency_limit,
             timeout: self.timeout,
@@ -461,7 +486,7 @@ impl<L> Server<L> {
             .http2_keepalive_timeout
             .unwrap_or_else(|| Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
 
-        let svc = self.layer.layer(svc);
+        let svc = self.service_builder.service(svc);
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
@@ -658,7 +683,7 @@ impl<L> Router<L> {
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
-        self.server.layer.layer(self.routes)
+        self.server.service_builder.service(self.routes)
     }
 }
 
