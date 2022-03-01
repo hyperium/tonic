@@ -3,14 +3,9 @@ pub mod pb {
 }
 
 use futures::Stream;
-use std::error::Error;
-use std::io::ErrorKind;
-use std::net::ToSocketAddrs;
-use std::pin::Pin;
-use std::time::Duration;
+use std::{error::Error, io::ErrorKind, net::ToSocketAddrs, pin::Pin, time::Duration};
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
-use tokio_stream::StreamExt;
+use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
 use pb::{EchoRequest, EchoResponse};
@@ -65,23 +60,22 @@ impl pb::echo_server::Echo for EchoServer {
         });
         let mut stream = Box::pin(tokio_stream::iter(repeat).throttle(Duration::from_millis(200)));
 
-        // spawn and channel is required if you want handle "disconnected" functionality
+        // spawn and channel are required if you want handle "disconnect" functionality
+        // the `out_stream` will not be polled after client disconnect
         let (tx, rx) = mpsc::channel(1);
         tokio::spawn(async move {
             while let Some(item) = stream.next().await {
                 match tx.send(Result::<_, Status>::Ok(item)).await {
                     Ok(_) => {
-                        // the item was send to channel but there is no guarntee it was send to client!
-                        // If you need such guarntee the solution can be "rendezvous channel"
-                        // (channel with 0 capacity), tokio::sync::mpsc do not support this special case
-                        // but you can use `flume::bounded` https://docs.rs/flume/latest/flume/fn.bounded.html
+                        // item (server response) was queued to be send to client
                     }
                     Err(_item) => {
-                        println!("\tclient disconnected"); //out_stream (build on rx) was droped
+                        // output_stream was build from rx and both are dropped
                         break;
                     }
                 }
             }
+            println!("\tclient disconnected");
         });
 
         let output_stream = ReceiverStream::new(rx);
@@ -103,15 +97,15 @@ impl pb::echo_server::Echo for EchoServer {
         &self,
         req: Request<Streaming<EchoRequest>>,
     ) -> EchoResult<Self::BidirectionalStreamingEchoStream> {
-        println!("EchoServer::Bidirectional_streaming_echo");
+        println!("EchoServer::bidirectional_streaming_echo");
 
         let mut in_stream = req.into_inner();
         let (tx, rx) = mpsc::channel(2);
 
         // this spawn here is required if you want to handle connection error.
         // If we just map `in_stream` and write it back as `out_stream` the `out_stream`
-        // will be droped when connection error occure and would be never propagated
-        // to `in_stream`.
+        // will be drooped when connection error occurs and error will never be propagated
+        // to mapped version of `in_stream`.
         tokio::spawn(async move {
             while let Some(result) = in_stream.next().await {
                 match result {
