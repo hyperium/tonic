@@ -62,7 +62,7 @@ impl pb::echo_server::Echo for EchoServer {
 
         // spawn and channel are required if you want handle "disconnect" functionality
         // the `out_stream` will not be polled after client disconnect
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::channel(128);
         tokio::spawn(async move {
             while let Some(item) = stream.next().await {
                 match tx.send(Result::<_, Status>::Ok(item)).await {
@@ -100,7 +100,7 @@ impl pb::echo_server::Echo for EchoServer {
         println!("EchoServer::bidirectional_streaming_echo");
 
         let mut in_stream = req.into_inner();
-        let (tx, rx) = mpsc::channel(2);
+        let (tx, rx) = mpsc::channel(128);
 
         // this spawn here is required if you want to handle connection error.
         // If we just map `in_stream` and write it back as `out_stream` the `out_stream`
