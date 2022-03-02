@@ -106,6 +106,9 @@ pub trait NamedService {
     /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
     const NAME: &'static str;
 
+    /// Return the `Service-Name` of this instance as described [here].
+    ///
+    /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
     fn name(&self) -> &'static str {
         Self::NAME
     }
