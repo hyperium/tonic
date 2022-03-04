@@ -4,10 +4,9 @@ use super::Channel;
 use super::ClientTlsConfig;
 #[cfg(feature = "tls")]
 use crate::transport::service::TlsConnector;
-use crate::transport::{service::SharedExec, Error};
+use crate::transport::{service::SharedExec, Error, Executor};
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
-use service::Executor;
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
