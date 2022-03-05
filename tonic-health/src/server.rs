@@ -103,7 +103,7 @@ impl HealthReporter {
     }
 }
 
-/// A service providing implementations of gRPC health checking protocol. 
+/// A service providing implementations of gRPC health checking protocol.
 #[derive(Debug)]
 pub struct HealthService {
     statuses: Arc<RwLock<HashMap<String, StatusPair>>>,
