@@ -1,11 +1,7 @@
 use futures_core::future::BoxFuture;
 use std::{future::Future, sync::Arc};
 
-/// An executor of futures.
-pub trait Executor<Fut> {
-    /// Place the future into the executor to be run.
-    fn execute(&self, fut: Fut);
-}
+pub(crate) use hyper::rt::Executor;
 
 #[derive(Copy, Clone)]
 struct TokioExec;
@@ -43,11 +39,5 @@ impl SharedExec {
 impl Executor<BoxFuture<'static, ()>> for SharedExec {
     fn execute(&self, fut: BoxFuture<'static, ()>) {
         self.inner.execute(fut)
-    }
-}
-
-impl hyper::rt::Executor<BoxFuture<'static, ()>> for SharedExec {
-    fn execute(&self, fut: BoxFuture<'static, ()>) {
-        Executor::execute(self, fut);
     }
 }

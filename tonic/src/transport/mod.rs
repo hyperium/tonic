@@ -99,9 +99,11 @@ pub use self::error::Error;
 #[doc(inline)]
 pub use self::server::{NamedService, Server};
 #[doc(inline)]
-pub use self::service::{executor::Executor, grpc_timeout::TimeoutExpired};
+pub use self::service::grpc_timeout::TimeoutExpired;
 pub use self::tls::Certificate;
 pub use hyper::{Body, Uri};
+
+pub(crate) use self::service::executor::Executor;
 
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
