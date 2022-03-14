@@ -40,6 +40,7 @@ use tower::{
 type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
+const DEFAULT_MPSC_CAPACITY: usize = 8;
 
 /// A default batteries included `transport` channel.
 ///
@@ -108,14 +109,19 @@ impl Channel {
     ///
     /// This creates a [`Channel`] that will load balance accross all the
     /// provided endpoints.
-    pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
-        let (channel, tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
-        list.for_each(|endpoint| {
-            tx.try_send(Change::Insert(endpoint.uri.clone(), endpoint))
+    pub async fn balance_list(
+        list: impl Iterator<Item = Endpoint>,
+    ) -> (Self, Sender<Change<Uri, Endpoint>>) {
+        let (channel, tx) = Self::balance_channel(DEFAULT_MPSC_CAPACITY);
+        for endpoint in list {
+            // The rx inside `channel` won't be closed or dropped here
+            let _ = tx
+                .send(Change::Insert(endpoint.uri.clone(), endpoint))
+                .await
                 .unwrap();
-        });
+        }
 
-        channel
+        (channel, tx)
     }
 
     /// Balance a list of [`Endpoint`]'s.

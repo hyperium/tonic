@@ -11,7 +11,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .iter()
         .map(|a| Channel::from_static(a));
 
-    let channel = Channel::balance_list(endpoints);
+    let (channel, _) = Channel::balance_list(endpoints).await;
 
     let mut client = EchoClient::new(channel);
 
