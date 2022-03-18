@@ -1,7 +1,7 @@
 //! Server implementation and builder.
 
 mod conn;
-mod incoming;
+pub mod incoming;
 mod recover_error;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
@@ -121,6 +121,7 @@ impl Default for Server<Identity> {
 pub struct Router<L = Identity> {
     server: Server<L>,
     routes: Routes,
+    signal_when_ready: Option<tokio::sync::oneshot::Sender<SocketAddr>>,
 }
 
 /// A trait to provide a static reference to the service's
@@ -353,7 +354,7 @@ impl<L> Server<L> {
     /// Create a router with the optional `S` typed service as the first service.
     ///
     /// This will clone the `Server` builder and create a router that will
-    /// route around different services.
+    /// route around diferent services.
     ///
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
@@ -524,7 +525,7 @@ impl<L> Server<L> {
 
 impl<L> Router<L> {
     pub(crate) fn new(server: Server<L>, routes: Routes) -> Self {
-        Self { server, routes }
+        Self { server, routes , signal_when_ready: None}
     }
 }
 
@@ -580,6 +581,10 @@ impl<L> Router<L> {
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
+        if let Some(signal_when_ready) = self.signal_when_ready {
+            // TODO: map the error appropriately...
+            signal_when_ready.send(incoming.get_local_socket_addr()).unwrap();
+        }
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
                 self.routes,
@@ -587,6 +592,32 @@ impl<L> Router<L> {
                 None,
             )
             .await
+    }
+
+    /// Register a way for clients to know when the server is ready to accept connections.
+    /// Also return the SockAddr from bind(), e.g., in the case of ephemeral ports
+    /// This can be very useful with testings, e.g., 
+    /// 
+    /// ```
+    /// // This code has a race condition between client and server startup
+    ///     #[tokio::test]
+    ///     async fn test_client_server_connect_race() -> Result<(), Box<dyn std::error::Error>> {
+    ///         // TODO: figure out how to bind an ephemeral port
+    ///         let addr = "[::1]:50051".to_string();
+    ///         let addr2 = addr.clone();
+    ///         tokio::spawn(async move {
+    ///             // note we can't bubble this up b/c the err type is !Send
+    ///             server(addr2).await.unwrap();
+    ///         });
+    ///         // Client can fail with connection reset if starts faster than server
+    ///         // this is very common in tests which are often single threaded
+    ///         client(addr.clone()).await?;
+    ///         Ok(())
+    ///     }
+    /// ```
+    pub fn add_signal_when_ready(mut self, sender: tokio::sync::oneshot::Sender<SocketAddr>) -> Self {
+        self.signal_when_ready = Some(sender);
+        self
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
@@ -610,6 +641,10 @@ impl<L> Router<L> {
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
+        if let Some(signal_when_ready) = self.signal_when_ready {
+            // TODO: map the error appropriately...
+            signal_when_ready.send(incoming.get_local_socket_addr()).unwrap();
+        }
         self.server
             .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
