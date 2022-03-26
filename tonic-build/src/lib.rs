@@ -77,7 +77,7 @@ mod prost;
 
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
-pub use prost::{compile_protos, configure, Builder};
+pub use prost::{compile_protos, configure, Builder, ServiceGenerator};
 
 /// Service code generation for client
 pub mod client;
