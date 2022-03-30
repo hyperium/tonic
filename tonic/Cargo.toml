@@ -64,8 +64,8 @@ tower-layer = "0.3"
 tower-service = "0.3"
 
 # prost
-prost-derive = {version = "0.9", optional = true}
-prost1 = {package = "prost", version = "0.9", optional = true}
+prost-derive = {version = "0.10", optional = true}
+prost1 = {package = "prost", version = "0.10", optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
