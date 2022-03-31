@@ -169,7 +169,7 @@ where
         // HTTP method of the HTTP request, so we extract them here and then add them back in below.
         let uri = req.uri().clone();
         let method = req.method().clone();
-        let version = req.version().clone();
+        let version = req.version();
         let req = crate::Request::from_http(req);
         let (metadata, extensions, msg) = req.into_parts();
 
