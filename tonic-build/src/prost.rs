@@ -412,10 +412,16 @@ impl Builder {
             config.protoc_arg(arg);
         }
 
-        config.service_generator(Box::new(ServiceGenerator::new(self)));
+        config.service_generator(self.service_generator());
 
         config.compile_protos(protos, includes)?;
 
         Ok(())
+    }
+
+    /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
+    /// `Config::service_generator`.
+    pub fn service_generator(self) -> Box<dyn prost_build::ServiceGenerator> {
+        Box::new(ServiceGenerator::new(self))
     }
 }
