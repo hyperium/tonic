@@ -8,6 +8,7 @@ use hyper::Body;
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
+    fmt,
     future::Future,
     pin::Pin,
     task::{Context, Poll},
@@ -54,8 +55,7 @@ impl Routes {
 
 async fn unimplemented() -> impl axum::response::IntoResponse {
     let status = http::StatusCode::OK;
-    let headers =
-        axum::response::Headers([("grpc-status", "12"), ("content-type", "application/grpc")]);
+    let headers = [("grpc-status", "12"), ("content-type", "application/grpc")];
     (status, headers)
 }
 
@@ -75,8 +75,13 @@ impl Service<Request<Body>> for Routes {
 }
 
 #[pin_project]
-#[derive(Debug)]
-pub struct RoutesFuture(#[pin] axum::routing::future::RouterFuture<Body>);
+pub struct RoutesFuture(#[pin] axum::routing::future::RouteFuture<Body, Infallible>);
+
+impl fmt::Debug for RoutesFuture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("RoutesFuture").finish()
+    }
+}
 
 impl Future for RoutesFuture {
     type Output = Result<Response<BoxBody>, crate::Error>;
