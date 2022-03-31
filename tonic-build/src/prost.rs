@@ -133,22 +133,14 @@ fn is_google_type(ty: &str) -> bool {
     ty.starts_with(".google.protobuf")
 }
 
-/// A service generator compatible with `prost_build`'s one, to extend its code generator.
-///
-/// This is used internally by Tonic build, but also when the codegen output is not to be handled
-/// by prost or tonic; e.g. such as in a flow for a `protoc` code generation plugin. When compiling
-/// as part of a `build.rs` file, instead use [`compile_protos()`].
-#[derive(Debug)]
-pub struct ServiceGenerator {
+struct ServiceGenerator {
     builder: Builder,
     clients: TokenStream,
     servers: TokenStream,
 }
 
 impl ServiceGenerator {
-    /// Create a new service generator from a configured builder, ready to be passed to
-    /// `prost_build`'s `Config::service_generator`.
-    pub fn new(builder: Builder) -> Self {
+    fn new(builder: Builder) -> Self {
         ServiceGenerator {
             builder,
             clients: TokenStream::default(),
@@ -420,10 +412,16 @@ impl Builder {
             config.protoc_arg(arg);
         }
 
-        config.service_generator(Box::new(ServiceGenerator::new(self)));
+        config.service_generator(self.service_generator());
 
         config.compile_protos(protos, includes)?;
 
         Ok(())
+    }
+
+    /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
+    /// `Config::service_generator`.
+    pub fn service_generator(self) -> Box<dyn prost_build::ServiceGenerator> {
+        Box::new(ServiceGenerator::new(self))
     }
 }
