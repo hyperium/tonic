@@ -388,7 +388,7 @@ impl Builder {
             PathBuf::from(std::env::var("OUT_DIR").unwrap())
         };
 
-        config.out_dir(out_dir.clone());
+        config.out_dir(out_dir);
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }

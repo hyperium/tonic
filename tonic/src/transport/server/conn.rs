@@ -116,10 +116,7 @@ where
         let inner = inner.connect_info();
 
         let certs = if let Some(certs) = session.peer_certificates() {
-            let certs = certs
-                .into_iter()
-                .map(|c| Certificate::from_pem(c))
-                .collect();
+            let certs = certs.iter().map(Certificate::from_pem).collect();
             Some(Arc::new(certs))
         } else {
             None

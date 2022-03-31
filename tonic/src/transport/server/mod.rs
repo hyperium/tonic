@@ -151,7 +151,6 @@ impl<L> Server<L> {
     /// Configure TLS for this server.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-    #[must_use]
     pub fn tls_config(self, tls_config: ServerTlsConfig) -> Result<Self, Error> {
         Ok(Server {
             tls: Some(tls_config.tls_acceptor().map_err(Error::from_source)?),
