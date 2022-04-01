@@ -53,29 +53,29 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut test_results = Vec::new();
 
         match test_case {
-            Testcase::empty_unary => client::empty_unary(&mut client, &mut test_results).await,
-            Testcase::large_unary => client::large_unary(&mut client, &mut test_results).await,
-            Testcase::client_streaming => {
+            Testcase::EmptyUnary => client::empty_unary(&mut client, &mut test_results).await,
+            Testcase::LargeUnary => client::large_unary(&mut client, &mut test_results).await,
+            Testcase::ClientStreaming => {
                 client::client_streaming(&mut client, &mut test_results).await
             }
-            Testcase::server_streaming => {
+            Testcase::ServerStreaming => {
                 client::server_streaming(&mut client, &mut test_results).await
             }
-            Testcase::ping_pong => client::ping_pong(&mut client, &mut test_results).await,
-            Testcase::empty_stream => client::empty_stream(&mut client, &mut test_results).await,
-            Testcase::status_code_and_message => {
+            Testcase::PingPong => client::ping_pong(&mut client, &mut test_results).await,
+            Testcase::EmptyStream => client::empty_stream(&mut client, &mut test_results).await,
+            Testcase::StatusCodeAndMessage => {
                 client::status_code_and_message(&mut client, &mut test_results).await
             }
-            Testcase::special_status_message => {
+            Testcase::SpecialStatusMessage => {
                 client::special_status_message(&mut client, &mut test_results).await
             }
-            Testcase::unimplemented_method => {
+            Testcase::UnimplementedMethod => {
                 client::unimplemented_method(&mut client, &mut test_results).await
             }
-            Testcase::unimplemented_service => {
+            Testcase::UnimplementedService => {
                 client::unimplemented_service(&mut unimplemented_client, &mut test_results).await
             }
-            Testcase::custom_metadata => {
+            Testcase::CustomMetadata => {
                 client::custom_metadata(&mut client, &mut test_results).await
             }
             _ => unimplemented!(),
@@ -99,31 +99,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 #[derive(Debug, Copy, Clone, clap::ArgEnum)]
-#[clap(rename_all = "verbatim")]
-#[allow(non_camel_case_types)]
+#[clap(rename_all = "snake_case")]
 enum Testcase {
-    empty_unary,
-    cacheable_unary,
-    large_unary,
-    client_compressed_unary,
-    server_compressed_unary,
-    client_streaming,
-    client_compressed_streaming,
-    server_streaming,
-    server_compressed_streaming,
-    ping_pong,
-    empty_stream,
-    compute_engine_creds,
-    jwt_token_creds,
-    oauth2_auth_token,
-    per_rpc_creds,
-    custom_metadata,
-    status_code_and_message,
-    special_status_message,
-    unimplemented_method,
-    unimplemented_service,
-    cancel_after_begin,
-    cancel_after_first_response,
-    timeout_on_sleeping_server,
-    concurrent_large_unary,
+    EmptyUnary,
+    CacheableUnary,
+    LargeUnary,
+    ClientCompressedUnary,
+    ServerCompressedUnary,
+    ClientStreaming,
+    ClientCompressedStreaming,
+    ServerStreaming,
+    ServerCompressedStreaming,
+    PingPong,
+    EmptyStream,
+    ComputeEngineCreds,
+    JwtTokenCreds,
+    Oauth2AuthToken,
+    PerRpcCreds,
+    CustomMetadata,
+    StatusCodeAndMessage,
+    SpecialStatusMessage,
+    UnimplementedMethod,
+    UnimplementedService,
+    CancelAfterBegin,
+    CancelAfterFirstResponse,
+    TimeoutOnSleepingServer,
+    ConcurrentLargeUnary,
 }
