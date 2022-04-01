@@ -7,7 +7,7 @@ without the need of an external proxy.
 
 ```toml
 [dependencies]
-tonic-web = "0.1"
+tonic-web = "<tonic-web-version>"
 ```
 
 ## Enabling tonic services
