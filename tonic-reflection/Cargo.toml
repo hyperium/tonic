@@ -9,12 +9,13 @@ Server Reflection module of `tonic` gRPC implementation.
 """
 edition = "2018"
 homepage = "https://github.com/hyperium/tonic"
+documentation = "https://docs.rs/tonic-reflection/0.4.0/tonic-reflection/"
 keywords = ["rpc", "grpc", "async", "reflection"]
 license = "MIT"
 name = "tonic-reflection"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.3.0"
+version = "0.4.0"
 
 [dependencies]
 bytes = "1.0"
