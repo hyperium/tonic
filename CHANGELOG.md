@@ -1,3 +1,10 @@
+# [0.7.1](https://github.com/hyperium/tonic/compare/v0.7.0...v0.7.1) (2022-04-04)
+
+### Features
+
+* **transport:** Add `channel` feature flag ([#960](https://github.com/hyperium/tonic/issues/960)) ([f1ca90f](https://github.com/hyperium/tonic/commit/f1ca90f2882925c30f96ef60ccfd4fe39bc2c93b))
+
+
 # [0.7.0](https://github.com/hyperium/tonic/compare/v0.6.2...v0.7.0) (2022-03-31)
 
 ### Breaking Changes
