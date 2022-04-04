@@ -33,6 +33,9 @@ tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "webpki-roots"]
 transport = [
   "axum",
+  "channel"
+]
+channel = [
   "h2",
   "hyper",
   "tokio",

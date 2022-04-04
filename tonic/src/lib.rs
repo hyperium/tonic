@@ -17,7 +17,9 @@
 //! # Feature Flags
 //!
 //! - `transport`: Enables the fully featured, batteries included client and server
-//! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
+//!     implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
+//! - `channel`: Enables just the full featured channel/client portion of the `transport`
+//!     feature.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //! for [`tonic-build`]. Enabled by default.
 //! - `tls`: Enables the `rustls` based TLS options for the `transport` feature. Not

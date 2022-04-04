@@ -94,6 +94,8 @@ mod service;
 mod tls;
 
 #[doc(inline)]
+#[cfg(feature = "channel")]
+#[cfg_attr(docsrs, doc(cfg(feature = "channel")))]
 pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
