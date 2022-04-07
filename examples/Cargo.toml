@@ -55,8 +55,16 @@ name = "tls-client"
 path = "src/tls/client.rs"
 
 [[bin]]
+name = "tls-client-rustls"
+path = "src/tls/client_rustls.rs"
+
+[[bin]]
 name = "tls-server"
 path = "src/tls/server.rs"
+
+[[bin]]
+name = "tls-server-rustls"
+path = "src/tls/server_rustls.rs"
 
 [[bin]]
 name = "tls-client-auth-server"
@@ -213,6 +221,11 @@ bytes = "1"
 tonic-web = { path = "../tonic-web" }
 # streaming example
 h2 = "0.3"
+
+tokio-rustls = "*"
+hyper-rustls = { version = "0.23", features = ["http2"] }
+rustls-pemfile = "*"
+tower-http = { version = "0.2", features = ["add-extension"] }
 
 
 [build-dependencies]
