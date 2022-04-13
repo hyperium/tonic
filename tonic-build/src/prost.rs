@@ -22,8 +22,6 @@ pub fn configure() -> Builder {
         client_attributes: Attributes::default(),
         proto_path: "super".to_string(),
         compile_well_known_types: false,
-        #[cfg(feature = "rustfmt")]
-        format: true,
         emit_package: true,
         protoc_args: Vec::new(),
         include_file: None,
@@ -184,7 +182,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 #clients
             };
 
-            let code = format!("{}", client_service);
+            let ast: syn::File = syn::parse2(client_service).expect("not a valid tokenstream");
+            let code = prettyplease::unparse(&ast);
             buf.push_str(&code);
 
             self.clients = TokenStream::default();
@@ -197,7 +196,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 #servers
             };
 
-            let code = format!("{}", server_service);
+            let ast: syn::File = syn::parse2(server_service).expect("not a valid tokenstream");
+            let code = prettyplease::unparse(&ast);
             buf.push_str(&code);
 
             self.servers = TokenStream::default();
@@ -223,8 +223,6 @@ pub struct Builder {
     pub(crate) include_file: Option<PathBuf>,
 
     out_dir: Option<PathBuf>,
-    #[cfg(feature = "rustfmt")]
-    format: bool,
 }
 
 impl Builder {
@@ -244,13 +242,6 @@ impl Builder {
     /// modules. This is required for implementing gRPC Server Reflection.
     pub fn file_descriptor_set_path(mut self, path: impl AsRef<Path>) -> Self {
         self.file_descriptor_set_path = Some(path.as_ref().to_path_buf());
-        self
-    }
-
-    /// Enable the output to be formated by rustfmt.
-    #[cfg(feature = "rustfmt")]
-    pub fn format(mut self, run: bool) -> Self {
-        self.format = run;
         self
     }
 
@@ -397,10 +388,7 @@ impl Builder {
             PathBuf::from(std::env::var("OUT_DIR").unwrap())
         };
 
-        #[cfg(feature = "rustfmt")]
-        let format = self.format;
-
-        config.out_dir(out_dir.clone());
+        config.out_dir(out_dir);
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }
@@ -424,17 +412,16 @@ impl Builder {
             config.protoc_arg(arg);
         }
 
-        config.service_generator(Box::new(ServiceGenerator::new(self)));
+        config.service_generator(self.service_generator());
 
         config.compile_protos(protos, includes)?;
 
-        #[cfg(feature = "rustfmt")]
-        {
-            if format {
-                super::fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
-            }
-        }
-
         Ok(())
+    }
+
+    /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
+    /// `Config::service_generator`.
+    pub fn service_generator(self) -> Box<dyn prost_build::ServiceGenerator> {
+        Box::new(ServiceGenerator::new(self))
     }
 }

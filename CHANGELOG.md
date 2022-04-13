@@ -1,3 +1,47 @@
+# [0.7.1](https://github.com/hyperium/tonic/compare/v0.7.0...v0.7.1) (2022-04-04)
+
+### Features
+
+* **transport:** Add `channel` feature flag ([#960](https://github.com/hyperium/tonic/issues/960)) ([f1ca90f](https://github.com/hyperium/tonic/commit/f1ca90f2882925c30f96ef60ccfd4fe39bc2c93b))
+
+
+# [0.7.0](https://github.com/hyperium/tonic/compare/v0.6.2...v0.7.0) (2022-03-31)
+
+### Breaking Changes
+
+* Update prost to 0.10 ([#948](https://github.com/hyperium/tonic/issues/948)) ([c78274e](https://github.com/hyperium/tonic/commit/c78274e3fe5763cba291a605979cd7175ad6c38f))
+* **build:** use prettyplease to format output ([#890](https://github.com/hyperium/tonic/issues/890)) ([#904](https://github.com/hyperium/tonic/issues/904)) ([d6c0fc1](https://github.com/hyperium/tonic/commit/d6c0fc112b2288a080fd0a727453b24d666e3d79))
+* **tls:** upgrade to tokio-rustls 0.23 (rustls 0.20) ([#859](https://github.com/hyperium/tonic/issues/859)) ([4548997](https://github.com/hyperium/tonic/commit/4548997080c9c34f12dc0ff83ab0e2bb35ceca9c))
+* **transport:** port router to axum ([#830](https://github.com/hyperium/tonic/issues/830)) ([6dfc20e](https://github.com/hyperium/tonic/commit/6dfc20e1db455be12b0a647533c65bbfd6ae78f2))
+* **build:** add must_use to gzip methods ([#892](https://github.com/hyperium/tonic/issues/892)) ([a337f13](https://github.com/hyperium/tonic/commit/a337f132a57dfcc262b70537cf31686519e0f73c))
+* **codec:** Remove `Default` bound on `Codec` ([#894](https://github.com/hyperium/tonic/issues/894)) ([d574cfd](https://github.com/hyperium/tonic/commit/d574cfda3a692d300db02f486a1792a99b3f9f6d))
+* **tonic:** Expose h2 error instead of reason ([#883](https://github.com/hyperium/tonic/issues/883)) ([a33e15a](https://github.com/hyperium/tonic/commit/a33e15a387a6ca1844748346904d28cb4caae84b))
+* **transport:** connect w/ connector infailable ([#922](https://github.com/hyperium/tonic/issues/922)) ([a197c20](https://github.com/hyperium/tonic/commit/a197c20469a666164c5cba280679e55b9e9e2b6c))
+* **transport:** Endpoint returns transport error ([#920](https://github.com/hyperium/tonic/issues/920)) ([ee6e726](https://github.com/hyperium/tonic/commit/ee6e726707a6839c6cabe672eb296c6118a2a1cd))
+* Handle interceptor errors as responses ([#840](https://github.com/hyperium/tonic/issues/840)) ([#842](https://github.com/hyperium/tonic/issues/842)) ([bf44940](https://github.com/hyperium/tonic/commit/bf44940f9b73709a83b31e4595a3d8ad262797a3))
+
+
+### Bug Fixes
+
+* **codec:** Return None after poll_data error ([#921](https://github.com/hyperium/tonic/issues/921)) ([d7cae70](https://github.com/hyperium/tonic/commit/d7cae702fc2284473846db7c946baf87977b7b48))
+* **health:** Correctly implement spec for overall health ([#897](https://github.com/hyperium/tonic/issues/897)) ([2b0ffee](https://github.com/hyperium/tonic/commit/2b0ffee62034f5983f8d6dcdafccd66f780559f2))
+* **tonic:** Preserve HTTP method in interceptor ([#912](https://github.com/hyperium/tonic/issues/912)) ([e623562](https://github.com/hyperium/tonic/commit/e6235623c4707f97e9b9f7c3ba88745050a884e5))
+* **transport:** Make `Server::layer()` support more than one layer ([#932](https://github.com/hyperium/tonic/issues/932)) ([e30bb7e](https://github.com/hyperium/tonic/commit/e30bb7ede7e107a3181cd786533c250ba09a2fcf))
+* **transport:** Make server builder more consistent ([#901](https://github.com/hyperium/tonic/issues/901)) ([6763d19](https://github.com/hyperium/tonic/commit/6763d191d267c1b9f861b96ad0f4b850e0264f4d))
+* Return error on non https uri instead of panic ([#838](https://github.com/hyperium/tonic/issues/838)) ([ef6e245](https://github.com/hyperium/tonic/commit/ef6e245180936097e56f5f95ed8b182674f3131b))
+
+
+### Features
+
+* **build:** Expose Prost generation plugin ([#947](https://github.com/hyperium/tonic/issues/947)) ([d4bd475](https://github.com/hyperium/tonic/commit/d4bd4758dd80135f89d3e559c5d7f42ccbbab504))
+* **build:** add constructor `from_arc` for gRPC servers ([#875](https://github.com/hyperium/tonic/issues/875)) ([7179f7a](https://github.com/hyperium/tonic/commit/7179f7ae6a5186bb64e4c120302084f56c053206))
+* **health:** Expose `HealthService` publically ([#930](https://github.com/hyperium/tonic/issues/930)) ([097e7e8](https://github.com/hyperium/tonic/commit/097e7e85a9079bb76bef54921f03c6f7e0ee0744))
+* **transport:** add unix socket support in server ([#861](https://github.com/hyperium/tonic/issues/861)) ([dee2ab5](https://github.com/hyperium/tonic/commit/dee2ab52ff4a2995156a3baf5ea916b479fd1d14))
+* **transport:** support customizing `Channel`'s async executor ([#935](https://github.com/hyperium/tonic/issues/935)) ([0859d82](https://github.com/hyperium/tonic/commit/0859d82e577fb024e39ce9b5b7356b95dcb66562))
+* Implement hash for `Code` ([#917](https://github.com/hyperium/tonic/issues/917)) ([6bc7dab](https://github.com/hyperium/tonic/commit/6bc7dab8e099c8ce226a6261e545d8d131c604f0))
+
+
+
 # [0.6.2](https://github.com/hyperium/tonic/compare/v0.6.1...v0.6.2) (2021-12-07)
 
 

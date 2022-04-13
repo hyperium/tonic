@@ -1,12 +1,6 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
 //! and proto definitiones for use with `tonic`.
 //!
-//! # Features
-//!
-//! - `rustfmt`: This feature enables the use of `rustfmt` to format the output code
-//! this makes the code readable and the error messages nice. This requires that `rustfmt`
-//! is installed. This is enabled by default.
-//!
 //! # Required dependencies
 //!
 //! ```toml
@@ -68,7 +62,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.6.2")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.7.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -84,13 +78,6 @@ mod prost;
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use prost::{compile_protos, configure, Builder};
-
-#[cfg(feature = "rustfmt")]
-#[cfg_attr(docsrs, doc(cfg(feature = "rustfmt")))]
-use std::io::{self, Write};
-#[cfg(feature = "rustfmt")]
-#[cfg_attr(docsrs, doc(cfg(feature = "rustfmt")))]
-use std::process::{exit, Command};
 
 /// Service code generation for client
 pub mod client;
@@ -215,42 +202,6 @@ fn generate_attributes<'a>(
                 .attrs
         })
         .collect::<Vec<_>>()
-}
-
-/// Format files under the out_dir with rustfmt
-#[cfg(feature = "rustfmt")]
-#[cfg_attr(docsrs, doc(cfg(feature = "rustfmt")))]
-pub fn fmt(out_dir: &str) {
-    let dir = std::fs::read_dir(out_dir).unwrap();
-
-    for entry in dir {
-        let file = entry.unwrap().file_name().into_string().unwrap();
-        if !file.ends_with(".rs") {
-            continue;
-        }
-        let result =
-            Command::new(std::env::var("RUSTFMT").unwrap_or_else(|_| "rustfmt".to_owned()))
-                .arg("--emit")
-                .arg("files")
-                .arg("--edition")
-                .arg("2018")
-                .arg(format!("{}/{}", out_dir, file))
-                .output();
-
-        match result {
-            Err(e) => {
-                eprintln!("error running rustfmt: {:?}", e);
-                exit(1)
-            }
-            Ok(output) => {
-                if !output.status.success() {
-                    io::stdout().write_all(&output.stdout).unwrap();
-                    io::stderr().write_all(&output.stderr).unwrap();
-                    exit(output.status.code().unwrap_or(1))
-                }
-            }
-        }
-    }
 }
 
 // Generate a singular line of a doc comment

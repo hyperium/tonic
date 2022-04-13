@@ -9,8 +9,9 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, DynamicServiceStream};
+use super::service::{Connection, DynamicServiceStream, SharedExec};
 use crate::body::BoxBody;
+use crate::transport::Executor;
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},
@@ -125,9 +126,25 @@ impl Channel {
     where
         K: Hash + Eq + Send + Clone + 'static,
     {
+        Self::balance_channel_with_executor(capacity, SharedExec::tokio())
+    }
+
+    /// Balance a list of [`Endpoint`]'s.
+    ///
+    /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
+    ///
+    /// The [`Channel`] will use the given executor to spawn async tasks.
+    pub fn balance_channel_with_executor<K, E>(
+        capacity: usize,
+        executor: E,
+    ) -> (Self, Sender<Change<K, Endpoint>>)
+    where
+        K: Hash + Eq + Send + Clone + 'static,
+        E: Executor<Pin<Box<dyn Future<Output = ()> + Send>>> + Send + Sync + 'static,
+    {
         let (tx, rx) = channel(capacity);
         let list = DynamicServiceStream::new(rx);
-        (Self::balance(list, DEFAULT_BUFFER_SIZE), tx)
+        (Self::balance(list, DEFAULT_BUFFER_SIZE, executor), tx)
     }
 
     pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Self
@@ -138,9 +155,11 @@ impl Channel {
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
+        let executor = endpoint.executor.clone();
 
         let svc = Connection::lazy(connector, endpoint);
-        let svc = Buffer::new(Either::A(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
+        executor.execute(Box::pin(worker));
 
         Channel { svc }
     }
@@ -153,25 +172,29 @@ impl Channel {
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
+        let executor = endpoint.executor.clone();
 
         let svc = Connection::connect(connector, endpoint)
             .await
             .map_err(super::Error::from_source)?;
-        let svc = Buffer::new(Either::A(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
+        executor.execute(Box::pin(worker));
 
         Ok(Channel { svc })
     }
 
-    pub(crate) fn balance<D>(discover: D, buffer_size: usize) -> Self
+    pub(crate) fn balance<D, E>(discover: D, buffer_size: usize, executor: E) -> Self
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
         D::Key: Hash + Send + Clone,
+        E: Executor<futures_core::future::BoxFuture<'static, ()>> + Send + Sync + 'static,
     {
         let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
-        let svc = Buffer::new(Either::B(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(Either::B(svc), buffer_size);
+        executor.execute(Box::pin(worker));
 
         Channel { svc }
     }

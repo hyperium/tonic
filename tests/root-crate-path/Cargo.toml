@@ -7,7 +7,7 @@ publish = false
 version = "0.1.0"
 
 [dependencies]
-prost = "0.9"
+prost = "0.10"
 tonic = {path = "../../tonic"}
 
 [build_dependencies]

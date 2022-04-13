@@ -6,7 +6,10 @@ mod recover_error;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
+#[cfg(unix)]
+mod unix;
 
+pub use super::service::Routes;
 pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
@@ -17,6 +20,9 @@ pub use conn::TlsConnectInfo;
 #[cfg(feature = "tls")]
 use super::service::TlsAcceptor;
 
+#[cfg(unix)]
+pub use unix::UdsConnectInfo;
+
 use incoming::TcpIncoming;
 
 #[cfg(feature = "tls")]
@@ -26,19 +32,17 @@ pub(crate) use tokio_rustls::server::TlsStream;
 use crate::transport::Error;
 
 use self::recover_error::RecoverError;
-use super::service::{GrpcTimeout, Or, Routes, ServerIo};
+use super::service::{GrpcTimeout, ServerIo};
 use crate::body::BoxBody;
 use bytes::Bytes;
 use futures_core::Stream;
-use futures_util::{
-    future::{self, MapErr},
-    ready, TryFutureExt,
-};
+use futures_util::{future, ready};
 use http::{Request, Response};
 use http_body::Body as _;
 use hyper::{server::accept, Body};
 use pin_project::pin_project;
 use std::{
+    convert::Infallible,
     fmt,
     future::Future,
     marker::PhantomData,
@@ -50,7 +54,10 @@ use std::{
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tower::{
-    layer::util::Identity, layer::Layer, limit::concurrency::ConcurrencyLimitLayer, util::Either,
+    layer::util::{Identity, Stack},
+    layer::Layer,
+    limit::concurrency::ConcurrencyLimitLayer,
+    util::Either,
     Service, ServiceBuilder,
 };
 
@@ -68,7 +75,7 @@ const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 /// a very good out of the box http2 server for use with tonic but is also a
 /// reference implementation that should be a good starting point for anyone
 /// wanting to create a more complex and/or specific implementation.
-#[derive(Default, Clone)]
+#[derive(Clone)]
 pub struct Server<L = Identity> {
     trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
@@ -84,46 +91,36 @@ pub struct Server<L = Identity> {
     http2_keepalive_timeout: Option<Duration>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
-    layer: L,
+    service_builder: ServiceBuilder<L>,
+}
+
+impl Default for Server<Identity> {
+    fn default() -> Self {
+        Self {
+            trace_interceptor: None,
+            concurrency_limit: None,
+            timeout: None,
+            #[cfg(feature = "tls")]
+            tls: None,
+            init_stream_window_size: None,
+            init_connection_window_size: None,
+            max_concurrent_streams: None,
+            tcp_keepalive: None,
+            tcp_nodelay: false,
+            http2_keepalive_interval: None,
+            http2_keepalive_timeout: None,
+            max_frame_size: None,
+            accept_http1: false,
+            service_builder: Default::default(),
+        }
+    }
 }
 
 /// A stack based `Service` router.
 #[derive(Debug)]
-pub struct Router<A, B, L = Identity> {
+pub struct Router<L = Identity> {
     server: Server<L>,
-    routes: Routes<A, B, Request<Body>>,
-}
-
-/// A service that is produced from a Tonic `Router`.
-///
-/// This service implementation will route between multiple Tonic
-/// gRPC endpoints and can be consumed with the rest of the `tower`
-/// ecosystem.
-#[derive(Debug, Clone)]
-pub struct RouterService<S> {
-    inner: S,
-}
-
-impl<S> Service<Request<Body>> for RouterService<S>
-where
-    S: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<crate::Error> + Send,
-{
-    type Response = Response<BoxBody>;
-    type Error = crate::Error;
-
-    #[allow(clippy::type_complexity)]
-    type Future = MapErr<S::Future, fn(S::Error) -> crate::Error>;
-
-    #[inline]
-    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
-        self.inner.call(req).map_err(Into::into)
-    }
+    routes: Routes,
 }
 
 /// A trait to provide a static reference to the service's
@@ -171,6 +168,7 @@ impl<L> Server<L> {
     /// # let builder = Server::builder();
     /// builder.concurrency_limit_per_connection(32);
     /// ```
+    #[must_use]
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
         Server {
             concurrency_limit: Some(limit),
@@ -186,12 +184,15 @@ impl<L> Server<L> {
     /// # use tonic::transport::Server;
     /// # use tower_service::Service;
     /// # use std::time::Duration;
-    /// # let mut builder = Server::builder();
+    /// # let builder = Server::builder();
     /// builder.timeout(Duration::from_secs(30));
     /// ```
-    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
-        self.timeout = Some(timeout);
-        self
+    #[must_use]
+    pub fn timeout(self, timeout: Duration) -> Self {
+        Server {
+            timeout: Some(timeout),
+            ..self
+        }
     }
 
     /// Sets the [`SETTINGS_INITIAL_WINDOW_SIZE`][spec] option for HTTP2
@@ -200,6 +201,7 @@ impl<L> Server<L> {
     /// Default is 65,535
     ///
     /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    #[must_use]
     pub fn initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> Self {
         Server {
             init_stream_window_size: sz.into(),
@@ -210,6 +212,7 @@ impl<L> Server<L> {
     /// Sets the max connection-level flow control for HTTP2
     ///
     /// Default is 65,535
+    #[must_use]
     pub fn initial_connection_window_size(self, sz: impl Into<Option<u32>>) -> Self {
         Server {
             init_connection_window_size: sz.into(),
@@ -223,6 +226,7 @@ impl<L> Server<L> {
     /// Default is no limit (`None`).
     ///
     /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_MAX_CONCURRENT_STREAMS
+    #[must_use]
     pub fn max_concurrent_streams(self, max: impl Into<Option<u32>>) -> Self {
         Server {
             max_concurrent_streams: max.into(),
@@ -239,6 +243,7 @@ impl<L> Server<L> {
     ///
     /// Default is no HTTP2 keepalive (`None`)
     ///
+    #[must_use]
     pub fn http2_keepalive_interval(self, http2_keepalive_interval: Option<Duration>) -> Self {
         Server {
             http2_keepalive_interval,
@@ -253,6 +258,7 @@ impl<L> Server<L> {
     ///
     /// Default is 20 seconds.
     ///
+    #[must_use]
     pub fn http2_keepalive_timeout(self, http2_keepalive_timeout: Option<Duration>) -> Self {
         Server {
             http2_keepalive_timeout,
@@ -268,6 +274,7 @@ impl<L> Server<L> {
     ///
     /// Default is no keepalive (`None`)
     ///
+    #[must_use]
     pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
         Server {
             tcp_keepalive,
@@ -276,6 +283,7 @@ impl<L> Server<L> {
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    #[must_use]
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Server {
             tcp_nodelay: enabled,
@@ -288,6 +296,7 @@ impl<L> Server<L> {
     /// Passing `None` will do nothing.
     ///
     /// If not set, will default from underlying transport.
+    #[must_use]
     pub fn max_frame_size(self, frame_size: impl Into<Option<u32>>) -> Self {
         Server {
             max_frame_size: frame_size.into(),
@@ -303,6 +312,7 @@ impl<L> Server<L> {
     /// return confusing (but correct) protocol errors.
     ///
     /// Default is `false`.
+    #[must_use]
     pub fn accept_http1(self, accept_http1: bool) -> Self {
         Server {
             accept_http1,
@@ -311,6 +321,7 @@ impl<L> Server<L> {
     }
 
     /// Intercept inbound headers and add a [`tracing::Span`] to each response future.
+    #[must_use]
     pub fn trace_fn<F>(self, f: F) -> Self
     where
         F: Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static,
@@ -325,18 +336,17 @@ impl<L> Server<L> {
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services.
-    pub fn add_service<S>(&mut self, svc: S) -> Router<S, Unimplemented, L>
+    pub fn add_service<S>(&mut self, svc: S) -> Router<L>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
             + Clone
             + Send
             + 'static,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
         L: Clone,
     {
-        Router::new(self.clone(), svc)
+        Router::new(self.clone(), Routes::new(svc))
     }
 
     /// Create a router with the optional `S` typed service as the first service.
@@ -347,25 +357,18 @@ impl<L> Server<L> {
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
     /// As a result, one cannot use this to toggle between two identically named implementations.
-    pub fn add_optional_service<S>(
-        &mut self,
-        svc: Option<S>,
-    ) -> Router<Either<S, Unimplemented>, Unimplemented, L>
+    pub fn add_optional_service<S>(&mut self, svc: Option<S>) -> Router<L>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
             + Clone
             + Send
             + 'static,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
         L: Clone,
     {
-        let svc = match svc {
-            Some(some) => Either::A(some),
-            None => Either::B(Unimplemented::default()),
-        };
-        Router::new(self.clone(), svc)
+        let routes = svc.map(Routes::new).unwrap_or_default();
+        Router::new(self.clone(), routes)
     }
 
     /// Set the [Tower] [`Layer`] all services will be wrapped in.
@@ -429,9 +432,9 @@ impl<L> Server<L> {
     /// [eco]: https://github.com/tower-rs
     /// [`ServiceBuilder`]: tower::ServiceBuilder
     /// [interceptors]: crate::service::Interceptor
-    pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<NewLayer> {
+    pub fn layer<NewLayer>(self, new_layer: NewLayer) -> Server<Stack<NewLayer, L>> {
         Server {
-            layer: new_layer,
+            service_builder: self.service_builder.layer(new_layer),
             trace_interceptor: self.trace_interceptor,
             concurrency_limit: self.concurrency_limit,
             timeout: self.timeout,
@@ -482,7 +485,7 @@ impl<L> Server<L> {
             .http2_keepalive_timeout
             .unwrap_or_else(|| Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
 
-        let svc = self.layer.layer(svc);
+        let svc = self.service_builder.service(svc);
 
         let tcp = incoming::tcp_incoming(incoming, self);
         let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
@@ -518,63 +521,25 @@ impl<L> Server<L> {
     }
 }
 
-impl<S, L> Router<S, Unimplemented, L> {
-    pub(crate) fn new(server: Server<L>, svc: S) -> Self
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let svc_name = <S as NamedService>::NAME;
-        let svc_route = format!("/{}", svc_name);
-        let pred = move |req: &Request<Body>| {
-            let path = req.uri().path();
-
-            path.starts_with(&svc_route)
-        };
-        Self {
-            server,
-            routes: Routes::new(pred, svc, Unimplemented::default()),
-        }
+impl<L> Router<L> {
+    pub(crate) fn new(server: Server<L>, routes: Routes) -> Self {
+        Self { server, routes }
     }
 }
 
-impl<A, B, L> Router<A, B, L>
-where
-    A: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-    A::Future: Send + 'static,
-    A::Error: Into<crate::Error> + Send,
-    B: Service<Request<Body>, Response = Response<BoxBody>> + Clone + Send + 'static,
-    B::Future: Send + 'static,
-    B::Error: Into<crate::Error> + Send,
-{
+impl<L> Router<L> {
     /// Add a new service to this router.
-    pub fn add_service<S>(self, svc: S) -> Router<S, Or<A, B, Request<Body>>, L>
+    pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
             + Clone
             + Send
             + 'static,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
-        let Self { routes, server } = self;
-
-        let svc_name = <S as NamedService>::NAME;
-        let svc_route = format!("/{}", svc_name);
-        let pred = move |req: &Request<Body>| {
-            let path = req.uri().path();
-
-            path.starts_with(&svc_route)
-        };
-        let routes = routes.push(pred, svc);
-
-        Router { server, routes }
+        self.routes = self.routes.add_service(svc);
+        self
     }
 
     /// Add a new optional service to this router.
@@ -583,35 +548,19 @@ where
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
     /// As a result, one cannot use this to toggle between two identically named implementations.
     #[allow(clippy::type_complexity)]
-    pub fn add_optional_service<S>(
-        self,
-        svc: Option<S>,
-    ) -> Router<Either<S, Unimplemented>, Or<A, B, Request<Body>>, L>
+    pub fn add_optional_service<S>(mut self, svc: Option<S>) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>>
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
             + Clone
             + Send
             + 'static,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
-        let Self { routes, server } = self;
-
-        let svc_name = <S as NamedService>::NAME;
-        let svc_route = format!("/{}", svc_name);
-        let pred = move |req: &Request<Body>| {
-            let path = req.uri().path();
-
-            path.starts_with(&svc_route)
-        };
-        let svc = match svc {
-            Some(some) => Either::A(some),
-            None => Either::B(Unimplemented::default()),
-        };
-        let routes = routes.push(pred, svc);
-
-        Router { server, routes }
+        if let Some(svc) = svc {
+            self.routes = self.routes.add_service(svc);
+        }
+        self
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
@@ -621,12 +570,10 @@ where
     /// [tokio]: https://docs.rs/tokio
     pub async fn serve<ResBody>(self, addr: SocketAddr) -> Result<(), super::Error>
     where
-        L: Layer<Routes<A, B, Request<Body>>>,
+        L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
-            Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
-            Into<crate::Error> + Send,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
@@ -653,12 +600,10 @@ where
         signal: F,
     ) -> Result<(), super::Error>
     where
-        L: Layer<Routes<A, B, Request<Body>>>,
+        L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
-            Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
-            Into<crate::Error> + Send,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
@@ -682,12 +627,10 @@ where
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
-        L: Layer<Routes<A, B, Request<Body>>>,
+        L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
-            Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
-            Into<crate::Error> + Send,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
@@ -717,12 +660,10 @@ where
         IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
-        L: Layer<Routes<A, B, Request<Body>>>,
+        L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
-            Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
-            Into<crate::Error> + Send,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
@@ -732,19 +673,16 @@ where
     }
 
     /// Create a tower service out of a router.
-    pub fn into_service<ResBody>(self) -> RouterService<L::Service>
+    pub fn into_service<ResBody>(self) -> L::Service
     where
-        L: Layer<Routes<A, B, Request<Body>>>,
+        L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Future:
-            Send + 'static,
-        <<L as Layer<Routes<A, B, Request<Body>>>>::Service as Service<Request<Body>>>::Error:
-            Into<crate::Error> + Send,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
-        let inner = self.server.layer.layer(self.routes);
-        RouterService { inner }
+        self.server.service_builder.service(self.routes)
     }
 }
 
@@ -898,32 +836,5 @@ where
             });
 
         future::ready(Ok(svc))
-    }
-}
-
-#[derive(Default, Clone, Debug)]
-#[doc(hidden)]
-pub struct Unimplemented {
-    _p: (),
-}
-
-impl Service<Request<Body>> for Unimplemented {
-    type Response = Response<BoxBody>;
-    type Error = crate::Error;
-    type Future = future::Ready<Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Ok(()).into()
-    }
-
-    fn call(&mut self, _req: Request<Body>) -> Self::Future {
-        future::ok(
-            http::Response::builder()
-                .status(200)
-                .header("grpc-status", "12")
-                .header("content-type", "application/grpc")
-                .body(crate::body::empty_body())
-                .unwrap(),
-        )
     }
 }

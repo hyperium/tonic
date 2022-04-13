@@ -33,7 +33,7 @@ const HEADER_SIZE: usize =
     std::mem::size_of::<u32>();
 
 /// Trait that knows how to encode and decode gRPC messages.
-pub trait Codec: Default {
+pub trait Codec {
     /// The encodable message.
     type Encode: Send + 'static;
     /// The decodable message.

@@ -1223,7 +1223,7 @@ impl<'a> Iterator for Iter<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|item| {
-            let (ref name, value) = item;
+            let (name, value) = item;
             if Ascii::is_valid_key(name.as_str()) {
                 KeyAndValueRef::Ascii(
                     MetadataKey::unchecked_from_header_name_ref(name),
@@ -1315,7 +1315,7 @@ impl<'a> Iterator for Values<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner.next().map(|item| {
-            let (ref name, value) = item;
+            let (name, value) = item;
             if Ascii::is_valid_key(name.as_str()) {
                 ValueRef::Ascii(MetadataValue::unchecked_from_header_value_ref(value))
             } else {

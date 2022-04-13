@@ -169,12 +169,14 @@ impl<T> Request<T> {
     pub(crate) fn into_http(
         self,
         uri: http::Uri,
+        method: http::Method,
+        version: http::Version,
         sanitize_headers: SanitizeHeaders,
     ) -> http::Request<T> {
         let mut request = http::Request::new(self.message);
 
-        *request.version_mut() = http::Version::HTTP_2;
-        *request.method_mut() = http::Method::POST;
+        *request.version_mut() = version;
+        *request.method_mut() = method;
         *request.uri_mut() = uri;
         *request.headers_mut() = match sanitize_headers {
             SanitizeHeaders::Yes => self.metadata.into_sanitized_headers(),
@@ -202,8 +204,8 @@ impl<T> Request<T> {
     /// Get the remote address of this connection.
     ///
     /// This will return `None` if the `IO` type used
-    /// does not implement `Connected`. This currently,
-    /// only works on the server side.
+    /// does not implement `Connected` or when using a unix domain socket.
+    /// This currently only works on the server side.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         #[cfg(feature = "transport")]
         {
@@ -441,7 +443,12 @@ mod tests {
                 .insert(*header, MetadataValue::from_static("invalid"));
         }
 
-        let http_request = r.into_http(Uri::default(), SanitizeHeaders::Yes);
+        let http_request = r.into_http(
+            Uri::default(),
+            http::Method::POST,
+            http::Version::HTTP_2,
+            SanitizeHeaders::Yes,
+        );
         assert!(http_request.headers().is_empty());
     }
 

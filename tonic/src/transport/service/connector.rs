@@ -3,6 +3,9 @@ use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
+#[cfg(feature = "tls-roots-common")]
+use std::convert::TryInto;
+use std::fmt;
 use std::task::{Context, Poll};
 use tower::make::MakeConnection;
 use tower_service::Service;
@@ -39,22 +42,18 @@ impl<C> Connector<C> {
 
     #[cfg(feature = "tls-roots-common")]
     fn tls_or_default(&self, scheme: Option<&str>, host: Option<&str>) -> Option<TlsConnector> {
-        use tokio_rustls::webpki::DNSNameRef;
-
         if self.tls.is_some() {
             return self.tls.clone();
         }
 
-        match (scheme, host) {
-            (Some("https"), Some(host)) => {
-                if DNSNameRef::try_from_ascii(host.as_bytes()).is_ok() {
-                    TlsConnector::new_with_rustls_cert(None, None, host.to_owned()).ok()
-                } else {
-                    None
-                }
-            }
-            _ => None,
-        }
+        let host = match (scheme, host) {
+            (Some("https"), Some(host)) => host,
+            _ => return None,
+        };
+
+        host.try_into()
+            .ok()
+            .and_then(|dns| TlsConnector::new(None, None, dns).ok())
     }
 }
 
@@ -80,9 +79,17 @@ where
         #[cfg(feature = "tls-roots-common")]
         let tls = self.tls_or_default(uri.scheme_str(), uri.host());
 
+        let is_https = uri.scheme_str() == Some("https");
         let connect = self.inner.make_connection(uri);
 
         Box::pin(async move {
+            #[cfg(not(feature = "tls"))]
+            {
+                if is_https {
+                    return Err(HttpsUriWithoutTlsSupport(()).into());
+                }
+            }
+
             let io = connect.await?;
 
             #[cfg(feature = "tls")]
@@ -90,6 +97,8 @@ where
                 if let Some(tls) = tls {
                     let conn = tls.connect(io).await?;
                     return Ok(BoxedIo::new(conn));
+                } else if is_https {
+                    return Err(HttpsUriWithoutTlsSupport(()).into());
                 }
             }
 
@@ -97,3 +106,16 @@ where
         })
     }
 }
+
+/// Error returned when trying to connect to an HTTPS endpoint without TLS enabled.
+#[derive(Debug)]
+pub(crate) struct HttpsUriWithoutTlsSupport(());
+
+impl fmt::Display for HttpsUriWithoutTlsSupport {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Connecting to HTTPS without TLS enabled")
+    }
+}
+
+// std::error::Error only requires a type to impl Debug and Display
+impl std::error::Error for HttpsUriWithoutTlsSupport {}
