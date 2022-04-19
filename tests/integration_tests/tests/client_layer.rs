@@ -8,10 +8,7 @@ use tonic::{
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
-use tower_http::{
-    set_header::SetRequestHeaderLayer,
-    trace::TraceLayer,
-};
+use tower_http::{set_header::SetRequestHeaderLayer, trace::TraceLayer};
 
 #[tokio::test]
 async fn connect_supports_standard_tower_layers() {
