@@ -23,6 +23,7 @@ http-body = "0.4"
 hyper = "0.14"
 tokio-stream = {version = "0.1.5", features = ["net"]}
 tower = {version = "0.4", features = []}
+tower-http = { version = "0.2", features = ["set-header", "trace"] }
 tower-service = "0.3"
 tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 
