@@ -18,7 +18,7 @@ tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
 tokio-stream = {version = "0.1.5", features = ["net"]}
 tonic = {path = "../../tonic", features = ["compression"]}
 tower = {version = "0.4", features = []}
-tower-http = {version = "0.2", features = ["map-response-body", "map-request-body"]}
+tower-http = {version = "0.3", features = ["map-response-body", "map-request-body"]}
 
 [build-dependencies]
 tonic-build = {path = "../../tonic-build", features = ["compression"]}
