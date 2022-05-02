@@ -286,7 +286,8 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// let val = AsciiMetadataValue::try_from_bytes(b"hello\xfa").unwrap();
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
 /// assert_eq!(val, &b"hello\xfa"[..]);
 /// ```
 ///
@@ -294,7 +295,8 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// let val = AsciiMetadataValue::try_from_bytes(b"\n");
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"\n");
 /// assert!(val.is_err());
 /// ```
 impl<'a, VE: ValueEncoding> TryFrom<&'a [u8]> for MetadataValue<VE> {
@@ -322,7 +324,8 @@ impl<'a, VE: ValueEncoding> TryFrom<&'a [u8]> for MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// let val = AsciiMetadataValue::try_from_bytes(b"hello\xfa").unwrap();
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
 /// assert_eq!(val, &b"hello\xfa"[..]);
 /// ```
 ///
@@ -330,7 +333,8 @@ impl<'a, VE: ValueEncoding> TryFrom<&'a [u8]> for MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// let val = AsciiMetadataValue::try_from_bytes(b"\n");
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"\n");
 /// assert!(val.is_err());
 /// ```
 impl<'a, VE: ValueEncoding, const N: usize> TryFrom<&'a [u8; N]> for MetadataValue<VE> {
