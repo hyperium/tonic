@@ -285,7 +285,7 @@ impl<T> Request<T> {
     ///
     /// [the spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
     pub fn set_timeout(&mut self, deadline: Duration) {
-        let value = MetadataValue::from_str(&duration_to_grpc_timeout(deadline)).unwrap();
+        let value: MetadataValue<_> = duration_to_grpc_timeout(deadline).parse().unwrap();
         self.metadata_mut()
             .insert(crate::metadata::GRPC_TIMEOUT_HEADER, value);
     }

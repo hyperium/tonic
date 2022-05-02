@@ -342,7 +342,7 @@ pub async fn unimplemented_service(
 
 pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let key1 = "x-grpc-test-echo-initial";
-    let value1 = MetadataValue::from_str("test_initial_metadata_value").unwrap();
+    let value1: MetadataValue<_> = "test_initial_metadata_value".parse().unwrap();
     let key2 = "x-grpc-test-echo-trailing-bin";
     let value2 = MetadataValue::from_bytes(&[0xab, 0xab, 0xab]);
 
