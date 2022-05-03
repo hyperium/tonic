@@ -51,11 +51,27 @@ pub trait ValueEncoding: Clone + Eq + PartialEq + Hash + self::value_encoding::S
     fn is_valid_key(key: &str) -> bool;
 }
 
+/// gRPC metadata values can be either ASCII strings or binary. Note that only
+/// visible ASCII characters (32-127) are permitted.
+/// This type should never be instantiated -- in fact, it's impossible
+/// to, because there's no variants to instantiate. Instead, it's just used as
+/// a type parameter for [`MetadataKey`] and [`MetadataValue`].
+///
+/// [`MetadataKey`]: struct.MetadataKey.html
+/// [`MetadataValue`]: struct.MetadataValue.html
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-#[doc(hidden)]
+#[non_exhaustive]
 pub enum Ascii {}
+
+/// gRPC metadata values can be either ASCII strings or binary.
+/// This type should never be instantiated -- in fact, it's impossible
+/// to, because there's no variants to instantiate. Instead, it's just used as
+/// a type parameter for [`MetadataKey`] and [`MetadataValue`].
+///
+/// [`MetadataKey`]: struct.MetadataKey.html
+/// [`MetadataValue`]: struct.MetadataValue.html
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
-#[doc(hidden)]
+#[non_exhaustive]
 pub enum Binary {}
 
 // ===== impl ValueEncoding =====
