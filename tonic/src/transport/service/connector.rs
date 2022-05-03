@@ -79,17 +79,11 @@ where
         #[cfg(feature = "tls-roots-common")]
         let tls = self.tls_or_default(uri.scheme_str(), uri.host());
 
+        #[cfg(feature = "tls")]
         let is_https = uri.scheme_str() == Some("https");
         let connect = self.inner.make_connection(uri);
 
         Box::pin(async move {
-            #[cfg(not(feature = "tls"))]
-            {
-                if is_https {
-                    return Err(HttpsUriWithoutTlsSupport(()).into());
-                }
-            }
-
             let io = connect.await?;
 
             #[cfg(feature = "tls")]
