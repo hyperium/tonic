@@ -230,3 +230,9 @@ tower-http = { version = "0.3", features = ["add-extension"] }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost", "compression"] }
+# Custom codec
+proc-macro2 = "*"
+quote = "*"
+syn = "*"
+prost-build = "*"
+prettyplease = "*"
