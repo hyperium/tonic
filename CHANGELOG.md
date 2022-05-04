@@ -1,3 +1,19 @@
+# [v0.7.2](https://github.com/hyperium/tonic/compare/v0.7.1...v0.7.2) (2022-05-04)
+
+
+### Bug Fixes
+
+* **build:** Reduce `Default` bound requirement ([#974](https://github.com/hyperium/tonic/issues/974)) ([4533a6e](https://github.com/hyperium/tonic/commit/4533a6e20eb889f8f13446c0edf39613fa4fe9f6))
+* don't enable default features in tower ([#972](https://github.com/hyperium/tonic/issues/972)) ([b4f9634](https://github.com/hyperium/tonic/commit/b4f96343afe6106db80f41f49e576a687bfcd633))
+* **transport:** Emit `HttpsUriWithoutTlsSupport` only with tls feature enabled ([#996](https://github.com/hyperium/tonic/issues/996)) ([1dd5ad2](https://github.com/hyperium/tonic/commit/1dd5ad2b07810fc6eb5015c152ec737b5f0ca39c))
+
+
+### Features
+
+* Add TryFrom implementations for MetadataValue ([#990](https://github.com/hyperium/tonic/issues/990)) ([edc5a0d](https://github.com/hyperium/tonic/commit/edc5a0d88d4a392effe065dfcc1c005b6bb55b5d))
+
+
+
 # [0.7.1](https://github.com/hyperium/tonic/compare/v0.7.0...v0.7.1) (2022-04-04)
 
 ### Features
