@@ -225,7 +225,7 @@ h2 = "0.3"
 tokio-rustls = "*"
 hyper-rustls = { version = "0.23", features = ["http2"] }
 rustls-pemfile = "*"
-tower-http = { version = "0.3", features = ["add-extension"] }
+tower-http = { version = "0.3", features = ["add-extension", "util"] }
 
 
 [build-dependencies]
