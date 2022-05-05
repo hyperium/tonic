@@ -186,6 +186,14 @@ path = "src/streaming/client.rs"
 name = "streaming-server"
 path = "src/streaming/server.rs"
 
+[[bin]]
+name = "json-codec-client"
+path = "src/json-codec/client.rs"
+
+[[bin]]
+name = "json-codec-server"
+path = "src/json-codec/server.rs"
+
 [dependencies]
 async-stream = "0.3"
 futures = { version = "0.3", default-features = false, features = ["alloc"] }

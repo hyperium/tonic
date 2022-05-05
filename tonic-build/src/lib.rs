@@ -79,6 +79,8 @@ mod prost;
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use prost::{compile_protos, configure, Builder};
 
+pub mod manual;
+
 /// Service code generation for client
 pub mod client;
 /// Service code generation for Server
@@ -91,9 +93,6 @@ pub mod server;
 /// to allow any codegen module to generate service
 /// abstractions.
 pub trait Service {
-    /// Path to the codec.
-    const CODEC_PATH: &'static str;
-
     /// Comment type.
     type Comment: AsRef<str>;
 
@@ -119,8 +118,6 @@ pub trait Service {
 /// to generate abstraction implementations for
 /// the provided methods.
 pub trait Method {
-    /// Path to the codec.
-    const CODEC_PATH: &'static str;
     /// Comment type.
     type Comment: AsRef<str>;
 
@@ -128,6 +125,8 @@ pub trait Method {
     fn name(&self) -> &str;
     /// Identifier used to generate type name.
     fn identifier(&self) -> &str;
+    /// Path to the codec.
+    fn codec_path(&self) -> &str;
     /// Method is streamed by client.
     fn client_streaming(&self) -> bool;
     /// Method is streamed by server.
