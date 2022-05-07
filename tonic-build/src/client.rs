@@ -15,7 +15,7 @@ pub fn generate<T: Service>(
     attributes: &Attributes,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
-    let client_mod = quote::format_ident!("{}_client", naive_snake_case(&service.name()));
+    let client_mod = quote::format_ident!("{}_client", naive_snake_case(service.name()));
     let methods = generate_methods(service, emit_package, proto_path, compile_well_known_types);
 
     let connect = generate_connect(&service_ident);
@@ -57,8 +57,8 @@ pub fn generate<T: Service>(
             impl<T> #service_ident<T>
             where
                 T: tonic::client::GrpcService<tonic::body::BoxBody>,
-                T::ResponseBody: Body + Send  + 'static,
                 T::Error: Into<StdError>,
+                T::ResponseBody: Body<Data = Bytes> + Send  + 'static,
                 <T::ResponseBody as Body>::Error: Into<StdError> + Send,
             {
                 pub fn new(inner: T) -> Self {
@@ -69,6 +69,7 @@ pub fn generate<T: Service>(
                 pub fn with_interceptor<F>(inner: T, interceptor: F) -> #service_ident<InterceptedService<T, F>>
                 where
                     F: tonic::service::Interceptor,
+                    T::ResponseBody: Default,
                     T: tonic::codegen::Service<
                         http::Request<tonic::body::BoxBody>,
                         Response = http::Response<<T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody>
@@ -82,12 +83,14 @@ pub fn generate<T: Service>(
                 ///
                 /// This requires the server to support it otherwise it might respond with an
                 /// error.
+                #[must_use]
                 pub fn send_gzip(mut self) -> Self {
                     self.inner = self.inner.send_gzip();
                     self
                 }
 
                 /// Enable decompressing responses with `gzip`.
+                #[must_use]
                 pub fn accept_gzip(mut self) -> Self {
                     self.inner = self.inner.accept_gzip();
                     self
@@ -164,7 +167,7 @@ fn generate_unary<T: Method>(
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
@@ -189,7 +192,7 @@ fn generate_server_streaming<T: Method>(
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
@@ -215,7 +218,7 @@ fn generate_client_streaming<T: Method>(
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
@@ -241,7 +244,7 @@ fn generate_streaming<T: Method>(
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);

@@ -147,15 +147,15 @@ impl<'b> Builder<'b> {
         let prefix = &fd.package.clone().unwrap_or_default();
 
         for msg in &fd.message_type {
-            self.process_message(fd.clone(), &prefix, msg)?;
+            self.process_message(fd.clone(), prefix, msg)?;
         }
 
         for en in &fd.enum_type {
-            self.process_enum(fd.clone(), &prefix, en)?;
+            self.process_enum(fd.clone(), prefix, en)?;
         }
 
         for service in &fd.service {
-            let service_name = extract_name(&prefix, "service", service.name.as_ref())?;
+            let service_name = extract_name(prefix, "service", service.name.as_ref())?;
             self.service_names.push(service_name.clone());
             self.symbols.insert(service_name.clone(), fd.clone());
 

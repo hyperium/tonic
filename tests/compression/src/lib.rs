@@ -1,7 +1,7 @@
 #![allow(unused_imports)]
 
 use self::util::*;
-use crate::util::{mock_io_channel, MockStream};
+use crate::util::mock_io_channel;
 use futures::{Stream, StreamExt};
 use std::convert::TryFrom;
 use std::{
@@ -28,17 +28,9 @@ mod util;
 
 tonic::include_proto!("test");
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct Svc {
     disable_compressing_on_response: bool,
-}
-
-impl Default for Svc {
-    fn default() -> Self {
-        Self {
-            disable_compressing_on_response: false,
-        }
-    }
 }
 
 const UNCOMPRESSED_MIN_BODY_SIZE: usize = 1024;

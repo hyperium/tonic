@@ -248,7 +248,12 @@ impl<T> Grpc<T> {
             })
             .map(BoxBody::new);
 
-        let mut request = request.into_http(uri, SanitizeHeaders::Yes);
+        let mut request = request.into_http(
+            uri,
+            http::Method::POST,
+            http::Version::HTTP_2,
+            SanitizeHeaders::Yes,
+        );
 
         // Add the gRPC related HTTP headers
         request

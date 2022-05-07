@@ -39,6 +39,7 @@ impl Connection {
             .http2_initial_connection_window_size(endpoint.init_connection_window_size)
             .http2_only(true)
             .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
+            .executor(endpoint.executor.clone())
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
