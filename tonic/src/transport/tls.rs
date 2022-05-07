@@ -5,6 +5,8 @@ pub struct Certificate {
 }
 
 /// Represents a private key and X509 certificate.
+#[cfg(feature = "tls")]
+#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Debug, Clone)]
 pub struct Identity {
     pub(crate) cert: Certificate,
@@ -22,7 +24,7 @@ impl Certificate {
 
     /// Get a immutable reference to underlying certificate
     pub fn get_ref(&self) -> &[u8] {
-        &self.pem.as_slice()
+        self.pem.as_slice()
     }
 
     /// Get a mutable reference to underlying certificate
@@ -42,6 +44,7 @@ impl AsRef<[u8]> for Certificate {
     }
 }
 
+#[cfg(feature = "tls")]
 impl Identity {
     /// Parse a PEM encoded certificate and private key.
     ///

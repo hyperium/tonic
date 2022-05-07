@@ -4,19 +4,19 @@ use super::Channel;
 use super::ClientTlsConfig;
 #[cfg(feature = "tls")]
 use crate::transport::service::TlsConnector;
-use crate::transport::Error;
+use crate::transport::{service::SharedExec, Error, Executor};
 use bytes::Bytes;
-use http::{
-    uri::{InvalidUri, Uri},
-    HeaderValue,
-};
+use http::{uri::Uri, HeaderValue};
 use std::{
     convert::{TryFrom, TryInto},
     fmt,
+    future::Future,
+    pin::Pin,
     str::FromStr,
     time::Duration,
 };
 use tower::make::MakeConnection;
+// use crate::transport::E
 
 /// Channel builder.
 ///
@@ -40,6 +40,7 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
+    pub(crate) executor: SharedExec,
 }
 
 impl Endpoint {
@@ -76,8 +77,8 @@ impl Endpoint {
     /// # use tonic::transport::Endpoint;
     /// Endpoint::from_shared("https://example.com".to_string());
     /// ```
-    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, InvalidUri> {
-        let uri = Uri::from_maybe_shared(s.into())?;
+    pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, Error> {
+        let uri = Uri::from_maybe_shared(s.into()).map_err(|e| Error::new_invalid_uri().with(e))?;
         Ok(Self::from(uri))
     }
 
@@ -266,6 +267,17 @@ impl Endpoint {
         }
     }
 
+    /// Sets the executor used to spawn async tasks.
+    ///
+    /// Uses `tokio::spawn` by default.
+    pub fn executor<E>(mut self, executor: E) -> Self
+    where
+        E: Executor<Pin<Box<dyn Future<Output = ()> + Send>>> + Send + Sync + 'static,
+    {
+        self.executor = SharedExec::new(executor);
+        self
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
@@ -349,7 +361,7 @@ impl Endpoint {
     ///
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
-    pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Result<Channel, Error>
+    pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
     where
         C: MakeConnection<Uri> + Send + 'static,
         C::Connection: Unpin + Send + 'static,
@@ -362,7 +374,7 @@ impl Endpoint {
         #[cfg(not(feature = "tls"))]
         let connector = service::connector(connector);
 
-        Ok(Channel::new(connector, self.clone()))
+        Channel::new(connector, self.clone())
     }
 
     /// Get the endpoint uri.
@@ -399,12 +411,13 @@ impl From<Uri> for Endpoint {
             http2_keep_alive_while_idle: None,
             connect_timeout: None,
             http2_adaptive_window: None,
+            executor: SharedExec::tokio(),
         }
     }
 }
 
 impl TryFrom<Bytes> for Endpoint {
-    type Error = InvalidUri;
+    type Error = Error;
 
     fn try_from(t: Bytes) -> Result<Self, Self::Error> {
         Self::from_shared(t)
@@ -412,7 +425,7 @@ impl TryFrom<Bytes> for Endpoint {
 }
 
 impl TryFrom<String> for Endpoint {
-    type Error = InvalidUri;
+    type Error = Error;
 
     fn try_from(t: String) -> Result<Self, Self::Error> {
         Self::from_shared(t.into_bytes())
@@ -420,7 +433,7 @@ impl TryFrom<String> for Endpoint {
 }
 
 impl TryFrom<&'static str> for Endpoint {
-    type Error = InvalidUri;
+    type Error = Error;
 
     fn try_from(t: &'static str) -> Result<Self, Self::Error> {
         Self::from_shared(t.as_bytes())
@@ -434,7 +447,7 @@ impl fmt::Debug for Endpoint {
 }
 
 impl FromStr for Endpoint {
-    type Err = InvalidUri;
+    type Err = Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::try_from(s.to_string())

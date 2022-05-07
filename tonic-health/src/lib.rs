@@ -16,7 +16,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-health/0.5.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-health/0.6.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -29,7 +29,7 @@ pub mod proto {
     #![allow(missing_docs)]
     tonic::include_proto!("grpc.health.v1");
 
-    pub const GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET: &'static [u8] =
+    pub const GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET: &[u8] =
         tonic::include_file_descriptor_set!("grpc_health_v1");
 }
 

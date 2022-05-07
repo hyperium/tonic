@@ -1,6 +1,6 @@
 [package]
 authors = ["Danny Hua <danny@42layers.io>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "uuid1"
 publish = false
@@ -10,6 +10,6 @@ version = "0.1.0"
 
 [dependencies]
 bytes = "1.0"
-prost = "0.9"
+prost = "0.10"
 [build-dependencies]
-prost-build = "0.9"
+prost-build = "0.10"

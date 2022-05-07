@@ -1,13 +1,13 @@
 # tonic-web
 
 Enables tonic servers to handle requests from `grpc-web` clients directly,
-without the need of an external proxy. 
+without the need of an external proxy.
 
 ## Getting Started
 
 ```toml
 [dependencies]
-tonic_web = "0.1"
+tonic-web = "<tonic-web-version>"
 ```
 
 ## Enabling tonic services
@@ -35,4 +35,4 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 See [the examples folder][example] for a server and client example.
 
-[example]: https://github.com/hyperium/tonic/tree/master/examples/src/tower
+[example]: https://github.com/hyperium/tonic/tree/master/examples/src/grpc-web

@@ -1,13 +1,13 @@
 [package]
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "root-crate-path"
 publish = false
 version = "0.1.0"
 
 [dependencies]
-prost = "0.9"
+prost = "0.10"
 tonic = {path = "../../tonic"}
 
 [build_dependencies]

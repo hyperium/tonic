@@ -27,9 +27,7 @@ async fn client_enabled_server_enabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
-                    MockStream(server),
-                )]))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -73,9 +71,7 @@ async fn client_disabled_server_enabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
-                    MockStream(server),
-                )]))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -102,9 +98,7 @@ async fn client_enabled_server_disabled() {
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
-                MockStream(server),
-            )]))
+            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
             .await
             .unwrap();
     });
@@ -147,9 +141,7 @@ async fn compressing_response_from_client_stream() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
-                    MockStream(server),
-                )]))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }

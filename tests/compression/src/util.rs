@@ -87,43 +87,6 @@ pub fn measure_request_body_size_layer(
     })
 }
 
-#[derive(Debug)]
-pub struct MockStream(pub tokio::io::DuplexStream);
-
-impl Connected for MockStream {
-    type ConnectInfo = ();
-
-    fn connect_info(&self) -> Self::ConnectInfo {}
-}
-
-impl AsyncRead for MockStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for MockStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<std::io::Result<usize>> {
-        Pin::new(&mut self.0).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        Pin::new(&mut self.0).poll_shutdown(cx)
-    }
-}
-
 #[allow(dead_code)]
 pub async fn mock_io_channel(client: tokio::io::DuplexStream) -> Channel {
     let mut client = Some(client);
@@ -132,7 +95,7 @@ pub async fn mock_io_channel(client: tokio::io::DuplexStream) -> Channel {
         .unwrap()
         .connect_with_connector(service_fn(move |_: Uri| {
             let client = client.take().unwrap();
-            async move { Ok::<_, std::io::Error>(MockStream(client)) }
+            async move { Ok::<_, std::io::Error>(client) }
         }))
         .await
         .unwrap()

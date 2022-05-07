@@ -7,6 +7,7 @@ use super::key::MetadataKey;
 
 use bytes::Bytes;
 use http::header::HeaderValue;
+use std::convert::TryFrom;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -86,9 +87,6 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     /// For Binary metadata values this method cannot fail. See also the Binary
     /// only version of this method `from_bytes`.
     ///
-    /// This function is intended to be replaced in the future by a `TryFrom`
-    /// implementation once the trait is stabilized in std.
-    ///
     /// # Examples
     ///
     /// ```
@@ -105,11 +103,9 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     /// assert!(val.is_err());
     /// ```
     #[inline]
+    #[deprecated = "Use TryFrom instead"]
     pub fn try_from_bytes(src: &[u8]) -> Result<Self, InvalidMetadataValueBytes> {
-        VE::from_bytes(src).map(|value| MetadataValue {
-            inner: value,
-            phantom: PhantomData,
-        })
+        Self::try_from(src)
     }
 
     /// Attempt to convert a `Bytes` buffer to a `MetadataValue`.
@@ -122,15 +118,10 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     /// error is returned. In use cases where the input is not base64 encoded,
     /// use `from_bytes`; if the value has to be encoded it's not possible to
     /// share the memory anyways.
-    ///
-    /// This function is intended to be replaced in the future by a `TryFrom`
-    /// implementation once the trait is stabilized in std.
     #[inline]
+    #[deprecated = "Use TryFrom instead"]
     pub fn from_shared(src: Bytes) -> Result<Self, InvalidMetadataValueBytes> {
-        VE::from_shared(src).map(|value| MetadataValue {
-            inner: value,
-            phantom: PhantomData,
-        })
+        Self::try_from(src)
     }
 
     /// Convert a `Bytes` directly into a `MetadataValue` without validating.
@@ -282,6 +273,165 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     }
 }
 
+/// Attempt to convert a byte slice to a `MetadataValue`.
+///
+/// For Ascii metadata values, If the argument contains invalid metadata
+/// value bytes, an error is returned. Only byte values between 32 and 255
+/// (inclusive) are permitted, excluding byte 127 (DEL).
+///
+/// For Binary metadata values this method cannot fail. See also the Binary
+/// only version of this method `from_bytes`.
+///
+/// # Examples
+///
+/// ```
+/// # use tonic::metadata::*;
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
+/// assert_eq!(val, &b"hello\xfa"[..]);
+/// ```
+///
+/// An invalid value
+///
+/// ```
+/// # use tonic::metadata::*;
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"\n");
+/// assert!(val.is_err());
+/// ```
+impl<'a, VE: ValueEncoding> TryFrom<&'a [u8]> for MetadataValue<VE> {
+    type Error = InvalidMetadataValueBytes;
+
+    #[inline]
+    fn try_from(src: &[u8]) -> Result<Self, Self::Error> {
+        VE::from_bytes(src).map(|value| MetadataValue {
+            inner: value,
+            phantom: PhantomData,
+        })
+    }
+}
+
+/// Attempt to convert a byte slice to a `MetadataValue`.
+///
+/// For Ascii metadata values, If the argument contains invalid metadata
+/// value bytes, an error is returned. Only byte values between 32 and 255
+/// (inclusive) are permitted, excluding byte 127 (DEL).
+///
+/// For Binary metadata values this method cannot fail. See also the Binary
+/// only version of this method `from_bytes`.
+///
+/// # Examples
+///
+/// ```
+/// # use tonic::metadata::*;
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
+/// assert_eq!(val, &b"hello\xfa"[..]);
+/// ```
+///
+/// An invalid value
+///
+/// ```
+/// # use tonic::metadata::*;
+/// # use std::convert::TryFrom;
+/// let val = AsciiMetadataValue::try_from(b"\n");
+/// assert!(val.is_err());
+/// ```
+impl<'a, VE: ValueEncoding, const N: usize> TryFrom<&'a [u8; N]> for MetadataValue<VE> {
+    type Error = InvalidMetadataValueBytes;
+
+    #[inline]
+    fn try_from(src: &[u8; N]) -> Result<Self, Self::Error> {
+        Self::try_from(src.as_ref())
+    }
+}
+
+/// Attempt to convert a `Bytes` buffer to a `MetadataValue`.
+///
+/// For `MetadataValue<Ascii>`, if the argument contains invalid metadata
+/// value bytes, an error is returned. Only byte values between 32 and 255
+/// (inclusive) are permitted, excluding byte 127 (DEL).
+///
+/// For `MetadataValue<Binary>`, if the argument is not valid base64, an
+/// error is returned. In use cases where the input is not base64 encoded,
+/// use `from_bytes`; if the value has to be encoded it's not possible to
+/// share the memory anyways.
+impl<VE: ValueEncoding> TryFrom<Bytes> for MetadataValue<VE> {
+    type Error = InvalidMetadataValueBytes;
+
+    #[inline]
+    fn try_from(src: Bytes) -> Result<Self, Self::Error> {
+        VE::from_shared(src).map(|value| MetadataValue {
+            inner: value,
+            phantom: PhantomData,
+        })
+    }
+}
+
+/// Attempt to convert a Vec of bytes to a `MetadataValue`.
+///
+/// For `MetadataValue<Ascii>`, if the argument contains invalid metadata
+/// value bytes, an error is returned. Only byte values between 32 and 255
+/// (inclusive) are permitted, excluding byte 127 (DEL).
+///
+/// For `MetadataValue<Binary>`, if the argument is not valid base64, an
+/// error is returned. In use cases where the input is not base64 encoded,
+/// use `from_bytes`; if the value has to be encoded it's not possible to
+/// share the memory anyways.
+impl<VE: ValueEncoding> TryFrom<Vec<u8>> for MetadataValue<VE> {
+    type Error = InvalidMetadataValueBytes;
+
+    #[inline]
+    fn try_from(src: Vec<u8>) -> Result<Self, Self::Error> {
+        Self::try_from(src.as_slice())
+    }
+}
+
+/// Attempt to convert a string to a `MetadataValue<Ascii>`.
+///
+/// If the argument contains invalid metadata value characters, an error is
+/// returned. Only visible ASCII characters (32-127) are permitted. Use
+/// `from_bytes` to create a `MetadataValue` that includes opaque octets
+/// (128-255).
+impl<'a> TryFrom<&'a str> for MetadataValue<Ascii> {
+    type Error = InvalidMetadataValue;
+
+    #[inline]
+    fn try_from(s: &'a str) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+/// Attempt to convert a string to a `MetadataValue<Ascii>`.
+///
+/// If the argument contains invalid metadata value characters, an error is
+/// returned. Only visible ASCII characters (32-127) are permitted. Use
+/// `from_bytes` to create a `MetadataValue` that includes opaque octets
+/// (128-255).
+impl<'a> TryFrom<&'a String> for MetadataValue<Ascii> {
+    type Error = InvalidMetadataValue;
+
+    #[inline]
+    fn try_from(s: &'a String) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
+/// Attempt to convert a string to a `MetadataValue<Ascii>`.
+///
+/// If the argument contains invalid metadata value characters, an error is
+/// returned. Only visible ASCII characters (32-127) are permitted. Use
+/// `from_bytes` to create a `MetadataValue` that includes opaque octets
+/// (128-255).
+impl TryFrom<String> for MetadataValue<Ascii> {
+    type Error = InvalidMetadataValue;
+
+    #[inline]
+    fn try_from(s: String) -> Result<Self, Self::Error> {
+        s.parse()
+    }
+}
+
 // is_empty is defined in the generic impl block above
 #[allow(clippy::len_without_is_empty)]
 impl MetadataValue<Ascii> {
@@ -291,9 +441,6 @@ impl MetadataValue<Ascii> {
     /// returned. Only visible ASCII characters (32-127) are permitted. Use
     /// `from_bytes` to create a `MetadataValue` that includes opaque octets
     /// (128-255).
-    ///
-    /// This function is intended to be replaced in the future by a `TryFrom`
-    /// implementation once the trait is stabilized in std.
     ///
     /// # Examples
     ///
@@ -311,14 +458,10 @@ impl MetadataValue<Ascii> {
     /// assert!(val.is_err());
     /// ```
     #[allow(clippy::should_implement_trait)]
+    #[deprecated = "Use TryFrom or FromStr instead"]
     #[inline]
     pub fn from_str(src: &str) -> Result<Self, InvalidMetadataValue> {
-        HeaderValue::from_str(src)
-            .map(|value| MetadataValue {
-                inner: value,
-                phantom: PhantomData,
-            })
-            .map_err(|_| InvalidMetadataValue::new())
+        src.parse()
     }
 
     /// Converts a MetadataKey into a MetadataValue<Ascii>.
@@ -330,8 +473,9 @@ impl MetadataValue<Ascii> {
     ///
     /// ```
     /// # use tonic::metadata::*;
+    /// # use std::convert::TryFrom;
     /// let val = AsciiMetadataValue::from_key::<Ascii>("accept".parse().unwrap());
-    /// assert_eq!(val, AsciiMetadataValue::try_from_bytes(b"accept").unwrap());
+    /// assert_eq!(val, AsciiMetadataValue::try_from(b"accept").unwrap());
     /// ```
     #[inline]
     pub fn from_key<KeyVE: ValueEncoding>(key: MetadataKey<KeyVE>) -> Self {
@@ -402,8 +546,8 @@ impl MetadataValue<Binary> {
     /// ```
     #[inline]
     pub fn from_bytes(src: &[u8]) -> Self {
-        // Only the Ascii version of try_from_bytes can fail.
-        Self::try_from_bytes(src).unwrap()
+        // Only the Ascii version of try_from can fail.
+        Self::try_from(src).unwrap()
     }
 }
 
@@ -501,7 +645,7 @@ mod from_metadata_value_tests {
 
         assert_eq!(
             map.get("accept").unwrap(),
-            AsciiMetadataValue::try_from_bytes(b"hello-world").unwrap()
+            AsciiMetadataValue::try_from(b"hello-world").unwrap()
         );
     }
 }
@@ -511,7 +655,12 @@ impl FromStr for MetadataValue<Ascii> {
 
     #[inline]
     fn from_str(s: &str) -> Result<MetadataValue<Ascii>, Self::Err> {
-        MetadataValue::<Ascii>::from_str(s)
+        HeaderValue::from_str(s)
+            .map(|value| MetadataValue {
+                inner: value,
+                phantom: PhantomData,
+            })
+            .map_err(|_| InvalidMetadataValue::new())
     }
 }
 
@@ -730,7 +879,7 @@ fn test_debug() {
     ];
 
     for &(value, expected) in cases {
-        let val = AsciiMetadataValue::try_from_bytes(value.as_bytes()).unwrap();
+        let val = AsciiMetadataValue::try_from(value.as_bytes()).unwrap();
         let actual = format!("{:?}", val);
         assert_eq!(expected, actual);
     }
@@ -760,7 +909,7 @@ fn test_is_empty() {
 
 #[test]
 fn test_from_shared_base64_encodes() {
-    let value = BinaryMetadataValue::from_shared(Bytes::from_static(b"Hello")).unwrap();
+    let value = BinaryMetadataValue::try_from(Bytes::from_static(b"Hello")).unwrap();
     assert_eq!(value.as_encoded_bytes(), b"SGVsbG8");
 }
 

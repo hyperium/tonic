@@ -80,6 +80,7 @@ impl CompressionEncoding {
 
         match header_value_str {
             "gzip" if gzip => Ok(Some(CompressionEncoding::Gzip)),
+            "identity" => Ok(None),
             other => {
                 let mut status = Status::unimplemented(format!(
                     "Content is compressed with `{}` which isn't supported",
