@@ -24,9 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         Server::builder()
             .add_service(GreeterServer::new(greeter))
-            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
-                mock::MockStream(server),
-            )]))
+            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
             .await
     });
 
@@ -35,9 +33,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut client = Some(client);
     let channel = Endpoint::try_from("http://[::]:50051")?
         .connect_with_connector(service_fn(move |_: Uri| {
-            let client = client.take().unwrap();
+            let client = client.take();
 
-            async move { Ok::<_, std::io::Error>(mock::MockStream(client)) }
+            async move {
+                if let Some(client) = client {
+                    Ok(client)
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Client already taken",
+                    ))
+                }
+            }
         }))
         .await?;
 
@@ -69,56 +76,5 @@ impl Greeter for MyGreeter {
             message: format!("Hello {}!", request.into_inner().name),
         };
         Ok(Response::new(reply))
-    }
-}
-
-mod mock {
-    use std::{
-        pin::Pin,
-        task::{Context, Poll},
-    };
-
-    use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-    use tonic::transport::server::Connected;
-
-    #[derive(Debug)]
-    pub struct MockStream(pub tokio::io::DuplexStream);
-
-    impl Connected for MockStream {
-        type ConnectInfo = ();
-
-        /// Create type holding information about the connection.
-        fn connect_info(&self) -> Self::ConnectInfo {}
-    }
-
-    impl AsyncRead for MockStream {
-        fn poll_read(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &mut ReadBuf<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.0).poll_read(cx, buf)
-        }
-    }
-
-    impl AsyncWrite for MockStream {
-        fn poll_write(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-            buf: &[u8],
-        ) -> Poll<std::io::Result<usize>> {
-            Pin::new(&mut self.0).poll_write(cx, buf)
-        }
-
-        fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.0).poll_flush(cx)
-        }
-
-        fn poll_shutdown(
-            mut self: Pin<&mut Self>,
-            cx: &mut Context<'_>,
-        ) -> Poll<std::io::Result<()>> {
-            Pin::new(&mut self.0).poll_shutdown(cx)
-        }
     }
 }

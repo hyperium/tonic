@@ -205,13 +205,13 @@ struct InterceptedService<S> {
 }
 
 impl<S> Service<HyperRequest<Body>> for InterceptedService<S>
-where
-    S: Service<HyperRequest<Body>, Response = HyperResponse<BoxBody>>
+    where
+        S: Service<HyperRequest<Body>, Response = HyperResponse<BoxBody>>
         + NamedService
         + Clone
         + Send
         + 'static,
-    S::Future: Send + 'static,
+        S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;

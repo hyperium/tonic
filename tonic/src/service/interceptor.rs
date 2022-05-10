@@ -2,8 +2,13 @@
 //!
 //! See [`Interceptor`] for more details.
 
-use crate::{request::SanitizeHeaders, Status};
-use http::Uri;
+use crate::{
+    body::{boxed, BoxBody},
+    request::SanitizeHeaders,
+    Request, Status,
+};
+use bytes::Bytes;
+use http::{Method, Uri, Version};
 use pin_project::pin_project;
 use std::{
     fmt,
@@ -46,8 +51,8 @@ pub trait Interceptor {
 }
 
 impl<F> Interceptor for F
-where
-    F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
+    where
+        F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
 {
     fn call(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status> {
         self(request)
@@ -58,90 +63,19 @@ where
 pub trait AsyncInterceptor {
     /// The Future returned by the interceptor.
     type Future: Future<Output = Result<crate::Request<()>, Status>>;
-    /// Call the underlying async function that transforms a body-less gRPC request.
-    fn call_underlying(&mut self, request: crate::Request<()>) -> Self::Future;
     /// Intercept a request before it is sent, optionally cancelling it.
-    fn call<ReqBody>(
-        &mut self,
-        request: http::Request<ReqBody>,
-    ) -> AsyncInterceptorFuture<Self::Future, ReqBody>;
+    fn call(&mut self, request: crate::Request<()>) -> Self::Future;
 }
 
 impl<F, U> AsyncInterceptor for F
-where
-    F: FnMut(crate::Request<()>) -> U,
-    U: Future<Output = Result<crate::Request<()>, Status>>,
+    where
+        F: FnMut(crate::Request<()>) -> U,
+        U: Future<Output = Result<crate::Request<()>, Status>>,
 {
     type Future = U;
 
-    fn call_underlying(&mut self, request: crate::Request<()>) -> Self::Future {
+    fn call(&mut self, request: crate::Request<()>) -> Self::Future {
         self(request)
-    }
-
-    fn call<ReqBody>(
-        &mut self,
-        request: http::Request<ReqBody>,
-    ) -> AsyncInterceptorFuture<U, ReqBody> {
-        AsyncInterceptorFuture::new(self, request)
-    }
-}
-
-/// Wrapper that hides the gRPC body from the underlying [`AsyncInterceptor`] function.
-#[pin_project]
-#[derive(Debug)]
-pub struct AsyncInterceptorFuture<I, ReqBody>
-where
-    I: Future<Output = Result<crate::Request<()>, Status>>,
-{
-    #[pin]
-    interceptor_fut: I,
-    uri: Uri,
-    msg: ReqBody,
-}
-
-impl<F, ReqBody> AsyncInterceptorFuture<F, ReqBody>
-where
-    F: Future<Output = Result<crate::Request<()>, Status>>,
-{
-    fn new<A: AsyncInterceptor<Future = F>>(
-        interceptor: &mut A,
-        req: http::Request<ReqBody>,
-    ) -> Self {
-        let uri = req.uri().clone();
-        let grpc_req = crate::Request::from_http(req);
-        let (metadata, extensions, msg) = grpc_req.into_parts();
-
-        let req_without_body = crate::Request::from_parts(metadata, extensions, ());
-        AsyncInterceptorFuture {
-            interceptor_fut: interceptor.call_underlying(req_without_body),
-            uri,
-            msg,
-        }
-    }
-}
-
-impl<F, ReqBody> Future for AsyncInterceptorFuture<F, ReqBody>
-where
-    F: Future<Output = Result<crate::Request<()>, Status>>,
-    ReqBody: Default,
-{
-    type Output = Result<http::Request<ReqBody>, crate::Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.project();
-        match this.interceptor_fut.poll(cx) {
-            Poll::Ready(intercepted_req) => match intercepted_req {
-                Ok(r) => {
-                    let (metadata, extensions, _) = r.into_parts();
-                    let msg = mem::replace(this.msg, ReqBody::default());
-                    let req = crate::Request::from_parts(metadata, extensions, msg);
-                    let req = req.into_http(this.uri.clone(), SanitizeHeaders::No);
-                    Poll::Ready(Ok(req))
-                }
-                Err(status) => Poll::Ready(Err(status.into())),
-            },
-            Poll::Pending => return Poll::Pending,
-        }
     }
 }
 
@@ -149,34 +83,34 @@ where
 ///
 /// See [`Interceptor`] for more details.
 pub fn interceptor<F>(f: F) -> InterceptorLayer<F>
-where
-    F: Interceptor,
+    where
+        F: Interceptor,
 {
     InterceptorLayer { f }
+}
+
+#[deprecated(
+since = "0.5.1",
+note = "Please use the `interceptor` function instead"
+)]
+/// Create a new interceptor layer.
+///
+/// See [`Interceptor`] for more details.
+pub fn interceptor_fn<F>(f: F) -> InterceptorLayer<F>
+    where
+        F: Interceptor,
+{
+    interceptor(f)
 }
 
 /// Create a new async interceptor layer.
 ///
 /// See [`AsyncInterceptor`] and [`Interceptor`] for more details.
 pub fn async_interceptor<F>(f: F) -> AsyncInterceptorLayer<F>
-where
-    F: AsyncInterceptor,
+    where
+        F: AsyncInterceptor,
 {
     AsyncInterceptorLayer { f }
-}
-
-#[deprecated(
-    since = "0.5.1",
-    note = "Please use the `interceptor` function instead"
-)]
-/// Create a new interceptor layer.
-///
-/// See [`Interceptor`] for more details.
-pub fn interceptor_fn<F>(f: F) -> InterceptorLayer<F>
-where
-    F: Interceptor,
-{
-    interceptor(f)
 }
 
 /// A gRPC interceptor that can be used as a [`Layer`],
@@ -189,8 +123,8 @@ pub struct InterceptorLayer<F> {
 }
 
 impl<S, F> Layer<S> for InterceptorLayer<F>
-where
-    F: Interceptor + Clone,
+    where
+        F: Interceptor + Clone,
 {
     type Service = InterceptedService<S, F>;
 
@@ -209,9 +143,9 @@ pub struct AsyncInterceptorLayer<F> {
 }
 
 impl<S, F> Layer<S> for AsyncInterceptorLayer<F>
-where
-    S: Clone,
-    F: AsyncInterceptor + Clone,
+    where
+        S: Clone,
+        F: AsyncInterceptor + Clone,
 {
     type Service = AsyncInterceptedService<S, F>;
 
@@ -221,8 +155,8 @@ where
 }
 
 #[deprecated(
-    since = "0.5.1",
-    note = "Please use the `InterceptorLayer` type instead"
+since = "0.5.1",
+note = "Please use the `InterceptorLayer` type instead"
 )]
 /// A gRPC interceptor that can be used as a [`Layer`],
 /// created by calling [`interceptor`].
@@ -243,16 +177,16 @@ impl<S, F> InterceptedService<S, F> {
     /// Create a new `InterceptedService` that wraps `S` and intercepts each request with the
     /// function `F`.
     pub fn new(service: S, f: F) -> Self
-    where
-        F: Interceptor,
+        where
+            F: Interceptor,
     {
         Self { inner: service, f }
     }
 }
 
 impl<S, F> fmt::Debug for InterceptedService<S, F>
-where
-    S: fmt::Debug,
+    where
+        S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InterceptedService")
@@ -262,39 +196,95 @@ where
     }
 }
 
+// Components and attributes of a request, without metadata or extensions.
+#[derive(Debug)]
+struct DecomposedRequest<ReqBody> {
+    uri: Uri,
+    method: Method,
+    http_version: Version,
+    msg: ReqBody,
+}
+
+/// Decompose the request into its contents and properties, and create a new request without a body.
+///
+/// It is bad practice to modify the body (i.e. Message) of the request via an interceptor.
+/// To avoid exposing the body of the request to the interceptor function, we first remove it
+/// here, allow the interceptor to modify the metadata and extensions, and then recreate the
+/// HTTP request with the original message body with the `recompose` function. Also note that Tonic
+/// requests do not preserve the URI, HTTP version, and HTTP method of the HTTP request, so we
+/// extract them here and then add them back in `recompose`.
+fn decompose<ReqBody>(req: http::Request<ReqBody>) -> (DecomposedRequest<ReqBody>, Request<()>) {
+    let uri = req.uri().clone();
+    let method = req.method().clone();
+    let http_version = req.version();
+    let req = crate::Request::from_http(req);
+    let (metadata, extensions, msg) = req.into_parts();
+
+    let dreq = DecomposedRequest {
+        uri,
+        method,
+        http_version,
+        msg,
+    };
+    let req_without_body = crate::Request::from_parts(metadata, extensions, ());
+
+    (dreq, req_without_body)
+}
+
+/// Combine the modified metadata and extensions with the original message body and attributes.
+fn recompose<ReqBody>(
+    dreq: DecomposedRequest<ReqBody>,
+    modified_req: Request<()>,
+) -> http::Request<ReqBody> {
+    let (metadata, extensions, _) = modified_req.into_parts();
+    let req = crate::Request::from_parts(metadata, extensions, dreq.msg);
+
+    req.into_http(
+        dreq.uri,
+        dreq.method,
+        dreq.http_version,
+        SanitizeHeaders::No,
+    )
+}
+
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
-where
-    F: Interceptor,
-    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-    S::Error: Into<crate::Error>,
+    where
+        F: Interceptor,
+        S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
+        S::Error: Into<crate::Error>,
+        ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<crate::Error>,
 {
-    type Response = http::Response<ResBody>;
-    type Error = crate::Error;
+    type Response = http::Response<BoxBody>;
+    type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
     #[inline]
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
-        let uri = req.uri().clone();
-        let req = crate::Request::from_http(req);
-        let (metadata, extensions, msg) = req.into_parts();
+        let (dreq, req_without_body) = decompose(req);
 
-        match self
-            .f
-            .call(crate::Request::from_parts(metadata, extensions, ()))
-        {
-            Ok(req) => {
-                let (metadata, extensions, _) = req.into_parts();
-                let req = crate::Request::from_parts(metadata, extensions, msg);
-                let req = req.into_http(uri, SanitizeHeaders::No);
-                ResponseFuture::future(self.inner.call(req))
+        match self.f.call(req_without_body) {
+            Ok(modified_req) => {
+                let modified_req_with_body = recompose(dreq, modified_req);
+
+                ResponseFuture::future(self.inner.call(modified_req_with_body))
             }
-            Err(status) => ResponseFuture::error(status),
+            Err(status) => ResponseFuture::status(status),
         }
     }
+}
+
+// required to use `InterceptedService` with `Router`
+#[cfg(feature = "transport")]
+impl<S, F> crate::transport::NamedService for InterceptedService<S, F>
+    where
+        S: crate::transport::NamedService,
+{
+    const NAME: &'static str = S::NAME;
 }
 
 /// A service wrapped in an async interceptor middleware.
@@ -315,8 +305,8 @@ impl<S, F> AsyncInterceptedService<S, F> {
 }
 
 impl<S, F> fmt::Debug for AsyncInterceptedService<S, F>
-where
-    S: fmt::Debug,
+    where
+        S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AsyncInterceptedService")
@@ -327,40 +317,33 @@ where
 }
 
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for AsyncInterceptedService<S, F>
-where
-    F: AsyncInterceptor + Clone,
-    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone,
-    S::Error: Into<crate::Error>,
-    ReqBody: Default,
+    where
+        F: AsyncInterceptor + Clone,
+        S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone,
+        S::Error: Into<crate::Error>,
+        ReqBody: Default,
+        ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<crate::Error>,
 {
-    type Response = S::Response;
-    type Error = crate::Error;
-    type Future = AsyncResponseFuture<S, AsyncInterceptorFuture<F::Future, ReqBody>, ReqBody>;
+    type Response = http::Response<BoxBody>;
+    type Error = S::Error;
+    type Future = AsyncResponseFuture<S, F::Future, ReqBody>;
 
     #[inline]
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
-        AsyncResponseFuture::new(self.f.call(req), self.inner.clone())
+        AsyncResponseFuture::new(req, &mut self.f, self.inner.clone())
     }
-}
-
-// required to use `InterceptedService` with `Router`
-#[cfg(feature = "transport")]
-impl<S, F> crate::transport::NamedService for InterceptedService<S, F>
-where
-    S: crate::transport::NamedService,
-{
-    const NAME: &'static str = S::NAME;
 }
 
 // required to use `AsyncInterceptedService` with `Router`
 #[cfg(feature = "transport")]
 impl<S, F> crate::transport::NamedService for AsyncInterceptedService<S, F>
-where
-    S: crate::transport::NamedService,
+    where
+        S: crate::transport::NamedService,
 {
     const NAME: &'static str = S::NAME;
 }
@@ -380,9 +363,9 @@ impl<F> ResponseFuture<F> {
         }
     }
 
-    fn error(status: Status) -> Self {
+    fn status(status: Status) -> Self {
         Self {
-            kind: Kind::Error(Some(status)),
+            kind: Kind::Status(Some(status)),
         }
     }
 }
@@ -391,22 +374,31 @@ impl<F> ResponseFuture<F> {
 #[derive(Debug)]
 enum Kind<F> {
     Future(#[pin] F),
-    Error(Option<Status>),
+    Status(Option<Status>),
 }
 
 impl<F, E, B> Future for ResponseFuture<F>
-where
-    F: Future<Output = Result<http::Response<B>, E>>,
-    E: Into<crate::Error>,
+    where
+        F: Future<Output = Result<http::Response<B>, E>>,
+        E: Into<crate::Error>,
+        B: Default + http_body::Body<Data = Bytes> + Send + 'static,
+        B::Error: Into<crate::Error>,
 {
-    type Output = Result<http::Response<B>, crate::Error>;
+    type Output = Result<http::Response<BoxBody>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().kind.project() {
-            KindProj::Future(future) => future.poll(cx).map_err(Into::into),
-            KindProj::Error(status) => {
-                let error = status.take().unwrap().into();
-                Poll::Ready(Err(error))
+            KindProj::Future(future) => future
+                .poll(cx)
+                .map(|result| result.map(|res| res.map(boxed))),
+            KindProj::Status(status) => {
+                let response = status
+                    .take()
+                    .unwrap()
+                    .to_http()
+                    .map(|_| B::default())
+                    .map(boxed);
+                Poll::Ready(Ok(response))
             }
         }
     }
@@ -420,66 +412,111 @@ enum PinnedOption<F> {
 }
 
 /// Response future for [`AsyncInterceptedService`].
-#[pin_project]
+///
+/// Handles the call to the async interceptor, then calls the inner service and wraps the result in
+/// [`ResponseFuture`].
+#[pin_project(project = AsyncResponseFutureProj)]
 #[derive(Debug)]
 pub struct AsyncResponseFuture<S, I, ReqBody>
-where
-    S: Service<http::Request<ReqBody>>,
-    S::Error: Into<crate::Error>,
-    I: Future<Output = Result<http::Request<ReqBody>, crate::Error>>,
+    where
+        S: Service<http::Request<ReqBody>>,
+        S::Error: Into<crate::Error>,
+        I: Future<Output = Result<crate::Request<()>, Status>>,
 {
     #[pin]
     interceptor_fut: PinnedOption<I>,
     #[pin]
     inner_fut: PinnedOption<ResponseFuture<S::Future>>,
     inner: S,
+    dreq: DecomposedRequest<ReqBody>,
 }
 
 impl<S, I, ReqBody> AsyncResponseFuture<S, I, ReqBody>
-where
-    S: Service<http::Request<ReqBody>>,
-    S::Error: Into<crate::Error>,
-    I: Future<Output = Result<http::Request<ReqBody>, crate::Error>>,
+    where
+        S: Service<http::Request<ReqBody>>,
+        S::Error: Into<crate::Error>,
+        I: Future<Output = Result<crate::Request<()>, Status>>,
+        ReqBody: Default,
 {
-    fn new(interceptor_fut: I, inner: S) -> Self {
+    fn new<A: AsyncInterceptor<Future = I>>(
+        req: http::Request<ReqBody>,
+        interceptor: &mut A,
+        inner: S,
+    ) -> Self {
+        let (dreq, req_without_body) = decompose(req);
+        let interceptor_fut = interceptor.call(req_without_body);
+
         AsyncResponseFuture {
             interceptor_fut: PinnedOption::Some(interceptor_fut),
             inner_fut: PinnedOption::None,
             inner,
+            dreq,
+        }
+    }
+
+    /// Calls the inner service with the intercepted request (which has been modified by the
+    /// async interceptor func).
+    fn create_inner_fut(
+        this: &mut AsyncResponseFutureProj<'_, S, I, ReqBody>,
+        intercepted_req: Result<crate::Request<()>, Status>,
+    ) -> ResponseFuture<S::Future> {
+        match intercepted_req {
+            Ok(req) => {
+                // We can't move the message body out of the pin projection. So, to
+                // avoid copying it, we swap its memory with an empty body and then can
+                // move it into the recomposed request.
+                let msg = mem::take(&mut this.dreq.msg);
+                let movable_dreq = DecomposedRequest {
+                    uri: this.dreq.uri.clone(),
+                    method: this.dreq.method.clone(),
+                    http_version: this.dreq.http_version,
+                    msg,
+                };
+                let modified_req_with_body = recompose(movable_dreq, req);
+
+                ResponseFuture::future(this.inner.call(modified_req_with_body))
+            }
+            Err(status) => ResponseFuture::status(status),
         }
     }
 }
 
 impl<S, I, ReqBody, ResBody> Future for AsyncResponseFuture<S, I, ReqBody>
-where
-    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-    I: Future<Output = Result<http::Request<ReqBody>, crate::Error>>,
-    S::Error: Into<crate::Error>,
-    ReqBody: Default,
+    where
+        S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
+        I: Future<Output = Result<crate::Request<()>, Status>>,
+        S::Error: Into<crate::Error>,
+        ReqBody: Default,
+        ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<crate::Error>,
 {
-    type Output = Result<http::Response<ResBody>, crate::Error>;
+    type Output = Result<http::Response<BoxBody>, S::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let mut this = self.project();
+
+        // The struct was initialized (via `new`) with interceptor func future, which we poll here.
         if let PinnedOptionProj::Some(f) = this.interceptor_fut.as_mut().project() {
             match f.poll(cx) {
-                Poll::Ready(intercepted_req) => match intercepted_req {
-                    Ok(req) => {
-                        this.inner_fut
-                            .set(PinnedOption::Some(ResponseFuture::future(
-                                this.inner.call(req),
-                            )));
-                        this.interceptor_fut.set(PinnedOption::None);
-                    }
-                    Err(e) => return Poll::Ready(Err(e)),
-                },
+                Poll::Ready(intercepted_req) => {
+                    let inner_fut = AsyncResponseFuture::<S, I, ReqBody>::create_inner_fut(
+                        &mut this,
+                        intercepted_req,
+                    );
+                    // Set the inner service future and clear the interceptor future.
+                    this.inner_fut.set(PinnedOption::Some(inner_fut));
+                    this.interceptor_fut.set(PinnedOption::None);
+                }
                 Poll::Pending => return Poll::Pending,
             }
         }
-        if let PinnedOptionProj::Some(inner_fut) = this.inner_fut.project() {
-            return inner_fut.poll(cx);
-        }
-        panic!()
+        // At this point, inner_fut should always be Some.
+        let inner_fut = match this.inner_fut.project() {
+            PinnedOptionProj::None => panic!(),
+            PinnedOptionProj::Some(f) => f,
+        };
+
+        inner_fut.poll(cx)
     }
 }
 
@@ -487,11 +524,38 @@ where
 mod tests {
     #[allow(unused_imports)]
     use super::*;
+    use http::header::HeaderMap;
+    use std::{
+        pin::Pin,
+        task::{Context, Poll},
+    };
     use tower::ServiceExt;
 
+    #[derive(Debug, Default)]
+    struct TestBody;
+
+    impl http_body::Body for TestBody {
+        type Data = Bytes;
+        type Error = Status;
+
+        fn poll_data(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+            Poll::Ready(None)
+        }
+
+        fn poll_trailers(
+            self: Pin<&mut Self>,
+            _cx: &mut Context<'_>,
+        ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
+            Poll::Ready(Ok(None))
+        }
+    }
+
     #[tokio::test]
-    async fn doesnt_remove_headers() {
-        let svc = tower::service_fn(|request: http::Request<hyper::Body>| async move {
+    async fn doesnt_remove_headers_from_requests() {
+        let svc = tower::service_fn(|request: http::Request<TestBody>| async move {
             assert_eq!(
                 request
                     .headers()
@@ -500,7 +564,7 @@ mod tests {
                 "test-tonic"
             );
 
-            Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::empty()))
+            Ok::<_, Status>(http::Response::new(TestBody))
         });
 
         let svc = InterceptedService::new(svc, |request: crate::Request<()>| {
@@ -511,12 +575,13 @@ mod tests {
                     .expect("missing in interceptor"),
                 "test-tonic"
             );
+
             Ok(request)
         });
 
         let request = http::Request::builder()
             .header("user-agent", "test-tonic")
-            .body(hyper::Body::empty())
+            .body(TestBody)
             .unwrap();
 
         svc.oneshot(request).await.unwrap();
@@ -549,6 +614,86 @@ mod tests {
 
         let request = http::Request::builder()
             .header("user-agent", "test-tonic")
+            .body(hyper::Body::empty())
+            .unwrap();
+
+        svc.oneshot(request).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn handles_intercepted_status_as_response() {
+        let message = "Blocked by the interceptor";
+        let expected = Status::permission_denied(message).to_http();
+
+        let svc = tower::service_fn(|_: http::Request<TestBody>| async {
+            Ok::<_, Status>(http::Response::new(TestBody))
+        });
+
+        let svc = InterceptedService::new(svc, |_: crate::Request<()>| {
+            Err(Status::permission_denied(message))
+        });
+
+        let request = http::Request::builder().body(TestBody).unwrap();
+        let response = svc.oneshot(request).await.unwrap();
+
+        assert_eq!(expected.status(), response.status());
+        assert_eq!(expected.version(), response.version());
+        assert_eq!(expected.headers(), response.headers());
+    }
+
+    #[tokio::test]
+    async fn async_interceptor_handles_intercepted_status_as_response() {
+        let message = "Blocked by the interceptor";
+        let expected = Status::permission_denied(message).to_http();
+
+        let svc = tower::service_fn(|_: http::Request<TestBody>| async {
+            Ok::<_, Status>(http::Response::new(TestBody))
+        });
+
+        let svc = AsyncInterceptedService::new(svc, |_: crate::Request<()>| {
+            std::future::ready(Err(Status::permission_denied(message)))
+        });
+
+        let request = http::Request::builder().body(TestBody).unwrap();
+        let response = svc.oneshot(request).await.unwrap();
+
+        assert_eq!(expected.status(), response.status());
+        assert_eq!(expected.version(), response.version());
+        assert_eq!(expected.headers(), response.headers());
+    }
+
+    #[tokio::test]
+    async fn doesnt_change_http_method() {
+        let svc = tower::service_fn(|request: http::Request<hyper::Body>| async move {
+            assert_eq!(request.method(), http::Method::OPTIONS);
+
+            Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::empty()))
+        });
+
+        let svc = InterceptedService::new(svc, |request: crate::Request<()>| Ok(request));
+
+        let request = http::Request::builder()
+            .method(http::Method::OPTIONS)
+            .body(hyper::Body::empty())
+            .unwrap();
+
+        svc.oneshot(request).await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn async_interceptor_doesnt_change_http_method() {
+        let svc = tower::service_fn(|request: http::Request<hyper::Body>| async move {
+            assert_eq!(request.method(), http::Method::OPTIONS);
+
+            Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::empty()))
+        });
+
+        let svc = AsyncInterceptedService::new(svc, |request: crate::Request<()>| {
+            std::future::ready(Ok(request))
+        });
+
+        let request = http::Request::builder()
+            .method(http::Method::OPTIONS)
             .body(hyper::Body::empty())
             .unwrap();
 

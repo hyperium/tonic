@@ -185,8 +185,7 @@ async fn status_from_server_stream_with_source() {
         .unwrap()
         .connect_with_connector_lazy(tower::service_fn(move |_: Uri| async move {
             Err::<MockStream, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
-        }))
-        .unwrap();
+        }));
 
     let mut client = test_stream_client::TestStreamClient::new(channel);
 

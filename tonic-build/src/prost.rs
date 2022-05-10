@@ -2,9 +2,11 @@ use super::{client, server, Attributes};
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
-use std::ffi::OsString;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsString,
+    io,
+    path::{Path, PathBuf},
+};
 
 /// Configure `tonic-build` code generation.
 ///
@@ -51,8 +53,6 @@ const PROST_CODEC_PATH: &str = "tonic::codec::ProstCodec";
 const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
 
 impl crate::Service for Service {
-    const CODEC_PATH: &'static str = PROST_CODEC_PATH;
-
     type Method = Method;
     type Comment = String;
 
@@ -78,7 +78,6 @@ impl crate::Service for Service {
 }
 
 impl crate::Method for Method {
-    const CODEC_PATH: &'static str = PROST_CODEC_PATH;
     type Comment = String;
 
     fn name(&self) -> &str {
@@ -87,6 +86,10 @@ impl crate::Method for Method {
 
     fn identifier(&self) -> &str {
         &self.proto_name
+    }
+
+    fn codec_path(&self) -> &str {
+        PROST_CODEC_PATH
     }
 
     fn client_streaming(&self) -> bool {
@@ -388,7 +391,7 @@ impl Builder {
             PathBuf::from(std::env::var("OUT_DIR").unwrap())
         };
 
-        config.out_dir(out_dir.clone());
+        config.out_dir(out_dir);
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }
@@ -412,10 +415,16 @@ impl Builder {
             config.protoc_arg(arg);
         }
 
-        config.service_generator(Box::new(ServiceGenerator::new(self)));
+        config.service_generator(self.service_generator());
 
         config.compile_protos(protos, includes)?;
 
         Ok(())
+    }
+
+    /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
+    /// `Config::service_generator`.
+    pub fn service_generator(self) -> Box<dyn prost_build::ServiceGenerator> {
+        Box::new(ServiceGenerator::new(self))
     }
 }

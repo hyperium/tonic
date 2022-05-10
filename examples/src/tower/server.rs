@@ -88,9 +88,9 @@ struct MyMiddleware<S> {
 }
 
 impl<S> Service<hyper::Request<Body>> for MyMiddleware<S>
-where
-    S: Service<hyper::Request<Body>, Response = hyper::Response<BoxBody>> + Clone + Send + 'static,
-    S::Future: Send + 'static,
+    where
+        S: Service<hyper::Request<Body>, Response = hyper::Response<BoxBody>> + Clone + Send + 'static,
+        S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;

@@ -124,7 +124,7 @@ pub fn generate<T: Service>(
                     B::Error: Into<StdError> + Send + 'static,
             {
                 type Response = http::Response<tonic::body::BoxBody>;
-                type Error = Never;
+                type Error = std::convert::Infallible;
                 type Future = BoxFuture<Self::Response, Self::Error>;
 
                 fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -366,7 +366,7 @@ fn generate_unary<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -415,7 +415,7 @@ fn generate_server_streaming<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -470,7 +470,7 @@ fn generate_client_streaming<T: Method>(
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -517,7 +517,7 @@ fn generate_streaming<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
