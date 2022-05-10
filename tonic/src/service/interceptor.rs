@@ -51,8 +51,8 @@ pub trait Interceptor {
 }
 
 impl<F> Interceptor for F
-    where
-        F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
+where
+    F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
 {
     fn call(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status> {
         self(request)
@@ -68,9 +68,9 @@ pub trait AsyncInterceptor {
 }
 
 impl<F, U> AsyncInterceptor for F
-    where
-        F: FnMut(crate::Request<()>) -> U,
-        U: Future<Output = Result<crate::Request<()>, Status>>,
+where
+    F: FnMut(crate::Request<()>) -> U,
+    U: Future<Output = Result<crate::Request<()>, Status>>,
 {
     type Future = U;
 
@@ -83,22 +83,22 @@ impl<F, U> AsyncInterceptor for F
 ///
 /// See [`Interceptor`] for more details.
 pub fn interceptor<F>(f: F) -> InterceptorLayer<F>
-    where
-        F: Interceptor,
+where
+    F: Interceptor,
 {
     InterceptorLayer { f }
 }
 
 #[deprecated(
-since = "0.5.1",
-note = "Please use the `interceptor` function instead"
+    since = "0.5.1",
+    note = "Please use the `interceptor` function instead"
 )]
 /// Create a new interceptor layer.
 ///
 /// See [`Interceptor`] for more details.
 pub fn interceptor_fn<F>(f: F) -> InterceptorLayer<F>
-    where
-        F: Interceptor,
+where
+    F: Interceptor,
 {
     interceptor(f)
 }
@@ -107,8 +107,8 @@ pub fn interceptor_fn<F>(f: F) -> InterceptorLayer<F>
 ///
 /// See [`AsyncInterceptor`] and [`Interceptor`] for more details.
 pub fn async_interceptor<F>(f: F) -> AsyncInterceptorLayer<F>
-    where
-        F: AsyncInterceptor,
+where
+    F: AsyncInterceptor,
 {
     AsyncInterceptorLayer { f }
 }
@@ -123,8 +123,8 @@ pub struct InterceptorLayer<F> {
 }
 
 impl<S, F> Layer<S> for InterceptorLayer<F>
-    where
-        F: Interceptor + Clone,
+where
+    F: Interceptor + Clone,
 {
     type Service = InterceptedService<S, F>;
 
@@ -143,9 +143,9 @@ pub struct AsyncInterceptorLayer<F> {
 }
 
 impl<S, F> Layer<S> for AsyncInterceptorLayer<F>
-    where
-        S: Clone,
-        F: AsyncInterceptor + Clone,
+where
+    S: Clone,
+    F: AsyncInterceptor + Clone,
 {
     type Service = AsyncInterceptedService<S, F>;
 
@@ -155,8 +155,8 @@ impl<S, F> Layer<S> for AsyncInterceptorLayer<F>
 }
 
 #[deprecated(
-since = "0.5.1",
-note = "Please use the `InterceptorLayer` type instead"
+    since = "0.5.1",
+    note = "Please use the `InterceptorLayer` type instead"
 )]
 /// A gRPC interceptor that can be used as a [`Layer`],
 /// created by calling [`interceptor`].
@@ -177,16 +177,16 @@ impl<S, F> InterceptedService<S, F> {
     /// Create a new `InterceptedService` that wraps `S` and intercepts each request with the
     /// function `F`.
     pub fn new(service: S, f: F) -> Self
-        where
-            F: Interceptor,
+    where
+        F: Interceptor,
     {
         Self { inner: service, f }
     }
 }
 
 impl<S, F> fmt::Debug for InterceptedService<S, F>
-    where
-        S: fmt::Debug,
+where
+    S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InterceptedService")
@@ -248,12 +248,12 @@ fn recompose<ReqBody>(
 }
 
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
-    where
-        F: Interceptor,
-        S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-        S::Error: Into<crate::Error>,
-        ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
-        ResBody::Error: Into<crate::Error>,
+where
+    F: Interceptor,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
+    S::Error: Into<crate::Error>,
+    ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody::Error: Into<crate::Error>,
 {
     type Response = http::Response<BoxBody>;
     type Error = S::Error;
@@ -281,8 +281,8 @@ impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedServ
 // required to use `InterceptedService` with `Router`
 #[cfg(feature = "transport")]
 impl<S, F> crate::transport::NamedService for InterceptedService<S, F>
-    where
-        S: crate::transport::NamedService,
+where
+    S: crate::transport::NamedService,
 {
     const NAME: &'static str = S::NAME;
 }
@@ -305,8 +305,8 @@ impl<S, F> AsyncInterceptedService<S, F> {
 }
 
 impl<S, F> fmt::Debug for AsyncInterceptedService<S, F>
-    where
-        S: fmt::Debug,
+where
+    S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("AsyncInterceptedService")
@@ -317,13 +317,13 @@ impl<S, F> fmt::Debug for AsyncInterceptedService<S, F>
 }
 
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for AsyncInterceptedService<S, F>
-    where
-        F: AsyncInterceptor + Clone,
-        S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone,
-        S::Error: Into<crate::Error>,
-        ReqBody: Default,
-        ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
-        ResBody::Error: Into<crate::Error>,
+where
+    F: AsyncInterceptor + Clone,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone,
+    S::Error: Into<crate::Error>,
+    ReqBody: Default,
+    ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody::Error: Into<crate::Error>,
 {
     type Response = http::Response<BoxBody>;
     type Error = S::Error;
@@ -342,8 +342,8 @@ impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for AsyncIntercepte
 // required to use `AsyncInterceptedService` with `Router`
 #[cfg(feature = "transport")]
 impl<S, F> crate::transport::NamedService for AsyncInterceptedService<S, F>
-    where
-        S: crate::transport::NamedService,
+where
+    S: crate::transport::NamedService,
 {
     const NAME: &'static str = S::NAME;
 }
@@ -378,11 +378,11 @@ enum Kind<F> {
 }
 
 impl<F, E, B> Future for ResponseFuture<F>
-    where
-        F: Future<Output = Result<http::Response<B>, E>>,
-        E: Into<crate::Error>,
-        B: Default + http_body::Body<Data = Bytes> + Send + 'static,
-        B::Error: Into<crate::Error>,
+where
+    F: Future<Output = Result<http::Response<B>, E>>,
+    E: Into<crate::Error>,
+    B: Default + http_body::Body<Data = Bytes> + Send + 'static,
+    B::Error: Into<crate::Error>,
 {
     type Output = Result<http::Response<BoxBody>, E>;
 
@@ -418,10 +418,10 @@ enum PinnedOption<F> {
 #[pin_project(project = AsyncResponseFutureProj)]
 #[derive(Debug)]
 pub struct AsyncResponseFuture<S, I, ReqBody>
-    where
-        S: Service<http::Request<ReqBody>>,
-        S::Error: Into<crate::Error>,
-        I: Future<Output = Result<crate::Request<()>, Status>>,
+where
+    S: Service<http::Request<ReqBody>>,
+    S::Error: Into<crate::Error>,
+    I: Future<Output = Result<crate::Request<()>, Status>>,
 {
     #[pin]
     interceptor_fut: PinnedOption<I>,
@@ -432,11 +432,11 @@ pub struct AsyncResponseFuture<S, I, ReqBody>
 }
 
 impl<S, I, ReqBody> AsyncResponseFuture<S, I, ReqBody>
-    where
-        S: Service<http::Request<ReqBody>>,
-        S::Error: Into<crate::Error>,
-        I: Future<Output = Result<crate::Request<()>, Status>>,
-        ReqBody: Default,
+where
+    S: Service<http::Request<ReqBody>>,
+    S::Error: Into<crate::Error>,
+    I: Future<Output = Result<crate::Request<()>, Status>>,
+    ReqBody: Default,
 {
     fn new<A: AsyncInterceptor<Future = I>>(
         req: http::Request<ReqBody>,
@@ -482,13 +482,13 @@ impl<S, I, ReqBody> AsyncResponseFuture<S, I, ReqBody>
 }
 
 impl<S, I, ReqBody, ResBody> Future for AsyncResponseFuture<S, I, ReqBody>
-    where
-        S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-        I: Future<Output = Result<crate::Request<()>, Status>>,
-        S::Error: Into<crate::Error>,
-        ReqBody: Default,
-        ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
-        ResBody::Error: Into<crate::Error>,
+where
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
+    I: Future<Output = Result<crate::Request<()>, Status>>,
+    S::Error: Into<crate::Error>,
+    ReqBody: Default,
+    ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody::Error: Into<crate::Error>,
 {
     type Output = Result<http::Response<BoxBody>, S::Error>;
 
