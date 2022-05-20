@@ -1,4 +1,5 @@
 use super::*;
+use tonic::codec::CompressionEncoding;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
@@ -31,7 +32,8 @@ async fn client_enabled_server_enabled() {
         }
     }
 
-    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -57,7 +59,8 @@ async fn client_enabled_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     for _ in 0..3 {
         let res = client.compress_output_unary(()).await.unwrap();
@@ -97,7 +100,8 @@ async fn client_enabled_server_disabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let res = client.compress_output_unary(()).await.unwrap();
 
@@ -135,7 +139,8 @@ async fn client_disabled() {
         }
     }
 
-    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -175,7 +180,8 @@ async fn client_disabled() {
 async fn server_replying_with_unsupported_encoding() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
 
     fn add_weird_content_encoding<B>(mut response: http::Response<B>) -> http::Response<B> {
         response
@@ -197,7 +203,8 @@ async fn server_replying_with_unsupported_encoding() {
             .unwrap();
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
     let status: Status = client.compress_output_unary(()).await.unwrap_err();
 
     assert_eq!(status.code(), tonic::Code::Unimplemented);
@@ -214,7 +221,7 @@ async fn disabling_compression_on_single_response() {
     let svc = test_server::TestServer::new(Svc {
         disable_compressing_on_response: true,
     })
-    .send_gzip();
+    .send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -239,7 +246,8 @@ async fn disabling_compression_on_single_response() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let res = client.compress_output_unary(()).await.unwrap();
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
@@ -254,7 +262,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
     let svc = test_server::TestServer::new(Svc {
         disable_compressing_on_response: true,
     })
-    .send_gzip();
+    .send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -279,7 +287,8 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 
@@ -309,7 +318,7 @@ async fn disabling_compression_on_response_from_client_stream() {
     let svc = test_server::TestServer::new(Svc {
         disable_compressing_on_response: true,
     })
-    .send_gzip();
+    .send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -334,7 +343,8 @@ async fn disabling_compression_on_response_from_client_stream() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let stream = futures::stream::iter(vec![]);
     let req = Request::new(Box::pin(stream));

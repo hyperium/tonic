@@ -24,7 +24,7 @@ version = "0.7.2"
 
 [features]
 codegen = ["async-trait"]
-compression = ["flate2"]
+gzip = ["flate2"]
 default = ["transport", "codegen", "prost"]
 prost = ["prost1", "prost-derive"]
 tls = ["rustls-pemfile", "transport", "tokio-rustls"]
