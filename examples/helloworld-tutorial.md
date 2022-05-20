@@ -124,7 +124,7 @@ We include `tonic-build` as a useful way to incorporate the generation of our cl
 
 ## Generating Server and Client code
 
-At the root of your project, create a `build.rs` file and add the following code:
+At the root of your project (not /src), create a `build.rs` file and add the following code:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
