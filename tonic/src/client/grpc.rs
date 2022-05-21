@@ -248,8 +248,13 @@ impl<T> Grpc<T> {
             })
             .map(BoxBody::new);
 
+        let (headers, extensions, _, msg) = request.into_parts();
+
+        // inject uri into the request
+        let request =
+            Request::from_http_parts(headers.into_headers(), extensions.into_http(), uri, msg);
+
         let mut request = request.into_http(
-            uri,
             http::Method::POST,
             http::Version::HTTP_2,
             SanitizeHeaders::Yes,

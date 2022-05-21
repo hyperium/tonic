@@ -350,7 +350,7 @@ where
             .await?
             .ok_or_else(|| Status::new(Code::Internal, "Missing request message."))?;
 
-        let mut req = Request::from_http_parts(parts, message);
+        let mut req = Request::from_http_parts(parts.headers, parts.extensions, parts.uri, message);
 
         if let Some(trailers) = stream.trailers().await? {
             req.metadata_mut().merge(trailers);

@@ -15,6 +15,7 @@ pub struct Request<T> {
     metadata: MetadataMap,
     message: T,
     extensions: Extensions,
+    uri: http::uri::Uri,
 }
 
 /// Trait implemented by RPC request types.
@@ -112,6 +113,7 @@ impl<T> Request<T> {
             metadata: MetadataMap::new(),
             message,
             extensions: Extensions::new(),
+            uri: http::uri::Uri::default(),
         }
     }
 
@@ -140,35 +142,32 @@ impl<T> Request<T> {
         self.message
     }
 
-    pub(crate) fn into_parts(self) -> (MetadataMap, Extensions, T) {
-        (self.metadata, self.extensions, self.message)
+    pub(crate) fn into_parts(self) -> (MetadataMap, Extensions, http::uri::Uri, T) {
+        (self.metadata, self.extensions, self.uri, self.message)
     }
 
-    pub(crate) fn from_parts(metadata: MetadataMap, extensions: Extensions, message: T) -> Self {
-        Self {
-            metadata,
-            extensions,
-            message,
-        }
-    }
-
-    pub(crate) fn from_http_parts(parts: http::request::Parts, message: T) -> Self {
+    pub(crate) fn from_http_parts(
+        headers: http::HeaderMap,
+        extensions: http::Extensions,
+        uri: http::Uri,
+        message: T,
+    ) -> Self {
         Request {
-            metadata: MetadataMap::from_headers(parts.headers),
+            metadata: MetadataMap::from_headers(headers),
             message,
-            extensions: Extensions::from_http(parts.extensions),
+            extensions: Extensions::from_http(extensions),
+            uri,
         }
     }
 
     /// Convert an HTTP request to a gRPC request
     pub fn from_http(http: http::Request<T>) -> Self {
         let (parts, message) = http.into_parts();
-        Request::from_http_parts(parts, message)
+        Request::from_http_parts(parts.headers, parts.extensions, parts.uri, message)
     }
 
     pub(crate) fn into_http(
         self,
-        uri: http::Uri,
         method: http::Method,
         version: http::Version,
         sanitize_headers: SanitizeHeaders,
@@ -177,7 +176,7 @@ impl<T> Request<T> {
 
         *request.version_mut() = version;
         *request.method_mut() = method;
-        *request.uri_mut() = uri;
+        *request.uri_mut() = self.uri;
         *request.headers_mut() = match sanitize_headers {
             SanitizeHeaders::Yes => self.metadata.into_sanitized_headers(),
             SanitizeHeaders::No => self.metadata.into_headers(),
@@ -198,6 +197,7 @@ impl<T> Request<T> {
             metadata: self.metadata,
             message,
             extensions: self.extensions,
+            uri: self.uri,
         }
     }
 
@@ -432,7 +432,6 @@ pub(crate) enum SanitizeHeaders {
 mod tests {
     use super::*;
     use crate::metadata::MetadataValue;
-    use http::Uri;
 
     #[test]
     fn reserved_headers_are_excluded() {
@@ -444,7 +443,6 @@ mod tests {
         }
 
         let http_request = r.into_http(
-            Uri::default(),
             http::Method::POST,
             http::Version::HTTP_2,
             SanitizeHeaders::Yes,

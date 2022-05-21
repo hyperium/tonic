@@ -167,20 +167,20 @@ where
         // here, allow the interceptor to modify the metadata and extensions, and then recreate the
         // HTTP request with the body. Tonic requests do not preserve the URI, HTTP version, and
         // HTTP method of the HTTP request, so we extract them here and then add them back in below.
-        let uri = req.uri().clone();
-        let method = req.method().clone();
-        let version = req.version();
-        let req = crate::Request::from_http(req);
-        let (metadata, extensions, msg) = req.into_parts();
+        let (parts, msg) = req.into_parts();
+        let req = crate::Request::from_http_parts(parts.headers, parts.extensions, parts.uri, ());
 
-        match self
-            .f
-            .call(crate::Request::from_parts(metadata, extensions, ()))
-        {
+        match self.f.call(req) {
             Ok(req) => {
-                let (metadata, extensions, _) = req.into_parts();
-                let req = crate::Request::from_parts(metadata, extensions, msg);
-                let req = req.into_http(uri, method, version, SanitizeHeaders::No);
+                let (headers, extensions, uri, _) = req.into_parts();
+                let req = crate::Request::from_http_parts(
+                    headers.into_headers(),
+                    extensions.into_http(),
+                    uri,
+                    msg,
+                );
+
+                let req = req.into_http(parts.method, parts.version, SanitizeHeaders::No);
                 ResponseFuture::future(self.inner.call(req))
             }
             Err(status) => ResponseFuture::status(status),
