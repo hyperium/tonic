@@ -137,6 +137,16 @@ impl<T> Request<T> {
         &mut self.metadata
     }
 
+    /// Get a reference to the URI.
+    pub fn uri(&self) -> &http::Uri {
+        &self.uri
+    }
+
+    /// Get the name of the RPC called.
+    pub fn method(&self) -> Option<&str> {
+        self.uri.path().rsplit_once('/').map(|(_, method)| method)
+    }
+
     /// Consumes `self`, returning the message
     pub fn into_inner(self) -> T {
         self.message
