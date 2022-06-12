@@ -24,6 +24,7 @@ use tower::make::MakeConnection;
 #[derive(Clone)]
 pub struct Endpoint {
     pub(crate) uri: Uri,
+    pub(crate) origin: Option<Uri>,
     pub(crate) user_agent: Option<HeaderValue>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) concurrency_limit: Option<usize>,
@@ -104,6 +105,24 @@ impl Endpoint {
                 ..self
             })
             .map_err(|_| Error::new_invalid_user_agent())
+    }
+
+    /// Set a custom origin.
+    ///
+    /// Override the `origin`, mainly useful when you are reaching a Server/LoadBalancer
+    /// which serves multiple services at the same time.
+    /// It will play the role of SNI (Server Name Indication).
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # let mut builder = Endpoint::from_static("https://proxy.com");
+    /// builder.origin("https://example.com".parse().expect("http://example.com must be a valid URI"));
+    /// ```
+    pub fn origin(self, origin: Uri) -> Self {
+        Endpoint {
+            origin: Some(origin),
+            ..self
+        }
     }
 
     /// Apply a timeout to each request.
@@ -395,6 +414,7 @@ impl From<Uri> for Endpoint {
     fn from(uri: Uri) -> Self {
         Self {
             uri,
+            origin: None,
             user_agent: None,
             concurrency_limit: None,
             rate_limit: None,

@@ -55,7 +55,15 @@ impl Connection {
         }
 
         let stack = ServiceBuilder::new()
-            .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
+            .layer_fn(|s| {
+                let origin = endpoint
+                    .origin
+                    .as_ref()
+                    .unwrap_or_else(|| &endpoint.uri)
+                    .clone();
+
+                AddOrigin::new(s, origin)
+            })
             .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
             .layer_fn(|s| GrpcTimeout::new(s, endpoint.timeout))
             .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
