@@ -1,11 +1,13 @@
 use super::*;
 use http_body::Body as _;
+use tonic::codec::CompressionEncoding;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).accept_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -35,7 +37,8 @@ async fn client_enabled_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).send_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .send_compressed(CompressionEncoding::Gzip);
 
     for _ in 0..3 {
         client
@@ -63,7 +66,8 @@ async fn client_enabled_server_disabled() {
             .unwrap();
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).send_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .send_compressed(CompressionEncoding::Gzip);
 
     let status = client
         .compress_input_unary(SomeData {
@@ -88,7 +92,8 @@ async fn client_enabled_server_disabled() {
 async fn client_mark_compressed_without_header_server_enabled() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).accept_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
 
     tokio::spawn({
         async move {
@@ -107,7 +112,7 @@ async fn client_mark_compressed_without_header_server_enabled() {
             Ok(req)
         },
     )
-    .send_gzip();
+    .send_compressed(CompressionEncoding::Gzip);
 
     let status = client
         .compress_input_unary(SomeData {

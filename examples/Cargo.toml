@@ -200,7 +200,7 @@ futures = { version = "0.3", default-features = false, features = ["alloc"] }
 prost = "0.10"
 tokio = { version = "1.0", features = [ "rt-multi-thread", "time", "fs", "macros", "net",] }
 tokio-stream = { version = "0.1", features = ["net"] }
-tonic = { path = "../tonic", features = ["tls", "compression"] }
+tonic = { path = "../tonic", features = ["tls", "gzip"] }
 tower = { version = "0.4" }
 # Required for routeguide
 rand = "0.8"
@@ -237,4 +237,4 @@ tower-http = { version = "0.3", features = ["add-extension", "util"] }
 
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build", features = ["prost", "compression"] }
+tonic-build = { path = "../tonic-build", features = ["prost"] }

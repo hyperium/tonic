@@ -79,20 +79,20 @@ pub fn generate<T: Service>(
                     #service_ident::new(InterceptedService::new(inner, interceptor))
                 }
 
-                /// Compress requests with `gzip`.
+                /// Compress requests with the given encoding.
                 ///
                 /// This requires the server to support it otherwise it might respond with an
                 /// error.
                 #[must_use]
-                pub fn send_gzip(mut self) -> Self {
-                    self.inner = self.inner.send_gzip();
+                pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+                    self.inner = self.inner.send_compressed(encoding);
                     self
                 }
 
-                /// Enable decompressing responses with `gzip`.
+                /// Enable decompressing responses.
                 #[must_use]
-                pub fn accept_gzip(mut self) -> Self {
-                    self.inner = self.inner.accept_gzip();
+                pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+                    self.inner = self.inner.accept_compressed(encoding);
                     self
                 }
 

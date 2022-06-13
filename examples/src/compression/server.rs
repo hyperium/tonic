@@ -2,6 +2,7 @@ use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
+use tonic::codec::CompressionEncoding;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -32,7 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("GreeterServer listening on {}", addr);
 
-    let service = GreeterServer::new(greeter).send_gzip().accept_gzip();
+    let service = GreeterServer::new(greeter)
+        .send_compressed(CompressionEncoding::Gzip)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     Server::builder().add_service(service).serve(addr).await?;
 
