@@ -39,7 +39,7 @@ impl Display for Error {
         match self {
             Error::DecodeError(_) => f.write_str("error decoding FileDescriptorSet from buffer"),
             Error::InvalidFileDescriptorSet(s) => {
-                f.write_fmt(format_args!("invalid FileDescriptorSet - {}", s))
+                write!(f, "invalid FileDescriptorSet - {}", s)
             }
         }
     }
