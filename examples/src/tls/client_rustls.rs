@@ -48,30 +48,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let client = hyper::Client::builder().build(connector);
 
-    // Hyper expects an absolute `Uri` to allow it to know which server to connect too.
-    // Currently, tonic's generated code only sets the `path_and_query` section so we
-    // are going to write a custom tower layer in front of the hyper client to add the
-    // scheme and authority.
-    //
-    // Again, this Uri is `example.com` because our tls certs is signed with this SNI but above
-    // we actually map this back to `[::1]:50051` before the `Uri` is passed to hyper's `HttpConnector`
-    // to allow it to correctly establish the tcp connection to the local `tls-server`.
+    // Using `with_origin` will let the codegenerated client set the `scheme` and
+    // `authority` from the porvided `Uri`.
     let uri = Uri::from_static("https://example.com");
-    let svc = tower::ServiceBuilder::new()
-        .map_request(move |mut req: http::Request<tonic::body::BoxBody>| {
-            let uri = Uri::builder()
-                .scheme(uri.scheme().unwrap().clone())
-                .authority(uri.authority().unwrap().clone())
-                .path_and_query(req.uri().path_and_query().unwrap().clone())
-                .build()
-                .unwrap();
-
-            *req.uri_mut() = uri;
-            req
-        })
-        .service(client);
-
-    let mut client = EchoClient::new(svc);
+    let mut client = EchoClient::with_origin(client, uri);
 
     let request = tonic::Request::new(EchoRequest {
         message: "hello".into(),
