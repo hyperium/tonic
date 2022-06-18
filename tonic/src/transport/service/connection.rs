@@ -56,11 +56,7 @@ impl Connection {
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| {
-                let origin = endpoint
-                    .origin
-                    .as_ref()
-                    .unwrap_or_else(|| &endpoint.uri)
-                    .clone();
+                let origin = endpoint.origin.as_ref().unwrap_or(&endpoint.uri).clone();
 
                 AddOrigin::new(s, origin)
             })

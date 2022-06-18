@@ -117,6 +117,7 @@ impl Endpoint {
     /// # use tonic::transport::Endpoint;
     /// # let mut builder = Endpoint::from_static("https://proxy.com");
     /// builder.origin("https://example.com".parse().expect("http://example.com must be a valid URI"));
+    /// // origin: "https://example.com"
     /// ```
     pub fn origin(self, origin: Uri) -> Self {
         Endpoint {
