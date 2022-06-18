@@ -107,6 +107,13 @@ pub enum Code {
     Unauthenticated = 16,
 }
 
+impl axum::response::IntoResponse for Status {
+    fn into_response(self) -> axum::response::Response {
+        let (parts, tonic_body) = self.to_http().into_parts();
+        axum::response::Response::from_parts(parts, axum::body::boxed(tonic_body))
+    }
+}
+
 impl Code {
     /// Get description of this `Code`.
     /// ```
