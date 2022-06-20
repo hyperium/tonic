@@ -44,6 +44,7 @@ pub fn generate<T: Service>(
                 clippy::let_unit_value,
             )]
             use tonic::codegen::*;
+            use tonic::codegen::http::Uri;
 
             #service_doc
             #(#struct_attributes)*
@@ -63,6 +64,11 @@ pub fn generate<T: Service>(
             {
                 pub fn new(inner: T) -> Self {
                     let inner = tonic::client::Grpc::new(inner);
+                    Self { inner }
+                }
+
+                pub fn with_origin(inner: T, origin: Uri) -> Self {
+                    let inner = tonic::client::Grpc::with_origin(inner, origin);
                     Self { inner }
                 }
 

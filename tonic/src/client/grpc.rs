@@ -30,6 +30,7 @@ use std::fmt;
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
     inner: T,
+    origin: Uri,
     /// Which compression encodings does the client accept?
     accept_compression_encodings: EnabledCompressionEncodings,
     /// The compression encoding that will be applied to requests.
@@ -41,6 +42,20 @@ impl<T> Grpc<T> {
     pub fn new(inner: T) -> Self {
         Self {
             inner,
+            origin: Uri::default(),
+            send_compression_encodings: None,
+            accept_compression_encodings: EnabledCompressionEncodings::default(),
+        }
+    }
+
+    /// Creates a new gRPC client with the provided [`GrpcService`] and `Uri`.
+    ///
+    /// The provided Uri will use only the scheme and authority parts as the
+    /// path_and_query portion will be set for each method.
+    pub fn with_origin(inner: T, origin: Uri) -> Self {
+        Self {
+            inner,
+            origin,
             send_compression_encodings: None,
             accept_compression_encodings: EnabledCompressionEncodings::default(),
         }
@@ -211,8 +226,13 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
+        let scheme = self.origin.scheme().cloned();
+        let authority = self.origin.authority().cloned();
+
         let mut parts = Parts::default();
         parts.path_and_query = Some(path);
+        parts.scheme = scheme;
+        parts.authority = authority;
 
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
@@ -296,6 +316,7 @@ impl<T: Clone> Clone for Grpc<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
+            origin: self.origin.clone(),
             send_compression_encodings: self.send_compression_encodings,
             accept_compression_encodings: self.accept_compression_encodings,
         }
@@ -307,6 +328,8 @@ impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
         let mut f = f.debug_struct("Grpc");
 
         f.field("inner", &self.inner);
+
+        f.field("origin", &self.origin);
 
         f.field("compression_encoding", &self.send_compression_encodings);
 
