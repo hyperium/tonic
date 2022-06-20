@@ -373,7 +373,7 @@ impl Builder {
     /// Enable or disable emitting
     /// [`cargo:rerun-if-changed=PATH`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-changed)
     /// instructions for Cargo.
-    /// 
+    ///
     /// If set, writes instructions to `stdout` for Cargo so that it understands
     /// when to rerun the build script. By default, this setting is enabled if
     /// the `CARGO` environment variable is set. The `CARGO` environment
