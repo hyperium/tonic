@@ -370,9 +370,19 @@ impl Builder {
         self
     }
 
-    /// Enable or disable emitting the rerun-if-changed cargo instruction
+    /// Enable or disable emitting
+    /// [`cargo:rerun-if-changed=PATH`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-changed)
+    /// instructions for Cargo.
     /// 
-    /// If set, emits rerun-if-changed instructions so that Cargo understands when to rerun the build script.
+    /// If set, writes instructions to `stdout` for Cargo so that it understands
+    /// when to rerun the build script. By default, this setting is enabled if
+    /// the `CARGO` environment variable is set. The `CARGO` environment
+    /// variable is set by Cargo for build scripts. Therefore, this setting
+    /// should be enabled automatically when run from a build script. However,
+    /// the method of detection is not completely reliable since the `CARGO`
+    /// environment variable can have been set by anything else. If writing the
+    /// instructions to `stdout` is undesireable, you can disable this setting
+    /// explicitly.
     pub fn emit_rerun_if_changed(mut self, enable: bool) -> Self {
         self.emit_rerun_if_changed = enable;
         self
