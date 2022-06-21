@@ -1,3 +1,19 @@
+# [v0.7.2](https://github.com/hyperium/tonic/compare/v0.7.1...v0.7.2) (2022-05-04)
+
+
+### Bug Fixes
+
+* **build:** Reduce `Default` bound requirement ([#974](https://github.com/hyperium/tonic/issues/974)) ([4533a6e](https://github.com/hyperium/tonic/commit/4533a6e20eb889f8f13446c0edf39613fa4fe9f6))
+* don't enable default features in tower ([#972](https://github.com/hyperium/tonic/issues/972)) ([b4f9634](https://github.com/hyperium/tonic/commit/b4f96343afe6106db80f41f49e576a687bfcd633))
+* **transport:** Emit `HttpsUriWithoutTlsSupport` only with tls feature enabled ([#996](https://github.com/hyperium/tonic/issues/996)) ([1dd5ad2](https://github.com/hyperium/tonic/commit/1dd5ad2b07810fc6eb5015c152ec737b5f0ca39c))
+
+
+### Features
+
+* Add TryFrom implementations for MetadataValue ([#990](https://github.com/hyperium/tonic/issues/990)) ([edc5a0d](https://github.com/hyperium/tonic/commit/edc5a0d88d4a392effe065dfcc1c005b6bb55b5d))
+
+
+
 # [0.7.1](https://github.com/hyperium/tonic/compare/v0.7.0...v0.7.1) (2022-04-04)
 
 ### Features
@@ -72,7 +88,7 @@
 
 * **build:** Correctly convert `Empty` to `()` ([#734](https://github.com/hyperium/tonic/issues/734)) ([ff6a690](https://github.com/hyperium/tonic/commit/ff6a690cec9daca33984cabea66f9d370ac63462))
 * **tonic:** fix extensions disappearing during streaming requests ([5c1bb90](https://github.com/hyperium/tonic/commit/5c1bb90ce82ecf90843a7c959edd7ef8fc280f62)), closes [#770](https://github.com/hyperium/tonic/issues/770)
-* **tonic:** Status code to set correct source on unkown error ([#799](https://github.com/hyperium/tonic/issues/799)) ([4054d61](https://github.com/hyperium/tonic/commit/4054d61e14b9794a72b48de1a051c26129ec36b1))
+* **tonic:** Status code to set correct source on unknown error ([#799](https://github.com/hyperium/tonic/issues/799)) ([4054d61](https://github.com/hyperium/tonic/commit/4054d61e14b9794a72b48de1a051c26129ec36b1))
 * **transport:** AddOrigin panic on invalid uri ([#801](https://github.com/hyperium/tonic/issues/801)) ([3ab00f3](https://github.com/hyperium/tonic/commit/3ab00f304dd204fccf00d1995e635fa6b2f8503b))
 * **transport:** Correctly map hyper errors ([#629](https://github.com/hyperium/tonic/issues/629)) ([4947b07](https://github.com/hyperium/tonic/commit/4947b076f5b0b5149ee7f6144515535b85f65db5))
 * **tonic:** compression: handle compression flag but no header (#763)

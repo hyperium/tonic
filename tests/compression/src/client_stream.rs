@@ -1,11 +1,13 @@
 use super::*;
 use http_body::Body as _;
+use tonic::codec::CompressionEncoding;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).accept_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -33,7 +35,8 @@ async fn client_enabled_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).send_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .send_compressed(CompressionEncoding::Gzip);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
     let stream = futures::stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
@@ -49,7 +52,8 @@ async fn client_enabled_server_enabled() {
 async fn client_disabled_server_enabled() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).accept_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -103,7 +107,8 @@ async fn client_enabled_server_disabled() {
             .unwrap();
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).send_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .send_compressed(CompressionEncoding::Gzip);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
     let stream = futures::stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
@@ -122,7 +127,8 @@ async fn client_enabled_server_disabled() {
 async fn compressing_response_from_client_stream() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -147,7 +153,8 @@ async fn compressing_response_from_client_stream() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let stream = futures::stream::iter(vec![]);
     let req = Request::new(Box::pin(stream));

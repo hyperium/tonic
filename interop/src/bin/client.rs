@@ -1,4 +1,4 @@
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use interop::client;
 use std::time::Duration;
 use tonic::transport::Endpoint;
@@ -6,14 +6,15 @@ use tonic::transport::{Certificate, ClientTlsConfig};
 
 #[derive(Parser)]
 struct Opts {
-    #[clap(name = "use_tls", long)]
+    #[clap(name = "use_tls", long, action = ArgAction::SetTrue)]
     use_tls: bool,
 
     #[clap(
         long = "test_case",
         use_value_delimiter = true,
         min_values = 1,
-        arg_enum
+        arg_enum,
+        action = ArgAction::Append
     )]
     test_case: Vec<Testcase>,
 }
