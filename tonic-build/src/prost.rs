@@ -27,6 +27,7 @@ pub fn configure() -> Builder {
         emit_package: true,
         protoc_args: Vec::new(),
         include_file: None,
+        emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
     }
 }
 
@@ -224,6 +225,7 @@ pub struct Builder {
     pub(crate) compile_well_known_types: bool,
     pub(crate) protoc_args: Vec<OsString>,
     pub(crate) include_file: Option<PathBuf>,
+    pub(crate) emit_rerun_if_changed: bool,
 
     out_dir: Option<PathBuf>,
 }
@@ -368,6 +370,24 @@ impl Builder {
         self
     }
 
+    /// Enable or disable emitting
+    /// [`cargo:rerun-if-changed=PATH`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-changed)
+    /// instructions for Cargo.
+    ///
+    /// If set, writes instructions to `stdout` for Cargo so that it understands
+    /// when to rerun the build script. By default, this setting is enabled if
+    /// the `CARGO` environment variable is set. The `CARGO` environment
+    /// variable is set by Cargo for build scripts. Therefore, this setting
+    /// should be enabled automatically when run from a build script. However,
+    /// the method of detection is not completely reliable since the `CARGO`
+    /// environment variable can have been set by anything else. If writing the
+    /// instructions to `stdout` is undesireable, you can disable this setting
+    /// explicitly.
+    pub fn emit_rerun_if_changed(mut self, enable: bool) -> Self {
+        self.emit_rerun_if_changed = enable;
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile(
         self,
@@ -413,6 +433,19 @@ impl Builder {
 
         for arg in self.protoc_args.iter() {
             config.protoc_arg(arg);
+        }
+
+        if self.emit_rerun_if_changed {
+            for path in protos.iter() {
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
+
+            for path in includes.iter() {
+                // Cargo will watch the **entire** directory recursively. If we
+                // could figure out which files are imported by our protos we
+                // could specify only those files instead.
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
         }
 
         config.service_generator(self.service_generator());
