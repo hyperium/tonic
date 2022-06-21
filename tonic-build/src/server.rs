@@ -35,7 +35,7 @@ pub fn generate<T: Service>(
         if package.is_empty() { "" } else { "." },
         service.identifier()
     );
-    let transport = generate_transport(&server_service, &server_trait, &path);
+    let named = generate_named(&server_service, &server_trait, &path);
     let mod_attributes = attributes.for_mod(package);
     let struct_attributes = attributes.for_struct(&path);
 
@@ -160,7 +160,7 @@ pub fn generate<T: Service>(
                 }
             }
 
-            #transport
+            #named
         }
     }
 }
@@ -256,8 +256,7 @@ fn generate_trait_methods<T: Service>(
     stream
 }
 
-#[cfg(feature = "transport")]
-fn generate_transport(
+fn generate_named(
     server_service: &syn::Ident,
     server_trait: &syn::Ident,
     service_name: &str,
@@ -265,19 +264,10 @@ fn generate_transport(
     let service_name = syn::LitStr::new(service_name, proc_macro2::Span::call_site());
 
     quote! {
-        impl<T: #server_trait> tonic::transport::NamedService for #server_service<T> {
+        impl<T: #server_trait> tonic::server::NamedService for #server_service<T> {
             const NAME: &'static str = #service_name;
         }
     }
-}
-
-#[cfg(not(feature = "transport"))]
-fn generate_transport(
-    _server_service: &syn::Ident,
-    _server_trait: &syn::Ident,
-    _service_name: &str,
-) -> TokenStream {
-    TokenStream::new()
 }
 
 fn generate_methods<T: Service>(

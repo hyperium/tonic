@@ -10,6 +10,7 @@ mod tls;
 mod unix;
 
 pub use super::service::Routes;
+pub use crate::server::NamedService;
 pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
@@ -121,15 +122,6 @@ impl Default for Server<Identity> {
 pub struct Router<L = Identity> {
     server: Server<L>,
     routes: Routes,
-}
-
-/// A trait to provide a static reference to the service's
-/// name. This is used for routing service's within the router.
-pub trait NamedService {
-    /// The `Service-Name` as described [here].
-    ///
-    /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
-    const NAME: &'static str;
 }
 
 impl<S: NamedService, T> NamedService for Either<S, T> {
