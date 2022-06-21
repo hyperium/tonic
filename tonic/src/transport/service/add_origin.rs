@@ -1,4 +1,6 @@
 use futures_core::future::BoxFuture;
+use http::uri::Authority;
+use http::uri::Scheme;
 use http::{Request, Uri};
 use std::task::{Context, Poll};
 use tower_service::Service;
@@ -6,12 +8,21 @@ use tower_service::Service;
 #[derive(Debug)]
 pub(crate) struct AddOrigin<T> {
     inner: T,
-    origin: Uri,
+    scheme: Option<Scheme>,
+    authority: Option<Authority>,
 }
 
 impl<T> AddOrigin<T> {
     pub(crate) fn new(inner: T, origin: Uri) -> Self {
-        Self { inner, origin }
+        let http::uri::Parts {
+            scheme, authority, ..
+        } = origin.into_parts();
+
+        Self {
+            inner,
+            scheme,
+            authority,
+        }
     }
 }
 
@@ -30,24 +41,24 @@ where
     }
 
     fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
-        // Split the request into the head and the body.
-        let (mut head, body) = req.into_parts();
-
-        // Split the request URI into parts.
-        let mut uri: http::uri::Parts = head.uri.into();
-        let set_uri = self.origin.clone().into_parts();
-
-        if set_uri.scheme.is_none() || set_uri.authority.is_none() {
+        if self.scheme.is_none() || self.authority.is_none() {
             let err = crate::transport::Error::new_invalid_uri();
             return Box::pin(async move { Err::<Self::Response, _>(err.into()) });
         }
 
-        // Update the URI parts, setting hte scheme and authority
-        uri.scheme = Some(set_uri.scheme.expect("expected scheme"));
-        uri.authority = Some(set_uri.authority.expect("expected authority"));
+        // Split the request into the head and the body.
+        let (mut head, body) = req.into_parts();
 
         // Update the the request URI
-        head.uri = http::Uri::from_parts(uri).expect("valid uri");
+        head.uri = {
+            // Split the request URI into parts.
+            let mut uri: http::uri::Parts = head.uri.into();
+            // Update the URI parts, setting hte scheme and authority
+            uri.scheme = self.scheme.clone();
+            uri.authority = self.authority.clone();
+
+            http::Uri::from_parts(uri).expect("valid uri")
+        };
 
         let request = Request::from_parts(head, body);
 

@@ -1,11 +1,11 @@
-use clap::Parser;
+use clap::{ArgAction, Parser};
 use interop::server;
 use tonic::transport::Server;
 use tonic::transport::{Identity, ServerTlsConfig};
 
 #[derive(Parser)]
 struct Opts {
-    #[clap(name = "use_tls", long)]
+    #[clap(name = "use_tls", long, action = ArgAction::SetTrue)]
     use_tls: bool,
 }
 

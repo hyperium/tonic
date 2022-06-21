@@ -1,11 +1,13 @@
 use super::*;
+use tonic::codec::CompressionEncoding;
 use tonic::Streaming;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -30,7 +32,8 @@ async fn client_enabled_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 
@@ -57,7 +60,8 @@ async fn client_enabled_server_enabled() {
 async fn client_disabled_server_enabled() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc = test_server::TestServer::new(Svc::default()).send_gzip();
+    let svc =
+        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -127,7 +131,8 @@ async fn client_enabled_server_disabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await).accept_gzip();
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 

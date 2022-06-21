@@ -186,13 +186,21 @@ path = "src/streaming/client.rs"
 name = "streaming-server"
 path = "src/streaming/server.rs"
 
+[[bin]]
+name = "json-codec-client"
+path = "src/json-codec/client.rs"
+
+[[bin]]
+name = "json-codec-server"
+path = "src/json-codec/server.rs"
+
 [dependencies]
 async-stream = "0.3"
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
 prost = "0.10"
 tokio = { version = "1.0", features = [ "rt-multi-thread", "time", "fs", "macros", "net",] }
 tokio-stream = { version = "0.1", features = ["net"] }
-tonic = { path = "../tonic", features = ["tls", "compression"] }
+tonic = { path = "../tonic", features = ["tls", "gzip"] }
 tower = { version = "0.4" }
 # Required for routeguide
 rand = "0.8"
@@ -225,8 +233,8 @@ h2 = "0.3"
 tokio-rustls = "*"
 hyper-rustls = { version = "0.23", features = ["http2"] }
 rustls-pemfile = "*"
-tower-http = { version = "0.2", features = ["add-extension"] }
+tower-http = { version = "0.3", features = ["add-extension", "util"] }
 
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build", features = ["prost", "compression"] }
+tonic-build = { path = "../tonic-build", features = ["prost"] }
