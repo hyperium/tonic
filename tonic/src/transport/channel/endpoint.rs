@@ -377,7 +377,7 @@ impl Endpoint {
     /// Connect with a custom connector lazily.
     ///
     /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport
-    /// connec to it lazily.
+    /// connect to it lazily.
     ///
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
