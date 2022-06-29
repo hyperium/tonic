@@ -127,12 +127,15 @@ enum SelectOutput<A> {
     Done,
 }
 
-pub(crate) struct TcpIncoming {
+/// Wrapper around AddrIncoming for TCP
+#[derive(Debug)]
+pub struct TcpIncoming {
     inner: AddrIncoming,
 }
 
+
 impl TcpIncoming {
-    pub(crate) fn new(
+    pub fn new(
         addr: SocketAddr,
         nodelay: bool,
         keepalive: Option<Duration>,
@@ -141,6 +144,13 @@ impl TcpIncoming {
         inner.set_nodelay(nodelay);
         inner.set_keepalive(keepalive);
         Ok(TcpIncoming { inner })
+    }
+
+
+    /// Return the actually bound socket address
+    /// Useful for binding ephemeral server ports and testing
+    pub fn get_local_socket_addr(&self) -> SocketAddr {
+        self.inner.local_addr()
     }
 }
 

@@ -28,6 +28,43 @@ async fn connect_returns_err() {
 }
 
 #[tokio::test]
+async fn connect_ephemeral_no_race() {
+    let (tx, rx) = oneshot::channel();
+    let sender = Arc::new(Mutex::new(Some(tx)));
+    let svc = test_server::TestServer::new(Svc(sender));
+
+    let (sock_tx, sock_rx) = tokio::sync::oneshot::channel();
+
+    let jh = tokio::spawn(async move {
+
+        Server::builder()
+            .add_service(svc)
+            .add_signal_when_ready(sock_tx)
+            // bind an ephemeral port; note the '0'
+            .serve_with_shutdown("127.0.0.1:0".parse().unwrap(), rx.map(drop))
+            .await
+            .unwrap();
+    });
+
+    let bound_sock_addr = sock_rx.await.unwrap();
+    let url = format!("http://{}:{}", bound_sock_addr.ip(), bound_sock_addr.port());
+    let mut client = TestClient::connect(url).await.unwrap();
+
+    // First call should pass, then shutdown the server
+    client.unary_call(Request::new(Input {})).await.unwrap();
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let res = client.unary_call(Request::new(Input {})).await;
+
+    let err = res.unwrap_err();
+    assert_eq!(err.code(), Code::Unavailable);
+
+    jh.await.unwrap();
+}
+
+
+#[tokio::test]
 async fn connect_returns_err_via_call_after_connected() {
     let (tx, rx) = oneshot::channel();
     let sender = Arc::new(Mutex::new(Some(tx)));
