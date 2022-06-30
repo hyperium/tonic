@@ -194,6 +194,37 @@ impl StreamingInner {
         Ok(None)
     }
 
+    // Returns Some(()) if data was found or None if the loop in `poll_next` should break
+    fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
+        let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
+            Some(Ok(d)) => Some(d),
+            Some(Err(e)) => {
+                let _ = std::mem::replace(&mut self.state, State::Error);
+                let err: crate::Error = e.into();
+                debug!("decoder inner stream error: {:?}", err);
+                let status = Status::from_error(err);
+                return Poll::Ready(Err(status));
+            }
+            None => None,
+        };
+
+        Poll::Ready(if let Some(data) = chunk {
+            self.buf.put(data);
+            Ok(Some(()))
+        } else {
+            // FIXME: improve buf usage.
+            if self.buf.has_remaining() {
+                trace!("unexpected EOF decoding stream");
+                Err(Status::new(
+                    Code::Internal,
+                    "Unexpected EOF decoding stream.".to_string(),
+                ))
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
     fn poll_response(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Status>> {
         if let Direction::Response(status) = self.direction {
             match ready!(Pin::new(&mut self.body).poll_trailers(cx)) {
@@ -327,33 +358,12 @@ impl<T> Stream for Streaming<T> {
                 return Poll::Ready(Some(Ok(item)));
             }
 
-            let chunk = match ready!(Pin::new(&mut self.inner.body).poll_data(cx)) {
-                Some(Ok(d)) => Some(d),
-                Some(Err(e)) => {
-                    let _ = std::mem::replace(&mut self.inner.state, State::Error);
-                    let err: crate::Error = e.into();
-                    debug!("decoder inner stream error: {:?}", err);
-                    let status = Status::from_error(err);
-                    return Poll::Ready(Some(Err(status)));
-                }
-                None => None,
-            };
-
-            if let Some(data) = chunk {
-                self.inner.buf.put(data);
-            } else {
-                // FIXME: improve buf usage.
-                if self.inner.buf.has_remaining() {
-                    trace!("unexpected EOF decoding stream");
-                    return Poll::Ready(Some(Err(Status::new(
-                        Code::Internal,
-                        "Unexpected EOF decoding stream.".to_string(),
-                    ))));
-                } else {
-                    break;
-                }
+            match ready!(self.inner.poll_data(cx))? {
+                Some(()) => (),
+                None => break,
             }
         }
+
         Poll::Ready(match ready!(self.inner.poll_response(cx)) {
             Ok(()) => None,
             Err(err) => Some(Err(err)),
