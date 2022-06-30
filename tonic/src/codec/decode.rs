@@ -193,6 +193,31 @@ impl StreamingInner {
 
         Ok(None)
     }
+
+    fn poll_response(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Status>> {
+        if let Direction::Response(status) = self.direction {
+            match ready!(Pin::new(&mut self.body).poll_trailers(cx)) {
+                Ok(trailer) => {
+                    if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
+                        if let Some(e) = e {
+                            return Poll::Ready(Err(e));
+                        } else {
+                            return Poll::Ready(Ok(()));
+                        }
+                    } else {
+                        self.trailers = trailer.map(MetadataMap::from_headers);
+                    }
+                }
+                Err(e) => {
+                    let err: crate::Error = e.into();
+                    debug!("decoder inner trailers error: {:?}", err);
+                    let status = Status::from_error(err);
+                    return Poll::Ready(Err(status));
+                }
+            }
+        }
+        Poll::Ready(Ok(()))
+    }
 }
 
 impl<T> Streaming<T> {
@@ -329,30 +354,10 @@ impl<T> Stream for Streaming<T> {
                 }
             }
         }
-
-        if let Direction::Response(status) = self.inner.direction {
-            match ready!(Pin::new(&mut self.inner.body).poll_trailers(cx)) {
-                Ok(trailer) => {
-                    if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
-                        if let Some(e) = e {
-                            return Some(Err(e)).into();
-                        } else {
-                            return Poll::Ready(None);
-                        }
-                    } else {
-                        self.inner.trailers = trailer.map(MetadataMap::from_headers);
-                    }
-                }
-                Err(e) => {
-                    let err: crate::Error = e.into();
-                    debug!("decoder inner trailers error: {:?}", err);
-                    let status = Status::from_error(err);
-                    return Some(Err(status)).into();
-                }
-            }
-        }
-
-        Poll::Ready(None)
+        Poll::Ready(match ready!(self.inner.poll_response(cx)) {
+            Ok(()) => None,
+            Err(err) => Some(Err(err)),
+        })
     }
 }
 
