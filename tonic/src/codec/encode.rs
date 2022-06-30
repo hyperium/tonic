@@ -98,18 +98,22 @@ where
             }
 
             // now that we know length, we can write the header
-            let len = buf.len() - HEADER_SIZE;
-            assert!(len <= std::u32::MAX as usize);
-            {
-                let mut buf = &mut buf[..HEADER_SIZE];
-                buf.put_u8(compression_encoding.is_some() as u8);
-                buf.put_u32(len as u32);
-            }
-
-            Ok(buf.split_to(len + HEADER_SIZE).freeze())
+            Ok(finish_encoding(compression_encoding, &mut buf))
         })();
         async { result }
     })
+}
+
+fn finish_encoding(compression_encoding: Option<CompressionEncoding>, buf: &mut BytesMut) -> Bytes {
+    let len = buf.len() - HEADER_SIZE;
+    assert!(len <= std::u32::MAX as usize);
+    {
+        let mut buf = &mut buf[..HEADER_SIZE];
+        buf.put_u8(compression_encoding.is_some() as u8);
+        buf.put_u32(len as u32);
+    }
+
+    buf.split_to(len + HEADER_SIZE).freeze()
 }
 
 #[derive(Debug)]
