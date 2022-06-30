@@ -30,6 +30,10 @@ use std::fmt;
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
 pub struct Grpc<T> {
     inner: T,
+    config: GrpcConfig,
+}
+
+struct GrpcConfig {
     origin: Uri,
     /// Which compression encodings does the client accept?
     accept_compression_encodings: EnabledCompressionEncodings,
@@ -42,9 +46,11 @@ impl<T> Grpc<T> {
     pub fn new(inner: T) -> Self {
         Self {
             inner,
-            origin: Uri::default(),
-            send_compression_encodings: None,
-            accept_compression_encodings: EnabledCompressionEncodings::default(),
+            config: GrpcConfig {
+                origin: Uri::default(),
+                send_compression_encodings: None,
+                accept_compression_encodings: EnabledCompressionEncodings::default(),
+            },
         }
     }
 
@@ -55,9 +61,11 @@ impl<T> Grpc<T> {
     pub fn with_origin(inner: T, origin: Uri) -> Self {
         Self {
             inner,
-            origin,
-            send_compression_encodings: None,
-            accept_compression_encodings: EnabledCompressionEncodings::default(),
+            config: GrpcConfig {
+                origin,
+                send_compression_encodings: None,
+                accept_compression_encodings: EnabledCompressionEncodings::default(),
+            },
         }
     }
 
@@ -88,7 +96,7 @@ impl<T> Grpc<T> {
     /// # };
     /// ```
     pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
-        self.send_compression_encodings = Some(encoding);
+        self.config.send_compression_encodings = Some(encoding);
         self
     }
 
@@ -119,7 +127,7 @@ impl<T> Grpc<T> {
     /// # };
     /// ```
     pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
-        self.accept_compression_encodings.enable(encoding);
+        self.config.accept_compression_encodings.enable(encoding);
         self
     }
 
@@ -226,6 +234,56 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
+        let request = request
+            .map(|s| encode_client(codec.encoder(), s, self.config.send_compression_encodings))
+            .map(BoxBody::new);
+
+        let request = self.config.prepare_request(request, path);
+
+        let response = self
+            .inner
+            .call(request)
+            .await
+            .map_err(|err| Status::from_error(err.into()))?;
+
+        let encoding = CompressionEncoding::from_encoding_header(
+            response.headers(),
+            self.config.accept_compression_encodings,
+        )?;
+
+        let status_code = response.status();
+        let trailers_only_status = Status::from_header_map(response.headers());
+
+        // We do not need to check for trailers if the `grpc-status` header is present
+        // with a valid code.
+        let expect_additional_trailers = if let Some(status) = trailers_only_status {
+            if status.code() != Code::Ok {
+                return Err(status);
+            }
+
+            false
+        } else {
+            true
+        };
+
+        let response = response.map(|body| {
+            if expect_additional_trailers {
+                Streaming::new_response(codec.decoder(), body, status_code, encoding)
+            } else {
+                Streaming::new_empty(codec.decoder(), body)
+            }
+        });
+
+        Ok(Response::from_http(response))
+    }
+}
+
+impl GrpcConfig {
+    fn prepare_request(
+        &self,
+        request: Request<http_body::combinators::UnsyncBoxBody<bytes::Bytes, Status>>,
+        path: PathAndQuery,
+    ) -> http::Request<http_body::combinators::UnsyncBoxBody<bytes::Bytes, Status>> {
         let scheme = self.origin.scheme().cloned();
         let authority = self.origin.authority().cloned();
 
@@ -235,10 +293,6 @@ impl<T> Grpc<T> {
         parts.authority = authority;
 
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
-
-        let request = request
-            .map(|s| encode_client(codec.encoder(), s, self.send_compression_encodings))
-            .map(BoxBody::new);
 
         let mut request = request.into_http(
             uri,
@@ -274,41 +328,7 @@ impl<T> Grpc<T> {
             );
         }
 
-        let response = self
-            .inner
-            .call(request)
-            .await
-            .map_err(|err| Status::from_error(err.into()))?;
-
-        let encoding = CompressionEncoding::from_encoding_header(
-            response.headers(),
-            self.accept_compression_encodings,
-        )?;
-
-        let status_code = response.status();
-        let trailers_only_status = Status::from_header_map(response.headers());
-
-        // We do not need to check for trailers if the `grpc-status` header is present
-        // with a valid code.
-        let expect_additional_trailers = if let Some(status) = trailers_only_status {
-            if status.code() != Code::Ok {
-                return Err(status);
-            }
-
-            false
-        } else {
-            true
-        };
-
-        let response = response.map(|body| {
-            if expect_additional_trailers {
-                Streaming::new_response(codec.decoder(), body, status_code, encoding)
-            } else {
-                Streaming::new_empty(codec.decoder(), body)
-            }
-        });
-
-        Ok(Response::from_http(response))
+        request
     }
 }
 
@@ -316,9 +336,11 @@ impl<T: Clone> Clone for Grpc<T> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
-            origin: self.origin.clone(),
-            send_compression_encodings: self.send_compression_encodings,
-            accept_compression_encodings: self.accept_compression_encodings,
+            config: GrpcConfig {
+                origin: self.config.origin.clone(),
+                send_compression_encodings: self.config.send_compression_encodings,
+                accept_compression_encodings: self.config.accept_compression_encodings,
+            },
         }
     }
 }
@@ -329,13 +351,16 @@ impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
 
         f.field("inner", &self.inner);
 
-        f.field("origin", &self.origin);
+        f.field("origin", &self.config.origin);
 
-        f.field("compression_encoding", &self.send_compression_encodings);
+        f.field(
+            "compression_encoding",
+            &self.config.send_compression_encodings,
+        );
 
         f.field(
             "accept_compression_encodings",
-            &self.accept_compression_encodings,
+            &self.config.accept_compression_encodings,
         );
 
         f.finish()
