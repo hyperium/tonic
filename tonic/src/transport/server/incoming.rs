@@ -23,13 +23,7 @@ where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
-    async_stream::try_stream! {
-        futures_util::pin_mut!(incoming);
-
-        while let Some(stream) = incoming.try_next().await? {
-            yield ServerIo::new_io(stream);
-        }
-    }
+    incoming.err_into().map_ok(ServerIo::new_io)
 }
 
 #[cfg(feature = "tls")]

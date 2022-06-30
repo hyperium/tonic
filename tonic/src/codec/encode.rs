@@ -58,66 +58,58 @@ where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
 {
-    async_stream::stream! {
-        let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
+    let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
 
-        let compression_encoding = if compression_override == SingleMessageCompressionOverride::Disable {
-            None
-        } else {
-            compression_encoding
-        };
+    let compression_encoding = if compression_override == SingleMessageCompressionOverride::Disable
+    {
+        None
+    } else {
+        compression_encoding
+    };
 
-        let mut uncompression_buf = if compression_encoding.is_some() {
-            BytesMut::with_capacity(BUFFER_SIZE)
-        } else {
-            BytesMut::new()
-        };
+    let mut uncompression_buf = if compression_encoding.is_some() {
+        BytesMut::with_capacity(BUFFER_SIZE)
+    } else {
+        BytesMut::new()
+    };
 
-        futures_util::pin_mut!(source);
-
-        loop {
-            match source.next().await {
-                Some(Ok(item)) => {
-                    buf.reserve(HEADER_SIZE);
-                    unsafe {
-                        buf.advance_mut(HEADER_SIZE);
-                    }
-
-                    if let Some(encoding) = compression_encoding {
-                        uncompression_buf.clear();
-
-                        encoder.encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
-                            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
-
-                        let uncompressed_len = uncompression_buf.len();
-
-                        compress(
-                            encoding,
-                            &mut uncompression_buf,
-                            &mut buf,
-                            uncompressed_len,
-                        ).map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
-                    } else {
-                        encoder.encode(item, &mut EncodeBuf::new(&mut buf))
-                            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
-                    }
-
-                    // now that we know length, we can write the header
-                    let len = buf.len() - HEADER_SIZE;
-                    assert!(len <= std::u32::MAX as usize);
-                    {
-                        let mut buf = &mut buf[..HEADER_SIZE];
-                        buf.put_u8(compression_encoding.is_some() as u8);
-                        buf.put_u32(len as u32);
-                    }
-
-                    yield Ok(buf.split_to(len + HEADER_SIZE).freeze());
-                },
-                Some(Err(status)) => yield Err(status),
-                None => break,
+    source.and_then(move |item| {
+        let result = (|| {
+            buf.reserve(HEADER_SIZE);
+            unsafe {
+                buf.advance_mut(HEADER_SIZE);
             }
-        }
-    }
+
+            if let Some(encoding) = compression_encoding {
+                uncompression_buf.clear();
+
+                encoder
+                    .encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
+                    .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+
+                let uncompressed_len = uncompression_buf.len();
+
+                compress(encoding, &mut uncompression_buf, &mut buf, uncompressed_len)
+                    .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
+            } else {
+                encoder
+                    .encode(item, &mut EncodeBuf::new(&mut buf))
+                    .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+            }
+
+            // now that we know length, we can write the header
+            let len = buf.len() - HEADER_SIZE;
+            assert!(len <= std::u32::MAX as usize);
+            {
+                let mut buf = &mut buf[..HEADER_SIZE];
+                buf.put_u8(compression_encoding.is_some() as u8);
+                buf.put_u32(len as u32);
+            }
+
+            Ok(buf.split_to(len + HEADER_SIZE).freeze())
+        })();
+        async { result }
+    })
 }
 
 #[derive(Debug)]
