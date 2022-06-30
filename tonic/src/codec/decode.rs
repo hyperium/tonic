@@ -116,6 +116,85 @@ impl<T> Streaming<T> {
     }
 }
 
+impl StreamingInner {
+    fn decode_chunk(&mut self) -> Result<Option<DecodeBuf<'_>>, Status> {
+        if let State::ReadHeader = self.state {
+            if self.buf.remaining() < HEADER_SIZE {
+                return Ok(None);
+            }
+
+            let compression_encoding = match self.buf.get_u8() {
+                0 => None,
+                1 => {
+                    {
+                        if self.encoding.is_some() {
+                            self.encoding
+                        } else {
+                            // https://grpc.github.io/grpc/core/md_doc_compression.html
+                            // An ill-constructed message with its Compressed-Flag bit set but lacking a grpc-encoding
+                            // entry different from identity in its metadata MUST fail with INTERNAL status,
+                            // its associated description indicating the invalid Compressed-Flag condition.
+                            return Err(Status::new(Code::Internal, "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
+                        }
+                    }
+                }
+                f => {
+                    trace!("unexpected compression flag");
+                    let message = if let Direction::Response(status) = self.direction {
+                        format!(
+                            "protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1) while receiving response with status: {}",
+                            f, status
+                        )
+                    } else {
+                        format!("protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1), while sending request", f)
+                    };
+                    return Err(Status::new(Code::Internal, message));
+                }
+            };
+            let len = self.buf.get_u32() as usize;
+            self.buf.reserve(len);
+
+            self.state = State::ReadBody {
+                compression: compression_encoding,
+                len,
+            }
+        }
+
+        if let State::ReadBody { len, compression } = self.state {
+            // if we haven't read enough of the message then return and keep
+            // reading
+            if self.buf.remaining() < len || self.buf.len() < len {
+                return Ok(None);
+            }
+
+            let decode_buf = if let Some(encoding) = compression {
+                self.decompress_buf.clear();
+
+                if let Err(err) = decompress(encoding, &mut self.buf, &mut self.decompress_buf, len)
+                {
+                    let message = if let Direction::Response(status) = self.direction {
+                        format!(
+                            "Error decompressing: {}, while receiving response with status: {}",
+                            err, status
+                        )
+                    } else {
+                        format!("Error decompressing: {}, while sending request", err)
+                    };
+                    return Err(Status::new(Code::Internal, message));
+                }
+                let decompressed_len = self.decompress_buf.len();
+                DecodeBuf::new(&mut self.decompress_buf, decompressed_len)
+            } else {
+                DecodeBuf::new(&mut self.buf, len)
+            };
+
+            return Ok(Some(decode_buf));
+        }
+
+        Ok(None)
+    }
+}
+
 impl<T> Streaming<T> {
     /// Fetch the next message from this stream.
     ///
@@ -194,95 +273,16 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
-        if let State::ReadHeader = self.inner.state {
-            if self.inner.buf.remaining() < HEADER_SIZE {
-                return Ok(None);
-            }
-
-            let compression_encoding = match self.inner.buf.get_u8() {
-                0 => None,
-                1 => {
-                    {
-                        if self.inner.encoding.is_some() {
-                            self.inner.encoding
-                        } else {
-                            // https://grpc.github.io/grpc/core/md_doc_compression.html
-                            // An ill-constructed message with its Compressed-Flag bit set but lacking a grpc-encoding
-                            // entry different from identity in its metadata MUST fail with INTERNAL status,
-                            // its associated description indicating the invalid Compressed-Flag condition.
-                            return Err(Status::new(Code::Internal, "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
-                        }
-                    }
-                }
-                f => {
-                    trace!("unexpected compression flag");
-                    let message = if let Direction::Response(status) = self.inner.direction {
-                        format!(
-                            "protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1) while receiving response with status: {}",
-                            f, status
-                        )
-                    } else {
-                        format!("protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1), while sending request", f)
-                    };
-                    return Err(Status::new(Code::Internal, message));
-                }
-            };
-            let len = self.inner.buf.get_u32() as usize;
-            self.inner.buf.reserve(len);
-
-            self.inner.state = State::ReadBody {
-                compression: compression_encoding,
-                len,
-            }
-        }
-
-        if let State::ReadBody { len, compression } = self.inner.state {
-            // if we haven't read enough of the message then return and keep
-            // reading
-            if self.inner.buf.remaining() < len || self.inner.buf.len() < len {
-                return Ok(None);
-            }
-
-            let decoding_result = if let Some(encoding) = compression {
-                self.inner.decompress_buf.clear();
-
-                if let Err(err) = decompress(
-                    encoding,
-                    &mut self.inner.buf,
-                    &mut self.inner.decompress_buf,
-                    len,
-                ) {
-                    let message = if let Direction::Response(status) = self.inner.direction {
-                        format!(
-                            "Error decompressing: {}, while receiving response with status: {}",
-                            err, status
-                        )
-                    } else {
-                        format!("Error decompressing: {}, while sending request", err)
-                    };
-                    return Err(Status::new(Code::Internal, message));
-                }
-                let decompressed_len = self.inner.decompress_buf.len();
-                self.decoder.decode(&mut DecodeBuf::new(
-                    &mut self.inner.decompress_buf,
-                    decompressed_len,
-                ))
-            } else {
-                self.decoder
-                    .decode(&mut DecodeBuf::new(&mut self.inner.buf, len))
-            };
-
-            return match decoding_result {
-                Ok(Some(msg)) => {
+        match self.inner.decode_chunk()? {
+            Some(mut decode_buf) => match self.decoder.decode(&mut decode_buf)? {
+                Some(msg) => {
                     self.inner.state = State::ReadHeader;
                     Ok(Some(msg))
                 }
-                Ok(None) => Ok(None),
-                Err(e) => Err(e),
-            };
+                None => Ok(None),
+            },
+            None => Ok(None),
         }
-
-        Ok(None)
     }
 }
 
