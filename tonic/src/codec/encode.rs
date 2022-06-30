@@ -127,6 +127,11 @@ enum Role {
 pub(crate) struct EncodeBody<S> {
     #[pin]
     inner: S,
+    state: EncodeState,
+}
+
+#[derive(Debug)]
+struct EncodeState {
     error: Option<Status>,
     role: Role,
     is_end_stream: bool,
@@ -139,18 +144,44 @@ where
     pub(crate) fn new_client(inner: S) -> Self {
         Self {
             inner,
-            error: None,
-            role: Role::Client,
-            is_end_stream: false,
+            state: EncodeState {
+                error: None,
+                role: Role::Client,
+                is_end_stream: false,
+            },
         }
     }
 
     pub(crate) fn new_server(inner: S) -> Self {
         Self {
             inner,
-            error: None,
-            role: Role::Server,
-            is_end_stream: false,
+            state: EncodeState {
+                error: None,
+                role: Role::Server,
+                is_end_stream: false,
+            },
+        }
+    }
+}
+
+impl EncodeState {
+    fn trailers(&mut self) -> Result<Option<HeaderMap>, Status> {
+        match self.role {
+            Role::Client => Ok(None),
+            Role::Server => {
+                if self.is_end_stream {
+                    return Ok(None);
+                }
+
+                let status = if let Some(status) = self.error.take() {
+                    self.is_end_stream = true;
+                    status
+                } else {
+                    Status::new(Code::Ok, "")
+                };
+
+                Ok(Some(status.to_header_map()?))
+            }
         }
     }
 }
@@ -163,7 +194,7 @@ where
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {
-        self.is_end_stream
+        self.state.is_end_stream
     }
 
     fn poll_data(
@@ -173,10 +204,10 @@ where
         let mut self_proj = self.project();
         match ready!(self_proj.inner.try_poll_next_unpin(cx)) {
             Some(Ok(d)) => Some(Ok(d)).into(),
-            Some(Err(status)) => match self_proj.role {
+            Some(Err(status)) => match self_proj.state.role {
                 Role::Client => Some(Err(status)).into(),
                 Role::Server => {
-                    *self_proj.error = Some(status);
+                    self_proj.state.error = Some(status);
                     None.into()
                 }
             },
@@ -188,24 +219,6 @@ where
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Option<HeaderMap>, Status>> {
-        match self.role {
-            Role::Client => Poll::Ready(Ok(None)),
-            Role::Server => {
-                let self_proj = self.project();
-
-                if *self_proj.is_end_stream {
-                    return Poll::Ready(Ok(None));
-                }
-
-                let status = if let Some(status) = self_proj.error.take() {
-                    *self_proj.is_end_stream = true;
-                    status
-                } else {
-                    Status::new(Code::Ok, "")
-                };
-
-                Poll::Ready(Ok(Some(status.to_header_map()?)))
-            }
-        }
+        Poll::Ready(self.project().state.trailers())
     }
 }
