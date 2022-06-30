@@ -44,14 +44,7 @@ struct GrpcConfig {
 impl<T> Grpc<T> {
     /// Creates a new gRPC client with the provided [`GrpcService`].
     pub fn new(inner: T) -> Self {
-        Self {
-            inner,
-            config: GrpcConfig {
-                origin: Uri::default(),
-                send_compression_encodings: None,
-                accept_compression_encodings: EnabledCompressionEncodings::default(),
-            },
-        }
+        Self::with_origin(inner, Uri::default())
     }
 
     /// Creates a new gRPC client with the provided [`GrpcService`] and `Uri`.
