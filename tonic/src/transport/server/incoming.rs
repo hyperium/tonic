@@ -127,12 +127,12 @@ enum SelectOutput<A> {
     Done,
 }
 
-pub(crate) struct TcpIncoming {
+pub struct TcpIncoming {
     inner: AddrIncoming,
 }
 
 impl TcpIncoming {
-    pub(crate) fn new(
+    pub fn new(
         addr: SocketAddr,
         nodelay: bool,
         keepalive: Option<Duration>,
