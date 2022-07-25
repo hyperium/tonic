@@ -140,6 +140,27 @@ impl TcpIncoming {
     /// Creates an instance by binding (opening) the specified socket address
     /// to which the specified TCP 'nodelay' and 'keepalive' parameters are applied.
     /// Returns a TcpIncoming if the socket address was successfully bound.
+    ///
+    /// # Examples
+    /// ```no_run
+    /// # use tower_service::Service;
+    /// # use http::{request::Request, response::Response};
+    /// # use tonic::{body::BoxBody, transport::{Body, NamedService, Server, server::TcpIncoming}};
+    /// # use core::convert::Infallible;
+    /// # use std::error::Error;
+    /// # fn main() { }  // Cannot have type parameters, hence instead define:
+    /// # fn run<S>(some_service: S) -> Result<(), Box<dyn Error + Send + Sync>>
+    /// # where
+    /// #   S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+    /// #   S::Future: Send + 'static,
+    /// # {
+    /// let addr = "127.0.0.1:8123".parse().unwrap();
+    /// let tinc = TcpIncoming::new(addr, true, None)?;
+    /// Server::builder()
+    ///    .add_service(some_service)
+    ///    .serve_with_incoming(tinc);
+    /// # Ok(())
+    /// # }
     pub fn new(
         addr: SocketAddr,
         nodelay: bool,
