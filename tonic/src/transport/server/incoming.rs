@@ -127,11 +127,19 @@ enum SelectOutput<A> {
     Done,
 }
 
+/// Binds a socket address for a [Router](super::Router)
+///
+/// An incoming stream, usable with [Router::serve_with_incoming](super::Router::serve_with_incoming),
+/// of `AsyncRead + AsyncWrite` that communicate with clients that connect to a socket address.
+#[derive(Debug)]
 pub struct TcpIncoming {
     inner: AddrIncoming,
 }
 
 impl TcpIncoming {
+    /// Creates an instance by binding (opening) the specified socket address
+    /// to which the specified TCP 'nodelay' and 'keepalive' parameters are applied.
+    /// Returns a TcpIncoming if the socket address was successfully bound.
     pub fn new(
         addr: SocketAddr,
         nodelay: bool,
