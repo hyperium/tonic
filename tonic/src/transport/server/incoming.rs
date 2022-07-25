@@ -180,3 +180,17 @@ impl Stream for TcpIncoming {
         Pin::new(&mut self.inner).poll_accept(cx)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::transport::server::TcpIncoming;
+    #[tokio::test]
+    async fn one_tcpincoming_at_a_time() {
+        let addr = "127.0.0.1:1322".parse().unwrap();
+        {
+            let _t1 = TcpIncoming::new(addr, true, None).unwrap();
+            let _t2 = TcpIncoming::new(addr, true, None).unwrap_err();
+        }
+        let _t3 = TcpIncoming::new(addr, true, None).unwrap();
+    }
+}
