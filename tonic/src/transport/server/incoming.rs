@@ -154,8 +154,15 @@ impl TcpIncoming {
     /// #   S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
     /// #   S::Future: Send + 'static,
     /// # {
-    /// let addr = "127.0.0.1:8123".parse().unwrap();
-    /// let tinc = TcpIncoming::new(addr, true, None)?;
+    /// // Find a free port
+    /// let mut port = 1322;
+    /// let tinc = loop {
+    ///    let addr = format!("127.0.0.1:{}", port).parse().unwrap();
+    ///    match TcpIncoming::new(addr, true, None) {
+    ///       Ok(t) => break t,
+    ///       Err(_) => port += 1
+    ///    }
+    /// };
     /// Server::builder()
     ///    .add_service(some_service)
     ///    .serve_with_incoming(tinc);
