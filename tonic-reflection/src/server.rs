@@ -1,6 +1,6 @@
 use crate::proto::server_reflection_request::MessageRequest;
 use crate::proto::server_reflection_response::MessageResponse;
-use crate::proto::server_reflection_server::{ServerReflection, ServerReflectionServer};
+pub use crate::proto::server_reflection_server::{ServerReflection, ServerReflectionServer};
 use crate::proto::{
     FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest, ServerReflectionResponse,
     ServiceResponse,
