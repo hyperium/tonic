@@ -53,6 +53,7 @@ pub struct Builder<'b> {
     include_reflection_service: bool,
 
     service_names: Vec<String>,
+    use_all_service_names: bool,
     symbols: HashMap<String, Arc<FileDescriptorProto>>,
 }
 
@@ -65,6 +66,7 @@ impl<'b> Builder<'b> {
             include_reflection_service: true,
 
             service_names: Vec::new(),
+            use_all_service_names: true,
             symbols: HashMap::new(),
         }
     }
@@ -91,6 +93,15 @@ impl<'b> Builder<'b> {
     /// by default - set `include` to false to disable.
     pub fn include_reflection_service(mut self, include: bool) -> Self {
         self.include_reflection_service = include;
+        self
+    }
+
+    /// Advertise a fully-qualified gRPC service name.
+    /// If not called, then all services present in the registered file descriptor sets
+    /// will be advertised.
+    pub fn with_service_name(mut self, name: impl Into<String>) -> Self {
+        self.use_all_service_names = false;
+        self.service_names.push(name.into());
         self
     }
 
@@ -156,7 +167,9 @@ impl<'b> Builder<'b> {
 
         for service in &fd.service {
             let service_name = extract_name(prefix, "service", service.name.as_ref())?;
-            self.service_names.push(service_name.clone());
+            if self.use_all_service_names {
+                self.service_names.push(service_name.clone());
+            }
             self.symbols.insert(service_name.clone(), fd.clone());
 
             for method in &service.method {
