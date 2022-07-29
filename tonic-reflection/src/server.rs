@@ -97,6 +97,7 @@ impl<'b> Builder<'b> {
     }
 
     /// Advertise a fully-qualified gRPC service name.
+    ///
     /// If not called, then all services present in the registered file descriptor sets
     /// will be advertised.
     pub fn with_service_name(mut self, name: impl Into<String>) -> Self {
