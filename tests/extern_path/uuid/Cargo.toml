@@ -12,4 +12,4 @@ version = "0.1.0"
 bytes = "1.0"
 prost = "0.11"
 [build-dependencies]
-prost-build = "0.10"
+prost-build = "0.11"
