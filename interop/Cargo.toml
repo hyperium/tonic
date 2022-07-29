@@ -24,7 +24,7 @@ futures-util = "0.3"
 http = "0.2"
 http-body = "0.4.2"
 hyper = "0.14"
-prost = "0.10"
+prost = "0.11"
 prost-derive = "0.10"
 tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros", "fs"]}
 tokio-stream = "0.1"

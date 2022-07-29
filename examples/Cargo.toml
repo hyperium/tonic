@@ -197,7 +197,7 @@ path = "src/json-codec/server.rs"
 [dependencies]
 async-stream = "0.3"
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
-prost = "0.10"
+prost = "0.11"
 tokio = { version = "1.0", features = [ "rt-multi-thread", "time", "fs", "macros", "net",] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = { path = "../tonic", features = ["tls", "gzip"] }

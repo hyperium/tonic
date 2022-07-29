@@ -12,10 +12,10 @@ license = "MIT"
 name = "tonic-types"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.5.0"
+version = "0.6.0"
 
 [dependencies]
-prost = "0.10"
+prost = "0.11"
 prost-types = "0.10"
 
 [build-dependencies]
