@@ -84,7 +84,7 @@
     rust_2018_idioms,
     unreachable_pub
 )]
-#![doc(html_root_url = "https://docs.rs/tonic-web/0.3.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-web/0.4.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
 pub use config::Config;

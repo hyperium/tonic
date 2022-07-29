@@ -1,3 +1,20 @@
+# [v0.8.0](https://github.com/hyperium/tonic/compare/v0.7.2...v0.8.0) (2022-07-29)
+
+
+### Features
+
+* Add `Grpc::with_origin` for clients ([#1017](https://github.com/hyperium/tonic/issues/1017)) ([10f6d2f](https://github.com/hyperium/tonic/commit/10f6d2f1a9fa3969599ebd674f7be27f4f458754))
+* **build:** Add option to emit rerun-if-changed instructions ([#1021](https://github.com/hyperium/tonic/issues/1021)) ([1d2083a](https://github.com/hyperium/tonic/commit/1d2083a1a690edcb3f95343edfe229339c4257b7))
+* **build:** Better support for custom codecs ([#999](https://github.com/hyperium/tonic/issues/999)) ([de2e4ac](https://github.com/hyperium/tonic/commit/de2e4ac077c076736dc451f3415ea7da1a61a560))
+* Decouple `NamedService` from the `transport` feature ([#969](https://github.com/hyperium/tonic/issues/969)) ([feae96c](https://github.com/hyperium/tonic/commit/feae96c5be1247af368e6ce665c8df757d298e35))
+* reflection: Export server types.
+* reflection: Add `with_service_name`.
+
+### BREAKING CHANGES
+
+* **build:** `CODEC_PATH` moved from const to fn
+* **tonic** Remove codegen depedency on `compression` feature.
+
 # [v0.7.2](https://github.com/hyperium/tonic/compare/v0.7.1...v0.7.2) (2022-05-04)
 
 
