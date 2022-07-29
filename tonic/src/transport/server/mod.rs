@@ -24,7 +24,7 @@ use super::service::TlsAcceptor;
 #[cfg(unix)]
 pub use unix::UdsConnectInfo;
 
-use incoming::TcpIncoming;
+pub use incoming::TcpIncoming;
 
 #[cfg(feature = "tls")]
 pub(crate) use tokio_rustls::server::TlsStream;
