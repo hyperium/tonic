@@ -32,6 +32,7 @@
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //! - `gzip`: Enables compressing requests, responses, and streams.
 //! Depends on [flate2]. Not enabled by default.
+//! Replaces the `compression` flag from earlier versions of `tonic`.
 //!
 //! # Structure
 //!
