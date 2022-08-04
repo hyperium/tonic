@@ -61,7 +61,7 @@ async fn unimplemented() -> impl axum::response::IntoResponse {
 
 impl Service<Request<Body>> for Routes {
     type Response = Response<BoxBody>;
-    type Error = crate::Error;
+    type Error = Infallible;
     type Future = RoutesFuture;
 
     #[inline]
@@ -84,7 +84,7 @@ impl fmt::Debug for RoutesFuture {
 }
 
 impl Future for RoutesFuture {
-    type Output = Result<Response<BoxBody>, crate::Error>;
+    type Output = Result<Response<BoxBody>, Infallible>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match futures_util::ready!(self.project().0.poll(cx)) {
