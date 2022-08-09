@@ -14,6 +14,7 @@
 
 * **build:** `CODEC_PATH` moved from const to fn
 * **tonic** Remove codegen depedency on `compression` feature.
+* **tonic** Remove `compression` feature in favor of `gzip` feature.
 
 # [v0.7.2](https://github.com/hyperium/tonic/compare/v0.7.1...v0.7.2) (2022-05-04)
 
