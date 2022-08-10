@@ -304,7 +304,12 @@ impl Status {
     }
 
     #[cfg_attr(not(feature = "transport"), allow(dead_code))]
-    pub(crate) fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
+    pub(crate) fn from_error(err: impl Into<Box<dyn Error + Send + Sync + 'static>>) -> Status {
+        Self::from_error_impl(err.into())
+    }
+
+    #[cfg_attr(not(feature = "transport"), allow(dead_code))]
+    fn from_error_impl(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
         Status::try_from_error(err).unwrap_or_else(|err| {
             let mut status = Status::new(Code::Unknown, err.to_string());
             status.source = Some(err);

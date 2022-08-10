@@ -233,11 +233,7 @@ impl<T> Grpc<T> {
 
         let request = self.config.prepare_request(request, path);
 
-        let response = self
-            .inner
-            .call(request)
-            .await
-            .map_err(|err| Status::from_error(err.into()))?;
+        let response = self.inner.call(request).await.map_err(Status::from_error)?;
 
         let decoder = codec.decoder();
 
