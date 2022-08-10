@@ -242,14 +242,15 @@ impl<T> Grpc<T> {
 
     // Keeping this code in a separate function from Self::streaming lets functions that return the
     // same output share the generated binary code
-    fn create_response<M2, B>(
+    fn create_response<M2>(
         &self,
         decoder: impl Decoder<Item = M2, Error = Status> + Send + 'static,
-        response: http::Response<B>,
+        response: http::Response<T::ResponseBody>,
     ) -> Result<Response<Streaming<M2>>, Status>
     where
-        B: Body + Send + 'static,
-        <B as Body>::Error: Into<crate::Error>,
+        T: GrpcService<BoxBody>,
+        T::ResponseBody: Body + Send + 'static,
+        <T::ResponseBody as Body>::Error: Into<crate::Error>,
     {
         let encoding = CompressionEncoding::from_encoding_header(
             response.headers(),
