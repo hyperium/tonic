@@ -2,7 +2,7 @@ use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings
 use crate::{
     body::BoxBody,
     client::GrpcService,
-    codec::{encode_client, Codec, Streaming},
+    codec::{encode_client, Codec, Decoder, Streaming},
     request::SanitizeHeaders,
     Code, Request, Response, Status,
 };
@@ -239,6 +239,22 @@ impl<T> Grpc<T> {
             .await
             .map_err(|err| Status::from_error(err.into()))?;
 
+        let decoder = codec.decoder();
+
+        self.create_response(decoder, response)
+    }
+
+    // Keeping this code in a separate function from Self::streaming lets functions that return the
+    // same output share the generated binary code
+    fn create_response<M2, B>(
+        &self,
+        decoder: impl Decoder<Item = M2, Error = Status> + Send + 'static,
+        response: http::Response<B>,
+    ) -> Result<Response<Streaming<M2>>, Status>
+    where
+        B: Body + Send + 'static,
+        <B as Body>::Error: Into<crate::Error>,
+    {
         let encoding = CompressionEncoding::from_encoding_header(
             response.headers(),
             self.config.accept_compression_encodings,
@@ -261,9 +277,9 @@ impl<T> Grpc<T> {
 
         let response = response.map(|body| {
             if expect_additional_trailers {
-                Streaming::new_response(codec.decoder(), body, status_code, encoding)
+                Streaming::new_response(decoder, body, status_code, encoding)
             } else {
-                Streaming::new_empty(codec.decoder(), body)
+                Streaming::new_empty(decoder, body)
             }
         });
 
