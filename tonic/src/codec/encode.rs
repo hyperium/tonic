@@ -76,31 +76,50 @@ where
     source.map(move |result| {
         let item = result?;
 
-        buf.reserve(HEADER_SIZE);
-        unsafe {
-            buf.advance_mut(HEADER_SIZE);
-        }
-
-        if let Some(encoding) = compression_encoding {
-            uncompression_buf.clear();
-
-            encoder
-                .encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
-                .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
-
-            let uncompressed_len = uncompression_buf.len();
-
-            compress(encoding, &mut uncompression_buf, &mut buf, uncompressed_len)
-                .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
-        } else {
-            encoder
-                .encode(item, &mut EncodeBuf::new(&mut buf))
-                .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
-        }
-
-        // now that we know length, we can write the header
-        Ok(finish_encoding(compression_encoding, &mut buf))
+        encode_item(
+            &mut encoder,
+            &mut buf,
+            &mut uncompression_buf,
+            compression_encoding,
+            item,
+        )
     })
+}
+
+fn encode_item<T>(
+    encoder: &mut T,
+    buf: &mut BytesMut,
+    uncompression_buf: &mut BytesMut,
+    compression_encoding: Option<CompressionEncoding>,
+    item: T::Item,
+) -> Result<Bytes, Status>
+where
+    T: Encoder<Error = Status>,
+{
+    buf.reserve(HEADER_SIZE);
+    unsafe {
+        buf.advance_mut(HEADER_SIZE);
+    }
+
+    if let Some(encoding) = compression_encoding {
+        uncompression_buf.clear();
+
+        encoder
+            .encode(item, &mut EncodeBuf::new(uncompression_buf))
+            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+
+        let uncompressed_len = uncompression_buf.len();
+
+        compress(encoding, uncompression_buf, buf, uncompressed_len)
+            .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
+    } else {
+        encoder
+            .encode(item, &mut EncodeBuf::new(buf))
+            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+    }
+
+    // now that we know length, we can write the header
+    Ok(finish_encoding(compression_encoding, buf))
 }
 
 fn finish_encoding(compression_encoding: Option<CompressionEncoding>, buf: &mut BytesMut) -> Bytes {
