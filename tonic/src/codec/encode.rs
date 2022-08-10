@@ -73,34 +73,33 @@ where
         BytesMut::new()
     };
 
-    source.and_then(move |item| {
-        let result = (|| {
-            buf.reserve(HEADER_SIZE);
-            unsafe {
-                buf.advance_mut(HEADER_SIZE);
-            }
+    source.map(move |result| {
+        let item = result?;
 
-            if let Some(encoding) = compression_encoding {
-                uncompression_buf.clear();
+        buf.reserve(HEADER_SIZE);
+        unsafe {
+            buf.advance_mut(HEADER_SIZE);
+        }
 
-                encoder
-                    .encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
-                    .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+        if let Some(encoding) = compression_encoding {
+            uncompression_buf.clear();
 
-                let uncompressed_len = uncompression_buf.len();
+            encoder
+                .encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
+                .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
 
-                compress(encoding, &mut uncompression_buf, &mut buf, uncompressed_len)
-                    .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
-            } else {
-                encoder
-                    .encode(item, &mut EncodeBuf::new(&mut buf))
-                    .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
-            }
+            let uncompressed_len = uncompression_buf.len();
 
-            // now that we know length, we can write the header
-            Ok(finish_encoding(compression_encoding, &mut buf))
-        })();
-        async { result }
+            compress(encoding, &mut uncompression_buf, &mut buf, uncompressed_len)
+                .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
+        } else {
+            encoder
+                .encode(item, &mut EncodeBuf::new(&mut buf))
+                .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+        }
+
+        // now that we know length, we can write the header
+        Ok(finish_encoding(compression_encoding, &mut buf))
     })
 }
 
