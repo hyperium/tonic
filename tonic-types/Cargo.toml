@@ -1,5 +1,8 @@
 [package]
-authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+authors = [
+  "Lucio Franco <luciofranco14@gmail.com>",
+  "Rafael Lemos <flemos.rafael.dev@gmail.com>"
+]
 categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A collection of useful protobuf types that can be used with `tonic`.
@@ -17,6 +20,7 @@ version = "0.6.0"
 [dependencies]
 prost = "0.11"
 prost-types = "0.11"
+tonic = {version = "0.8", path = "../tonic"}
 
 [build-dependencies]
 prost-build = "0.11"
