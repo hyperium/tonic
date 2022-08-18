@@ -44,7 +44,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::new();
     /// ```
@@ -69,7 +69,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_retry_info(Some(Duration::from_secs(5)));
     /// ```
@@ -85,7 +85,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_stack = vec!["...".into(), "...".into()];
     ///
@@ -103,7 +103,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, QuotaViolation};
+    /// use tonic_types::{ErrorDetails, QuotaViolation};
     ///
     /// let err_details = ErrorDetails::with_quota_failure(vec![
     ///     QuotaViolation::new("subject 1", "description 1"),
@@ -122,7 +122,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_quota_failure_violation("subject", "description");
     /// ```
@@ -142,7 +142,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut metadata: HashMap<String, String> = HashMap::new();
     /// metadata.insert("instanceLimitPerRequest".into(), "100".into());
@@ -165,7 +165,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, PreconditionViolation};
+    /// use tonic_types::{ErrorDetails, PreconditionViolation};
     ///
     /// let err_details = ErrorDetails::with_precondition_failure(vec![
     ///     PreconditionViolation::new(
@@ -193,7 +193,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_precondition_failure_violation(
     ///     "violation type",
@@ -221,7 +221,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, FieldViolation};
+    /// use tonic_types::{ErrorDetails, FieldViolation};
     ///
     /// let err_details = ErrorDetails::with_bad_request(vec![
     ///     FieldViolation::new("field_1", "description 1"),
@@ -240,7 +240,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_bad_request_violation(
     ///     "field",
@@ -262,7 +262,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_request_info(
     ///     "request_id",
@@ -284,7 +284,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_resource_info(
     ///     "res_type",
@@ -315,7 +315,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, HelpLink};
+    /// use tonic_types::{ErrorDetails, HelpLink};
     ///
     /// let err_details = ErrorDetails::with_help(vec![
     ///     HelpLink::new("description of link a", "resource-a.example.local"),
@@ -334,7 +334,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_help_link(
     ///     "description of link a",
@@ -353,7 +353,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let err_details = ErrorDetails::with_localized_message(
     ///     "en-US",
@@ -375,7 +375,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -391,7 +391,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -413,7 +413,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, QuotaViolation};
+    /// use tonic_types::{ErrorDetails, QuotaViolation};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -433,7 +433,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -460,7 +460,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::with_quota_failure(vec![]);
     ///
@@ -483,7 +483,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -507,7 +507,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, PreconditionViolation};
+    /// use tonic_types::{ErrorDetails, PreconditionViolation};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -538,7 +538,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -574,7 +574,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::with_precondition_failure(vec![]);
     ///
@@ -600,7 +600,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, FieldViolation};
+    /// use tonic_types::{ErrorDetails, FieldViolation};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -620,7 +620,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -647,7 +647,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::with_bad_request(vec![]);
     ///
@@ -669,7 +669,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -689,7 +689,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -716,7 +716,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails, HelpLink};
+    /// use tonic_types::{ErrorDetails, HelpLink};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -736,7 +736,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -763,7 +763,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::with_help(vec![]);
     ///
@@ -785,7 +785,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_richer_error::{ErrorDetails};
+    /// use tonic_types::{ErrorDetails};
     ///
     /// let mut err_details = ErrorDetails::new();
     ///

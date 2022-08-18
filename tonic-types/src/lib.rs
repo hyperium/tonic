@@ -1,16 +1,17 @@
 /*!
 A collection of useful protobuf types that can be used with `tonic`.
 
-This crate introduces the [`WithErrorDetails`] trait and implements it in
+This crate also introduces the [`WithErrorDetails`] trait and implements it in
 [`tonic::Status`], allowing the implementation of the [gRPC Richer Error Model]
 with [`tonic`] in a convenient way.
 
 # Usage
-The [`WithErrorDetails`] trait adds associated functions to [`tonic::Status`]
-that can be used on the server side to create a status with error details, that
-can then be returned to the gRPC client. Moreover, the trait also adds methods
-to [`tonic::Status`] that can be used by a tonic client to extract error
-details, and handle them with ease.
+Useful protobuf types are available through the `pb` module. They can be
+imported and worked with directly. The [`WithErrorDetails`] trait adds
+associated functions to [`tonic::Status`] that can be used on the server side
+to create a status with error details, which can then be returned to the gRPC
+client. Moreover, the trait also adds methods to [`tonic::Status`] that can be
+used by a tonic client to extract error details, and handle them with ease.
 
 # Getting Started
 To build this crate you must have the Protocol Buffer Compiler, `protoc`,
@@ -18,18 +19,19 @@ installed. Instructions can be found [here][protoc-install].
 
 ```toml
 [dependencies]
-tonic = "0.8"
-tonic-richer-error = "0.3"
+tonic = <tonic-version>
+tonic-types = <tonic-types-version>
 ```
 
 # Examples
-The examples bellow cover a basic use case. More complete server and client
-implementations can be found at the [github examples] directory.
+The examples bellow cover a basic use case using the [gRPC Richer Error Model].
+More complete server and client implementations can be found at the main repo
+[examples] directory.
 
 ## Server Side: Generating [`tonic::Status`] with an [`ErrorDetails`] struct
 ```
 use tonic::{Code, Status};
-use tonic_richer_error::{ErrorDetails, WithErrorDetails};
+use tonic_types::{ErrorDetails, WithErrorDetails};
 
 # async fn endpoint() -> Result<tonic::Response<()>, Status> {
 // ...
@@ -82,7 +84,7 @@ if err_details.has_bad_request_violations() {
 ## Client Side: Extracting an [`ErrorDetails`] struct from `tonic::Status`
 ```
 use tonic::{Response, Status};
-use tonic_richer_error::{WithErrorDetails};
+use tonic_types::{WithErrorDetails};
 
 // ...
 
@@ -120,8 +122,8 @@ with the [`ErrorDetail`] enum. This approach can provide more control over the
 vector of standard error messages that will be generated or that was received,
 if necessary. To see how to adopt this approach, please check the
 [`WithErrorDetails::with_error_details_vec`] and
-[`WithErrorDetails::get_error_details_vec`] docs, and also the
-[github examples] directory.\
+[`WithErrorDetails::get_error_details_vec`] docs, and also the main repo
+[examples] directory.\
 
 Besides that, multiple examples with alternative error details extraction
 methods are provided in the [`WithErrorDetails`] doc, which can be specially
@@ -134,7 +136,7 @@ more direct way of extracting a [`BadRequest`] error message from
 [`tonic`]: https://docs.rs/tonic/0.8.0/tonic/
 [gRPC Richer Error Model]: https://www.grpc.io/docs/guides/error/
 [protoc-install]: https://grpc.io/docs/protoc-installation/
-[github examples]: https://github.com/flemosr/tonic-richer-error/tree/main/examples
+[examples]: https://github.com/hyperium/tonic/tree/master/examples
 [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
 */
 
@@ -155,6 +157,7 @@ use prost::{DecodeError, Message};
 use prost_types::Any;
 use tonic::{codegen::Bytes, Code};
 
+/// Useful protobuf types
 pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/google.rpc.rs"));
 }
@@ -190,7 +193,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Code, Status};
-    /// use tonic_richer_error::{ErrorDetails, WithErrorDetails};
+    /// use tonic_types::{ErrorDetails, WithErrorDetails};
     ///
     /// let status = Status::with_error_details(
     ///     Code::InvalidArgument,
@@ -210,7 +213,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Code, Status};
-    /// use tonic_richer_error::{BadRequest, WithErrorDetails};
+    /// use tonic_types::{BadRequest, WithErrorDetails};
     ///
     /// let status = Status::with_error_details_vec(
     ///     Code::InvalidArgument,
@@ -236,7 +239,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -260,7 +263,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -287,7 +290,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{ErrorDetail, WithErrorDetails};
+    /// use tonic_types::{ErrorDetail, WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -313,7 +316,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{ErrorDetail, WithErrorDetails};
+    /// use tonic_types::{ErrorDetail, WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -341,7 +344,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -362,7 +365,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -383,7 +386,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -404,7 +407,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -425,7 +428,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -446,7 +449,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -467,7 +470,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -488,7 +491,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -509,7 +512,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -530,7 +533,7 @@ pub trait WithErrorDetails {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_richer_error::{WithErrorDetails};
+    /// use tonic_types::{WithErrorDetails};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
