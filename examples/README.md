@@ -153,3 +153,33 @@ The autoload example requires the following crates installed globally:
 
 * [systemfd](https://crates.io/crates/systemfd)
 * [cargo-watch](https://crates.io/crates/cargo-watch)
+
+## Richer Error Model
+Both clients and both servers do the same thing, but using the two different
+approaches available for implementing the gRPC Richer Error Model using
+`tonic-types`. Run one of the servers in one terminal, and then run the clients
+in another.
+
+### Client using ErrorDetails struct
+
+```bash
+$ cargo run --bin richer-error-client
+```
+
+### Client using standard messages vector
+
+```bash
+$ cargo run --bin richer-error-client-vec
+```
+
+### Server using ErrorDetails struct
+
+```bash
+$ cargo run --bin richer-error-server
+```
+
+### Server using standard messages vector
+
+```bash
+$ cargo run --bin richer-error-server-vec
+```

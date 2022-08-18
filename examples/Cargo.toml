@@ -194,6 +194,22 @@ path = "src/json-codec/client.rs"
 name = "json-codec-server"
 path = "src/json-codec/server.rs"
 
+[[bin]]
+name = "richer-error-client"
+path = "src/richer-error/client.rs"
+
+[[bin]]
+name = "richer-error-server"
+path = "src/richer-error/server.rs"
+
+[[bin]]
+name = "richer-error-client-vec"
+path = "src/richer-error/client_vec.rs"
+
+[[bin]]
+name = "richer-error-server-vec"
+path = "src/richer-error/server_vec.rs"
+
 [dependencies]
 async-stream = "0.3"
 futures = { version = "0.3", default-features = false, features = ["alloc"] }
@@ -229,6 +245,8 @@ bytes = "1"
 tonic-web = { path = "../tonic-web" }
 # streaming example
 h2 = "0.3"
+# Richer Error Model example
+tonic-types = { path = "../tonic-types" }
 
 tokio-rustls = "*"
 hyper-rustls = { version = "0.23", features = ["http2"] }
