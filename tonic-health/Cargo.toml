@@ -17,8 +17,6 @@ version = "0.7.0"
 [features]
 default = ["transport"]
 transport = ["tonic/transport"]
-# generate gRPC code from `.proto`(s)
-gen-proto = ["dep:tonic-build"]
 
 [dependencies]
 async-stream = "0.3"
@@ -30,6 +28,4 @@ tonic = {version = "0.8", path = "../tonic", features = ["codegen", "prost"]}
 
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
-
-[build-dependencies]
-tonic-build = {version = "0.8", path = "../tonic-build", features = ["prost"], optional = true}
+tonic-build = {version = "0.8", path = "../tonic-build", features = ["prost"]}

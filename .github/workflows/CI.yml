@@ -37,10 +37,6 @@ jobs:
       run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
-    - name: Ensure generated code matches
-      run: >
-        echo 'If this fails, run `cargo build --features gen-proto` and commit the changes';
-        git diff --exit-code --name-only -- tonic-health/src/generated/
 
   # deny-check:
   #   name: cargo-deny check
