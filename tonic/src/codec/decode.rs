@@ -21,6 +21,10 @@ const BUFFER_SIZE: usize = 8 * 1024;
 /// to fetch the message stream and trailing metadata
 pub struct Streaming<T> {
     decoder: Box<dyn Decoder<Item = T, Error = Status> + Send + 'static>,
+    inner: StreamingInner,
+}
+
+struct StreamingInner {
     body: BoxBody,
     state: State,
     direction: Direction,
@@ -96,17 +100,154 @@ impl<T> Streaming<T> {
     {
         Self {
             decoder: Box::new(decoder),
-            body: body
-                .map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
-                .map_err(|err| Status::map_error(err.into()))
-                .boxed_unsync(),
-            state: State::ReadHeader,
-            direction,
-            buf: BytesMut::with_capacity(BUFFER_SIZE),
-            trailers: None,
-            decompress_buf: BytesMut::new(),
-            encoding,
+            inner: StreamingInner {
+                body: body
+                    .map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
+                    .map_err(|err| Status::map_error(err.into()))
+                    .boxed_unsync(),
+                state: State::ReadHeader,
+                direction,
+                buf: BytesMut::with_capacity(BUFFER_SIZE),
+                trailers: None,
+                decompress_buf: BytesMut::new(),
+                encoding,
+            },
         }
+    }
+}
+
+impl StreamingInner {
+    fn decode_chunk(&mut self) -> Result<Option<DecodeBuf<'_>>, Status> {
+        if let State::ReadHeader = self.state {
+            if self.buf.remaining() < HEADER_SIZE {
+                return Ok(None);
+            }
+
+            let compression_encoding = match self.buf.get_u8() {
+                0 => None,
+                1 => {
+                    {
+                        if self.encoding.is_some() {
+                            self.encoding
+                        } else {
+                            // https://grpc.github.io/grpc/core/md_doc_compression.html
+                            // An ill-constructed message with its Compressed-Flag bit set but lacking a grpc-encoding
+                            // entry different from identity in its metadata MUST fail with INTERNAL status,
+                            // its associated description indicating the invalid Compressed-Flag condition.
+                            return Err(Status::new(Code::Internal, "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
+                        }
+                    }
+                }
+                f => {
+                    trace!("unexpected compression flag");
+                    let message = if let Direction::Response(status) = self.direction {
+                        format!(
+                            "protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1) while receiving response with status: {}",
+                            f, status
+                        )
+                    } else {
+                        format!("protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1), while sending request", f)
+                    };
+                    return Err(Status::new(Code::Internal, message));
+                }
+            };
+            let len = self.buf.get_u32() as usize;
+            self.buf.reserve(len);
+
+            self.state = State::ReadBody {
+                compression: compression_encoding,
+                len,
+            }
+        }
+
+        if let State::ReadBody { len, compression } = self.state {
+            // if we haven't read enough of the message then return and keep
+            // reading
+            if self.buf.remaining() < len || self.buf.len() < len {
+                return Ok(None);
+            }
+
+            let decode_buf = if let Some(encoding) = compression {
+                self.decompress_buf.clear();
+
+                if let Err(err) = decompress(encoding, &mut self.buf, &mut self.decompress_buf, len)
+                {
+                    let message = if let Direction::Response(status) = self.direction {
+                        format!(
+                            "Error decompressing: {}, while receiving response with status: {}",
+                            err, status
+                        )
+                    } else {
+                        format!("Error decompressing: {}, while sending request", err)
+                    };
+                    return Err(Status::new(Code::Internal, message));
+                }
+                let decompressed_len = self.decompress_buf.len();
+                DecodeBuf::new(&mut self.decompress_buf, decompressed_len)
+            } else {
+                DecodeBuf::new(&mut self.buf, len)
+            };
+
+            return Ok(Some(decode_buf));
+        }
+
+        Ok(None)
+    }
+
+    // Returns Some(()) if data was found or None if the loop in `poll_next` should break
+    fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
+        let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
+            Some(Ok(d)) => Some(d),
+            Some(Err(e)) => {
+                let _ = std::mem::replace(&mut self.state, State::Error);
+                let err: crate::Error = e.into();
+                debug!("decoder inner stream error: {:?}", err);
+                let status = Status::from_error(err);
+                return Poll::Ready(Err(status));
+            }
+            None => None,
+        };
+
+        Poll::Ready(if let Some(data) = chunk {
+            self.buf.put(data);
+            Ok(Some(()))
+        } else {
+            // FIXME: improve buf usage.
+            if self.buf.has_remaining() {
+                trace!("unexpected EOF decoding stream");
+                Err(Status::new(
+                    Code::Internal,
+                    "Unexpected EOF decoding stream.".to_string(),
+                ))
+            } else {
+                Ok(None)
+            }
+        })
+    }
+
+    fn poll_response(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Status>> {
+        if let Direction::Response(status) = self.direction {
+            match ready!(Pin::new(&mut self.body).poll_trailers(cx)) {
+                Ok(trailer) => {
+                    if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
+                        if let Some(e) = e {
+                            return Poll::Ready(Err(e));
+                        } else {
+                            return Poll::Ready(Ok(()));
+                        }
+                    } else {
+                        self.trailers = trailer.map(MetadataMap::from_headers);
+                    }
+                }
+                Err(e) => {
+                    let err: crate::Error = e.into();
+                    debug!("decoder inner trailers error: {:?}", err);
+                    let status = Status::from_error(err);
+                    return Poll::Ready(Err(status));
+                }
+            }
+        }
+        Poll::Ready(Ok(()))
     }
 }
 
@@ -165,7 +306,7 @@ impl<T> Streaming<T> {
     pub async fn trailers(&mut self) -> Result<Option<MetadataMap>, Status> {
         // Shortcut to see if we already pulled the trailers in the stream step
         // we need to do that so that the stream can error on trailing grpc-status
-        if let Some(trailers) = self.trailers.take() {
+        if let Some(trailers) = self.inner.trailers.take() {
             return Ok(Some(trailers));
         }
 
@@ -174,13 +315,13 @@ impl<T> Streaming<T> {
 
         // Since we call poll_trailers internally on poll_next we need to
         // check if it got cached again.
-        if let Some(trailers) = self.trailers.take() {
+        if let Some(trailers) = self.inner.trailers.take() {
             return Ok(Some(trailers));
         }
 
         // Trailers were not caught during poll_next and thus lets poll for
         // them manually.
-        let map = future::poll_fn(|cx| Pin::new(&mut self.body).poll_trailers(cx))
+        let map = future::poll_fn(|cx| Pin::new(&mut self.inner.body).poll_trailers(cx))
             .await
             .map_err(|e| Status::from_error(Box::new(e)));
 
@@ -188,90 +329,16 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
-        if let State::ReadHeader = self.state {
-            if self.buf.remaining() < HEADER_SIZE {
-                return Ok(None);
-            }
-
-            let compression_encoding = match self.buf.get_u8() {
-                0 => None,
-                1 => {
-                    {
-                        if self.encoding.is_some() {
-                            self.encoding
-                        } else {
-                            // https://grpc.github.io/grpc/core/md_doc_compression.html
-                            // An ill-constructed message with its Compressed-Flag bit set but lacking a grpc-encoding
-                            // entry different from identity in its metadata MUST fail with INTERNAL status,
-                            // its associated description indicating the invalid Compressed-Flag condition.
-                            return Err(Status::new(Code::Internal, "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
-                        }
-                    }
-                }
-                f => {
-                    trace!("unexpected compression flag");
-                    let message = if let Direction::Response(status) = self.direction {
-                        format!(
-                            "protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1) while receiving response with status: {}",
-                            f, status
-                        )
-                    } else {
-                        format!("protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1), while sending request", f)
-                    };
-                    return Err(Status::new(Code::Internal, message));
-                }
-            };
-            let len = self.buf.get_u32() as usize;
-            self.buf.reserve(len);
-
-            self.state = State::ReadBody {
-                compression: compression_encoding,
-                len,
-            }
-        }
-
-        if let State::ReadBody { len, compression } = self.state {
-            // if we haven't read enough of the message then return and keep
-            // reading
-            if self.buf.remaining() < len || self.buf.len() < len {
-                return Ok(None);
-            }
-
-            let decoding_result = if let Some(encoding) = compression {
-                self.decompress_buf.clear();
-
-                if let Err(err) = decompress(encoding, &mut self.buf, &mut self.decompress_buf, len)
-                {
-                    let message = if let Direction::Response(status) = self.direction {
-                        format!(
-                            "Error decompressing: {}, while receiving response with status: {}",
-                            err, status
-                        )
-                    } else {
-                        format!("Error decompressing: {}, while sending request", err)
-                    };
-                    return Err(Status::new(Code::Internal, message));
-                }
-                let decompressed_len = self.decompress_buf.len();
-                self.decoder.decode(&mut DecodeBuf::new(
-                    &mut self.decompress_buf,
-                    decompressed_len,
-                ))
-            } else {
-                self.decoder.decode(&mut DecodeBuf::new(&mut self.buf, len))
-            };
-
-            return match decoding_result {
-                Ok(Some(msg)) => {
-                    self.state = State::ReadHeader;
+        match self.inner.decode_chunk()? {
+            Some(mut decode_buf) => match self.decoder.decode(&mut decode_buf)? {
+                Some(msg) => {
+                    self.inner.state = State::ReadHeader;
                     Ok(Some(msg))
                 }
-                Ok(None) => Ok(None),
-                Err(e) => Err(e),
-            };
+                None => Ok(None),
+            },
+            None => Ok(None),
         }
-
-        Ok(None)
     }
 }
 
@@ -280,7 +347,7 @@ impl<T> Stream for Streaming<T> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            if let State::Error = &self.state {
+            if let State::Error = &self.inner.state {
                 return Poll::Ready(None);
             }
 
@@ -291,57 +358,16 @@ impl<T> Stream for Streaming<T> {
                 return Poll::Ready(Some(Ok(item)));
             }
 
-            let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
-                Some(Ok(d)) => Some(d),
-                Some(Err(e)) => {
-                    let _ = std::mem::replace(&mut self.state, State::Error);
-                    let err: crate::Error = e.into();
-                    debug!("decoder inner stream error: {:?}", err);
-                    let status = Status::from_error(err);
-                    return Poll::Ready(Some(Err(status)));
-                }
-                None => None,
-            };
-
-            if let Some(data) = chunk {
-                self.buf.put(data);
-            } else {
-                // FIXME: improve buf usage.
-                if self.buf.has_remaining() {
-                    trace!("unexpected EOF decoding stream");
-                    return Poll::Ready(Some(Err(Status::new(
-                        Code::Internal,
-                        "Unexpected EOF decoding stream.".to_string(),
-                    ))));
-                } else {
-                    break;
-                }
+            match ready!(self.inner.poll_data(cx))? {
+                Some(()) => (),
+                None => break,
             }
         }
 
-        if let Direction::Response(status) = self.direction {
-            match ready!(Pin::new(&mut self.body).poll_trailers(cx)) {
-                Ok(trailer) => {
-                    if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
-                        if let Some(e) = e {
-                            return Some(Err(e)).into();
-                        } else {
-                            return Poll::Ready(None);
-                        }
-                    } else {
-                        self.trailers = trailer.map(MetadataMap::from_headers);
-                    }
-                }
-                Err(e) => {
-                    let err: crate::Error = e.into();
-                    debug!("decoder inner trailers error: {:?}", err);
-                    let status = Status::from_error(err);
-                    return Some(Err(status)).into();
-                }
-            }
-        }
-
-        Poll::Ready(None)
+        Poll::Ready(match ready!(self.inner.poll_response(cx)) {
+            Ok(()) => None,
+            Err(err) => Some(Err(err)),
+        })
     }
 }
 

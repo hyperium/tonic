@@ -58,66 +58,80 @@ where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
 {
-    async_stream::stream! {
-        let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
+    let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
 
-        let compression_encoding = if compression_override == SingleMessageCompressionOverride::Disable {
-            None
-        } else {
-            compression_encoding
-        };
+    let compression_encoding = if compression_override == SingleMessageCompressionOverride::Disable
+    {
+        None
+    } else {
+        compression_encoding
+    };
 
-        let mut uncompression_buf = if compression_encoding.is_some() {
-            BytesMut::with_capacity(BUFFER_SIZE)
-        } else {
-            BytesMut::new()
-        };
+    let mut uncompression_buf = if compression_encoding.is_some() {
+        BytesMut::with_capacity(BUFFER_SIZE)
+    } else {
+        BytesMut::new()
+    };
 
-        futures_util::pin_mut!(source);
+    source.map(move |result| {
+        let item = result?;
 
-        loop {
-            match source.next().await {
-                Some(Ok(item)) => {
-                    buf.reserve(HEADER_SIZE);
-                    unsafe {
-                        buf.advance_mut(HEADER_SIZE);
-                    }
+        encode_item(
+            &mut encoder,
+            &mut buf,
+            &mut uncompression_buf,
+            compression_encoding,
+            item,
+        )
+    })
+}
 
-                    if let Some(encoding) = compression_encoding {
-                        uncompression_buf.clear();
-
-                        encoder.encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
-                            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
-
-                        let uncompressed_len = uncompression_buf.len();
-
-                        compress(
-                            encoding,
-                            &mut uncompression_buf,
-                            &mut buf,
-                            uncompressed_len,
-                        ).map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
-                    } else {
-                        encoder.encode(item, &mut EncodeBuf::new(&mut buf))
-                            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
-                    }
-
-                    // now that we know length, we can write the header
-                    let len = buf.len() - HEADER_SIZE;
-                    assert!(len <= std::u32::MAX as usize);
-                    {
-                        let mut buf = &mut buf[..HEADER_SIZE];
-                        buf.put_u8(compression_encoding.is_some() as u8);
-                        buf.put_u32(len as u32);
-                    }
-
-                    yield Ok(buf.split_to(len + HEADER_SIZE).freeze());
-                },
-                Some(Err(status)) => yield Err(status),
-                None => break,
-            }
-        }
+fn encode_item<T>(
+    encoder: &mut T,
+    buf: &mut BytesMut,
+    uncompression_buf: &mut BytesMut,
+    compression_encoding: Option<CompressionEncoding>,
+    item: T::Item,
+) -> Result<Bytes, Status>
+where
+    T: Encoder<Error = Status>,
+{
+    buf.reserve(HEADER_SIZE);
+    unsafe {
+        buf.advance_mut(HEADER_SIZE);
     }
+
+    if let Some(encoding) = compression_encoding {
+        uncompression_buf.clear();
+
+        encoder
+            .encode(item, &mut EncodeBuf::new(uncompression_buf))
+            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+
+        let uncompressed_len = uncompression_buf.len();
+
+        compress(encoding, uncompression_buf, buf, uncompressed_len)
+            .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
+    } else {
+        encoder
+            .encode(item, &mut EncodeBuf::new(buf))
+            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+    }
+
+    // now that we know length, we can write the header
+    Ok(finish_encoding(compression_encoding, buf))
+}
+
+fn finish_encoding(compression_encoding: Option<CompressionEncoding>, buf: &mut BytesMut) -> Bytes {
+    let len = buf.len() - HEADER_SIZE;
+    assert!(len <= std::u32::MAX as usize);
+    {
+        let mut buf = &mut buf[..HEADER_SIZE];
+        buf.put_u8(compression_encoding.is_some() as u8);
+        buf.put_u32(len as u32);
+    }
+
+    buf.split_to(len + HEADER_SIZE).freeze()
 }
 
 #[derive(Debug)]
@@ -131,6 +145,11 @@ enum Role {
 pub(crate) struct EncodeBody<S> {
     #[pin]
     inner: S,
+    state: EncodeState,
+}
+
+#[derive(Debug)]
+struct EncodeState {
     error: Option<Status>,
     role: Role,
     is_end_stream: bool,
@@ -143,18 +162,44 @@ where
     pub(crate) fn new_client(inner: S) -> Self {
         Self {
             inner,
-            error: None,
-            role: Role::Client,
-            is_end_stream: false,
+            state: EncodeState {
+                error: None,
+                role: Role::Client,
+                is_end_stream: false,
+            },
         }
     }
 
     pub(crate) fn new_server(inner: S) -> Self {
         Self {
             inner,
-            error: None,
-            role: Role::Server,
-            is_end_stream: false,
+            state: EncodeState {
+                error: None,
+                role: Role::Server,
+                is_end_stream: false,
+            },
+        }
+    }
+}
+
+impl EncodeState {
+    fn trailers(&mut self) -> Result<Option<HeaderMap>, Status> {
+        match self.role {
+            Role::Client => Ok(None),
+            Role::Server => {
+                if self.is_end_stream {
+                    return Ok(None);
+                }
+
+                let status = if let Some(status) = self.error.take() {
+                    self.is_end_stream = true;
+                    status
+                } else {
+                    Status::new(Code::Ok, "")
+                };
+
+                Ok(Some(status.to_header_map()?))
+            }
         }
     }
 }
@@ -167,7 +212,7 @@ where
     type Error = Status;
 
     fn is_end_stream(&self) -> bool {
-        self.is_end_stream
+        self.state.is_end_stream
     }
 
     fn poll_data(
@@ -177,10 +222,10 @@ where
         let mut self_proj = self.project();
         match ready!(self_proj.inner.try_poll_next_unpin(cx)) {
             Some(Ok(d)) => Some(Ok(d)).into(),
-            Some(Err(status)) => match self_proj.role {
+            Some(Err(status)) => match self_proj.state.role {
                 Role::Client => Some(Err(status)).into(),
                 Role::Server => {
-                    *self_proj.error = Some(status);
+                    self_proj.state.error = Some(status);
                     None.into()
                 }
             },
@@ -192,24 +237,6 @@ where
         self: Pin<&mut Self>,
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Option<HeaderMap>, Status>> {
-        match self.role {
-            Role::Client => Poll::Ready(Ok(None)),
-            Role::Server => {
-                let self_proj = self.project();
-
-                if *self_proj.is_end_stream {
-                    return Poll::Ready(Ok(None));
-                }
-
-                let status = if let Some(status) = self_proj.error.take() {
-                    *self_proj.is_end_stream = true;
-                    status
-                } else {
-                    Status::new(Code::Ok, "")
-                };
-
-                Poll::Ready(Ok(Some(status.to_header_map()?)))
-            }
-        }
+        Poll::Ready(self.project().state.trailers())
     }
 }
