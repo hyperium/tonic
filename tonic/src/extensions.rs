@@ -7,6 +7,7 @@ use std::fmt;
 ///
 /// [`Interceptor`]: crate::service::Interceptor
 /// [`Request`]: crate::Request
+#[derive(Default)]
 pub struct Extensions {
     inner: http::Extensions,
 }
@@ -58,8 +59,9 @@ impl Extensions {
         Self { inner: http }
     }
 
+    /// Convert to `http::Extensions` and consume self.
     #[inline]
-    pub(crate) fn into_http(self) -> http::Extensions {
+    pub fn into_http(self) -> http::Extensions {
         self.inner
     }
 }
