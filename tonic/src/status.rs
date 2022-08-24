@@ -310,8 +310,12 @@ impl Status {
         Self::from_error(err.into())
     }
 
+    /// Create a `Status` from various types of `Error`.
+    ///
+    /// Inspects the error source chain for recognizable errors, including statuses, HTTP2, and
+    /// hyper, and attempts to maps them to a `Status`, or else returns an Unknown `Status`.
     #[cfg_attr(not(feature = "transport"), allow(dead_code))]
-    pub(crate) fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
+    pub fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
         Status::try_from_error(err).unwrap_or_else(|err| {
             let mut status = Status::new(Code::Unknown, err.to_string());
             status.source = Some(err);
