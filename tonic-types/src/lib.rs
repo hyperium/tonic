@@ -13,7 +13,8 @@
 #![doc(html_root_url = "https://docs.rs/tonic-types/0.6.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
-mod pb {
+/// Useful protobuf types
+pub mod pb {
     include!(concat!(env!("OUT_DIR"), "/google.rpc.rs"));
 }
 
