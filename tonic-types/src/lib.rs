@@ -27,7 +27,7 @@ use tonic::{codegen::Bytes, Code};
 
 /// Useful protobuf types
 pub mod pb {
-    include!(concat!(env!("OUT_DIR"), "/google.rpc.rs"));
+    include!("generated/google.rpc.rs");
 }
 
 pub use pb::Status;
