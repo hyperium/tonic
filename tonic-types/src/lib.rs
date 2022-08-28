@@ -23,7 +23,7 @@
 
 use prost::{DecodeError, Message};
 use prost_types::Any;
-use tonic::{codegen::Bytes, Code};
+use tonic::{codegen::Bytes, metadata::MetadataMap, Code};
 
 /// Useful protobuf types
 pub mod pb {
@@ -64,6 +64,28 @@ fn gen_details_bytes(code: Code, message: &String, details: Vec<Any>) -> Bytes {
 /// allow the addition and extraction of standard error details.
 pub trait WithErrorDetails {
     /// Generates a `tonic::Status` with error details obtained from an
+    /// [`ErrorDetails`] struct, and custom metadata.
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{metadata::MetadataMap, Code, Status};
+    /// use tonic_types::{ErrorDetails, WithErrorDetails};
+    ///
+    /// let status = Status::with_error_details_and_metadata(
+    ///     Code::InvalidArgument,
+    ///     "bad request",
+    ///     ErrorDetails::with_bad_request_violation("field", "description"),
+    ///     MetadataMap::new()
+    /// );
+    /// ```
+    fn with_error_details_and_metadata(
+        code: Code,
+        message: impl Into<String>,
+        details: ErrorDetails,
+        metadata: MetadataMap,
+    ) -> tonic::Status;
+
+    /// Generates a `tonic::Status` with error details obtained from an
     /// [`ErrorDetails`] struct.
     /// # Examples
     ///
@@ -81,6 +103,30 @@ pub trait WithErrorDetails {
         code: Code,
         message: impl Into<String>,
         details: ErrorDetails,
+    ) -> tonic::Status;
+
+    /// Generates a `tonic::Status` with error details provided in a vector of
+    /// [`ErrorDetail`] enums, and custom metadata.
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{metadata::MetadataMap, Code, Status};
+    /// use tonic_types::{BadRequest, WithErrorDetails};
+    ///
+    /// let status = Status::with_error_details_vec_and_metadata(
+    ///     Code::InvalidArgument,
+    ///     "bad request",
+    ///     vec![
+    ///         BadRequest::with_violation("field", "description").into(),
+    ///     ],
+    ///     MetadataMap::new()
+    /// );
+    /// ```
+    fn with_error_details_vec_and_metadata(
+        code: Code,
+        message: impl Into<String>,
+        details: impl IntoIterator<Item = ErrorDetail>,
+        metadata: MetadataMap,
     ) -> tonic::Status;
 
     /// Generates a `tonic::Status` with error details provided in a vector of
@@ -237,7 +283,12 @@ pub trait WithErrorDetails {
 }
 
 impl WithErrorDetails for tonic::Status {
-    fn with_error_details(code: Code, message: impl Into<String>, details: ErrorDetails) -> Self {
+    fn with_error_details_and_metadata(
+        code: Code,
+        message: impl Into<String>,
+        details: ErrorDetails,
+        metadata: MetadataMap,
+    ) -> Self {
         let message: String = message.into();
 
         let mut conv_details: Vec<Any> = Vec::with_capacity(10);
@@ -248,13 +299,18 @@ impl WithErrorDetails for tonic::Status {
 
         let details = gen_details_bytes(code, &message, conv_details);
 
-        tonic::Status::with_details(code, message, details)
+        tonic::Status::with_details_and_metadata(code, message, details, metadata)
     }
 
-    fn with_error_details_vec(
+    fn with_error_details(code: Code, message: impl Into<String>, details: ErrorDetails) -> Self {
+        tonic::Status::with_error_details_and_metadata(code, message, details, MetadataMap::new())
+    }
+
+    fn with_error_details_vec_and_metadata(
         code: Code,
         message: impl Into<String>,
         details: impl IntoIterator<Item = ErrorDetail>,
+        metadata: MetadataMap,
     ) -> Self {
         let message: String = message.into();
 
@@ -270,7 +326,20 @@ impl WithErrorDetails for tonic::Status {
 
         let details = gen_details_bytes(code, &message, conv_details);
 
-        tonic::Status::with_details(code, message, details)
+        tonic::Status::with_details_and_metadata(code, message, details, metadata)
+    }
+
+    fn with_error_details_vec(
+        code: Code,
+        message: impl Into<String>,
+        details: impl IntoIterator<Item = ErrorDetail>,
+    ) -> Self {
+        tonic::Status::with_error_details_vec_and_metadata(
+            code,
+            message,
+            details,
+            MetadataMap::new(),
+        )
     }
 
     fn check_error_details(&self) -> Result<ErrorDetails, DecodeError> {
