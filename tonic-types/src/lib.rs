@@ -1,14 +1,12 @@
-/*!
-A collection of useful protobuf types that can be used with `tonic`.
-
-This crate also introduces the [`WithErrorDetails`] trait and implements it in
-[`tonic::Status`], allowing the implementation of the [gRPC Richer Error Model]
-with [`tonic`] in a convenient way.
-
-[`tonic::Status`]: https://docs.rs/tonic/0.8.0/tonic/struct.Status.html
-[`tonic`]: https://docs.rs/tonic/0.8.0/tonic/
-[gRPC Richer Error Model]: https://www.grpc.io/docs/guides/error/
-*/
+//! A collection of useful protobuf types that can be used with `tonic`.
+//!
+//! This crate also introduces the [`WithErrorDetails`] trait and implements it
+//! in [`tonic::Status`], allowing the implementation of the
+//! [gRPC Richer Error Model] with [`tonic`] in a convenient way.
+//!
+//! [`tonic::Status`]: https://docs.rs/tonic/0.8.0/tonic/struct.Status.html
+//! [`tonic`]: https://docs.rs/tonic/0.8.0/tonic/
+//! [gRPC Richer Error Model]: https://www.grpc.io/docs/guides/error/
 
 #![warn(
     missing_debug_implementations,
@@ -38,11 +36,9 @@ mod error_details;
 mod error_details_vec;
 mod std_messages;
 
-pub use std_messages::*;
-
 pub use error_details::ErrorDetails;
-
 pub use error_details_vec::ErrorDetail;
+pub use std_messages::{BadRequest, FieldViolation};
 
 trait IntoAny {
     fn into_any(self) -> Any;
@@ -52,6 +48,16 @@ trait FromAny {
     fn from_any(any: Any) -> Result<Self, DecodeError>
     where
         Self: Sized;
+}
+
+fn gen_details_bytes(code: Code, message: &String, details: Vec<Any>) -> Bytes {
+    let status = pb::Status {
+        code: code as i32,
+        message: message.clone(),
+        details,
+    };
+
+    Bytes::from(status.encode_to_vec())
 }
 
 /// Used to implement associated functions and methods on `tonic::Status`, that
@@ -72,7 +78,7 @@ pub trait WithErrorDetails {
     /// );
     /// ```
     fn with_error_details(
-        code: tonic::Code,
+        code: Code,
         message: impl Into<String>,
         details: ErrorDetails,
     ) -> tonic::Status;
@@ -94,9 +100,9 @@ pub trait WithErrorDetails {
     /// );
     /// ```
     fn with_error_details_vec(
-        code: tonic::Code,
+        code: Code,
         message: impl Into<String>,
-        details: Vec<ErrorDetail>,
+        details: impl IntoIterator<Item = ErrorDetail>,
     ) -> tonic::Status;
 
     /// Can be used to check if the error details contained in `tonic::Status`
@@ -116,7 +122,7 @@ pub trait WithErrorDetails {
     ///         Ok(_) => {},
     ///         Err(status) => {
     ///             let err_details = status.get_error_details();
-    ///             if let Some(bad_request) = err_details.bad_request {
+    ///             if let Some(bad_request) = err_details.bad_request() {
     ///                 // Handle bad_request details
     ///             }
     ///             // ...
@@ -140,7 +146,7 @@ pub trait WithErrorDetails {
     ///         Ok(_) => {},
     ///         Err(status) => {
     ///             let err_details = status.get_error_details();
-    ///             if let Some(bad_request) = err_details.bad_request {
+    ///             if let Some(bad_request) = err_details.bad_request() {
     ///                 // Handle bad_request details
     ///             }
     ///             // ...
@@ -240,23 +246,19 @@ impl WithErrorDetails for tonic::Status {
             conv_details.push(bad_request.into_any());
         }
 
-        let status = pb::Status {
-            code: code as i32,
-            message: message.clone(),
-            details: conv_details,
-        };
+        let details = gen_details_bytes(code, &message, conv_details);
 
-        tonic::Status::with_details(code, message, Bytes::from(status.encode_to_vec()))
+        tonic::Status::with_details(code, message, details)
     }
 
     fn with_error_details_vec(
         code: Code,
         message: impl Into<String>,
-        details: Vec<ErrorDetail>,
+        details: impl IntoIterator<Item = ErrorDetail>,
     ) -> Self {
         let message: String = message.into();
 
-        let mut conv_details: Vec<Any> = Vec::with_capacity(details.len());
+        let mut conv_details: Vec<Any> = Vec::new();
 
         for error_detail in details.into_iter() {
             match error_detail {
@@ -266,13 +268,9 @@ impl WithErrorDetails for tonic::Status {
             }
         }
 
-        let status = pb::Status {
-            code: code as i32,
-            message: message.clone(),
-            details: conv_details,
-        };
+        let details = gen_details_bytes(code, &message, conv_details);
 
-        tonic::Status::with_details(code, message, Bytes::from(status.encode_to_vec()))
+        tonic::Status::with_details(code, message, details)
     }
 
     fn check_error_details(&self) -> Result<ErrorDetails, DecodeError> {
@@ -348,13 +346,9 @@ mod tests {
 
         let fmt_details = format!("{:?}", err_details);
 
-        println!("{fmt_details}\n");
-
         let err_details_vec = vec![BadRequest::with_violation("field", "description").into()];
 
         let fmt_details_vec = format!("{:?}", err_details_vec);
-
-        println!("{fmt_details_vec}\n");
 
         let status_from_struct = Status::with_error_details(
             Code::InvalidArgument,
@@ -362,19 +356,11 @@ mod tests {
             err_details,
         );
 
-        let fmt_status_with_details = format!("{:?}", status_from_struct);
-
-        println!("{:?}\n", fmt_status_with_details);
-
         let status_from_vec = Status::with_error_details_vec(
             Code::InvalidArgument,
             "error with bad request details",
             err_details_vec,
         );
-
-        let fmt_status_with_details_vec = format!("{:?}", status_from_vec);
-
-        println!("{:?}\n", fmt_status_with_details_vec);
 
         let ext_details = match status_from_vec.check_error_details() {
             Ok(ext_details) => ext_details,
@@ -385,8 +371,6 @@ mod tests {
         };
 
         let fmt_ext_details = format!("{:?}", ext_details);
-
-        println!("{fmt_ext_details}\n");
 
         assert!(
             fmt_ext_details.eq(&fmt_details),
@@ -402,8 +386,6 @@ mod tests {
         };
 
         let fmt_ext_details_vec = format!("{:?}", ext_details_vec);
-
-        println!("fmt_ext_details_vec: {:?}\n", fmt_ext_details_vec);
 
         assert!(
             fmt_ext_details_vec.eq(&fmt_details_vec),

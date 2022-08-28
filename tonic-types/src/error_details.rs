@@ -1,13 +1,14 @@
-use super::std_messages::*;
+use super::std_messages::{BadRequest, FieldViolation};
 
 /// Groups the standard error messages structs. Provides associated
 /// functions and methods to setup and edit each error message independently.
 /// Used when extracting error details from `tonic::Status`, and when
 /// creating a `tonic::Status` with error details.
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct ErrorDetails {
     /// This field stores [`BadRequest`] data, if any.
-    pub bad_request: Option<BadRequest>,
+    pub(crate) bad_request: Option<BadRequest>,
 }
 
 impl ErrorDetails {
@@ -63,9 +64,12 @@ impl ErrorDetails {
             ..ErrorDetails::new()
         }
     }
-}
 
-impl ErrorDetails {
+    /// Get [`BadRequest`] details, if any
+    pub fn bad_request(&self) -> Option<BadRequest> {
+        self.bad_request.clone()
+    }
+
     /// Set [`BadRequest`] details. Can be chained with other `.set_` and
     /// `.add_` [`ErrorDetails`] methods.
     /// # Examples

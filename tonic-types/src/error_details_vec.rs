@@ -1,7 +1,8 @@
-use super::std_messages::*;
+use super::std_messages::BadRequest;
 
 /// Wraps the structs corresponding to the standard error messages, allowing
 /// the implementation and handling of vectors containing any of them.
+#[non_exhaustive]
 #[derive(Clone, Debug)]
 pub enum ErrorDetail {
     /// Wraps the [`BadRequest`] struct.

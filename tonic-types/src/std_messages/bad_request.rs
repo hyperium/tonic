@@ -57,9 +57,7 @@ impl BadRequest {
             }],
         }
     }
-}
 
-impl BadRequest {
     /// Adds a [`FieldViolation`] to [`BadRequest`]'s `field_violations`.
     pub fn add_violation(
         &mut self,
@@ -131,8 +129,6 @@ mod tests {
         let mut br_details = BadRequest::new(Vec::new());
         let formatted = format!("{:?}", br_details);
 
-        println!("empty BadRequest -> {formatted}");
-
         let expected = "BadRequest { field_violations: [] }";
 
         assert!(
@@ -151,8 +147,6 @@ mod tests {
 
         let formatted = format!("{:?}", br_details);
 
-        println!("filled BadRequest -> {formatted}");
-
         let expected_filled = "BadRequest { field_violations: [FieldViolation { field: \"field_a\", description: \"description_a\" }, FieldViolation { field: \"field_b\", description: \"description_b\" }] }";
 
         assert!(
@@ -168,8 +162,6 @@ mod tests {
         let gen_any = br_details.into_any();
         let formatted = format!("{:?}", gen_any);
 
-        println!("Any generated from BadRequest -> {formatted}");
-
         let expected = "Any { type_url: \"type.googleapis.com/google.rpc.BadRequest\", value: [10, 24, 10, 7, 102, 105, 101, 108, 100, 95, 97, 18, 13, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 95, 97, 10, 24, 10, 7, 102, 105, 101, 108, 100, 95, 98, 18, 13, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 95, 98] }";
 
         assert!(
@@ -183,8 +175,6 @@ mod tests {
         };
 
         let formatted = format!("{:?}", br_details);
-
-        println!("BadRequest generated from Any -> {formatted}");
 
         assert!(
             formatted.eq(expected_filled),
