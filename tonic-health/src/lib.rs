@@ -23,14 +23,14 @@
 
 use std::fmt::{Display, Formatter};
 
-/// Generated protobuf types from the `grpc.healthy.v1` package.
+/// Generated protobuf types from the `grpc.health.v1` package.
 pub mod proto {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
-    tonic::include_proto!("grpc.health.v1");
+    include!("generated/grpc.health.v1.rs");
 
     pub const GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET: &[u8] =
-        tonic::include_file_descriptor_set!("grpc_health_v1");
+        include_bytes!("generated/grpc_health_v1.bin");
 }
 
 pub mod server;
