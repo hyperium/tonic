@@ -90,6 +90,7 @@ pub struct Server<L = Identity> {
     tcp_nodelay: bool,
     http2_keepalive_interval: Option<Duration>,
     http2_keepalive_timeout: Option<Duration>,
+    http2_adaptive_window: Option<bool>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
@@ -110,6 +111,7 @@ impl Default for Server<Identity> {
             tcp_nodelay: false,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: None,
+            http2_adaptive_window: None,
             max_frame_size: None,
             accept_http1: false,
             service_builder: Default::default(),
@@ -254,6 +256,17 @@ impl<L> Server<L> {
     pub fn http2_keepalive_timeout(self, http2_keepalive_timeout: Option<Duration>) -> Self {
         Server {
             http2_keepalive_timeout,
+            ..self
+        }
+    }
+
+    /// Sets whether to use an adaptive flow control. Defaults to false.
+    /// Enabling this will override the limits set in http2_initial_stream_window_size and
+    /// http2_initial_connection_window_size.
+    #[must_use]
+    pub fn http2_adaptive_window(self, enabled: Option<bool>) -> Self {
+        Server {
+            http2_adaptive_window: enabled,
             ..self
         }
     }
@@ -439,6 +452,7 @@ impl<L> Server<L> {
             tcp_nodelay: self.tcp_nodelay,
             http2_keepalive_interval: self.http2_keepalive_interval,
             http2_keepalive_timeout: self.http2_keepalive_timeout,
+            http2_adaptive_window: self.http2_adaptive_window,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
         }
@@ -476,6 +490,7 @@ impl<L> Server<L> {
         let http2_keepalive_timeout = self
             .http2_keepalive_timeout
             .unwrap_or_else(|| Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
+        let http2_adaptive_window = self.http2_adaptive_window;
 
         let svc = self.service_builder.service(svc);
 
@@ -497,6 +512,7 @@ impl<L> Server<L> {
             .http2_max_concurrent_streams(max_concurrent_streams)
             .http2_keep_alive_interval(http2_keepalive_interval)
             .http2_keep_alive_timeout(http2_keepalive_timeout)
+            .http2_adaptive_window(http2_adaptive_window.unwrap_or_default())
             .http2_max_frame_size(max_frame_size);
 
         if let Some(signal) = signal {
