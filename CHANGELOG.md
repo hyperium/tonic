@@ -1,4 +1,14 @@
-# [v0.8.0](https://github.com/hyperium/tonic/compare/v0.7.2...v0.8.0) (2022-07-29)
+# [0.8.1](https://github.com/hyperium/tonic/compare/v0.8.0...v0.8.1) (2022-09-07)
+
+
+### Features
+
+* **transport:** Expose hyper's H2 adaptive window on server ([#1071](https://github.com/hyperium/tonic/issues/1071)) ([919d28b](https://github.com/hyperium/tonic/commit/919d28b2b96c7c803cec131a9e36e80d2b071701))
+* Reduce the amount of monomorphized code.
+* Expose `Extensions::into_http` and `Status::from_error`.
+* **health:** Remove `build.rs` and commit generated code.
+
+# [0.8.0](https://github.com/hyperium/tonic/compare/v0.7.2...v0.8.0) (2022-07-29)
 
 
 ### Features
@@ -16,7 +26,7 @@
 * **tonic** Remove codegen depedency on `compression` feature.
 * **tonic** Remove `compression` feature in favor of `gzip` feature.
 
-# [v0.7.2](https://github.com/hyperium/tonic/compare/v0.7.1...v0.7.2) (2022-05-04)
+# [0.7.2](https://github.com/hyperium/tonic/compare/v0.7.1...v0.7.2) (2022-05-04)
 
 
 ### Bug Fixes

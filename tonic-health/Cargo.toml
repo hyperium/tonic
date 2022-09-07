@@ -12,7 +12,7 @@ license = "MIT"
 name = "tonic-health"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.7.0"
+version = "0.7.1"
 
 [features]
 default = ["transport"]
