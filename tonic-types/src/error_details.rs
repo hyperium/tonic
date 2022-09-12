@@ -1,5 +1,7 @@
 use super::std_messages::{BadRequest, FieldViolation};
 
+pub(crate) mod vec;
+
 /// Groups the standard error messages structs. Provides associated
 /// functions and methods to setup and edit each error message independently.
 /// Used when extracting error details from `tonic::Status`, and when
@@ -13,6 +15,7 @@ pub struct ErrorDetails {
 
 impl ErrorDetails {
     /// Generates an [`ErrorDetails`] struct with all fields set to `None`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -26,6 +29,7 @@ impl ErrorDetails {
 
     /// Generates an [`ErrorDetails`] struct with [`BadRequest`] details and
     /// remaining fields set to `None`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -45,6 +49,7 @@ impl ErrorDetails {
 
     /// Generates an [`ErrorDetails`] struct with [`BadRequest`] details (one
     /// [`FieldViolation`] set) and remaining fields set to `None`.
+    ///
     /// # Examples
     ///
     /// ```
@@ -72,6 +77,7 @@ impl ErrorDetails {
 
     /// Set [`BadRequest`] details. Can be chained with other `.set_` and
     /// `.add_` [`ErrorDetails`] methods.
+    ///
     /// # Examples
     ///
     /// ```
@@ -92,6 +98,7 @@ impl ErrorDetails {
     /// Adds a [`FieldViolation`] to [`BadRequest`] details. Sets
     /// [`BadRequest`] details if it is not set yet. Can be chained with other
     /// `.set_` and `.add_` [`ErrorDetails`] methods.
+    ///
     /// # Examples
     ///
     /// ```
@@ -119,6 +126,7 @@ impl ErrorDetails {
 
     /// Returns `true` if [`BadRequest`] is set and its `field_violations`
     /// vector is not empty, otherwise returns `false`.
+    ///
     /// # Examples
     ///
     /// ```

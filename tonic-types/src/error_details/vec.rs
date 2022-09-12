@@ -1,4 +1,4 @@
-use super::std_messages::BadRequest;
+use super::super::std_messages::BadRequest;
 
 /// Wraps the structs corresponding to the standard error messages, allowing
 /// the implementation and handling of vectors containing any of them.

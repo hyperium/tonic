@@ -120,7 +120,6 @@ impl FromAny for BadRequest {
 
 #[cfg(test)]
 mod tests {
-
     use super::super::super::{FromAny, IntoAny};
     use super::BadRequest;
 

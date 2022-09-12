@@ -1,11 +1,11 @@
 //! A collection of useful protobuf types that can be used with `tonic`.
 //!
-//! This crate also introduces the [`WithErrorDetails`] trait and implements it
-//! in [`tonic::Status`], allowing the implementation of the
+//! This crate also introduces the [`StatusExt`] trait and implements it in
+//! [`tonic::Status`], allowing the implementation of the
 //! [gRPC Richer Error Model] with [`tonic`] in a convenient way.
 //!
-//! [`tonic::Status`]: https://docs.rs/tonic/0.8.0/tonic/struct.Status.html
-//! [`tonic`]: https://docs.rs/tonic/0.8.0/tonic/
+//! [`tonic::Status`]: https://docs.rs/tonic/latest/tonic/struct.Status.html
+//! [`tonic`]: https://docs.rs/tonic/latest/tonic/
 //! [gRPC Richer Error Model]: https://www.grpc.io/docs/guides/error/
 
 #![warn(
@@ -33,11 +33,9 @@ pub mod pb {
 pub use pb::Status;
 
 mod error_details;
-mod error_details_vec;
 mod std_messages;
 
-pub use error_details::ErrorDetails;
-pub use error_details_vec::ErrorDetail;
+pub use error_details::{vec::ErrorDetail, ErrorDetails};
 pub use std_messages::{BadRequest, FieldViolation};
 
 trait IntoAny {
@@ -62,14 +60,15 @@ fn gen_details_bytes(code: Code, message: &String, details: Vec<Any>) -> Bytes {
 
 /// Used to implement associated functions and methods on `tonic::Status`, that
 /// allow the addition and extraction of standard error details.
-pub trait WithErrorDetails {
+pub trait StatusExt {
     /// Generates a `tonic::Status` with error details obtained from an
     /// [`ErrorDetails`] struct, and custom metadata.
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{metadata::MetadataMap, Code, Status};
-    /// use tonic_types::{ErrorDetails, WithErrorDetails};
+    /// use tonic_types::{ErrorDetails, StatusExt};
     ///
     /// let status = Status::with_error_details_and_metadata(
     ///     Code::InvalidArgument,
@@ -87,11 +86,12 @@ pub trait WithErrorDetails {
 
     /// Generates a `tonic::Status` with error details obtained from an
     /// [`ErrorDetails`] struct.
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{Code, Status};
-    /// use tonic_types::{ErrorDetails, WithErrorDetails};
+    /// use tonic_types::{ErrorDetails, StatusExt};
     ///
     /// let status = Status::with_error_details(
     ///     Code::InvalidArgument,
@@ -107,11 +107,12 @@ pub trait WithErrorDetails {
 
     /// Generates a `tonic::Status` with error details provided in a vector of
     /// [`ErrorDetail`] enums, and custom metadata.
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{metadata::MetadataMap, Code, Status};
-    /// use tonic_types::{BadRequest, WithErrorDetails};
+    /// use tonic_types::{BadRequest, StatusExt};
     ///
     /// let status = Status::with_error_details_vec_and_metadata(
     ///     Code::InvalidArgument,
@@ -131,11 +132,12 @@ pub trait WithErrorDetails {
 
     /// Generates a `tonic::Status` with error details provided in a vector of
     /// [`ErrorDetail`] enums.
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{Code, Status};
-    /// use tonic_types::{BadRequest, WithErrorDetails};
+    /// use tonic_types::{BadRequest, StatusExt};
     ///
     /// let status = Status::with_error_details_vec(
     ///     Code::InvalidArgument,
@@ -155,13 +157,14 @@ pub trait WithErrorDetails {
     /// are malformed or not. Tries to get an [`ErrorDetails`] struct from a
     /// `tonic::Status`. If some `prost::DecodeError` occurs, it will be
     /// returned. If not debugging, consider using
-    /// [`WithErrorDetails::get_error_details`] or
-    /// [`WithErrorDetails::get_error_details_vec`].
+    /// [`StatusExt::get_error_details`] or
+    /// [`StatusExt::get_error_details_vec`].
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{WithErrorDetails};
+    /// use tonic_types::{StatusExt};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -181,11 +184,12 @@ pub trait WithErrorDetails {
     /// Get an [`ErrorDetails`] struct from `tonic::Status`. If some
     /// `prost::DecodeError` occurs, an empty [`ErrorDetails`] struct will be
     /// returned.
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{WithErrorDetails};
+    /// use tonic_types::{StatusExt};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -206,13 +210,14 @@ pub trait WithErrorDetails {
     /// are malformed or not. Tries to get a vector of [`ErrorDetail`] enums
     /// from a `tonic::Status`. If some `prost::DecodeError` occurs, it will be
     /// returned. If not debugging, consider using
-    /// [`WithErrorDetails::get_error_details_vec`] or
-    /// [`WithErrorDetails::get_error_details`].
+    /// [`StatusExt::get_error_details_vec`] or
+    /// [`StatusExt::get_error_details`].
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{ErrorDetail, WithErrorDetails};
+    /// use tonic_types::{ErrorDetail, StatusExt};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -234,11 +239,12 @@ pub trait WithErrorDetails {
 
     /// Get a vector of [`ErrorDetail`] enums from `tonic::Status`. If some
     /// `prost::DecodeError` occurs, an empty vector will be returned.
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{ErrorDetail, WithErrorDetails};
+    /// use tonic_types::{ErrorDetail, StatusExt};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -262,11 +268,12 @@ pub trait WithErrorDetails {
 
     /// Get first [`BadRequest`] details found on `tonic::Status`, if any. If
     /// some `prost::DecodeError` occurs, returns `None`.
+    ///
     /// # Examples
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{WithErrorDetails};
+    /// use tonic_types::{StatusExt};
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -282,7 +289,7 @@ pub trait WithErrorDetails {
     fn get_details_bad_request(&self) -> Option<BadRequest>;
 }
 
-impl WithErrorDetails for tonic::Status {
+impl StatusExt for tonic::Status {
     fn with_error_details_and_metadata(
         code: Code,
         message: impl Into<String>,
@@ -405,7 +412,7 @@ impl WithErrorDetails for tonic::Status {
 mod tests {
     use tonic::{Code, Status};
 
-    use super::{BadRequest, ErrorDetails, WithErrorDetails};
+    use super::{BadRequest, ErrorDetails, StatusExt};
 
     #[test]
     fn gen_status_with_details() {
