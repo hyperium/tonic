@@ -3,7 +3,7 @@ use crate::metadata::MetadataMap;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
-use std::{borrow::Cow, error::Error, fmt};
+use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 use tracing::{debug, trace, warn};
 
 const ENCODING_SET: &AsciiSet = &CONTROLS
@@ -33,6 +33,7 @@ const GRPC_STATUS_DETAILS_HEADER: &str = "grpc-status-details-bin";
 /// assert_eq!(status1.code(), Code::InvalidArgument);
 /// assert_eq!(status1.code(), status2.code());
 /// ```
+#[derive(Clone)]
 pub struct Status {
     /// The gRPC status code, found in the `grpc-status` header.
     code: Code,
@@ -45,7 +46,7 @@ pub struct Status {
     /// or by `Status` fields above, they will be ignored.
     metadata: MetadataMap,
     /// Optional underlying error.
-    source: Option<Box<dyn Error + Send + Sync + 'static>>,
+    source: Option<Arc<dyn Error + Send + Sync + 'static>>,
 }
 
 /// gRPC status codes used by [`Status`].
@@ -318,7 +319,7 @@ impl Status {
     pub fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
         Status::try_from_error(err).unwrap_or_else(|err| {
             let mut status = Status::new(Code::Unknown, err.to_string());
-            status.source = Some(err);
+            status.source = Some(err.into());
             status
         })
     }
@@ -342,7 +343,7 @@ impl Status {
         };
 
         if let Some(mut status) = find_status_in_source_chain(&*err) {
-            status.source = Some(err);
+            status.source = Some(err.into());
             return Ok(status);
         }
 
@@ -370,7 +371,7 @@ impl Status {
         };
 
         let mut status = Self::new(code, format!("h2 protocol error: {}", err));
-        status.source = Some(err);
+        status.source = Some(Arc::new(*err));
         status
     }
 
