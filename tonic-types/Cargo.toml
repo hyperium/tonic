@@ -17,6 +17,7 @@ version = "0.6.0"
 [dependencies]
 prost = "0.11"
 prost-types = "0.11"
+tonic = {version = "0.8", path = "../tonic"}
 
-[build-dependencies]
-prost-build = "0.11"
+[dev-dependencies]
+tonic-build = {version = "0.8", path = "../tonic-build", features = ["prost"]}
