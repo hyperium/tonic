@@ -123,4 +123,4 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 #[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;
 
-pub type Result<T> = std::result::Result<T, Status>;
+pub type Result<T, E = Status> = std::result::Result<T, E>;
