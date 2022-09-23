@@ -15,14 +15,15 @@ repository = "https://github.com/hyperium/tonic"
 version = "0.8.0"
 
 [dependencies]
-prettyplease = {version = "0.1"}
+prettyplease = { version = "0.1" }
 proc-macro2 = "1.0"
-prost-build = {version = "0.11", optional = true}
+prost-build = { version = "0.11", optional = true }
 quote = "1.0"
 syn = "1.0"
 
 [features]
 default = ["transport", "prost"]
+cleanup-markdown = ["prost-build/cleanup-markdown"]
 prost = ["prost-build"]
 transport = []
 

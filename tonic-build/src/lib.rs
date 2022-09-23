@@ -1,6 +1,13 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
 //! and proto definitiones for use with `tonic`.
 //!
+//! # Feature flags
+//! - `cleanup-markdown`: Enables cleaning up documentation from the generated code. Useful
+//! when documentation of generated code fails `cargo test --doc`.
+//! - `prost`: Enables usage of prost generator (enabled by default).
+//! - `transport`: Enables generation of `connect` method using `tonic::transport::Channel`
+//! (enabled by default).
+//!
 //! # Required dependencies
 //!
 //! ```toml
