@@ -2,6 +2,7 @@
 //! and proto definitiones for use with `tonic`.
 //!
 //! # Feature flags
+//!
 //! - `cleanup-markdown`: Enables cleaning up documentation from the generated code. Useful
 //! when documentation of the generated code fails `cargo test --doc` for example.
 //! - `prost`: Enables usage of prost generator (enabled by default).
