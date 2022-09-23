@@ -123,4 +123,6 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 #[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;
 
+/// `Result` is a type that represents either success ([`Ok`]) or failure ([`Err`]).
+/// By default, the Err value is of type [`Status`] but this can be overridden if desired.
 pub type Result<T, E = Status> = std::result::Result<T, E>;
