@@ -103,8 +103,8 @@ pub mod health_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
-        /// If the requested service is unknown, the call will fail with status
-        /// NOT_FOUND.
+        ///If the requested service is unknown, the call will fail with status
+        ///NOT_FOUND.
         pub async fn check(
             &mut self,
             request: impl tonic::IntoRequest<super::HealthCheckRequest>,
@@ -124,21 +124,21 @@ pub mod health_client {
             );
             self.inner.unary(request.into_request(), path, codec).await
         }
-        /// Performs a watch for the serving status of the requested service.
-        /// The server will immediately send back a message indicating the current
-        /// serving status.  It will then subsequently send a new message whenever
-        /// the service's serving status changes.
+        ///Performs a watch for the serving status of the requested service.
+        ///The server will immediately send back a message indicating the current
+        ///serving status.  It will then subsequently send a new message whenever
+        ///the service's serving status changes.
         ///
-        /// If the requested service is unknown when the call is received, the
-        /// server will send a message setting the serving status to
-        /// SERVICE_UNKNOWN but will *not* terminate the call.  If at some
-        /// future point, the serving status of the service becomes known, the
-        /// server will send a new message with the service's serving status.
+        ///If the requested service is unknown when the call is received, the
+        ///server will send a message setting the serving status to
+        ///SERVICE_UNKNOWN but will *not* terminate the call.  If at some
+        ///future point, the serving status of the service becomes known, the
+        ///server will send a new message with the service's serving status.
         ///
-        /// If the call terminates with status UNIMPLEMENTED, then clients
-        /// should assume this method is not supported and should not retry the
-        /// call.  If the call terminates with any other status (including OK),
-        /// clients should retry the call with appropriate exponential backoff.
+        ///If the call terminates with status UNIMPLEMENTED, then clients
+        ///should assume this method is not supported and should not retry the
+        ///call.  If the call terminates with any other status (including OK),
+        ///clients should retry the call with appropriate exponential backoff.
         pub async fn watch(
             &mut self,
             request: impl tonic::IntoRequest<super::HealthCheckRequest>,
@@ -170,8 +170,8 @@ pub mod health_server {
     ///Generated trait containing gRPC methods that should be implemented for use with HealthServer.
     #[async_trait]
     pub trait Health: Send + Sync + 'static {
-        /// If the requested service is unknown, the call will fail with status
-        /// NOT_FOUND.
+        ///If the requested service is unknown, the call will fail with status
+        ///NOT_FOUND.
         async fn check(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
@@ -182,21 +182,21 @@ pub mod health_server {
             >
             + Send
             + 'static;
-        /// Performs a watch for the serving status of the requested service.
-        /// The server will immediately send back a message indicating the current
-        /// serving status.  It will then subsequently send a new message whenever
-        /// the service's serving status changes.
+        ///Performs a watch for the serving status of the requested service.
+        ///The server will immediately send back a message indicating the current
+        ///serving status.  It will then subsequently send a new message whenever
+        ///the service's serving status changes.
         ///
-        /// If the requested service is unknown when the call is received, the
-        /// server will send a message setting the serving status to
-        /// SERVICE_UNKNOWN but will *not* terminate the call.  If at some
-        /// future point, the serving status of the service becomes known, the
-        /// server will send a new message with the service's serving status.
+        ///If the requested service is unknown when the call is received, the
+        ///server will send a message setting the serving status to
+        ///SERVICE_UNKNOWN but will *not* terminate the call.  If at some
+        ///future point, the serving status of the service becomes known, the
+        ///server will send a new message with the service's serving status.
         ///
-        /// If the call terminates with status UNIMPLEMENTED, then clients
-        /// should assume this method is not supported and should not retry the
-        /// call.  If the call terminates with any other status (including OK),
-        /// clients should retry the call with appropriate exponential backoff.
+        ///If the call terminates with status UNIMPLEMENTED, then clients
+        ///should assume this method is not supported and should not retry the
+        ///call.  If the call terminates with any other status (including OK),
+        ///clients should retry the call with appropriate exponential backoff.
         async fn watch(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,

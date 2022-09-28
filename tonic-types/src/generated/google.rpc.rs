@@ -7,12 +7,12 @@
 /// [API Design Guide](<https://cloud.google.com/apis/design/errors>).
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Status {
-    /// The status code, which should be an enum value of \[google.rpc.Code][google.rpc.Code\].
+    /// The status code, which should be an enum value of \\[google.rpc.Code\]\[google.rpc.Code\\].
     #[prost(int32, tag="1")]
     pub code: i32,
     /// A developer-facing error message, which should be in English. Any
     /// user-facing error message should be localized and sent in the
-    /// \[google.rpc.Status.details][google.rpc.Status.details\] field, or localized by the client.
+    /// \\[google.rpc.Status.details\]\[google.rpc.Status.details\\] field, or localized by the client.
     #[prost(string, tag="2")]
     pub message: ::prost::alloc::string::String,
     /// A list of messages that carry the error details.  There is a common set of
@@ -92,33 +92,36 @@ pub mod quota_failure {
 ///
 /// Example of an error when contacting the "pubsub.googleapis.com" API when it
 /// is not enabled:
-/// ```json
-///      { "reason": "API_DISABLED"
-///        "domain": "googleapis.com"
-///        "metadata": {
-///          "resource": "projects/123",
-///          "service": "pubsub.googleapis.com"
-///        }
-///      }
+///
+/// ```text,json
+///     { "reason": "API_DISABLED"
+///       "domain": "googleapis.com"
+///       "metadata": {
+///         "resource": "projects/123",
+///         "service": "pubsub.googleapis.com"
+///       }
+///     }
 /// ```
+///
 /// This response indicates that the pubsub.googleapis.com API is not enabled.
 ///
 /// Example of an error that is returned when attempting to create a Spanner
 /// instance in a region that is out of stock:
-/// ```json
-///      { "reason": "STOCKOUT"
-///        "domain": "spanner.googleapis.com",
-///        "metadata": {
-///          "availableRegions": "us-central1,us-east2"
-///        }
-///      }
+///
+/// ```text,json
+///     { "reason": "STOCKOUT"
+///       "domain": "spanner.googleapis.com",
+///       "metadata": {
+///         "availableRegions": "us-central1,us-east2"
+///       }
+///     }
 /// ```
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorInfo {
     /// The reason of the error. This is a constant value that identifies the
     /// proximate cause of the error. Error reasons are unique within a particular
     /// domain of errors. This should be at most 63 characters and match
-    /// /\[A-Z0-9_\]+/.
+    /// /\\[A-Z0-9\_\\]+/.
     #[prost(string, tag="1")]
     pub reason: ::prost::alloc::string::String,
     /// The logical grouping to which the "reason" belongs. The error domain
@@ -131,7 +134,7 @@ pub struct ErrorInfo {
     pub domain: ::prost::alloc::string::String,
     /// Additional structured details about this error.
     ///
-    /// Keys should match /\[a-zA-Z0-9-_\]/ and be limited to 64 characters in
+    /// Keys should match /\\[a-zA-Z0-9-\_\\]/ and be limited to 64 characters in
     /// length. When identifying the current value of an exceeded limit, the units
     /// should be contained in the key, not the value.  For example, rather than
     /// {"instanceLimit": "100/request"}, should be returned as,
@@ -220,7 +223,7 @@ pub struct ResourceInfo {
     pub resource_type: ::prost::alloc::string::String,
     /// The name of the resource being accessed.  For example, a shared calendar
     /// name: "example.com_4fghdhgsrgh@group.calendar.google.com", if the current
-    /// error is \[google.rpc.Code.PERMISSION_DENIED][google.rpc.Code.PERMISSION_DENIED\].
+    /// error is \\[google.rpc.Code.PERMISSION_DENIED\]\[google.rpc.Code.PERMISSION_DENIED\\].
     #[prost(string, tag="2")]
     pub resource_name: ::prost::alloc::string::String,
     /// The owner of the resource (optional).
