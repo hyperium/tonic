@@ -36,7 +36,7 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 Examples can be found in [`examples`] and for more complex scenarios [`interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
-If you're using [rust-analyzer] we recommend you set `"rust-analyzer.cargo.runBuildScripts": true` to correctly load
+If you're using [rust-analyzer] we recommend you set `"rust-analyzer.cargo.buildScripts.enable": true` to correctly load
 the generated code.
 
 For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust/intellij-rust/pull/8056) and enable
