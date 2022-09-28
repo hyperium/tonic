@@ -1,3 +1,19 @@
+# [0.8.2](https://github.com/hyperium/tonic/compare/v0.8.1...v0.8.2) (2022-09-28)
+
+
+### Bug Fixes
+
+* **transport:** Bump axum for CVE-2022-3212 ([#1088](https://github.com/hyperium/tonic/issues/1088)) ([cddd992](https://github.com/hyperium/tonic/commit/cddd99266682127a3fa0e5d601f56a6346369814))
+
+
+### Features
+
+* **tonic:** add `Result<T>` type alias for `std::result::Result<T, tonic::Status>` ([#1085](https://github.com/hyperium/tonic/issues/1085)) ([56ff45d](https://github.com/hyperium/tonic/commit/56ff45d9a36040c429753d0d118ad980fbfe3eb8))
+* **build:** add `cleanup-markdown` feature flag ([#1086](https://github.com/hyperium/tonic/issues/1086)) ([c1b08df](https://github.com/hyperium/tonic/commit/c1b08dffacb67e13ce7e94a002eee8999ca7c0e5))
+* **tonic:** impl `Clone` for `Status` using `Arc` ([#1076](https://github.com/hyperium/tonic/issues/1076)) ([ee3d0df](https://github.com/hyperium/tonic/commit/ee3d0dfe7556fc7e996764f650ee3351097e7309))
+* **transport:** Expose hyper's H2 adaptive window on server ([#1071](https://github.com/hyperium/tonic/issues/1071)) ([919d28b](https://github.com/hyperium/tonic/commit/919d28b2b96c7c803cec131a9e36e80d2b071701))
+
+
 # [0.8.1](https://github.com/hyperium/tonic/compare/v0.8.0...v0.8.1) (2022-09-07)
 
 
