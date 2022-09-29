@@ -1,4 +1,6 @@
-use super::std_messages::{BadRequest, FieldViolation};
+use std::time;
+
+use super::std_messages::{BadRequest, FieldViolation, RetryInfo};
 
 pub(crate) mod vec;
 
@@ -9,6 +11,9 @@ pub(crate) mod vec;
 #[non_exhaustive]
 #[derive(Clone, Debug)]
 pub struct ErrorDetails {
+    /// This field stores [`RetryInfo`] data, if any.
+    pub(crate) retry_info: Option<RetryInfo>,
+
     /// This field stores [`BadRequest`] data, if any.
     pub(crate) bad_request: Option<BadRequest>,
 }
@@ -24,7 +29,28 @@ impl ErrorDetails {
     /// let err_details = ErrorDetails::new();
     /// ```
     pub fn new() -> Self {
-        ErrorDetails { bad_request: None }
+        ErrorDetails {
+            retry_info: None,
+            bad_request: None,
+        }
+    }
+
+    /// Generates an [`ErrorDetails`] struct with [`RetryInfo`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use tonic_types::{ErrorDetails};
+    ///
+    /// let err_details = ErrorDetails::with_retry_info(Some(Duration::from_secs(5)));
+    /// ```
+    pub fn with_retry_info(retry_delay: Option<time::Duration>) -> Self {
+        ErrorDetails {
+            retry_info: Some(RetryInfo::new(retry_delay)),
+            ..ErrorDetails::new()
+        }
     }
 
     /// Generates an [`ErrorDetails`] struct with [`BadRequest`] details and
@@ -70,9 +96,32 @@ impl ErrorDetails {
         }
     }
 
+    /// Get [`RetryInfo`] details, if any
+    pub fn retry_info(&self) -> Option<RetryInfo> {
+        self.retry_info.clone()
+    }
+
     /// Get [`BadRequest`] details, if any
     pub fn bad_request(&self) -> Option<BadRequest> {
         self.bad_request.clone()
+    }
+
+    /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::time::Duration;
+    /// use tonic_types::{ErrorDetails};
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_retry_info(Some(Duration::from_secs(5)));
+    /// ```
+    pub fn set_retry_info(&mut self, retry_delay: Option<time::Duration>) -> &mut Self {
+        self.retry_info = Some(RetryInfo::new(retry_delay));
+        self
     }
 
     /// Set [`BadRequest`] details. Can be chained with other `.set_` and

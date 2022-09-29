@@ -8,7 +8,7 @@ mod std_messages;
 use super::pb;
 
 pub use error_details::{vec::ErrorDetail, ErrorDetails};
-pub use std_messages::{BadRequest, FieldViolation};
+pub use std_messages::{BadRequest, FieldViolation, RetryInfo};
 
 trait IntoAny {
     fn into_any(self) -> Any;
@@ -238,6 +238,28 @@ pub trait StatusExt {
     /// ```
     fn get_error_details_vec(&self) -> Vec<ErrorDetail>;
 
+    /// Get first [`RetryInfo`] details found on `tonic::Status`, if any. If
+    /// some `prost::DecodeError` occurs, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{Status, Response};
+    /// use tonic_types::{StatusExt};
+    ///
+    /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
+    ///     match req_result {
+    ///         Ok(_) => {},
+    ///         Err(status) => {
+    ///             if let Some(retry_info) = status.get_details_retry_info() {
+    ///                 // Handle retry_info details
+    ///             }
+    ///         }
+    ///     };
+    /// }
+    /// ```
+    fn get_details_retry_info(&self) -> Option<RetryInfo>;
+
     /// Get first [`BadRequest`] details found on `tonic::Status`, if any. If
     /// some `prost::DecodeError` occurs, returns `None`.
     ///
@@ -272,6 +294,10 @@ impl StatusExt for tonic::Status {
 
         let mut conv_details: Vec<Any> = Vec::with_capacity(10);
 
+        if let Some(retry_info) = details.retry_info {
+            conv_details.push(retry_info.into_any());
+        }
+
         if let Some(bad_request) = details.bad_request {
             conv_details.push(bad_request.into_any());
         }
@@ -297,6 +323,9 @@ impl StatusExt for tonic::Status {
 
         for error_detail in details.into_iter() {
             match error_detail {
+                ErrorDetail::RetryInfo(retry_info) => {
+                    conv_details.push(retry_info.into_any());
+                }
                 ErrorDetail::BadRequest(bad_req) => {
                     conv_details.push(bad_req.into_any());
                 }
@@ -328,6 +357,9 @@ impl StatusExt for tonic::Status {
 
         for any in status.details.into_iter() {
             match any.type_url.as_str() {
+                RetryInfo::TYPE_URL => {
+                    details.retry_info = Some(RetryInfo::from_any(any)?);
+                }
                 BadRequest::TYPE_URL => {
                     details.bad_request = Some(BadRequest::from_any(any)?);
                 }
@@ -349,6 +381,9 @@ impl StatusExt for tonic::Status {
 
         for any in status.details.into_iter() {
             match any.type_url.as_str() {
+                RetryInfo::TYPE_URL => {
+                    details.push(RetryInfo::from_any(any)?.into());
+                }
                 BadRequest::TYPE_URL => {
                     details.push(BadRequest::from_any(any)?.into());
                 }
@@ -361,6 +396,22 @@ impl StatusExt for tonic::Status {
 
     fn get_error_details_vec(&self) -> Vec<ErrorDetail> {
         self.check_error_details_vec().unwrap_or(Vec::new())
+    }
+
+    fn get_details_retry_info(&self) -> Option<RetryInfo> {
+        let status = pb::Status::decode(self.details()).ok()?;
+
+        for any in status.details.into_iter() {
+            match any.type_url.as_str() {
+                RetryInfo::TYPE_URL => match RetryInfo::from_any(any) {
+                    Ok(detail) => return Some(detail),
+                    Err(_) => {}
+                },
+                _ => {}
+            }
+        }
+
+        None
     }
 
     fn get_details_bad_request(&self) -> Option<BadRequest> {
@@ -382,19 +433,25 @@ impl StatusExt for tonic::Status {
 
 #[cfg(test)]
 mod tests {
+    use std::time::Duration;
     use tonic::{Code, Status};
 
-    use super::{BadRequest, ErrorDetails, StatusExt};
+    use super::{BadRequest, ErrorDetails, RetryInfo, StatusExt};
 
     #[test]
     fn gen_status_with_details() {
         let mut err_details = ErrorDetails::new();
 
-        err_details.add_bad_request_violation("field", "description");
+        err_details
+            .set_retry_info(Some(Duration::from_secs(5)))
+            .add_bad_request_violation("field", "description");
 
         let fmt_details = format!("{:?}", err_details);
 
-        let err_details_vec = vec![BadRequest::with_violation("field", "description").into()];
+        let err_details_vec = vec![
+            RetryInfo::new(Some(Duration::from_secs(5))).into(),
+            BadRequest::with_violation("field", "description").into(),
+        ];
 
         let fmt_details_vec = format!("{:?}", err_details_vec);
 
