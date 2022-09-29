@@ -172,6 +172,18 @@ impl TcpIncoming {
         inner.set_keepalive(keepalive);
         Ok(TcpIncoming { inner })
     }
+
+    /// Creates a new `TcpIncoming` from an existing `tokio::net::TcpListener`.
+    pub fn from_listener(
+        listener: TcpListener,
+        nodelay: bool,
+        keepalive: Option<Duration>,
+    ) -> crate::Result<Self> {
+        let mut inner = AddrIncoming::from_listener(listener)?;
+        inner.set_nodelay(nodelay);
+        inner.set_keepalive(keepalive);
+        Ok(TcpIncoming { inner })
+    }
 }
 
 impl Stream for TcpIncoming {
