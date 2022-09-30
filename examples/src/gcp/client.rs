@@ -22,7 +22,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ok_or_else(|| "Expected a project name as the first argument.".to_string())?;
 
     let bearer_token = format!("Bearer {}", token);
-    let header_value = MetadataValue::from_str(&bearer_token)?;
+    let header_value: MetadataValue<_> = bearer_token.parse()?;
 
     let certs = tokio::fs::read("examples/data/gcp/roots.pem").await?;
 

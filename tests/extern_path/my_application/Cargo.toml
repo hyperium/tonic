@@ -1,6 +1,6 @@
 [package]
 authors = ["Danny Hua <danny@42layers.io>"]
-edition = "2021"
+edition = "2018"
 license = "MIT"
 name = "my_application"
 publish = false
@@ -9,8 +9,8 @@ version = "0.1.0"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.9"
-prost-types = "0.9"
+prost = "0.11"
+prost-types = "0.11"
 tonic = {path = "../../../tonic"}
 uuid = {package = "uuid1", path = "../uuid"}
 

@@ -59,7 +59,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn check_auth(req: Request<()>) -> Result<Request<()>, Status> {
-    let token = MetadataValue::from_str("Bearer some-secret-token").unwrap();
+    let token: MetadataValue<_> = "Bearer some-secret-token".parse().unwrap();
 
     match req.metadata().get("authorization") {
         Some(t) if token == t => Ok(req),

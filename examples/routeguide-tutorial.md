@@ -47,12 +47,6 @@ Change your current directory to Tonic's repository root:
 $ cd tonic
 ```
 
-Tonic uses `rustfmt` to tidy up the code it generates, so we'll make sure it's installed.
-
-```shell
-$ rustup component add rustfmt
-```
-
 Run the server
 ```shell
 $ cargo run --bin routeguide-server
@@ -180,8 +174,8 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.6"
-prost = "0.9"
+tonic = "0.8"
+prost = "0.11"
 futures-core = "0.3"
 futures-util = "0.3"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
@@ -193,7 +187,7 @@ serde_json = "1.0"
 rand = "0.7"
 
 [build-dependencies]
-tonic-build = "0.6"
+tonic-build = "0.8"
 ```
 
 Create a `build.rs` file at the root of your crate:

@@ -17,7 +17,9 @@
 //! # Feature Flags
 //!
 //! - `transport`: Enables the fully featured, batteries included client and server
-//! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
+//!     implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
+//! - `channel`: Enables just the full featured channel/client portion of the `transport`
+//!     feature.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //! for [`tonic-build`]. Enabled by default.
 //! - `tls`: Enables the `rustls` based TLS options for the `transport` feature. Not
@@ -28,9 +30,9 @@
 //! - `tls-webpki-roots`: Add the standard trust roots from the `webpki-roots` crate to
 //! `rustls`-based gRPC clients. Not enabled by default.
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
-//! - `compression`: Enables compressing requests, responses, and streams. Note
-//! that you must enable the `compression` feature on both `tonic` and
-//! `tonic-build` to use it. Depends on [flate2]. Not enabled by default.
+//! - `gzip`: Enables compressing requests, responses, and streams.
+//! Depends on [flate2]. Not enabled by default.
+//! Replaces the `compression` flag from earlier versions of `tonic` (<= 0.7).
 //!
 //! # Structure
 //!
@@ -75,11 +77,11 @@
     rust_2018_idioms,
     unreachable_pub
 )]
-#![deny(broken_intra_doc_links)]
+#![deny(rustdoc::broken_intra_doc_links)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic/0.6.0")]
+#![doc(html_root_url = "https://docs.rs/tonic/0.8.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]

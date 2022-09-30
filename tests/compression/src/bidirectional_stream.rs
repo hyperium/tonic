@@ -1,12 +1,13 @@
 use super::*;
+use tonic::codec::CompressionEncoding;
 
 #[tokio::test(flavor = "multi_thread")]
 async fn client_enabled_server_enabled() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default())
-        .accept_gzip()
-        .send_gzip();
+        .accept_compressed(CompressionEncoding::Gzip)
+        .send_compressed(CompressionEncoding::Gzip);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
@@ -36,17 +37,15 @@ async fn client_enabled_server_enabled() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(
-                    MockStream(server),
-                )]))
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
     });
 
     let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .send_gzip()
-        .accept_gzip();
+        .send_compressed(CompressionEncoding::Gzip)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
     let stream = futures::stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);

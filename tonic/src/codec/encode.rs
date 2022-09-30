@@ -1,4 +1,3 @@
-#[cfg(feature = "compression")]
 use super::compression::{compress, CompressionEncoding, SingleMessageCompressionOverride};
 use super::{EncodeBuf, Encoder, HEADER_SIZE};
 use crate::{Code, Status};
@@ -18,22 +17,14 @@ pub(super) const BUFFER_SIZE: usize = 8 * 1024;
 pub(crate) fn encode_server<T, U>(
     encoder: T,
     source: U,
-    #[cfg(feature = "compression")] compression_encoding: Option<CompressionEncoding>,
-    #[cfg(feature = "compression")] compression_override: SingleMessageCompressionOverride,
+    compression_encoding: Option<CompressionEncoding>,
+    compression_override: SingleMessageCompressionOverride,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
 {
-    let stream = encode(
-        encoder,
-        source,
-        #[cfg(feature = "compression")]
-        compression_encoding,
-        #[cfg(feature = "compression")]
-        compression_override,
-    )
-    .into_stream();
+    let stream = encode(encoder, source, compression_encoding, compression_override).into_stream();
 
     EncodeBody::new_server(stream)
 }
@@ -41,7 +32,7 @@ where
 pub(crate) fn encode_client<T, U>(
     encoder: T,
     source: U,
-    #[cfg(feature = "compression")] compression_encoding: Option<CompressionEncoding>,
+    compression_encoding: Option<CompressionEncoding>,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status>,
@@ -50,9 +41,7 @@ where
     let stream = encode(
         encoder,
         source.map(Ok),
-        #[cfg(feature = "compression")]
         compression_encoding,
-        #[cfg(feature = "compression")]
         SingleMessageCompressionOverride::default(),
     )
     .into_stream();
@@ -62,8 +51,8 @@ where
 fn encode<T, U>(
     mut encoder: T,
     source: U,
-    #[cfg(feature = "compression")] compression_encoding: Option<CompressionEncoding>,
-    #[cfg(feature = "compression")] compression_override: SingleMessageCompressionOverride,
+    compression_encoding: Option<CompressionEncoding>,
+    compression_override: SingleMessageCompressionOverride,
 ) -> impl TryStream<Ok = Bytes, Error = Status>
 where
     T: Encoder<Error = Status>,
@@ -72,17 +61,17 @@ where
     async_stream::stream! {
         let mut buf = BytesMut::with_capacity(BUFFER_SIZE);
 
-        #[cfg(feature = "compression")]
-        let (compression_enabled_for_stream, mut uncompression_buf) = match compression_encoding {
-            Some(CompressionEncoding::Gzip) => (true, BytesMut::with_capacity(BUFFER_SIZE)),
-            None => (false, BytesMut::new()),
+        let compression_encoding = if compression_override == SingleMessageCompressionOverride::Disable {
+            None
+        } else {
+            compression_encoding
         };
 
-        #[cfg(feature = "compression")]
-        let compress_item = compression_enabled_for_stream && compression_override == SingleMessageCompressionOverride::Inherit;
-
-        #[cfg(not(feature = "compression"))]
-        let compress_item = false;
+        let mut uncompression_buf = if compression_encoding.is_some() {
+            BytesMut::with_capacity(BUFFER_SIZE)
+        } else {
+            BytesMut::new()
+        };
 
         futures_util::pin_mut!(source);
 
@@ -94,26 +83,20 @@ where
                         buf.advance_mut(HEADER_SIZE);
                     }
 
-                    if compress_item {
-                        #[cfg(feature = "compression")]
-                        {
-                            uncompression_buf.clear();
+                    if let Some(encoding) = compression_encoding {
+                        uncompression_buf.clear();
 
-                            encoder.encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
-                                .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+                        encoder.encode(item, &mut EncodeBuf::new(&mut uncompression_buf))
+                            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
 
-                            let uncompressed_len = uncompression_buf.len();
+                        let uncompressed_len = uncompression_buf.len();
 
-                            compress(
-                                compression_encoding.unwrap(),
-                                &mut uncompression_buf,
-                                &mut buf,
-                                uncompressed_len,
-                            ).map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
-                        }
-
-                        #[cfg(not(feature = "compression"))]
-                        unreachable!("compression disabled, should not take this branch");
+                        compress(
+                            encoding,
+                            &mut uncompression_buf,
+                            &mut buf,
+                            uncompressed_len,
+                        ).map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
                     } else {
                         encoder.encode(item, &mut EncodeBuf::new(&mut buf))
                             .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
@@ -124,7 +107,7 @@ where
                     assert!(len <= std::u32::MAX as usize);
                     {
                         let mut buf = &mut buf[..HEADER_SIZE];
-                        buf.put_u8(compress_item as u8);
+                        buf.put_u8(compression_encoding.is_some() as u8);
                         buf.put_u32(len as u32);
                     }
 

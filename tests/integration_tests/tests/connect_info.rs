@@ -48,3 +48,77 @@ async fn getting_connect_info() {
 
     jh.await.unwrap();
 }
+
+#[cfg(unix)]
+pub mod unix {
+    use std::convert::TryFrom as _;
+
+    use futures_util::FutureExt;
+    use tokio::{
+        net::{UnixListener, UnixStream},
+        sync::oneshot,
+    };
+    use tokio_stream::wrappers::UnixListenerStream;
+    use tonic::{
+        transport::{server::UdsConnectInfo, Endpoint, Server, Uri},
+        Request, Response, Status,
+    };
+    use tower::service_fn;
+
+    use integration_tests::pb::{test_client, test_server, Input, Output};
+
+    struct Svc {}
+
+    #[tonic::async_trait]
+    impl test_server::Test for Svc {
+        async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
+            let conn_info = req.extensions().get::<UdsConnectInfo>().unwrap();
+
+            // Client-side unix sockets are unnamed.
+            assert!(req.remote_addr().is_none());
+            assert!(conn_info.peer_addr.as_ref().unwrap().is_unnamed());
+            // This should contain process credentials for the client socket.
+            assert!(conn_info.peer_cred.as_ref().is_some());
+
+            Ok(Response::new(Output {}))
+        }
+    }
+
+    #[tokio::test]
+    async fn getting_connect_info() {
+        let mut unix_socket_path = std::env::temp_dir();
+        unix_socket_path.push("uds-integration-test");
+
+        let uds = UnixListener::bind(&unix_socket_path).unwrap();
+        let uds_stream = UnixListenerStream::new(uds);
+
+        let service = test_server::TestServer::new(Svc {});
+        let (tx, rx) = oneshot::channel::<()>();
+
+        let jh = tokio::spawn(async move {
+            Server::builder()
+                .add_service(service)
+                .serve_with_incoming_shutdown(uds_stream, rx.map(drop))
+                .await
+                .unwrap();
+        });
+
+        // Take a copy before moving into the `service_fn` closure so that the closure
+        // can implement `FnMut`.
+        let path = unix_socket_path.clone();
+        let channel = Endpoint::try_from("http://[::]:50051")
+            .unwrap()
+            .connect_with_connector(service_fn(move |_: Uri| UnixStream::connect(path.clone())))
+            .await
+            .unwrap();
+
+        let mut client = test_client::TestClient::new(channel);
+
+        client.unary_call(Input {}).await.unwrap();
+
+        tx.send(()).unwrap();
+        jh.await.unwrap();
+
+        std::fs::remove_file(unix_socket_path).unwrap();
+    }
+}

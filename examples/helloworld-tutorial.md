@@ -26,13 +26,12 @@ feature.
 
 ```bash
 $ rustup update
-$ rustup component add rustfmt
 ```
 
 ## Defining the HelloWorld service
 
 Our first step is to define the gRPC _service_ and the method _request_ and _response_ types using
-[protocol buffers]. We will keep our `.proto` files in a directory in our crate's root.
+[protocol buffers]. We will keep our `.proto` files in a directory in our project's root.
 Note that Tonic does not really care where our `.proto` definitions live.
 
 ```shell
@@ -113,19 +112,19 @@ name = "helloworld-client"
 path = "src/client.rs"
 
 [dependencies]
-tonic = "0.6"
-prost = "0.9"
+tonic = "0.8"
+prost = "0.11"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
-tonic-build = "0.6"
+tonic-build = "0.8"
 ```
 
 We include `tonic-build` as a useful way to incorporate the generation of our client and server gRPC code into the build process of our application. We will setup this build process now:
 
 ## Generating Server and Client code
 
-At the root of your crate, create a `build.rs` file and add the following code:
+At the root of your project (not /src), create a `build.rs` file and add the following code:
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -244,7 +243,7 @@ If you have a gRPC GUI client such as [Bloom RPC] you should be able to send req
 
 Or if you use [grpcurl] then you can simply try send requests like this:
 ```
-$ grpcurl -plaintext -import-path ./proto -proto helloworld.proto -d '{"name": "Tonic"}' [::]:50051 helloworld.Greeter/SayHello
+$ grpcurl -plaintext -import-path ./proto -proto helloworld.proto -d '{"name": "Tonic"}' '[::]:50051' helloworld.Greeter/SayHello
 ```
 And receiving responses like this:
 ```

@@ -1,11 +1,11 @@
+use clap::{ArgAction, Parser};
 use interop::server;
-use structopt::StructOpt;
 use tonic::transport::Server;
 use tonic::transport::{Identity, ServerTlsConfig};
 
-#[derive(StructOpt)]
+#[derive(Parser)]
 struct Opts {
-    #[structopt(name = "use_tls", long)]
+    #[clap(name = "use_tls", long, action = ArgAction::SetTrue)]
     use_tls: bool,
 }
 
@@ -13,7 +13,7 @@ struct Opts {
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     interop::trace_init();
 
-    let matches = Opts::from_args();
+    let matches = Opts::parse();
 
     let addr = "127.0.0.1:10000".parse().unwrap();
 

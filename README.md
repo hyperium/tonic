@@ -36,18 +36,45 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 Examples can be found in [`examples`] and for more complex scenarios [`interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
-If you're using [rust-analyzer] we recommend you set `"rust-analyzer.cargo.loadOutDirsFromCheck": true` to correctly load
+If you're using [rust-analyzer] we recommend you set `"rust-analyzer.cargo.runBuildScripts": true` to correctly load
 the generated code.
+
+For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust/intellij-rust/pull/8056) and enable
+`org.rust.cargo.evaluate.build.scripts`
+[experimental feature](https://plugins.jetbrains.com/plugin/8182-rust/docs/rust-faq.html#experimental-features).
 
 ### Rust Version
 
-`tonic` currently works on rust `1.39` and above as it requires support for the `async_await`
-feature.
+`tonic` currently works on Rust `1.56` and above as it requires support for the 2018 edition.
 
 ```bash
 $ rustup update
-$ rustup component add rustfmt
 $ cargo build
+```
+
+### Dependencies
+
+In order to build `tonic` >= 0.8.0, you need the `protoc` Protocol Buffers compiler, along with Protocol Buffers resource files.
+
+#### Ubuntu
+
+```bash
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y protobuf-compiler libprotobuf-dev
+```
+
+#### Alpine Linux
+
+```sh
+sudo apk add protoc protobuf-dev
+```
+
+#### macOS
+
+Assuming [Homebrew](https://brew.sh/) is already installed. (If not, see instructions for installing Homebrew on [the Homebrew website](https://brew.sh/).)
+
+```zsh
+brew install protobuf
 ```
 
 ### Tutorials

@@ -1,5 +1,6 @@
 use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
+use tonic::codec::CompressionEncoding;
 use tonic::transport::Channel;
 
 pub mod hello_world {
@@ -13,7 +14,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .await
         .unwrap();
 
-    let mut client = GreeterClient::new(channel).send_gzip().accept_gzip();
+    let mut client = GreeterClient::new(channel)
+        .send_compressed(CompressionEncoding::Gzip)
+        .accept_compressed(CompressionEncoding::Gzip);
 
     let request = tonic::Request::new(HelloRequest {
         name: "Tonic".into(),

@@ -26,6 +26,11 @@ jobs:
       run: rustup component add rustfmt
     - name: Install cargo-hack
       run: cargo install cargo-hack
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }} 
+    - uses: Swatinem/rust-cache@v1
     - name: Check fmt
       run: cargo fmt -- --check
     - name: Check features
@@ -58,6 +63,11 @@ jobs:
         rust-version: ${{ matrix.rust }}
     - name: Install rustfmt
       run: rustup component add rustfmt
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }} 
+    - uses: Swatinem/rust-cache@v1
     - uses: actions/checkout@master
     - name: Run tests
       run: cargo test --all --all-features
@@ -80,6 +90,11 @@ jobs:
     - name: Install rustfmt
       run: rustup component add rustfmt
     - uses: actions/checkout@master
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }} 
+    - uses: Swatinem/rust-cache@v1
     - name: Run interop tests
       run: ./interop/test.sh
       shell: bash

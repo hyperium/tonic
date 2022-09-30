@@ -39,6 +39,7 @@ impl Connection {
             .http2_initial_connection_window_size(endpoint.init_connection_window_size)
             .http2_only(true)
             .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
+            .executor(endpoint.executor.clone())
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
@@ -54,7 +55,11 @@ impl Connection {
         }
 
         let stack = ServiceBuilder::new()
-            .layer_fn(|s| AddOrigin::new(s, endpoint.uri.clone()))
+            .layer_fn(|s| {
+                let origin = endpoint.origin.as_ref().unwrap_or(&endpoint.uri).clone();
+
+                AddOrigin::new(s, origin)
+            })
             .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
             .layer_fn(|s| GrpcTimeout::new(s, endpoint.timeout))
             .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))

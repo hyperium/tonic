@@ -2,9 +2,11 @@ use super::{client, server, Attributes};
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
-use std::ffi::OsString;
-use std::io;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsString,
+    io,
+    path::{Path, PathBuf},
+};
 
 /// Configure `tonic-build` code generation.
 ///
@@ -22,11 +24,10 @@ pub fn configure() -> Builder {
         client_attributes: Attributes::default(),
         proto_path: "super".to_string(),
         compile_well_known_types: false,
-        #[cfg(feature = "rustfmt")]
-        format: true,
         emit_package: true,
         protoc_args: Vec::new(),
         include_file: None,
+        emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
     }
 }
 
@@ -53,8 +54,6 @@ const PROST_CODEC_PATH: &str = "tonic::codec::ProstCodec";
 const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
 
 impl crate::Service for Service {
-    const CODEC_PATH: &'static str = PROST_CODEC_PATH;
-
     type Method = Method;
     type Comment = String;
 
@@ -80,7 +79,6 @@ impl crate::Service for Service {
 }
 
 impl crate::Method for Method {
-    const CODEC_PATH: &'static str = PROST_CODEC_PATH;
     type Comment = String;
 
     fn name(&self) -> &str {
@@ -89,6 +87,10 @@ impl crate::Method for Method {
 
     fn identifier(&self) -> &str {
         &self.proto_name
+    }
+
+    fn codec_path(&self) -> &str {
+        PROST_CODEC_PATH
     }
 
     fn client_streaming(&self) -> bool {
@@ -184,7 +186,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 #clients
             };
 
-            let code = format!("{}", client_service);
+            let ast: syn::File = syn::parse2(client_service).expect("not a valid tokenstream");
+            let code = prettyplease::unparse(&ast);
             buf.push_str(&code);
 
             self.clients = TokenStream::default();
@@ -197,7 +200,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 #servers
             };
 
-            let code = format!("{}", server_service);
+            let ast: syn::File = syn::parse2(server_service).expect("not a valid tokenstream");
+            let code = prettyplease::unparse(&ast);
             buf.push_str(&code);
 
             self.servers = TokenStream::default();
@@ -221,10 +225,9 @@ pub struct Builder {
     pub(crate) compile_well_known_types: bool,
     pub(crate) protoc_args: Vec<OsString>,
     pub(crate) include_file: Option<PathBuf>,
+    pub(crate) emit_rerun_if_changed: bool,
 
     out_dir: Option<PathBuf>,
-    #[cfg(feature = "rustfmt")]
-    format: bool,
 }
 
 impl Builder {
@@ -244,13 +247,6 @@ impl Builder {
     /// modules. This is required for implementing gRPC Server Reflection.
     pub fn file_descriptor_set_path(mut self, path: impl AsRef<Path>) -> Self {
         self.file_descriptor_set_path = Some(path.as_ref().to_path_buf());
-        self
-    }
-
-    /// Enable the output to be formated by rustfmt.
-    #[cfg(feature = "rustfmt")]
-    pub fn format(mut self, run: bool) -> Self {
-        self.format = run;
         self
     }
 
@@ -374,6 +370,24 @@ impl Builder {
         self
     }
 
+    /// Enable or disable emitting
+    /// [`cargo:rerun-if-changed=PATH`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-changed)
+    /// instructions for Cargo.
+    ///
+    /// If set, writes instructions to `stdout` for Cargo so that it understands
+    /// when to rerun the build script. By default, this setting is enabled if
+    /// the `CARGO` environment variable is set. The `CARGO` environment
+    /// variable is set by Cargo for build scripts. Therefore, this setting
+    /// should be enabled automatically when run from a build script. However,
+    /// the method of detection is not completely reliable since the `CARGO`
+    /// environment variable can have been set by anything else. If writing the
+    /// instructions to `stdout` is undesireable, you can disable this setting
+    /// explicitly.
+    pub fn emit_rerun_if_changed(mut self, enable: bool) -> Self {
+        self.emit_rerun_if_changed = enable;
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile(
         self,
@@ -397,10 +411,7 @@ impl Builder {
             PathBuf::from(std::env::var("OUT_DIR").unwrap())
         };
 
-        #[cfg(feature = "rustfmt")]
-        let format = self.format;
-
-        config.out_dir(out_dir.clone());
+        config.out_dir(out_dir);
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }
@@ -424,17 +435,29 @@ impl Builder {
             config.protoc_arg(arg);
         }
 
-        config.service_generator(Box::new(ServiceGenerator::new(self)));
+        if self.emit_rerun_if_changed {
+            for path in protos.iter() {
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
 
-        config.compile_protos(protos, includes)?;
-
-        #[cfg(feature = "rustfmt")]
-        {
-            if format {
-                super::fmt(out_dir.to_str().expect("Expected utf8 out_dir"));
+            for path in includes.iter() {
+                // Cargo will watch the **entire** directory recursively. If we
+                // could figure out which files are imported by our protos we
+                // could specify only those files instead.
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
             }
         }
 
+        config.service_generator(self.service_generator());
+
+        config.compile_protos(protos, includes)?;
+
         Ok(())
+    }
+
+    /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
+    /// `Config::service_generator`.
+    pub fn service_generator(self) -> Box<dyn prost_build::ServiceGenerator> {
+        Box::new(ServiceGenerator::new(self))
     }
 }

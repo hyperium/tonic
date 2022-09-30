@@ -84,6 +84,7 @@ where
     body.advance(1);
 
     let len = body.get_u32();
+    #[allow(clippy::let_and_return)]
     let msg = T::decode(&mut body.split_to(len as usize)).unwrap();
 
     msg

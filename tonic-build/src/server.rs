@@ -19,7 +19,7 @@ pub fn generate<T: Service>(
 
     let server_service = quote::format_ident!("{}Server", service.name());
     let server_trait = quote::format_ident!("{}", service.name());
-    let server_mod = quote::format_ident!("{}_server", naive_snake_case(&service.name()));
+    let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
         service,
         proto_path,
@@ -35,34 +35,24 @@ pub fn generate<T: Service>(
         if package.is_empty() { "" } else { "." },
         service.identifier()
     );
-    let transport = generate_transport(&server_service, &server_trait, &path);
+    let named = generate_named(&server_service, &server_trait, &path);
     let mod_attributes = attributes.for_mod(package);
     let struct_attributes = attributes.for_struct(&path);
 
-    let compression_enabled = cfg!(feature = "compression");
-
-    let compression_config_ty = if compression_enabled {
-        quote! { EnabledCompressionEncodings }
-    } else {
-        quote! { () }
-    };
-
-    let configure_compression_methods = if compression_enabled {
-        quote! {
-            /// Enable decompressing requests with `gzip`.
-            pub fn accept_gzip(mut self) -> Self {
-                self.accept_compression_encodings.enable_gzip();
-                self
-            }
-
-            /// Compress responses with `gzip`, if the client supports it.
-            pub fn send_gzip(mut self) -> Self {
-                self.send_compression_encodings.enable_gzip();
-                self
-            }
+    let configure_compression_methods = quote! {
+        /// Enable decompressing requests with the given encoding.
+        #[must_use]
+        pub fn accept_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.accept_compression_encodings.enable(encoding);
+            self
         }
-    } else {
-        quote! {}
+
+        /// Compress responses with the given encoding, if the client supports it.
+        #[must_use]
+        pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
+            self.send_compression_encodings.enable(encoding);
+            self
+        }
     };
 
     quote! {
@@ -85,15 +75,18 @@ pub fn generate<T: Service>(
             #[derive(Debug)]
             pub struct #server_service<T: #server_trait> {
                 inner: _Inner<T>,
-                accept_compression_encodings: #compression_config_ty,
-                send_compression_encodings: #compression_config_ty,
+                accept_compression_encodings: EnabledCompressionEncodings,
+                send_compression_encodings: EnabledCompressionEncodings,
             }
 
             struct _Inner<T>(Arc<T>);
 
             impl<T: #server_trait> #server_service<T> {
                 pub fn new(inner: T) -> Self {
-                    let inner = Arc::new(inner);
+                    Self::from_arc(Arc::new(inner))
+                }
+
+                pub fn from_arc(inner: Arc<T>) -> Self {
                     let inner = _Inner(inner);
                     Self {
                         inner,
@@ -119,7 +112,7 @@ pub fn generate<T: Service>(
                     B::Error: Into<StdError> + Send + 'static,
             {
                 type Response = http::Response<tonic::body::BoxBody>;
-                type Error = Never;
+                type Error = std::convert::Infallible;
                 type Future = BoxFuture<Self::Response, Self::Error>;
 
                 fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -167,7 +160,7 @@ pub fn generate<T: Service>(
                 }
             }
 
-            #transport
+            #named
         }
     }
 }
@@ -263,8 +256,7 @@ fn generate_trait_methods<T: Service>(
     stream
 }
 
-#[cfg(feature = "transport")]
-fn generate_transport(
+fn generate_named(
     server_service: &syn::Ident,
     server_trait: &syn::Ident,
     service_name: &str,
@@ -272,19 +264,10 @@ fn generate_transport(
     let service_name = syn::LitStr::new(service_name, proc_macro2::Span::call_site());
 
     quote! {
-        impl<T: #server_trait> tonic::transport::NamedService for #server_service<T> {
+        impl<T: #server_trait> tonic::server::NamedService for #server_service<T> {
             const NAME: &'static str = #service_name;
         }
     }
-}
-
-#[cfg(not(feature = "transport"))]
-fn generate_transport(
-    _server_service: &syn::Ident,
-    _server_trait: &syn::Ident,
-    _service_name: &str,
-) -> TokenStream {
-    TokenStream::new()
 }
 
 fn generate_methods<T: Service>(
@@ -361,7 +344,7 @@ fn generate_unary<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -410,7 +393,7 @@ fn generate_server_streaming<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
@@ -465,7 +448,7 @@ fn generate_client_streaming<T: Method>(
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -512,7 +495,7 @@ fn generate_streaming<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(T::CODEC_PATH).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 

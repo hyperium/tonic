@@ -40,7 +40,10 @@ pub struct HealthReporter {
 
 impl HealthReporter {
     fn new() -> Self {
-        let statuses = Arc::new(RwLock::new(HashMap::new()));
+        // According to the gRPC Health Check specification, the empty service "" corresponds to the overall server health
+        let server_status = ("".to_string(), watch::channel(ServingStatus::Serving));
+
+        let statuses = Arc::new(RwLock::new(HashMap::from([server_status])));
 
         HealthReporter { statuses }
     }
@@ -100,7 +103,9 @@ impl HealthReporter {
     }
 }
 
-struct HealthService {
+/// A service providing implementations of gRPC health checking protocol.
+#[derive(Debug)]
+pub struct HealthService {
     statuses: Arc<RwLock<HashMap<String, StatusPair>>>,
 }
 
@@ -166,9 +171,7 @@ mod tests {
     use crate::proto::HealthCheckRequest;
     use crate::server::{HealthReporter, HealthService};
     use crate::ServingStatus;
-    use std::collections::HashMap;
-    use std::sync::Arc;
-    use tokio::sync::{watch, RwLock};
+    use tokio::sync::watch;
     use tokio_stream::StreamExt;
     use tonic::{Code, Request, Status};
 
@@ -183,22 +186,34 @@ mod tests {
     }
 
     async fn make_test_service() -> (HealthReporter, HealthService) {
-        let state = Arc::new(RwLock::new(HashMap::new()));
-        state.write().await.insert(
-            "TestService".to_string(),
-            watch::channel(ServingStatus::Unknown),
-        );
-        (
-            HealthReporter {
-                statuses: state.clone(),
-            },
-            HealthService::new(state.clone()),
-        )
+        let health_reporter = HealthReporter::new();
+
+        // insert test value
+        {
+            let mut statuses = health_reporter.statuses.write().await;
+            statuses.insert(
+                "TestService".to_string(),
+                watch::channel(ServingStatus::Unknown),
+            );
+        }
+
+        let health_service = HealthService::new(health_reporter.statuses.clone());
+        (health_reporter, health_service)
     }
 
     #[tokio::test]
     async fn test_service_check() {
         let (mut reporter, service) = make_test_service().await;
+
+        // Overall server health
+        let resp = service
+            .check(Request::new(HealthCheckRequest {
+                service: "".to_string(),
+            }))
+            .await;
+        assert!(resp.is_ok());
+        let resp = resp.unwrap().into_inner();
+        assert_serving_status(resp.status, ServingStatus::Serving);
 
         // Unregistered service
         let resp = service
@@ -236,6 +251,21 @@ mod tests {
     #[tokio::test]
     async fn test_service_watch() {
         let (mut reporter, service) = make_test_service().await;
+
+        // Overall server health
+        let resp = service
+            .watch(Request::new(HealthCheckRequest {
+                service: "".to_string(),
+            }))
+            .await;
+        assert!(resp.is_ok());
+        let mut resp = resp.unwrap().into_inner();
+        let item = resp
+            .next()
+            .await
+            .expect("streamed response is Some")
+            .expect("response is ok");
+        assert_serving_status(item.status, ServingStatus::Serving);
 
         // Unregistered service
         let resp = service
