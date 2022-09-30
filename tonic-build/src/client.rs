@@ -1,5 +1,5 @@
 use super::{Attributes, Method, Service};
-use crate::{generate_doc_comments, naive_snake_case};
+use crate::{generate_doc_comments, naive_snake_case, sanitize_name};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
@@ -174,7 +174,7 @@ fn generate_unary<T: Method>(
     path: String,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
     quote! {
@@ -199,7 +199,7 @@ fn generate_server_streaming<T: Method>(
     path: String,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
@@ -225,7 +225,7 @@ fn generate_client_streaming<T: Method>(
     path: String,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
@@ -251,7 +251,7 @@ fn generate_streaming<T: Method>(
     path: String,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 

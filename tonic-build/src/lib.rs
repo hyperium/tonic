@@ -272,6 +272,17 @@ fn naive_snake_case(name: &str) -> String {
     s
 }
 
+fn sanitize_name(name: &str) -> String {
+    let mut ident: String = name.into();
+    match ident.as_str() {
+        "connect" | "new" | "send_gzip" | "accept_gzip" => {
+            ident.insert(0, '_')
+        },
+        _ => (),
+    };
+    ident
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

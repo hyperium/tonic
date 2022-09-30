@@ -1,5 +1,5 @@
 use super::{Attributes, Method, Service};
-use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
+use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case, sanitize_name};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};
@@ -194,7 +194,7 @@ fn generate_trait_methods<T: Service>(
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
-        let name = quote::format_ident!("{}", method.name());
+        let name = quote::format_ident!("{}", sanitize_name(method.name()));
 
         let (req_message, res_message) =
             method.request_response_name(proto_path, compile_well_known_types);
@@ -290,7 +290,7 @@ fn generate_methods<T: Service>(
             method.identifier()
         );
         let method_path = Lit::Str(LitStr::new(&path, Span::call_site()));
-        let ident = quote::format_ident!("{}", method.name());
+        let ident = quote::format_ident!("{}", sanitize_name(method.name()));
         let server_trait = quote::format_ident!("{}", service.name());
 
         let method_stream = match (method.client_streaming(), method.server_streaming()) {
