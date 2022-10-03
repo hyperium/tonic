@@ -12,7 +12,10 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpListener,
+};
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE, L>(
@@ -168,6 +171,18 @@ impl TcpIncoming {
         keepalive: Option<Duration>,
     ) -> Result<Self, crate::Error> {
         let mut inner = AddrIncoming::bind(&addr)?;
+        inner.set_nodelay(nodelay);
+        inner.set_keepalive(keepalive);
+        Ok(TcpIncoming { inner })
+    }
+
+    /// Creates a new `TcpIncoming` from an existing `tokio::net::TcpListener`.
+    pub fn from_listener(
+        listener: TcpListener,
+        nodelay: bool,
+        keepalive: Option<Duration>,
+    ) -> Result<Self, crate::Error> {
+        let mut inner = AddrIncoming::from_listener(listener)?;
         inner.set_nodelay(nodelay);
         inner.set_keepalive(keepalive);
         Ok(TcpIncoming { inner })
