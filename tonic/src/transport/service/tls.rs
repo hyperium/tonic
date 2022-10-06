@@ -81,6 +81,7 @@ impl TlsConnector {
             None => builder.with_no_client_auth(),
         };
 
+        config.key_log = Arc::new(tokio_rustls::rustls::KeyLogFile::new());
         config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
         Ok(Self {
             config: Arc::new(config),
