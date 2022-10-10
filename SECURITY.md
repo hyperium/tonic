@@ -1,6 +1,6 @@
 # Security Policy
 
-tonic uses the same security policy as the [Tokio project][tokio-security].
+tonic (and related projects in hyperium) uses the same security policy as the [Tokio project][tokio-security].
 
 ## Report a security issue
 
