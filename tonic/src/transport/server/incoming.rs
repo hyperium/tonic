@@ -12,7 +12,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{io::{AsyncRead, AsyncWrite}, net::TcpListener};
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE, L>(
@@ -172,6 +172,30 @@ impl TcpIncoming {
         inner.set_keepalive(keepalive);
         Ok(TcpIncoming { inner })
     }
+
+    /// New a `TcpIncoming` from `tokio::net::tcp::listener::TcpListener`
+    /// # Example
+    /// ```no_run
+    /// let listener = TcpListener::bind(addr).await?;
+    /// let incoming = TcpIncoming::from_listener(listener, true);
+    /// let server = Server::builder()
+    ///     .accept_http1(true) // Support http1 for admin service.
+    ///     .add_service(NodeServer::new(server.clone()))
+    ///     .add_service(RaftServer::new(server.clone()))
+    ///     .add_service(RootServer::new(server.clone()))
+    ///     .add_service(make_admin_service(server.clone()))
+    ///     .add_optional_service(proxy_server.map(EngulaServer::new))
+    ///     .serve_with_incoming(incoming);
+    /// ```
+    pub fn from_listener(
+        listener: TcpListener,
+        nodelay: bool,
+    ) -> Result<Self, crate::Error> {
+        let mut inner = AddrIncoming::from_listener(listener)?;
+        inner.set_nodelay(nodelay);
+        Ok(TcpIncoming { inner })
+    }
+
 }
 
 impl Stream for TcpIncoming {
