@@ -337,7 +337,7 @@ mod tests {
         async fn grpc_web_content_types() {
             let mut svc = crate::enable(Svc);
 
-            for ct in &[GRPC_WEB_TEXT, GRPC_WEB_PROTO, GRPC_WEB_PROTO, GRPC_WEB] {
+            for ct in &[GRPC_WEB_TEXT, GRPC_WEB_PROTO, GRPC_WEB_TEXT_PROTO, GRPC_WEB] {
                 let mut req = request();
                 req.headers_mut()
                     .insert(CONTENT_TYPE, HeaderValue::from_static(ct));
