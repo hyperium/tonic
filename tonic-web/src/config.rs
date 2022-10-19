@@ -4,6 +4,7 @@ use std::time::Duration;
 
 use http::{header::HeaderName, HeaderValue};
 use tonic::body::BoxBody;
+use tower_layer::Layer;
 use tower_service::Service;
 
 use crate::service::GrpcWeb;
@@ -162,5 +163,19 @@ impl Config {
 impl Default for Config {
     fn default() -> Self {
         Config::new()
+    }
+}
+
+impl<S> Layer<S> for Config
+where
+    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Into<BoxError> + Send,
+{
+    type Service = GrpcWeb<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        self.enable(inner)
     }
 }
