@@ -140,7 +140,8 @@ impl<T> Request<T> {
         self.message
     }
 
-    pub(crate) fn into_parts(self) -> (MetadataMap, Extensions, T) {
+    /// Consumes `self` returning the parts of the request.
+    pub fn into_parts(self) -> (MetadataMap, Extensions, T) {
         (self.metadata, self.extensions, self.message)
     }
 
