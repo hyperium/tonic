@@ -15,6 +15,7 @@ use crate::{BoxError, BoxFuture, Config};
 
 const GRPC: &str = "application/grpc";
 
+/// A wrapper around tonic services enabling them to handle grpc-web requests
 #[derive(Debug, Clone)]
 pub struct GrpcWeb<S> {
     inner: S,
