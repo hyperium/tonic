@@ -74,13 +74,14 @@ async fn spawn(allowed_origin: &str) -> String {
     let url = format!("http://{}", listener.local_addr().unwrap());
     let listener_stream = TcpListenerStream::new(listener);
 
-    let tonic_web_config = tonic_web::config().allow_origins(vec![allowed_origin]);
+    let svc = tonic_web::config()
+        .allow_origins(vec![allowed_origin])
+        .enable(TestServer::new(Svc));
 
     let _ = tokio::spawn(async move {
         Server::builder()
             .accept_http1(true)
-            .layer(tonic_web_config)
-            .add_service(TestServer::new(Svc))
+            .add_service(svc)
             .serve_with_incoming(listener_stream)
             .await
             .unwrap()
