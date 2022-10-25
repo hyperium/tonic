@@ -88,15 +88,13 @@
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
 pub use layer::GrpcWebLayer;
-pub use service::GrpcWebService;
+pub use service::{GrpcWebService, ResponseFuture};
 
 mod call;
 mod layer;
 mod service;
 
 use http::header::HeaderName;
-use std::future::Future;
-use std::pin::Pin;
 use std::time::Duration;
 use tonic::body::BoxBody;
 use tower_http::cors::{AllowOrigin, Cors, CorsLayer};
@@ -110,7 +108,6 @@ const DEFAULT_ALLOW_HEADERS: [&str; 4] =
     ["x-grpc-web", "content-type", "x-user-agent", "grpc-timeout"];
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 
 /// Enable a tonic service to handle grpc-web requests with the default configuration.
 ///

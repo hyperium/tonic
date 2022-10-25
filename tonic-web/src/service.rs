@@ -1,7 +1,11 @@
+use futures_core::ready;
+use std::future::Future;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
 use hyper::Body;
+use pin_project::pin_project;
 use tonic::body::{empty_body, BoxBody};
 use tonic::transport::NamedService;
 use tower_service::Service;
@@ -9,7 +13,7 @@ use tracing::{debug, trace};
 
 use crate::call::content_types::is_grpc_web;
 use crate::call::{Encoding, GrpcWebCall};
-use crate::{BoxError, BoxFuture};
+use crate::BoxError;
 
 const GRPC: &str = "application/grpc";
 
@@ -47,13 +51,17 @@ impl<S> GrpcWebService<S>
 where
     S: Service<Request<Body>, Response = Response<BoxBody>> + Send + 'static,
 {
-    fn response(&self, status: StatusCode) -> BoxFuture<S::Response, S::Error> {
-        Box::pin(async move {
-            Ok(Response::builder()
-                .status(status)
-                .body(empty_body())
-                .unwrap())
-        })
+    fn response(&self, status: StatusCode) -> ResponseFuture<S::Future> {
+        ResponseFuture {
+            case: Case::ImmediateResponse {
+                res: Some(
+                    Response::builder()
+                        .status(status)
+                        .body(empty_body())
+                        .unwrap(),
+                ),
+            },
+        }
     }
 }
 
@@ -65,7 +73,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = BoxFuture<Self::Response, Self::Error>;
+    type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -89,8 +97,12 @@ where
             } => {
                 trace!(kind = "simple", path = ?req.uri().path(), ?encoding, ?accept);
 
-                let fut = self.inner.call(coerce_request(req, encoding));
-                Box::pin(async move { Ok(coerce_response(fut.await?, accept)) })
+                ResponseFuture {
+                    case: Case::GrpcWeb {
+                        future: self.inner.call(coerce_request(req, encoding)),
+                        accept,
+                    },
+                }
             }
 
             // The request's content-type matches one of the 4 supported grpc-web
@@ -105,7 +117,11 @@ where
             // whatever they are.
             RequestKind::Other(Version::HTTP_2) => {
                 debug!(kind = "other h2", content_type = ?req.headers().get(header::CONTENT_TYPE));
-                Box::pin(self.inner.call(req))
+                ResponseFuture {
+                    case: Case::Other {
+                        future: self.inner.call(req),
+                    },
+                }
             }
 
             // Return HTTP 400 for all other requests.
@@ -113,6 +129,53 @@ where
                 debug!(kind = "other h1", content_type = ?req.headers().get(header::CONTENT_TYPE));
                 self.response(StatusCode::BAD_REQUEST)
             }
+        }
+    }
+}
+
+/// Response future for the [`GrpcWebService`].
+#[allow(missing_debug_implementations)]
+#[pin_project]
+#[must_use = "futures do nothing unless polled"]
+pub struct ResponseFuture<F> {
+    #[pin]
+    case: Case<F>,
+}
+
+#[pin_project(project = CaseProj)]
+enum Case<F> {
+    GrpcWeb {
+        #[pin]
+        future: F,
+        accept: Encoding,
+    },
+    Other {
+        #[pin]
+        future: F,
+    },
+    ImmediateResponse {
+        res: Option<Response<BoxBody>>,
+    },
+}
+
+impl<F, E> Future for ResponseFuture<F>
+where
+    F: Future<Output = Result<Response<BoxBody>, E>> + Send + 'static,
+    E: Into<BoxError> + Send,
+{
+    type Output = Result<Response<BoxBody>, E>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        let mut this = self.project();
+
+        match this.case.as_mut().project() {
+            CaseProj::GrpcWeb { future, accept } => {
+                let res = ready!(future.poll(cx))?;
+
+                Poll::Ready(Ok(coerce_response(res, *accept)))
+            }
+            CaseProj::Other { future } => future.poll(cx),
+            CaseProj::ImmediateResponse { res } => Poll::Ready(Ok(res.take().unwrap())),
         }
     }
 }
@@ -176,6 +239,8 @@ mod tests {
     use http::header::{
         ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, CONTENT_TYPE, ORIGIN,
     };
+
+    type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 
     #[derive(Debug, Clone)]
     struct Svc;
