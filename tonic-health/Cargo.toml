@@ -16,7 +16,7 @@ version = "0.7.1"
 
 [features]
 default = ["transport"]
-transport = ["tonic/transport"]
+transport = []
 
 [dependencies]
 async-stream = "0.3"
