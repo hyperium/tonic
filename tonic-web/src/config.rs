@@ -4,7 +4,6 @@ use std::time::Duration;
 
 use http::{header::HeaderName, HeaderValue};
 use tonic::body::BoxBody;
-use tonic::transport::NamedService;
 use tower_service::Service;
 
 use crate::service::GrpcWeb;
@@ -152,11 +151,10 @@ impl Config {
     pub fn enable<S>(&self, service: S) -> GrpcWeb<S>
     where
         S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
-        S: NamedService + Clone + Send + 'static,
+        S: Clone + Send + 'static,
         S::Future: Send + 'static,
         S::Error: Into<BoxError> + Send,
     {
-        tracing::trace!("enabled for {}", S::NAME);
         GrpcWeb::new(service, self.clone())
     }
 }

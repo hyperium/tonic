@@ -15,6 +15,7 @@ use crate::{BoxError, BoxFuture, Config};
 
 const GRPC: &str = "application/grpc";
 
+/// Service implementing the grpc-web protocol.
 #[derive(Debug, Clone)]
 pub struct GrpcWeb<S> {
     inner: S,
@@ -266,6 +267,7 @@ mod tests {
     mod grpc_web {
         use super::*;
         use http::HeaderValue;
+        use tower_layer::Layer;
 
         fn request() -> Request<Body> {
             Request::builder()
@@ -279,6 +281,14 @@ mod tests {
         #[tokio::test]
         async fn default_cors_config() {
             let mut svc = crate::enable(Svc);
+            let res = svc.call(request()).await.unwrap();
+
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn web_layer() {
+            let mut svc = crate::GrpcWebLayer::new().layer(Svc);
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::OK);

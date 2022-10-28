@@ -88,17 +88,18 @@
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
 pub use config::Config;
+pub use layer::GrpcWebLayer;
+pub use service::GrpcWeb;
 
 mod call;
 mod config;
 mod cors;
+mod layer;
 mod service;
 
-use crate::service::GrpcWeb;
 use std::future::Future;
 use std::pin::Pin;
 use tonic::body::BoxBody;
-use tonic::transport::NamedService;
 use tower_service::Service;
 
 /// enable a tonic service to handle grpc-web requests with the default configuration.
@@ -107,7 +108,7 @@ use tower_service::Service;
 pub fn enable<S>(service: S) -> GrpcWeb<S>
 where
     S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
-    S: NamedService + Clone + Send + 'static,
+    S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
 {

@@ -24,6 +24,7 @@ hyper = "0.14"
 pin-project = "1"
 tonic = {version = "0.8", path = "../tonic", default-features = false, features = ["transport"]}
 tower-service = "0.3"
+tower-layer = "0.3"
 tracing = "0.1"
 
 [dev-dependencies]
