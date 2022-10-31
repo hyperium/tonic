@@ -74,7 +74,7 @@ pub mod quota_failure {
     pub struct Violation {
         /// The subject on which the quota check failed.
         /// For example, "clientip:<ip address of client>" or "project:<Google
-        /// developer project id>".
+        ///  developer project id>".
         #[prost(string, tag="1")]
         pub subject: ::prost::alloc::string::String,
         /// A description of how the quota check failed. Clients can use this
@@ -228,7 +228,7 @@ pub struct ResourceInfo {
     pub resource_name: ::prost::alloc::string::String,
     /// The owner of the resource (optional).
     /// For example, "user:<owner email>" or "project:<Google developer project
-    /// id>".
+    ///  id>".
     #[prost(string, tag="3")]
     pub owner: ::prost::alloc::string::String,
     /// Describes what error is encountered when accessing this resource.

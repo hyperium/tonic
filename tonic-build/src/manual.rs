@@ -367,6 +367,7 @@ impl ServiceGenerator {
                 true,  // emit_package,
                 "",    // proto_path, -- not used
                 false, // compile_well_known_types, -- not used
+                self.builder.build_transport,
                 &Attributes::default(),
             );
             self.clients.extend(client);
@@ -409,6 +410,7 @@ impl ServiceGenerator {
 pub struct Builder {
     build_server: bool,
     build_client: bool,
+    build_transport: bool,
 
     out_dir: Option<PathBuf>,
 }
@@ -418,6 +420,7 @@ impl Default for Builder {
         Self {
             build_server: true,
             build_client: true,
+            build_transport: true,
             out_dir: None,
         }
     }
@@ -442,6 +445,15 @@ impl Builder {
     /// Defaults to enabling server code generation.
     pub fn build_server(mut self, enable: bool) -> Self {
         self.build_server = enable;
+        self
+    }
+
+    /// Enable or disable generated clients and servers to have built-in tonic
+    /// transport features.
+    ///
+    /// When the `transport` feature is disabled this does nothing.
+    pub fn build_transport(mut self, enable: bool) -> Self {
+        self.build_transport = enable;
         self
     }
 
