@@ -11,6 +11,7 @@ use tonic::{Response, Streaming};
 
 use integration::pb::{test_client::TestClient, test_server::TestServer, Input};
 use integration::Svc;
+use tonic_web::GrpcWebLayer;
 
 #[tokio::test]
 async fn smoke_unary() {
@@ -113,13 +114,10 @@ async fn grpc(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, Stri
 async fn grpc_web(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, String) {
     let (listener, url) = bind().await;
 
-    let svc = tonic_web::config()
-        .allow_origins(vec!["http://foo.com"])
-        .enable(TestServer::new(Svc));
-
     let fut = Server::builder()
         .accept_http1(accept_h1)
-        .add_service(svc)
+        .layer(GrpcWebLayer::new())
+        .add_service(TestServer::new(Svc))
         .serve_with_incoming(TcpListenerStream::new(listener));
 
     (fut, url)

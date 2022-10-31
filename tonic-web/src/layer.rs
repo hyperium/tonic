@@ -1,4 +1,4 @@
-use super::{BoxBody, BoxError, Config, GrpcWeb};
+use super::{BoxBody, BoxError, GrpcWebService};
 
 use tower_layer::Layer;
 use tower_service::Service;
@@ -23,9 +23,9 @@ where
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
 {
-    type Service = GrpcWeb<S>;
+    type Service = GrpcWebService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {
-        Config::default().enable(inner)
+        GrpcWebService::new(inner)
     }
 }
