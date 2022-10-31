@@ -133,7 +133,7 @@ fn generate_connect(service_ident: &syn::Ident, enabled: bool) -> TokenStream {
 }
 
 #[cfg(not(feature = "transport"))]
-fn generate_connect(_service_ident: &syn::Ident) -> TokenStream {
+fn generate_connect(_service_ident: &syn::Ident, _enabled: bool) -> TokenStream {
     TokenStream::new()
 }
 
