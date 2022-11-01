@@ -1,22 +1,32 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HealthCheckRequest {
-    #[prost(string, tag="1")]
+    #[prost(string, tag = "1")]
     pub service: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HealthCheckResponse {
-    #[prost(enumeration="health_check_response::ServingStatus", tag="1")]
+    #[prost(enumeration = "health_check_response::ServingStatus", tag = "1")]
     pub status: i32,
 }
 /// Nested message and enum types in `HealthCheckResponse`.
 pub mod health_check_response {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
     #[repr(i32)]
     pub enum ServingStatus {
         Unknown = 0,
         Serving = 1,
         NotServing = 2,
-        ///  Used only by the Watch method.
+        /// Used only by the Watch method.
         ServiceUnknown = 3,
     }
     impl ServingStatus {
