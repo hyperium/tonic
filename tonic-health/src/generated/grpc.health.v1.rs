@@ -153,9 +153,9 @@ pub mod health_client {
             &mut self,
             request: impl tonic::IntoRequest<super::HealthCheckRequest>,
         ) -> Result<
-                tonic::Response<tonic::codec::Streaming<super::HealthCheckResponse>>,
-                tonic::Status,
-            > {
+            tonic::Response<tonic::codec::Streaming<super::HealthCheckResponse>>,
+            tonic::Status,
+        > {
             self.inner
                 .ready()
                 .await
