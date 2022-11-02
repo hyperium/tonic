@@ -31,7 +31,7 @@ pub mod health_check_response {
     }
     impl ServingStatus {
         /// String value of the enum field names used in the ProtoBuf definition.
-        ///
+        /// 
         /// The values are not transformed in any way and thus are considered stable
         /// (if the ProtoBuf definition does not change) and safe for programmatic use.
         pub fn as_str_name(&self) -> &'static str {
@@ -99,7 +99,7 @@ pub mod health_client {
             HealthClient::new(InterceptedService::new(inner, interceptor))
         }
         /// Compress requests with the given encoding.
-        ///
+        /// 
         /// This requires the server to support it otherwise it might respond with an
         /// error.
         #[must_use]
@@ -138,13 +138,13 @@ pub mod health_client {
         /// The server will immediately send back a message indicating the current
         /// serving status.  It will then subsequently send a new message whenever
         /// the service's serving status changes.
-        ///
+        /// 
         /// If the requested service is unknown when the call is received, the
         /// server will send a message setting the serving status to
         /// SERVICE_UNKNOWN but will *not* terminate the call.  If at some
         /// future point, the serving status of the service becomes known, the
         /// server will send a new message with the service's serving status.
-        ///
+        /// 
         /// If the call terminates with status UNIMPLEMENTED, then clients
         /// should assume this method is not supported and should not retry the
         /// call.  If the call terminates with any other status (including OK),
@@ -177,7 +177,7 @@ pub mod health_client {
 pub mod health_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    ///Generated trait containing gRPC methods that should be implemented for use with HealthServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with HealthServer.
     #[async_trait]
     pub trait Health: Send + Sync + 'static {
         /// If the requested service is unknown, the call will fail with status
@@ -186,7 +186,7 @@ pub mod health_server {
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
         ) -> Result<tonic::Response<super::HealthCheckResponse>, tonic::Status>;
-        ///Server streaming response type for the Watch method.
+        /// Server streaming response type for the Watch method.
         type WatchStream: futures_core::Stream<
                 Item = Result<super::HealthCheckResponse, tonic::Status>,
             >
@@ -196,13 +196,13 @@ pub mod health_server {
         /// The server will immediately send back a message indicating the current
         /// serving status.  It will then subsequently send a new message whenever
         /// the service's serving status changes.
-        ///
+        /// 
         /// If the requested service is unknown when the call is received, the
         /// server will send a message setting the serving status to
         /// SERVICE_UNKNOWN but will *not* terminate the call.  If at some
         /// future point, the serving status of the service becomes known, the
         /// server will send a new message with the service's serving status.
-        ///
+        /// 
         /// If the call terminates with status UNIMPLEMENTED, then clients
         /// should assume this method is not supported and should not retry the
         /// call.  If the call terminates with any other status (including OK),
