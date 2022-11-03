@@ -213,12 +213,19 @@ fn generate_attributes<'a>(
 
 // Generate a singular line of a doc comment
 fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
+    let comment = comment.as_ref();
+
+    let comment = if !comment.starts_with(" ") {
+        format!(" {}", comment)
+    } else {
+        comment.to_string()
+    };
+
     let mut doc_stream = TokenStream::new();
 
     doc_stream.append(Ident::new("doc", Span::call_site()));
     doc_stream.append(Punct::new('=', Spacing::Alone));
-    println!("{:?}", comment.as_ref());
-    doc_stream.append(Literal::string(&format!("{}", comment.as_ref())));
+    doc_stream.append(Literal::string(&comment));
 
     let group = Group::new(Delimiter::Bracket, doc_stream);
 

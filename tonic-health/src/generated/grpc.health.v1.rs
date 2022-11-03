@@ -177,7 +177,7 @@ pub mod health_client {
 pub mod health_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    ///Generated trait containing gRPC methods that should be implemented for use with HealthServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with HealthServer.
     #[async_trait]
     pub trait Health: Send + Sync + 'static {
         /// If the requested service is unknown, the call will fail with status
@@ -186,7 +186,7 @@ pub mod health_server {
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
         ) -> Result<tonic::Response<super::HealthCheckResponse>, tonic::Status>;
-        ///Server streaming response type for the Watch method.
+        /// Server streaming response type for the Watch method.
         type WatchStream: futures_core::Stream<
                 Item = Result<super::HealthCheckResponse, tonic::Status>,
             >
