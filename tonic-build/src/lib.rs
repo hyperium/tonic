@@ -218,7 +218,7 @@ fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
     doc_stream.append(Ident::new("doc", Span::call_site()));
     doc_stream.append(Punct::new('=', Spacing::Alone));
     println!("{:?}", comment.as_ref());
-    doc_stream.append(Literal::string(&format!(" {}", comment.as_ref())));
+    doc_stream.append(Literal::string(&format!("{}", comment.as_ref())));
 
     let group = Group::new(Delimiter::Bracket, doc_stream);
 
