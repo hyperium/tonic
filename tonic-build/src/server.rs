@@ -173,7 +173,7 @@ fn generate_trait<T: Service>(
 ) -> TokenStream {
     let methods = generate_trait_methods(service, proto_path, compile_well_known_types);
     let trait_doc = generate_doc_comment(&format!(
-        "Generated trait containing gRPC methods that should be implemented for use with {}Server.",
+        " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
         service.name()
     ));
 
@@ -219,7 +219,7 @@ fn generate_trait_methods<T: Service>(
             (false, true) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
                 let stream_doc = generate_doc_comment(&format!(
-                    "Server streaming response type for the {} method.",
+                    " Server streaming response type for the {} method.",
                     method.identifier()
                 ));
 
@@ -235,7 +235,7 @@ fn generate_trait_methods<T: Service>(
             (true, true) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
                 let stream_doc = generate_doc_comment(&format!(
-                    "Server streaming response type for the {} method.",
+                    " Server streaming response type for the {} method.",
                     method.identifier()
                 ));
 

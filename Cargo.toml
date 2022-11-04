@@ -22,3 +22,7 @@ members = [
   "tests/compression",
   "tonic-web/tests/integration",
 ]
+
+[patch.crates-io]
+prost-build = { git = "https://github.com/tokio-rs/prost/", branch = "lucio/format" }
+

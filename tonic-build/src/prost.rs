@@ -15,6 +15,7 @@ pub fn configure() -> Builder {
     Builder {
         build_client: true,
         build_server: true,
+        build_transport: true,
         file_descriptor_set_path: None,
         out_dir: None,
         extern_path: Vec::new(),
@@ -172,6 +173,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 self.builder.emit_package,
                 &self.builder.proto_path,
                 self.builder.compile_well_known_types,
+                self.builder.build_transport,
                 &self.builder.client_attributes,
             );
             self.clients.extend(client);
@@ -214,6 +216,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 pub struct Builder {
     pub(crate) build_client: bool,
     pub(crate) build_server: bool,
+    pub(crate) build_transport: bool,
     pub(crate) file_descriptor_set_path: Option<PathBuf>,
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
@@ -240,6 +243,15 @@ impl Builder {
     /// Enable or disable gRPC server code generation.
     pub fn build_server(mut self, enable: bool) -> Self {
         self.build_server = enable;
+        self
+    }
+
+    /// Enable or disable generated clients and servers to have built-in tonic
+    /// transport features.
+    ///
+    /// When the `transport` feature is disabled this does nothing.
+    pub fn build_transport(mut self, enable: bool) -> Self {
+        self.build_transport = enable;
         self
     }
 
