@@ -1,6 +1,5 @@
 use std::{path::PathBuf, process::Command};
 
-#[ignore]
 #[test]
 fn bootstrap() {
     let iface_files = &["proto/health.proto"];
