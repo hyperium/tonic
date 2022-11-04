@@ -1,16 +1,26 @@
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HealthCheckRequest {
-    #[prost(string, tag="1")]
+    #[prost(string, tag = "1")]
     pub service: ::prost::alloc::string::String,
 }
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HealthCheckResponse {
-    #[prost(enumeration="health_check_response::ServingStatus", tag="1")]
+    #[prost(enumeration = "health_check_response::ServingStatus", tag = "1")]
     pub status: i32,
 }
 /// Nested message and enum types in `HealthCheckResponse`.
 pub mod health_check_response {
-    #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+    #[derive(
+        Clone,
+        Copy,
+        Debug,
+        PartialEq,
+        Eq,
+        Hash,
+        PartialOrd,
+        Ord,
+        ::prost::Enumeration
+    )]
     #[repr(i32)]
     pub enum ServingStatus {
         Unknown = 0,
@@ -156,7 +166,7 @@ pub mod health_client {
 pub mod health_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    ///Generated trait containing gRPC methods that should be implemented for use with HealthServer.
+    /// Generated trait containing gRPC methods that should be implemented for use with HealthServer.
     #[async_trait]
     pub trait Health: Send + Sync + 'static {
         /// If the requested service is unknown, the call will fail with status
@@ -165,7 +175,7 @@ pub mod health_server {
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
         ) -> Result<tonic::Response<super::HealthCheckResponse>, tonic::Status>;
-        ///Server streaming response type for the Watch method.
+        /// Server streaming response type for the Watch method.
         type WatchStream: futures_core::Stream<
                 Item = Result<super::HealthCheckResponse, tonic::Status>,
             >

@@ -12,13 +12,14 @@ pub fn generate<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    build_transport: bool,
     attributes: &Attributes,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Client", service.name());
     let client_mod = quote::format_ident!("{}_client", naive_snake_case(service.name()));
     let methods = generate_methods(service, emit_package, proto_path, compile_well_known_types);
 
-    let connect = generate_connect(&service_ident);
+    let connect = generate_connect(&service_ident, build_transport);
     let service_doc = generate_doc_comments(service.comment());
 
     let package = if emit_package { service.package() } else { "" };
@@ -109,8 +110,8 @@ pub fn generate<T: Service>(
 }
 
 #[cfg(feature = "transport")]
-fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
-    quote! {
+fn generate_connect(service_ident: &syn::Ident, enabled: bool) -> TokenStream {
+    let connect_impl = quote! {
         impl #service_ident<tonic::transport::Channel> {
             /// Attempt to create a new client by connecting to a given endpoint.
             pub async fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
@@ -122,11 +123,17 @@ fn generate_connect(service_ident: &syn::Ident) -> TokenStream {
                 Ok(Self::new(conn))
             }
         }
+    };
+
+    if enabled {
+        connect_impl
+    } else {
+        TokenStream::new()
     }
 }
 
 #[cfg(not(feature = "transport"))]
-fn generate_connect(_service_ident: &syn::Ident) -> TokenStream {
+fn generate_connect(_service_ident: &syn::Ident, _enabled: bool) -> TokenStream {
     TokenStream::new()
 }
 

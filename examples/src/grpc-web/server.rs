@@ -2,6 +2,7 @@ use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
+use tonic_web::GrpcWebLayer;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -33,14 +34,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let greeter = MyGreeter::default();
     let greeter = GreeterServer::new(greeter);
-    let greeter = tonic_web::config()
-        .allow_origins(vec!["127.0.0.1"])
-        .enable(greeter);
 
     println!("GreeterServer listening on {}", addr);
 
     Server::builder()
         .accept_http1(true)
+        .layer(GrpcWebLayer::new())
         .add_service(greeter)
         .serve(addr)
         .await?;
