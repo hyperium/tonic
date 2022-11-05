@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{Attributes, Method, Service};
 use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
 use proc_macro2::{Span, TokenStream};
@@ -14,6 +16,7 @@ pub fn generate<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
     attributes: &Attributes,
+    disable_comments: &HashSet<String>,
 ) -> TokenStream {
     let methods = generate_methods(service, proto_path, compile_well_known_types);
 
@@ -22,11 +25,12 @@ pub fn generate<T: Service>(
     let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
         service,
+        emit_package,
         proto_path,
         compile_well_known_types,
         server_trait.clone(),
+        disable_comments,
     );
-    let service_doc = generate_doc_comments(service.comment());
     let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
     let path = format!(
@@ -35,6 +39,13 @@ pub fn generate<T: Service>(
         if package.is_empty() { "" } else { "." },
         service.identifier()
     );
+
+    let service_doc = if disable_comments.contains(&path) {
+        TokenStream::new()
+    } else {
+        generate_doc_comments(service.comment())
+    };
+
     let named = generate_named(&server_service, &server_trait, &path);
     let mod_attributes = attributes.for_mod(package);
     let struct_attributes = attributes.for_struct(&path);
@@ -167,11 +178,19 @@ pub fn generate<T: Service>(
 
 fn generate_trait<T: Service>(
     service: &T,
+    emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
     server_trait: Ident,
+    disable_comments: &HashSet<String>,
 ) -> TokenStream {
-    let methods = generate_trait_methods(service, proto_path, compile_well_known_types);
+    let methods = generate_trait_methods(
+        service,
+        emit_package,
+        proto_path,
+        compile_well_known_types,
+        disable_comments,
+    );
     let trait_doc = generate_doc_comment(&format!(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
         service.name()
@@ -188,18 +207,31 @@ fn generate_trait<T: Service>(
 
 fn generate_trait_methods<T: Service>(
     service: &T,
+    emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    disable_comments: &HashSet<String>,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
+    let package = if emit_package { service.package() } else { "" };
     for method in service.methods() {
         let name = quote::format_ident!("{}", method.name());
 
         let (req_message, res_message) =
             method.request_response_name(proto_path, compile_well_known_types);
 
-        let method_doc = generate_doc_comments(method.comment());
+        let method_doc = if disable_comments.contains(&format!(
+            "{}{}{}.{}",
+            package,
+            if package.is_empty() { "" } else { "." },
+            service.identifier(),
+            method.identifier()
+        )) {
+            TokenStream::new()
+        } else {
+            generate_doc_comments(method.comment())
+        };
 
         let method = match (method.client_streaming(), method.server_streaming()) {
             (false, false) => {

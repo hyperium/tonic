@@ -3,6 +3,7 @@ use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
 use std::{
+    collections::HashSet,
     ffi::OsString,
     io,
     path::{Path, PathBuf},
@@ -29,6 +30,7 @@ pub fn configure() -> Builder {
         protoc_args: Vec::new(),
         include_file: None,
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
+        disable_comments: HashSet::default(),
     }
 }
 
@@ -163,6 +165,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 &self.builder.proto_path,
                 self.builder.compile_well_known_types,
                 &self.builder.server_attributes,
+                &self.builder.disable_comments,
             );
             self.servers.extend(server);
         }
@@ -175,6 +178,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 self.builder.compile_well_known_types,
                 self.builder.build_transport,
                 &self.builder.client_attributes,
+                &self.builder.disable_comments,
             );
             self.clients.extend(client);
         }
@@ -229,6 +233,7 @@ pub struct Builder {
     pub(crate) protoc_args: Vec<OsString>,
     pub(crate) include_file: Option<PathBuf>,
     pub(crate) emit_rerun_if_changed: bool,
+    pub(crate) disable_comments: HashSet<String>,
 
     out_dir: Option<PathBuf>,
 }
@@ -351,6 +356,12 @@ impl Builder {
     /// Note: Enabling `--experimental_allow_proto3_optional` requires protobuf >= 3.12.
     pub fn protoc_arg<A: AsRef<str>>(mut self, arg: A) -> Self {
         self.protoc_args.push(arg.as_ref().into());
+        self
+    }
+
+    /// Disable service and rpc comments emission.
+    pub fn disable_comments(mut self, path: impl AsRef<str>) -> Self {
+        self.disable_comments.insert(path.as_ref().to_string());
         self
     }
 
