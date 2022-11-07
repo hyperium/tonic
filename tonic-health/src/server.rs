@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 use tokio_stream::Stream;
 #[cfg(feature = "transport")]
-use tonic::transport::NamedService;
+use tonic::server::NamedService;
 use tonic::{Request, Response, Status};
 
 /// Creates a `HealthReporter` and a linked `HealthServer` pair. Together,

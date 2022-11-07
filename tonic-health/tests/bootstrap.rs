@@ -12,6 +12,7 @@ fn bootstrap() {
     tonic_build::configure()
         .build_client(true)
         .build_server(true)
+        .build_transport(false)
         .out_dir(format!("{}", out_dir.display()))
         .compile(iface_files, dirs)
         .unwrap();

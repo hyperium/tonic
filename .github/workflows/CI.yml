@@ -29,7 +29,7 @@ jobs:
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }} 
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: Swatinem/rust-cache@v1
     - name: Check fmt
       run: cargo fmt -- --check
@@ -66,7 +66,7 @@ jobs:
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }} 
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: Swatinem/rust-cache@v1
     - uses: actions/checkout@master
     - name: Run tests
@@ -93,7 +93,7 @@ jobs:
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }} 
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: Swatinem/rust-cache@v1
     - name: Run interop tests
       run: ./interop/test.sh
