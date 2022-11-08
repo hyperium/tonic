@@ -136,6 +136,37 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn encode_too_big() {
+        let encoder = MockEncoder::default();
+
+        let msg = vec![0u8; u32::MAX as usize + 1];
+
+        let messages = std::iter::once(Ok::<_, Status>(msg));
+        let source = futures_util::stream::iter(messages);
+
+        let body = encode_server(
+            encoder,
+            source,
+            None,
+            SingleMessageCompressionOverride::default(),
+        );
+
+        futures_util::pin_mut!(body);
+
+        assert!(body.data().await.is_none());
+        assert_eq!(
+            body.trailers()
+                .await
+                .expect("no error polling trailers")
+                .expect("some trailers")
+                .get("grpc-status")
+                .expect("grpc-status header"),
+            "8"
+        );
+        assert!(body.is_end_stream());
+    }
+
     #[derive(Debug, Clone, Default)]
     struct MockEncoder;
 

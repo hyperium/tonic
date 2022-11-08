@@ -119,19 +119,26 @@ where
     }
 
     // now that we know length, we can write the header
-    Ok(finish_encoding(compression_encoding, buf))
+    finish_encoding(compression_encoding, buf)
 }
 
-fn finish_encoding(compression_encoding: Option<CompressionEncoding>, buf: &mut BytesMut) -> Bytes {
+fn finish_encoding(
+    compression_encoding: Option<CompressionEncoding>,
+    buf: &mut BytesMut,
+) -> Result<Bytes, Status> {
     let len = buf.len() - HEADER_SIZE;
-    assert!(len <= std::u32::MAX as usize);
+    if len > std::u32::MAX as usize {
+        return Err(Status::resource_exhausted(format!(
+            "Cannot return body with more than 4GB of data but got {len} bytes"
+        )));
+    }
     {
         let mut buf = &mut buf[..HEADER_SIZE];
         buf.put_u8(compression_encoding.is_some() as u8);
         buf.put_u32(len as u32);
     }
 
-    buf.split_to(len + HEADER_SIZE).freeze()
+    Ok(buf.split_to(len + HEADER_SIZE).freeze())
 }
 
 #[derive(Debug)]
