@@ -32,6 +32,7 @@ use super::{client, server, Attributes};
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -357,6 +358,7 @@ impl ServiceGenerator {
                 "",    // proto_path, -- not used
                 false, // compile_well_known_types -- not used
                 &Attributes::default(),
+                &HashSet::default(),
             );
             self.servers.extend(server);
         }
@@ -369,6 +371,7 @@ impl ServiceGenerator {
                 false, // compile_well_known_types, -- not used
                 self.builder.build_transport,
                 &Attributes::default(),
+                &HashSet::default(),
             );
             self.clients.extend(client);
         }
