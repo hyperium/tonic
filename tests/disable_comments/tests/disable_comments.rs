@@ -2,10 +2,7 @@ use std::{fs, path::PathBuf};
 
 #[test]
 fn test() {
-    let path = PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-        .join("src")
-        .join("generated")
-        .join("test.rs");
+    let path = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("test.rs");
     let s = fs::read_to_string(path).unwrap();
     assert!(!s.contains("This comment will be removed."));
     let mut count = 0_usize;

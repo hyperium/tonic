@@ -1,3 +1,3 @@
 pub mod pb {
-    include!("generated/test.rs");
+    tonic::include_proto!("test");
 }
