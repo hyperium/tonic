@@ -77,6 +77,12 @@ Assuming [Homebrew](https://brew.sh/) is already installed. (If not, see instruc
 brew install protobuf
 ```
 
+#### Windows
+
+- Download the latest version of `protoc-xx.y-win64.zip` from [HERE](https://github.com/protocolbuffers/protobuf/releases/latest)
+- Extract the file `bin\protoc.exe` and put it somewhere in the `PATH`
+- Verify installation by opening a command prompt and enter `protoc --version`
+
 ### Tutorials
 
 - The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, perfect for first time users!
