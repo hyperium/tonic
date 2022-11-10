@@ -194,6 +194,20 @@ impl Attributes {
     }
 }
 
+fn format_method_name<T: Service>(
+    package: &str,
+    service: &T,
+    method: &<T as Service>::Method,
+) -> String {
+    format!(
+        "{}{}{}.{}",
+        package,
+        if package.is_empty() { "" } else { "." },
+        service.identifier(),
+        method.identifier()
+    )
+}
+
 // Generates attributes given a list of (`pattern`, `attribute`) pairs. If `pattern` matches `name`, `attribute` will be included.
 fn generate_attributes<'a>(
     name: &str,
