@@ -136,6 +136,8 @@ mod tests {
         }
     }
 
+    // skip on windows because CI stumbles over our 4GB allocation
+    #[cfg(not(target_family = "windows"))]
     #[tokio::test]
     async fn encode_too_big() {
         let encoder = MockEncoder::default();
