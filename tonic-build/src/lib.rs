@@ -229,7 +229,7 @@ fn generate_attributes<'a>(
 fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
     let comment = comment.as_ref();
 
-    let comment = if !comment.starts_with(" ") {
+    let comment = if !comment.starts_with(' ') {
         format!(" {}", comment)
     } else {
         comment.to_string()
