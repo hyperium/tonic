@@ -188,7 +188,7 @@ mod rustls_keys {
     use crate::transport::service::tls::TlsError;
     use crate::transport::Identity;
 
-    pub(crate) fn load_rustls_private_key(
+    pub(super) fn load_rustls_private_key(
         mut cursor: std::io::Cursor<&[u8]>,
     ) -> Result<PrivateKey, crate::Error> {
         while let Ok(Some(item)) = rustls_pemfile::read_one(&mut cursor) {
