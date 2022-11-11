@@ -85,3 +85,9 @@ impl StdError for Error {
             .map(|source| &**source as &(dyn StdError + 'static))
     }
 }
+
+impl From<crate::Error> for Error {
+    fn from(e: crate::Error) -> Error {
+        Error::from_source(e)
+    }
+}
