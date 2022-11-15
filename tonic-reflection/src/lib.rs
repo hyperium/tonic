@@ -15,12 +15,13 @@
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub(crate) mod proto {
+/// Generated protobuf types from the `grpc.reflection.v1alpha` package.
+pub mod proto {
     #![allow(unreachable_pub)]
-    tonic::include_proto!("grpc.reflection.v1alpha");
+    #![allow(missing_docs)]
+    include!("generated/grpc.reflection.v1alpha.rs");
 
-    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
-        tonic::include_file_descriptor_set!("reflection_v1alpha1");
+    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/reflection_v1alpha1.bin");
 }
 
 /// Implementation of the server component of gRPC Server Reflection.
