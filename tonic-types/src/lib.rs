@@ -33,3 +33,8 @@ mod richer_error;
 pub use richer_error::{
     BadRequest, ErrorDetail, ErrorDetails, FieldViolation, RetryInfo, StatusExt,
 };
+
+mod sealed {
+    #[allow(unreachable_pub)]
+    pub trait Sealed {}
+}

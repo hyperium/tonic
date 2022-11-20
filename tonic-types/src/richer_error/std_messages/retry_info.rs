@@ -3,8 +3,7 @@ use std::{convert::TryFrom, time};
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
-use super::super::pb;
-use super::super::{FromAny, IntoAny};
+use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
 /// [error_details.proto]. Describes when the clients can retry a failed

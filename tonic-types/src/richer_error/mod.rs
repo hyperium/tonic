@@ -1,4 +1,4 @@
-use prost::{DecodeError, Message};
+use prost::{bytes::BytesMut, DecodeError, Message};
 use prost_types::Any;
 use tonic::{codegen::Bytes, metadata::MetadataMap, Code};
 
@@ -27,12 +27,18 @@ fn gen_details_bytes(code: Code, message: &String, details: Vec<Any>) -> Bytes {
         details,
     };
 
-    Bytes::from(status.encode_to_vec())
+    let mut buf = BytesMut::with_capacity(status.encoded_len());
+
+    // Should never panic since `buf` is initialized with sufficient capacity
+    status.encode(&mut buf).unwrap();
+
+    buf.freeze()
 }
 
 /// Used to implement associated functions and methods on `tonic::Status`, that
-/// allow the addition and extraction of standard error details.
-pub trait StatusExt {
+/// allow the addition and extraction of standard error details. This trait is
+/// sealed and not meant to be implemented outside of `tonic-types`.
+pub trait StatusExt: crate::sealed::Sealed {
     /// Generates a `tonic::Status` with error details obtained from an
     /// [`ErrorDetails`] struct, and custom metadata.
     ///
@@ -282,6 +288,8 @@ pub trait StatusExt {
     /// ```
     fn get_details_bad_request(&self) -> Option<BadRequest>;
 }
+
+impl crate::sealed::Sealed for tonic::Status {}
 
 impl StatusExt for tonic::Status {
     fn with_error_details_and_metadata(
