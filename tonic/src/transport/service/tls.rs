@@ -118,12 +118,20 @@ impl TlsAcceptor {
     pub(crate) fn new(
         identity: Identity,
         client_ca_root: Option<Certificate>,
+        client_auth_optional: bool,
     ) -> Result<Self, crate::Error> {
         let builder = ServerConfig::builder().with_safe_defaults();
 
-        let builder = match client_ca_root {
-            None => builder.with_no_client_auth(),
-            Some(cert) => {
+        let builder = match (client_ca_root, client_auth_optional) {
+            (None, _) => builder.with_no_client_auth(),
+            (Some(cert), true) => {
+                use tokio_rustls::rustls::server::AllowAnyAnonymousOrAuthenticatedClient;
+                let mut roots = RootCertStore::empty();
+                rustls_keys::add_certs_from_pem(std::io::Cursor::new(&cert.pem[..]), &mut roots)?;
+                builder
+                    .with_client_cert_verifier(AllowAnyAnonymousOrAuthenticatedClient::new(roots))
+            }
+            (Some(cert), false) => {
                 use tokio_rustls::rustls::server::AllowAnyAuthenticatedClient;
                 let mut roots = RootCertStore::empty();
                 rustls_keys::add_certs_from_pem(std::io::Cursor::new(&cert.pem[..]), &mut roots)?;
