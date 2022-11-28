@@ -28,7 +28,7 @@
 //! }
 //! ```
 
-use crate::generate::CodeGen8uilder;
+use crate::code_gen::CodeGen8uilder;
 
 use proc_macro2::TokenStream;
 use quote::ToTokens;

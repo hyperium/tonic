@@ -1,4 +1,4 @@
-use crate::generate::CodeGen8uilder;
+use crate::code_gen::CodeGen8uilder;
 
 use super::Attributes;
 use proc_macro2::TokenStream;
