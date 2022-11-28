@@ -9,11 +9,11 @@ struct Opts {
     #[clap(name = "use_tls", long, action = ArgAction::SetTrue)]
     use_tls: bool,
 
-    #[clap(
+    #[arg(
         long = "test_case",
         use_value_delimiter = true,
-        min_values = 1,
-        arg_enum,
+        num_args(1..),
+        value_enum,
         action = ArgAction::Append
     )]
     test_case: Vec<Testcase>,
@@ -99,7 +99,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone, clap::ArgEnum)]
+#[derive(Debug, Copy, Clone, clap::ValueEnum)]
 #[clap(rename_all = "snake_case")]
 enum Testcase {
     EmptyUnary,
