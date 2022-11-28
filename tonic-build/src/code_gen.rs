@@ -6,7 +6,7 @@ use crate::{Attributes, Service};
 
 /// Builder for the generic code generation of server and clients.
 #[derive(Debug)]
-pub struct CodeGen8uilder {
+pub struct CodeGenBuilder {
     emit_package: bool,
     compile_well_known_types: bool,
     attributes: Attributes,
@@ -14,7 +14,7 @@ pub struct CodeGen8uilder {
     disable_comments: HashSet<String>,
 }
 
-impl CodeGen8uilder {
+impl CodeGenBuilder {
     /// Create a new code gen builder with default options.
     pub fn new() -> Self {
         Default::default()
@@ -89,7 +89,7 @@ impl CodeGen8uilder {
     }
 }
 
-impl Default for CodeGen8uilder {
+impl Default for CodeGenBuilder {
     fn default() -> Self {
         Self {
             emit_package: true,
