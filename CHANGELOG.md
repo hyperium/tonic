@@ -1,3 +1,29 @@
+# [v0.8.3](https://github.com/hyperium/tonic/compare/v0.8.2...v0.8.3) (2022-11-28)
+
+Included in this release is also the sub-crate major version bumps:
+
+* `tonic-health` has been bumped to `0.8.0` 
+* `tonic-reflection` has been bumped to `0.6.0`
+* `tonic-web` has been bumped to `0.5.0`
+
+
+### Bug Fixes
+
+* do not panic while encoding oversized bodies ([#1142](https://github.com/hyperium/tonic/issues/1142)) ([33e22bb](https://github.com/hyperium/tonic/commit/33e22bbc5ef1b74de82394c3ebfea27382419620)), closes [#1141](https://github.com/hyperium/tonic/issues/1141)
+* **reflection, health:** Remove transport feature ([#1112](https://github.com/hyperium/tonic/issues/1112)) ([7153289](https://github.com/hyperium/tonic/commit/7153289b51f7770cdd00cefeceddacc4cf36df97))
+
+
+### Features
+
+* **build:** Add `build_transport` builder option ([#1130](https://github.com/hyperium/tonic/issues/1130)) ([1f5bc9b](https://github.com/hyperium/tonic/commit/1f5bc9b9d55f814d1cb83de6f43239e275122265))
+* **build:** Add `CodeGenBuilder` ([#1154](https://github.com/hyperium/tonic/issues/1154)) ([c4525ba](https://github.com/hyperium/tonic/commit/c4525ba6ad21cf9db8d1857931f430cbe924aeb5))
+* **build:** Add disable_comments option ([#1127](https://github.com/hyperium/tonic/issues/1127)) ([e188521](https://github.com/hyperium/tonic/commit/e1885211495e63d962bc1d00f9be6eeaab2bb901))
+* Expose `Request#into_parts` and `Request#from_parts` ([#1118](https://github.com/hyperium/tonic/issues/1118)) ([b409ddd](https://github.com/hyperium/tonic/commit/b409ddd478959e239aeef3cb8715cd3ace470a8f))
+* **transport:** add `from_listener` for `TcpIncoming` ([#1093](https://github.com/hyperium/tonic/issues/1093)) ([0b03b30](https://github.com/hyperium/tonic/commit/0b03b30cccc67d517b05587614405d63d942b1bb))
+* **web:** Implement tower::Layer for tonic_web::Config ([#1119](https://github.com/hyperium/tonic/issues/1119)) ([40536dc](https://github.com/hyperium/tonic/commit/40536dc13428f6338610d74f7b45a5f9c87d9335))
+* **web:** Removed Cors impl and replaced with tower-http's CorsLayer ([#1123](https://github.com/hyperium/tonic/issues/1123)) ([a98d719](https://github.com/hyperium/tonic/commit/a98d719fb4b0a88127504a1ab3eb472e842c6b71)), closes [#1122](https://github.com/hyperium/tonic/issues/1122)
+
+
 # [0.8.2](https://github.com/hyperium/tonic/compare/v0.8.1...v0.8.2) (2022-09-28)
 
 
