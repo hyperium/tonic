@@ -1,4 +1,6 @@
-use super::{client, server, Attributes};
+use crate::code_gen::CodeGen8uilder;
+
+use super::Attributes;
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
@@ -159,27 +161,25 @@ impl ServiceGenerator {
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
         if self.builder.build_server {
-            let server = server::generate(
-                &service,
-                self.builder.emit_package,
-                &self.builder.proto_path,
-                self.builder.compile_well_known_types,
-                &self.builder.server_attributes,
-                &self.builder.disable_comments,
-            );
+            let server = CodeGen8uilder::new()
+                .emit_package(self.builder.emit_package)
+                .compile_well_known_types(self.builder.compile_well_known_types)
+                .attributes(self.builder.server_attributes.clone())
+                .disable_comments(self.builder.disable_comments.clone())
+                .generate_server(&service, &self.builder.proto_path);
+
             self.servers.extend(server);
         }
 
         if self.builder.build_client {
-            let client = client::generate(
-                &service,
-                self.builder.emit_package,
-                &self.builder.proto_path,
-                self.builder.compile_well_known_types,
-                self.builder.build_transport,
-                &self.builder.client_attributes,
-                &self.builder.disable_comments,
-            );
+            let client = CodeGen8uilder::new()
+                .emit_package(self.builder.emit_package)
+                .compile_well_known_types(self.builder.compile_well_known_types)
+                .attributes(self.builder.client_attributes.clone())
+                .disable_comments(self.builder.disable_comments.clone())
+                .build_transport(self.builder.build_transport)
+                .generate_client(&service, &self.builder.proto_path);
+
             self.clients.extend(client);
         }
     }

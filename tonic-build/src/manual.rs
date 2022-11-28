@@ -28,11 +28,11 @@
 //! }
 //! ```
 
-use super::{client, server, Attributes};
+use crate::code_gen::CodeGen8uilder;
+
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{
-    collections::HashSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -352,27 +352,21 @@ struct ServiceGenerator {
 impl ServiceGenerator {
     fn generate(&mut self, service: &Service) {
         if self.builder.build_server {
-            let server = server::generate(
-                service,
-                true,  // emit_package,
-                "",    // proto_path, -- not used
-                false, // compile_well_known_types -- not used
-                &Attributes::default(),
-                &HashSet::default(),
-            );
+            let server = CodeGen8uilder::new()
+                .emit_package(true)
+                .compile_well_known_types(false)
+                .generate_server(service, "");
+
             self.servers.extend(server);
         }
 
         if self.builder.build_client {
-            let client = client::generate(
-                service,
-                true,  // emit_package,
-                "",    // proto_path, -- not used
-                false, // compile_well_known_types, -- not used
-                self.builder.build_transport,
-                &Attributes::default(),
-                &HashSet::default(),
-            );
+            let client = CodeGen8uilder::new()
+                .emit_package(true)
+                .compile_well_known_types(false)
+                .build_transport(self.builder.build_transport)
+                .generate_client(service, "");
+
             self.clients.extend(client);
         }
     }
