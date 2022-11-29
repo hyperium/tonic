@@ -18,7 +18,7 @@ path = "src/bin/server.rs"
 async-stream = "0.3"
 bytes = "1.0"
 clap = {version = "4.0.26", features = ["derive"]}
-console = "0.14"
+console = "0.15"
 futures-core = "0.3"
 futures-util = "0.3"
 http = "0.2"
