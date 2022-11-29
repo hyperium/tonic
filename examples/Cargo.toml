@@ -222,7 +222,7 @@ warp = "0.3"
 # Health example
 tonic-health = { path = "../tonic-health" }
 # Reflection example
-listenfd = "0.3"
+listenfd = "1.0"
 tonic-reflection = { path = "../tonic-reflection" }
 # grpc-web example
 bytes = "1"
