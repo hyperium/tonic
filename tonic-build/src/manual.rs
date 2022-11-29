@@ -28,7 +28,7 @@
 //! }
 //! ```
 
-use crate::code_gen::CodeGen8uilder;
+use crate::code_gen::CodeGenBuilder;
 
 use proc_macro2::TokenStream;
 use quote::ToTokens;
@@ -352,7 +352,7 @@ struct ServiceGenerator {
 impl ServiceGenerator {
     fn generate(&mut self, service: &Service) {
         if self.builder.build_server {
-            let server = CodeGen8uilder::new()
+            let server = CodeGenBuilder::new()
                 .emit_package(true)
                 .compile_well_known_types(false)
                 .generate_server(service, "");
@@ -361,7 +361,7 @@ impl ServiceGenerator {
         }
 
         if self.builder.build_client {
-            let client = CodeGen8uilder::new()
+            let client = CodeGenBuilder::new()
                 .emit_package(true)
                 .compile_well_known_types(false)
                 .build_transport(self.builder.build_transport)

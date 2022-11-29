@@ -1,4 +1,4 @@
-use crate::code_gen::CodeGen8uilder;
+use crate::code_gen::CodeGenBuilder;
 
 use super::Attributes;
 use proc_macro2::TokenStream;
@@ -161,7 +161,7 @@ impl ServiceGenerator {
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
         if self.builder.build_server {
-            let server = CodeGen8uilder::new()
+            let server = CodeGenBuilder::new()
                 .emit_package(self.builder.emit_package)
                 .compile_well_known_types(self.builder.compile_well_known_types)
                 .attributes(self.builder.server_attributes.clone())
@@ -172,7 +172,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
         }
 
         if self.builder.build_client {
-            let client = CodeGen8uilder::new()
+            let client = CodeGenBuilder::new()
                 .emit_package(self.builder.emit_package)
                 .compile_well_known_types(self.builder.compile_well_known_types)
                 .attributes(self.builder.client_attributes.clone())

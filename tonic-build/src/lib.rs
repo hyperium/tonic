@@ -95,7 +95,7 @@ pub mod client;
 pub mod server;
 
 mod code_gen;
-pub use code_gen::CodeGen8uilder;
+pub use code_gen::CodeGenBuilder;
 
 /// Service generation trait.
 ///
