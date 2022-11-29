@@ -1,4 +1,16 @@
+# [v0.8.4](https://github.com/hyperium/tonic/compare/v0.8.3...v0.8.4) (2022-11-29)
+
+This release only contains a release for `tonic-build`.
+
+### Bug Fixes
+
+* **build:** Fix CodeGen8uilder typo ([#1165](https://github.com/hyperium/tonic/issues/1165)) ([#1166](https://github.com/hyperium/tonic/issues/1166)) ([c7476ff](https://github.com/hyperium/tonic/commit/c7476fff425b972c7966228fd38a9191e8d2ddc9))
+
+
 # [v0.8.3](https://github.com/hyperium/tonic/compare/v0.8.2...v0.8.3) (2022-11-28)
+
+**note:** this version has been yanked due to a typo in the `CodeGenBuilder`
+type.
 
 Included in this release is also the sub-crate major version bumps:
 
