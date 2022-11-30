@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::{Attributes, Method, Service};
-use crate::{generate_doc_comments, naive_snake_case};
+use crate::{format_method_name, generate_doc_comments, naive_snake_case};
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
@@ -190,13 +190,7 @@ fn generate_methods<T: Service>(
             method.identifier()
         );
 
-        if !disable_comments.contains(&format!(
-            "{}{}{}.{}",
-            package,
-            if package.is_empty() { "" } else { "." },
-            service.identifier(),
-            method.identifier()
-        )) {
+        if !disable_comments.contains(&format_method_name(package, service, method)) {
             stream.extend(generate_doc_comments(method.comment()));
         }
 

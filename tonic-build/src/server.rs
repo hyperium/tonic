@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 
 use super::{Attributes, Method, Service};
-use crate::{generate_doc_comment, generate_doc_comments, naive_snake_case};
+use crate::{format_method_name, generate_doc_comment, generate_doc_comments, naive_snake_case};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};
@@ -239,13 +239,8 @@ fn generate_trait_methods<T: Service>(
         let (req_message, res_message) =
             method.request_response_name(proto_path, compile_well_known_types);
 
-        let method_doc = if disable_comments.contains(&format!(
-            "{}{}{}.{}",
-            package,
-            if package.is_empty() { "" } else { "." },
-            service.identifier(),
-            method.identifier()
-        )) {
+        let method_doc = if disable_comments.contains(&format_method_name(package, service, method))
+        {
             TokenStream::new()
         } else {
             generate_doc_comments(method.comment())
