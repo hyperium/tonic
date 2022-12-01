@@ -1,5 +1,8 @@
 name: CI
 
+env:
+  MSRV: "1.60"
+
 on:
   push:
     branches:
@@ -44,6 +47,24 @@ jobs:
   #   steps:
   #   - uses: actions/checkout@v1
   #   - uses: EmbarkStudios/cargo-deny-action@v1
+
+  msrv:
+    name: Check MSRV (${{ env.MSRV }})
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v1
+      - name: Install Rust (${{ env.MSRV }})
+        uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: ${{ env.MSRV }}
+          override: true
+      - name: Check
+        uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --all --all-targets --all-features
 
   test:
     runs-on: ${{ matrix.os }}
