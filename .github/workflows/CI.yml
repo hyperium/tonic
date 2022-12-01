@@ -46,12 +46,12 @@ jobs:
   #   - uses: EmbarkStudios/cargo-deny-action@v1
 
   msrv:
-    name: Check MSRV (${{ env.MSRV }})
+    name: Check MSRV
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v1
-      - name: Install Rust (${{ env.MSRV }})
+      - name: Install Rust
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
