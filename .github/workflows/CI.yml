@@ -55,7 +55,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: 1.60 
+          toolchain: "1.60"
           override: true
       - name: Check
         run: cargo check --all --all-targets --all-features
