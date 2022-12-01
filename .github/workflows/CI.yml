@@ -1,8 +1,5 @@
 name: CI
 
-env:
-  MSRV: "1.60"
-
 on:
   push:
     branches:
@@ -58,7 +55,7 @@ jobs:
         uses: actions-rs/toolchain@v1
         with:
           profile: minimal
-          toolchain: ${{ env.MSRV }}
+          toolchain: 1.60 
           override: true
       - name: Check
         uses: actions-rs/cargo@v1
