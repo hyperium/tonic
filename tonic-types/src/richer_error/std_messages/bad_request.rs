@@ -1,8 +1,7 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
-use super::super::pb;
-use super::super::{FromAny, IntoAny};
+use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `field_violations` field of the [`BadRequest`] struct.
 /// Describes a single bad request field.
