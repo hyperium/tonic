@@ -58,10 +58,7 @@ jobs:
           toolchain: 1.60 
           override: true
       - name: Check
-        uses: actions-rs/cargo@v1
-        with:
-          command: check
-          args: --all --all-targets --all-features
+        run: cargo check --all --all-targets --all-features
 
   test:
     runs-on: ${{ matrix.os }}
