@@ -1,14 +1,11 @@
 pub mod pb {
-    tonic::include_proto!("grpc.examples.echo");
+    tonic::include_proto!("grpc.examples.unaryecho");
 }
 
-use futures::Stream;
 use pb::{EchoRequest, EchoResponse};
-use std::pin::Pin;
-use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status, Streaming};
+use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status};
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
 
 #[derive(Default)]
 pub struct EchoServer;
@@ -18,31 +15,6 @@ impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
-    }
-
-    type ServerStreamingEchoStream = ResponseStream;
-
-    async fn server_streaming_echo(
-        &self,
-        _: Request<EchoRequest>,
-    ) -> EchoResult<Self::ServerStreamingEchoStream> {
-        Err(Status::unimplemented("not implemented"))
-    }
-
-    async fn client_streaming_echo(
-        &self,
-        _: Request<Streaming<EchoRequest>>,
-    ) -> EchoResult<EchoResponse> {
-        Err(Status::unimplemented("not implemented"))
-    }
-
-    type BidirectionalStreamingEchoStream = ResponseStream;
-
-    async fn bidirectional_streaming_echo(
-        &self,
-        _: Request<Streaming<EchoRequest>>,
-    ) -> EchoResult<Self::BidirectionalStreamingEchoStream> {
-        Err(Status::unimplemented("not implemented"))
     }
 }
 

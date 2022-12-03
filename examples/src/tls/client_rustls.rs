@@ -2,7 +2,7 @@
 //! provide a custom `ClientConfig` for the tls configuration.
 
 pub mod pb {
-    tonic::include_proto!("/grpc.examples.echo");
+    tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
 use hyper::{client::HttpConnector, Uri};
