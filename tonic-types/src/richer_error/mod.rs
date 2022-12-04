@@ -8,7 +8,7 @@ mod std_messages;
 use super::pb;
 
 pub use error_details::{vec::ErrorDetail, ErrorDetails};
-pub use std_messages::{BadRequest, FieldViolation, RetryInfo};
+pub use std_messages::{BadRequest, DebugInfo, FieldViolation, RetryInfo};
 
 trait IntoAny {
     fn into_any(self) -> Any;
@@ -266,6 +266,28 @@ pub trait StatusExt: crate::sealed::Sealed {
     /// ```
     fn get_details_retry_info(&self) -> Option<RetryInfo>;
 
+    /// Get first [`DebugInfo`] details found on `tonic::Status`, if any. If
+    /// some `prost::DecodeError` occurs, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{Status, Response};
+    /// use tonic_types::{StatusExt};
+    ///
+    /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
+    ///     match req_result {
+    ///         Ok(_) => {},
+    ///         Err(status) => {
+    ///             if let Some(debug_info) = status.get_details_debug_info() {
+    ///                 // Handle debug_info details
+    ///             }
+    ///         }
+    ///     };
+    /// }
+    /// ```
+    fn get_details_debug_info(&self) -> Option<DebugInfo>;
+
     /// Get first [`BadRequest`] details found on `tonic::Status`, if any. If
     /// some `prost::DecodeError` occurs, returns `None`.
     ///
@@ -306,6 +328,10 @@ impl StatusExt for tonic::Status {
             conv_details.push(retry_info.into_any());
         }
 
+        if let Some(debug_info) = details.debug_info {
+            conv_details.push(debug_info.into_any());
+        }
+
         if let Some(bad_request) = details.bad_request {
             conv_details.push(bad_request.into_any());
         }
@@ -333,6 +359,9 @@ impl StatusExt for tonic::Status {
             match error_detail {
                 ErrorDetail::RetryInfo(retry_info) => {
                     conv_details.push(retry_info.into_any());
+                }
+                ErrorDetail::DebugInfo(debug_info) => {
+                    conv_details.push(debug_info.into_any());
                 }
                 ErrorDetail::BadRequest(bad_req) => {
                     conv_details.push(bad_req.into_any());
@@ -368,6 +397,9 @@ impl StatusExt for tonic::Status {
                 RetryInfo::TYPE_URL => {
                     details.retry_info = Some(RetryInfo::from_any(any)?);
                 }
+                DebugInfo::TYPE_URL => {
+                    details.debug_info = Some(DebugInfo::from_any(any)?);
+                }
                 BadRequest::TYPE_URL => {
                     details.bad_request = Some(BadRequest::from_any(any)?);
                 }
@@ -392,6 +424,9 @@ impl StatusExt for tonic::Status {
                 RetryInfo::TYPE_URL => {
                     details.push(RetryInfo::from_any(any)?.into());
                 }
+                DebugInfo::TYPE_URL => {
+                    details.push(DebugInfo::from_any(any)?.into());
+                }
                 BadRequest::TYPE_URL => {
                     details.push(BadRequest::from_any(any)?.into());
                 }
@@ -412,6 +447,22 @@ impl StatusExt for tonic::Status {
         for any in status.details.into_iter() {
             match any.type_url.as_str() {
                 RetryInfo::TYPE_URL => match RetryInfo::from_any(any) {
+                    Ok(detail) => return Some(detail),
+                    Err(_) => {}
+                },
+                _ => {}
+            }
+        }
+
+        None
+    }
+
+    fn get_details_debug_info(&self) -> Option<DebugInfo> {
+        let status = pb::Status::decode(self.details()).ok()?;
+
+        for any in status.details.into_iter() {
+            match any.type_url.as_str() {
+                DebugInfo::TYPE_URL => match DebugInfo::from_any(any) {
                     Ok(detail) => return Some(detail),
                     Err(_) => {}
                 },
@@ -444,7 +495,7 @@ mod tests {
     use std::time::Duration;
     use tonic::{Code, Status};
 
-    use super::{BadRequest, ErrorDetails, RetryInfo, StatusExt};
+    use super::{BadRequest, DebugInfo, ErrorDetails, RetryInfo, StatusExt};
 
     #[test]
     fn gen_status_with_details() {
@@ -452,12 +503,21 @@ mod tests {
 
         err_details
             .set_retry_info(Some(Duration::from_secs(5)))
+            .set_debug_info(
+                vec!["trace3".into(), "trace2".into(), "trace1".into()],
+                "details",
+            )
             .add_bad_request_violation("field", "description");
 
         let fmt_details = format!("{:?}", err_details);
 
         let err_details_vec = vec![
             RetryInfo::new(Some(Duration::from_secs(5))).into(),
+            DebugInfo::new(
+                vec!["trace3".into(), "trace2".into(), "trace1".into()],
+                "details",
+            )
+            .into(),
             BadRequest::with_violation("field", "description").into(),
         ];
 

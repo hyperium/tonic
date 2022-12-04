@@ -31,7 +31,7 @@ pub use pb::Status;
 mod richer_error;
 
 pub use richer_error::{
-    BadRequest, ErrorDetail, ErrorDetails, FieldViolation, RetryInfo, StatusExt,
+    BadRequest, DebugInfo, ErrorDetail, ErrorDetails, FieldViolation, RetryInfo, StatusExt,
 };
 
 mod sealed {
