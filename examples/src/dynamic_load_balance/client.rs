@@ -1,5 +1,5 @@
 pub mod pb {
-    tonic::include_proto!("grpc.examples.echo");
+    tonic::include_proto!("grpc.examples.unaryecho");
 }
 
 use pb::{echo_client::EchoClient, EchoRequest};
