@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+#![allow(clippy::derive_partial_eq_without_eq)]
 
 use self::util::*;
 use crate::util::mock_io_channel;
