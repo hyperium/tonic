@@ -13,6 +13,7 @@ use routeguide::route_guide_server::{RouteGuide, RouteGuideServer};
 use routeguide::{Feature, Point, Rectangle, RouteNote, RouteSummary};
 
 pub mod routeguide {
+    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("routeguide");
 }
 

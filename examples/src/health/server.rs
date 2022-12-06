@@ -6,6 +6,7 @@ use std::time::Duration;
 use tonic_health::server::HealthReporter;
 
 pub mod hello_world {
+    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("helloworld");
 }
 

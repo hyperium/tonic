@@ -10,6 +10,7 @@ pub mod common;
 use common::{HelloRequest, HelloResponse};
 
 pub mod hello_world {
+    #![allow(clippy::derive_partial_eq_without_eq)]
     include!(concat!(env!("OUT_DIR"), "/json.helloworld.Greeter.rs"));
 }
 use hello_world::greeter_server::{Greeter, GreeterServer};

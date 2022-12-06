@@ -6,6 +6,7 @@ use tonic::{
 use tower::service_fn;
 
 pub mod hello_world {
+    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("helloworld");
 }
 

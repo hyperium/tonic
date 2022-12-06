@@ -1,6 +1,7 @@
 use tokio::runtime::{Builder, Runtime};
 
 pub mod hello_world {
+    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("helloworld");
 }
 
