@@ -16,6 +16,12 @@ impl GrpcWebLayer {
     }
 }
 
+impl Default for GrpcWebLayer {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl<S> Layer<S> for GrpcWebLayer
 where
     S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
