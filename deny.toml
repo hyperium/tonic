@@ -33,6 +33,7 @@ allow = [
     "OpenSSL",
     "Zlib",
     "Unicode-DFS-2016",
+    "MPL-2.0",
 ]
 
 [[licenses.clarify]]
