@@ -6,6 +6,7 @@ pub mod server;
 pub mod pb {
     #![allow(dead_code)]
     #![allow(unused_imports)]
+    #![allow(clippy::derive_partial_eq_without_eq)]
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
 }
 
