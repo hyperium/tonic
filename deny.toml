@@ -24,6 +24,7 @@ skip-tree = [
 unlicensed = "deny"
 # We want really high confidence when inferring licenses from text
 confidence-threshold = 0.92
+copyleft = "deny"
 allow = [
     "Apache-2.0",
     "BSD-3-Clause",
