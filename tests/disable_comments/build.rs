@@ -1,6 +1,6 @@
 fn main() {
     let mut config = prost_build::Config::default();
-    config.disable_comments(&["test.Input1", "test.Output1"]);
+    config.disable_comments(["test.Input1", "test.Output1"]);
     tonic_build::configure()
         .disable_comments("test.Service1")
         .disable_comments("test.Service1.Rpc1")
