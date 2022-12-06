@@ -247,7 +247,7 @@ impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for str {
     /// ```
     #[inline]
     fn eq(&self, other: &MetadataKey<VE>) -> bool {
-        (*other).inner == *self
+        other.inner == *self
     }
 }
 
