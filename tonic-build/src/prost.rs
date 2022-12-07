@@ -15,6 +15,11 @@ use std::{
 ///
 /// Use [`compile_protos`] instead if you don't need to tweak anything.
 pub fn configure() -> Builder {
+    let type_attributes = vec![(
+        ".".to_string(),
+        "#[allow(clippy::derive_partial_eq_without_eq)]".to_string(),
+    )];
+
     Builder {
         build_client: true,
         build_server: true,
@@ -23,7 +28,7 @@ pub fn configure() -> Builder {
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
-        type_attributes: Vec::new(),
+        type_attributes,
         server_attributes: Attributes::default(),
         client_attributes: Attributes::default(),
         proto_path: "super".to_string(),
