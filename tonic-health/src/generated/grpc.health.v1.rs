@@ -1,8 +1,10 @@
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HealthCheckRequest {
     #[prost(string, tag = "1")]
     pub service: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct HealthCheckResponse {
     #[prost(enumeration = "health_check_response::ServingStatus", tag = "1")]
@@ -10,6 +12,7 @@ pub struct HealthCheckResponse {
 }
 /// Nested message and enum types in `HealthCheckResponse`.
 pub mod health_check_response {
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(
         Clone,
         Copy,

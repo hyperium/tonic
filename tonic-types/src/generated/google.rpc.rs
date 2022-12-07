@@ -5,14 +5,15 @@
 ///
 /// You can find out more about this error model and how to work with it in the
 /// [API Design Guide](<https://cloud.google.com/apis/design/errors>).
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Status {
-    /// The status code, which should be an enum value of \\[google.rpc.Code\]\[google.rpc.Code\\].
+    /// The status code, which should be an enum value of \[google.rpc.Code][google.rpc.Code\].
     #[prost(int32, tag = "1")]
     pub code: i32,
     /// A developer-facing error message, which should be in English. Any
     /// user-facing error message should be localized and sent in the
-    /// \\[google.rpc.Status.details\]\[google.rpc.Status.details\\] field, or localized by the client.
+    /// \[google.rpc.Status.details][google.rpc.Status.details\] field, or localized by the client.
     #[prost(string, tag = "2")]
     pub message: ::prost::alloc::string::String,
     /// A list of messages that carry the error details.  There is a common set of
@@ -33,6 +34,7 @@ pub struct Status {
 /// the delay between retries based on `retry_delay`, until either a maximum
 /// number of retries have been reached or a maximum retry delay cap has been
 /// reached.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RetryInfo {
     /// Clients should wait at least this long between retrying the same request.
@@ -40,6 +42,7 @@ pub struct RetryInfo {
     pub retry_delay: ::core::option::Option<::prost_types::Duration>,
 }
 /// Describes additional debugging info.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct DebugInfo {
     /// The stack trace entries indicating where the error occurred.
@@ -60,6 +63,7 @@ pub struct DebugInfo {
 ///
 /// Also see RetryInfo and Help types for other details about handling a
 /// quota failure.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct QuotaFailure {
     /// Describes all quota violations.
@@ -70,6 +74,7 @@ pub struct QuotaFailure {
 pub mod quota_failure {
     /// A message type used to describe a single quota violation.  For example, a
     /// daily quota or a custom quota that was exceeded.
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Violation {
         /// The subject on which the quota check failed.
@@ -92,36 +97,34 @@ pub mod quota_failure {
 ///
 /// Example of an error when contacting the "pubsub.googleapis.com" API when it
 /// is not enabled:
-///
-/// ```text,json
-///     { "reason": "API_DISABLED"
-///       "domain": "googleapis.com"
-///       "metadata": {
-///         "resource": "projects/123",
-///         "service": "pubsub.googleapis.com"
-///       }
-///     }
+/// ```json
+///      { "reason": "API_DISABLED"
+///        "domain": "googleapis.com"
+///        "metadata": {
+///          "resource": "projects/123",
+///          "service": "pubsub.googleapis.com"
+///        }
+///      }
 /// ```
-///
 /// This response indicates that the pubsub.googleapis.com API is not enabled.
 ///
 /// Example of an error that is returned when attempting to create a Spanner
 /// instance in a region that is out of stock:
-///
-/// ```text,json
-///     { "reason": "STOCKOUT"
-///       "domain": "spanner.googleapis.com",
-///       "metadata": {
-///         "availableRegions": "us-central1,us-east2"
-///       }
-///     }
+/// ```json
+///      { "reason": "STOCKOUT"
+///        "domain": "spanner.googleapis.com",
+///        "metadata": {
+///          "availableRegions": "us-central1,us-east2"
+///        }
+///      }
 /// ```
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorInfo {
     /// The reason of the error. This is a constant value that identifies the
     /// proximate cause of the error. Error reasons are unique within a particular
     /// domain of errors. This should be at most 63 characters and match
-    /// /\\[A-Z0-9\_\\]+/.
+    /// /\[A-Z0-9_\]+/.
     #[prost(string, tag = "1")]
     pub reason: ::prost::alloc::string::String,
     /// The logical grouping to which the "reason" belongs. The error domain
@@ -134,7 +137,7 @@ pub struct ErrorInfo {
     pub domain: ::prost::alloc::string::String,
     /// Additional structured details about this error.
     ///
-    /// Keys should match /\\[a-zA-Z0-9-\_\\]/ and be limited to 64 characters in
+    /// Keys should match /\[a-zA-Z0-9-_\]/ and be limited to 64 characters in
     /// length. When identifying the current value of an exceeded limit, the units
     /// should be contained in the key, not the value.  For example, rather than
     /// {"instanceLimit": "100/request"}, should be returned as,
@@ -151,6 +154,7 @@ pub struct ErrorInfo {
 /// For example, if an RPC failed because it required the Terms of Service to be
 /// acknowledged, it could list the terms of service violation in the
 /// PreconditionFailure message.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct PreconditionFailure {
     /// Describes all precondition violations.
@@ -160,6 +164,7 @@ pub struct PreconditionFailure {
 /// Nested message and enum types in `PreconditionFailure`.
 pub mod precondition_failure {
     /// A message type used to describe a single precondition failure.
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Violation {
         /// The type of PreconditionFailure. We recommend using a service-specific
@@ -182,6 +187,7 @@ pub mod precondition_failure {
 }
 /// Describes violations in a client request. This error type focuses on the
 /// syntactic aspects of the request.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct BadRequest {
     /// Describes all violations in a client request.
@@ -191,6 +197,7 @@ pub struct BadRequest {
 /// Nested message and enum types in `BadRequest`.
 pub mod bad_request {
     /// A message type used to describe a single bad request field.
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct FieldViolation {
         /// A path leading to a field in the request body. The value will be a
@@ -205,6 +212,7 @@ pub mod bad_request {
 }
 /// Contains metadata about the request that clients can attach when filing a bug
 /// or providing other forms of feedback.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct RequestInfo {
     /// An opaque string that should only be interpreted by the service generating
@@ -217,6 +225,7 @@ pub struct RequestInfo {
     pub serving_data: ::prost::alloc::string::String,
 }
 /// Describes the resource that is being accessed.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ResourceInfo {
     /// A name for the type of resource being accessed, e.g. "sql table",
@@ -226,7 +235,7 @@ pub struct ResourceInfo {
     pub resource_type: ::prost::alloc::string::String,
     /// The name of the resource being accessed.  For example, a shared calendar
     /// name: "example.com_4fghdhgsrgh@group.calendar.google.com", if the current
-    /// error is \\[google.rpc.Code.PERMISSION_DENIED\]\[google.rpc.Code.PERMISSION_DENIED\\].
+    /// error is \[google.rpc.Code.PERMISSION_DENIED][google.rpc.Code.PERMISSION_DENIED\].
     #[prost(string, tag = "2")]
     pub resource_name: ::prost::alloc::string::String,
     /// The owner of the resource (optional).
@@ -245,6 +254,7 @@ pub struct ResourceInfo {
 /// For example, if a quota check failed with an error indicating the calling
 /// project hasn't enabled the accessed service, this can contain a URL pointing
 /// directly to the right place in the developer console to flip the bit.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Help {
     /// URL(s) pointing to additional information on handling the current error.
@@ -254,6 +264,7 @@ pub struct Help {
 /// Nested message and enum types in `Help`.
 pub mod help {
     /// Describes a URL link.
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Message)]
     pub struct Link {
         /// Describes what the link offers.
@@ -266,6 +277,7 @@ pub mod help {
 }
 /// Provides a localized error message that is safe to return to the user
 /// which can be attached to an RPC error.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct LocalizedMessage {
     /// The locale used following the specification defined at
