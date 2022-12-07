@@ -1,12 +1,10 @@
 use tonic::{transport::Server, Request, Response, Status};
 
 pub mod hello_world {
-    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("helloworld");
 }
 
 pub mod echo {
-    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("grpc.examples.unaryecho");
 }
 

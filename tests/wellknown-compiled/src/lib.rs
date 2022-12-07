@@ -1,13 +1,11 @@
 pub mod gen {
     pub mod google {
         pub mod protobuf {
-            #![allow(clippy::derive_partial_eq_without_eq)]
             tonic::include_proto!("google.protobuf");
         }
     }
 
     pub mod test {
-        #![allow(clippy::derive_partial_eq_without_eq)]
         tonic::include_proto!("test");
     }
 }

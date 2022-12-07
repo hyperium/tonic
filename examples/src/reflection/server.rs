@@ -2,7 +2,6 @@ use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
 mod proto {
-    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("helloworld");
 
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =

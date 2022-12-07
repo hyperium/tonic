@@ -21,7 +21,6 @@ use hello_world::{HelloReply, HelloRequest};
 type Error = Box<dyn std::error::Error + Send + Sync + 'static>;
 
 pub mod hello_world {
-    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("helloworld");
 }
 

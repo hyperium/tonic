@@ -9,7 +9,6 @@ pub struct Animal {
 pub mod foo {
     pub mod bar {
         pub mod baz {
-            #![allow(clippy::derive_partial_eq_without_eq)]
             tonic::include_proto!("foo.bar.baz");
         }
     }

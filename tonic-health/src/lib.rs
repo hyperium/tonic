@@ -27,7 +27,6 @@ use std::fmt::{Display, Formatter};
 pub mod proto {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
-    #![allow(clippy::derive_partial_eq_without_eq)]
     include!("generated/grpc.health.v1.rs");
 
     pub const GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET: &[u8] =

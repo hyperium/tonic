@@ -23,7 +23,6 @@
 
 /// Useful protobuf types
 pub mod pb {
-    #![allow(clippy::derive_partial_eq_without_eq)]
     include!("generated/google.rpc.rs");
 }
 

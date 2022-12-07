@@ -3,7 +3,6 @@ use hello_world::{HelloReply, HelloRequest};
 use http::header::{ACCEPT, CONTENT_TYPE};
 
 pub mod hello_world {
-    #![allow(clippy::derive_partial_eq_without_eq)]
     tonic::include_proto!("helloworld");
 }
 

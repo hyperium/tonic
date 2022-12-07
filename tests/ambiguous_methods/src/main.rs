@@ -1,4 +1,3 @@
-#![allow(clippy::derive_partial_eq_without_eq)]
 #[macro_use]
 extern crate tonic;
 
