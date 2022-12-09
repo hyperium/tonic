@@ -12,7 +12,6 @@ pub struct HealthCheckResponse {
 }
 /// Nested message and enum types in `HealthCheckResponse`.
 pub mod health_check_response {
-    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(
         Clone,
         Copy,
