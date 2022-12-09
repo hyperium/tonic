@@ -179,7 +179,7 @@ pub(crate) fn generate_internal<T: Service>(
 
             impl<T: #server_trait> Clone for _Inner<T> {
                 fn clone(&self) -> Self {
-                    Self(self.0.clone())
+                    Self(Arc::clone(&self.0))
                 }
             }
 
@@ -404,7 +404,7 @@ fn generate_unary<T: Method>(
             type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
-                let inner = self.0.clone();
+                let inner = Arc::clone(&self.0);
                 let fut = async move {
                     (*inner).#method_ident(request).await
                 };
@@ -456,7 +456,7 @@ fn generate_server_streaming<T: Method>(
             type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
-                let inner = self.0.clone();
+                let inner = Arc::clone(&self.0);
                 let fut = async move {
                     (*inner).#method_ident(request).await
                 };
@@ -505,7 +505,7 @@ fn generate_client_streaming<T: Method>(
             type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
-                let inner = self.0.clone();
+                let inner = Arc::clone(&self.0);
                 let fut = async move {
                     (*inner).#method_ident(request).await
 
@@ -559,7 +559,7 @@ fn generate_streaming<T: Method>(
             type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
-                let inner = self.0.clone();
+                let inner = Arc::clone(&self.0);
                 let fut = async move {
                     (*inner).#method_ident(request).await
                 };
