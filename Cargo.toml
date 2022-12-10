@@ -23,8 +23,3 @@ members = [
   "tests/compression",
   "tonic-web/tests/integration",
 ]
-
-
-# TODO: Remove this patch and update prost-build version when prost-build is released.
-[patch.crates-io]
-prost-build = { git = "https://github.com/tokio-rs/prost.git", rev = "d531ba7a1912be8bc54a9cf6dceb68dc3e725f36" }
