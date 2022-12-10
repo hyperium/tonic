@@ -2520,7 +2520,7 @@ mod tests {
 
         let mut found_x_word = false;
         for key_and_value in map.iter() {
-            if let KeyAndValueRef::Ascii(ref key, ref _value) = key_and_value {
+            if let KeyAndValueRef::Ascii(key, _value) = key_and_value {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
@@ -2540,7 +2540,7 @@ mod tests {
 
         let mut found_x_word_bin = false;
         for key_and_value in map.iter() {
-            if let KeyAndValueRef::Binary(ref key, ref _value) = key_and_value {
+            if let KeyAndValueRef::Binary(key, _value) = key_and_value {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {
@@ -2561,7 +2561,7 @@ mod tests {
 
         let mut found_x_word = false;
         for key_and_value in map.iter_mut() {
-            if let KeyAndMutValueRef::Ascii(ref key, ref _value) = key_and_value {
+            if let KeyAndMutValueRef::Ascii(key, _value) = key_and_value {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
@@ -2581,7 +2581,7 @@ mod tests {
 
         let mut found_x_word_bin = false;
         for key_and_value in map.iter_mut() {
-            if let KeyAndMutValueRef::Binary(ref key, ref _value) = key_and_value {
+            if let KeyAndMutValueRef::Binary(key, _value) = key_and_value {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {

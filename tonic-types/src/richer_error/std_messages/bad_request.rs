@@ -153,7 +153,7 @@ mod tests {
         );
 
         assert!(
-            br_details.is_empty() == false,
+            !br_details.is_empty(),
             "filled BadRequest returns 'true' from .is_empty()"
         );
 
