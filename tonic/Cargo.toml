@@ -23,27 +23,25 @@ repository = "https://github.com/hyperium/tonic"
 version = "0.8.3"
 
 [features]
-codegen = ["async-trait"]
-gzip = ["flate2"]
+codegen = ["dep:async-trait"]
+gzip = ["dep:flate2"]
 default = ["transport", "codegen", "prost"]
-prost = ["prost1", "prost-derive"]
-tls = ["rustls-pemfile", "transport", "tokio-rustls"]
-tls-roots = ["tls-roots-common", "rustls-native-certs"]
+prost = ["dep:prost", "dep:prost-derive"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls"]
+tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
-tls-webpki-roots = ["tls-roots-common", "webpki-roots"]
+tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 transport = [
-  "axum",
+  "dep:axum",
   "channel"
 ]
 channel = [
-  "h2",
-  "hyper",
-  "tokio",
-  "tower",
-  "tracing-futures",
-  "tokio/macros",
-  "tokio/time",
-  "hyper-timeout",
+  "dep:h2",
+  "dep:hyper",
+  "dep:tokio",
+  "dep:tower",
+  "dep:tracing-futures",
+  "dep:hyper-timeout",
 ]
 
 # [[bench]]
@@ -68,7 +66,7 @@ tower-service = "0.3"
 
 # prost
 prost-derive = {version = "0.11", optional = true}
-prost1 = {package = "prost", version = "0.11", optional = true}
+prost = {version = "0.11", optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
@@ -77,7 +75,7 @@ async-trait = {version = "0.1.13", optional = true}
 h2 = {version = "0.3", optional = true}
 hyper = {version = "0.14.14", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
-tokio = {version = "1.0.1", features = ["net"], optional = true}
+tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
 tracing-futures = {version = "0.2", optional = true}
