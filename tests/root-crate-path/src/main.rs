@@ -1,4 +1,5 @@
-#[derive(Clone, PartialEq, Eq, ::prost::Message)]
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Animal {
     #[prost(string, optional, tag = "1")]
     pub name: ::core::option::Option<::prost::alloc::string::String>,
