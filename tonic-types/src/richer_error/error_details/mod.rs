@@ -1,6 +1,6 @@
 use std::time;
 
-use super::std_messages::{BadRequest, FieldViolation, RetryInfo};
+use super::std_messages::{BadRequest, DebugInfo, FieldViolation, RetryInfo};
 
 pub(crate) mod vec;
 
@@ -13,6 +13,9 @@ pub(crate) mod vec;
 pub struct ErrorDetails {
     /// This field stores [`RetryInfo`] data, if any.
     pub(crate) retry_info: Option<RetryInfo>,
+
+    /// This field stores [`DebugInfo`] data, if any.
+    pub(crate) debug_info: Option<DebugInfo>,
 
     /// This field stores [`BadRequest`] data, if any.
     pub(crate) bad_request: Option<BadRequest>,
@@ -31,6 +34,7 @@ impl ErrorDetails {
     pub fn new() -> Self {
         ErrorDetails {
             retry_info: None,
+            debug_info: None,
             bad_request: None,
         }
     }
@@ -49,6 +53,25 @@ impl ErrorDetails {
     pub fn with_retry_info(retry_delay: Option<time::Duration>) -> Self {
         ErrorDetails {
             retry_info: Some(RetryInfo::new(retry_delay)),
+            ..ErrorDetails::new()
+        }
+    }
+
+    /// Generates an [`ErrorDetails`] struct with [`DebugInfo`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails};
+    ///
+    /// let err_stack = vec!["...".into(), "...".into()];
+    ///
+    /// let err_details = ErrorDetails::with_debug_info(err_stack, "error details");
+    /// ```
+    pub fn with_debug_info(stack_entries: Vec<String>, detail: impl Into<String>) -> Self {
+        ErrorDetails {
+            debug_info: Some(DebugInfo::new(stack_entries, detail)),
             ..ErrorDetails::new()
         }
     }
@@ -101,6 +124,11 @@ impl ErrorDetails {
         self.retry_info.clone()
     }
 
+    /// Get [`DebugInfo`] details, if any
+    pub fn debug_info(&self) -> Option<DebugInfo> {
+        self.debug_info.clone()
+    }
+
     /// Get [`BadRequest`] details, if any
     pub fn bad_request(&self) -> Option<BadRequest> {
         self.bad_request.clone()
@@ -121,6 +149,29 @@ impl ErrorDetails {
     /// ```
     pub fn set_retry_info(&mut self, retry_delay: Option<time::Duration>) -> &mut Self {
         self.retry_info = Some(RetryInfo::new(retry_delay));
+        self
+    }
+
+    /// Set [`DebugInfo`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails};
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// let err_stack = vec!["...".into(), "...".into()];
+    ///
+    /// err_details.set_debug_info(err_stack, "error details");
+    /// ```
+    pub fn set_debug_info(
+        &mut self,
+        stack_entries: Vec<String>,
+        detail: impl Into<String>,
+    ) -> &mut Self {
+        self.debug_info = Some(DebugInfo::new(stack_entries, detail));
         self
     }
 
