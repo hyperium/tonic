@@ -49,6 +49,7 @@ jobs:
         toolchain: "1.60"
         override: true
         components: clippy
+    - uses: actions/checkout@v3
     - name: Run cargo clippy
       run: cargo clippy --workspace --all-targets --all-features
 
