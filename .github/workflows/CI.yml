@@ -24,8 +24,6 @@ jobs:
     - uses: actions/checkout@master
     - name: Install rustfmt
       run: rustup component add rustfmt
-    - name: Install clippy
-      run : rustup component add clippy
     - name: Install cargo-hack
       run: cargo install cargo-hack
     - name: Install Protoc
@@ -33,8 +31,6 @@ jobs:
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: Swatinem/rust-cache@v1
-    - name: Clippy
-      run: cargo clippy --workspace --all-targets --all-features
     - name: Check fmt
       run: cargo fmt -- --check
     - name: Check features
