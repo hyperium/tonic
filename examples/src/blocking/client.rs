@@ -21,7 +21,7 @@ struct BlockingClient {
 impl BlockingClient {
     pub fn connect<D>(dst: D) -> Result<Self, tonic::transport::Error>
     where
-        D: std::convert::TryInto<tonic::transport::Endpoint>,
+        D: TryInto<tonic::transport::Endpoint>,
         D::Error: Into<StdError>,
     {
         let rt = Builder::new_multi_thread().enable_all().build().unwrap();

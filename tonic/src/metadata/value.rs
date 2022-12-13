@@ -7,7 +7,6 @@ use super::key::MetadataKey;
 
 use bytes::Bytes;
 use http::header::HeaderValue;
-use std::convert::TryFrom;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::marker::PhantomData;
@@ -286,7 +285,6 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// # use std::convert::TryFrom;
 /// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
 /// assert_eq!(val, &b"hello\xfa"[..]);
 /// ```
@@ -295,7 +293,6 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// # use std::convert::TryFrom;
 /// let val = AsciiMetadataValue::try_from(b"\n");
 /// assert!(val.is_err());
 /// ```
@@ -324,7 +321,6 @@ impl<'a, VE: ValueEncoding> TryFrom<&'a [u8]> for MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// # use std::convert::TryFrom;
 /// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
 /// assert_eq!(val, &b"hello\xfa"[..]);
 /// ```
@@ -333,7 +329,6 @@ impl<'a, VE: ValueEncoding> TryFrom<&'a [u8]> for MetadataValue<VE> {
 ///
 /// ```
 /// # use tonic::metadata::*;
-/// # use std::convert::TryFrom;
 /// let val = AsciiMetadataValue::try_from(b"\n");
 /// assert!(val.is_err());
 /// ```
@@ -473,7 +468,6 @@ impl MetadataValue<Ascii> {
     ///
     /// ```
     /// # use tonic::metadata::*;
-    /// # use std::convert::TryFrom;
     /// let val = AsciiMetadataValue::from_key::<Ascii>("accept".parse().unwrap());
     /// assert_eq!(val, AsciiMetadataValue::try_from(b"accept").unwrap());
     /// ```
