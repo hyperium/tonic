@@ -54,7 +54,7 @@ jobs:
       uses: arduino/setup-protoc@v1
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: Swatinem/rust-cache@v3
+    - uses: Swatinem/rust-cache@v2
     - name: Run cargo clippy
       run: cargo clippy --workspace --all-targets --all-features
 
