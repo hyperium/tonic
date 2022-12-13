@@ -459,12 +459,10 @@ impl StatusExt for tonic::Status {
         let status = pb::Status::decode(self.details()).ok()?;
 
         for any in status.details.into_iter() {
-            match any.type_url.as_str() {
-                DebugInfo::TYPE_URL => match DebugInfo::from_any(any) {
-                    Ok(detail) => return Some(detail),
-                    Err(_) => {}
-                },
-                _ => {}
+            if any.type_url.as_str() == DebugInfo::TYPE_URL {
+                if let Ok(detail) = DebugInfo::from_any(any) {
+                    return Some(detail);
+                }
             }
         }
 
