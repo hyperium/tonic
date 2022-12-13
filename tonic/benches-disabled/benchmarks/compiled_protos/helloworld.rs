@@ -139,7 +139,7 @@ pub mod server {
                             &mut self,
                             request: tonic::Request<super::HelloRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { inner.say_hello(request).await };
                             Box::pin(fut)
                         }

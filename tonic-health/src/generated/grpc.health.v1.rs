@@ -278,7 +278,7 @@ pub mod health_server {
                             &mut self,
                             request: tonic::Request<super::HealthCheckRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { (*inner).check(request).await };
                             Box::pin(fut)
                         }
@@ -317,7 +317,7 @@ pub mod health_server {
                             &mut self,
                             request: tonic::Request<super::HealthCheckRequest>,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move { (*inner).watch(request).await };
                             Box::pin(fut)
                         }
@@ -366,7 +366,7 @@ pub mod health_server {
     }
     impl<T: Health> Clone for _Inner<T> {
         fn clone(&self) -> Self {
-            Self(self.0.clone())
+            Self(Arc::clone(&self.0))
         }
     }
     impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {

@@ -337,7 +337,7 @@ pub mod server_reflection_server {
                                 tonic::Streaming<super::ServerReflectionRequest>,
                             >,
                         ) -> Self::Future {
-                            let inner = self.0.clone();
+                            let inner = Arc::clone(&self.0);
                             let fut = async move {
                                 (*inner).server_reflection_info(request).await
                             };
@@ -388,7 +388,7 @@ pub mod server_reflection_server {
     }
     impl<T: ServerReflection> Clone for _Inner<T> {
         fn clone(&self) -> Self {
-            Self(self.0.clone())
+            Self(Arc::clone(&self.0))
         }
     }
     impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {
