@@ -56,7 +56,7 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: Swatinem/rust-cache@v2
     - name: Run cargo clippy
-      run: cargo clippy --workspace --all-targets --all-features
+      run: cargo clippy --workspace --all-targets --all-features -- --allow unknown_lints --deny warnings
 
   deny-check:
     name: cargo-deny check
