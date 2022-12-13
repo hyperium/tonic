@@ -1,7 +1,7 @@
 use super::{Codec, DecodeBuf, Decoder, Encoder};
 use crate::codec::EncodeBuf;
 use crate::{Code, Status};
-use prost1::Message;
+use prost::Message;
 use std::marker::PhantomData;
 
 /// A [`Codec`] that implements `application/grpc+proto` via the prost library..
@@ -69,7 +69,7 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
     }
 }
 
-fn from_decode_error(error: prost1::DecodeError) -> crate::Status {
+fn from_decode_error(error: prost::DecodeError) -> crate::Status {
     // Map Protobuf parse errors to an INTERNAL status code, as per
     // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
     Status::new(Code::Internal, error.to_string())
