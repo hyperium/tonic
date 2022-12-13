@@ -38,6 +38,20 @@ jobs:
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
 
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+    - name: Install Rust and clippy
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: "1.60"
+        override: true
+        components: clippy
+    - name: Run cargo clippy
+      run: cargo clippy --workspace --all-targets --all-features
+
   deny-check:
     name: cargo-deny check
     runs-on: ubuntu-latest
