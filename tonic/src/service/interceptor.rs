@@ -349,7 +349,7 @@ mod tests {
             Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::empty()))
         });
 
-        let svc = InterceptedService::new(svc, |request: crate::Request<()>| Ok(request));
+        let svc = InterceptedService::new(svc, Ok);
 
         let request = http::Request::builder()
             .method(http::Method::OPTIONS)

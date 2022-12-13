@@ -7,7 +7,7 @@ use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
 /// [error_details.proto]. Describes when the clients can retry a failed
-/// request.  
+/// request.
 /// Note: When obtained from decoding `RetryInfo` messages, negative
 /// `retry_delay`'s become 0.
 ///
@@ -119,7 +119,7 @@ mod tests {
         );
 
         assert!(
-            error_info.is_empty() == false,
+            !error_info.is_empty(),
             "filled RetryInfo returns 'false' from .has_retry_delay()"
         );
 

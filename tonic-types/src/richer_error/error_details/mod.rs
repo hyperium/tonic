@@ -247,3 +247,9 @@ impl ErrorDetails {
         false
     }
 }
+
+impl Default for ErrorDetails {
+    fn default() -> Self {
+        Self::new()
+    }
+}

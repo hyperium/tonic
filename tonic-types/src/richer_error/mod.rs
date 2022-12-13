@@ -20,10 +20,10 @@ trait FromAny {
         Self: Sized;
 }
 
-fn gen_details_bytes(code: Code, message: &String, details: Vec<Any>) -> Bytes {
+fn gen_details_bytes(code: Code, message: &str, details: Vec<Any>) -> Bytes {
     let status = pb::Status {
         code: code as i32,
-        message: message.clone(),
+        message: message.to_owned(),
         details,
     };
 
@@ -411,7 +411,7 @@ impl StatusExt for tonic::Status {
     }
 
     fn get_error_details(&self) -> ErrorDetails {
-        self.check_error_details().unwrap_or(ErrorDetails::new())
+        self.check_error_details().unwrap_or_default()
     }
 
     fn check_error_details_vec(&self) -> Result<Vec<ErrorDetail>, DecodeError> {
@@ -438,19 +438,17 @@ impl StatusExt for tonic::Status {
     }
 
     fn get_error_details_vec(&self) -> Vec<ErrorDetail> {
-        self.check_error_details_vec().unwrap_or(Vec::new())
+        self.check_error_details_vec().unwrap_or_default()
     }
 
     fn get_details_retry_info(&self) -> Option<RetryInfo> {
         let status = pb::Status::decode(self.details()).ok()?;
 
         for any in status.details.into_iter() {
-            match any.type_url.as_str() {
-                RetryInfo::TYPE_URL => match RetryInfo::from_any(any) {
-                    Ok(detail) => return Some(detail),
-                    Err(_) => {}
-                },
-                _ => {}
+            if any.type_url.as_str() == RetryInfo::TYPE_URL {
+                if let Ok(detail) = RetryInfo::from_any(any) {
+                    return Some(detail);
+                }
             }
         }
 
@@ -477,12 +475,10 @@ impl StatusExt for tonic::Status {
         let status = pb::Status::decode(self.details()).ok()?;
 
         for any in status.details.into_iter() {
-            match any.type_url.as_str() {
-                BadRequest::TYPE_URL => match BadRequest::from_any(any) {
-                    Ok(detail) => return Some(detail),
-                    Err(_) => {}
-                },
-                _ => {}
+            if any.type_url.as_str() == BadRequest::TYPE_URL {
+                if let Ok(detail) = BadRequest::from_any(any) {
+                    return Some(detail);
+                }
             }
         }
 

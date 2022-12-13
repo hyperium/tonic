@@ -1,4 +1,5 @@
 /// The message sent by the client when calling ServerReflectionInfo method.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerReflectionRequest {
     #[prost(string, tag = "1")]
@@ -16,6 +17,7 @@ pub mod server_reflection_request {
     /// To use reflection service, the client should set one of the following
     /// fields in message_request. The server distinguishes requests by their
     /// defined field and then handles them using corresponding methods.
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum MessageRequest {
         /// Find a proto file by the file name.
@@ -48,6 +50,7 @@ pub mod server_reflection_request {
 }
 /// The type name and extension number sent by the client when requesting
 /// file_containing_extension.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExtensionRequest {
     /// Fully-qualified type name. The format should be <package>.<type>
@@ -57,6 +60,7 @@ pub struct ExtensionRequest {
     pub extension_number: i32,
 }
 /// The message sent by the server to answer ServerReflectionInfo method.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServerReflectionResponse {
     #[prost(string, tag = "1")]
@@ -74,6 +78,7 @@ pub struct ServerReflectionResponse {
 pub mod server_reflection_response {
     /// The server sets one of the following fields according to the
     /// message_request in the request.
+    #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum MessageResponse {
         /// This message is used to answer file_by_filename, file_containing_symbol,
@@ -98,6 +103,7 @@ pub mod server_reflection_response {
 /// Serialized FileDescriptorProto messages sent by the server answering
 /// a file_by_filename, file_containing_symbol, or file_containing_extension
 /// request.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct FileDescriptorResponse {
     /// Serialized FileDescriptorProto messages. We avoid taking a dependency on
@@ -108,6 +114,7 @@ pub struct FileDescriptorResponse {
 }
 /// A list of extension numbers sent by the server answering
 /// all_extension_numbers_of_type request.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ExtensionNumberResponse {
     /// Full name of the base type, including the package name. The format
@@ -118,6 +125,7 @@ pub struct ExtensionNumberResponse {
     pub extension_number: ::prost::alloc::vec::Vec<i32>,
 }
 /// A list of ServiceResponse sent by the server answering list_services request.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ListServiceResponse {
     /// The information of each service may be expanded in the future, so we use
@@ -127,6 +135,7 @@ pub struct ListServiceResponse {
 }
 /// The information of a single service used by ListServiceResponse to answer
 /// list_services request.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ServiceResponse {
     /// Full name of a registered service, including its package name. The format
@@ -135,6 +144,7 @@ pub struct ServiceResponse {
     pub name: ::prost::alloc::string::String,
 }
 /// The error code and error message sent by the server when an error occurs.
+#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct ErrorResponse {
     /// This field uses the error codes defined in grpc::StatusCode.

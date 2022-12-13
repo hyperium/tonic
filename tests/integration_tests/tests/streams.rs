@@ -17,7 +17,7 @@ async fn status_from_server_stream_with_source() {
             &self,
             _: Request<InputStream>,
         ) -> Result<Response<Self::StreamCallStream>, Status> {
-            let s = Unsync(0 as *mut ());
+            let s = Unsync(std::ptr::null_mut::<()>());
 
             Ok(Response::new(Box::pin(s) as Self::StreamCallStream))
         }
