@@ -42,6 +42,7 @@ jobs:
     name: cargo clippy
     runs-on: ubuntu-latest
     steps:
+    - uses: actions/checkout@v3
     - name: Install Rust and clippy
       uses: actions-rs/toolchain@v1
       with:
@@ -49,7 +50,11 @@ jobs:
         toolchain: "1.60"
         override: true
         components: clippy
-    - uses: actions/checkout@v3
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: Swatinem/rust-cache@v3
     - name: Run cargo clippy
       run: cargo clippy --workspace --all-targets --all-features
 
