@@ -51,8 +51,6 @@ async fn getting_connect_info() {
 
 #[cfg(unix)]
 pub mod unix {
-    use std::convert::TryFrom as _;
-
     use futures_util::FutureExt;
     use tokio::{
         net::{UnixListener, UnixStream},

@@ -7,7 +7,7 @@ categories = ["network-programming", "asynchronous"]
 description = """
 Server Reflection module of `tonic` gRPC implementation.
 """
-edition = "2018"
+edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 documentation = "https://docs.rs/tonic-reflection/0.5.0/tonic-reflection/"
 keywords = ["rpc", "grpc", "async", "reflection"]

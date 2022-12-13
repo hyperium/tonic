@@ -5,7 +5,7 @@ description = """
 Codegen module of `tonic` gRPC implementation.
 """
 documentation = "https://docs.rs/tonic-build/0.8.4/tonic_build/"
-edition = "2018"
+edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
 license = "MIT"

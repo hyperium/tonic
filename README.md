@@ -45,7 +45,7 @@ For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust
 
 ### Rust Version
 
-`tonic` currently works on Rust `1.60` and above as it requires support for the 2018 edition.
+`tonic`'s MSRV is `1.60`.
 
 ```bash
 $ rustup update

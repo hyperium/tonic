@@ -5,8 +5,6 @@ use crate::transport::{
 };
 #[cfg(feature = "tls-roots")]
 use rustls_native_certs;
-#[cfg(feature = "tls")]
-use std::convert::TryInto;
 use std::{fmt, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite};
 #[cfg(feature = "tls")]
