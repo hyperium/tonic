@@ -1,0 +1,26 @@
+[package]
+name = "example-tracing"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "tracing-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "tracing-client"
+path = "src/client.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+prost = "0.11"
+tonic = { path = "../../tonic" }
+tracing = "0.1.16"
+tracing-attributes = "0.1"
+tracing-futures = "0.2"
+tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
