@@ -1,0 +1,28 @@
+[package]
+name = "example-routeguide"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "routeguide-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "routeguide-client"
+path = "src/client.rs"
+
+[dependencies]
+async-stream = "0.3"
+futures = { version = "0.3", default-features = false  }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio-stream = "0.1"
+prost = "0.11"
+tonic = { path = "../../tonic" }
+rand = "0.8"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
