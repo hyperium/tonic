@@ -29,6 +29,7 @@ members = [
   "examples/multiplex",
   "examples/tls",
   "examples/dynamic-load-balance",
+  "examples/timeout",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
