@@ -7,14 +7,6 @@ publish = false
 version = "0.1.0"
 
 [[bin]]
-name = "helloworld-server"
-path = "src/helloworld/server.rs"
-
-[[bin]]
-name = "helloworld-client"
-path = "src/helloworld/client.rs"
-
-[[bin]]
 name = "blocking-server"
 path = "src/blocking/server.rs"
 
