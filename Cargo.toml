@@ -26,6 +26,7 @@ members = [
   "examples/compression",
   "examples/interceptor",
   "examples/optional",
+  "examples/multiplex",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
