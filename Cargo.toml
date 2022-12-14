@@ -22,6 +22,7 @@ members = [
   "examples/streaming",
   "examples/mock",
   "examples/tower",
+  "examples/json-codec",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
