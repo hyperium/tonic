@@ -135,14 +135,6 @@ name = "mock"
 path = "src/mock/mock.rs"
 
 [[bin]]
-name = "grpc-web-server"
-path = "src/grpc-web/server.rs"
-
-[[bin]]
-name = "grpc-web-client"
-path = "src/grpc-web/client.rs"
-
-[[bin]]
 name = "streaming-client"
 path = "src/streaming/client.rs"
 
@@ -179,9 +171,8 @@ http-body = "0.4.2"
 hyper = { version = "0.14", features = ["full"] }
 pin-project = "1.0"
 warp = "0.3"
-# grpc-web example
+# json-codec
 bytes = "1"
-tonic-web = { path = "../tonic-web" }
 # streaming example
 h2 = "0.3"
 
