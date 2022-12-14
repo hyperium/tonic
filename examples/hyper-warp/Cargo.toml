@@ -13,6 +13,14 @@ path = "src/server.rs"
 name = "hyper-warp-client"
 path = "src/client.rs"
 
+[[bin]]
+name = "hyper-warp-server-multiplex"
+path = "src/server_multiplex.rs"
+
+[[bin]]
+name = "hyper-warp-client-multiplex"
+path = "src/client_multiplex.rs"
+
 [dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 prost = "0.11"

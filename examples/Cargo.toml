@@ -91,14 +91,6 @@ name = "optional-server"
 path = "src/optional/server.rs"
 
 [[bin]]
-name = "hyper-warp-multiplex-client"
-path = "src/hyper_warp_multiplex/client.rs"
-
-[[bin]]
-name = "hyper-warp-multiplex-server"
-path = "src/hyper_warp_multiplex/server.rs"
-
-[[bin]]
 name = "compression-server"
 path = "src/compression/server.rs"
 
@@ -138,10 +130,8 @@ serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 # Hyper example
 http = "0.2"
-http-body = "0.4.2"
 hyper = { version = "0.14", features = ["full"] }
 pin-project = "1.0"
-warp = "0.3"
 # json-codec
 bytes = "1"
 # streaming example
