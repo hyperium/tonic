@@ -11,6 +11,7 @@ members = [
   "examples/gcp",
   "examples/routeguide",
   "examples/blocking",
+  "examples/reflection",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

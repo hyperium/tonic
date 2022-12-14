@@ -1,0 +1,19 @@
+[package]
+name = "example-reflection"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "reflection-server"
+path = "src/server.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+prost = "0.11"
+tonic = { path = "../../tonic" }
+tonic-reflection = { path = "../../tonic-reflection" }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
