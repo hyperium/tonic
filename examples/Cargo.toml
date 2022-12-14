@@ -7,14 +7,6 @@ publish = false
 version = "0.1.0"
 
 [[bin]]
-name = "authentication-client"
-path = "src/authentication/client.rs"
-
-[[bin]]
-name = "authentication-server"
-path = "src/authentication/server.rs"
-
-[[bin]]
 name = "load-balance-client"
 path = "src/load_balance/client.rs"
 
