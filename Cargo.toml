@@ -24,6 +24,7 @@ members = [
   "examples/tower",
   "examples/json-codec",
   "examples/compression",
+  "examples/interceptor",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

@@ -63,14 +63,6 @@ name = "multiplex-client"
 path = "src/multiplex/client.rs"
 
 [[bin]]
-name = "interceptor-client"
-path = "src/interceptor/client.rs"
-
-[[bin]]
-name = "interceptor-server"
-path = "src/interceptor/server.rs"
-
-[[bin]]
 name = "optional-server"
 path = "src/optional/server.rs"
 
