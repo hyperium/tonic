@@ -62,10 +62,6 @@ path = "src/multiplex/server.rs"
 name = "multiplex-client"
 path = "src/multiplex/client.rs"
 
-[[bin]]
-name = "optional-server"
-path = "src/optional/server.rs"
-
 [dependencies]
 prost = "0.11"
 tokio = { version = "1.0", features = [ "rt-multi-thread", "time", "fs", "macros", "net",] }

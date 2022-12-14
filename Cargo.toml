@@ -25,6 +25,7 @@ members = [
   "examples/json-codec",
   "examples/compression",
   "examples/interceptor",
+  "examples/optional",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
