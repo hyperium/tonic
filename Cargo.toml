@@ -21,6 +21,7 @@ members = [
   "examples/uds",
   "examples/streaming",
   "examples/mock",
+  "examples/tower",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

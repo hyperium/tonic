@@ -47,14 +47,6 @@ name = "tls-client-auth-client"
 path = "src/tls_client_auth/client.rs"
 
 [[bin]]
-name = "tower-server"
-path = "src/tower/server.rs"
-
-[[bin]]
-name = "tower-client"
-path = "src/tower/client.rs"
-
-[[bin]]
 name = "timeout-server"
 path = "src/timeout/server.rs"
 
@@ -99,7 +91,6 @@ name = "json-codec-server"
 path = "src/json-codec/server.rs"
 
 [dependencies]
-futures = { version = "0.3", default-features = false, features = ["alloc"] }
 prost = "0.11"
 tokio = { version = "1.0", features = [ "rt-multi-thread", "time", "fs", "macros", "net",] }
 tonic = { path = "../tonic", features = ["tls", "gzip"] }
