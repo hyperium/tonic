@@ -38,6 +38,26 @@ jobs:
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
 
+  clippy:
+    name: cargo clippy
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install Rust and clippy
+      uses: actions-rs/toolchain@v1
+      with:
+        profile: minimal
+        toolchain: "1.60"
+        override: true
+        components: clippy
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: Swatinem/rust-cache@v2
+    - name: Run cargo clippy
+      run: cargo clippy --workspace --all-targets --all-features -- --allow unknown_lints --deny warnings
+
   deny-check:
     name: cargo-deny check
     runs-on: ubuntu-latest
