@@ -1,0 +1,23 @@
+[package]
+name = "example-dynamic-load-balance"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "dynamic-load-balance-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "dynamic-load-balance-client"
+path = "src/client.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+prost = "0.11"
+tonic = { path = "../../tonic" }
+tower = "0.4"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }

@@ -15,14 +15,6 @@ name = "load-balance-server"
 path = "src/load_balance/server.rs"
 
 [[bin]]
-name = "dynamic-load-balance-client"
-path = "src/dynamic_load_balance/client.rs"
-
-[[bin]]
-name = "dynamic-load-balance-server"
-path = "src/dynamic_load_balance/server.rs"
-
-[[bin]]
 name = "tls-client-auth-server"
 path = "src/tls_client_auth/server.rs"
 
