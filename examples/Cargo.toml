@@ -87,14 +87,6 @@ name = "interceptor-server"
 path = "src/interceptor/server.rs"
 
 [[bin]]
-name = "hyper-warp-client"
-path = "src/hyper_warp/client.rs"
-
-[[bin]]
-name = "hyper-warp-server"
-path = "src/hyper_warp/server.rs"
-
-[[bin]]
 name = "optional-server"
 path = "src/optional/server.rs"
 

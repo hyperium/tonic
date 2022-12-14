@@ -17,6 +17,7 @@ members = [
   "examples/grpc-web",
   "examples/authentication",
   "examples/tracing",
+  "examples/hyper-warp",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
