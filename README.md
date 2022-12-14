@@ -146,7 +146,7 @@ terms or conditions.
 [Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
 [Chat]: https://discord.gg/6yGkFeN
-[routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
-[helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
+[routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide/tutorial.md
+[helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld/tutorial.md
 [healthcheck]: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
 [rust-analyzer]: https://rust-analyzer.github.io
