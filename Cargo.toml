@@ -13,6 +13,7 @@ members = [
   "examples/blocking",
   "examples/reflection",
   "examples/autoreload",
+  "examples/health",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

@@ -111,10 +111,6 @@ name = "hyper-warp-server"
 path = "src/hyper_warp/server.rs"
 
 [[bin]]
-name = "health-server"
-path = "src/health/server.rs"
-
-[[bin]]
 name = "optional-server"
 path = "src/optional/server.rs"
 
@@ -183,8 +179,6 @@ http-body = "0.4.2"
 hyper = { version = "0.14", features = ["full"] }
 pin-project = "1.0"
 warp = "0.3"
-# Health example
-tonic-health = { path = "../tonic-health" }
 # grpc-web example
 bytes = "1"
 tonic-web = { path = "../tonic-web" }
