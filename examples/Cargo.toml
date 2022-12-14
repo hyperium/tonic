@@ -7,14 +7,6 @@ publish = false
 version = "0.1.0"
 
 [[bin]]
-name = "blocking-server"
-path = "src/blocking/server.rs"
-
-[[bin]]
-name = "blocking-client"
-path = "src/blocking/client.rs"
-
-[[bin]]
 name = "authentication-client"
 path = "src/authentication/client.rs"
 
