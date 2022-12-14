@@ -20,6 +20,7 @@ members = [
   "examples/hyper-warp",
   "examples/uds",
   "examples/streaming",
+  "examples/mock",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

@@ -91,10 +91,6 @@ name = "compression-client"
 path = "src/compression/client.rs"
 
 [[bin]]
-name = "mock"
-path = "src/mock/mock.rs"
-
-[[bin]]
 name = "json-codec-client"
 path = "src/json-codec/client.rs"
 
