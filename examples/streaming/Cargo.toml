@@ -1,0 +1,25 @@
+[package]
+name = "example-streaming"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "streaming-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "streaming-client"
+path = "src/client.rs"
+
+[dependencies]
+futures = { version = "0.3", default-features = false }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
+tokio-stream = "0.1"
+prost = "0.11"
+tonic = { path = "../../tonic" }
+h2 = "0.3"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
