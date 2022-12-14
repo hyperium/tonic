@@ -18,6 +18,7 @@ members = [
   "examples/authentication",
   "examples/tracing",
   "examples/hyper-warp",
+  "examples/uds",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

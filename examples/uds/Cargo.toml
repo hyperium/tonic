@@ -1,0 +1,24 @@
+[package]
+name = "example-uds"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "uds-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "uds-client"
+path = "src/client.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "fs", "macros"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+prost = "0.11"
+tonic = { path = "../../tonic" }
+tower = "0.4"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
