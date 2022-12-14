@@ -24,14 +24,6 @@ fn main() {
         .compile(&["proto/attrs/attrs.proto"], &["proto"])
         .unwrap();
 
-    tonic_build::configure()
-        .build_server(false)
-        .compile(
-            &["proto/googleapis/google/pubsub/v1/pubsub.proto"],
-            &["proto/googleapis"],
-        )
-        .unwrap();
-
     build_json_codec_service();
 }
 

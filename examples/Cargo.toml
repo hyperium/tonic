@@ -95,10 +95,6 @@ name = "multiplex-client"
 path = "src/multiplex/client.rs"
 
 [[bin]]
-name = "gcp-client"
-path = "src/gcp/client.rs"
-
-[[bin]]
 name = "tracing-client"
 path = "src/tracing/client.rs"
 
@@ -207,8 +203,6 @@ tracing = "0.1.16"
 tracing-attributes = "0.1"
 tracing-futures = "0.2"
 tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
-# Required for wellknown types
-prost-types = "0.11"
 # Hyper example
 http = "0.2"
 http-body = "0.4.2"

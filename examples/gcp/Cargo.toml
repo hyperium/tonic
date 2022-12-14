@@ -1,0 +1,19 @@
+[package]
+name = "example-gcp"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "gcp-client"
+path = "src/client.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "fs", "macros"] }
+prost = "0.11"
+prost-types ="0.11"
+tonic = { path = "../../tonic", features = ["tls"] }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
