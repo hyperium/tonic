@@ -12,6 +12,7 @@ members = [
   "examples/routeguide",
   "examples/blocking",
   "examples/reflection",
+  "examples/autoreload",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

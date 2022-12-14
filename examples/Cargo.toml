@@ -115,10 +115,6 @@ name = "health-server"
 path = "src/health/server.rs"
 
 [[bin]]
-name = "autoreload-server"
-path = "src/autoreload/server.rs"
-
-[[bin]]
 name = "optional-server"
 path = "src/optional/server.rs"
 
@@ -189,8 +185,6 @@ pin-project = "1.0"
 warp = "0.3"
 # Health example
 tonic-health = { path = "../tonic-health" }
-# autoreload example
-listenfd = "1.0"
 # grpc-web example
 bytes = "1"
 tonic-web = { path = "../tonic-web" }
