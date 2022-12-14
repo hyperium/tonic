@@ -6,7 +6,6 @@ members = [
   "tonic-types",
   "tonic-reflection",
   "tonic-web", # Non-published crates
-  "examples",
   "examples/helloworld",
   "examples/gcp",
   "examples/routeguide",
@@ -31,6 +30,7 @@ members = [
   "examples/dynamic-load-balance",
   "examples/timeout",
   "examples/load-balance",
+  "examples/tls-client-auth",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
