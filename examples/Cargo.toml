@@ -23,22 +23,6 @@ name = "dynamic-load-balance-server"
 path = "src/dynamic_load_balance/server.rs"
 
 [[bin]]
-name = "tls-client"
-path = "src/tls/client.rs"
-
-[[bin]]
-name = "tls-client-rustls"
-path = "src/tls/client_rustls.rs"
-
-[[bin]]
-name = "tls-server"
-path = "src/tls/server.rs"
-
-[[bin]]
-name = "tls-server-rustls"
-path = "src/tls/server_rustls.rs"
-
-[[bin]]
 name = "tls-client-auth-server"
 path = "src/tls_client_auth/server.rs"
 
@@ -59,16 +43,6 @@ prost = "0.11"
 tokio = { version = "1.0", features = [ "rt-multi-thread", "time", "fs", "macros", "net",] }
 tonic = { path = "../tonic", features = ["tls"] }
 tower = { version = "0.4" }
-# Hyper example
-http = "0.2"
-hyper = { version = "0.14", features = ["full"] }
-pin-project = "1.0"
-
-tokio-rustls = "*"
-hyper-rustls = { version = "0.23", features = ["http2"] }
-rustls-pemfile = "*"
-tower-http = { version = "0.3", features = ["add-extension", "util"] }
-
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }

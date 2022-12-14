@@ -1,0 +1,36 @@
+[package]
+name = "example-tls"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "tls-server"
+path = "src/server.rs"
+
+[[bin]]
+name = "tls-server-rustls"
+path = "src/server_rustls.rs"
+
+[[bin]]
+name = "tls-client"
+path = "src/client.rs"
+
+[[bin]]
+name = "tls-client-rustls"
+path = "src/client_rustls.rs"
+
+[dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "fs", "macros"] }
+prost = "0.11"
+tonic = { path = "../../tonic", features = ["tls"] }
+hyper = "0.14"
+hyper-rustls = { version = "0.23", features = ["http2"] }
+tower = "0.4"
+tower-http = { version = "0.3", features = ["add-extension"] }
+rustls-pemfile = "1"
+tokio-rustls = "0.23"
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
