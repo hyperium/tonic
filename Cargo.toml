@@ -23,6 +23,7 @@ members = [
   "examples/mock",
   "examples/tower",
   "examples/json-codec",
+  "examples/compression",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
