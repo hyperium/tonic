@@ -7,14 +7,6 @@ publish = false
 version = "0.1.0"
 
 [[bin]]
-name = "load-balance-client"
-path = "src/load_balance/client.rs"
-
-[[bin]]
-name = "load-balance-server"
-path = "src/load_balance/server.rs"
-
-[[bin]]
 name = "tls-client-auth-server"
 path = "src/tls_client_auth/server.rs"
 
