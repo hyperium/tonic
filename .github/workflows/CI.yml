@@ -41,6 +41,10 @@ jobs:
   clippy:
     name: cargo clippy
     runs-on: ubuntu-latest
+
+    env:
+      RUSTFLAGS: "-A unknown_lints -D warnings"
+
     steps:
     - uses: actions/checkout@v3
     - name: Install Rust and clippy
@@ -56,7 +60,7 @@ jobs:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: Swatinem/rust-cache@v2
     - name: Run cargo clippy
-      run: cargo clippy --workspace --all-targets --all-features -- --allow unknown_lints --deny warnings
+      run: cargo clippy --workspace --all-targets --all-features
 
   deny-check:
     name: cargo-deny check
