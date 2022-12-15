@@ -18,12 +18,11 @@ jobs:
       RUSTFLAGS: "-D warnings"
 
     steps:
-    - uses: hecrj/setup-rust-action@master
+    - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
+        components: rustfmt
     - uses: actions/checkout@v3
-    - name: Install rustfmt
-      run: rustup component add rustfmt
     - name: Install cargo-hack
       run: cargo install cargo-hack
     - name: Install Protoc
@@ -47,12 +46,9 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install Rust and clippy
-      uses: actions-rs/toolchain@v1
+    - uses: hecrj/setup-rust-action@v1
       with:
-        profile: minimal
-        toolchain: "1.60"
-        override: true
+        rust-version: "1.60"
         components: clippy
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
@@ -75,12 +71,9 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
+      - uses: hecrj/setup-rust-action@v1
         with:
-          profile: minimal
-          toolchain: "1.60"
-          override: true
+          rust-version: "1.60"
       - name: Install Protoc
         uses: arduino/setup-protoc@v1
         with:
@@ -101,11 +94,10 @@ jobs:
       QUICKCHECK_TESTS: 1000
 
     steps:
-    - uses: hecrj/setup-rust-action@master
+    - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-    - name: Install rustfmt
-      run: rustup component add rustfmt
+        components: rustfmt
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
@@ -127,11 +119,10 @@ jobs:
       RUSTFLAGS: "-D warnings"
 
     steps:
-    - uses: hecrj/setup-rust-action@master
+    - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-    - name: Install rustfmt
-      run: rustup component add rustfmt
+        components: rustfmt
     - uses: actions/checkout@v3
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
