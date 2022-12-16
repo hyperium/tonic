@@ -209,7 +209,7 @@ fn generate_trait<T: Service>(
         compile_well_known_types,
         disable_comments,
     );
-    let trait_doc = generate_doc_comment(&format!(
+    let trait_doc = generate_doc_comment(format!(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
         service.name()
     ));
@@ -263,7 +263,7 @@ fn generate_trait_methods<T: Service>(
             }
             (false, true) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
-                let stream_doc = generate_doc_comment(&format!(
+                let stream_doc = generate_doc_comment(format!(
                     " Server streaming response type for the {} method.",
                     method.identifier()
                 ));
@@ -279,7 +279,7 @@ fn generate_trait_methods<T: Service>(
             }
             (true, true) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
-                let stream_doc = generate_doc_comment(&format!(
+                let stream_doc = generate_doc_comment(format!(
                     " Server streaming response type for the {} method.",
                     method.identifier()
                 ));
