@@ -123,7 +123,13 @@ pub mod health_client {
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.health.v1.Health/Check",
             );
-            self.inner.unary(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod {
+                    service: "grpc.health.v1.Health",
+                    method: "Check",
+                });
+            self.inner.unary(req, path, codec).await
         }
         /// Performs a watch for the serving status of the requested service.
         /// The server will immediately send back a message indicating the current
@@ -160,7 +166,13 @@ pub mod health_client {
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.health.v1.Health/Watch",
             );
-            self.inner.server_streaming(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut()
+                .insert(GrpcMethod {
+                    service: "grpc.health.v1.Health",
+                    method: "Watch",
+                });
+            self.inner.server_streaming(req, path, codec).await
         }
     }
 }

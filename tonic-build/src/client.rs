@@ -181,28 +181,48 @@ fn generate_methods<T: Service>(
     let mut stream = TokenStream::new();
     let package = if emit_package { service.package() } else { "" };
 
+    let service_name = format!(
+        "{}{}{}",
+        package,
+        if package.is_empty() { "" } else { "." },
+        service.identifier(),
+    );
     for method in service.methods() {
-        let path = format!(
-            "/{}{}{}/{}",
-            package,
-            if package.is_empty() { "" } else { "." },
-            service.identifier(),
-            method.identifier()
-        );
+        let path = format!("/{}/{}", service_name, method.identifier());
 
         if !disable_comments.contains(&format_method_name(package, service, method)) {
             stream.extend(generate_doc_comments(method.comment()));
         }
 
         let method = match (method.client_streaming(), method.server_streaming()) {
-            (false, false) => generate_unary(method, proto_path, compile_well_known_types, path),
-            (false, true) => {
-                generate_server_streaming(method, proto_path, compile_well_known_types, path)
-            }
-            (true, false) => {
-                generate_client_streaming(method, proto_path, compile_well_known_types, path)
-            }
-            (true, true) => generate_streaming(method, proto_path, compile_well_known_types, path),
+            (false, false) => generate_unary(
+                &service_name,
+                method,
+                proto_path,
+                compile_well_known_types,
+                path,
+            ),
+            (false, true) => generate_server_streaming(
+                &service_name,
+                method,
+                proto_path,
+                compile_well_known_types,
+                path,
+            ),
+            (true, false) => generate_client_streaming(
+                &service_name,
+                method,
+                proto_path,
+                compile_well_known_types,
+                path,
+            ),
+            (true, true) => generate_streaming(
+                &service_name,
+                method,
+                proto_path,
+                compile_well_known_types,
+                path,
+            ),
         };
 
         stream.extend(method);
@@ -212,11 +232,13 @@ fn generate_methods<T: Service>(
 }
 
 fn generate_unary<T: Method>(
+    service_name: &str,
     method: &T,
     proto_path: &str,
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
+    let method_name = method.identifier();
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
@@ -231,17 +253,21 @@ fn generate_unary<T: Method>(
            })?;
            let codec = #codec_name::default();
            let path = http::uri::PathAndQuery::from_static(#path);
-           self.inner.unary(request.into_request(), path, codec).await
+           let mut req = request.into_request();
+           req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+           self.inner.unary(req, path, codec).await
         }
     }
 }
 
 fn generate_server_streaming<T: Method>(
+    service_name: &str,
     method: &T,
     proto_path: &str,
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
+    let method_name = method.identifier();
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
@@ -257,17 +283,21 @@ fn generate_server_streaming<T: Method>(
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
-            self.inner.server_streaming(request.into_request(), path, codec).await
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+            self.inner.server_streaming(req, path, codec).await
         }
     }
 }
 
 fn generate_client_streaming<T: Method>(
+    service_name: &str,
     method: &T,
     proto_path: &str,
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
+    let method_name = method.identifier();
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
@@ -283,17 +313,21 @@ fn generate_client_streaming<T: Method>(
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
-            self.inner.client_streaming(request.into_streaming_request(), path, codec).await
+            let mut req = request.into_streaming_request();
+            req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+            self.inner.client_streaming(req, path, codec).await
         }
     }
 }
 
 fn generate_streaming<T: Method>(
+    service_name: &str,
     method: &T,
     proto_path: &str,
     compile_well_known_types: bool,
     path: String,
 ) -> TokenStream {
+    let method_name = method.identifier();
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
 
@@ -309,7 +343,9 @@ fn generate_streaming<T: Method>(
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
-            self.inner.streaming(request.into_streaming_request(), path, codec).await
+            let mut req = request.into_streaming_request();
+            req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+            self.inner.streaming(req, path, codec).await
         }
     }
 }
