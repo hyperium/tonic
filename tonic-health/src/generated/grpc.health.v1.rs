@@ -109,7 +109,10 @@ pub mod health_client {
         pub async fn check(
             &mut self,
             request: impl tonic::IntoRequest<super::HealthCheckRequest>,
-        ) -> Result<tonic::Response<super::HealthCheckResponse>, tonic::Status> {
+        ) -> std::result::Result<
+            tonic::Response<super::HealthCheckResponse>,
+            tonic::Status,
+        > {
             self.inner
                 .ready()
                 .await
@@ -143,7 +146,7 @@ pub mod health_client {
         pub async fn watch(
             &mut self,
             request: impl tonic::IntoRequest<super::HealthCheckRequest>,
-        ) -> Result<
+        ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::HealthCheckResponse>>,
             tonic::Status,
         > {
@@ -176,10 +179,13 @@ pub mod health_server {
         async fn check(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
-        ) -> Result<tonic::Response<super::HealthCheckResponse>, tonic::Status>;
+        ) -> std::result::Result<
+            tonic::Response<super::HealthCheckResponse>,
+            tonic::Status,
+        >;
         /// Server streaming response type for the Watch method.
         type WatchStream: futures_core::Stream<
-                Item = Result<super::HealthCheckResponse, tonic::Status>,
+                Item = std::result::Result<super::HealthCheckResponse, tonic::Status>,
             >
             + Send
             + 'static;
@@ -201,7 +207,7 @@ pub mod health_server {
         async fn watch(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
-        ) -> Result<tonic::Response<Self::WatchStream>, tonic::Status>;
+        ) -> std::result::Result<tonic::Response<Self::WatchStream>, tonic::Status>;
     }
     #[derive(Debug)]
     pub struct HealthServer<T: Health> {
