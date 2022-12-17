@@ -22,4 +22,5 @@ members = [
   "tests/root-crate-path",
   "tests/compression",
   "tonic-web/tests/integration",
+  "tests/service_named_result",
 ]
