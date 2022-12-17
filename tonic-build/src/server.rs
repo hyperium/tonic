@@ -39,6 +39,7 @@ pub(crate) fn generate_internal<T: Service>(
     let methods = generate_methods(service, proto_path, compile_well_known_types);
 
     let server_service = quote::format_ident!("{}Server", service.name());
+    let server_service_name = quote::format_ident!("{}_SERVICE_NAME", service.identifier().to_uppercase());
     let server_trait = quote::format_ident!("{}", service.name());
     let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
@@ -51,22 +52,22 @@ pub(crate) fn generate_internal<T: Service>(
     );
     let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
-    let path = format!(
+    let service_name = format!(
         "{}{}{}",
         package,
         if package.is_empty() { "" } else { "." },
         service.identifier()
     );
 
-    let service_doc = if disable_comments.contains(&path) {
+    let service_doc = if disable_comments.contains(&service_name) {
         TokenStream::new()
     } else {
         generate_doc_comments(service.comment())
     };
 
-    let named = generate_named(service, &server_service, &server_trait, &path);
+    let named = generate_named(service, &server_service, &server_trait, &service_name);
     let mod_attributes = attributes.for_mod(package);
-    let struct_attributes = attributes.for_struct(&path);
+    let struct_attributes = attributes.for_struct(&service_name);
 
     let configure_compression_methods = quote! {
         /// Enable decompressing requests with the given encoding.
@@ -96,6 +97,8 @@ pub(crate) fn generate_internal<T: Service>(
                 clippy::let_unit_value,
             )]
             use tonic::codegen::*;
+
+            pub const #server_service_name : &'static str = #service_name;
 
             #generated_trait
 
