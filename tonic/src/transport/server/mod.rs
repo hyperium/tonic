@@ -128,6 +128,10 @@ pub struct Router<L = Identity> {
 
 impl<S: NamedService, T> NamedService for Either<S, T> {
     const NAME: &'static str = S::NAME;
+
+    fn grpc_method(path: &str) -> Option<crate::GrpcMethod<'static>> {
+        S::grpc_method(path)
+    }
 }
 
 impl Server {

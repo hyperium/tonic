@@ -11,6 +11,7 @@
 mod grpc;
 mod service;
 
+pub use crate::extensions::GrpcMethod;
 pub use self::grpc::Grpc;
 pub use self::service::{
     ClientStreamingService, ServerStreamingService, StreamingService, UnaryService,
@@ -23,4 +24,7 @@ pub trait NamedService {
     ///
     /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
     const NAME: &'static str;
+
+    /// Use to get gRPC method name from the path of uri
+    fn grpc_method(path: &str) -> Option<GrpcMethod<'static>>;
 }

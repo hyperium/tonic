@@ -46,6 +46,11 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
+        // inject the GrpcMethod extension value if it is gRPC request.
+        let svc = svc.map_request(|mut req: Request<_>| {
+            S::grpc_method(req.uri().path()).and_then(|val| req.extensions_mut().insert(val));
+            req
+        });
         let svc = svc.map_response(|res| res.map(axum::body::boxed));
         self.router = self
             .router

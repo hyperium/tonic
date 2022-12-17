@@ -141,4 +141,7 @@ where
 
 impl<S: NamedService> NamedService for InterceptedService<S> {
     const NAME: &'static str = S::NAME;
+    fn grpc_method(path: &str) -> Option<tonic::GrpcMethod<'static>> {
+        S::grpc_method(path)
+    }
 }

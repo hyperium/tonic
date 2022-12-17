@@ -195,6 +195,9 @@ where
     S: crate::transport::NamedService,
 {
     const NAME: &'static str = S::NAME;
+    fn grpc_method(path: &str) -> Option<crate::GrpcMethod<'static>> {
+        S::grpc_method(path)
+    }
 }
 
 /// Response future for [`InterceptedService`].

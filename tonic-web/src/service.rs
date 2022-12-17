@@ -182,6 +182,10 @@ where
 
 impl<S: NamedService> NamedService for GrpcWebService<S> {
     const NAME: &'static str = S::NAME;
+
+    fn grpc_method(path: &str) -> Option<tonic::GrpcMethod<'static>> {
+        S::grpc_method(path)
+    }
 }
 
 impl<'a> RequestKind<'a> {
@@ -261,6 +265,9 @@ mod tests {
 
     impl NamedService for Svc {
         const NAME: &'static str = "test";
+        fn grpc_method(_: &str) -> Option<tonic::GrpcMethod<'static>> {
+            None
+        }
     }
 
     mod grpc_web {

@@ -71,3 +71,12 @@ impl fmt::Debug for Extensions {
         f.debug_struct("Extensions").finish()
     }
 }
+
+/// An extension for http::Request that is GRPC Request.
+#[derive(Debug)]
+pub struct GrpcMethod<'a> {
+    /// GRPC service name
+    pub service: &'a str,
+    /// GRPC method name
+    pub method: &'a str,
+}

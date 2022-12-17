@@ -246,6 +246,7 @@ pub mod server_reflection_server {
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
     #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {
+        const SERVER_REFLECTION_INFO: &'static str = "ServerReflectionInfo";
         /// Server streaming response type for the ServerReflectionInfo method.
         type ServerReflectionInfoStream: futures_core::Stream<
                 Item = Result<super::ServerReflectionResponse, tonic::Status>,
@@ -398,5 +399,16 @@ pub mod server_reflection_server {
     }
     impl<T: ServerReflection> tonic::server::NamedService for ServerReflectionServer<T> {
         const NAME: &'static str = "grpc.reflection.v1alpha.ServerReflection";
+        fn grpc_method(path: &str) -> Option<GrpcMethod<'static>> {
+            match path {
+                "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo" => {
+                    Some(GrpcMethod {
+                        service: "grpc.reflection.v1alpha.ServerReflection",
+                        method: "ServerReflectionInfo",
+                    })
+                }
+                _ => None,
+            }
+        }
     }
 }
