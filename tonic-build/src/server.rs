@@ -251,14 +251,14 @@ fn generate_trait_methods<T: Service>(
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (true, false) => {
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (false, true) => {
@@ -270,11 +270,11 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
             (true, true) => {
@@ -286,11 +286,11 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
         };
