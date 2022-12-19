@@ -11,11 +11,11 @@
 mod grpc;
 mod service;
 
-pub use crate::extensions::GrpcMethod;
 pub use self::grpc::Grpc;
 pub use self::service::{
     ClientStreamingService, ServerStreamingService, StreamingService, UnaryService,
 };
+pub use crate::extensions::GrpcMethod;
 
 /// A trait to provide a static reference to the service's
 /// name. This is used for routing service's within the router.

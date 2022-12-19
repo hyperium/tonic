@@ -235,7 +235,13 @@ pub mod server_reflection_client {
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
             );
-            self.inner.streaming(request.into_streaming_request(), path, codec).await
+            let mut req = request.into_streaming_request();
+            req.extensions_mut()
+                .insert(GrpcMethod {
+                    service: "grpc.reflection.v1alpha.ServerReflection",
+                    method: "ServerReflectionInfo",
+                });
+            self.inner.streaming(req, path, codec).await
         }
     }
 }
@@ -243,6 +249,7 @@ pub mod server_reflection_client {
 pub mod server_reflection_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
+    pub const SERVERREFLECTION_SERVICE_NAME: &'static str = "grpc.reflection.v1alpha.ServerReflection";
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
     #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {

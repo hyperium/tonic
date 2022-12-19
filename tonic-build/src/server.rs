@@ -39,7 +39,8 @@ pub(crate) fn generate_internal<T: Service>(
     let methods = generate_methods(service, proto_path, compile_well_known_types);
 
     let server_service = quote::format_ident!("{}Server", service.name());
-    let server_service_name = quote::format_ident!("{}_SERVICE_NAME", service.identifier().to_uppercase());
+    let server_service_name =
+        quote::format_ident!("{}_SERVICE_NAME", service.identifier().to_uppercase());
     let server_trait = quote::format_ident!("{}", service.name());
     let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
@@ -328,7 +329,7 @@ fn generate_named<T: Service>(
         };
         stream.extend(method);
     }
-    let service_name = syn::LitStr::new(&service_name, proc_macro2::Span::call_site());
+    let service_name = syn::LitStr::new(service_name, proc_macro2::Span::call_site());
     quote! {
         impl<T: #server_trait> tonic::server::NamedService for #server_service<T> {
             const NAME: &'static str = #service_name;
