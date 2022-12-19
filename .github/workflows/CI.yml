@@ -24,7 +24,9 @@ jobs:
         components: rustfmt
     - uses: actions/checkout@v3
     - name: Install cargo-hack
-      run: cargo install cargo-hack
+      uses: baptiste0928/cargo-install@v1
+      with:
+        crate: cargo-hack
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
