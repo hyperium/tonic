@@ -8,7 +8,9 @@ mod std_messages;
 use super::pb;
 
 pub use error_details::{vec::ErrorDetail, ErrorDetails};
-pub use std_messages::{BadRequest, DebugInfo, FieldViolation, RetryInfo};
+pub use std_messages::{
+    BadRequest, DebugInfo, FieldViolation, QuotaFailure, QuotaViolation, RetryInfo,
+};
 
 trait IntoAny {
     fn into_any(self) -> Any;
@@ -288,6 +290,28 @@ pub trait StatusExt: crate::sealed::Sealed {
     /// ```
     fn get_details_debug_info(&self) -> Option<DebugInfo>;
 
+    /// Get first [`QuotaFailure`] details found on `tonic::Status`, if any.
+    /// If some `prost::DecodeError` occurs, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{Status, Response};
+    /// use tonic_types::{StatusExt};
+    ///
+    /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
+    ///     match req_result {
+    ///         Ok(_) => {},
+    ///         Err(status) => {
+    ///             if let Some(quota_failure) = status.get_details_quota_failure() {
+    ///                 // Handle quota_failure details
+    ///             }
+    ///         }
+    ///     };
+    /// }
+    /// ```
+    fn get_details_quota_failure(&self) -> Option<QuotaFailure>;
+
     /// Get first [`BadRequest`] details found on `tonic::Status`, if any. If
     /// some `prost::DecodeError` occurs, returns `None`.
     ///
@@ -332,6 +356,10 @@ impl StatusExt for tonic::Status {
             conv_details.push(debug_info.into_any());
         }
 
+        if let Some(quota_failure) = details.quota_failure {
+            conv_details.push(quota_failure.into_any());
+        }
+
         if let Some(bad_request) = details.bad_request {
             conv_details.push(bad_request.into_any());
         }
@@ -362,6 +390,9 @@ impl StatusExt for tonic::Status {
                 }
                 ErrorDetail::DebugInfo(debug_info) => {
                     conv_details.push(debug_info.into_any());
+                }
+                ErrorDetail::QuotaFailure(quota_failure) => {
+                    conv_details.push(quota_failure.into_any());
                 }
                 ErrorDetail::BadRequest(bad_req) => {
                     conv_details.push(bad_req.into_any());
@@ -400,6 +431,9 @@ impl StatusExt for tonic::Status {
                 DebugInfo::TYPE_URL => {
                     details.debug_info = Some(DebugInfo::from_any(any)?);
                 }
+                QuotaFailure::TYPE_URL => {
+                    details.quota_failure = Some(QuotaFailure::from_any(any)?);
+                }
                 BadRequest::TYPE_URL => {
                     details.bad_request = Some(BadRequest::from_any(any)?);
                 }
@@ -426,6 +460,9 @@ impl StatusExt for tonic::Status {
                 }
                 DebugInfo::TYPE_URL => {
                     details.push(DebugInfo::from_any(any)?.into());
+                }
+                QuotaFailure::TYPE_URL => {
+                    details.push(QuotaFailure::from_any(any)?.into());
                 }
                 BadRequest::TYPE_URL => {
                     details.push(BadRequest::from_any(any)?.into());
@@ -469,6 +506,20 @@ impl StatusExt for tonic::Status {
         None
     }
 
+    fn get_details_quota_failure(&self) -> Option<QuotaFailure> {
+        let status = pb::Status::decode(self.details()).ok()?;
+
+        for any in status.details.into_iter() {
+            if any.type_url.as_str() == QuotaFailure::TYPE_URL {
+                if let Ok(detail) = QuotaFailure::from_any(any) {
+                    return Some(detail);
+                }
+            }
+        }
+
+        None
+    }
+
     fn get_details_bad_request(&self) -> Option<BadRequest> {
         let status = pb::Status::decode(self.details()).ok()?;
 
@@ -489,7 +540,7 @@ mod tests {
     use std::time::Duration;
     use tonic::{Code, Status};
 
-    use super::{BadRequest, DebugInfo, ErrorDetails, RetryInfo, StatusExt};
+    use super::{BadRequest, DebugInfo, ErrorDetails, QuotaFailure, RetryInfo, StatusExt};
 
     #[test]
     fn gen_status_with_details() {
@@ -501,6 +552,7 @@ mod tests {
                 vec!["trace3".into(), "trace2".into(), "trace1".into()],
                 "details",
             )
+            .add_quota_failure_violation("clientip:<ip address>", "description")
             .add_bad_request_violation("field", "description");
 
         let fmt_details = format!("{:?}", err_details);
@@ -512,6 +564,7 @@ mod tests {
                 "details",
             )
             .into(),
+            QuotaFailure::with_violation("clientip:<ip address>", "description").into(),
             BadRequest::with_violation("field", "description").into(),
         ];
 
