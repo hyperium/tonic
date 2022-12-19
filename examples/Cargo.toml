@@ -25,10 +25,12 @@ path = "src/blocking/client.rs"
 [[bin]]
 name = "routeguide-server"
 path = "src/routeguide/server.rs"
+required-features = ["routeguide"]
 
 [[bin]]
 name = "routeguide-client"
 path = "src/routeguide/client.rs"
+required-features = ["routeguide"]
 
 [[bin]]
 name = "authentication-client"
@@ -49,50 +51,62 @@ path = "src/load_balance/server.rs"
 [[bin]]
 name = "dynamic-load-balance-client"
 path = "src/dynamic_load_balance/client.rs"
+required-features = ["dynamic-load-balance"]
 
 [[bin]]
 name = "dynamic-load-balance-server"
 path = "src/dynamic_load_balance/server.rs"
+required-features = ["dynamic-load-balance"]
 
 [[bin]]
 name = "tls-client"
 path = "src/tls/client.rs"
+required-features = ["tls"]
 
 [[bin]]
 name = "tls-client-rustls"
 path = "src/tls/client_rustls.rs"
+required-features = ["tls"]
 
 [[bin]]
 name = "tls-server"
 path = "src/tls/server.rs"
+required-features = ["tls"]
 
 [[bin]]
 name = "tls-server-rustls"
 path = "src/tls/server_rustls.rs"
+required-features = ["tls"]
 
 [[bin]]
 name = "tls-client-auth-server"
 path = "src/tls_client_auth/server.rs"
+required-features = ["tls-client-auth"]
 
 [[bin]]
 name = "tls-client-auth-client"
 path = "src/tls_client_auth/client.rs"
+required-features = ["tls-client-auth"]
 
 [[bin]]
 name = "tower-server"
 path = "src/tower/server.rs"
+required-features = ["tower"]
 
 [[bin]]
 name = "tower-client"
 path = "src/tower/client.rs"
+required-features = ["tower"]
 
 [[bin]]
 name = "timeout-server"
 path = "src/timeout/server.rs"
+required-features = ["timeout"]
 
 [[bin]]
 name = "timeout-client"
 path = "src/timeout/client.rs"
+required-features = ["timeout"]
 
 [[bin]]
 name = "multiplex-server"
@@ -105,22 +119,27 @@ path = "src/multiplex/client.rs"
 [[bin]]
 name = "gcp-client"
 path = "src/gcp/client.rs"
+required-features = ["gcp"]
 
 [[bin]]
 name = "tracing-client"
 path = "src/tracing/client.rs"
+required-features = ["tracing"]
 
 [[bin]]
 name = "tracing-server"
 path = "src/tracing/server.rs"
+required-features = ["tracing"]
 
 [[bin]]
 name = "uds-client"
 path = "src/uds/client.rs"
+required-features = ["uds"]
 
 [[bin]]
 name = "uds-server"
 path = "src/uds/server.rs"
+required-features = ["uds"]
 
 [[bin]]
 name = "interceptor-client"
@@ -133,22 +152,27 @@ path = "src/interceptor/server.rs"
 [[bin]]
 name = "hyper-warp-client"
 path = "src/hyper_warp/client.rs"
+required-features = ["hyper-warp"]
 
 [[bin]]
 name = "hyper-warp-server"
 path = "src/hyper_warp/server.rs"
+required-features = ["hyper-warp"]
 
 [[bin]]
 name = "health-server"
 path = "src/health/server.rs"
+required-features = ["health"]
 
 [[bin]]
 name = "reflection-server"
 path = "src/reflection/server.rs"
+required-features = ["reflection"]
 
 [[bin]]
 name = "autoreload-server"
 path = "src/autoreload/server.rs"
+required-features = ["autoreload"]
 
 [[bin]]
 name = "optional-server"
@@ -157,87 +181,116 @@ path = "src/optional/server.rs"
 [[bin]]
 name = "hyper-warp-multiplex-client"
 path = "src/hyper_warp_multiplex/client.rs"
+required-features = ["hyper-warp-multiplex"]
 
 [[bin]]
 name = "hyper-warp-multiplex-server"
 path = "src/hyper_warp_multiplex/server.rs"
+required-features = ["hyper-warp-multiplex"]
 
 [[bin]]
 name = "compression-server"
 path = "src/compression/server.rs"
+required-features = ["compression"]
 
 [[bin]]
 name = "compression-client"
 path = "src/compression/client.rs"
+required-features = ["compression"]
 
 [[bin]]
 name = "mock"
 path = "src/mock/mock.rs"
+required-features = ["mock"]
 
 [[bin]]
 name = "grpc-web-server"
 path = "src/grpc-web/server.rs"
+required-features = ["grpc-web"]
 
 [[bin]]
 name = "grpc-web-client"
 path = "src/grpc-web/client.rs"
+required-features = ["grpc-web"]
 
 [[bin]]
 name = "streaming-client"
 path = "src/streaming/client.rs"
+required-features = ["streaming"]
 
 [[bin]]
 name = "streaming-server"
 path = "src/streaming/server.rs"
+required-features = ["streaming"]
 
 [[bin]]
 name = "json-codec-client"
 path = "src/json-codec/client.rs"
+required-features = ["json-codec"]
 
 [[bin]]
 name = "json-codec-server"
 path = "src/json-codec/server.rs"
+required-features = ["json-codec"]
+
+[features]
+gcp = ["dep:prost-types", "tokio/fs", "tonic/tls"]
+routeguide = ["dep:async-stream", "dep:futures", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
+reflection = ["dep:tonic-reflection"]
+autoreload = ["tokio-stream/net", "dep:listenfd"]
+health = ["dep:tonic-health"]
+grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "hyper", "dep:tracing-subscriber"]
+tracing = ["dep:tracing", "dep:tracing-attributes", "dep:tracing-futures", "dep:tracing-subscriber"]
+hyper-warp = ["dep:futures", "dep:tower", "hyper", "dep:http", "dep:http-body", "dep:warp"]
+hyper-warp-multiplex = ["hyper-warp"]
+uds = ["tokio-stream/net", "dep:tower", "hyper", "tokio/fs"]
+streaming = ["dep:futures", "tokio-stream", "dep:h2"]
+mock = ["dep:futures", "dep:tower"]
+tower = ["dep:futures", "hyper", "dep:tower", "dep:http"]
+json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
+compression = ["tonic/gzip"]
+tls = ["hyper", "tokio/fs", "tonic/tls", "dep:hyper-rustls", "dep:tower",
+       "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls"]
+dynamic-load-balance = ["dep:tower"]
+timeout = ["tokio/time", "dep:tower"]
+tls-client-auth = ["tokio/fs", "tonic/tls"]
+
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex",
+        "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "dynamic-load-balance", "timeout","tls-client-auth"]
+default = ["full"]
 
 [dependencies]
-async-stream = "0.3"
-futures = { version = "0.3", default-features = false, features = ["alloc"] }
+# Common dependencies
+tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 prost = "0.11"
-tokio = { version = "1.0", features = [ "rt-multi-thread", "time", "fs", "macros", "net",] }
-tokio-stream = { version = "0.1", features = ["net"] }
-tonic = { path = "../tonic", features = ["tls", "gzip"] }
-tower = { version = "0.4" }
-# Required for routeguide
-rand = "0.8"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-# Tracing
-tracing = "0.1.16"
-tracing-attributes = "0.1"
-tracing-futures = "0.2"
-tracing-subscriber = { version = "0.3", features = ["tracing-log"] }
-# Required for wellknown types
-prost-types = "0.11"
-# Hyper example
-http = "0.2"
-http-body = "0.4.2"
-hyper = { version = "0.14", features = ["full"] }
-warp = "0.3"
-# Health example
-tonic-health = { path = "../tonic-health" }
-# Reflection example
-listenfd = "1.0"
-tonic-reflection = { path = "../tonic-reflection" }
-# grpc-web example
-bytes = "1"
-tonic-web = { path = "../tonic-web" }
-# streaming example
-h2 = "0.3"
-
-tokio-rustls = "*"
-hyper-rustls = { version = "0.23", features = ["http2"] }
-rustls-pemfile = "*"
-tower-http = { version = "0.3", features = ["add-extension", "util"] }
-
+tonic = { path = "../tonic" }
+# Optional dependencies
+tonic-web = { path = "../tonic-web", optional = true }
+tonic-health = { path = "../tonic-health", optional = true }
+tonic-reflection = { path = "../tonic-reflection", optional = true }
+async-stream = { version = "0.3", optional = true }
+futures = { version = "0.3", default-features = false, optional = true }
+tokio-stream = { version = "0.1", optional = true }
+tower = { version = "0.4", optional = true }
+rand = { version = "0.8", optional = true }
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+tracing = { version = "0.1.16", optional = true }
+tracing-attributes = { version = "0.1", optional = true }
+tracing-futures = { version = "0.2", optional = true }
+tracing-subscriber = { version = "0.3", features = ["tracing-log", "fmt"], optional = true }
+prost-types = { version = "0.11", optional = true }
+http = { version = "0.2", optional = true }
+http-body = { version = "0.4.2", optional = true }
+hyper = { version = "0.14", optional = true }
+warp = { version = "0.3", optional = true }
+listenfd = { version = "1.0", optional = true }
+bytes = { version = "1", optional = true }
+h2 = { version = "0.3", optional = true }
+tokio-rustls = { version = "0.23", optional = true }
+hyper-rustls = { version = "0.23", features = ["http2"], optional = true }
+rustls-pemfile = { version = "1", optional = true }
+tower-http = { version = "0.3", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
