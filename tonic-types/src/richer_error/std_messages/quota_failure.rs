@@ -152,7 +152,7 @@ mod tests {
         );
 
         assert!(
-            quota_failure.is_empty() == false,
+            !quota_failure.is_empty(),
             "filled QuotaFailure returns 'true' from .is_empty()"
         );
 
