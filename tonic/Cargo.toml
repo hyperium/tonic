@@ -40,7 +40,6 @@ channel = [
   "dep:hyper",
   "dep:tokio",
   "dep:tower",
-  "dep:tracing-futures",
   "dep:hyper-timeout",
 ]
 
@@ -78,7 +77,6 @@ hyper-timeout = {version = "0.4", optional = true}
 tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
-tracing-futures = {version = "0.2", optional = true}
 axum = {version = "0.6", default_features = false, optional = true}
 
 # rustls
