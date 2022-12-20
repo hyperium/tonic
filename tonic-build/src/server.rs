@@ -40,7 +40,7 @@ pub(crate) fn generate_internal<T: Service>(
 
     let server_service = quote::format_ident!("{}Server", service.name());
     let server_service_name =
-        quote::format_ident!("{}_SERVICE_NAME", service.identifier().to_uppercase());
+        quote::format_ident!("{}_SERVICE_NAME", naive_snake_case(service.name()).to_uppercase());
     let server_trait = quote::format_ident!("{}", service.name());
     let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
