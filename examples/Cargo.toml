@@ -240,7 +240,7 @@ reflection = ["dep:tonic-reflection"]
 autoreload = ["tokio-stream/net", "dep:listenfd"]
 health = ["dep:tonic-health"]
 grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "hyper", "dep:tracing-subscriber"]
-tracing = ["dep:tracing", "dep:tracing-attributes", "dep:tracing-futures", "dep:tracing-subscriber"]
+tracing = ["dep:tracing", "dep:tracing-attributes", "dep:tracing-subscriber"]
 hyper-warp = ["dep:futures", "dep:tower", "hyper", "dep:http", "dep:http-body", "dep:warp"]
 hyper-warp-multiplex = ["hyper-warp"]
 uds = ["tokio-stream/net", "dep:tower", "hyper", "tokio/fs"]
@@ -277,7 +277,6 @@ serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tracing = { version = "0.1.16", optional = true }
 tracing-attributes = { version = "0.1", optional = true }
-tracing-futures = { version = "0.2", optional = true }
 tracing-subscriber = { version = "0.3", features = ["tracing-log", "fmt"], optional = true }
 prost-types = { version = "0.11", optional = true }
 http = { version = "0.2", optional = true }
