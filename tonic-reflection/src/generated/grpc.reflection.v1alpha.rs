@@ -249,7 +249,7 @@ pub mod server_reflection_client {
 pub mod server_reflection_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
-    pub const SERVERREFLECTION_SERVICE_NAME: &'static str = "grpc.reflection.v1alpha.ServerReflection";
+    pub const SERVER_REFLECTION_SERVICE_NAME: &'static str = "grpc.reflection.v1alpha.ServerReflection";
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
     #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {
