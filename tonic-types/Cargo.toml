@@ -20,4 +20,4 @@ prost-types = "0.11"
 tonic = {version = "0.8", path = "../tonic"}
 
 [dev-dependencies]
-tonic-build = {version = "0.8", path = "../tonic-build", features = ["prost"]}
+tonic-build = {version = "0.8", path = "../tonic-build", features = ["prost", "cleanup-markdown"]}
