@@ -101,7 +101,7 @@ pub(crate) fn generate_internal<T: Service>(
             )]
             use tonic::codegen::*;
 
-            pub const #server_service_name : &'static str = #service_name;
+            pub const #server_service_name : &str = #service_name;
 
             #generated_trait
 
