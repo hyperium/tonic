@@ -166,23 +166,23 @@ impl ErrorDetails {
     }
 
     /// Get [`RetryInfo`] details, if any
-    pub fn retry_info(&self) -> &Option<RetryInfo> {
-        &self.retry_info
+    pub fn retry_info(&self) -> Option<RetryInfo> {
+        self.retry_info.clone()
     }
 
     /// Get [`DebugInfo`] details, if any
-    pub fn debug_info(&self) -> &Option<DebugInfo> {
-        &self.debug_info
+    pub fn debug_info(&self) -> Option<DebugInfo> {
+        self.debug_info.clone()
     }
 
     /// Get [`QuotaFailure`] details, if any
-    pub fn quota_failure(&self) -> &Option<QuotaFailure> {
-        &self.quota_failure
+    pub fn quota_failure(&self) -> Option<QuotaFailure> {
+        self.quota_failure.clone()
     }
 
     /// Get [`BadRequest`] details, if any
-    pub fn bad_request(&self) -> &Option<BadRequest> {
-        &self.bad_request
+    pub fn bad_request(&self) -> Option<BadRequest> {
+        self.bad_request.clone()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
