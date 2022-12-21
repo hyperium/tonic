@@ -24,6 +24,9 @@
 /// Useful protobuf types
 pub mod pb {
     include!("generated/google.rpc.rs");
+
+    /// Byte encoded FILE_DESCRIPTOR_SET.
+    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/types.bin");
 }
 
 pub use pb::Status;
