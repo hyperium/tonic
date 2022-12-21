@@ -1,0 +1,14 @@
+[package]
+name = "service_named_result"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+prost = "0.11"
+tonic = {path = "../../tonic"}
+
+[build-dependencies]
+tonic-build = {path = "../../tonic-build"}
