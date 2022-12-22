@@ -14,6 +14,7 @@ fn bootstrap() {
         .build_server(true)
         .build_transport(false)
         .out_dir(format!("{}", out_dir.display()))
+        .file_descriptor_set_path(out_dir.join("reflection_v1alpha1.bin"))
         .compile(iface_files, dirs)
         .unwrap();
 
