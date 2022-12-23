@@ -23,6 +23,7 @@
 
 /// Useful protobuf types
 pub mod pb {
+    #![allow(rustdoc::invalid_html_tags)]
     include!("generated/google.rpc.rs");
 
     /// Byte encoded FILE_DESCRIPTOR_SET.
