@@ -218,7 +218,7 @@ pub mod server_reflection_client {
             request: impl tonic::IntoStreamingRequest<
                 Message = super::ServerReflectionRequest,
             >,
-        ) -> Result<
+        ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::ServerReflectionResponse>>,
             tonic::Status,
         > {
@@ -256,7 +256,10 @@ pub mod server_reflection_server {
         const SERVER_REFLECTION_INFO: &'static str = "ServerReflectionInfo";
         /// Server streaming response type for the ServerReflectionInfo method.
         type ServerReflectionInfoStream: futures_core::Stream<
-                Item = Result<super::ServerReflectionResponse, tonic::Status>,
+                Item = std::result::Result<
+                    super::ServerReflectionResponse,
+                    tonic::Status,
+                >,
             >
             + Send
             + 'static;
@@ -265,7 +268,10 @@ pub mod server_reflection_server {
         async fn server_reflection_info(
             &self,
             request: tonic::Request<tonic::Streaming<super::ServerReflectionRequest>>,
-        ) -> Result<tonic::Response<Self::ServerReflectionInfoStream>, tonic::Status>;
+        ) -> std::result::Result<
+            tonic::Response<Self::ServerReflectionInfoStream>,
+            tonic::Status,
+        >;
     }
     #[derive(Debug)]
     pub struct ServerReflectionServer<T: ServerReflection> {
@@ -320,7 +326,7 @@ pub mod server_reflection_server {
         fn poll_ready(
             &mut self,
             _cx: &mut Context<'_>,
-        ) -> Poll<Result<(), Self::Error>> {
+        ) -> Poll<std::result::Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
         fn call(&mut self, req: http::Request<B>) -> Self::Future {

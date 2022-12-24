@@ -247,7 +247,7 @@ fn generate_unary<T: Method>(
         pub async fn #ident(
             &mut self,
             request: impl tonic::IntoRequest<#request>,
-        ) -> Result<tonic::Response<#response>, tonic::Status> {
+        ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
            self.inner.ready().await.map_err(|e| {
                tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
            })?;
@@ -277,7 +277,7 @@ fn generate_server_streaming<T: Method>(
         pub async fn #ident(
             &mut self,
             request: impl tonic::IntoRequest<#request>,
-        ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
+        ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
@@ -307,7 +307,7 @@ fn generate_client_streaming<T: Method>(
         pub async fn #ident(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = #request>
-        ) -> Result<tonic::Response<#response>, tonic::Status> {
+        ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;
@@ -337,7 +337,7 @@ fn generate_streaming<T: Method>(
         pub async fn #ident(
             &mut self,
             request: impl tonic::IntoStreamingRequest<Message = #request>
-        ) -> Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
+        ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                         tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
             })?;

@@ -2,8 +2,8 @@ use crate::proto::server_reflection_request::MessageRequest;
 use crate::proto::server_reflection_response::MessageResponse;
 pub use crate::proto::server_reflection_server::{ServerReflection, ServerReflectionServer};
 use crate::proto::{
-    FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest, ServerReflectionResponse,
-    ServiceResponse,
+    ExtensionNumberResponse, FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest,
+    ServerReflectionResponse, ServiceResponse,
 };
 use prost::{DecodeError, Message};
 use prost_types::{
@@ -347,7 +347,11 @@ impl ServerReflection for ReflectionService {
                             Err(Status::not_found("extensions are not supported"))
                         }
                         MessageRequest::AllExtensionNumbersOfType(_) => {
-                            Err(Status::not_found("extensions are not supported"))
+                            // NOTE: Workaround. Some grpc clients (e.g. grpcurl) expect this method not to fail.
+                            // https://github.com/hyperium/tonic/issues/1077
+                            Ok(MessageResponse::AllExtensionNumbersResponse(
+                                ExtensionNumberResponse::default(),
+                            ))
                         }
                         MessageRequest::ListServices(_) => Ok(state.list_services()),
                     },

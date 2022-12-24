@@ -150,7 +150,7 @@ pub(crate) fn generate_internal<T: Service>(
                 type Error = std::convert::Infallible;
                 type Future = BoxFuture<Self::Response, Self::Error>;
 
-                fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+                fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
                     Poll::Ready(Ok(()))
                 }
 
@@ -215,7 +215,7 @@ fn generate_trait<T: Service>(
         compile_well_known_types,
         disable_comments,
     );
-    let trait_doc = generate_doc_comment(&format!(
+    let trait_doc = generate_doc_comment(format!(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
         service.name()
     ));
@@ -263,46 +263,46 @@ fn generate_trait_methods<T: Service>(
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (true, false) => {
                 quote! {
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<#res_message>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (false, true) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
-                let stream_doc = generate_doc_comment(&format!(
+                let stream_doc = generate_doc_comment(format!(
                     " Server streaming response type for the {} method.",
                     method.identifier()
                 ));
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<#req_message>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
             (true, true) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
-                let stream_doc = generate_doc_comment(&format!(
+                let stream_doc = generate_doc_comment(format!(
                     " Server streaming response type for the {} method.",
                     method.identifier()
                 ));
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> Result<tonic::Response<Self::#stream>, tonic::Status>;
+                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
         };

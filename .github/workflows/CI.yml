@@ -24,12 +24,14 @@ jobs:
         components: rustfmt
     - uses: actions/checkout@v3
     - name: Install cargo-hack
-      run: cargo install cargo-hack
+      uses: baptiste0928/cargo-install@v1
+      with:
+        crate: cargo-hack
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v2
     - name: Check fmt
       run: cargo fmt -- --check
     - name: Check features
@@ -69,17 +71,17 @@ jobs:
     name: Check MSRV
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v3
-      - uses: hecrj/setup-rust-action@v1
-        with:
-          rust-version: "1.60"
-      - name: Install Protoc
-        uses: arduino/setup-protoc@v1
-        with:
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-      - name: Check
-        run: cargo check --all --all-targets --all-features
+    - name: Checkout
+      uses: actions/checkout@v3
+    - uses: hecrj/setup-rust-action@v1
+      with:
+        rust-version: "1.60"
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - name: Check
+      run: cargo check --all --all-targets --all-features
 
   test:
     runs-on: ${{ matrix.os }}
@@ -102,7 +104,7 @@ jobs:
       uses: arduino/setup-protoc@v1
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v2
     - uses: actions/checkout@v3
     - name: Run tests
       run: cargo test --all --all-features
@@ -128,7 +130,7 @@ jobs:
       uses: arduino/setup-protoc@v1
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: Swatinem/rust-cache@v1
+    - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh
       shell: bash
