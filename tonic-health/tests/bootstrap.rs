@@ -25,7 +25,5 @@ fn bootstrap() {
         .status()
         .unwrap();
 
-    if !status.success() {
-        panic!("You should commit the protobuf files");
-    }
+    assert!(status.success(), "You should commit the protobuf files");
 }
