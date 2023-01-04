@@ -958,7 +958,7 @@ impl MetadataMap {
     /// use `insert_bin`.
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Ascii>.
+    /// converted to a `MetadataKey<Ascii>`.
     ///
     /// If the map did not previously have this key present, then `None` is
     /// returned.
@@ -1008,7 +1008,7 @@ impl MetadataMap {
     /// Like insert, but for Binary keys (for example "trace-proto-bin").
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Binary>.
+    /// converted to a `MetadataKey<Binary>`.
     ///
     /// # Examples
     ///
@@ -1050,7 +1050,7 @@ impl MetadataMap {
     /// use `append_bin`.
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Ascii>.
+    /// converted to a `MetadataKey<Ascii>`.
     ///
     /// If the map did not previously have this key present, then `false` is
     /// returned.
@@ -1099,7 +1099,7 @@ impl MetadataMap {
     /// Like append, but for binary keys (for example "trace-proto-bin").
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Binary>.
+    /// converted to a `MetadataKey<Binary>`.
     ///
     /// # Examples
     ///

@@ -124,7 +124,7 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     }
 
     /// Convert a `Bytes` directly into a `MetadataValue` without validating.
-    /// For MetadataValue<Binary> the provided parameter must be base64
+    /// For `MetadataValue<Binary>` the provided parameter must be base64
     /// encoded without padding bytes at the end.
     ///
     /// # Safety
@@ -459,7 +459,7 @@ impl MetadataValue<Ascii> {
         src.parse()
     }
 
-    /// Converts a MetadataKey into a MetadataValue<Ascii>.
+    /// Converts a MetadataKey into a `MetadataValue<Ascii>`.
     ///
     /// Since every valid MetadataKey is a valid MetadataValue this is done
     /// infallibly.
@@ -478,9 +478,9 @@ impl MetadataValue<Ascii> {
 
     /// Returns the length of `self`, in bytes.
     ///
-    /// This method is not available for MetadataValue<Binary> because that
+    /// This method is not available for `MetadataValue<Binary>` because that
     /// cannot be implemented in constant time, which most people would probably
-    /// expect. To get the length of MetadataValue<Binary>, convert it to a
+    /// expect. To get the length of `MetadataValue<Binary>`, convert it to a
     /// Bytes value and measure its length.
     ///
     /// # Examples

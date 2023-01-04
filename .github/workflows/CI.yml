@@ -39,6 +39,26 @@ jobs:
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
 
+  check-docs:
+    name: check docs
+    runs-on: ubuntu-latest
+
+    env:
+      RUSTFLAGS: "-D warnings"
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Install Protoc
+      uses: arduino/setup-protoc@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: hecrj/setup-rust-action@v1
+      with:
+        rust-version: "1.60"
+    - uses: Swatinem/rust-cache@v2
+    - name: cargo doc
+      run: cargo doc --workspace --no-deps --exclude examples
+
   clippy:
     name: cargo clippy
     runs-on: ubuntu-latest
