@@ -19,6 +19,7 @@
 pub mod proto {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
+    #![allow(rustdoc::invalid_html_tags)]
     include!("generated/grpc.reflection.v1alpha.rs");
 
     pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/reflection_v1alpha1.bin");
