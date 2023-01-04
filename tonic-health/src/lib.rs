@@ -31,6 +31,17 @@ pub mod proto {
 
     pub const GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET: &[u8] =
         include_bytes!("generated/grpc_health_v1.bin");
+
+    #[cfg(test)]
+    mod tests {
+        use super::GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET;
+        use prost::Message as _;
+
+        #[test]
+        fn file_descriptor_set_is_valid() {
+            prost_types::FileDescriptorSet::decode(GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET).unwrap();
+        }
+    }
 }
 
 pub mod server;
