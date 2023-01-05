@@ -11,7 +11,7 @@ pub(crate) mod vec;
 /// Used when extracting error details from `tonic::Status`, and when
 /// creating a `tonic::Status` with error details.
 #[non_exhaustive]
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct ErrorDetails {
     /// This field stores [`RetryInfo`] data, if any.
     pub(crate) retry_info: Option<RetryInfo>,
@@ -37,12 +37,7 @@ impl ErrorDetails {
     /// let err_details = ErrorDetails::new();
     /// ```
     pub fn new() -> Self {
-        ErrorDetails {
-            retry_info: None,
-            debug_info: None,
-            quota_failure: None,
-            bad_request: None,
-        }
+        Self::default()
     }
 
     /// Generates an [`ErrorDetails`] struct with [`RetryInfo`] details and
@@ -368,11 +363,5 @@ impl ErrorDetails {
             return !bad_request.field_violations.is_empty();
         }
         false
-    }
-}
-
-impl Default for ErrorDetails {
-    fn default() -> Self {
-        Self::new()
     }
 }
