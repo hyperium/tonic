@@ -7,7 +7,7 @@ use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pem = tokio::fs::read("examples/data/tls/ca.pem").await?;
+    let pem = std::fs::read_to_string("examples/data/tls/ca.pem")?;
     let ca = Certificate::from_pem(pem);
 
     let tls = ClientTlsConfig::new()

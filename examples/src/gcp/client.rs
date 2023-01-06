@@ -24,10 +24,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let bearer_token = format!("Bearer {}", token);
     let header_value: MetadataValue<_> = bearer_token.parse()?;
 
-    let certs = tokio::fs::read("examples/data/gcp/roots.pem").await?;
+    let certs = std::fs::read_to_string("examples/data/gcp/roots.pem")?;
 
     let tls_config = ClientTlsConfig::new()
-        .ca_certificate(Certificate::from_pem(certs.as_slice()))
+        .ca_certificate(Certificate::from_pem(certs))
         .domain_name("pubsub.googleapis.com");
 
     let channel = Channel::from_static(ENDPOINT)

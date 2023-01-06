@@ -234,7 +234,7 @@ path = "src/json-codec/server.rs"
 required-features = ["json-codec"]
 
 [features]
-gcp = ["dep:prost-types", "tokio/fs", "tonic/tls"]
+gcp = ["dep:prost-types", "tonic/tls"]
 routeguide = ["dep:async-stream", "dep:futures", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
 reflection = ["dep:tonic-reflection"]
 autoreload = ["tokio-stream/net", "dep:listenfd"]
@@ -243,17 +243,17 @@ grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "hyper", "dep:tracing-subs
 tracing = ["dep:tracing", "dep:tracing-attributes", "dep:tracing-subscriber"]
 hyper-warp = ["dep:futures", "dep:tower", "hyper", "dep:http", "dep:http-body", "dep:warp"]
 hyper-warp-multiplex = ["hyper-warp"]
-uds = ["tokio-stream/net", "dep:tower", "hyper", "tokio/fs"]
+uds = ["tokio-stream/net", "dep:tower", "hyper"]
 streaming = ["dep:futures", "tokio-stream", "dep:h2"]
 mock = ["dep:futures", "dep:tower"]
 tower = ["dep:futures", "hyper", "dep:tower", "dep:http"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
-tls = ["hyper", "tokio/fs", "tonic/tls", "dep:hyper-rustls", "dep:tower",
+tls = ["hyper", "tonic/tls", "dep:hyper-rustls", "dep:tower",
        "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls"]
 dynamic-load-balance = ["dep:tower"]
 timeout = ["tokio/time", "dep:tower"]
-tls-client-auth = ["tokio/fs", "tonic/tls"]
+tls-client-auth = ["tonic/tls"]
 
 full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex",
         "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "dynamic-load-balance", "timeout","tls-client-auth"]

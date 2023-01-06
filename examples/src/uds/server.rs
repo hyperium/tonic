@@ -45,7 +45,7 @@ impl Greeter for MyGreeter {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = "/tmp/tonic/helloworld";
 
-    tokio::fs::create_dir_all(Path::new(path).parent().unwrap()).await?;
+    std::fs::create_dir_all(Path::new(path).parent().unwrap())?;
 
     let greeter = MyGreeter::default();
 
