@@ -23,10 +23,22 @@
 
 /// Useful protobuf types
 pub mod pb {
+    #![allow(rustdoc::invalid_html_tags)]
     include!("generated/google.rpc.rs");
 
     /// Byte encoded FILE_DESCRIPTOR_SET.
     pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/types.bin");
+
+    #[cfg(test)]
+    mod tests {
+        use super::FILE_DESCRIPTOR_SET;
+        use prost::Message as _;
+
+        #[test]
+        fn file_descriptor_set_is_valid() {
+            prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
+        }
+    }
 }
 
 pub use pb::Status;
@@ -34,7 +46,8 @@ pub use pb::Status;
 mod richer_error;
 
 pub use richer_error::{
-    BadRequest, DebugInfo, ErrorDetail, ErrorDetails, FieldViolation, RetryInfo, StatusExt,
+    BadRequest, DebugInfo, ErrorDetail, ErrorDetails, FieldViolation, QuotaFailure, QuotaViolation,
+    RetryInfo, StatusExt,
 };
 
 mod sealed {

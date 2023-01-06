@@ -28,3 +28,4 @@ tonic = { version = "0.8", path = "../tonic", default-features = false, features
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
 tonic-build = { version = "0.8", path = "../tonic-build", default-features = false, features = ["prost"] }
+prost-types = "0.11"
