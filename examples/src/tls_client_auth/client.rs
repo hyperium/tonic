@@ -7,10 +7,11 @@ use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let server_root_ca_cert = std::fs::read_to_string("examples/data/tls/ca.pem")?;
+    let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
+    let server_root_ca_cert = std::fs::read_to_string(data_dir.join("tls/ca.pem"))?;
     let server_root_ca_cert = Certificate::from_pem(server_root_ca_cert);
-    let client_cert = std::fs::read_to_string("examples/data/tls/client1.pem")?;
-    let client_key = std::fs::read_to_string("examples/data/tls/client1.key")?;
+    let client_cert = std::fs::read_to_string(data_dir.join("tls/client1.pem"))?;
+    let client_key = std::fs::read_to_string(data_dir.join("tls/client1.key"))?;
     let client_identity = Identity::from_pem(client_cert, client_key);
 
     let tls = ClientTlsConfig::new()
