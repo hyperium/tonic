@@ -7,23 +7,19 @@ use crate::transport::{
 use rustls_native_certs;
 use std::{fmt, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite};
-#[cfg(feature = "tls")]
 use tokio_rustls::{
     rustls::{ClientConfig, RootCertStore, ServerConfig, ServerName},
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
 
 /// h2 alpn in plain format for rustls.
-#[cfg(feature = "tls")]
 const ALPN_H2: &str = "h2";
 
 #[derive(Debug)]
 enum TlsError {
     #[allow(dead_code)]
     H2NotNegotiated,
-    #[cfg(feature = "tls")]
     CertificateParseError,
-    #[cfg(feature = "tls")]
     PrivateKeyParseError,
 }
 
@@ -34,7 +30,6 @@ pub(crate) struct TlsConnector {
 }
 
 impl TlsConnector {
-    #[cfg(feature = "tls")]
     pub(crate) fn new(
         ca_cert: Option<Certificate>,
         identity: Option<Identity>,
@@ -121,7 +116,6 @@ pub(crate) struct TlsAcceptor {
 }
 
 impl TlsAcceptor {
-    #[cfg(feature = "tls")]
     pub(crate) fn new(
         identity: Identity,
         client_ca_root: Option<Certificate>,
@@ -177,7 +171,6 @@ impl fmt::Display for TlsError {
 
 impl std::error::Error for TlsError {}
 
-#[cfg(feature = "tls")]
 mod rustls_keys {
     use std::io::Cursor;
 
