@@ -974,7 +974,7 @@ mod tests {
 
         let header_map = status.to_header_map().unwrap();
 
-        let b64_details = base64::engine::general_purpose::STANDARD_NO_PAD.encode_config(DETAILS);
+        let b64_details = base64::engine::general_purpose::STANDARD_NO_PAD.encode(DETAILS);
 
         assert_eq!(header_map[super::GRPC_STATUS_DETAILS_HEADER], b64_details);
 
