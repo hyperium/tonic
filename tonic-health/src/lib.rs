@@ -24,22 +24,22 @@
 use std::fmt::{Display, Formatter};
 
 /// Generated protobuf types from the `grpc.health.v1` package.
-pub mod proto {
+pub mod pb {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
     include!("generated/grpc.health.v1.rs");
 
-    pub const GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET: &[u8] =
-        include_bytes!("generated/grpc_health_v1.bin");
+    /// Byte encoded FILE_DESCRIPTOR_SET.
+    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/grpc_health_v1.bin");
 
     #[cfg(test)]
     mod tests {
-        use super::GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET;
+        use super::FILE_DESCRIPTOR_SET;
         use prost::Message as _;
 
         #[test]
         fn file_descriptor_set_is_valid() {
-            prost_types::FileDescriptorSet::decode(GRPC_HEALTH_V1_FILE_DESCRIPTOR_SET).unwrap();
+            prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
         }
     }
 }
@@ -67,12 +67,12 @@ impl Display for ServingStatus {
     }
 }
 
-impl From<ServingStatus> for proto::health_check_response::ServingStatus {
+impl From<ServingStatus> for pb::health_check_response::ServingStatus {
     fn from(s: ServingStatus) -> Self {
         match s {
-            ServingStatus::Unknown => proto::health_check_response::ServingStatus::Unknown,
-            ServingStatus::Serving => proto::health_check_response::ServingStatus::Serving,
-            ServingStatus::NotServing => proto::health_check_response::ServingStatus::NotServing,
+            ServingStatus::Unknown => pb::health_check_response::ServingStatus::Unknown,
+            ServingStatus::Serving => pb::health_check_response::ServingStatus::Serving,
+            ServingStatus::NotServing => pb::health_check_response::ServingStatus::NotServing,
         }
     }
 }
