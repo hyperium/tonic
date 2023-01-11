@@ -17,7 +17,6 @@ const ALPN_H2: &str = "h2";
 
 #[derive(Debug)]
 enum TlsError {
-    #[allow(dead_code)]
     H2NotNegotiated,
     CertificateParseError,
     PrivateKeyParseError,
