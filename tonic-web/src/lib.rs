@@ -139,3 +139,22 @@ where
         )
         .layer(GrpcWebService::new(service))
 }
+
+pub(crate) mod util {
+    pub(crate) mod base64 {
+        use base64::{
+            alphabet,
+            engine::{
+                general_purpose::{GeneralPurpose, GeneralPurposeConfig},
+                DecodePaddingMode,
+            },
+        };
+
+        pub(crate) const STANDARD: GeneralPurpose = GeneralPurpose::new(
+            &alphabet::STANDARD,
+            GeneralPurposeConfig::new()
+                .with_encode_padding(true)
+                .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+        );
+    }
+}
