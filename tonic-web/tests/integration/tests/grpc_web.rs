@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use hyper::http::{header, StatusCode};
 use hyper::{Body, Client, Method, Request, Uri};
@@ -110,7 +111,9 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
 
     let bytes = match content_type {
         "grpc-web" => encode_body(),
-        "grpc-web-text" => base64::encode(encode_body()).into(),
+        "grpc-web-text" => integration::util::base64::STANDARD
+            .encode(encode_body())
+            .into(),
         _ => panic!("invalid content type {}", content_type),
     };
 
@@ -128,7 +131,10 @@ async fn decode_body(body: Body, content_type: &str) -> (Output, Bytes) {
     let mut body = hyper::body::to_bytes(body).await.unwrap();
 
     if content_type == "application/grpc-web-text+proto" {
-        body = base64::decode(body).unwrap().into()
+        body = integration::util::base64::STANDARD
+            .decode(body)
+            .unwrap()
+            .into()
     }
 
     body.advance(1);
