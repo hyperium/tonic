@@ -23,6 +23,7 @@ pub fn configure() -> Builder {
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
+        message_attributes: Vec::new(),
         enum_attributes: Vec::new(),
         type_attributes: Vec::new(),
         server_attributes: Attributes::default(),
@@ -226,6 +227,7 @@ pub struct Builder {
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
+    pub(crate) message_attributes: Vec<(String, String)>,
     pub(crate) enum_attributes: Vec<(String, String)>,
     pub(crate) server_attributes: Attributes,
     pub(crate) client_attributes: Attributes,
@@ -304,6 +306,19 @@ impl Builder {
     /// Passed directly to `prost_build::Config.type_attribute`.
     pub fn type_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
         self.type_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
+    /// Add additional attribute to matched messages.
+    ///
+    /// Passed directly to `prost_build::Config.message_attribute`.
+    pub fn message_attribute<P: AsRef<str>, A: AsRef<str>>(
+        mut self,
+        path: P,
+        attribute: A,
+    ) -> Self {
+        self.message_attributes
             .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
         self
     }
@@ -457,6 +472,9 @@ impl Builder {
         }
         for (prost_path, attr) in self.type_attributes.iter() {
             config.type_attribute(prost_path, attr);
+        }
+        for (prost_path, attr) in self.message_attributes.iter() {
+            config.message_attribute(prost_path, attr);
         }
         for (prost_path, attr) in self.enum_attributes.iter() {
             config.enum_attribute(prost_path, attr);
