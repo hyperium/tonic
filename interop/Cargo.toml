@@ -16,7 +16,7 @@ path = "src/bin/server.rs"
 
 [dependencies]
 async-stream = "0.3"
-clap = {version = "4.0.26", features = ["derive"]}
+clap = {version = ">=4.0.26, <4.1", features = ["derive"]}
 console = "0.15"
 futures-core = "0.3"
 futures-util = "0.3"
