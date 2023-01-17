@@ -14,7 +14,7 @@ impl Opts {
     fn parse() -> Result<Opts, pico_args::Error> {
         let mut pargs = pico_args::Arguments::from_env();
         Ok(Self {
-            use_tls: pargs.value_from_str("--use_tls").unwrap_or(false),
+            use_tls: pargs.contains("--use_tls"),
             test_case: pargs.value_from_fn("--test_case", |test_case| {
                 test_case.split(',').map(Testcase::from_str).collect()
             })?,
