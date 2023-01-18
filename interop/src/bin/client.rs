@@ -1,6 +1,5 @@
 use interop::client;
-use std::str::FromStr;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 use tonic::transport::Endpoint;
 use tonic::transport::{Certificate, ClientTlsConfig};
 
@@ -11,7 +10,7 @@ struct Opts {
 }
 
 impl Opts {
-    fn parse() -> Result<Opts, pico_args::Error> {
+    fn parse() -> Result<Self, pico_args::Error> {
         let mut pargs = pico_args::Arguments::from_env();
         Ok(Self {
             use_tls: pargs.contains("--use_tls"),
