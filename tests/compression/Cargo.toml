@@ -15,7 +15,6 @@ hyper = "0.14.3"
 pin-project = "1.0"
 prost = "0.11"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
-tokio-stream = {version = "0.1.5", features = ["net"]}
 tonic = {path = "../../tonic", features = ["gzip"]}
 tower = {version = "0.4", features = []}
 tower-http = {version = "0.3", features = ["map-response-body", "map-request-body"]}
