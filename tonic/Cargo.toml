@@ -63,7 +63,7 @@ tower-layer = "0.3"
 tower-service = "0.3"
 
 # prost
-prost = {version = "0.11", default-features = false, optional = true}
+prost = {version = "0.11", default-features = false, features = ["std"], optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
