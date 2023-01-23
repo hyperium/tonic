@@ -6,7 +6,7 @@ use tokio::sync::oneshot;
 use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
 use tonic::{transport::Server, Request};
 use tonic_reflection::{
-    proto::{
+    pb::{
         server_reflection_client::ServerReflectionClient,
         server_reflection_request::MessageRequest, server_reflection_response::MessageResponse,
         ServerReflectionRequest, ServiceResponse, FILE_DESCRIPTOR_SET,

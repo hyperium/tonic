@@ -15,8 +15,9 @@ use tower_http::ServiceBuilderExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
     let certs = {
-        let fd = std::fs::File::open("examples/data/tls/server.pem")?;
+        let fd = std::fs::File::open(data_dir.join("tls/server.pem"))?;
         let mut buf = std::io::BufReader::new(&fd);
         rustls_pemfile::certs(&mut buf)?
             .into_iter()
@@ -24,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .collect()
     };
     let key = {
-        let fd = std::fs::File::open("examples/data/tls/server.key")?;
+        let fd = std::fs::File::open(data_dir.join("tls/server.key"))?;
         let mut buf = std::io::BufReader::new(&fd);
         rustls_pemfile::pkcs8_private_keys(&mut buf)?
             .into_iter()
@@ -32,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .next()
             .unwrap()
 
-        // let key = std::fs::read("examples/data/tls/server.key")?;
+        // let key = std::fs::read(data_dir.join("tls/server.key"))?;
         // PrivateKey(key)
     };
 

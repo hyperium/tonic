@@ -5,13 +5,16 @@ pub mod pb {
     tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
+use std::iter::FromIterator;
+
 use hyper::{client::HttpConnector, Uri};
 use pb::{echo_client::EchoClient, EchoRequest};
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let fd = std::fs::File::open("examples/data/tls/ca.pem")?;
+    let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
+    let fd = std::fs::File::open(data_dir.join("tls/ca.pem"))?;
 
     let mut roots = RootCertStore::empty();
 

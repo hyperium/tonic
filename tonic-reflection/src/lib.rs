@@ -16,12 +16,13 @@
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
 /// Generated protobuf types from the `grpc.reflection.v1alpha` package.
-pub mod proto {
+pub mod pb {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
     #![allow(rustdoc::invalid_html_tags)]
     include!("generated/grpc.reflection.v1alpha.rs");
 
+    /// Byte encoded FILE_DESCRIPTOR_SET.
     pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/reflection_v1alpha1.bin");
 
     #[cfg(test)]
