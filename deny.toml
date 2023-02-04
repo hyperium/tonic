@@ -17,6 +17,7 @@ deny = [
 skip-tree = [
     { name = "rustls-pemfile" },
     { name = "windows-sys" },
+    { name = "hermit-abi" },
 ]
 
 [licenses]
