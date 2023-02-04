@@ -26,7 +26,7 @@ version = "0.8.3"
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 default = ["transport", "codegen", "prost"]
-prost = ["dep:prost", "dep:prost-derive"]
+prost = ["dep:prost"]
 tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
@@ -59,13 +59,11 @@ async-stream = "0.3"
 http-body = "0.4.4"
 percent-encoding = "2.1"
 pin-project = "1.0.11"
-tokio-util = {version = "0.7", features = ["codec"]}
 tower-layer = "0.3"
 tower-service = "0.3"
 
 # prost
-prost-derive = {version = "0.11", optional = true}
-prost = {version = "0.11", optional = true}
+prost = {version = "0.11", default-features = false, features = ["std"], optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
