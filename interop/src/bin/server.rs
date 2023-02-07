@@ -1,19 +1,26 @@
-use clap::{ArgAction, Parser};
 use interop::server;
 use tonic::transport::Server;
 use tonic::transport::{Identity, ServerTlsConfig};
 
-#[derive(Parser)]
+#[derive(Debug)]
 struct Opts {
-    #[clap(name = "use_tls", long, action = ArgAction::SetTrue)]
     use_tls: bool,
+}
+
+impl Opts {
+    fn parse() -> Result<Self, pico_args::Error> {
+        let mut pargs = pico_args::Arguments::from_env();
+        Ok(Self {
+            use_tls: pargs.contains("--use_tls"),
+        })
+    }
 }
 
 #[tokio::main]
 async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     interop::trace_init();
 
-    let matches = Opts::parse();
+    let matches = Opts::parse()?;
 
     let addr = "127.0.0.1:10000".parse().unwrap();
 
