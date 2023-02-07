@@ -29,3 +29,6 @@ tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 
 [build-dependencies]
 tonic-build = {path = "../../tonic-build"}
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]
