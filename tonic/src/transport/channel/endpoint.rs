@@ -226,6 +226,16 @@ impl Endpoint {
         }
     }
 
+    /// Sets the tower service default internal buffer size
+    ///
+    /// Default is 1024
+    pub fn buffer_size(self, sz: impl Into<Option<usize>>) -> Self {
+        Endpoint {
+            buffer_size: sz.into(),
+            ..self
+        }
+    }
+
     /// Configures TLS for the endpoint.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
