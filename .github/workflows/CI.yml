@@ -27,6 +27,10 @@ jobs:
       uses: baptiste0928/cargo-install@v1
       with:
         crate: cargo-hack
+    - name: Install cargo-machete
+      uses: baptiste0928/cargo-install@v1
+      with:
+        crate: cargo-machete
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
@@ -34,6 +38,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Check fmt
       run: cargo fmt -- --check
+    - name: Check unused dependencies
+      run: cargo machete
     - name: Check features
       run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
