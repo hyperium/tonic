@@ -54,11 +54,11 @@ impl<T> Response<T> {
         self.message
     }
 
-    pub(crate) fn into_parts(self) -> (MetadataMap, T, Extensions) {
+    pub fn into_parts(self) -> (MetadataMap, T, Extensions) {
         (self.metadata, self.message, self.extensions)
     }
 
-    pub(crate) fn from_parts(metadata: MetadataMap, message: T, extensions: Extensions) -> Self {
+    pub fn from_parts(metadata: MetadataMap, message: T, extensions: Extensions) -> Self {
         Self {
             metadata,
             message,
