@@ -328,6 +328,10 @@ impl Status {
     /// Create a `Status` from various types of `Error`.
     ///
     /// Returns the error if a status could not be created.
+    ///
+    /// # Downcast stability
+    /// This function does not provide any stability guarantees around how it will downcast errors into
+    /// status codes.
     pub fn try_from_error(
         err: Box<dyn Error + Send + Sync + 'static>,
     ) -> Result<Status, Box<dyn Error + Send + Sync + 'static>> {
