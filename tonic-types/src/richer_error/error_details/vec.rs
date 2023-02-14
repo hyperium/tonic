@@ -1,4 +1,4 @@
-use super::super::std_messages::{BadRequest, DebugInfo, QuotaFailure, RetryInfo};
+use super::super::std_messages::{BadRequest, DebugInfo, ErrorInfo, QuotaFailure, RetryInfo};
 
 /// Wraps the structs corresponding to the standard error messages, allowing
 /// the implementation and handling of vectors containing any of them.
@@ -13,6 +13,9 @@ pub enum ErrorDetail {
 
     /// Wraps the [`QuotaFailure`] struct.
     QuotaFailure(QuotaFailure),
+
+    /// Wraps the [`ErrorInfo`] struct.
+    ErrorInfo(ErrorInfo),
 
     /// Wraps the [`BadRequest`] struct.
     BadRequest(BadRequest),
@@ -33,6 +36,12 @@ impl From<DebugInfo> for ErrorDetail {
 impl From<QuotaFailure> for ErrorDetail {
     fn from(err_detail: QuotaFailure) -> Self {
         ErrorDetail::QuotaFailure(err_detail)
+    }
+}
+
+impl From<ErrorInfo> for ErrorDetail {
+    fn from(err_detail: ErrorInfo) -> Self {
+        ErrorDetail::ErrorInfo(err_detail)
     }
 }
 

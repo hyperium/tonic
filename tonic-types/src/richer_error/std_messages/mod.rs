@@ -10,6 +10,10 @@ mod quota_failure;
 
 pub use quota_failure::{QuotaFailure, QuotaViolation};
 
+mod error_info;
+
+pub use error_info::ErrorInfo;
+
 mod bad_request;
 
 pub use bad_request::{BadRequest, FieldViolation};
