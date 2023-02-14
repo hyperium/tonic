@@ -24,3 +24,4 @@ members = [
   "tonic-web/tests/integration",
   "tests/service_named_result",
 ]
+resolver = "2"
