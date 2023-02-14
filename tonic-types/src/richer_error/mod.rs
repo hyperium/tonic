@@ -1,6 +1,9 @@
-use prost::{bytes::BytesMut, DecodeError, Message};
+use prost::{
+    bytes::{Bytes, BytesMut},
+    DecodeError, Message,
+};
 use prost_types::Any;
-use tonic::{codegen::Bytes, metadata::MetadataMap, Code};
+use tonic::{metadata::MetadataMap, Code};
 
 mod error_details;
 mod std_messages;

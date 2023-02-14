@@ -10,6 +10,8 @@ fn bootstrap() {
         .join("generated");
 
     tonic_build::configure()
+        .build_client(false)
+        .build_server(false)
         .out_dir(&out_dir)
         .file_descriptor_set_path(out_dir.join("types.bin"))
         .compile(iface_files, dirs)
