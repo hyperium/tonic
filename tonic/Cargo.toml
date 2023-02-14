@@ -27,7 +27,7 @@ codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:async-stream"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
@@ -55,7 +55,6 @@ futures-util = {version = "0.3", default-features = false}
 http = "0.2"
 tracing = "0.1"
 
-async-stream = "0.3"
 http-body = "0.4.4"
 percent-encoding = "2.1"
 pin-project = "1.0.11"
@@ -78,6 +77,7 @@ tower = {version = "0.4.7", default-features = false, features = ["balance", "bu
 axum = {version = "0.6", default_features = false, optional = true}
 
 # rustls
+async-stream = { version = "0.3", optional = true }
 rustls-pemfile = { version = "1.0", optional = true }
 rustls-native-certs = { version = "0.6.1", optional = true }
 tokio-rustls = { version = "0.23.1", optional = true }
