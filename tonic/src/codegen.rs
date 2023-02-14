@@ -23,8 +23,4 @@ pub mod http {
     pub use http::*;
 }
 
-pub fn empty_body() -> crate::body::BoxBody {
-    http_body::Empty::new()
-        .map_err(|err| match err {})
-        .boxed_unsync()
-}
+pub use crate::body::empty_body;
