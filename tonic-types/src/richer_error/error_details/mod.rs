@@ -1,7 +1,7 @@
-use std::time;
+use std::{collections::HashMap, time};
 
 use super::std_messages::{
-    BadRequest, DebugInfo, FieldViolation, QuotaFailure, QuotaViolation, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, QuotaFailure, QuotaViolation, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -21,6 +21,9 @@ pub struct ErrorDetails {
 
     /// This field stores [`QuotaFailure`] data, if any.
     pub(crate) quota_failure: Option<QuotaFailure>,
+
+    /// This field stores [`ErrorInfo`] data, if any.
+    pub(crate) error_info: Option<ErrorInfo>,
 
     /// This field stores [`BadRequest`] data, if any.
     pub(crate) bad_request: Option<BadRequest>,
@@ -117,6 +120,31 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`ErrorInfo`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use tonic_types::{ErrorDetails};
+    ///
+    /// let mut metadata: HashMap<String, String> = HashMap::new();
+    /// metadata.insert("instanceLimitPerRequest".into(), "100".into());
+    ///
+    /// let err_details = ErrorDetails::with_error_info("reason", "domain", metadata);
+    /// ```
+    pub fn with_error_info(
+        reason: impl Into<String>,
+        domain: impl Into<String>,
+        metadata: impl Into<HashMap<String, String>>,
+    ) -> Self {
+        ErrorDetails {
+            error_info: Some(ErrorInfo::new(reason, domain, metadata)),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Generates an [`ErrorDetails`] struct with [`BadRequest`] details and
     /// remaining fields set to `None`.
     ///
@@ -173,6 +201,11 @@ impl ErrorDetails {
     /// Get [`QuotaFailure`] details, if any
     pub fn quota_failure(&self) -> Option<QuotaFailure> {
         self.quota_failure.clone()
+    }
+
+    /// Get [`ErrorInfo`] details, if any
+    pub fn error_info(&self) -> Option<ErrorInfo> {
+        self.error_info.clone()
     }
 
     /// Get [`BadRequest`] details, if any
@@ -291,6 +324,32 @@ impl ErrorDetails {
             return !quota_failure.violations.is_empty();
         }
         false
+    }
+
+    /// Set [`ErrorInfo`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::collections::HashMap;
+    /// use tonic_types::{ErrorDetails};
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// let mut metadata: HashMap<String, String> = HashMap::new();
+    /// metadata.insert("instanceLimitPerRequest".into(), "100".into());
+    ///
+    /// err_details.set_error_info("reason", "example.local", metadata);
+    /// ```
+    pub fn set_error_info(
+        &mut self,
+        reason: impl Into<String>,
+        domain: impl Into<String>,
+        metadata: impl Into<HashMap<String, String>>,
+    ) -> &mut Self {
+        self.error_info = Some(ErrorInfo::new(reason, domain, metadata));
+        self
     }
 
     /// Set [`BadRequest`] details. Can be chained with other `.set_` and
