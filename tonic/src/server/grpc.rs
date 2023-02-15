@@ -279,8 +279,12 @@ where
 
         let (parts, body) = request.into_parts();
 
-        let stream =
-            Streaming::new_request(self.codec.decoder(), body, request_compression_encoding);
+        let stream = Streaming::new_request(
+            self.codec.decoder(),
+            body,
+            request_compression_encoding,
+            None,
+        );
 
         futures_util::pin_mut!(stream);
 
@@ -309,7 +313,7 @@ where
         let encoding = self.request_encoding_if_supported(&request)?;
 
         let request =
-            request.map(|body| Streaming::new_request(self.codec.decoder(), body, encoding));
+            request.map(|body| Streaming::new_request(self.codec.decoder(), body, encoding, None));
 
         Ok(Request::from_http(request))
     }
@@ -349,6 +353,7 @@ where
             body.into_stream(),
             accept_encoding,
             compression_override,
+            None,
         );
 
         http::Response::from_parts(parts, BoxBody::new(body))

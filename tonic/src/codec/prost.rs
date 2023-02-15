@@ -81,11 +81,13 @@ mod tests {
     use crate::codec::{
         encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
     };
-    use crate::Status;
+    use crate::{Code, Status};
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
 
     const LEN: usize = 10000;
+    // The maximum uncompressed size in bytes for a message. Set to 2MB.
+    const MAX_MESSAGE_SIZE: usize = 2 * 1024 * 1024;
 
     #[tokio::test]
     async fn decode() {
@@ -103,7 +105,7 @@ mod tests {
 
         let body = body::MockBody::new(&buf[..], 10005, 0);
 
-        let mut stream = Streaming::new_request(decoder, body, None);
+        let mut stream = Streaming::new_request(decoder, body, None, None);
 
         let mut i = 0usize;
         while let Some(output_msg) = stream.message().await.unwrap() {
@@ -111,6 +113,39 @@ mod tests {
             i += 1;
         }
         assert_eq!(i, 1);
+    }
+
+    #[tokio::test]
+    async fn decode_max_message_size_exceeded() {
+        let decoder = MockDecoder::default();
+
+        let msg = vec![0u8; MAX_MESSAGE_SIZE + 1];
+
+        let mut buf = BytesMut::new();
+
+        buf.reserve(msg.len() + HEADER_SIZE);
+        buf.put_u8(0);
+        buf.put_u32(msg.len() as u32);
+
+        buf.put(&msg[..]);
+
+        let body = body::MockBody::new(&buf[..], 10005, 0);
+
+        let mut stream = Streaming::new_request(decoder, body, None, Some(MAX_MESSAGE_SIZE));
+
+        let actual = stream.message().await.unwrap_err();
+
+        let expected = Status::new(
+            Code::OutOfRange,
+            format!(
+                "Error, message length too large: found {} bytes, the limit is: {} bytes",
+                msg.len(),
+                MAX_MESSAGE_SIZE
+            ),
+        );
+
+        assert_eq!(actual.code(), expected.code());
+        assert_eq!(actual.message(), expected.message());
     }
 
     #[tokio::test]
@@ -127,6 +162,7 @@ mod tests {
             source,
             None,
             SingleMessageCompressionOverride::default(),
+            None,
         );
 
         futures_util::pin_mut!(body);
@@ -134,6 +170,38 @@ mod tests {
         while let Some(r) = body.data().await {
             r.unwrap();
         }
+    }
+
+    #[tokio::test]
+    async fn encode_max_message_size_exceeded() {
+        let encoder = MockEncoder::default();
+
+        let msg = vec![0u8; MAX_MESSAGE_SIZE + 1];
+
+        let messages = std::iter::once(Ok::<_, Status>(msg));
+        let source = futures_util::stream::iter(messages);
+
+        let body = encode_server(
+            encoder,
+            source,
+            None,
+            SingleMessageCompressionOverride::default(),
+            Some(MAX_MESSAGE_SIZE),
+        );
+
+        futures_util::pin_mut!(body);
+
+        assert!(body.data().await.is_none());
+        assert_eq!(
+            body.trailers()
+                .await
+                .expect("no error polling trailers")
+                .expect("some trailers")
+                .get("grpc-status")
+                .expect("grpc-status header"),
+            "11"
+        );
+        assert!(body.is_end_stream());
     }
 
     // skip on windows because CI stumbles over our 4GB allocation
@@ -152,6 +220,7 @@ mod tests {
             source,
             None,
             SingleMessageCompressionOverride::default(),
+            Some(usize::MAX),
         );
 
         futures_util::pin_mut!(body);

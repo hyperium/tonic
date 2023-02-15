@@ -228,7 +228,14 @@ impl<T> Grpc<T> {
         M2: Send + Sync + 'static,
     {
         let request = request
-            .map(|s| encode_client(codec.encoder(), s, self.config.send_compression_encodings))
+            .map(|s| {
+                encode_client(
+                    codec.encoder(),
+                    s,
+                    self.config.send_compression_encodings,
+                    None,
+                )
+            })
             .map(BoxBody::new);
 
         let request = self.config.prepare_request(request, path);
@@ -278,7 +285,7 @@ impl<T> Grpc<T> {
 
         let response = response.map(|body| {
             if expect_additional_trailers {
-                Streaming::new_response(decoder, body, status_code, encoding)
+                Streaming::new_response(decoder, body, status_code, encoding, None)
             } else {
                 Streaming::new_empty(decoder, body)
             }
