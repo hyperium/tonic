@@ -6,8 +6,10 @@ use std::task::{Context, Poll};
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
 use hyper::Body;
 use pin_project::pin_project;
-use tonic::body::{empty_body, BoxBody};
-use tonic::transport::NamedService;
+use tonic::{
+    body::{empty_body, BoxBody},
+    server::NamedService,
+};
 use tower_service::Service;
 use tracing::{debug, trace};
 

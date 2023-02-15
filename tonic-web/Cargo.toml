@@ -20,9 +20,9 @@ bytes = "1.0"
 futures-core = "0.3"
 http = "0.2"
 http-body = "0.4"
-hyper = "0.14"
+hyper = {version = "0.14", default-features = false, features = ["stream"]}
 pin-project = "1"
-tonic = {version = "0.8", path = "../tonic", default-features = false, features = ["transport"]}
+tonic = {version = "0.8", path = "../tonic", default-features = false}
 tower-service = "0.3"
 tower-layer = "0.3"
 tower-http = { version = "0.3", features = ["cors"] }
