@@ -64,19 +64,19 @@ path = "src/tls/client.rs"
 required-features = ["tls"]
 
 [[bin]]
-name = "tls-client-rustls"
-path = "src/tls/client_rustls.rs"
-required-features = ["tls"]
-
-[[bin]]
 name = "tls-server"
 path = "src/tls/server.rs"
 required-features = ["tls"]
 
 [[bin]]
-name = "tls-server-rustls"
-path = "src/tls/server_rustls.rs"
-required-features = ["tls"]
+name = "tls-rustls-client"
+path = "src/tls_rustls/client.rs"
+required-features = ["tls-rustls"]
+
+[[bin]]
+name = "tls-rustls-server"
+path = "src/tls_rustls/server.rs"
+required-features = ["tls-rustls"]
 
 [[bin]]
 name = "tls-client-auth-server"
@@ -249,14 +249,13 @@ mock = ["dep:futures", "dep:tower"]
 tower = ["dep:futures", "dep:hyper", "dep:tower", "dep:http"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
-tls = ["dep:hyper", "tonic/tls", "dep:hyper-rustls", "dep:tower",
-       "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls"]
+tls = ["tonic/tls"]
+tls-rustls = ["dep:hyper", "dep:hyper-rustls", "dep:tower", "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls"]
 dynamic-load-balance = ["dep:tower"]
 timeout = ["tokio/time", "dep:tower"]
 tls-client-auth = ["tonic/tls"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex",
-        "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "dynamic-load-balance", "timeout","tls-client-auth"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth"]
 default = ["full"]
 
 [dependencies]
