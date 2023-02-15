@@ -71,3 +71,12 @@ impl fmt::Debug for Extensions {
         f.debug_struct("Extensions").finish()
     }
 }
+
+/// A gRPC Method info extension.
+#[derive(Debug)]
+pub struct GrpcMethod<'a> {
+    /// gRPC service name
+    pub service: &'a str,
+    /// gRPC method name
+    pub method: &'a str,
+}

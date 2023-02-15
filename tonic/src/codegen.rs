@@ -11,6 +11,7 @@ pub use std::task::{Context, Poll};
 pub use tower_service::Service;
 pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub use crate::codec::{CompressionEncoding, EnabledCompressionEncodings};
+pub use crate::extensions::GrpcMethod;
 pub use crate::service::interceptor::InterceptedService;
 pub use bytes::Bytes;
 pub use http_body::Body;
