@@ -1,6 +1,6 @@
 use crate::{
     body::{boxed, BoxBody},
-    transport::NamedService,
+    server::NamedService,
 };
 use http::{Request, Response};
 use hyper::Body;

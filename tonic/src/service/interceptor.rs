@@ -189,10 +189,9 @@ where
 }
 
 // required to use `InterceptedService` with `Router`
-#[cfg(feature = "transport")]
-impl<S, F> crate::transport::NamedService for InterceptedService<S, F>
+impl<S, F> crate::server::NamedService for InterceptedService<S, F>
 where
-    S: crate::transport::NamedService,
+    S: crate::server::NamedService,
 {
     const NAME: &'static str = S::NAME;
 }
