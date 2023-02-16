@@ -43,9 +43,7 @@ impl ErrorInfo {
             metadata: metadata.into(),
         }
     }
-}
 
-impl ErrorInfo {
     /// Returns `true` if [`ErrorInfo`] fields are empty, and `false` if they
     /// are not.
     pub fn is_empty(&self) -> bool {

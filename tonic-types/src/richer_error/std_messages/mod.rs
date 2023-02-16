@@ -14,6 +14,10 @@ mod error_info;
 
 pub use error_info::ErrorInfo;
 
+mod prec_failure;
+
+pub use prec_failure::{PreconditionFailure, PreconditionViolation};
+
 mod bad_request;
 
 pub use bad_request::{BadRequest, FieldViolation};
