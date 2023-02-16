@@ -139,23 +139,29 @@ impl<T> Grpc<T> {
     ///
     /// ```rust
     /// use tonic::transport::Channel;
+    /// # struct TestClient<T>(T);
+    /// # impl<T> TestClient<T> {
+    /// #     fn new(channel: T) -> Self { Self(channel) }
+    /// #     fn max_decoding_message_size(self, _: usize) -> Self { self }
+    /// # }
     ///
     /// # async {
     /// let channel = Channel::builder("127.0.0.1:3000".parse().unwrap())
     ///     .connect()
     ///     .await
     ///     .unwrap();
+    ///
     /// // Set the limit to 2MB
     /// let limit = 2 * 1024 * 1024
-    /// let client = TestClient::new(channel).max_encoding_message_size(limit);
+    /// let client = TestClient::new(channel).max_decoding_message_size(limit);
     /// # };
     /// ```
-    pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
-        self.config.max_encoding_message_size = Some(limit);
+    pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+        self.config.max_decoding_message_size = Some(limit);
         self
     }
 
-    /// Limits the maximum size of an encoded message.
+    /// Limits the maximum size of an ecoded message.
     ///
     ///
     /// # Example
@@ -164,19 +170,25 @@ impl<T> Grpc<T> {
     ///
     /// ```rust
     /// use tonic::transport::Channel;
+    /// # struct TestClient<T>(T);
+    /// # impl<T> TestClient<T> {
+    /// #     fn new(channel: T) -> Self { Self(channel) }
+    /// #     fn max_encoding_message_size(self, _: usize) -> Self { self }
+    /// # }
     ///
     /// # async {
     /// let channel = Channel::builder("127.0.0.1:3000".parse().unwrap())
     ///     .connect()
     ///     .await
     ///     .unwrap();
-    /// 
+    ///
+    /// // Set the limit to 2MB
     /// let limit = 2 * 1024 * 1024
-    /// let client = TestClient::new(channel).max_decoding_message_size(limit);
+    /// let client = TestClient::new(channel).max_encoding_message_size(limit);
     /// # };
     /// ```
-    pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
-        self.config.max_decoding_message_size = Some(limit);
+    pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+        self.config.max_encoding_message_size = Some(limit);
         self
     }
 
@@ -341,7 +353,13 @@ impl<T> Grpc<T> {
 
         let response = response.map(|body| {
             if expect_additional_trailers {
-                Streaming::new_response(decoder, body, status_code, encoding, self.config.max_decoding_message_size)
+                Streaming::new_response(
+                    decoder,
+                    body,
+                    status_code,
+                    encoding,
+                    self.config.max_decoding_message_size,
+                )
             } else {
                 Streaming::new_empty(decoder, body)
             }
