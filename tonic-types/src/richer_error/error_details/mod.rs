@@ -39,7 +39,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::new();
     /// ```
@@ -54,7 +54,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::with_retry_info(Some(Duration::from_secs(5)));
     /// ```
@@ -71,7 +71,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_stack = vec!["...".into(), "...".into()];
     ///
@@ -110,7 +110,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::with_quota_failure_violation("subject", "description");
     /// ```
@@ -131,7 +131,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut metadata: HashMap<String, String> = HashMap::new();
     /// metadata.insert("instanceLimitPerRequest".into(), "100".into());
@@ -233,7 +233,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::with_bad_request_violation(
     ///     "field",
@@ -250,22 +250,22 @@ impl ErrorDetails {
         }
     }
 
-    /// Get [`RetryInfo`] details, if any
+    /// Get [`RetryInfo`] details, if any.
     pub fn retry_info(&self) -> Option<RetryInfo> {
         self.retry_info.clone()
     }
 
-    /// Get [`DebugInfo`] details, if any
+    /// Get [`DebugInfo`] details, if any.
     pub fn debug_info(&self) -> Option<DebugInfo> {
         self.debug_info.clone()
     }
 
-    /// Get [`QuotaFailure`] details, if any
+    /// Get [`QuotaFailure`] details, if any.
     pub fn quota_failure(&self) -> Option<QuotaFailure> {
         self.quota_failure.clone()
     }
 
-    /// Get [`ErrorInfo`] details, if any
+    /// Get [`ErrorInfo`] details, if any.
     pub fn error_info(&self) -> Option<ErrorInfo> {
         self.error_info.clone()
     }
@@ -275,7 +275,7 @@ impl ErrorDetails {
         self.precondition_failure.clone()
     }
 
-    /// Get [`BadRequest`] details, if any
+    /// Get [`BadRequest`] details, if any.
     pub fn bad_request(&self) -> Option<BadRequest> {
         self.bad_request.clone()
     }
@@ -287,7 +287,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -304,7 +304,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -348,7 +348,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -376,7 +376,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::with_quota_failure(vec![]);
     ///
@@ -400,7 +400,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -542,7 +542,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -570,7 +570,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::with_bad_request(vec![]);
     ///

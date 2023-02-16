@@ -148,7 +148,7 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -173,7 +173,7 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -257,7 +257,7 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -279,7 +279,7 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -301,7 +301,7 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -323,7 +323,7 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
@@ -367,7 +367,7 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
