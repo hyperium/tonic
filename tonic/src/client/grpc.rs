@@ -457,13 +457,13 @@ impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
         );
 
         f.field(
-            "max_encoding_message_size",
-            &self.config.max_encoding_message_size,
+            "max_decoding_message_size",
+            &self.config.max_decoding_message_size,
         );
 
         f.field(
-            "max_decoding_message_size",
-            &self.config.max_decoding_message_size,
+            "max_encoding_message_size",
+            &self.config.max_encoding_message_size,
         );
 
         f.finish()

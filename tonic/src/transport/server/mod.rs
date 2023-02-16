@@ -92,7 +92,6 @@ pub struct Server<L = Identity> {
     http2_keepalive_timeout: Option<Duration>,
     http2_adaptive_window: Option<bool>,
     max_frame_size: Option<u32>,
-    max_message_size: Option<u32>,
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
 }
@@ -114,7 +113,6 @@ impl Default for Server<Identity> {
             http2_keepalive_timeout: None,
             http2_adaptive_window: None,
             max_frame_size: None,
-            max_message_size: None,
             accept_http1: false,
             service_builder: Default::default(),
         }
@@ -311,19 +309,6 @@ impl<L> Server<L> {
         }
     }
 
-    /// Sets the maximum message size to use for gRPC Message.
-    ///
-    /// Passing `None` will do nothing.
-    ///
-    /// If not set, will default 4MB
-    #[must_use]
-    pub fn max_message_size(self, message_size: impl Into<Option<u32>>) -> Self {
-        Server {
-            max_message_size: message_size.into(),
-            ..self
-        }
-    }
-
     /// Allow this server to accept http1 requests.
     ///
     /// Accepting http1 requests is only useful when developing `grpc-web`
@@ -469,7 +454,6 @@ impl<L> Server<L> {
             http2_keepalive_timeout: self.http2_keepalive_timeout,
             http2_adaptive_window: self.http2_adaptive_window,
             max_frame_size: self.max_frame_size,
-            max_message_size: self.max_message_size,
             accept_http1: self.accept_http1,
         }
     }
