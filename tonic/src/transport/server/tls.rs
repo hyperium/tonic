@@ -51,6 +51,9 @@ impl ServerTlsConfig {
     /// Sets whether client certificate verification is optional.
     ///
     /// This option has effect only if CA certificate is set.
+    ///
+    /// # Default
+    /// By default, this option is set to `false`.
     pub fn client_auth_optional(self, optional: bool) -> Self {
         ServerTlsConfig {
             client_auth_optional: optional,
