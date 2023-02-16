@@ -141,7 +141,6 @@ fn finish_encoding(
     buf: &mut BytesMut,
 ) -> Result<Bytes, Status> {
     let len = buf.len() - HEADER_SIZE;
-
     let limit = max_message_size.unwrap_or(DEFAULT_MAX_MESSAGE_SIZE);
     if len > limit {
         return Err(Status::new(

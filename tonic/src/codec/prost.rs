@@ -129,7 +129,7 @@ mod tests {
 
         buf.put(&msg[..]);
 
-        let body = body::MockBody::new(&buf[..], 10005, 0);
+        let body = body::MockBody::new(&buf[..], MAX_MESSAGE_SIZE + HEADER_SIZE + 1, 0);
 
         let mut stream = Streaming::new_request(decoder, body, None, Some(MAX_MESSAGE_SIZE));
 
