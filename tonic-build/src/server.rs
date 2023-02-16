@@ -438,6 +438,8 @@ fn generate_unary<T: Method>(
 
         let accept_compression_encodings = self.accept_compression_encodings;
         let send_compression_encodings = self.send_compression_encodings;
+        let max_decoding_message_size = self.max_decoding_message_size;
+        let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
@@ -445,7 +447,8 @@ fn generate_unary<T: Method>(
             let codec = #codec_name::default();
 
             let mut grpc = tonic::server::Grpc::new(codec)
-                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings)
+                .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
             let res = grpc.unary(method, req).await;
             Ok(res)
@@ -490,6 +493,8 @@ fn generate_server_streaming<T: Method>(
 
         let accept_compression_encodings = self.accept_compression_encodings;
         let send_compression_encodings = self.send_compression_encodings;
+        let max_decoding_message_size = self.max_decoding_message_size;
+        let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
@@ -497,7 +502,8 @@ fn generate_server_streaming<T: Method>(
             let codec = #codec_name::default();
 
             let mut grpc = tonic::server::Grpc::new(codec)
-                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings)
+                .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
             let res = grpc.server_streaming(method, req).await;
             Ok(res)
@@ -540,6 +546,8 @@ fn generate_client_streaming<T: Method>(
 
         let accept_compression_encodings = self.accept_compression_encodings;
         let send_compression_encodings = self.send_compression_encodings;
+        let max_decoding_message_size = self.max_decoding_message_size;
+        let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
@@ -547,7 +555,8 @@ fn generate_client_streaming<T: Method>(
             let codec = #codec_name::default();
 
             let mut grpc = tonic::server::Grpc::new(codec)
-                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings)
+                .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
             let res = grpc.client_streaming(method, req).await;
             Ok(res)
@@ -593,6 +602,8 @@ fn generate_streaming<T: Method>(
 
         let accept_compression_encodings = self.accept_compression_encodings;
         let send_compression_encodings = self.send_compression_encodings;
+        let max_decoding_message_size = self.max_decoding_message_size;
+        let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
             let inner = inner.0;
@@ -600,7 +611,8 @@ fn generate_streaming<T: Method>(
             let codec = #codec_name::default();
 
             let mut grpc = tonic::server::Grpc::new(codec)
-                .apply_compression_config(accept_compression_encodings, send_compression_encodings);
+                .apply_compression_config(accept_compression_encodings, send_compression_encodings)
+                .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
 
             let res = grpc.streaming(method, req).await;
             Ok(res)

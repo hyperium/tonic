@@ -205,6 +205,24 @@ where
         this
     }
 
+    #[doc(hidden)]
+    pub fn apply_max_message_size_config(
+        self,
+        max_decoding_message_size: Option<usize>,
+        max_encoding_message_size: Option<usize>,
+    ) -> Self {
+        let mut this = self;
+
+        if let Some(limit) = max_decoding_message_size {
+            this = this.max_decoding_message_size(limit);
+        }
+        if let Some(limit) = max_encoding_message_size {
+            this = this.max_encoding_message_size(limit);
+        }
+
+        this
+    }
+
     /// Handle a single unary gRPC request.
     pub async fn unary<S, B>(
         &mut self,
