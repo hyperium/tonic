@@ -53,9 +53,7 @@ impl QuotaFailure {
             }],
         }
     }
-}
 
-impl QuotaFailure {
     /// Adds a [`QuotaViolation`] to [`QuotaFailure`]'s `violations`.
     pub fn add_violation(
         &mut self,
