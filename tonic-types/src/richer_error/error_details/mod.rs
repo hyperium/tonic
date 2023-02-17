@@ -2,7 +2,7 @@ use std::{collections::HashMap, time};
 
 use super::std_messages::{
     BadRequest, DebugInfo, ErrorInfo, FieldViolation, PreconditionFailure, PreconditionViolation,
-    QuotaFailure, QuotaViolation, RetryInfo,
+    QuotaFailure, QuotaViolation, RequestInfo, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -31,6 +31,9 @@ pub struct ErrorDetails {
 
     /// This field stores [`BadRequest`] data, if any.
     pub(crate) bad_request: Option<BadRequest>,
+
+    /// This field stores [`RequestInfo`] data, if any.
+    pub(crate) request_info: Option<RequestInfo>,
 }
 
 impl ErrorDetails {
@@ -250,6 +253,29 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`RequestInfo`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_request_info(
+    ///     "request_id",
+    ///     "serving_data",
+    /// );
+    /// ```
+    pub fn with_request_info(
+        request_id: impl Into<String>,
+        serving_data: impl Into<String>,
+    ) -> Self {
+        ErrorDetails {
+            request_info: Some(RequestInfo::new(request_id, serving_data)),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Get [`RetryInfo`] details, if any.
     pub fn retry_info(&self) -> Option<RetryInfo> {
         self.retry_info.clone()
@@ -278,6 +304,11 @@ impl ErrorDetails {
     /// Get [`BadRequest`] details, if any.
     pub fn bad_request(&self) -> Option<BadRequest> {
         self.bad_request.clone()
+    }
+
+    /// Get [`RequestInfo`] details, if any.
+    pub fn request_info(&self) -> Option<RequestInfo> {
+        self.request_info.clone()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
@@ -585,5 +616,26 @@ impl ErrorDetails {
             return !bad_request.field_violations.is_empty();
         }
         false
+    }
+
+    /// Set [`RequestInfo`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_request_info("request_id", "serving_data");
+    /// ```
+    pub fn set_request_info(
+        &mut self,
+        request_id: impl Into<String>,
+        serving_data: impl Into<String>,
+    ) -> &mut Self {
+        self.request_info = Some(RequestInfo::new(request_id, serving_data));
+        self
     }
 }

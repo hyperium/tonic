@@ -47,7 +47,8 @@ mod richer_error;
 
 pub use richer_error::{
     BadRequest, DebugInfo, ErrorDetail, ErrorDetails, ErrorInfo, FieldViolation,
-    PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation, RetryInfo, StatusExt,
+    PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo,
+    RetryInfo, StatusExt,
 };
 
 mod sealed {
