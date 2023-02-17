@@ -137,6 +137,20 @@ pub(crate) fn generate_internal<T: Service>(
                     self
                 }
 
+                /// Limits the maximum size of a decoded message.
+                #[must_use]
+                pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+                    self.inner = self.inner.max_decoding_message_size(limit);
+                    self
+                }
+
+                /// Limits the maximum size of an encoded message.
+                #[must_use]
+                pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+                    self.inner = self.inner.max_encoding_message_size(limit);
+                    self
+                }
+
                 #methods
             }
         }
