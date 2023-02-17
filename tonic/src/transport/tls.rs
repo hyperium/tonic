@@ -38,6 +38,12 @@ impl Certificate {
     }
 }
 
+impl From<Vec<u8>> for Certificate {
+    fn from(pem: Vec<u8>) -> Self {
+        Self { pem }
+    }
+}
+
 impl AsRef<[u8]> for Certificate {
     fn as_ref(&self) -> &[u8] {
         self.pem.as_ref()
@@ -52,6 +58,11 @@ impl Identity {
     pub fn from_pem(cert: impl AsRef<[u8]>, key: impl AsRef<[u8]>) -> Self {
         let cert = Certificate::from_pem(cert);
         let key = key.as_ref().into();
+        Self { cert, key }
+    }
+
+    pub fn from_pem_vec(cert: Vec<u8>, key: Vec<u8>) -> Self {
+        let cert = Certificate::from(cert);
         Self { cert, key }
     }
 }
