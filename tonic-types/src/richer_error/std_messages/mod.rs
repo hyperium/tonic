@@ -25,3 +25,7 @@ pub use bad_request::{BadRequest, FieldViolation};
 mod request_info;
 
 pub use request_info::RequestInfo;
+
+mod resource_info;
+
+pub use resource_info::ResourceInfo;
