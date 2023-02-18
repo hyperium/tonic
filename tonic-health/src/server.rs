@@ -155,7 +155,7 @@ impl Health for HealthService {
             let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
             yield HealthCheckResponse { status };
 
-            while let Ok(_) = status_rx.changed().await {
+            while status_rx.changed().await.is_ok() {
                 let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
                 yield HealthCheckResponse { status };
             }
