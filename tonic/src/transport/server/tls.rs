@@ -5,8 +5,6 @@ use crate::transport::{
 use std::fmt;
 
 /// Configures TLS settings for servers.
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Clone, Default)]
 pub struct ServerTlsConfig {
     identity: Option<Identity>,
@@ -14,14 +12,12 @@ pub struct ServerTlsConfig {
     client_auth_optional: bool,
 }
 
-#[cfg(feature = "tls")]
 impl fmt::Debug for ServerTlsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ServerTlsConfig").finish()
     }
 }
 
-#[cfg(feature = "tls")]
 impl ServerTlsConfig {
     /// Creates a new `ServerTlsConfig`.
     pub fn new() -> Self {
