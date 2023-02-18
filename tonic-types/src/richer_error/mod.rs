@@ -153,12 +153,13 @@ pub trait StatusExt: crate::sealed::Sealed {
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
     ///         Ok(_) => {},
-    ///         Err(status) => {
-    ///             let err_details = status.get_error_details();
-    ///             if let Some(bad_request) = err_details.bad_request() {
-    ///                 // Handle bad_request details
+    ///         Err(status) => match status.check_error_details() {
+    ///             Ok(err_details) => {
+    ///                 // Handle extracted details
     ///             }
-    ///             // ...
+    ///             Err(decode_error) => {
+    ///                 // Handle decode_error
+    ///             }
     ///         }
     ///     };
     /// }
@@ -201,19 +202,17 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{ErrorDetail, StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
     ///         Ok(_) => {},
-    ///         Err(status) => {
-    ///             match status.check_error_details_vec() {
-    ///                 Ok(err_details) => {
-    ///                     // Handle extracted details
-    ///                 }
-    ///                 Err(decode_error) => {
-    ///                     // Handle decode_error
-    ///                 }
+    ///         Err(status) => match status.check_error_details_vec() {
+    ///             Ok(err_details) => {
+    ///                 // Handle extracted details
+    ///             }
+    ///             Err(decode_error) => {
+    ///                 // Handle decode_error
     ///             }
     ///         }
     ///     };
