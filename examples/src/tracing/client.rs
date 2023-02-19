@@ -3,7 +3,6 @@ pub mod hello_world {
 }
 
 use hello_world::{greeter_client::GreeterClient, HelloRequest};
-use tracing_attributes::instrument;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -16,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[instrument]
+#[tracing::instrument]
 async fn say_hi(name: String) -> Result<(), Box<dyn std::error::Error>> {
     let mut client = GreeterClient::connect("http://[::1]:50051").await?;
 
