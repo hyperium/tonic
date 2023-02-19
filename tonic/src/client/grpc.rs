@@ -370,9 +370,9 @@ impl<T> Grpc<T> {
 impl GrpcConfig {
     fn prepare_request(
         &self,
-        request: Request<http_body::combinators::UnsyncBoxBody<bytes::Bytes, Status>>,
+        request: Request<BoxBody>,
         path: PathAndQuery,
-    ) -> http::Request<http_body::combinators::UnsyncBoxBody<bytes::Bytes, Status>> {
+    ) -> http::Request<BoxBody> {
         let scheme = self.origin.scheme().cloned();
         let authority = self.origin.authority().cloned();
 
