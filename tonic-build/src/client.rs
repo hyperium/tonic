@@ -222,7 +222,7 @@ fn generate_methods<T: Service>(
 
 fn generate_unary<T: Service>(
     service: &T,
-    method: &<T as Service>::Method,
+    method: &T::Method,
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
@@ -245,7 +245,7 @@ fn generate_unary<T: Service>(
            let codec = #codec_name::default();
            let path = http::uri::PathAndQuery::from_static(#path);
            let mut req = request.into_request();
-           req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+           req.extensions_mut().insert(GrpcMethod::new(#service_name, #method_name));
            self.inner.unary(req, path, codec).await
         }
     }
@@ -253,7 +253,7 @@ fn generate_unary<T: Service>(
 
 fn generate_server_streaming<T: Service>(
     service: &T,
-    method: &<T as Service>::Method,
+    method: &T::Method,
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
@@ -276,7 +276,7 @@ fn generate_server_streaming<T: Service>(
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
             let mut req = request.into_request();
-            req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+            req.extensions_mut().insert(GrpcMethod::new(#service_name, #method_name));
             self.inner.server_streaming(req, path, codec).await
         }
     }
@@ -284,7 +284,7 @@ fn generate_server_streaming<T: Service>(
 
 fn generate_client_streaming<T: Service>(
     service: &T,
-    method: &<T as Service>::Method,
+    method: &T::Method,
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
@@ -307,7 +307,7 @@ fn generate_client_streaming<T: Service>(
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
             let mut req = request.into_streaming_request();
-            req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+            req.extensions_mut().insert(GrpcMethod::new(#service_name, #method_name));
             self.inner.client_streaming(req, path, codec).await
         }
     }
@@ -315,7 +315,7 @@ fn generate_client_streaming<T: Service>(
 
 fn generate_streaming<T: Service>(
     service: &T,
-    method: &<T as Service>::Method,
+    method: &T::Method,
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
@@ -338,7 +338,7 @@ fn generate_streaming<T: Service>(
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
             let mut req = request.into_streaming_request();
-            req.extensions_mut().insert(GrpcMethod{service: #service_name, method: #method_name});
+            req.extensions_mut().insert(GrpcMethod::new(#service_name,#method_name));
             self.inner.streaming(req, path, codec).await
         }
     }

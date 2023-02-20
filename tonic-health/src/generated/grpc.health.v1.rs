@@ -138,10 +138,7 @@ pub mod health_client {
             );
             let mut req = request.into_request();
             req.extensions_mut()
-                .insert(GrpcMethod {
-                    service: "grpc.health.v1.Health",
-                    method: "Check",
-                });
+                .insert(GrpcMethod::new("grpc.health.v1.Health", "Check"));
             self.inner.unary(req, path, codec).await
         }
         /// Performs a watch for the serving status of the requested service.
@@ -181,10 +178,7 @@ pub mod health_client {
             );
             let mut req = request.into_request();
             req.extensions_mut()
-                .insert(GrpcMethod {
-                    service: "grpc.health.v1.Health",
-                    method: "Watch",
-                });
+                .insert(GrpcMethod::new("grpc.health.v1.Health", "Watch"));
             self.inner.server_streaming(req, path, codec).await
         }
     }

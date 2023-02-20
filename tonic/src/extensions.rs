@@ -74,9 +74,23 @@ impl fmt::Debug for Extensions {
 
 /// A gRPC Method info extension.
 #[derive(Debug)]
-pub struct GrpcMethod<'a> {
+pub struct GrpcMethod {
+    service: &'static str,
+    method: &'static str,
+}
+
+impl GrpcMethod {
+    /// Create a new `GrpcMethod` extension.
+    pub fn new(service: &'static str, method: &'static str) -> Self {
+        Self { service, method }
+    }
+
     /// gRPC service name
-    pub service: &'a str,
+    pub fn service(&self) -> &str {
+        &self.service
+    }
     /// gRPC method name
-    pub method: &'a str,
+    pub fn method(&self) -> &str {
+        &self.method
+    }
 }

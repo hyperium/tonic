@@ -237,10 +237,12 @@ pub mod server_reflection_client {
             );
             let mut req = request.into_streaming_request();
             req.extensions_mut()
-                .insert(GrpcMethod {
-                    service: "grpc.reflection.v1alpha.ServerReflection",
-                    method: "ServerReflectionInfo",
-                });
+                .insert(
+                    GrpcMethod::new(
+                        "grpc.reflection.v1alpha.ServerReflection",
+                        "ServerReflectionInfo",
+                    ),
+                );
             self.inner.streaming(req, path, codec).await
         }
     }

@@ -38,8 +38,8 @@ async fn interceptor_retrieves_grpc_method() {
         println!("Intercepting client request: {:?}", req);
 
         let gm = req.extensions().get::<GrpcMethod>().unwrap();
-        assert_eq!(gm.service, "test.Test");
-        assert_eq!(gm.method, "UnaryCall");
+        assert_eq!(gm.service(), "test.Test");
+        assert_eq!(gm.method(), "UnaryCall");
 
         Ok(req)
     }

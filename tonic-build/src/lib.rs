@@ -207,11 +207,7 @@ fn format_service_name<T: Service>(service: &T, emit_package: bool) -> String {
     )
 }
 
-fn format_method_path<T: Service>(
-    service: &T,
-    method: &<T as Service>::Method,
-    emit_package: bool,
-) -> String {
+fn format_method_path<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
     format!(
         "/{}/{}",
         format_service_name(service, emit_package),
@@ -219,11 +215,7 @@ fn format_method_path<T: Service>(
     )
 }
 
-fn format_method_name<T: Service>(
-    service: &T,
-    method: &<T as Service>::Method,
-    emit_package: bool,
-) -> String {
+fn format_method_name<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
     format!(
         "{}.{}",
         format_service_name(service, emit_package),
