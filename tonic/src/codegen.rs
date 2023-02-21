@@ -13,14 +13,11 @@ pub type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 pub use crate::codec::{CompressionEncoding, EnabledCompressionEncodings};
 pub use crate::service::interceptor::InterceptedService;
 pub use bytes::Bytes;
+pub use http;
 pub use http_body::Body;
 
 pub type BoxFuture<T, E> = self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
 pub type BoxStream<T> =
     self::Pin<Box<dyn futures_core::Stream<Item = Result<T, crate::Status>> + Send + 'static>>;
-
-pub mod http {
-    pub use http::*;
-}
 
 pub use crate::body::empty_body;
