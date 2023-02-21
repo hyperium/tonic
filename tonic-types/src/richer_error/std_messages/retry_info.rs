@@ -42,9 +42,7 @@ impl RetryInfo {
 
         RetryInfo { retry_delay }
     }
-}
 
-impl RetryInfo {
     /// Returns `true` if [`RetryInfo`]'s `retry_delay` is set as `None`, and
     /// `false` if it is not.
     pub fn is_empty(&self) -> bool {

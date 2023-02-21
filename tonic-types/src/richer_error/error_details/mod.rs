@@ -1,7 +1,8 @@
 use std::{collections::HashMap, time};
 
 use super::std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, FieldViolation, QuotaFailure, QuotaViolation, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, PreconditionFailure, PreconditionViolation,
+    QuotaFailure, QuotaViolation, RequestInfo, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -25,8 +26,14 @@ pub struct ErrorDetails {
     /// This field stores [`ErrorInfo`] data, if any.
     pub(crate) error_info: Option<ErrorInfo>,
 
+    /// This field stores [`PreconditionFailure`] data, if any.
+    pub(crate) precondition_failure: Option<PreconditionFailure>,
+
     /// This field stores [`BadRequest`] data, if any.
     pub(crate) bad_request: Option<BadRequest>,
+
+    /// This field stores [`RequestInfo`] data, if any.
+    pub(crate) request_info: Option<RequestInfo>,
 }
 
 impl ErrorDetails {
@@ -35,7 +42,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::new();
     /// ```
@@ -50,7 +57,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::with_retry_info(Some(Duration::from_secs(5)));
     /// ```
@@ -67,7 +74,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_stack = vec!["...".into(), "...".into()];
     ///
@@ -106,7 +113,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::with_quota_failure_violation("subject", "description");
     /// ```
@@ -127,7 +134,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut metadata: HashMap<String, String> = HashMap::new();
     /// metadata.insert("instanceLimitPerRequest".into(), "100".into());
@@ -141,6 +148,64 @@ impl ErrorDetails {
     ) -> Self {
         ErrorDetails {
             error_info: Some(ErrorInfo::new(reason, domain, metadata)),
+            ..ErrorDetails::new()
+        }
+    }
+
+    /// Generates an [`ErrorDetails`] struct with [`PreconditionFailure`]
+    /// details and remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails, PreconditionViolation};
+    ///
+    /// let err_details = ErrorDetails::with_precondition_failure(vec![
+    ///     PreconditionViolation::new(
+    ///         "violation type 1",
+    ///         "subject 1",
+    ///         "description 1",
+    ///     ),
+    ///     PreconditionViolation::new(
+    ///         "violation type 2",
+    ///         "subject 2",
+    ///         "description 2",
+    ///     ),
+    /// ]);
+    /// ```
+    pub fn with_precondition_failure(violations: Vec<PreconditionViolation>) -> Self {
+        ErrorDetails {
+            precondition_failure: Some(PreconditionFailure::new(violations)),
+            ..ErrorDetails::new()
+        }
+    }
+
+    /// Generates an [`ErrorDetails`] struct with [`PreconditionFailure`]
+    /// details (one [`PreconditionViolation`] set) and remaining fields set to
+    /// `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_precondition_failure_violation(
+    ///     "violation type",
+    ///     "subject",
+    ///     "description",
+    /// );
+    /// ```
+    pub fn with_precondition_failure_violation(
+        violation_type: impl Into<String>,
+        subject: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        ErrorDetails {
+            precondition_failure: Some(PreconditionFailure::with_violation(
+                violation_type,
+                subject,
+                description,
+            )),
             ..ErrorDetails::new()
         }
     }
@@ -171,7 +236,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let err_details = ErrorDetails::with_bad_request_violation(
     ///     "field",
@@ -188,29 +253,62 @@ impl ErrorDetails {
         }
     }
 
-    /// Get [`RetryInfo`] details, if any
+    /// Generates an [`ErrorDetails`] struct with [`RequestInfo`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_request_info(
+    ///     "request_id",
+    ///     "serving_data",
+    /// );
+    /// ```
+    pub fn with_request_info(
+        request_id: impl Into<String>,
+        serving_data: impl Into<String>,
+    ) -> Self {
+        ErrorDetails {
+            request_info: Some(RequestInfo::new(request_id, serving_data)),
+            ..ErrorDetails::new()
+        }
+    }
+
+    /// Get [`RetryInfo`] details, if any.
     pub fn retry_info(&self) -> Option<RetryInfo> {
         self.retry_info.clone()
     }
 
-    /// Get [`DebugInfo`] details, if any
+    /// Get [`DebugInfo`] details, if any.
     pub fn debug_info(&self) -> Option<DebugInfo> {
         self.debug_info.clone()
     }
 
-    /// Get [`QuotaFailure`] details, if any
+    /// Get [`QuotaFailure`] details, if any.
     pub fn quota_failure(&self) -> Option<QuotaFailure> {
         self.quota_failure.clone()
     }
 
-    /// Get [`ErrorInfo`] details, if any
+    /// Get [`ErrorInfo`] details, if any.
     pub fn error_info(&self) -> Option<ErrorInfo> {
         self.error_info.clone()
     }
 
-    /// Get [`BadRequest`] details, if any
+    /// Get [`PreconditionFailure`] details, if any.
+    pub fn precondition_failure(&self) -> Option<PreconditionFailure> {
+        self.precondition_failure.clone()
+    }
+
+    /// Get [`BadRequest`] details, if any.
     pub fn bad_request(&self) -> Option<BadRequest> {
         self.bad_request.clone()
+    }
+
+    /// Get [`RequestInfo`] details, if any.
+    pub fn request_info(&self) -> Option<RequestInfo> {
+        self.request_info.clone()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
@@ -220,7 +318,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::time::Duration;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -237,7 +335,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -281,7 +379,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -309,7 +407,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::with_quota_failure(vec![]);
     ///
@@ -333,7 +431,7 @@ impl ErrorDetails {
     ///
     /// ```
     /// use std::collections::HashMap;
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -350,6 +448,102 @@ impl ErrorDetails {
     ) -> &mut Self {
         self.error_info = Some(ErrorInfo::new(reason, domain, metadata));
         self
+    }
+
+    /// Set [`PreconditionFailure`] details. Can be chained with other `.set_`
+    /// and `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails, PreconditionViolation};
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_precondition_failure(vec![
+    ///     PreconditionViolation::new(
+    ///         "violation type 1",
+    ///         "subject 1",
+    ///         "description 1",
+    ///     ),
+    ///     PreconditionViolation::new(
+    ///         "violation type 2",
+    ///         "subject 2",
+    ///         "description 2",
+    ///     ),
+    /// ]);
+    /// ```
+    pub fn set_precondition_failure(
+        &mut self,
+        violations: Vec<PreconditionViolation>,
+    ) -> &mut Self {
+        self.precondition_failure = Some(PreconditionFailure::new(violations));
+        self
+    }
+
+    /// Adds a [`PreconditionViolation`] to [`PreconditionFailure`] details.
+    /// Sets [`PreconditionFailure`] details if it is not set yet. Can be
+    /// chained with other `.set_` and `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.add_precondition_failure_violation(
+    ///     "violation type",
+    ///     "subject",
+    ///     "description"
+    /// );
+    /// ```
+    pub fn add_precondition_failure_violation(
+        &mut self,
+        violation_type: impl Into<String>,
+        subject: impl Into<String>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        match &mut self.precondition_failure {
+            Some(precondition_failure) => {
+                precondition_failure.add_violation(violation_type, subject, description);
+            }
+            None => {
+                self.precondition_failure = Some(PreconditionFailure::with_violation(
+                    violation_type,
+                    subject,
+                    description,
+                ));
+            }
+        };
+        self
+    }
+
+    /// Returns `true` if [`PreconditionFailure`] is set and its `violations`
+    /// vector is not empty, otherwise returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::with_precondition_failure(vec![]);
+    ///
+    /// assert_eq!(err_details.has_precondition_failure_violations(), false);
+    ///
+    /// err_details.add_precondition_failure_violation(
+    ///     "violation type",
+    ///     "subject",
+    ///     "description"
+    /// );
+    ///
+    /// assert_eq!(err_details.has_precondition_failure_violations(), true);
+    /// ```
+    pub fn has_precondition_failure_violations(&self) -> bool {
+        if let Some(precondition_failure) = &self.precondition_failure {
+            return !precondition_failure.violations.is_empty();
+        }
+        false
     }
 
     /// Set [`BadRequest`] details. Can be chained with other `.set_` and
@@ -379,7 +573,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::new();
     ///
@@ -407,7 +601,7 @@ impl ErrorDetails {
     /// # Examples
     ///
     /// ```
-    /// use tonic_types::{ErrorDetails};
+    /// use tonic_types::ErrorDetails;
     ///
     /// let mut err_details = ErrorDetails::with_bad_request(vec![]);
     ///
@@ -422,5 +616,26 @@ impl ErrorDetails {
             return !bad_request.field_violations.is_empty();
         }
         false
+    }
+
+    /// Set [`RequestInfo`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_request_info("request_id", "serving_data");
+    /// ```
+    pub fn set_request_info(
+        &mut self,
+        request_id: impl Into<String>,
+        serving_data: impl Into<String>,
+    ) -> &mut Self {
+        self.request_info = Some(RequestInfo::new(request_id, serving_data));
+        self
     }
 }

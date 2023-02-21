@@ -27,9 +27,7 @@ impl DebugInfo {
             detail: detail.into(),
         }
     }
-}
 
-impl DebugInfo {
     /// Returns `true` if [`DebugInfo`] fields are empty, and `false` if they
     /// are not.
     pub fn is_empty(&self) -> bool {
