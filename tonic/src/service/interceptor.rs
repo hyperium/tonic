@@ -188,6 +188,13 @@ where
     }
 }
 
+impl<S: crate::server::NamedService> crate::server::NamedService for tower_http::cors::Cors<S>
+where
+    S: crate::server::NamedService,
+{
+    const NAME: &'static str = S::NAME;
+}
+
 // required to use `InterceptedService` with `Router`
 impl<S, F> crate::server::NamedService for InterceptedService<S, F>
 where
