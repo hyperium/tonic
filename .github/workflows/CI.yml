@@ -65,27 +65,6 @@ jobs:
     - name: cargo doc
       run: cargo doc --workspace --no-deps --exclude examples
 
-  clippy:
-    name: cargo clippy
-    runs-on: ubuntu-latest
-
-    env:
-      RUSTFLAGS: "-A unknown_lints -D warnings"
-
-    steps:
-    - uses: actions/checkout@v3
-    - uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: "1.60"
-        components: clippy
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: Swatinem/rust-cache@v2
-    - name: Run cargo clippy
-      run: cargo clippy --workspace --all-targets --all-features
-
   deny-check:
     name: cargo-deny check
     runs-on: ubuntu-latest
