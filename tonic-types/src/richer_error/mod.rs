@@ -790,7 +790,7 @@ mod tests {
 
     use super::{
         BadRequest, DebugInfo, ErrorDetails, ErrorInfo, Help, PreconditionFailure, QuotaFailure,
-        RequestInfo, RetryInfo, StatusExt,
+        RequestInfo, ResourceInfo, RetryInfo, StatusExt,
     };
 
     #[test]
@@ -811,6 +811,7 @@ mod tests {
             .add_precondition_failure_violation("TOS", "example.local", "description")
             .add_bad_request_violation("field", "description")
             .set_request_info("request-id", "some-request-data")
+            .set_resource_info("resource-type", "resource-name", "owner", "description")
             .add_help_link("link to resource", "resource.example.local");
 
         let fmt_details = format!("{:?}", err_details);
@@ -827,6 +828,7 @@ mod tests {
             PreconditionFailure::with_violation("TOS", "example.local", "description").into(),
             BadRequest::with_violation("field", "description").into(),
             RequestInfo::new("request-id", "some-request-data").into(),
+            ResourceInfo::new("resource-type", "resource-name", "owner", "description").into(),
             Help::with_link("link to resource", "resource.example.local").into(),
         ];
 
