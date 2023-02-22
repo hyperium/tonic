@@ -150,7 +150,7 @@ mod tests {
         );
 
         assert!(
-            help.is_empty() == false,
+            !help.is_empty(),
             "filled Help returns 'true' from .is_empty()"
         );
 
