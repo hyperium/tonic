@@ -29,3 +29,7 @@ pub use request_info::RequestInfo;
 mod resource_info;
 
 pub use resource_info::ResourceInfo;
+
+mod help;
+
+pub use help::{Help, HelpLink};

@@ -12,8 +12,8 @@ use super::pb;
 
 pub use error_details::{vec::ErrorDetail, ErrorDetails};
 pub use std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, FieldViolation, PreconditionFailure, PreconditionViolation,
-    QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, PreconditionFailure,
+    PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
 };
 
 trait IntoAny {
@@ -424,6 +424,28 @@ pub trait StatusExt: crate::sealed::Sealed {
     /// }
     /// ```
     fn get_details_resource_info(&self) -> Option<ResourceInfo>;
+
+    /// Get first [`Help`] details found on `tonic::Status`, if any. If some
+    /// `prost::DecodeError` occurs, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{Status, Response};
+    /// use tonic_types::StatusExt;
+    ///
+    /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
+    ///     match req_result {
+    ///         Ok(_) => {},
+    ///         Err(status) => {
+    ///             if let Some(help) = status.get_details_help() {
+    ///                 // Handle help details
+    ///             }
+    ///         }
+    ///     };
+    /// }
+    /// ```
+    fn get_details_help(&self) -> Option<Help>;
 }
 
 impl crate::sealed::Sealed for tonic::Status {}
@@ -471,6 +493,10 @@ impl StatusExt for tonic::Status {
             conv_details.push(resource_info.into_any());
         }
 
+        if let Some(help) = details.help {
+            conv_details.push(help.into_any());
+        }
+
         let details = gen_details_bytes(code, &message, conv_details);
 
         tonic::Status::with_details_and_metadata(code, message, details, metadata)
@@ -515,6 +541,9 @@ impl StatusExt for tonic::Status {
                 }
                 ErrorDetail::ResourceInfo(res_info) => {
                     conv_details.push(res_info.into_any());
+                }
+                ErrorDetail::Help(help) => {
+                    conv_details.push(help.into_any());
                 }
             }
         }
@@ -568,6 +597,9 @@ impl StatusExt for tonic::Status {
                 ResourceInfo::TYPE_URL => {
                     details.resource_info = Some(ResourceInfo::from_any(any)?);
                 }
+                Help::TYPE_URL => {
+                    details.help = Some(Help::from_any(any)?);
+                }
                 _ => {}
             }
         }
@@ -609,6 +641,9 @@ impl StatusExt for tonic::Status {
                 }
                 ResourceInfo::TYPE_URL => {
                     details.push(ResourceInfo::from_any(any)?.into());
+                }
+                Help::TYPE_URL => {
+                    details.push(Help::from_any(any)?.into());
                 }
                 _ => {}
             }
@@ -732,6 +767,20 @@ impl StatusExt for tonic::Status {
 
         None
     }
+
+    fn get_details_help(&self) -> Option<Help> {
+        let status = pb::Status::decode(self.details()).ok()?;
+
+        for any in status.details.into_iter() {
+            if any.type_url.as_str() == Help::TYPE_URL {
+                if let Ok(detail) = Help::from_any(any) {
+                    return Some(detail);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[cfg(test)]
@@ -740,7 +789,7 @@ mod tests {
     use tonic::{Code, Status};
 
     use super::{
-        BadRequest, DebugInfo, ErrorDetails, ErrorInfo, PreconditionFailure, QuotaFailure,
+        BadRequest, DebugInfo, ErrorDetails, ErrorInfo, Help, PreconditionFailure, QuotaFailure,
         RequestInfo, RetryInfo, StatusExt,
     };
 
@@ -761,7 +810,8 @@ mod tests {
             .set_error_info("SOME_INFO", "example.local", metadata.clone())
             .add_precondition_failure_violation("TOS", "example.local", "description")
             .add_bad_request_violation("field", "description")
-            .set_request_info("request-id", "some-request-data");
+            .set_request_info("request-id", "some-request-data")
+            .add_help_link("link to resource", "resource.example.local");
 
         let fmt_details = format!("{:?}", err_details);
 
@@ -777,6 +827,7 @@ mod tests {
             PreconditionFailure::with_violation("TOS", "example.local", "description").into(),
             BadRequest::with_violation("field", "description").into(),
             RequestInfo::new("request-id", "some-request-data").into(),
+            Help::with_link("link to resource", "resource.example.local").into(),
         ];
 
         let fmt_details_vec = format!("{:?}", err_details_vec);

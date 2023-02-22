@@ -1,8 +1,8 @@
 use std::{collections::HashMap, time};
 
 use super::std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, FieldViolation, PreconditionFailure, PreconditionViolation,
-    QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, PreconditionFailure,
+    PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -37,6 +37,9 @@ pub struct ErrorDetails {
 
     /// This field stores [`ResourceInfo`] data, if any.
     pub(crate) resource_info: Option<ResourceInfo>,
+
+    /// This field stores [`Help`] data, if any.
+    pub(crate) help: Option<Help>,
 }
 
 impl ErrorDetails {
@@ -311,6 +314,26 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`Help`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails, HelpLink};
+    ///
+    /// let err_details = ErrorDetails::with_help(vec![
+    ///     HelpLink::new("description of link a", "resource-a.example.local"),
+    ///     HelpLink::new("description of link b", "resource-b.example.local"),
+    /// ]);
+    /// ```
+    pub fn with_help(links: Vec<HelpLink>) -> Self {
+        ErrorDetails {
+            help: Some(Help::new(links)),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Get [`RetryInfo`] details, if any.
     pub fn retry_info(&self) -> Option<RetryInfo> {
         self.retry_info.clone()
@@ -349,6 +372,11 @@ impl ErrorDetails {
     /// Get [`ResourceInfo`] details, if any.
     pub fn resource_info(&self) -> Option<ResourceInfo> {
         self.resource_info.clone()
+    }
+
+    /// Get [`Help`] details, if any.
+    pub fn help(&self) -> Option<Help> {
+        self.help.clone()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
@@ -705,5 +733,77 @@ impl ErrorDetails {
             description,
         ));
         self
+    }
+
+    /// Set [`Help`] details. Can be chained with other `.set_` and `.add_`
+    /// [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails, HelpLink};
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_help(vec![
+    ///     HelpLink::new("description of link a", "resource-a.example.local"),
+    ///     HelpLink::new("description of link b", "resource-b.example.local"),
+    /// ]);
+    /// ```
+    pub fn set_help(&mut self, links: Vec<HelpLink>) -> &mut Self {
+        self.help = Some(Help::new(links));
+        self
+    }
+
+    /// Adds a [`HelpLink`] to [`Help`] details. Sets [`Help`] details if it is
+    /// not set yet. Can be chained with other `.set_` and `.add_`
+    /// [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.add_help_link("description of link", "resource.example.local");
+    /// ```
+    pub fn add_help_link(
+        &mut self,
+        description: impl Into<String>,
+        url: impl Into<String>,
+    ) -> &mut Self {
+        match &mut self.help {
+            Some(help) => {
+                help.add_link(description, url);
+            }
+            None => {
+                self.help = Some(Help::with_link(description, url));
+            }
+        };
+        self
+    }
+
+    /// Returns `true` if [`Help`] is set and its `links` vector is not empty,
+    /// otherwise returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::with_help(vec![]);
+    ///
+    /// assert_eq!(err_details.has_help_links(), false);
+    ///
+    /// err_details.add_help_link("description of link", "resource.example.local");
+    ///
+    /// assert_eq!(err_details.has_help_links(), true);
+    /// ```
+    pub fn has_help_links(&self) -> bool {
+        if let Some(help) = &self.help {
+            return !help.links.is_empty();
+        }
+        false
     }
 }
