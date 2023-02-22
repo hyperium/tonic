@@ -81,6 +81,7 @@ pub struct GrpcMethod {
 
 impl GrpcMethod {
     /// Create a new `GrpcMethod` extension.
+    #[doc(hidden)]
     pub fn new(service: &'static str, method: &'static str) -> Self {
         Self { service, method }
     }
