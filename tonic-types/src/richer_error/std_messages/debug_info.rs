@@ -21,9 +21,9 @@ impl DebugInfo {
     pub const TYPE_URL: &'static str = "type.googleapis.com/google.rpc.DebugInfo";
 
     /// Creates a new [`DebugInfo`] struct.
-    pub fn new(stack_entries: Vec<String>, detail: impl Into<String>) -> Self {
+    pub fn new(stack_entries: impl Into<Vec<String>>, detail: impl Into<String>) -> Self {
         DebugInfo {
-            stack_entries,
+            stack_entries: stack_entries.into(),
             detail: detail.into(),
         }
     }

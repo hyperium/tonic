@@ -39,8 +39,10 @@ impl Help {
     pub const TYPE_URL: &'static str = "type.googleapis.com/google.rpc.Help";
 
     /// Creates a new [`Help`] struct.
-    pub fn new(links: Vec<HelpLink>) -> Self {
-        Help { links }
+    pub fn new(links: impl Into<Vec<HelpLink>>) -> Self {
+        Help {
+            links: links.into(),
+        }
     }
 
     /// Creates a new [`Help`] struct with a single [`HelpLink`] in `links`.

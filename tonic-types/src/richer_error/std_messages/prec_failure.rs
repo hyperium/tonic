@@ -52,8 +52,10 @@ impl PreconditionFailure {
     pub const TYPE_URL: &'static str = "type.googleapis.com/google.rpc.PreconditionFailure";
 
     /// Creates a new [`PreconditionFailure`] struct.
-    pub fn new(violations: Vec<PreconditionViolation>) -> Self {
-        PreconditionFailure { violations }
+    pub fn new(violations: impl Into<Vec<PreconditionViolation>>) -> Self {
+        PreconditionFailure {
+            violations: violations.into(),
+        }
     }
 
     /// Creates a new [`PreconditionFailure`] struct with a single

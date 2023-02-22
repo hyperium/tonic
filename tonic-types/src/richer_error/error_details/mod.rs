@@ -86,7 +86,10 @@ impl ErrorDetails {
     ///
     /// let err_details = ErrorDetails::with_debug_info(err_stack, "error details");
     /// ```
-    pub fn with_debug_info(stack_entries: Vec<String>, detail: impl Into<String>) -> Self {
+    pub fn with_debug_info(
+        stack_entries: impl Into<Vec<String>>,
+        detail: impl Into<String>,
+    ) -> Self {
         ErrorDetails {
             debug_info: Some(DebugInfo::new(stack_entries, detail)),
             ..ErrorDetails::new()
@@ -106,7 +109,7 @@ impl ErrorDetails {
     ///     QuotaViolation::new("subject 2", "description 2"),
     /// ]);
     /// ```
-    pub fn with_quota_failure(violations: Vec<QuotaViolation>) -> Self {
+    pub fn with_quota_failure(violations: impl Into<Vec<QuotaViolation>>) -> Self {
         ErrorDetails {
             quota_failure: Some(QuotaFailure::new(violations)),
             ..ErrorDetails::new()
@@ -179,7 +182,7 @@ impl ErrorDetails {
     ///     ),
     /// ]);
     /// ```
-    pub fn with_precondition_failure(violations: Vec<PreconditionViolation>) -> Self {
+    pub fn with_precondition_failure(violations: impl Into<Vec<PreconditionViolation>>) -> Self {
         ErrorDetails {
             precondition_failure: Some(PreconditionFailure::new(violations)),
             ..ErrorDetails::new()
@@ -229,7 +232,7 @@ impl ErrorDetails {
     ///     FieldViolation::new("field_2", "description 2"),
     /// ]);
     /// ```
-    pub fn with_bad_request(field_violations: Vec<FieldViolation>) -> Self {
+    pub fn with_bad_request(field_violations: impl Into<Vec<FieldViolation>>) -> Self {
         ErrorDetails {
             bad_request: Some(BadRequest::new(field_violations)),
             ..ErrorDetails::new()
@@ -327,7 +330,7 @@ impl ErrorDetails {
     ///     HelpLink::new("description of link b", "resource-b.example.local"),
     /// ]);
     /// ```
-    pub fn with_help(links: Vec<HelpLink>) -> Self {
+    pub fn with_help(links: impl Into<Vec<HelpLink>>) -> Self {
         ErrorDetails {
             help: Some(Help::new(links)),
             ..ErrorDetails::new()
@@ -413,7 +416,7 @@ impl ErrorDetails {
     /// ```
     pub fn set_debug_info(
         &mut self,
-        stack_entries: Vec<String>,
+        stack_entries: impl Into<Vec<String>>,
         detail: impl Into<String>,
     ) -> &mut Self {
         self.debug_info = Some(DebugInfo::new(stack_entries, detail));
@@ -435,7 +438,7 @@ impl ErrorDetails {
     ///     QuotaViolation::new("subject 2", "description 2"),
     /// ]);
     /// ```
-    pub fn set_quota_failure(&mut self, violations: Vec<QuotaViolation>) -> &mut Self {
+    pub fn set_quota_failure(&mut self, violations: impl Into<Vec<QuotaViolation>>) -> &mut Self {
         self.quota_failure = Some(QuotaFailure::new(violations));
         self
     }
@@ -543,7 +546,7 @@ impl ErrorDetails {
     /// ```
     pub fn set_precondition_failure(
         &mut self,
-        violations: Vec<PreconditionViolation>,
+        violations: impl Into<Vec<PreconditionViolation>>,
     ) -> &mut Self {
         self.precondition_failure = Some(PreconditionFailure::new(violations));
         self
@@ -629,7 +632,7 @@ impl ErrorDetails {
     ///     FieldViolation::new("field_2", "description 2"),
     /// ]);
     /// ```
-    pub fn set_bad_request(&mut self, violations: Vec<FieldViolation>) -> &mut Self {
+    pub fn set_bad_request(&mut self, violations: impl Into<Vec<FieldViolation>>) -> &mut Self {
         self.bad_request = Some(BadRequest::new(violations));
         self
     }
@@ -750,7 +753,7 @@ impl ErrorDetails {
     ///     HelpLink::new("description of link b", "resource-b.example.local"),
     /// ]);
     /// ```
-    pub fn set_help(&mut self, links: Vec<HelpLink>) -> &mut Self {
+    pub fn set_help(&mut self, links: impl Into<Vec<HelpLink>>) -> &mut Self {
         self.help = Some(Help::new(links));
         self
     }
