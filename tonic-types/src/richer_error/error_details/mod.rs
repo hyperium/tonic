@@ -2,7 +2,7 @@ use std::{collections::HashMap, time};
 
 use super::std_messages::{
     BadRequest, DebugInfo, ErrorInfo, FieldViolation, PreconditionFailure, PreconditionViolation,
-    QuotaFailure, QuotaViolation, RequestInfo, RetryInfo,
+    QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -34,6 +34,9 @@ pub struct ErrorDetails {
 
     /// This field stores [`RequestInfo`] data, if any.
     pub(crate) request_info: Option<RequestInfo>,
+
+    /// This field stores [`ResourceInfo`] data, if any.
+    pub(crate) resource_info: Option<ResourceInfo>,
 }
 
 impl ErrorDetails {
@@ -276,6 +279,38 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`ResourceInfo`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_resource_info(
+    ///     "res_type",
+    ///     "res_name",
+    ///     "owner",
+    ///     "description",
+    /// );
+    /// ```
+    pub fn with_resource_info(
+        resource_type: impl Into<String>,
+        resource_name: impl Into<String>,
+        owner: impl Into<String>,
+        description: impl Into<String>,
+    ) -> Self {
+        ErrorDetails {
+            resource_info: Some(ResourceInfo::new(
+                resource_type,
+                resource_name,
+                owner,
+                description,
+            )),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Get [`RetryInfo`] details, if any.
     pub fn retry_info(&self) -> Option<RetryInfo> {
         self.retry_info.clone()
@@ -309,6 +344,11 @@ impl ErrorDetails {
     /// Get [`RequestInfo`] details, if any.
     pub fn request_info(&self) -> Option<RequestInfo> {
         self.request_info.clone()
+    }
+
+    /// Get [`ResourceInfo`] details, if any.
+    pub fn resource_info(&self) -> Option<ResourceInfo> {
+        self.resource_info.clone()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
@@ -636,6 +676,34 @@ impl ErrorDetails {
         serving_data: impl Into<String>,
     ) -> &mut Self {
         self.request_info = Some(RequestInfo::new(request_id, serving_data));
+        self
+    }
+
+    /// Set [`ResourceInfo`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_resource_info("res_type", "res_name", "owner", "description");
+    /// ```
+    pub fn set_resource_info(
+        &mut self,
+        resource_type: impl Into<String>,
+        resource_name: impl Into<String>,
+        owner: impl Into<String>,
+        description: impl Into<String>,
+    ) -> &mut Self {
+        self.resource_info = Some(ResourceInfo::new(
+            resource_type,
+            resource_name,
+            owner,
+            description,
+        ));
         self
     }
 }

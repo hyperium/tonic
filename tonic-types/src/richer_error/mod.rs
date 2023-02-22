@@ -13,7 +13,7 @@ use super::pb;
 pub use error_details::{vec::ErrorDetail, ErrorDetails};
 pub use std_messages::{
     BadRequest, DebugInfo, ErrorInfo, FieldViolation, PreconditionFailure, PreconditionViolation,
-    QuotaFailure, QuotaViolation, RequestInfo, RetryInfo,
+    QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
 };
 
 trait IntoAny {
@@ -153,12 +153,13 @@ pub trait StatusExt: crate::sealed::Sealed {
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
     ///         Ok(_) => {},
-    ///         Err(status) => {
-    ///             let err_details = status.get_error_details();
-    ///             if let Some(bad_request) = err_details.bad_request() {
-    ///                 // Handle bad_request details
+    ///         Err(status) => match status.check_error_details() {
+    ///             Ok(err_details) => {
+    ///                 // Handle extracted details
     ///             }
-    ///             // ...
+    ///             Err(decode_error) => {
+    ///                 // Handle decode_error
+    ///             }
     ///         }
     ///     };
     /// }
@@ -201,19 +202,17 @@ pub trait StatusExt: crate::sealed::Sealed {
     ///
     /// ```
     /// use tonic::{Status, Response};
-    /// use tonic_types::{ErrorDetail, StatusExt};
+    /// use tonic_types::StatusExt;
     ///
     /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
     ///     match req_result {
     ///         Ok(_) => {},
-    ///         Err(status) => {
-    ///             match status.check_error_details_vec() {
-    ///                 Ok(err_details) => {
-    ///                     // Handle extracted details
-    ///                 }
-    ///                 Err(decode_error) => {
-    ///                     // Handle decode_error
-    ///                 }
+    ///         Err(status) => match status.check_error_details_vec() {
+    ///             Ok(err_details) => {
+    ///                 // Handle extracted details
+    ///             }
+    ///             Err(decode_error) => {
+    ///                 // Handle decode_error
     ///             }
     ///         }
     ///     };
@@ -403,6 +402,28 @@ pub trait StatusExt: crate::sealed::Sealed {
     /// }
     /// ```
     fn get_details_request_info(&self) -> Option<RequestInfo>;
+
+    /// Get first [`ResourceInfo`] details found on `tonic::Status`, if any.
+    /// If some `prost::DecodeError` occurs, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{Status, Response};
+    /// use tonic_types::StatusExt;
+    ///
+    /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
+    ///     match req_result {
+    ///         Ok(_) => {},
+    ///         Err(status) => {
+    ///             if let Some(resource_info) = status.get_details_resource_info() {
+    ///                 // Handle resource_info details
+    ///             }
+    ///         }
+    ///     };
+    /// }
+    /// ```
+    fn get_details_resource_info(&self) -> Option<ResourceInfo>;
 }
 
 impl crate::sealed::Sealed for tonic::Status {}
@@ -446,6 +467,10 @@ impl StatusExt for tonic::Status {
             conv_details.push(request_info.into_any());
         }
 
+        if let Some(resource_info) = details.resource_info {
+            conv_details.push(resource_info.into_any());
+        }
+
         let details = gen_details_bytes(code, &message, conv_details);
 
         tonic::Status::with_details_and_metadata(code, message, details, metadata)
@@ -487,6 +512,9 @@ impl StatusExt for tonic::Status {
                 }
                 ErrorDetail::RequestInfo(req_info) => {
                     conv_details.push(req_info.into_any());
+                }
+                ErrorDetail::ResourceInfo(res_info) => {
+                    conv_details.push(res_info.into_any());
                 }
             }
         }
@@ -537,6 +565,9 @@ impl StatusExt for tonic::Status {
                 RequestInfo::TYPE_URL => {
                     details.request_info = Some(RequestInfo::from_any(any)?);
                 }
+                ResourceInfo::TYPE_URL => {
+                    details.resource_info = Some(ResourceInfo::from_any(any)?);
+                }
                 _ => {}
             }
         }
@@ -575,6 +606,9 @@ impl StatusExt for tonic::Status {
                 }
                 RequestInfo::TYPE_URL => {
                     details.push(RequestInfo::from_any(any)?.into());
+                }
+                ResourceInfo::TYPE_URL => {
+                    details.push(ResourceInfo::from_any(any)?.into());
                 }
                 _ => {}
             }
@@ -677,6 +711,20 @@ impl StatusExt for tonic::Status {
         for any in status.details.into_iter() {
             if any.type_url.as_str() == RequestInfo::TYPE_URL {
                 if let Ok(detail) = RequestInfo::from_any(any) {
+                    return Some(detail);
+                }
+            }
+        }
+
+        None
+    }
+
+    fn get_details_resource_info(&self) -> Option<ResourceInfo> {
+        let status = pb::Status::decode(self.details()).ok()?;
+
+        for any in status.details.into_iter() {
+            if any.type_url.as_str() == ResourceInfo::TYPE_URL {
+                if let Ok(detail) = ResourceInfo::from_any(any) {
                     return Some(detail);
                 }
             }
