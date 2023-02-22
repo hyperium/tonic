@@ -100,7 +100,7 @@ impl FromAny for Help {
         let buf: &[u8] = &any.value;
         let help = pb::Help::decode(buf)?;
 
-        let quota_failure = Help {
+        let help = Help {
             links: help
                 .links
                 .into_iter()
@@ -111,7 +111,7 @@ impl FromAny for Help {
                 .collect(),
         };
 
-        Ok(quota_failure)
+        Ok(help)
     }
 }
 
@@ -121,7 +121,7 @@ mod tests {
     use super::Help;
 
     #[test]
-    fn gen_quota_failure() {
+    fn gen_help() {
         let mut help = Help::new(Vec::new());
         let formatted = format!("{:?}", help);
 

@@ -69,15 +69,15 @@ impl IntoAny for ErrorInfo {
 impl FromAny for ErrorInfo {
     fn from_any(any: Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
-        let debug_info = pb::ErrorInfo::decode(buf)?;
+        let error_info = pb::ErrorInfo::decode(buf)?;
 
-        let debug_info = ErrorInfo {
-            reason: debug_info.reason,
-            domain: debug_info.domain,
-            metadata: debug_info.metadata,
+        let error_info = ErrorInfo {
+            reason: error_info.reason,
+            domain: error_info.domain,
+            metadata: error_info.metadata,
         };
 
-        Ok(debug_info)
+        Ok(error_info)
     }
 }
 
