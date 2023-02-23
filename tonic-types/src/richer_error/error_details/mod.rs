@@ -1,8 +1,8 @@
 use std::{collections::HashMap, time};
 
 use super::std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, FieldViolation, PreconditionFailure, PreconditionViolation,
-    QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, PreconditionFailure,
+    PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -37,6 +37,9 @@ pub struct ErrorDetails {
 
     /// This field stores [`ResourceInfo`] data, if any.
     pub(crate) resource_info: Option<ResourceInfo>,
+
+    /// This field stores [`Help`] data, if any.
+    pub(crate) help: Option<Help>,
 }
 
 impl ErrorDetails {
@@ -83,7 +86,10 @@ impl ErrorDetails {
     ///
     /// let err_details = ErrorDetails::with_debug_info(err_stack, "error details");
     /// ```
-    pub fn with_debug_info(stack_entries: Vec<String>, detail: impl Into<String>) -> Self {
+    pub fn with_debug_info(
+        stack_entries: impl Into<Vec<String>>,
+        detail: impl Into<String>,
+    ) -> Self {
         ErrorDetails {
             debug_info: Some(DebugInfo::new(stack_entries, detail)),
             ..ErrorDetails::new()
@@ -103,7 +109,7 @@ impl ErrorDetails {
     ///     QuotaViolation::new("subject 2", "description 2"),
     /// ]);
     /// ```
-    pub fn with_quota_failure(violations: Vec<QuotaViolation>) -> Self {
+    pub fn with_quota_failure(violations: impl Into<Vec<QuotaViolation>>) -> Self {
         ErrorDetails {
             quota_failure: Some(QuotaFailure::new(violations)),
             ..ErrorDetails::new()
@@ -176,7 +182,7 @@ impl ErrorDetails {
     ///     ),
     /// ]);
     /// ```
-    pub fn with_precondition_failure(violations: Vec<PreconditionViolation>) -> Self {
+    pub fn with_precondition_failure(violations: impl Into<Vec<PreconditionViolation>>) -> Self {
         ErrorDetails {
             precondition_failure: Some(PreconditionFailure::new(violations)),
             ..ErrorDetails::new()
@@ -226,7 +232,7 @@ impl ErrorDetails {
     ///     FieldViolation::new("field_2", "description 2"),
     /// ]);
     /// ```
-    pub fn with_bad_request(field_violations: Vec<FieldViolation>) -> Self {
+    pub fn with_bad_request(field_violations: impl Into<Vec<FieldViolation>>) -> Self {
         ErrorDetails {
             bad_request: Some(BadRequest::new(field_violations)),
             ..ErrorDetails::new()
@@ -311,6 +317,26 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`Help`] details and
+    /// remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails, HelpLink};
+    ///
+    /// let err_details = ErrorDetails::with_help(vec![
+    ///     HelpLink::new("description of link a", "resource-a.example.local"),
+    ///     HelpLink::new("description of link b", "resource-b.example.local"),
+    /// ]);
+    /// ```
+    pub fn with_help(links: impl Into<Vec<HelpLink>>) -> Self {
+        ErrorDetails {
+            help: Some(Help::new(links)),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Get [`RetryInfo`] details, if any.
     pub fn retry_info(&self) -> Option<RetryInfo> {
         self.retry_info.clone()
@@ -351,6 +377,11 @@ impl ErrorDetails {
         self.resource_info.clone()
     }
 
+    /// Get [`Help`] details, if any.
+    pub fn help(&self) -> Option<Help> {
+        self.help.clone()
+    }
+
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
     /// `.add_` [`ErrorDetails`] methods.
     ///
@@ -385,7 +416,7 @@ impl ErrorDetails {
     /// ```
     pub fn set_debug_info(
         &mut self,
-        stack_entries: Vec<String>,
+        stack_entries: impl Into<Vec<String>>,
         detail: impl Into<String>,
     ) -> &mut Self {
         self.debug_info = Some(DebugInfo::new(stack_entries, detail));
@@ -407,7 +438,7 @@ impl ErrorDetails {
     ///     QuotaViolation::new("subject 2", "description 2"),
     /// ]);
     /// ```
-    pub fn set_quota_failure(&mut self, violations: Vec<QuotaViolation>) -> &mut Self {
+    pub fn set_quota_failure(&mut self, violations: impl Into<Vec<QuotaViolation>>) -> &mut Self {
         self.quota_failure = Some(QuotaFailure::new(violations));
         self
     }
@@ -515,7 +546,7 @@ impl ErrorDetails {
     /// ```
     pub fn set_precondition_failure(
         &mut self,
-        violations: Vec<PreconditionViolation>,
+        violations: impl Into<Vec<PreconditionViolation>>,
     ) -> &mut Self {
         self.precondition_failure = Some(PreconditionFailure::new(violations));
         self
@@ -601,7 +632,7 @@ impl ErrorDetails {
     ///     FieldViolation::new("field_2", "description 2"),
     /// ]);
     /// ```
-    pub fn set_bad_request(&mut self, violations: Vec<FieldViolation>) -> &mut Self {
+    pub fn set_bad_request(&mut self, violations: impl Into<Vec<FieldViolation>>) -> &mut Self {
         self.bad_request = Some(BadRequest::new(violations));
         self
     }
@@ -705,5 +736,77 @@ impl ErrorDetails {
             description,
         ));
         self
+    }
+
+    /// Set [`Help`] details. Can be chained with other `.set_` and `.add_`
+    /// [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::{ErrorDetails, HelpLink};
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_help(vec![
+    ///     HelpLink::new("description of link a", "resource-a.example.local"),
+    ///     HelpLink::new("description of link b", "resource-b.example.local"),
+    /// ]);
+    /// ```
+    pub fn set_help(&mut self, links: impl Into<Vec<HelpLink>>) -> &mut Self {
+        self.help = Some(Help::new(links));
+        self
+    }
+
+    /// Adds a [`HelpLink`] to [`Help`] details. Sets [`Help`] details if it is
+    /// not set yet. Can be chained with other `.set_` and `.add_`
+    /// [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.add_help_link("description of link", "resource.example.local");
+    /// ```
+    pub fn add_help_link(
+        &mut self,
+        description: impl Into<String>,
+        url: impl Into<String>,
+    ) -> &mut Self {
+        match &mut self.help {
+            Some(help) => {
+                help.add_link(description, url);
+            }
+            None => {
+                self.help = Some(Help::with_link(description, url));
+            }
+        };
+        self
+    }
+
+    /// Returns `true` if [`Help`] is set and its `links` vector is not empty,
+    /// otherwise returns `false`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::with_help(vec![]);
+    ///
+    /// assert_eq!(err_details.has_help_links(), false);
+    ///
+    /// err_details.add_help_link("description of link", "resource.example.local");
+    ///
+    /// assert_eq!(err_details.has_help_links(), true);
+    /// ```
+    pub fn has_help_links(&self) -> bool {
+        if let Some(help) = &self.help {
+            return !help.links.is_empty();
+        }
+        false
     }
 }

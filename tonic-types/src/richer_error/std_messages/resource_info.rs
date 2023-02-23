@@ -72,14 +72,14 @@ impl FromAny for ResourceInfo {
         let buf: &[u8] = &any.value;
         let res_info = pb::ResourceInfo::decode(buf)?;
 
-        let debug_info = ResourceInfo {
+        let res_info = ResourceInfo {
             resource_type: res_info.resource_type,
             resource_name: res_info.resource_name,
             owner: res_info.owner,
             description: res_info.description,
         };
 
-        Ok(debug_info)
+        Ok(res_info)
     }
 }
 
@@ -89,11 +89,10 @@ mod tests {
     use super::ResourceInfo;
 
     #[test]
-    fn gen_error_info() {
-        let error_info =
-            ResourceInfo::new("resource-type", "resource-name", "owner", "description");
+    fn gen_resource_info() {
+        let res_info = ResourceInfo::new("resource-type", "resource-name", "owner", "description");
 
-        let formatted = format!("{:?}", error_info);
+        let formatted = format!("{:?}", res_info);
 
         let expected_filled = "ResourceInfo { resource_type: \"resource-type\", resource_name: \"resource-name\", owner: \"owner\", description: \"description\" }";
 
@@ -102,7 +101,7 @@ mod tests {
             "filled ResourceInfo differs from expected result"
         );
 
-        let gen_any = error_info.into_any();
+        let gen_any = res_info.into_any();
 
         let formatted = format!("{:?}", gen_any);
 

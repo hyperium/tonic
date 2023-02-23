@@ -57,12 +57,12 @@ impl FromAny for RequestInfo {
         let buf: &[u8] = &any.value;
         let req_info = pb::RequestInfo::decode(buf)?;
 
-        let debug_info = RequestInfo {
+        let req_info = RequestInfo {
             request_id: req_info.request_id,
             serving_data: req_info.serving_data,
         };
 
-        Ok(debug_info)
+        Ok(req_info)
     }
 }
 
@@ -72,10 +72,10 @@ mod tests {
     use super::RequestInfo;
 
     #[test]
-    fn gen_error_info() {
-        let error_info = RequestInfo::new("some-id", "some-data");
+    fn gen_request_info() {
+        let req_info = RequestInfo::new("some-id", "some-data");
 
-        let formatted = format!("{:?}", error_info);
+        let formatted = format!("{:?}", req_info);
 
         let expected_filled =
             "RequestInfo { request_id: \"some-id\", serving_data: \"some-data\" }";
@@ -85,7 +85,7 @@ mod tests {
             "filled RequestInfo differs from expected result"
         );
 
-        let gen_any = error_info.into_any();
+        let gen_any = req_info.into_any();
 
         let formatted = format!("{:?}", gen_any);
 
