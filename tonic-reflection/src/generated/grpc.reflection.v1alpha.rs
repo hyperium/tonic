@@ -247,7 +247,15 @@ pub mod server_reflection_client {
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
             );
-            self.inner.streaming(request.into_streaming_request(), path, codec).await
+            let mut req = request.into_streaming_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "grpc.reflection.v1alpha.ServerReflection",
+                        "ServerReflectionInfo",
+                    ),
+                );
+            self.inner.streaming(req, path, codec).await
         }
     }
 }
