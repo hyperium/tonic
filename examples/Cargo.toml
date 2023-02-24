@@ -287,7 +287,7 @@ h2 = { version = "0.3", optional = true }
 tokio-rustls = { version = "0.23", optional = true }
 hyper-rustls = { version = "0.23", features = ["http2"], optional = true }
 rustls-pemfile = { version = "1", optional = true }
-tower-http = { version = "0.3", optional = true }
+tower-http = { version = "0.4", features = ["util"], optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
