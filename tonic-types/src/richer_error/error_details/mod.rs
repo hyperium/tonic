@@ -341,6 +341,26 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`Help`] details (one
+    /// [`HelpLink`] set) and remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_help_link(
+    ///     "description of link a",
+    ///     "resource-a.example.local"
+    /// );
+    /// ```
+    pub fn with_help_link(description: impl Into<String>, url: impl Into<String>) -> Self {
+        ErrorDetails {
+            help: Some(Help::with_link(description, url)),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Generates an [`ErrorDetails`] struct with [`LocalizedMessage`] details
     /// and remaining fields set to `None`.
     ///
