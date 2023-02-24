@@ -6,8 +6,10 @@ use std::task::{Context, Poll};
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
 use hyper::Body;
 use pin_project::pin_project;
-use tonic::body::{empty_body, BoxBody};
-use tonic::transport::NamedService;
+use tonic::{
+    body::{empty_body, BoxBody},
+    server::NamedService,
+};
 use tower_service::Service;
 use tracing::{debug, trace};
 
@@ -183,7 +185,7 @@ where
 impl<S: NamedService> NamedService for GrpcWebService<S> {
     const NAME: &'static str = S::NAME;
 
-    fn grpc_method(path: &str) -> Option<tonic::GrpcMethod<'static>> {
+    fn grpc_method(path: &str) -> Option<tonic::GrpcMethod> {
         S::grpc_method(path)
     }
 }
@@ -265,7 +267,7 @@ mod tests {
 
     impl NamedService for Svc {
         const NAME: &'static str = "test";
-        fn grpc_method(_: &str) -> Option<tonic::GrpcMethod<'static>> {
+        fn grpc_method(_: &str) -> Option<tonic::GrpcMethod> {
             None
         }
     }

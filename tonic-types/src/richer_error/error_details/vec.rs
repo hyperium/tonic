@@ -1,4 +1,7 @@
-use super::super::std_messages::{BadRequest, DebugInfo, QuotaFailure, RetryInfo};
+use super::super::std_messages::{
+    BadRequest, DebugInfo, ErrorInfo, Help, PreconditionFailure, QuotaFailure, RequestInfo,
+    ResourceInfo, RetryInfo,
+};
 
 /// Wraps the structs corresponding to the standard error messages, allowing
 /// the implementation and handling of vectors containing any of them.
@@ -14,8 +17,23 @@ pub enum ErrorDetail {
     /// Wraps the [`QuotaFailure`] struct.
     QuotaFailure(QuotaFailure),
 
+    /// Wraps the [`ErrorInfo`] struct.
+    ErrorInfo(ErrorInfo),
+
+    /// Wraps the [`PreconditionFailure`] struct.
+    PreconditionFailure(PreconditionFailure),
+
     /// Wraps the [`BadRequest`] struct.
     BadRequest(BadRequest),
+
+    /// Wraps the [`RequestInfo`] struct.
+    RequestInfo(RequestInfo),
+
+    /// Wraps the [`ResourceInfo`] struct.
+    ResourceInfo(ResourceInfo),
+
+    /// Wraps the [`Help`] struct.
+    Help(Help),
 }
 
 impl From<RetryInfo> for ErrorDetail {
@@ -36,8 +54,38 @@ impl From<QuotaFailure> for ErrorDetail {
     }
 }
 
+impl From<ErrorInfo> for ErrorDetail {
+    fn from(err_detail: ErrorInfo) -> Self {
+        ErrorDetail::ErrorInfo(err_detail)
+    }
+}
+
+impl From<PreconditionFailure> for ErrorDetail {
+    fn from(err_detail: PreconditionFailure) -> Self {
+        ErrorDetail::PreconditionFailure(err_detail)
+    }
+}
+
 impl From<BadRequest> for ErrorDetail {
     fn from(err_detail: BadRequest) -> Self {
         ErrorDetail::BadRequest(err_detail)
+    }
+}
+
+impl From<RequestInfo> for ErrorDetail {
+    fn from(err_detail: RequestInfo) -> Self {
+        ErrorDetail::RequestInfo(err_detail)
+    }
+}
+
+impl From<ResourceInfo> for ErrorDetail {
+    fn from(err_detail: ResourceInfo) -> Self {
+        ErrorDetail::ResourceInfo(err_detail)
+    }
+}
+
+impl From<Help> for ErrorDetail {
+    fn from(err_detail: Help) -> Self {
+        ErrorDetail::Help(err_detail)
     }
 }

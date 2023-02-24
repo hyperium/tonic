@@ -26,5 +26,5 @@ pub trait NamedService {
     const NAME: &'static str;
 
     /// Use to get gRPC method name from the path of uri
-    fn grpc_method(path: &str) -> Option<GrpcMethod<'static>>;
+    fn grpc_method(path: &str) -> Option<GrpcMethod>;
 }

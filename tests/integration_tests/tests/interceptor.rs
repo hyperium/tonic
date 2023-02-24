@@ -24,10 +24,10 @@ async fn interceptor_retrieves_grpc_method() {
         println!("Intercepting server request: {:?}", req);
 
         let gm = req.extensions().get::<GrpcMethod>().unwrap();
-        assert_eq!(gm.service, "test.Test");
-        assert_eq!(gm.service, TEST_SERVICE_NAME);
-        assert_eq!(gm.method, "UnaryCall");
-        assert_eq!(gm.method, Svc::UNARY_CALL);
+        assert_eq!(gm.service(), "test.Test");
+        assert_eq!(gm.service(), TEST_SERVICE_NAME);
+        assert_eq!(gm.method(), "UnaryCall");
+        assert_eq!(gm.method(), Svc::UNARY_CALL);
 
         Ok(req)
     }
@@ -49,10 +49,8 @@ async fn interceptor_retrieves_grpc_method() {
         println!("Intercepting client request: {:?}", req);
 
         let gm = req.extensions().get::<GrpcMethod>().unwrap();
-        assert_eq!(gm.service, "test.Test");
-        assert_eq!(gm.service, TEST_SERVICE_NAME);
-        assert_eq!(gm.method, "UnaryCall");
-        assert_eq!(gm.method, Svc::UNARY_CALL);
+        assert_eq!(gm.service(), "test.Test");
+        assert_eq!(gm.method(), "UnaryCall");
 
         Ok(req)
     }

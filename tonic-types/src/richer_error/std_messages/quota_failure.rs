@@ -39,8 +39,10 @@ impl QuotaFailure {
     pub const TYPE_URL: &'static str = "type.googleapis.com/google.rpc.QuotaFailure";
 
     /// Creates a new [`QuotaFailure`] struct.
-    pub fn new(violations: Vec<QuotaViolation>) -> Self {
-        QuotaFailure { violations }
+    pub fn new(violations: impl Into<Vec<QuotaViolation>>) -> Self {
+        QuotaFailure {
+            violations: violations.into(),
+        }
     }
 
     /// Creates a new [`QuotaFailure`] struct with a single [`QuotaViolation`]
@@ -53,9 +55,7 @@ impl QuotaFailure {
             }],
         }
     }
-}
 
-impl QuotaFailure {
     /// Adds a [`QuotaViolation`] to [`QuotaFailure`]'s `violations`.
     pub fn add_violation(
         &mut self,

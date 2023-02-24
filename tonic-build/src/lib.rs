@@ -197,16 +197,28 @@ impl Attributes {
     }
 }
 
-fn format_method_name<T: Service>(
-    package: &str,
-    service: &T,
-    method: &<T as Service>::Method,
-) -> String {
+fn format_service_name<T: Service>(service: &T, emit_package: bool) -> String {
+    let package = if emit_package { service.package() } else { "" };
     format!(
-        "{}{}{}.{}",
+        "{}{}{}",
         package,
         if package.is_empty() { "" } else { "." },
         service.identifier(),
+    )
+}
+
+fn format_method_path<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
+    format!(
+        "/{}/{}",
+        format_service_name(service, emit_package),
+        method.identifier()
+    )
+}
+
+fn format_method_name<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
+    format!(
+        "{}.{}",
+        format_service_name(service, emit_package),
         method.identifier()
     )
 }

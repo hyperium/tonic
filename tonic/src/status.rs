@@ -325,7 +325,14 @@ impl Status {
         })
     }
 
-    pub(crate) fn try_from_error(
+    /// Create a `Status` from various types of `Error`.
+    ///
+    /// Returns the error if a status could not be created.
+    ///
+    /// # Downcast stability
+    /// This function does not provide any stability guarantees around how it will downcast errors into
+    /// status codes.
+    pub fn try_from_error(
         err: Box<dyn Error + Send + Sync + 'static>,
     ) -> Result<Status, Box<dyn Error + Send + Sync + 'static>> {
         let err = match err.downcast::<Status>() {
@@ -501,7 +508,8 @@ impl Status {
         Ok(header_map)
     }
 
-    pub(crate) fn add_header(&self, header_map: &mut HeaderMap) -> Result<(), Self> {
+    /// Add headers from this `Status` into `header_map`.
+    pub fn add_header(&self, header_map: &mut HeaderMap) -> Result<(), Self> {
         header_map.extend(self.metadata.clone().into_sanitized_headers());
 
         header_map.insert(GRPC_STATUS_HEADER_CODE, self.code.to_header_value());
@@ -553,6 +561,12 @@ impl Status {
             metadata,
             source: None,
         }
+    }
+
+    /// Add a source error to this status.
+    pub fn set_source(&mut self, source: Arc<dyn Error + Send + Sync + 'static>) -> &mut Status {
+        self.source = Some(source);
+        self
     }
 
     #[allow(clippy::wrong_self_convention)]
