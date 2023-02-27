@@ -74,7 +74,7 @@ hyper-timeout = {version = "0.4", optional = true}
 tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
-axum = {version = "0.6", default_features = false, optional = true}
+axum = {version = "0.6.9", default_features = false, optional = true}
 
 # rustls
 async-stream = { version = "0.3", optional = true }
