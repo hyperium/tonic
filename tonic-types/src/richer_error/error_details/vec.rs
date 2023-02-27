@@ -1,6 +1,6 @@
 use super::super::std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, Help, PreconditionFailure, QuotaFailure, RequestInfo,
-    ResourceInfo, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, Help, LocalizedMessage, PreconditionFailure, QuotaFailure,
+    RequestInfo, ResourceInfo, RetryInfo,
 };
 
 /// Wraps the structs corresponding to the standard error messages, allowing
@@ -34,6 +34,9 @@ pub enum ErrorDetail {
 
     /// Wraps the [`Help`] struct.
     Help(Help),
+
+    /// Wraps the [`LocalizedMessage`] struct.
+    LocalizedMessage(LocalizedMessage),
 }
 
 impl From<RetryInfo> for ErrorDetail {
@@ -87,5 +90,11 @@ impl From<ResourceInfo> for ErrorDetail {
 impl From<Help> for ErrorDetail {
     fn from(err_detail: Help) -> Self {
         ErrorDetail::Help(err_detail)
+    }
+}
+
+impl From<LocalizedMessage> for ErrorDetail {
+    fn from(err_detail: LocalizedMessage) -> Self {
+        ErrorDetail::LocalizedMessage(err_detail)
     }
 }

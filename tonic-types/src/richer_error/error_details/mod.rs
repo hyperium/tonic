@@ -1,8 +1,9 @@
 use std::{collections::HashMap, time};
 
 use super::std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, PreconditionFailure,
-    PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, LocalizedMessage,
+    PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo,
+    ResourceInfo, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -40,6 +41,9 @@ pub struct ErrorDetails {
 
     /// This field stores [`Help`] data, if any.
     pub(crate) help: Option<Help>,
+
+    /// This field stores [`LocalizedMessage`] data, if any.
+    pub(crate) localized_message: Option<LocalizedMessage>,
 }
 
 impl ErrorDetails {
@@ -337,6 +341,46 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`Help`] details (one
+    /// [`HelpLink`] set) and remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_help_link(
+    ///     "description of link a",
+    ///     "resource-a.example.local"
+    /// );
+    /// ```
+    pub fn with_help_link(description: impl Into<String>, url: impl Into<String>) -> Self {
+        ErrorDetails {
+            help: Some(Help::with_link(description, url)),
+            ..ErrorDetails::new()
+        }
+    }
+
+    /// Generates an [`ErrorDetails`] struct with [`LocalizedMessage`] details
+    /// and remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_localized_message(
+    ///     "en-US",
+    ///     "message for the user"
+    /// );
+    /// ```
+    pub fn with_localized_message(locale: impl Into<String>, message: impl Into<String>) -> Self {
+        ErrorDetails {
+            localized_message: Some(LocalizedMessage::new(locale, message)),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Get [`RetryInfo`] details, if any.
     pub fn retry_info(&self) -> Option<RetryInfo> {
         self.retry_info.clone()
@@ -380,6 +424,11 @@ impl ErrorDetails {
     /// Get [`Help`] details, if any.
     pub fn help(&self) -> Option<Help> {
         self.help.clone()
+    }
+
+    /// Get [`LocalizedMessage`] details, if any.
+    pub fn localized_message(&self) -> Option<LocalizedMessage> {
+        self.localized_message.clone()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
@@ -808,5 +857,26 @@ impl ErrorDetails {
             return !help.links.is_empty();
         }
         false
+    }
+
+    /// Set [`LocalizedMessage`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_localized_message("en-US", "message for the user");
+    /// ```
+    pub fn set_localized_message(
+        &mut self,
+        locale: impl Into<String>,
+        message: impl Into<String>,
+    ) -> &mut Self {
+        self.localized_message = Some(LocalizedMessage::new(locale, message));
+        self
     }
 }
