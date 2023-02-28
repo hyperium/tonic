@@ -233,6 +233,26 @@ name = "json-codec-server"
 path = "src/json-codec/server.rs"
 required-features = ["json-codec"]
 
+[[bin]]
+name = "richer-error-client"
+path = "src/richer-error/client.rs"
+required-features = ["types"]
+
+[[bin]]
+name = "richer-error-server"
+path = "src/richer-error/server.rs"
+required-features = ["types"]
+
+[[bin]]
+name = "richer-error-client-vec"
+path = "src/richer-error/client_vec.rs"
+required-features = ["types"]
+
+[[bin]]
+name = "richer-error-server-vec"
+path = "src/richer-error/server_vec.rs"
+required-features = ["types"]
+
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
 routeguide = ["dep:async-stream", "dep:futures", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
@@ -254,8 +274,9 @@ tls-rustls = ["dep:hyper", "dep:hyper-rustls", "dep:tower", "tower-http/util", "
 dynamic-load-balance = ["dep:tower"]
 timeout = ["tokio/time", "dep:tower"]
 tls-client-auth = ["tonic/tls"]
+types = ["dep:tonic-types"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types"]
 default = ["full"]
 
 [dependencies]
@@ -267,6 +288,7 @@ tonic = { path = "../tonic" }
 tonic-web = { path = "../tonic-web", optional = true }
 tonic-health = { path = "../tonic-health", optional = true }
 tonic-reflection = { path = "../tonic-reflection", optional = true }
+tonic-types = { path = "../tonic-types", optional = true }
 async-stream = { version = "0.3", optional = true }
 futures = { version = "0.3", default-features = false, optional = true }
 tokio-stream = { version = "0.1", optional = true }
