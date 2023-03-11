@@ -52,6 +52,5 @@ pub use richer_error::{
 };
 
 mod sealed {
-    #[allow(unreachable_pub)]
     pub trait Sealed {}
 }
