@@ -382,53 +382,53 @@ impl ErrorDetails {
     }
 
     /// Get [`RetryInfo`] details, if any.
-    pub fn retry_info(&self) -> Option<RetryInfo> {
-        self.retry_info.clone()
+    pub fn retry_info(&self) -> Option<&RetryInfo> {
+        self.retry_info.as_ref()
     }
 
     /// Get [`DebugInfo`] details, if any.
-    pub fn debug_info(&self) -> Option<DebugInfo> {
-        self.debug_info.clone()
+    pub fn debug_info(&self) -> Option<&DebugInfo> {
+        self.debug_info.as_ref()
     }
 
     /// Get [`QuotaFailure`] details, if any.
-    pub fn quota_failure(&self) -> Option<QuotaFailure> {
-        self.quota_failure.clone()
+    pub fn quota_failure(&self) -> Option<&QuotaFailure> {
+        self.quota_failure.as_ref()
     }
 
     /// Get [`ErrorInfo`] details, if any.
-    pub fn error_info(&self) -> Option<ErrorInfo> {
-        self.error_info.clone()
+    pub fn error_info(&self) -> Option<&ErrorInfo> {
+        self.error_info.as_ref()
     }
 
     /// Get [`PreconditionFailure`] details, if any.
-    pub fn precondition_failure(&self) -> Option<PreconditionFailure> {
-        self.precondition_failure.clone()
+    pub fn precondition_failure(&self) -> Option<&PreconditionFailure> {
+        self.precondition_failure.as_ref()
     }
 
     /// Get [`BadRequest`] details, if any.
-    pub fn bad_request(&self) -> Option<BadRequest> {
-        self.bad_request.clone()
+    pub fn bad_request(&self) -> Option<&BadRequest> {
+        self.bad_request.as_ref()
     }
 
     /// Get [`RequestInfo`] details, if any.
-    pub fn request_info(&self) -> Option<RequestInfo> {
-        self.request_info.clone()
+    pub fn request_info(&self) -> Option<&RequestInfo> {
+        self.request_info.as_ref()
     }
 
     /// Get [`ResourceInfo`] details, if any.
-    pub fn resource_info(&self) -> Option<ResourceInfo> {
-        self.resource_info.clone()
+    pub fn resource_info(&self) -> Option<&ResourceInfo> {
+        self.resource_info.as_ref()
     }
 
     /// Get [`Help`] details, if any.
-    pub fn help(&self) -> Option<Help> {
-        self.help.clone()
+    pub fn help(&self) -> Option<&Help> {
+        self.help.as_ref()
     }
 
     /// Get [`LocalizedMessage`] details, if any.
-    pub fn localized_message(&self) -> Option<LocalizedMessage> {
-        self.localized_message.clone()
+    pub fn localized_message(&self) -> Option<&LocalizedMessage> {
+        self.localized_message.as_ref()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
