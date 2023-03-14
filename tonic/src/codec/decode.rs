@@ -47,7 +47,7 @@ enum State {
     Error,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Direction {
     Request,
     Response(StatusCode),
@@ -232,6 +232,10 @@ impl StreamingInner {
         let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
             Some(Ok(d)) => Some(d),
             Some(Err(e)) => {
+                if self.direction == Direction::Request && e.code() == Code::Cancelled {
+                    return Poll::Ready(Ok(None));
+                }
+
                 let _ = std::mem::replace(&mut self.state, State::Error);
                 let err: crate::Error = e.into();
                 debug!("decoder inner stream error: {:?}", err);
