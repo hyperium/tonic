@@ -684,7 +684,7 @@ impl<L> Router<L> {
     pub fn into_service<ResBody>(self) -> L::Service
     where
         L: Layer<Routes>,
-        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + Sync + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
