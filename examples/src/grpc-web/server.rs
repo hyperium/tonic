@@ -2,8 +2,6 @@ use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
-use tonic_web::GrpcWebLayer;
-use tower_http::cors::CorsLayer;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
