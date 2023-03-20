@@ -106,7 +106,7 @@ mod service;
 
 use http::header::HeaderName;
 use std::time::Duration;
-use tonic::{body::BoxBody, transport::NamedService};
+use tonic::{body::BoxBody, server::NamedService};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_layer::Layer;
 use tower_service::Service;
