@@ -20,6 +20,7 @@ pub fn configure() -> Builder {
         build_server: true,
         build_transport: true,
         file_descriptor_set_path: None,
+        skip_protoc_run: false,
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
@@ -224,6 +225,7 @@ pub struct Builder {
     pub(crate) build_server: bool,
     pub(crate) build_transport: bool,
     pub(crate) file_descriptor_set_path: Option<PathBuf>,
+    pub(crate) skip_protoc_run: bool,
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
@@ -268,6 +270,14 @@ impl Builder {
     /// modules. This is required for implementing gRPC Server Reflection.
     pub fn file_descriptor_set_path(mut self, path: impl AsRef<Path>) -> Self {
         self.file_descriptor_set_path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// In combination with with file_descriptor_set_path, this can be used to provide a file
+    /// descriptor set as an input file, rather than having prost-build generate the file by
+    /// calling protoc.
+    pub fn skip_protoc_run(mut self) -> Self {
+        self.skip_protoc_run = true;
         self
     }
 
@@ -463,6 +473,9 @@ impl Builder {
         config.out_dir(out_dir);
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
+        }
+        if self.skip_protoc_run {
+            config.skip_protoc_run();
         }
         for (proto_path, rust_path) in self.extern_path.iter() {
             config.extern_path(proto_path, rust_path);
