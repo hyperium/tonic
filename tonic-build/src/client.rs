@@ -1,9 +1,8 @@
 use std::collections::HashSet;
 
 use super::{Attributes, Method, Service};
-use crate::{
-    format_method_name, format_method_path, format_service_name, generate_doc_comments,
-    naive_snake_case,
+use crate::{generate_doc_comments, naive_snake_case, sanitize_name,
+    format_method_name, format_method_path, format_service_name,
 };
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -242,7 +241,7 @@ fn generate_unary<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -273,7 +272,8 @@ fn generate_server_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
+
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -304,7 +304,8 @@ fn generate_client_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
+
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -335,7 +336,8 @@ fn generate_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = format_ident!("{}", sanitize_name(method.name()));
+
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
