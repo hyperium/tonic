@@ -12,7 +12,10 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    net::TcpListener,
+};
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE, L>(
@@ -23,13 +26,7 @@ where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
-    async_stream::try_stream! {
-        futures_util::pin_mut!(incoming);
-
-        while let Some(stream) = incoming.try_next().await? {
-            yield ServerIo::new_io(stream);
-        }
-    }
+    incoming.err_into().map_ok(ServerIo::new_io)
 }
 
 #[cfg(feature = "tls")]
@@ -145,7 +142,7 @@ impl TcpIncoming {
     /// ```no_run
     /// # use tower_service::Service;
     /// # use http::{request::Request, response::Response};
-    /// # use tonic::{body::BoxBody, transport::{Body, NamedService, Server, server::TcpIncoming}};
+    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Body, Server, server::TcpIncoming}};
     /// # use core::convert::Infallible;
     /// # use std::error::Error;
     /// # fn main() { }  // Cannot have type parameters, hence instead define:
@@ -174,6 +171,18 @@ impl TcpIncoming {
         keepalive: Option<Duration>,
     ) -> Result<Self, crate::Error> {
         let mut inner = AddrIncoming::bind(&addr)?;
+        inner.set_nodelay(nodelay);
+        inner.set_keepalive(keepalive);
+        Ok(TcpIncoming { inner })
+    }
+
+    /// Creates a new `TcpIncoming` from an existing `tokio::net::TcpListener`.
+    pub fn from_listener(
+        listener: TcpListener,
+        nodelay: bool,
+        keepalive: Option<Duration>,
+    ) -> Result<Self, crate::Error> {
+        let mut inner = AddrIncoming::from_listener(listener)?;
         inner.set_nodelay(nodelay);
         inner.set_keepalive(keepalive);
         Ok(TcpIncoming { inner })

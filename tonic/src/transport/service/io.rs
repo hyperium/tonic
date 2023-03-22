@@ -70,7 +70,7 @@ impl AsyncWrite for BoxedIo {
 pub(crate) enum ServerIo<IO> {
     Io(IO),
     #[cfg(feature = "tls")]
-    TlsIo(TlsStream<IO>),
+    TlsIo(Box<TlsStream<IO>>),
 }
 
 use tower::util::Either;
@@ -89,7 +89,7 @@ impl<IO> ServerIo<IO> {
 
     #[cfg(feature = "tls")]
     pub(in crate::transport) fn new_tls_io(io: TlsStream<IO>) -> Self {
-        Self::TlsIo(io)
+        Self::TlsIo(Box::new(io))
     }
 
     #[cfg(feature = "tls")]

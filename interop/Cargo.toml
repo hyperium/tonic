@@ -1,6 +1,6 @@
 [package]
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 name = "interop"
 publish = false
@@ -16,16 +16,15 @@ path = "src/bin/server.rs"
 
 [dependencies]
 async-stream = "0.3"
-bytes = "1.0"
-clap = {version = "3.2.1", features = ["derive"]}
-console = "0.14"
+strum = {version = "0.24", features = ["derive"]}
+pico-args = {version = "0.5", features = ["eq-separator"]}
+console = "0.15"
 futures-core = "0.3"
 futures-util = "0.3"
 http = "0.2"
 http-body = "0.4.2"
 hyper = "0.14"
 prost = "0.11"
-prost-derive = "0.11"
 tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros", "fs"]}
 tokio-stream = "0.1"
 tonic = {path = "../tonic", features = ["tls"]}
@@ -36,3 +35,6 @@ tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 
 [build-dependencies]
 tonic-build = {path = "../tonic-build", features = ["prost"]}
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]

@@ -10,17 +10,31 @@
     html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-reflection/0.4.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-reflection/0.6.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
-pub(crate) mod proto {
+/// Generated protobuf types from the `grpc.reflection.v1alpha` package.
+pub mod pb {
     #![allow(unreachable_pub)]
-    tonic::include_proto!("grpc.reflection.v1alpha");
+    #![allow(missing_docs)]
+    #![allow(rustdoc::invalid_html_tags)]
+    include!("generated/grpc.reflection.v1alpha.rs");
 
-    pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
-        tonic::include_file_descriptor_set!("reflection_v1alpha1");
+    /// Byte encoded FILE_DESCRIPTOR_SET.
+    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/reflection_v1alpha1.bin");
+
+    #[cfg(test)]
+    mod tests {
+        use super::FILE_DESCRIPTOR_SET;
+        use prost::Message as _;
+
+        #[test]
+        fn file_descriptor_set_is_valid() {
+            prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
+        }
+    }
 }
 
 /// Implementation of the server component of gRPC Server Reflection.

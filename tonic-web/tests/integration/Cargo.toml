@@ -1,13 +1,13 @@
 [package]
 authors = ["Juan Alvarez <j@yabit.io>"]
-edition = "2018"
+edition = "2021"
 name = "integration"
 publish = false
 version = "0.1.0"
 license = "MIT"
 
 [dependencies]
-base64 = "0.13"
+base64 = "0.21"
 bytes = "1.0"
 hyper = "0.14"
 prost = "0.11"

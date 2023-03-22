@@ -113,7 +113,7 @@ impl fmt::Display for TestAssertion {
 macro_rules! test_assert {
     ($description:expr, $assertion:expr) => {
         if $assertion {
-            crate::TestAssertion::Passed {
+            $crate::TestAssertion::Passed {
                 description: $description,
             }
         } else {
@@ -126,11 +126,11 @@ macro_rules! test_assert {
     };
     ($description:expr, $assertion:expr, $why:expr) => {
         if $assertion {
-            crate::TestAssertion::Passed {
+            $crate::TestAssertion::Passed {
                 description: $description,
             }
         } else {
-            crate::TestAssertion::Failed {
+            $crate::TestAssertion::Failed {
                 description: $description,
                 expression: stringify!($assertion),
                 why: Some($why),

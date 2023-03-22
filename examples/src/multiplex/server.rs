@@ -1,5 +1,3 @@
-use futures::Stream;
-use std::pin::Pin;
 use tonic::{transport::Server, Request, Response, Status};
 
 pub mod hello_world {
@@ -7,7 +5,7 @@ pub mod hello_world {
 }
 
 pub mod echo {
-    tonic::include_proto!("grpc.examples.echo");
+    tonic::include_proto!("grpc.examples.unaryecho");
 }
 
 use hello_world::{
@@ -19,8 +17,6 @@ use echo::{
     echo_server::{Echo, EchoServer},
     EchoRequest, EchoResponse,
 };
-
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -65,30 +61,5 @@ impl Echo for MyEcho {
     ) -> Result<Response<EchoResponse>, Status> {
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
-    }
-
-    type ServerStreamingEchoStream = ResponseStream;
-
-    async fn server_streaming_echo(
-        &self,
-        _: Request<EchoRequest>,
-    ) -> Result<Response<Self::ServerStreamingEchoStream>, Status> {
-        Err(Status::unimplemented("Not yet implemented"))
-    }
-
-    async fn client_streaming_echo(
-        &self,
-        _: Request<tonic::Streaming<EchoRequest>>,
-    ) -> Result<Response<EchoResponse>, Status> {
-        Err(Status::unimplemented("Not yet implemented"))
-    }
-
-    type BidirectionalStreamingEchoStream = ResponseStream;
-
-    async fn bidirectional_streaming_echo(
-        &self,
-        _: Request<tonic::Streaming<EchoRequest>>,
-    ) -> Result<Response<Self::BidirectionalStreamingEchoStream>, Status> {
-        Err(Status::unimplemented("Not yet implemented"))
     }
 }

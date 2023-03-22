@@ -1,8 +1,11 @@
-use super::{client, server, Attributes};
+use crate::code_gen::CodeGenBuilder;
+
+use super::Attributes;
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
 use quote::ToTokens;
 use std::{
+    collections::HashSet,
     ffi::OsString,
     io,
     path::{Path, PathBuf},
@@ -15,10 +18,14 @@ pub fn configure() -> Builder {
     Builder {
         build_client: true,
         build_server: true,
+        build_transport: true,
         file_descriptor_set_path: None,
+        skip_protoc_run: false,
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
+        message_attributes: Vec::new(),
+        enum_attributes: Vec::new(),
         type_attributes: Vec::new(),
         server_attributes: Attributes::default(),
         client_attributes: Attributes::default(),
@@ -28,6 +35,7 @@ pub fn configure() -> Builder {
         protoc_args: Vec::new(),
         include_file: None,
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
+        disable_comments: HashSet::default(),
     }
 }
 
@@ -156,24 +164,25 @@ impl ServiceGenerator {
 impl prost_build::ServiceGenerator for ServiceGenerator {
     fn generate(&mut self, service: prost_build::Service, _buf: &mut String) {
         if self.builder.build_server {
-            let server = server::generate(
-                &service,
-                self.builder.emit_package,
-                &self.builder.proto_path,
-                self.builder.compile_well_known_types,
-                &self.builder.server_attributes,
-            );
+            let server = CodeGenBuilder::new()
+                .emit_package(self.builder.emit_package)
+                .compile_well_known_types(self.builder.compile_well_known_types)
+                .attributes(self.builder.server_attributes.clone())
+                .disable_comments(self.builder.disable_comments.clone())
+                .generate_server(&service, &self.builder.proto_path);
+
             self.servers.extend(server);
         }
 
         if self.builder.build_client {
-            let client = client::generate(
-                &service,
-                self.builder.emit_package,
-                &self.builder.proto_path,
-                self.builder.compile_well_known_types,
-                &self.builder.client_attributes,
-            );
+            let client = CodeGenBuilder::new()
+                .emit_package(self.builder.emit_package)
+                .compile_well_known_types(self.builder.compile_well_known_types)
+                .attributes(self.builder.client_attributes.clone())
+                .disable_comments(self.builder.disable_comments.clone())
+                .build_transport(self.builder.build_transport)
+                .generate_client(&service, &self.builder.proto_path);
+
             self.clients.extend(client);
         }
     }
@@ -214,10 +223,14 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
 pub struct Builder {
     pub(crate) build_client: bool,
     pub(crate) build_server: bool,
+    pub(crate) build_transport: bool,
     pub(crate) file_descriptor_set_path: Option<PathBuf>,
+    pub(crate) skip_protoc_run: bool,
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
+    pub(crate) message_attributes: Vec<(String, String)>,
+    pub(crate) enum_attributes: Vec<(String, String)>,
     pub(crate) server_attributes: Attributes,
     pub(crate) client_attributes: Attributes,
     pub(crate) proto_path: String,
@@ -226,6 +239,7 @@ pub struct Builder {
     pub(crate) protoc_args: Vec<OsString>,
     pub(crate) include_file: Option<PathBuf>,
     pub(crate) emit_rerun_if_changed: bool,
+    pub(crate) disable_comments: HashSet<String>,
 
     out_dir: Option<PathBuf>,
 }
@@ -243,10 +257,27 @@ impl Builder {
         self
     }
 
+    /// Enable or disable generated clients and servers to have built-in tonic
+    /// transport features.
+    ///
+    /// When the `transport` feature is disabled this does nothing.
+    pub fn build_transport(mut self, enable: bool) -> Self {
+        self.build_transport = enable;
+        self
+    }
+
     /// Generate a file containing the encoded `prost_types::FileDescriptorSet` for protocol buffers
     /// modules. This is required for implementing gRPC Server Reflection.
     pub fn file_descriptor_set_path(mut self, path: impl AsRef<Path>) -> Self {
         self.file_descriptor_set_path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// In combination with with file_descriptor_set_path, this can be used to provide a file
+    /// descriptor set as an input file, rather than having prost-build generate the file by
+    /// calling protoc.
+    pub fn skip_protoc_run(mut self) -> Self {
+        self.skip_protoc_run = true;
         self
     }
 
@@ -285,6 +316,28 @@ impl Builder {
     /// Passed directly to `prost_build::Config.type_attribute`.
     pub fn type_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
         self.type_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
+    /// Add additional attribute to matched messages.
+    ///
+    /// Passed directly to `prost_build::Config.message_attribute`.
+    pub fn message_attribute<P: AsRef<str>, A: AsRef<str>>(
+        mut self,
+        path: P,
+        attribute: A,
+    ) -> Self {
+        self.message_attributes
+            .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
+        self
+    }
+
+    /// Add additional attribute to matched enums.
+    ///
+    /// Passed directly to `prost_build::Config.enum_attribute`.
+    pub fn enum_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.enum_attributes
             .push((path.as_ref().to_string(), attribute.as_ref().to_string()));
         self
     }
@@ -339,6 +392,12 @@ impl Builder {
     /// Note: Enabling `--experimental_allow_proto3_optional` requires protobuf >= 3.12.
     pub fn protoc_arg<A: AsRef<str>>(mut self, arg: A) -> Self {
         self.protoc_args.push(arg.as_ref().into());
+        self
+    }
+
+    /// Disable service and rpc comments emission.
+    pub fn disable_comments(mut self, path: impl AsRef<str>) -> Self {
+        self.disable_comments.insert(path.as_ref().to_string());
         self
     }
 
@@ -415,6 +474,9 @@ impl Builder {
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }
+        if self.skip_protoc_run {
+            config.skip_protoc_run();
+        }
         for (proto_path, rust_path) in self.extern_path.iter() {
             config.extern_path(proto_path, rust_path);
         }
@@ -423,6 +485,12 @@ impl Builder {
         }
         for (prost_path, attr) in self.type_attributes.iter() {
             config.type_attribute(prost_path, attr);
+        }
+        for (prost_path, attr) in self.message_attributes.iter() {
+            config.message_attribute(prost_path, attr);
+        }
+        for (prost_path, attr) in self.enum_attributes.iter() {
+            config.enum_attribute(prost_path, attr);
         }
         if self.compile_well_known_types {
             config.compile_well_known_types();

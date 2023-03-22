@@ -1,5 +1,5 @@
 pub mod pb {
-    tonic::include_proto!("/grpc.examples.echo");
+    tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
 use pb::{echo_client::EchoClient, EchoRequest};
@@ -7,7 +7,8 @@ use tonic::transport::{Certificate, Channel, ClientTlsConfig};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let pem = tokio::fs::read("examples/data/tls/ca.pem").await?;
+    let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
+    let pem = std::fs::read_to_string(data_dir.join("tls/ca.pem"))?;
     let ca = Certificate::from_pem(pem);
 
     let tls = ClientTlsConfig::new()

@@ -5,13 +5,6 @@
 //! with a [tower] service that performs the translation between protocols and handles `cors`
 //! requests.
 //!
-//! ## Getting Started
-//!
-//! ```toml
-//! [dependencies]
-//! tonic_web = "0.1"
-//! ```
-//!
 //! ## Enabling tonic services
 //!
 //! The easiest way to get started, is to call the [`enable`] function with your tonic service
@@ -31,10 +24,28 @@
 //!
 //!    Ok(())
 //! }
-//!
 //! ```
 //! This will apply a default configuration that works well with grpc-web clients out of the box.
-//! See the [`Config`] documentation for details.
+//!
+//! You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
+//!
+//! ```ignore
+//! #[tokio::main]
+//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
+//!     let addr = "[::1]:50051".parse().unwrap();
+//!     let greeter = GreeterServer::new(MyGreeter::default());
+//!
+//!     Server::builder()
+//!        .accept_http1(true)
+//!        // This will apply the gRPC-Web translation layer
+//!        .layer(GrpcWebLayer::new())
+//!        .add_service(greeter)
+//!        .serve(addr)
+//!        .await?;
+//!
+//!    Ok(())
+//! }
+//! ```
 //!
 //! Alternatively, if you have a tls enabled server, you could skip setting `accept_http1` to `true`.
 //! This works because the browser will handle `ALPN`.
@@ -77,59 +88,120 @@
 //! [grpc-web]: https://github.com/grpc/grpc-web
 //! [tower]: https://github.com/tower-rs/tower
 //! [`enable`]: crate::enable()
-//! [`Config`]: crate::Config
 #![warn(
     missing_debug_implementations,
     missing_docs,
     rust_2018_idioms,
     unreachable_pub
 )]
-#![doc(html_root_url = "https://docs.rs/tonic-web/0.4.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-web/0.5.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
-pub use config::Config;
+pub use layer::GrpcWebLayer;
+pub use service::{GrpcWebService, ResponseFuture};
 
 mod call;
-mod config;
-mod cors;
+mod layer;
 mod service;
 
-use crate::service::GrpcWeb;
-use std::future::Future;
-use std::pin::Pin;
-use tonic::body::BoxBody;
-use tonic::transport::NamedService;
+use http::header::HeaderName;
+use std::time::Duration;
+use tonic::{body::BoxBody, server::NamedService};
+use tower_http::cors::{AllowOrigin, CorsLayer};
+use tower_layer::Layer;
 use tower_service::Service;
 
-/// enable a tonic service to handle grpc-web requests with the default configuration.
+const DEFAULT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
+const DEFAULT_EXPOSED_HEADERS: [&str; 3] =
+    ["grpc-status", "grpc-message", "grpc-status-details-bin"];
+const DEFAULT_ALLOW_HEADERS: [&str; 4] =
+    ["x-grpc-web", "content-type", "x-user-agent", "grpc-timeout"];
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
+
+/// Enable a tonic service to handle grpc-web requests with the default configuration.
 ///
-/// Shortcut for `tonic_web::config().enable(service)`
-pub fn enable<S>(service: S) -> GrpcWeb<S>
+/// You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
+pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
 where
     S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
-    S: NamedService + Clone + Send + 'static,
+    S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
 {
-    config().enable(service)
+    let cors = CorsLayer::new()
+        .allow_origin(AllowOrigin::mirror_request())
+        .allow_credentials(true)
+        .max_age(DEFAULT_MAX_AGE)
+        .expose_headers(
+            DEFAULT_EXPOSED_HEADERS
+                .iter()
+                .cloned()
+                .map(HeaderName::from_static)
+                .collect::<Vec<HeaderName>>(),
+        )
+        .allow_headers(
+            DEFAULT_ALLOW_HEADERS
+                .iter()
+                .cloned()
+                .map(HeaderName::from_static)
+                .collect::<Vec<HeaderName>>(),
+        );
+
+    tower_layer::layer_fn(|s| CorsGrpcWeb(cors.layer(s))).layer(GrpcWebService::new(service))
 }
 
-/// returns a default [`Config`] instance for configuring services.
-///
-/// ## Example
-///
-/// ```
-/// let config = tonic_web::config()
-///      .allow_origins(vec!["http://foo.com"])
-///      .allow_credentials(false)
-///      .expose_headers(vec!["x-request-id"]);
-///
-/// // let greeter = config.enable(Greeter);
-/// // let route_guide = config.enable(RouteGuide);
-/// ```
-pub fn config() -> Config {
-    Config::default()
+/// A newtype wrapper around [`GrpcWebLayer`] and [`tower_http::cors::CorsLayer`] to allow
+/// `tonic_web::enable` to implement the [`NamedService`] trait.
+#[derive(Debug, Clone)]
+pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
+
+impl<S> Service<http::Request<hyper::Body>> for CorsGrpcWeb<S>
+where
+    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Clone + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Into<BoxError> + Send,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future =
+        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<hyper::Body>>>::Future;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.0.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+        self.0.call(req)
+    }
 }
 
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
+impl<S> NamedService for CorsGrpcWeb<S>
+where
+    S: NamedService,
+{
+    const NAME: &'static str = S::NAME;
+}
+
+pub(crate) mod util {
+    pub(crate) mod base64 {
+        use base64::{
+            alphabet,
+            engine::{
+                general_purpose::{GeneralPurpose, GeneralPurposeConfig},
+                DecodePaddingMode,
+            },
+        };
+
+        pub(crate) const STANDARD: GeneralPurpose = GeneralPurpose::new(
+            &alphabet::STANDARD,
+            GeneralPurposeConfig::new()
+                .with_encode_padding(true)
+                .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+        );
+    }
+}

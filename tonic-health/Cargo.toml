@@ -5,29 +5,27 @@ description = """
 Health Checking module of `tonic` gRPC implementation.
 """
 documentation = "https://docs.rs/tonic-health/0.7.0/tonic-health/"
-edition = "2018"
+edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "healthcheck"]
 license = "MIT"
 name = "tonic-health"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.7.0"
+version = "0.8.0"
 
 [features]
 default = ["transport"]
-transport = ["tonic/transport", "tonic-build/transport"]
+transport = []
 
 [dependencies]
 async-stream = "0.3"
-bytes = "1.0"
 prost = "0.11"
 tokio = {version = "1.0", features = ["sync"]}
 tokio-stream = "0.1"
-tonic = {version = "0.8", path = "../tonic", features = ["codegen", "prost"]}
+tonic = { version = "0.8", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
 
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
-
-[build-dependencies]
-tonic-build = {version = "0.8", path = "../tonic-build", features = ["prost"]}
+tonic-build = { version = "0.8", path = "../tonic-build", default-features = false, features = ["prost"] }
+prost-types = "0.11"

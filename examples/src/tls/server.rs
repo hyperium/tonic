@@ -1,20 +1,17 @@
 pub mod pb {
-    tonic::include_proto!("/grpc.examples.echo");
+    tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
-use futures::Stream;
 use pb::{EchoRequest, EchoResponse};
-use std::pin::Pin;
 use tonic::{
     transport::{
         server::{TcpConnectInfo, TlsConnectInfo},
         Identity, Server, ServerTlsConfig,
     },
-    Request, Response, Status, Streaming,
+    Request, Response, Status,
 };
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
 
 #[derive(Default)]
 pub struct EchoServer;
@@ -35,37 +32,13 @@ impl pb::echo_server::Echo for EchoServer {
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
     }
-
-    type ServerStreamingEchoStream = ResponseStream;
-
-    async fn server_streaming_echo(
-        &self,
-        _: Request<EchoRequest>,
-    ) -> EchoResult<Self::ServerStreamingEchoStream> {
-        Err(Status::unimplemented("not implemented"))
-    }
-
-    async fn client_streaming_echo(
-        &self,
-        _: Request<Streaming<EchoRequest>>,
-    ) -> EchoResult<EchoResponse> {
-        Err(Status::unimplemented("not implemented"))
-    }
-
-    type BidirectionalStreamingEchoStream = ResponseStream;
-
-    async fn bidirectional_streaming_echo(
-        &self,
-        _: Request<Streaming<EchoRequest>>,
-    ) -> EchoResult<Self::BidirectionalStreamingEchoStream> {
-        Err(Status::unimplemented("not implemented"))
-    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
-    let key = tokio::fs::read("examples/data/tls/server.key").await?;
+    let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
+    let cert = std::fs::read_to_string(data_dir.join("tls/server.pem"))?;
+    let key = std::fs::read_to_string(data_dir.join("tls/server.key"))?;
 
     let identity = Identity::from_pem(cert, key);
 

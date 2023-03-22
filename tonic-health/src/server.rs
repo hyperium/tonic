@@ -1,7 +1,7 @@
 //! Contains all healthcheck based server utilities.
 
-use crate::proto::health_server::{Health, HealthServer};
-use crate::proto::{HealthCheckRequest, HealthCheckResponse};
+use crate::pb::health_server::{Health, HealthServer};
+use crate::pb::{HealthCheckRequest, HealthCheckResponse};
 use crate::ServingStatus;
 use std::collections::HashMap;
 use std::pin::Pin;
@@ -9,7 +9,7 @@ use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 use tokio_stream::Stream;
 #[cfg(feature = "transport")]
-use tonic::transport::NamedService;
+use tonic::server::NamedService;
 use tonic::{Request, Response, Status};
 
 /// Creates a `HealthReporter` and a linked `HealthServer` pair. Together,
@@ -132,7 +132,7 @@ impl Health for HealthService {
         match status {
             None => Err(Status::not_found("service not registered")),
             Some(status) => Ok(Response::new(HealthCheckResponse {
-                status: crate::proto::health_check_response::ServingStatus::from(status) as i32,
+                status: crate::pb::health_check_response::ServingStatus::from(status) as i32,
             })),
         }
     }
@@ -152,11 +152,11 @@ impl Health for HealthService {
 
         let output = async_stream::try_stream! {
             // yield the current value
-            let status = crate::proto::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
+            let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
             yield HealthCheckResponse { status };
 
             while let Ok(_) = status_rx.changed().await {
-                let status = crate::proto::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
+                let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
                 yield HealthCheckResponse { status };
             }
         };
@@ -167,8 +167,8 @@ impl Health for HealthService {
 
 #[cfg(test)]
 mod tests {
-    use crate::proto::health_server::Health;
-    use crate::proto::HealthCheckRequest;
+    use crate::pb::health_server::Health;
+    use crate::pb::HealthCheckRequest;
     use crate::server::{HealthReporter, HealthService};
     use crate::ServingStatus;
     use tokio::sync::watch;
@@ -176,7 +176,7 @@ mod tests {
     use tonic::{Code, Request, Status};
 
     fn assert_serving_status(wire: i32, expected: ServingStatus) {
-        let expected = crate::proto::health_check_response::ServingStatus::from(expected) as i32;
+        let expected = crate::pb::health_check_response::ServingStatus::from(expected) as i32;
         assert_eq!(wire, expected);
     }
 

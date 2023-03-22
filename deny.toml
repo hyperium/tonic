@@ -14,27 +14,27 @@ deny = [
     # term is not fully maintained, and termcolor is replacing it
     { name = "term" },
 ]
-skip-tree = [ 
-    { name = "winapi", version = "<= 0.3" },
-    { name = "autocfg", version = "<= 1" },
-    { name = "version_check", version = "<= 0.9" },
-    { name = "scoped-tls", version = ">=0.1" },
-    { name = "ansi_term", version = "<= 0.12"},
-    { name = "wasi", version = "<= 0.10.0"},
+skip-tree = [
+    { name = "rustls-pemfile" },
+    { name = "windows-sys" },
+    { name = "hermit-abi" },
+    { name = "syn" },
 ]
 
 [licenses]
 unlicensed = "deny"
 # We want really high confidence when inferring licenses from text
 confidence-threshold = 0.92
+copyleft = "deny"
 allow = [
     "Apache-2.0",
-    "BSD-2-Clause",
     "BSD-3-Clause",
     "ISC",
     "MIT",
     "OpenSSL",
     "Zlib",
+    "Unicode-DFS-2016",
+    "MPL-2.0",
 ]
 
 [[licenses.clarify]]

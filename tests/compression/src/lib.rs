@@ -3,7 +3,6 @@
 use self::util::*;
 use crate::util::mock_io_channel;
 use futures::{Stream, StreamExt};
-use std::convert::TryFrom;
 use std::{
     pin::Pin,
     sync::{
