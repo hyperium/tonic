@@ -1,0 +1,29 @@
+syntax = "proto3";
+
+package test;
+
+// This comment will be removed.
+service Service1 {
+  // This comment will be removed.
+  rpc Rpc1(Input1) returns (Output1);
+  // This comment will not be removed.
+  rpc Rpc2(Input2) returns (Output2);
+}
+
+// This comment will not be removed.
+service Service2 {
+  // This comment will not be removed.
+  rpc Rpc(Input1) returns (Output1);
+}
+
+// This comment will be removed.
+message Input1 {}
+
+// This comment will not be removed.
+message Input2 {}
+
+// This comment will be removed.
+message Output1 {}
+
+// This comment will not be removed.
+message Output2 {}

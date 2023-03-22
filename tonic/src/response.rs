@@ -54,11 +54,13 @@ impl<T> Response<T> {
         self.message
     }
 
-    pub(crate) fn into_parts(self) -> (MetadataMap, T, Extensions) {
+    /// Consumes `self` returning the parts of the response.
+    pub fn into_parts(self) -> (MetadataMap, T, Extensions) {
         (self.metadata, self.message, self.extensions)
     }
 
-    pub(crate) fn from_parts(metadata: MetadataMap, message: T, extensions: Extensions) -> Self {
+    /// Create a new gRPC response from metadata, message and extensions.
+    pub fn from_parts(metadata: MetadataMap, message: T, extensions: Extensions) -> Self {
         Self {
             metadata,
             message,

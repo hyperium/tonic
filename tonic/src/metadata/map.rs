@@ -958,7 +958,7 @@ impl MetadataMap {
     /// use `insert_bin`.
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Ascii>.
+    /// converted to a `MetadataKey<Ascii>`.
     ///
     /// If the map did not previously have this key present, then `None` is
     /// returned.
@@ -1008,7 +1008,7 @@ impl MetadataMap {
     /// Like insert, but for Binary keys (for example "trace-proto-bin").
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Binary>.
+    /// converted to a `MetadataKey<Binary>`.
     ///
     /// # Examples
     ///
@@ -1050,7 +1050,7 @@ impl MetadataMap {
     /// use `append_bin`.
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Ascii>.
+    /// converted to a `MetadataKey<Ascii>`.
     ///
     /// If the map did not previously have this key present, then `false` is
     /// returned.
@@ -1099,7 +1099,7 @@ impl MetadataMap {
     /// Like append, but for binary keys (for example "trace-proto-bin").
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Binary>.
+    /// converted to a `MetadataKey<Binary>`.
     ///
     /// # Examples
     ///
@@ -1362,7 +1362,7 @@ where
         match self.inner {
             Some(ref mut inner) => inner
                 .next()
-                .map(&MetadataValue::unchecked_from_header_value_ref),
+                .map(MetadataValue::unchecked_from_header_value_ref),
             None => None,
         }
     }
@@ -1383,7 +1383,7 @@ where
         match self.inner {
             Some(ref mut inner) => inner
                 .next_back()
-                .map(&MetadataValue::unchecked_from_header_value_ref),
+                .map(MetadataValue::unchecked_from_header_value_ref),
             None => None,
         }
     }
@@ -1400,7 +1400,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
-            .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+            .map(MetadataValue::unchecked_from_mut_header_value_ref)
     }
 }
 
@@ -1411,7 +1411,7 @@ where
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner
             .next_back()
-            .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+            .map(MetadataValue::unchecked_from_mut_header_value_ref)
     }
 }
 
@@ -1992,7 +1992,7 @@ impl<'a, 'b: 'a, VE: ValueEncoding> IntoIterator for &'b GetAll<'a, VE> {
 
     fn into_iter(self) -> ValueIter<'a, VE> {
         ValueIter {
-            inner: (&self.inner).as_ref().map(|inner| inner.into_iter()),
+            inner: self.inner.as_ref().map(|inner| inner.into_iter()),
             phantom: PhantomData,
         }
     }
@@ -2037,7 +2037,7 @@ mod into_metadata_key {
         ) -> Option<MetadataValue<VE>> {
             map.headers
                 .insert(self.inner, val.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
 
         #[doc(hidden)]
@@ -2059,7 +2059,7 @@ mod into_metadata_key {
         ) -> Option<MetadataValue<VE>> {
             map.headers
                 .insert(&self.inner, val.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
         #[doc(hidden)]
         #[inline]
@@ -2083,7 +2083,7 @@ mod into_metadata_key {
 
             map.headers
                 .insert(key.inner, val.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
         #[doc(hidden)]
         #[inline]
@@ -2141,7 +2141,7 @@ mod as_metadata_key {
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
             map.headers
                 .get(self.inner)
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2149,7 +2149,7 @@ mod as_metadata_key {
         fn get_mut(self, map: &mut MetadataMap) -> Option<&mut MetadataValue<VE>> {
             map.headers
                 .get_mut(self.inner)
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2172,7 +2172,7 @@ mod as_metadata_key {
         fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
             map.headers
                 .remove(self.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
@@ -2184,7 +2184,7 @@ mod as_metadata_key {
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
             map.headers
                 .get(&self.inner)
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2192,7 +2192,7 @@ mod as_metadata_key {
         fn get_mut(self, map: &mut MetadataMap) -> Option<&mut MetadataValue<VE>> {
             map.headers
                 .get_mut(&self.inner)
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2215,7 +2215,7 @@ mod as_metadata_key {
         fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
             map.headers
                 .remove(&self.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
@@ -2230,7 +2230,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get(self)
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2241,7 +2241,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get_mut(self)
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2277,7 +2277,7 @@ mod as_metadata_key {
             }
             map.headers
                 .remove(self)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
@@ -2292,7 +2292,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2303,7 +2303,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get_mut(self.as_str())
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2338,7 +2338,7 @@ mod as_metadata_key {
             }
             map.headers
                 .remove(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
@@ -2353,7 +2353,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2364,7 +2364,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get_mut(self.as_str())
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2399,7 +2399,7 @@ mod as_metadata_key {
             }
             map.headers
                 .remove(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
@@ -2520,7 +2520,7 @@ mod tests {
 
         let mut found_x_word = false;
         for key_and_value in map.iter() {
-            if let KeyAndValueRef::Ascii(ref key, ref _value) = key_and_value {
+            if let KeyAndValueRef::Ascii(key, _value) = key_and_value {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
@@ -2540,7 +2540,7 @@ mod tests {
 
         let mut found_x_word_bin = false;
         for key_and_value in map.iter() {
-            if let KeyAndValueRef::Binary(ref key, ref _value) = key_and_value {
+            if let KeyAndValueRef::Binary(key, _value) = key_and_value {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {
@@ -2561,7 +2561,7 @@ mod tests {
 
         let mut found_x_word = false;
         for key_and_value in map.iter_mut() {
-            if let KeyAndMutValueRef::Ascii(ref key, ref _value) = key_and_value {
+            if let KeyAndMutValueRef::Ascii(key, _value) = key_and_value {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
@@ -2581,7 +2581,7 @@ mod tests {
 
         let mut found_x_word_bin = false;
         for key_and_value in map.iter_mut() {
-            if let KeyAndMutValueRef::Binary(ref key, ref _value) = key_and_value {
+            if let KeyAndMutValueRef::Binary(key, _value) = key_and_value {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {

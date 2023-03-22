@@ -46,32 +46,15 @@ fn encode_body<T>(msg: T) -> Bytes
 where
     T: prost::Message,
 {
-    let mut buf = BytesMut::with_capacity(1024);
+    let msg_len = msg.encoded_len();
+    let mut buf = BytesMut::with_capacity(GRPC_HEADER_SIZE + msg_len);
 
-    // first skip past the header
-    // cannot write it yet since we don't know the size of the
-    // encoded message
-    buf.reserve(GRPC_HEADER_SIZE);
-    unsafe {
-        buf.advance_mut(GRPC_HEADER_SIZE);
-    }
+    // compression flag, 0 means "no compression"
+    buf.put_u8(0);
+    buf.put_u32(msg_len as u32);
 
-    // write the message
     msg.encode(&mut buf).unwrap();
-
-    // now we know the size of encoded message and can write the
-    // header
-    let len = buf.len() - GRPC_HEADER_SIZE;
-    {
-        let mut buf = &mut buf[..GRPC_HEADER_SIZE];
-
-        // compression flag, 0 means "no compression"
-        buf.put_u8(0);
-
-        buf.put_u32(len as u32);
-    }
-
-    buf.split_to(len + GRPC_HEADER_SIZE).freeze()
+    buf.freeze()
 }
 
 async fn decode_body<T>(body: hyper::Body) -> T

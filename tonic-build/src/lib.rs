@@ -1,6 +1,14 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
 //! and proto definitiones for use with `tonic`.
 //!
+//! # Feature flags
+//!
+//! - `cleanup-markdown`: Enables cleaning up documentation from the generated code. Useful
+//! when documentation of the generated code fails `cargo test --doc` for example.
+//! - `prost`: Enables usage of prost generator (enabled by default).
+//! - `transport`: Enables generation of `connect` method using `tonic::transport::Channel`
+//! (enabled by default).
+//!
 //! # Required dependencies
 //!
 //! ```toml
@@ -62,7 +70,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.8.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.8.4")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -85,6 +93,9 @@ pub mod manual;
 pub mod client;
 /// Service code generation for Server
 pub mod server;
+
+mod code_gen;
+pub use code_gen::CodeGenBuilder;
 
 /// Service generation trait.
 ///
@@ -186,6 +197,32 @@ impl Attributes {
     }
 }
 
+fn format_service_name<T: Service>(service: &T, emit_package: bool) -> String {
+    let package = if emit_package { service.package() } else { "" };
+    format!(
+        "{}{}{}",
+        package,
+        if package.is_empty() { "" } else { "." },
+        service.identifier(),
+    )
+}
+
+fn format_method_path<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
+    format!(
+        "/{}/{}",
+        format_service_name(service, emit_package),
+        method.identifier()
+    )
+}
+
+fn format_method_name<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
+    format!(
+        "{}.{}",
+        format_service_name(service, emit_package),
+        method.identifier()
+    )
+}
+
 // Generates attributes given a list of (`pattern`, `attribute`) pairs. If `pattern` matches `name`, `attribute` will be included.
 fn generate_attributes<'a>(
     name: &str,
@@ -205,6 +242,14 @@ fn generate_attributes<'a>(
 
 // Generate a singular line of a doc comment
 fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
+    let comment = comment.as_ref();
+
+    let comment = if !comment.starts_with(' ') {
+        format!(" {}", comment)
+    } else {
+        comment.to_string()
+    };
+
     let mut doc_stream = TokenStream::new();
 
     doc_stream.append(Ident::new("doc", Span::call_site()));

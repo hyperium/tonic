@@ -15,7 +15,8 @@ struct Location {
 
 #[allow(dead_code)]
 pub fn load() -> Vec<crate::routeguide::Feature> {
-    let file = File::open("examples/data/route_guide_db.json").expect("failed to open data file");
+    let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
+    let file = File::open(data_dir.join("route_guide_db.json")).expect("failed to open data file");
 
     let decoded: Vec<Feature> =
         serde_json::from_reader(&file).expect("failed to deserialize features");

@@ -1,8 +1,7 @@
 use crate::{
     body::{boxed, BoxBody},
-    transport::NamedService,
+    server::NamedService,
 };
-use axum::handler::Handler;
 use http::{Request, Response};
 use hyper::Body;
 use pin_project::pin_project;
@@ -33,7 +32,7 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let router = axum::Router::new().fallback(unimplemented.into_service());
+        let router = axum::Router::new().fallback(unimplemented);
         Self { router }.add_service(svc)
     }
 
@@ -48,8 +47,18 @@ impl Routes {
         S::Error: Into<crate::Error> + Send,
     {
         let svc = svc.map_response(|res| res.map(axum::body::boxed));
-        self.router = self.router.route(&format!("/{}/*rest", S::NAME), svc);
+        self.router = self
+            .router
+            .route_service(&format!("/{}/*rest", S::NAME), svc);
         self
+    }
+
+    pub(crate) fn prepare(self) -> Self {
+        Self {
+            // this makes axum perform update some internals of the router that improves perf
+            // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
+            router: self.router.with_state(()),
+        }
     }
 }
 

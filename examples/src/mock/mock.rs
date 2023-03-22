@@ -1,4 +1,3 @@
-use std::convert::TryFrom;
 use tonic::{
     transport::{Endpoint, Server, Uri},
     Request, Response, Status,

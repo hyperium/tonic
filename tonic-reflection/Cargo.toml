@@ -7,7 +7,7 @@ categories = ["network-programming", "asynchronous"]
 description = """
 Server Reflection module of `tonic` gRPC implementation.
 """
-edition = "2018"
+edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 documentation = "https://docs.rs/tonic-reflection/0.5.0/tonic-reflection/"
 keywords = ["rpc", "grpc", "async", "reflection"]
@@ -15,19 +15,17 @@ license = "MIT"
 name = "tonic-reflection"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.5.0"
+version = "0.6.0"
 
 [dependencies]
-bytes = "1.0"
 prost = "0.11"
 prost-types = "0.11"
-tokio = {version = "1.0", features = ["sync"]}
+tokio = {version = "1.0", features = ["sync", "rt"]}
 tokio-stream = {version = "0.1", features = ["net"]}
-tonic = {version = "0.8", path = "../tonic", features = ["codegen", "prost"]}
-
-[build-dependencies]
-tonic-build = {version = "0.8", path = "../tonic-build", features = ["transport", "prost"]}
+tonic = { version = "0.8", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
 
 [dev-dependencies]
+tonic = { version = "0.8", path = "../tonic", default-features = false, features = ["transport"] }
+tonic-build = { version = "0.8", path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"] }
 futures = "0.3"
 futures-util = "0.3"

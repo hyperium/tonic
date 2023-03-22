@@ -6,7 +6,6 @@ use integration_tests::pb::{
     test_client, test_server, test_stream_client, test_stream_server, Input, InputStream, Output,
     OutputStream,
 };
-use std::convert::TryFrom;
 use std::error::Error;
 use std::time::Duration;
 use tokio::sync::oneshot;

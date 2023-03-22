@@ -1,5 +1,6 @@
 use std::net::SocketAddr;
 
+use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use hyper::http::{header, StatusCode};
 use hyper::{Body, Client, Method, Request, Uri};
@@ -10,10 +11,11 @@ use tonic::transport::Server;
 
 use integration::pb::{test_server::TestServer, Input, Output};
 use integration::Svc;
+use tonic_web::GrpcWebLayer;
 
 #[tokio::test]
 async fn binary_request() {
-    let server_url = spawn("http://example.com").await;
+    let server_url = spawn().await;
     let client = Client::new();
 
     let req = build_request(server_url, "grpc-web", "grpc-web");
@@ -36,7 +38,7 @@ async fn binary_request() {
 
 #[tokio::test]
 async fn text_request() {
-    let server_url = spawn("http://example.com").await;
+    let server_url = spawn().await;
     let client = Client::new();
 
     let req = build_request(server_url, "grpc-web-text", "grpc-web-text");
@@ -57,31 +59,17 @@ async fn text_request() {
     assert_eq!(&trailers[..], b"grpc-status:0\r\n");
 }
 
-#[tokio::test]
-async fn origin_not_allowed() {
-    let server_url = spawn("http://foo.com").await;
-    let client = Client::new();
-
-    let req = build_request(server_url, "grpc-web-text", "grpc-web-text");
-    let res = client.request(req).await.unwrap();
-
-    assert_eq!(res.status(), StatusCode::FORBIDDEN);
-}
-
-async fn spawn(allowed_origin: &str) -> String {
+async fn spawn() -> String {
     let addr = SocketAddr::from(([127, 0, 0, 1], 0));
     let listener = TcpListener::bind(addr).await.expect("listener");
     let url = format!("http://{}", listener.local_addr().unwrap());
     let listener_stream = TcpListenerStream::new(listener);
 
-    let svc = tonic_web::config()
-        .allow_origins(vec![allowed_origin])
-        .enable(TestServer::new(Svc));
-
     let _ = tokio::spawn(async move {
         Server::builder()
             .accept_http1(true)
-            .add_service(svc)
+            .layer(GrpcWebLayer::new())
+            .add_service(TestServer::new(Svc))
             .serve_with_incoming(listener_stream)
             .await
             .unwrap()
@@ -123,7 +111,9 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
 
     let bytes = match content_type {
         "grpc-web" => encode_body(),
-        "grpc-web-text" => base64::encode(encode_body()).into(),
+        "grpc-web-text" => integration::util::base64::STANDARD
+            .encode(encode_body())
+            .into(),
         _ => panic!("invalid content type {}", content_type),
     };
 
@@ -141,7 +131,10 @@ async fn decode_body(body: Body, content_type: &str) -> (Output, Bytes) {
     let mut body = hyper::body::to_bytes(body).await.unwrap();
 
     if content_type == "application/grpc-web-text+proto" {
-        body = base64::decode(body).unwrap().into()
+        body = integration::util::base64::STANDARD
+            .decode(body)
+            .unwrap()
+            .into()
     }
 
     body.advance(1);

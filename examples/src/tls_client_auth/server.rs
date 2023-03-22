@@ -1,15 +1,12 @@
 pub mod pb {
-    tonic::include_proto!("grpc.examples.echo");
+    tonic::include_proto!("grpc.examples.unaryecho");
 }
 
-use futures::Stream;
 use pb::{EchoRequest, EchoResponse};
-use std::pin::Pin;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status};
 
 type EchoResult<T> = Result<Response<T>, Status>;
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send>>;
 
 #[derive(Default)]
 pub struct EchoServer;
@@ -26,40 +23,16 @@ impl pb::echo_server::Echo for EchoServer {
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
     }
-
-    type ServerStreamingEchoStream = ResponseStream;
-
-    async fn server_streaming_echo(
-        &self,
-        _: Request<EchoRequest>,
-    ) -> Result<Response<Self::ServerStreamingEchoStream>, Status> {
-        Err(Status::unimplemented("Not yet implemented"))
-    }
-
-    async fn client_streaming_echo(
-        &self,
-        _: Request<tonic::Streaming<EchoRequest>>,
-    ) -> Result<Response<EchoResponse>, Status> {
-        Err(Status::unimplemented("Not yet implemented"))
-    }
-
-    type BidirectionalStreamingEchoStream = ResponseStream;
-
-    async fn bidirectional_streaming_echo(
-        &self,
-        _: Request<tonic::Streaming<EchoRequest>>,
-    ) -> Result<Response<Self::BidirectionalStreamingEchoStream>, Status> {
-        Err(Status::unimplemented("Not yet implemented"))
-    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cert = tokio::fs::read("examples/data/tls/server.pem").await?;
-    let key = tokio::fs::read("examples/data/tls/server.key").await?;
+    let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
+    let cert = std::fs::read_to_string(data_dir.join("tls/server.pem"))?;
+    let key = std::fs::read_to_string(data_dir.join("tls/server.key"))?;
     let server_identity = Identity::from_pem(cert, key);
 
-    let client_ca_cert = tokio::fs::read("examples/data/tls/client_ca.pem").await?;
+    let client_ca_cert = std::fs::read_to_string(data_dir.join("tls/client_ca.pem"))?;
     let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
     let addr = "[::1]:50051".parse().unwrap();

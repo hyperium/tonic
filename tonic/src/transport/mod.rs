@@ -63,7 +63,7 @@
 //! #       unimplemented!()
 //! #   }
 //! # }
-//! # impl tonic::transport::NamedService for Svc {
+//! # impl tonic::server::NamedService for Svc {
 //! # const NAME: &'static str = "some_svc";
 //! # }
 //! # let my_svc = Svc;
@@ -99,10 +99,12 @@ mod tls;
 pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
-pub use self::server::{NamedService, Server};
+pub use self::server::Server;
 #[doc(inline)]
 pub use self::service::grpc_timeout::TimeoutExpired;
 pub use self::tls::Certificate;
+#[doc(inline)]
+pub use crate::server::NamedService;
 pub use hyper::{Body, Uri};
 
 pub(crate) use self::service::executor::Executor;

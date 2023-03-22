@@ -81,7 +81,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic/0.8.0")]
+#![doc(html_root_url = "https://docs.rs/tonic/0.8.3")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -111,7 +111,7 @@ pub use async_trait::async_trait;
 
 #[doc(inline)]
 pub use codec::Streaming;
-pub use extensions::Extensions;
+pub use extensions::{Extensions, GrpcMethod};
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, Status};
@@ -122,3 +122,7 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 #[cfg(feature = "codegen")]
 #[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;
+
+/// `Result` is a type that represents either success ([`Ok`]) or failure ([`Err`]).
+/// By default, the Err value is of type [`Status`] but this can be overridden if desired.
+pub type Result<T, E = Status> = std::result::Result<T, E>;

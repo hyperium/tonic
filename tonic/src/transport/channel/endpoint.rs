@@ -7,14 +7,7 @@ use crate::transport::service::TlsConnector;
 use crate::transport::{service::SharedExec, Error, Executor};
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt,
-    future::Future,
-    pin::Pin,
-    str::FromStr,
-    time::Duration,
-};
+use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
 use tower::make::MakeConnection;
 // use crate::transport::E
 

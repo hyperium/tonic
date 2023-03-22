@@ -8,6 +8,7 @@ members = [
   "tonic-web", # Non-published crates
   "examples",
   "interop", # Tests
+  "tests/disable_comments",
   "tests/included_service",
   "tests/same_name",
   "tests/service_named_service",
@@ -21,4 +22,6 @@ members = [
   "tests/root-crate-path",
   "tests/compression",
   "tonic-web/tests/integration",
+  "tests/service_named_result",
 ]
+resolver = "2"

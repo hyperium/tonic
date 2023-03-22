@@ -42,7 +42,7 @@ impl<VE: ValueEncoding> MetadataKey<VE> {
         match HeaderName::from_bytes(src) {
             Ok(name) => {
                 if !VE::is_valid_key(name.as_str()) {
-                    panic!("invalid metadata key")
+                    return Err(InvalidMetadataKey::new());
                 }
 
                 Ok(MetadataKey {
@@ -247,7 +247,7 @@ impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for str {
     /// ```
     #[inline]
     fn eq(&self, other: &MetadataKey<VE>) -> bool {
-        (*other).inner == *self
+        other.inner == *self
     }
 }
 
@@ -282,3 +282,30 @@ impl Default for InvalidMetadataKey {
 }
 
 impl Error for InvalidMetadataKey {}
+
+#[cfg(test)]
+mod tests {
+    use super::{AsciiMetadataKey, BinaryMetadataKey};
+
+    #[test]
+    fn test_from_bytes_binary() {
+        assert!(BinaryMetadataKey::from_bytes(b"").is_err());
+        assert!(BinaryMetadataKey::from_bytes(b"\xFF").is_err());
+        assert!(BinaryMetadataKey::from_bytes(b"abc").is_err());
+        assert_eq!(
+            BinaryMetadataKey::from_bytes(b"abc-bin").unwrap().as_str(),
+            "abc-bin"
+        );
+    }
+
+    #[test]
+    fn test_from_bytes_ascii() {
+        assert!(AsciiMetadataKey::from_bytes(b"").is_err());
+        assert!(AsciiMetadataKey::from_bytes(b"\xFF").is_err());
+        assert_eq!(
+            AsciiMetadataKey::from_bytes(b"abc").unwrap().as_str(),
+            "abc"
+        );
+        assert!(AsciiMetadataKey::from_bytes(b"abc-bin").is_err());
+    }
+}

@@ -1,0 +1,13 @@
+syntax = "proto3";
+
+import "google/protobuf/empty.proto";
+
+package result;
+
+service Result {
+  rpc Listen(google.protobuf.Empty) returns (Reply) {}
+}
+
+message Reply {
+  int32 step = 1;
+}

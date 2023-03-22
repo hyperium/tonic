@@ -21,9 +21,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = GreeterServer::new(MyGreeter::default());
 
-    Server::builder()
+   Server::builder()
        .accept_http1(true)
-       .add_service(tonic_web::enable(greeter))
+       .layer(GrpcWebLayer::new())
+       .add_service(greeter)
        .serve(addr)
        .await?;
 

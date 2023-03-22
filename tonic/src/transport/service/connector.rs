@@ -3,8 +3,6 @@ use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
-#[cfg(feature = "tls-roots-common")]
-use std::convert::TryInto;
 use std::fmt;
 use std::task::{Context, Poll};
 use tower::make::MakeConnection;

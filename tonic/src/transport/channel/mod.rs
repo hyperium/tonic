@@ -83,7 +83,7 @@ impl Channel {
         Endpoint::from(uri)
     }
 
-    /// Create an `Endpoint` from a static string.
+    /// Create an [`Endpoint`] from a static string.
     ///
     /// ```
     /// # use tonic::transport::Channel;
@@ -94,7 +94,7 @@ impl Channel {
         Self::builder(uri)
     }
 
-    /// Create an `Endpoint` from shared bytes.
+    /// Create an [`Endpoint`] from shared bytes.
     ///
     /// ```
     /// # use tonic::transport::Channel;

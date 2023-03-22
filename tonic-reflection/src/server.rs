@@ -1,9 +1,9 @@
-use crate::proto::server_reflection_request::MessageRequest;
-use crate::proto::server_reflection_response::MessageResponse;
-pub use crate::proto::server_reflection_server::{ServerReflection, ServerReflectionServer};
-use crate::proto::{
-    FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest, ServerReflectionResponse,
-    ServiceResponse,
+use crate::pb::server_reflection_request::MessageRequest;
+use crate::pb::server_reflection_response::MessageResponse;
+pub use crate::pb::server_reflection_server::{ServerReflection, ServerReflectionServer};
+use crate::pb::{
+    ExtensionNumberResponse, FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest,
+    ServerReflectionResponse, ServiceResponse,
 };
 use prost::{DecodeError, Message};
 use prost_types::{
@@ -109,7 +109,7 @@ impl<'b> Builder<'b> {
     /// Build a gRPC Reflection Service to be served via Tonic.
     pub fn build(mut self) -> Result<ServerReflectionServer<impl ServerReflection>, Error> {
         if self.include_reflection_service {
-            self = self.register_encoded_file_descriptor_set(crate::proto::FILE_DESCRIPTOR_SET);
+            self = self.register_encoded_file_descriptor_set(crate::pb::FILE_DESCRIPTOR_SET);
         }
 
         for encoded in &self.encoded_file_descriptor_sets {
@@ -347,7 +347,11 @@ impl ServerReflection for ReflectionService {
                             Err(Status::not_found("extensions are not supported"))
                         }
                         MessageRequest::AllExtensionNumbersOfType(_) => {
-                            Err(Status::not_found("extensions are not supported"))
+                            // NOTE: Workaround. Some grpc clients (e.g. grpcurl) expect this method not to fail.
+                            // https://github.com/hyperium/tonic/issues/1077
+                            Ok(MessageResponse::AllExtensionNumbersResponse(
+                                ExtensionNumberResponse::default(),
+                            ))
                         }
                         MessageRequest::ListServices(_) => Ok(state.list_services()),
                     },

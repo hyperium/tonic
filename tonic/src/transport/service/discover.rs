@@ -36,6 +36,7 @@ impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
                     let mut http = hyper::client::connect::HttpConnector::new();
                     http.set_nodelay(endpoint.tcp_nodelay);
                     http.set_keepalive(endpoint.tcp_keepalive);
+                    http.set_connect_timeout(endpoint.connect_timeout);
                     http.enforce_http(false);
                     #[cfg(feature = "tls")]
                     let connector = service::connector(http, endpoint.tls.clone());

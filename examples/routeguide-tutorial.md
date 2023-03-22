@@ -825,7 +825,7 @@ fn main() {
 }
 ```
 
-On `cargo run`, this will generate code for the client only, and place the resulting file in
+On `cargo run`, this will generate code for the server only, and place the resulting file in
 `another_crate/src/pb`.
 
 2) Similarly, we could also keep the `.proto` definitions in a separate crate and then use that

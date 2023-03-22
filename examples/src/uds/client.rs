@@ -5,7 +5,6 @@ pub mod hello_world {
 }
 
 use hello_world::{greeter_client::GreeterClient, HelloRequest};
-use std::convert::TryFrom;
 #[cfg(unix)]
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};

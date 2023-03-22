@@ -7,6 +7,7 @@ use std::fmt;
 ///
 /// [`Interceptor`]: crate::service::Interceptor
 /// [`Request`]: crate::Request
+#[derive(Default)]
 pub struct Extensions {
     inner: http::Extensions,
 }
@@ -58,8 +59,9 @@ impl Extensions {
         Self { inner: http }
     }
 
+    /// Convert to `http::Extensions` and consume self.
     #[inline]
-    pub(crate) fn into_http(self) -> http::Extensions {
+    pub fn into_http(self) -> http::Extensions {
         self.inner
     }
 }
@@ -67,5 +69,29 @@ impl Extensions {
 impl fmt::Debug for Extensions {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Extensions").finish()
+    }
+}
+
+/// A gRPC Method info extension.
+#[derive(Debug)]
+pub struct GrpcMethod {
+    service: &'static str,
+    method: &'static str,
+}
+
+impl GrpcMethod {
+    /// Create a new `GrpcMethod` extension.
+    #[doc(hidden)]
+    pub fn new(service: &'static str, method: &'static str) -> Self {
+        Self { service, method }
+    }
+
+    /// gRPC service name
+    pub fn service(&self) -> &str {
+        self.service
+    }
+    /// gRPC method name
+    pub fn method(&self) -> &str {
+        self.method
     }
 }
