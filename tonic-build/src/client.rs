@@ -272,8 +272,12 @@ fn generate_server_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+<<<<<<< HEAD
     let ident = format_ident!("{}", sanitize_name(method.name()));
 
+=======
+    let ident = format_ident!("{}", method.name());
+>>>>>>> fork/master
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -304,8 +308,12 @@ fn generate_client_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+<<<<<<< HEAD
     let ident = format_ident!("{}", sanitize_name(method.name()));
 
+=======
+    let ident = format_ident!("{}", method.name());
+>>>>>>> fork/master
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -336,8 +344,12 @@ fn generate_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+<<<<<<< HEAD
     let ident = format_ident!("{}", sanitize_name(method.name()));
 
+=======
+    let ident = format_ident!("{}", method.name());
+>>>>>>> fork/master
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
