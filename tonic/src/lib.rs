@@ -53,6 +53,14 @@
 //! to build even more feature rich clients and servers. This module also provides the ability to
 //! enable TLS using [`rustls`], via the `tls` feature flag.
 //!
+//! # Code generated client/server configuration
+//!
+//! ## Max Message Size
+//!
+//! Currently, both servers and clients can be configured to set the max message encoding and
+//! decoding size. This will ensure that an incoming gRPC message will not exahust the systems
+//! memory. By default, the decoding message limit is `4MB` and the encoding limit is `usize::MAX`.
+//!
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
 //! [`tokio`]: https://docs.rs/tokio
