@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .concurrency_limit(30);
 
     if matches.use_tls {
-        let pem = tokio::fs::read("interop/data/ca.pem").await?;
+        let pem = std::fs::read_to_string("interop/data/ca.pem")?;
         let ca = Certificate::from_pem(pem);
         endpoint = endpoint.tls_config(
             ClientTlsConfig::new()
