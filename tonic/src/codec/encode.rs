@@ -1,5 +1,5 @@
 use super::compression::{compress, CompressionEncoding, SingleMessageCompressionOverride};
-use super::{EncodeBuf, Encoder, DEFAULT_MAX_MESSAGE_SIZE, HEADER_SIZE};
+use super::{EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use futures_core::{Stream, TryStream};
@@ -141,7 +141,7 @@ fn finish_encoding(
     buf: &mut BytesMut,
 ) -> Result<Bytes, Status> {
     let len = buf.len() - HEADER_SIZE;
-    let limit = max_message_size.unwrap_or(DEFAULT_MAX_MESSAGE_SIZE);
+    let limit = max_message_size.unwrap_or(DEFAULT_MAX_SEND_MESSAGE_SIZE);
     if len > limit {
         return Err(Status::new(
             Code::OutOfRange,

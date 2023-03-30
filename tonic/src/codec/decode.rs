@@ -1,5 +1,5 @@
 use super::compression::{decompress, CompressionEncoding};
-use super::{DecodeBuf, Decoder, DEFAULT_MAX_MESSAGE_SIZE, HEADER_SIZE};
+use super::{DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -174,7 +174,9 @@ impl StreamingInner {
             };
 
             let len = self.buf.get_u32() as usize;
-            let limit = self.max_message_size.unwrap_or(DEFAULT_MAX_MESSAGE_SIZE);
+            let limit = self
+                .max_message_size
+                .unwrap_or(DEFAULT_MAX_RECV_MESSAGE_SIZE);
             if len > limit {
                 return Err(Status::new(
                     Code::OutOfRange,
