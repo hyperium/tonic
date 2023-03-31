@@ -203,6 +203,40 @@ impl<T> Request<T> {
         }
     }
 
+    /// Get the local address of this connection.
+    ///
+    /// This will return `None` if the `IO` type used
+    /// does not implement `Connected` or when using a unix domain socket.
+    /// This currently only works on the server side.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        #[cfg(feature = "transport")]
+        {
+            #[cfg(feature = "tls")]
+            {
+                self.extensions()
+                    .get::<TcpConnectInfo>()
+                    .and_then(|i| i.local_addr())
+                    .or_else(|| {
+                        self.extensions()
+                            .get::<TlsConnectInfo<TcpConnectInfo>>()
+                            .and_then(|i| i.get_ref().local_addr())
+                    })
+            }
+
+            #[cfg(not(feature = "tls"))]
+            {
+                self.extensions()
+                    .get::<TcpConnectInfo>()
+                    .and_then(|i| i.local_addr())
+            }
+        }
+
+        #[cfg(not(feature = "transport"))]
+        {
+            None
+        }
+    }
+
     /// Get the remote address of this connection.
     ///
     /// This will return `None` if the `IO` type used
