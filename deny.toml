@@ -15,9 +15,9 @@ deny = [
     { name = "term" },
 ]
 skip-tree = [
-    { name = "rustls-pemfile" },
     { name = "windows-sys" },
     { name = "hermit-abi" },
+    { name = "base64" },
     { name = "syn" },
 ]
 
