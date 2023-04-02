@@ -128,14 +128,15 @@ impl TlsAcceptor {
                 use tokio_rustls::rustls::server::AllowAnyAnonymousOrAuthenticatedClient;
                 let mut roots = RootCertStore::empty();
                 rustls_keys::add_certs_from_pem(std::io::Cursor::new(&cert.pem[..]), &mut roots)?;
-                builder
-                    .with_client_cert_verifier(AllowAnyAnonymousOrAuthenticatedClient::new(roots))
+                builder.with_client_cert_verifier(
+                    AllowAnyAnonymousOrAuthenticatedClient::new(roots).boxed(),
+                )
             }
             (Some(cert), false) => {
                 use tokio_rustls::rustls::server::AllowAnyAuthenticatedClient;
                 let mut roots = RootCertStore::empty();
                 rustls_keys::add_certs_from_pem(std::io::Cursor::new(&cert.pem[..]), &mut roots)?;
-                builder.with_client_cert_verifier(AllowAnyAuthenticatedClient::new(roots))
+                builder.with_client_cert_verifier(AllowAnyAuthenticatedClient::new(roots).boxed())
             }
         };
 
