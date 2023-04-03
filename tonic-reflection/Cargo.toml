@@ -9,7 +9,7 @@ Server Reflection module of `tonic` gRPC implementation.
 """
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
-documentation = "https://docs.rs/tonic-reflection/0.9.0/tonic-reflection/"
+documentation = "https://docs.rs/tonic-reflection/0.9.0"
 keywords = ["rpc", "grpc", "async", "reflection"]
 license = "MIT"
 name = "tonic-reflection"
