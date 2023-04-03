@@ -1,3 +1,9 @@
+# [v0.9.1](https://github.com/hyperium/tonic/compare/v0.9.0...v0.9.1) (2023-04-03)
+
+### Features
+
+- **transport:** Update `rustls` to `0.21` ([#1340](https://github.com/hyperium/tonic/pull/1340))
+
 # [v0.9.0](https://github.com/hyperium/tonic/compare/v0.8.4...v0.9.0) (2023-03-31)
 
 All tonic-* crates owned by this repository will now be versioned together to
