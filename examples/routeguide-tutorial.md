@@ -174,7 +174,7 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.8"
+tonic = "0.9"
 prost = "0.11"
 futures-core = "0.3"
 futures-util = "0.3"
@@ -187,7 +187,7 @@ serde_json = "1.0"
 rand = "0.7"
 
 [build-dependencies]
-tonic-build = "0.8"
+tonic-build = "0.9"
 ```
 
 Create a `build.rs` file at the root of your crate:
