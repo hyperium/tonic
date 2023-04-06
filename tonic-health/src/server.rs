@@ -155,6 +155,7 @@ impl Health for HealthService {
             let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
             yield HealthCheckResponse { status };
 
+            #[allow(clippy::redundant_pattern_matching)]
             while let Ok(_) = status_rx.changed().await {
                 let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
                 yield HealthCheckResponse { status };
