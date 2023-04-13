@@ -1,8 +1,10 @@
 use super::{client, server, Attributes};
 use proc_macro2::TokenStream;
 use prost_build::{Config, Method, Service};
+use prost_reflect_build::Builder as ProstBuilder;
 use quote::ToTokens;
 use std::{
+    borrow::BorrowMut,
     ffi::OsString,
     io,
     path::{Path, PathBuf},
@@ -16,6 +18,7 @@ pub fn configure() -> Builder {
         build_client: true,
         build_server: true,
         file_descriptor_set_path: None,
+        descriptor_pool: None,
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
@@ -215,6 +218,7 @@ pub struct Builder {
     pub(crate) build_client: bool,
     pub(crate) build_server: bool,
     pub(crate) file_descriptor_set_path: Option<PathBuf>,
+    pub(crate) descriptor_pool: Option<String>,
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
@@ -255,6 +259,13 @@ impl Builder {
     /// Defaults to the `OUT_DIR` environment variable.
     pub fn out_dir(mut self, out_dir: impl AsRef<Path>) -> Self {
         self.out_dir = Some(out_dir.as_ref().to_path_buf());
+        self
+    }
+
+    /// Set the variable name that will be used for the descriptor pool when generating
+    /// reflection builds
+    pub fn descriptor_pool_name(mut self, name: impl Into<String>) -> Self {
+        self.descriptor_pool = Some(name.into());
         self
     }
 
@@ -411,6 +422,12 @@ impl Builder {
             PathBuf::from(std::env::var("OUT_DIR").unwrap())
         };
 
+        let mut reflect_builder = self.descriptor_pool.as_ref().map(|name| {
+            let mut builder = ProstBuilder::new();
+            builder.descriptor_pool(name);
+            builder
+        });
+
         config.out_dir(out_dir);
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
@@ -450,7 +467,11 @@ impl Builder {
 
         config.service_generator(self.service_generator());
 
-        config.compile_protos(protos, includes)?;
+        if let Some(builder) = reflect_builder.borrow_mut() {
+            builder.compile_protos_with_config(config, protos, includes)?;
+        } else {
+            config.compile_protos(protos, includes)?;
+        }
 
         Ok(())
     }
