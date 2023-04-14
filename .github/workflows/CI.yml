@@ -7,6 +7,16 @@ on:
   pull_request: {}
 
 jobs:
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: hecrj/setup-rust-action@v1
+      with:
+        components: rustfmt
+    - run: cargo fmt --all --check
+
   check:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -21,7 +31,6 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-        components: rustfmt
     - uses: actions/checkout@v3
     - name: Install cargo-hack
       uses: baptiste0928/cargo-install@v1
@@ -36,8 +45,6 @@ jobs:
       with:
         repo-token: ${{ secrets.GITHUB_TOKEN }}
     - uses: Swatinem/rust-cache@v2
-    - name: Check fmt
-      run: cargo fmt -- --check
     - name: Check unused dependencies
       run: cargo machete
     - name: Check features
@@ -104,7 +111,6 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-        components: rustfmt
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
@@ -129,7 +135,6 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-        components: rustfmt
     - uses: actions/checkout@v3
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
