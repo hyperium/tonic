@@ -1,29 +1,31 @@
-use clap::{ArgAction, Parser};
 use interop::client;
-use std::time::Duration;
+use std::{str::FromStr, time::Duration};
 use tonic::transport::Endpoint;
 use tonic::transport::{Certificate, ClientTlsConfig};
 
-#[derive(Parser)]
+#[derive(Debug)]
 struct Opts {
-    #[clap(name = "use_tls", long, action = ArgAction::SetTrue)]
     use_tls: bool,
-
-    #[arg(
-        long = "test_case",
-        use_value_delimiter = true,
-        num_args(1..),
-        value_enum,
-        action = ArgAction::Append
-    )]
     test_case: Vec<Testcase>,
+}
+
+impl Opts {
+    fn parse() -> Result<Self, pico_args::Error> {
+        let mut pargs = pico_args::Arguments::from_env();
+        Ok(Self {
+            use_tls: pargs.contains("--use_tls"),
+            test_case: pargs.value_from_fn("--test_case", |test_case| {
+                test_case.split(',').map(Testcase::from_str).collect()
+            })?,
+        })
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     interop::trace_init();
 
-    let matches = Opts::parse();
+    let matches = Opts::parse()?;
 
     let test_cases = matches.test_case;
 
@@ -33,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .concurrency_limit(30);
 
     if matches.use_tls {
-        let pem = tokio::fs::read("interop/data/ca.pem").await?;
+        let pem = std::fs::read_to_string("interop/data/ca.pem")?;
         let ca = Certificate::from_pem(pem);
         endpoint = endpoint.tls_config(
             ClientTlsConfig::new()
@@ -99,8 +101,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[derive(Debug, Copy, Clone, clap::ValueEnum)]
-#[clap(rename_all = "snake_case")]
+#[derive(Debug, strum::EnumString)]
+#[strum(serialize_all = "snake_case")]
 enum Testcase {
     EmptyUnary,
     CacheableUnary,

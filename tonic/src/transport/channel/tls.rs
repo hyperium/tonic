@@ -7,8 +7,6 @@ use http::Uri;
 use std::fmt;
 
 /// Configures TLS settings for endpoints.
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Clone, Default)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
@@ -16,7 +14,6 @@ pub struct ClientTlsConfig {
     identity: Option<Identity>,
 }
 
-#[cfg(feature = "tls")]
 impl fmt::Debug for ClientTlsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientTlsConfig")
@@ -27,7 +24,6 @@ impl fmt::Debug for ClientTlsConfig {
     }
 }
 
-#[cfg(feature = "tls")]
 impl ClientTlsConfig {
     /// Creates a new `ClientTlsConfig` using Rustls.
     pub fn new() -> Self {

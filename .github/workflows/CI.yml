@@ -27,6 +27,10 @@ jobs:
       uses: baptiste0928/cargo-install@v1
       with:
         crate: cargo-hack
+    - name: Install cargo-machete
+      uses: baptiste0928/cargo-install@v1
+      with:
+        crate: cargo-machete
     - name: Install Protoc
       uses: arduino/setup-protoc@v1
       with:
@@ -34,6 +38,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Check fmt
       run: cargo fmt -- --check
+    - name: Check unused dependencies
+      run: cargo machete
     - name: Check features
       run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
@@ -58,27 +64,6 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: cargo doc
       run: cargo doc --workspace --no-deps --exclude examples
-
-  clippy:
-    name: cargo clippy
-    runs-on: ubuntu-latest
-
-    env:
-      RUSTFLAGS: "-A unknown_lints -D warnings"
-
-    steps:
-    - uses: actions/checkout@v3
-    - uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: "1.60"
-        components: clippy
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
-      with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
-    - uses: Swatinem/rust-cache@v2
-    - name: Run cargo clippy
-      run: cargo clippy --workspace --all-targets --all-features
 
   deny-check:
     name: cargo-deny check

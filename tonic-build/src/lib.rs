@@ -70,7 +70,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.8.4")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.9.1")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -197,16 +197,28 @@ impl Attributes {
     }
 }
 
-fn format_method_name<T: Service>(
-    package: &str,
-    service: &T,
-    method: &<T as Service>::Method,
-) -> String {
+fn format_service_name<T: Service>(service: &T, emit_package: bool) -> String {
+    let package = if emit_package { service.package() } else { "" };
     format!(
-        "{}{}{}.{}",
+        "{}{}{}",
         package,
         if package.is_empty() { "" } else { "." },
         service.identifier(),
+    )
+}
+
+fn format_method_path<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
+    format!(
+        "/{}/{}",
+        format_service_name(service, emit_package),
+        method.identifier()
+    )
+}
+
+fn format_method_name<T: Service>(service: &T, method: &T::Method, emit_package: bool) -> String {
+    format!(
+        "{}.{}",
+        format_service_name(service, emit_package),
         method.identifier()
     )
 }

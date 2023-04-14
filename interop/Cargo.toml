@@ -16,8 +16,8 @@ path = "src/bin/server.rs"
 
 [dependencies]
 async-stream = "0.3"
-clap = {version = ">=4.0.26, <4.1", features = ["derive"]}
-clap_lex = "=0.3.0"             # keeps msrv to 1.60
+strum = {version = "0.24", features = ["derive"]}
+pico-args = {version = "0.5", features = ["eq-separator"]}
 console = "0.15"
 futures-core = "0.3"
 futures-util = "0.3"
@@ -25,8 +25,7 @@ http = "0.2"
 http-body = "0.4.2"
 hyper = "0.14"
 prost = "0.11"
-prost-derive = "0.11"
-tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros", "fs"]}
+tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
 tonic = {path = "../tonic", features = ["tls"]}
 tower = {version = "0.4"}
@@ -36,3 +35,6 @@ tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 
 [build-dependencies]
 tonic-build = {path = "../tonic-build", features = ["prost"]}
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]

@@ -12,3 +12,6 @@ version = "0.1.0"
 prost = "0.11"
 [build-dependencies]
 prost-build = "0.11.6"
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]

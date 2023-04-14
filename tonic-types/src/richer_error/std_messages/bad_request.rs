@@ -42,8 +42,10 @@ impl BadRequest {
     pub const TYPE_URL: &'static str = "type.googleapis.com/google.rpc.BadRequest";
 
     /// Creates a new [`BadRequest`] struct.
-    pub fn new(field_violations: Vec<FieldViolation>) -> Self {
-        BadRequest { field_violations }
+    pub fn new(field_violations: impl Into<Vec<FieldViolation>>) -> Self {
+        BadRequest {
+            field_violations: field_violations.into(),
+        }
     }
 
     /// Creates a new [`BadRequest`] struct with a single [`FieldViolation`] in

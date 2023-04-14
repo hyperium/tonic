@@ -1,23 +1,26 @@
 [package]
-authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+authors = [
+  "Lucio Franco <luciofranco14@gmail.com>",
+  "Rafael Lemos <flemos.rafael.dev@gmail.com>"
+]
 categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A collection of useful protobuf types that can be used with `tonic`.
 """
-documentation = "https://docs.rs/tonic-types/0.5.0/tonic-types/"
+documentation = "https://docs.rs/tonic-types/0.9.1"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "protobuf"]
 license = "MIT"
 name = "tonic-types"
-readme = "../README.md"
+readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.6.1"
+version = "0.9.1"
 
 [dependencies]
 prost = "0.11"
 prost-types = "0.11"
-tonic = {version = "0.8", path = "../tonic"}
+tonic = {version = "0.9", path = "../tonic", default-features = false}
 
 [dev-dependencies]
-tonic-build = {version = "0.8", path = "../tonic-build", features = ["prost", "cleanup-markdown"]}
+tonic-build = {version = "0.9", path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"]}
