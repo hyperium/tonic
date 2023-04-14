@@ -430,7 +430,11 @@ impl Builder {
 
         config.out_dir(out_dir);
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
-            config.file_descriptor_set_path(path);
+            if let Some(builder) = reflect_builder.borrow_mut() {
+                builder.file_descriptor_set_path(path);
+            } else {
+                config.file_descriptor_set_path(path);
+            }
         }
         for (proto_path, rust_path) in self.extern_path.iter() {
             config.extern_path(proto_path, rust_path);
