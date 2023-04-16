@@ -1,5 +1,5 @@
 use bytes::buf::UninitSlice;
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 /// A specialized buffer to decode gRPC messages from.
 #[derive(Debug)]
@@ -43,6 +43,13 @@ impl Buf for DecodeBuf<'_> {
         self.buf.advance(cnt);
         self.len -= cnt;
     }
+
+    #[inline]
+    fn copy_to_bytes(&mut self, len: usize) -> Bytes {
+        assert!(len <= self.len);
+        self.len -= len;
+        self.buf.copy_to_bytes(len)
+    }
 }
 
 impl<'a> EncodeBuf<'a> {
@@ -77,6 +84,19 @@ unsafe impl BufMut for EncodeBuf<'_> {
     #[inline]
     fn chunk_mut(&mut self) -> &mut UninitSlice {
         self.buf.chunk_mut()
+    }
+
+    #[inline]
+    fn put<T: Buf>(&mut self, src: T)
+    where
+        Self: Sized,
+    {
+        self.buf.put(src)
+    }
+
+    #[inline]
+    fn put_slice(&mut self, src: &[u8]) {
+        self.buf.put_slice(src)
     }
 }
 
