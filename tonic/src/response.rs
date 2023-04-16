@@ -129,15 +129,17 @@ impl<T> Response<T> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::MetadataValue;
+    use crate::metadata::{MetadataKey, MetadataValue};
 
     #[test]
     fn reserved_headers_are_excluded() {
         let mut r = Response::new(1);
 
         for header in &MetadataMap::GRPC_RESERVED_HEADERS {
-            r.metadata_mut()
-                .insert(*header, MetadataValue::from_static("invalid"));
+            r.metadata_mut().insert(
+                MetadataKey::unchecked_from_header_name(header.clone()),
+                MetadataValue::from_static("invalid"),
+            );
         }
 
         let http_response = r.into_http();

@@ -467,7 +467,7 @@ pub(crate) enum SanitizeHeaders {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::MetadataValue;
+    use crate::metadata::{MetadataKey, MetadataValue};
     use http::Uri;
 
     #[test]
@@ -475,8 +475,10 @@ mod tests {
         let mut r = Request::new(1);
 
         for header in &MetadataMap::GRPC_RESERVED_HEADERS {
-            r.metadata_mut()
-                .insert(*header, MetadataValue::from_static("invalid"));
+            r.metadata_mut().insert(
+                MetadataKey::unchecked_from_header_name(header.clone()),
+                MetadataValue::from_static("invalid"),
+            );
         }
 
         let http_request = r.into_http(
