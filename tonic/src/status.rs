@@ -2,7 +2,10 @@ use crate::body::BoxBody;
 use crate::metadata::MetadataMap;
 use base64::Engine as _;
 use bytes::Bytes;
-use http::header::{HeaderMap, HeaderValue};
+use http::{
+    header::{HeaderMap, HeaderValue},
+    HeaderName,
+};
 use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
 use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 use tracing::{debug, trace, warn};
@@ -18,9 +21,9 @@ const ENCODING_SET: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-const GRPC_STATUS_HEADER_CODE: &str = "grpc-status";
-const GRPC_STATUS_MESSAGE_HEADER: &str = "grpc-message";
-const GRPC_STATUS_DETAILS_HEADER: &str = "grpc-status-details-bin";
+const GRPC_STATUS_HEADER_CODE: HeaderName = HeaderName::from_static("grpc-status");
+const GRPC_STATUS_MESSAGE_HEADER: HeaderName = HeaderName::from_static("grpc-message");
+const GRPC_STATUS_DETAILS_HEADER: HeaderName = HeaderName::from_static("grpc-status-details-bin");
 
 /// A gRPC status describing the result of an RPC call.
 ///
