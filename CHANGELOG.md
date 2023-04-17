@@ -1,3 +1,10 @@
+# [v0.9.2](https://github.com/hyperium/tonic/compare/v0.9.1...v0.9.2) (2023-04-17)
+
+### Features
+
+- **build:**: Support boxing fields ([#1252](https://github.com/hyperium/tonic/pull/1252))
+
+
 # [v0.9.1](https://github.com/hyperium/tonic/compare/v0.9.0...v0.9.1) (2023-04-03)
 
 ### Features
