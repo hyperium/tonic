@@ -11,6 +11,8 @@ message Output {}
 
 service Test1 {
   rpc UnaryCall(Input1) returns (Output1);
+
+  rpc StreamCall(Input1) returns (stream Output1);
 }
 
 message Input1 {
