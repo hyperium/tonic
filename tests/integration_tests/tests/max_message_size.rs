@@ -1,3 +1,6 @@
+use std::pin::Pin;
+
+use futures::{stream, Stream};
 use integration_tests::{
     pb::{test1_client, test1_server, Input1, Output1},
     trace_init,
@@ -110,6 +113,81 @@ fn max_message_send_size() {
     });
 }
 
+#[tokio::test]
+async fn response_stream_limit() {
+    let client_blob = vec![0; 1];
+
+    let (client, server) = tokio::io::duplex(1024);
+
+    struct Svc;
+
+    #[tonic::async_trait]
+    impl test1_server::Test1 for Svc {
+        async fn unary_call(&self, _req: Request<Input1>) -> Result<Response<Output1>, Status> {
+            unimplemented!()
+        }
+
+        type StreamCallStream =
+            Pin<Box<dyn Stream<Item = Result<Output1, Status>> + Send + 'static>>;
+
+        async fn stream_call(
+            &self,
+            _req: Request<Input1>,
+        ) -> Result<Response<Self::StreamCallStream>, Status> {
+            let blob = Output1 {
+                buf: vec![0; 6877902],
+            };
+            let stream = stream::iter(vec![Ok(blob.clone()), Ok(blob.clone())]);
+
+            Ok(Response::new(Box::pin(stream)))
+        }
+    }
+
+    let svc = test1_server::Test1Server::new(Svc);
+
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .await
+            .unwrap();
+    });
+
+    // Move client to an option so we can _move_ the inner value
+    // on the first attempt to connect. All other attempts will fail.
+    let mut client = Some(client);
+    let channel = Endpoint::try_from("http://[::]:50051")
+        .unwrap()
+        .connect_with_connector(tower::service_fn(move |_| {
+            let client = client.take();
+
+            async move {
+                if let Some(client) = client {
+                    Ok(client)
+                } else {
+                    Err(std::io::Error::new(
+                        std::io::ErrorKind::Other,
+                        "Client already taken",
+                    ))
+                }
+            }
+        }))
+        .await
+        .unwrap();
+
+    let client = test1_client::Test1Client::new(channel);
+
+    let mut client = client.max_decoding_message_size(6877902 + 5);
+
+    let req = Request::new(Input1 {
+        buf: client_blob.clone(),
+    });
+
+    let mut stream = client.stream_call(req).await.unwrap().into_inner();
+
+    while let Some(_b) = stream.message().await.unwrap() {}
+}
+
 // Track caller doesn't work on async fn so we extract the async part
 // into a sync version and assert the response there using track track_caller
 // so that when this does panic it tells us which line in the test failed not
@@ -209,6 +287,16 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
             Ok(Response::new(Output1 {
                 buf: self.0.clone(),
             }))
+        }
+
+        type StreamCallStream =
+            Pin<Box<dyn Stream<Item = Result<Output1, Status>> + Send + 'static>>;
+
+        async fn stream_call(
+            &self,
+            _req: Request<Input1>,
+        ) -> Result<Response<Self::StreamCallStream>, Status> {
+            unimplemented!()
         }
     }
 
