@@ -40,10 +40,10 @@ jobs:
       uses: baptiste0928/cargo-install@v1
       with:
         crate: cargo-machete
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
     - name: Check unused dependencies
       run: cargo machete
@@ -61,10 +61,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: "1.60"
@@ -88,10 +88,10 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: "1.60"
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - name: Check
       run: cargo check --all --all-targets --all-features
 
@@ -111,10 +111,10 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
     - uses: actions/checkout@v3
     - name: Run tests
@@ -136,10 +136,10 @@ jobs:
       with:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@v3
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh
