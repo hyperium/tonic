@@ -389,7 +389,11 @@ pub mod server_reflection_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                (*inner).server_reflection_info(request).await
+                                <T as ServerReflection>::server_reflection_info(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
                             };
                             Box::pin(fut)
                         }

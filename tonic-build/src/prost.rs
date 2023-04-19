@@ -37,6 +37,7 @@ pub fn configure() -> Builder {
         include_file: None,
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
         disable_comments: HashSet::default(),
+        use_arc_self: false,
     }
 }
 
@@ -170,6 +171,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .compile_well_known_types(self.builder.compile_well_known_types)
                 .attributes(self.builder.server_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
+                .use_arc_self(self.builder.use_arc_self)
                 .generate_server(&service, &self.builder.proto_path);
 
             self.servers.extend(server);
@@ -242,6 +244,7 @@ pub struct Builder {
     pub(crate) include_file: Option<PathBuf>,
     pub(crate) emit_rerun_if_changed: bool,
     pub(crate) disable_comments: HashSet<String>,
+    pub(crate) use_arc_self: bool,
 
     out_dir: Option<PathBuf>,
 }
@@ -408,6 +411,12 @@ impl Builder {
     /// Disable service and rpc comments emission.
     pub fn disable_comments(mut self, path: impl AsRef<str>) -> Self {
         self.disable_comments.insert(path.as_ref().to_string());
+        self
+    }
+
+    /// Emit `Arc<Self>` receiver type in server traits instead of `&self`.
+    pub fn use_arc_self(mut self, enable: bool) -> Self {
+        self.use_arc_self = enable;
         self
     }
 
