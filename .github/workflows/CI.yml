@@ -23,6 +23,9 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
+        include:
+        - os: windows-latest
+          option: --exclude-features uds
     steps:
     - uses: actions/checkout@v3
     - uses: dtolnay/rust-toolchain@nightly
@@ -33,7 +36,7 @@ jobs:
       with:
         tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --ignore-private --each-feature
+    - run: cargo hack udeps --workspace --each-feature ${{ matrix.option }}
 
   check:
     runs-on: ${{ matrix.os }}
