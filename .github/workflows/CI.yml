@@ -17,6 +17,24 @@ jobs:
         components: rustfmt
     - run: cargo fmt --all --check
 
+  udeps:
+    name: Check unused dependencies
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v3
+    - uses: dtolnay/rust-toolchain@nightly
+    - uses: taiki-e/install-action@cargo-hack
+    - uses: taiki-e/install-action@cargo-udeps
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@3.20.3
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo hack udeps --workspace --ignore-private --each-feature
+
   check:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -36,17 +54,11 @@ jobs:
       uses: baptiste0928/cargo-install@v1
       with:
         crate: cargo-hack
-    - name: Install cargo-machete
-      uses: baptiste0928/cargo-install@v1
-      with:
-        crate: cargo-machete
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
         tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
-    - name: Check unused dependencies
-      run: cargo machete
     - name: Check features
       run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
