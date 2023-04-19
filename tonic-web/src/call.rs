@@ -155,15 +155,16 @@ impl<B> GrpcWebCall<B> {
     }
 }
 
-impl<B> GrpcWebCall<B>
+impl<B, D> GrpcWebCall<B>
 where
-    B: Body<Data = Bytes>,
+    B: Body<Data = D>,
     B::Error: Error,
+    D: Buf,
 {
     fn poll_decode(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<B::Data, Status>>> {
+    ) -> Poll<Option<Result<Bytes, Status>>> {
         match self.encoding {
             Encoding::Base64 => loop {
                 if let Some(bytes) = self.as_mut().decode_chunk()? {
@@ -186,7 +187,10 @@ where
             },
 
             Encoding::None => match ready!(self.project().inner.poll_data(cx)) {
-                Some(res) => Poll::Ready(Some(res.map_err(internal_error))),
+                Some(res) => Poll::Ready(Some(
+                    res.map(|mut d| d.copy_to_bytes(d.remaining()))
+                        .map_err(internal_error),
+                )),
                 None => Poll::Ready(None),
             },
         }
@@ -195,15 +199,18 @@ where
     fn poll_encode(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<B::Data, Status>>> {
+    ) -> Poll<Option<Result<Bytes, Status>>> {
         let mut this = self.as_mut().project();
 
-        if let Some(mut res) = ready!(this.inner.as_mut().poll_data(cx)) {
-            if *this.encoding == Encoding::Base64 {
-                res = res.map(|b| crate::util::base64::STANDARD.encode(b).into())
-            }
+        if let Some(res) = ready!(this.inner.as_mut().poll_data(cx)) {
+            let res = res.map(|mut d| d.copy_to_bytes(d.remaining()));
+            let bytes = if *this.encoding == Encoding::Base64 {
+                res.map(|b| crate::util::base64::STANDARD.encode(b).into())
+            } else {
+                res
+            };
 
-            return Poll::Ready(Some(res.map_err(internal_error)));
+            return Poll::Ready(Some(bytes.map_err(internal_error)));
         }
 
         // this flag is needed because the inner stream never
@@ -229,10 +236,11 @@ where
     }
 }
 
-impl<B> Body for GrpcWebCall<B>
+impl<B, D> Body for GrpcWebCall<B>
 where
-    B: Body<Data = Bytes>,
+    B: Body<Data = D>,
     B::Error: Error,
+    D: Buf,
 {
     type Data = Bytes;
     type Error = Status;

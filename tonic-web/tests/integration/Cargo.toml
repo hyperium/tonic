@@ -7,6 +7,7 @@ version = "0.1.0"
 license = "MIT"
 
 [dependencies]
+axum = { version = "0.6.9" }
 base64 = "0.21"
 bytes = "1.0"
 hyper = "0.14"
@@ -17,6 +18,7 @@ tonic = { path = "../../../tonic" }
 
 [dev-dependencies]
 tonic-web = { path = "../../../tonic-web" }
+tower = { version = "0.4", features = ["util"] }
 
 [build-dependencies]
 tonic-build = { path = "../../../tonic-build" }
