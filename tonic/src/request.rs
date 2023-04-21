@@ -17,6 +17,15 @@ pub struct Request<T> {
     extensions: Extensions,
 }
 
+impl<T> std::ops::Deref for Request<T> {
+    type Target = T;
+
+    /// Returns a reference to the inner message of the request. This is equivalent
+    fn deref(&self) -> &Self::Target {
+        &self.message
+    }
+}
+
 /// Trait implemented by RPC request types.
 ///
 /// Types implementing this trait can be used as arguments to client RPC
@@ -507,5 +516,11 @@ mod tests {
         let one_hour = Duration::from_secs(60 * 60);
         let value = duration_to_grpc_timeout(one_hour);
         assert_eq!(value, format!("{}m", one_hour.as_millis()));
+    }
+
+    #[test]
+    fn deref_for_mesage() {
+        let req = Request::new("hello");
+        assert_eq!(*req, "hello");
     }
 }
