@@ -194,7 +194,7 @@ impl<L> Server<L> {
     ///
     /// Default is 65,535
     ///
-    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    /// [spec]: https://httpwg.org/specs/rfc9113.html#SettingValues
     #[must_use]
     pub fn initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> Self {
         Server {
@@ -219,7 +219,7 @@ impl<L> Server<L> {
     ///
     /// Default is no limit (`None`).
     ///
-    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_MAX_CONCURRENT_STREAMS
+    /// [spec]: https://httpwg.org/specs/rfc9113.html#SettingValues
     #[must_use]
     pub fn max_concurrent_streams(self, max: impl Into<Option<u32>>) -> Self {
         Server {
@@ -295,12 +295,13 @@ impl<L> Server<L> {
             ..self
         }
     }
-
-    /// Sets the maximum frame size to use for HTTP2.
+    /// Sets the [`SETTINGS_MAX_FRAME_SIZE`][spec] to use for HTTP2.
     ///
     /// Passing `None` will do nothing.
     ///
     /// If not set, will default from underlying transport.
+    ///
+    /// [spec]: https://httpwg.org/specs/rfc9113.html#SettingValues
     #[must_use]
     pub fn max_frame_size(self, frame_size: impl Into<Option<u32>>) -> Self {
         Server {
