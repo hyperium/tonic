@@ -1,19 +1,40 @@
 use super::*;
-use http_body::Body as _;
+use http_body::Body;
 use tonic::codec::CompressionEncoding;
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_enabled_server_enabled() {
+util::parametrized_tests! {
+    client_enabled_server_enabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc =
-        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
+    let svc = test_server::TestServer::new(Svc::default()).accept_compressed(encoding);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
-    fn assert_right_encoding<B>(req: http::Request<B>) -> http::Request<B> {
-        assert_eq!(req.headers().get("grpc-encoding").unwrap(), "gzip");
-        req
+    #[derive(Clone)]
+    pub struct AssertRightEncoding {
+        encoding: CompressionEncoding,
+    }
+
+    #[allow(dead_code)]
+    impl AssertRightEncoding {
+        pub fn new(encoding: CompressionEncoding) -> Self {
+            Self { encoding }
+        }
+
+        pub fn call<B: Body>(self, req: http::Request<B>) -> http::Request<B> {
+            assert_eq!(
+                req.headers().get("grpc-encoding").unwrap(),
+                self.encoding.as_str()
+            );
+
+            req
+        }
     }
 
     tokio::spawn({
@@ -24,7 +45,9 @@ async fn client_enabled_server_enabled() {
                     ServiceBuilder::new()
                         .layer(
                             ServiceBuilder::new()
-                                .map_request(assert_right_encoding)
+                                .map_request(move |req| {
+                                    AssertRightEncoding::new(encoding).clone().call(req)
+                                })
                                 .layer(measure_request_body_size_layer(request_bytes_counter))
                                 .into_inner(),
                         )
@@ -37,8 +60,8 @@ async fn client_enabled_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .send_compressed(CompressionEncoding::Gzip);
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
 
     for _ in 0..3 {
         client
@@ -52,8 +75,14 @@ async fn client_enabled_server_enabled() {
     }
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_enabled_server_disabled() {
+parametrized_tests! {
+    client_enabled_server_disabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default());
@@ -66,8 +95,8 @@ async fn client_enabled_server_disabled() {
             .unwrap();
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .send_compressed(CompressionEncoding::Gzip);
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
 
     let status = client
         .compress_input_unary(SomeData {
@@ -79,7 +108,10 @@ async fn client_enabled_server_disabled() {
     assert_eq!(status.code(), tonic::Code::Unimplemented);
     assert_eq!(
         status.message(),
-        "Content is compressed with `gzip` which isn't supported"
+        format!(
+            "Content is compressed with `{}` which isn't supported",
+            encoding.as_str()
+        )
     );
 
     assert_eq!(
@@ -87,13 +119,17 @@ async fn client_enabled_server_disabled() {
         "identity"
     );
 }
+parametrized_tests! {
+    client_mark_compressed_without_header_server_enabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_mark_compressed_without_header_server_enabled() {
+#[allow(dead_code)]
+async fn client_mark_compressed_without_header_server_enabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc =
-        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
+    let svc = test_server::TestServer::new(Svc::default()).accept_compressed(encoding);
 
     tokio::spawn({
         async move {

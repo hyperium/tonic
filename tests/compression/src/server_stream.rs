@@ -2,12 +2,17 @@ use super::*;
 use tonic::codec::CompressionEncoding;
 use tonic::Streaming;
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_enabled_server_enabled() {
+util::parametrized_tests! {
+    client_enabled_server_enabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc =
-        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
+    let svc = test_server::TestServer::new(Svc::default()).send_compressed(encoding);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -32,12 +37,15 @@ async fn client_enabled_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .accept_compressed(CompressionEncoding::Gzip);
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).accept_compressed(encoding);
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 
-    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
+    assert_eq!(
+        res.metadata().get("grpc-encoding").unwrap(),
+        encoding.as_str()
+    );
 
     let mut stream: Streaming<SomeData> = res.into_inner();
 
@@ -56,12 +64,17 @@ async fn client_enabled_server_enabled() {
     assert!(response_bytes_counter.load(SeqCst) < UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_disabled_server_enabled() {
+util::parametrized_tests! {
+    client_disabled_server_enabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_disabled_server_enabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc =
-        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
+    let svc = test_server::TestServer::new(Svc::default()).send_compressed(encoding);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -102,8 +115,14 @@ async fn client_disabled_server_enabled() {
     assert!(response_bytes_counter.load(SeqCst) > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_enabled_server_disabled() {
+util::parametrized_tests! {
+    client_enabled_server_disabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default());
@@ -131,8 +150,8 @@ async fn client_enabled_server_disabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .accept_compressed(CompressionEncoding::Gzip);
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).accept_compressed(encoding);
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 

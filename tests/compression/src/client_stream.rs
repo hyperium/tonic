@@ -1,19 +1,40 @@
 use super::*;
-use http_body::Body as _;
+use http_body::Body;
 use tonic::codec::CompressionEncoding;
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_enabled_server_enabled() {
+util::parametrized_tests! {
+    client_enabled_server_enabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc =
-        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
+    let svc = test_server::TestServer::new(Svc::default()).accept_compressed(encoding);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
-    fn assert_right_encoding<B>(req: http::Request<B>) -> http::Request<B> {
-        assert_eq!(req.headers().get("grpc-encoding").unwrap(), "gzip");
-        req
+    #[derive(Clone)]
+    pub struct AssertRightEncoding {
+        encoding: CompressionEncoding,
+    }
+
+    #[allow(dead_code)]
+    impl AssertRightEncoding {
+        pub fn new(encoding: CompressionEncoding) -> Self {
+            Self { encoding }
+        }
+
+        pub fn call<B: Body>(self, req: http::Request<B>) -> http::Request<B> {
+            assert_eq!(
+                req.headers().get("grpc-encoding").unwrap(),
+                self.encoding.as_str()
+            );
+
+            req
+        }
     }
 
     tokio::spawn({
@@ -22,7 +43,9 @@ async fn client_enabled_server_enabled() {
             Server::builder()
                 .layer(
                     ServiceBuilder::new()
-                        .map_request(assert_right_encoding)
+                        .map_request(move |req| {
+                            AssertRightEncoding::new(encoding).clone().call(req)
+                        })
                         .layer(measure_request_body_size_layer(
                             request_bytes_counter.clone(),
                         ))
@@ -35,8 +58,8 @@ async fn client_enabled_server_enabled() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .send_compressed(CompressionEncoding::Gzip);
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
     let stream = futures::stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
@@ -48,12 +71,17 @@ async fn client_enabled_server_enabled() {
     assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_disabled_server_enabled() {
+util::parametrized_tests! {
+    client_disabled_server_enabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_disabled_server_enabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc =
-        test_server::TestServer::new(Svc::default()).accept_compressed(CompressionEncoding::Gzip);
+    let svc = test_server::TestServer::new(Svc::default()).accept_compressed(encoding);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -93,8 +121,14 @@ async fn client_disabled_server_enabled() {
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn client_enabled_server_disabled() {
+util::parametrized_tests! {
+    client_enabled_server_disabled,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default());
@@ -107,8 +141,8 @@ async fn client_enabled_server_disabled() {
             .unwrap();
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .send_compressed(CompressionEncoding::Gzip);
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
     let stream = futures::stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
@@ -119,16 +153,24 @@ async fn client_enabled_server_disabled() {
     assert_eq!(status.code(), tonic::Code::Unimplemented);
     assert_eq!(
         status.message(),
-        "Content is compressed with `gzip` which isn't supported"
+        format!(
+            "Content is compressed with `{}` which isn't supported",
+            encoding.as_str()
+        )
     );
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn compressing_response_from_client_stream() {
+util::parametrized_tests! {
+    compressing_response_from_client_stream,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn compressing_response_from_client_stream(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
-    let svc =
-        test_server::TestServer::new(Svc::default()).send_compressed(CompressionEncoding::Gzip);
+    let svc = test_server::TestServer::new(Svc::default()).send_compressed(encoding);
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -153,14 +195,17 @@ async fn compressing_response_from_client_stream() {
         }
     });
 
-    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
-        .accept_compressed(CompressionEncoding::Gzip);
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).accept_compressed(encoding);
 
     let stream = futures::stream::iter(vec![]);
     let req = Request::new(Box::pin(stream));
 
     let res = client.compress_output_client_stream(req).await.unwrap();
-    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), "gzip");
+    assert_eq!(
+        res.metadata().get("grpc-encoding").unwrap(),
+        encoding.as_str()
+    );
     let bytes_sent = response_bytes_counter.load(SeqCst);
     assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
 }

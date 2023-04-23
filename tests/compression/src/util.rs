@@ -12,8 +12,25 @@ use std::{
     task::{Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tonic::codec::CompressionEncoding;
 use tonic::transport::{server::Connected, Channel};
 use tower_http::map_request_body::MapRequestBodyLayer;
+
+macro_rules! parametrized_tests {
+    ($fn_name:ident, $($test_name:ident: $input:expr),+ $(,)?) => {
+        paste::paste! {
+            $(
+                #[tokio::test(flavor = "multi_thread")]
+                async fn [<$fn_name _ $test_name>]() {
+                    let input = $input;
+                    $fn_name(input).await;
+                }
+            )+
+        }
+    }
+}
+
+pub(crate) use parametrized_tests;
 
 /// A body that tracks how many bytes passes through it
 #[pin_project]
@@ -99,4 +116,25 @@ pub async fn mock_io_channel(client: tokio::io::DuplexStream) -> Channel {
         }))
         .await
         .unwrap()
+}
+
+#[derive(Clone)]
+pub struct AssertRightEncoding {
+    encoding: CompressionEncoding,
+}
+
+#[allow(dead_code)]
+impl AssertRightEncoding {
+    pub fn new(encoding: CompressionEncoding) -> Self {
+        Self { encoding }
+    }
+
+    pub fn call<B: Body>(self, req: http::Request<B>) -> http::Request<B> {
+        assert_eq!(
+            req.headers().get("grpc-encoding").unwrap(),
+            self.encoding.as_str()
+        );
+
+        req
+    }
 }
