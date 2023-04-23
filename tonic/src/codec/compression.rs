@@ -92,7 +92,7 @@ impl CompressionEncoding {
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
     ) -> Option<Self> {
-        if !enabled_encodings.is_gzip_enabled() {
+        if !enabled_encodings.is_gzip_enabled() && !enabled_encodings.is_zstd_enabled() {
             return None;
         }
 
@@ -153,13 +153,18 @@ impl CompressionEncoding {
         }
     }
 
-    pub(crate) fn into_header_value(self) -> http::HeaderValue {
+    #[allow(missing_docs)]
+    pub fn as_str(&self) -> &'static str {
         match self {
             #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => http::HeaderValue::from_static("gzip"),
+            CompressionEncoding::Gzip => "gzip",
             #[cfg(feature = "zstd")]
-            CompressionEncoding::Zstd => http::HeaderValue::from_static("zstd"),
+            CompressionEncoding::Zstd => "zstd",
         }
+    }
+
+    pub(crate) fn into_header_value(self) -> http::HeaderValue {
+        http::HeaderValue::from_static(self.as_str())
     }
 
     pub(crate) fn encodings() -> &'static [Self] {
