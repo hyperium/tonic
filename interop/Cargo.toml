@@ -31,7 +31,7 @@ tonic = {path = "../tonic", features = ["tls"]}
 tower = {version = "0.4"}
 tracing = "0.1"
 tracing-log = "0.1"
-tracing-subscriber = {version = "0.3", features = ["env-filter"]}
+tracing-subscriber = {version = "0.3"}
 
 [build-dependencies]
 tonic-build = {path = "../tonic-build", features = ["prost"]}
