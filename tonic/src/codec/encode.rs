@@ -2,7 +2,7 @@ use super::compression::{compress, CompressionEncoding, SingleMessageCompression
 use super::{EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_core::{Stream, TryStream};
+use futures_core::TryStream;
 use futures_util::{ready, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use http_body::Body;
@@ -11,6 +11,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tokio_stream::Stream;
 
 pub(super) const BUFFER_SIZE: usize = 8 * 1024;
 
