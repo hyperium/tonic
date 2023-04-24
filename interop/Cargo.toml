@@ -29,8 +29,6 @@ tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
 tonic = {path = "../tonic", features = ["tls"]}
 tower = {version = "0.4"}
-tracing = "0.1"
-tracing-log = "0.1"
 tracing-subscriber = {version = "0.3"}
 
 [build-dependencies]
