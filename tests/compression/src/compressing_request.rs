@@ -75,6 +75,66 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     }
 }
 
+util::parametrized_tests! {
+    client_enabled_server_enabled_multi_encoding,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+}
+
+#[allow(dead_code)]
+async fn client_enabled_server_enabled_multi_encoding(encoding: CompressionEncoding) {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
+    let svc = test_server::TestServer::new(Svc::default())
+        .accept_compressed(CompressionEncoding::Gzip)
+        .accept_compressed(CompressionEncoding::Zstd);
+
+    let request_bytes_counter = Arc::new(AtomicUsize::new(0));
+
+    fn assert_right_encoding<B>(req: http::Request<B>) -> http::Request<B> {
+        let supported_encodings = ["gzip", "zstd"];
+        let req_encoding = req.headers().get("grpc-encoding").unwrap();
+        assert!(supported_encodings.iter().any(|e| e == req_encoding));
+
+        req
+    }
+
+    tokio::spawn({
+        let request_bytes_counter = request_bytes_counter.clone();
+        async move {
+            Server::builder()
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(
+                            ServiceBuilder::new()
+                                .map_request(assert_right_encoding)
+                                .layer(measure_request_body_size_layer(request_bytes_counter))
+                                .into_inner(),
+                        )
+                        .into_inner(),
+                )
+                .add_service(svc)
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .await
+                .unwrap();
+        }
+    });
+
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
+
+    for _ in 0..3 {
+        client
+            .compress_input_unary(SomeData {
+                data: [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
+            })
+            .await
+            .unwrap();
+        let bytes_sent = request_bytes_counter.load(SeqCst);
+        assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
+    }
+}
+
 parametrized_tests! {
     client_enabled_server_disabled,
     zstd: CompressionEncoding::Zstd,
