@@ -135,6 +135,48 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn client_enabled_server_disabled_multi_encoding() {
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
+    let svc = test_server::TestServer::new(Svc::default());
+
+    let response_bytes_counter = Arc::new(AtomicUsize::new(0));
+
+    tokio::spawn({
+        let response_bytes_counter = response_bytes_counter.clone();
+        async move {
+            Server::builder()
+                // no compression enable on the server so responses should not be compressed
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(MapResponseBodyLayer::new(move |body| {
+                            util::CountBytesBody {
+                                inner: body,
+                                counter: response_bytes_counter.clone(),
+                            }
+                        }))
+                        .into_inner(),
+                )
+                .add_service(svc)
+                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .await
+                .unwrap();
+        }
+    });
+
+    let mut client = test_client::TestClient::new(mock_io_channel(client).await)
+        .accept_compressed(CompressionEncoding::Gzip)
+        .accept_compressed(CompressionEncoding::Zstd);
+
+    let res = client.compress_output_unary(()).await.unwrap();
+
+    assert!(res.metadata().get("grpc-encoding").is_none());
+
+    let bytes_sent = response_bytes_counter.load(SeqCst);
+    assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
+}
+
 util::parametrized_tests! {
     client_disabled,
     zstd: CompressionEncoding::Zstd,
