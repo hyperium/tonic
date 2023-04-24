@@ -64,7 +64,7 @@ impl EnabledCompressionEncodings {
     }
 
     #[cfg(not(feature = "zstd"))]
-    const fn is_gzip_enabled(&self) -> bool {
+    const fn is_zstd_enabled(&self) -> bool {
         false
     }
 }
@@ -127,6 +127,7 @@ impl CompressionEncoding {
             "gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
                 Ok(Some(CompressionEncoding::Gzip))
             }
+            #[cfg(feature = "zstd")]
             "zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
                 Ok(Some(CompressionEncoding::Zstd))
             }
