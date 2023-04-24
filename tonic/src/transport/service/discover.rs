@@ -9,7 +9,7 @@ use std::{
 };
 use tokio::sync::mpsc::Receiver;
 
-use futures_core::Stream;
+use tokio_stream::Stream;
 use tower::discover::Change;
 
 type DiscoverResult<K, S, E> = Result<Change<K, S>, E>;

@@ -71,6 +71,7 @@ h2 = {version = "0.3", optional = true}
 hyper = {version = "0.14.14", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
 tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = true}
+tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
 axum = {version = "0.6.9", default_features = false, optional = true}
 

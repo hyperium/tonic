@@ -3,11 +3,11 @@
 use crate::pb::health_server::{Health, HealthServer};
 use crate::pb::{HealthCheckRequest, HealthCheckResponse};
 use crate::ServingStatus;
-use futures_core::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
+use tokio_stream::Stream;
 #[cfg(feature = "transport")]
 use tonic::server::NamedService;
 use tonic::{Request, Response, Status};
