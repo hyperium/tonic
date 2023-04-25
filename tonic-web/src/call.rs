@@ -1,9 +1,10 @@
 use std::error::Error;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll};
 
 use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use futures_core::ready;
 use http::{header, HeaderMap, HeaderValue};
 use http_body::{Body, SizeHint};
 use pin_project::pin_project;

@@ -17,6 +17,7 @@ version = "0.9.2"
 [dependencies]
 base64 = "0.21"
 bytes = "1.0"
+futures-core = "0.3"
 tokio-stream = "0.1"
 http = "0.2"
 http-body = "0.4"
