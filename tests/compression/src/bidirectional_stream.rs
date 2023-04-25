@@ -31,10 +31,11 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         }
 
         pub fn call<B: Body>(self, req: http::Request<B>) -> http::Request<B> {
-            assert_eq!(
-                req.headers().get("grpc-encoding").unwrap(),
-                self.encoding.as_str()
-            );
+            let expected = match self.encoding {
+                CompressionEncoding::Gzip => "gzip",
+                CompressionEncoding::Zstd => "zstd",
+            };
+            assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);
 
             req
         }
@@ -81,10 +82,12 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         .await
         .unwrap();
 
-    assert_eq!(
-        res.metadata().get("grpc-encoding").unwrap(),
-        encoding.as_str()
-    );
+    let expected = match encoding {
+        CompressionEncoding::Gzip => "gzip",
+        CompressionEncoding::Zstd => "zstd",
+        _ => panic!("unexpected encoding {:?}", encoding),
+    };
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
     let mut stream: Streaming<SomeData> = res.into_inner();
 

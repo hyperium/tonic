@@ -42,10 +42,12 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 
-    assert_eq!(
-        res.metadata().get("grpc-encoding").unwrap(),
-        encoding.as_str()
-    );
+    let expected = match encoding {
+        CompressionEncoding::Gzip => "gzip",
+        CompressionEncoding::Zstd => "zstd",
+        _ => panic!("unexpected encoding {:?}", encoding),
+    };
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
     let mut stream: Streaming<SomeData> = res.into_inner();
 
