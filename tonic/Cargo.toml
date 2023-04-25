@@ -49,7 +49,6 @@ channel = []
 [dependencies]
 base64 = "0.21"
 bytes = "1.0"
-futures-core = {version = "0.3", default-features = false}
 futures-util = {version = "0.3", default-features = false}
 http = "0.2"
 tracing = "0.1"
