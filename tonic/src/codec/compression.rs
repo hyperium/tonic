@@ -152,7 +152,7 @@ impl CompressionEncoding {
     }
 
     #[allow(missing_docs)]
-    pub fn as_str(&self) -> &'static str {
+    pub(crate) fn as_str(&self) -> &'static str {
         match self {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => "gzip",

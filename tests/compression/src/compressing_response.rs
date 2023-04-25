@@ -33,13 +33,17 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         }
 
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
+            let expected = match self.encoding {
+                CompressionEncoding::Gzip => "gzip",
+                CompressionEncoding::Zstd => "zstd",
+            };
             assert_eq!(
                 req.headers()
                     .get("grpc-accept-encoding")
                     .unwrap()
                     .to_str()
                     .unwrap(),
-                format!("{},identity", self.encoding.as_str()),
+                format!("{},identity", expected)
             );
             self.service.call(req)
         }
@@ -77,12 +81,15 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let mut client =
         test_client::TestClient::new(mock_io_channel(client).await).accept_compressed(encoding);
 
+    let expected = match encoding {
+        CompressionEncoding::Gzip => "gzip",
+        CompressionEncoding::Zstd => "zstd",
+        _ => panic!("unexpected encoding {:?}", encoding),
+    };
+
     for _ in 0..3 {
         let res = client.compress_output_unary(()).await.unwrap();
-        assert_eq!(
-            res.metadata().get("grpc-encoding").unwrap(),
-            encoding.as_str()
-        );
+        assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
         let bytes_sent = response_bytes_counter.load(SeqCst);
         assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
     }
@@ -332,10 +339,14 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
         test_client::TestClient::new(mock_io_channel(client).await).accept_compressed(encoding);
 
     let res = client.compress_output_unary(()).await.unwrap();
-    assert_eq!(
-        res.metadata().get("grpc-encoding").unwrap(),
-        encoding.as_str()
-    );
+
+    let expected = match encoding {
+        CompressionEncoding::Gzip => "gzip",
+        CompressionEncoding::Zstd => "zstd",
+        _ => panic!("unexpected encoding {:?}", encoding),
+    };
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
+
     let bytes_sent = response_bytes_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
@@ -385,10 +396,12 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
 
     let res = client.compress_output_server_stream(()).await.unwrap();
 
-    assert_eq!(
-        res.metadata().get("grpc-encoding").unwrap(),
-        encoding.as_str()
-    );
+    let expected = match encoding {
+        CompressionEncoding::Gzip => "gzip",
+        CompressionEncoding::Zstd => "zstd",
+        _ => panic!("unexpected encoding {:?}", encoding),
+    };
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
     let mut stream: Streaming<SomeData> = res.into_inner();
 
@@ -452,10 +465,13 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
     let req = Request::new(Box::pin(stream));
 
     let res = client.compress_output_client_stream(req).await.unwrap();
-    assert_eq!(
-        res.metadata().get("grpc-encoding").unwrap(),
-        encoding.as_str()
-    );
+
+    let expected = match encoding {
+        CompressionEncoding::Gzip => "gzip",
+        CompressionEncoding::Zstd => "zstd",
+        _ => panic!("unexpected encoding {:?}", encoding),
+    };
+    assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
     let bytes_sent = response_bytes_counter.load(SeqCst);
     assert!(bytes_sent > UNCOMPRESSED_MIN_BODY_SIZE);
 }
