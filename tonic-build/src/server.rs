@@ -28,6 +28,7 @@ pub fn generate<T: Service>(
         compile_well_known_types,
         attributes,
         &HashSet::default(),
+        false,
     )
 }
 
@@ -38,8 +39,15 @@ pub(crate) fn generate_internal<T: Service>(
     compile_well_known_types: bool,
     attributes: &Attributes,
     disable_comments: &HashSet<String>,
+    use_arc_self: bool,
 ) -> TokenStream {
-    let methods = generate_methods(service, emit_package, proto_path, compile_well_known_types);
+    let methods = generate_methods(
+        service,
+        emit_package,
+        proto_path,
+        compile_well_known_types,
+        use_arc_self,
+    );
 
     let server_service = quote::format_ident!("{}Server", service.name());
     let server_service_name = quote::format_ident!(
@@ -55,6 +63,7 @@ pub(crate) fn generate_internal<T: Service>(
         compile_well_known_types,
         server_trait.clone(),
         disable_comments,
+        use_arc_self,
     );
     let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
@@ -88,6 +97,8 @@ pub(crate) fn generate_internal<T: Service>(
 
     let configure_max_message_size_methods = quote! {
         /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
         #[must_use]
         pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
             self.max_decoding_message_size = Some(limit);
@@ -95,6 +106,8 @@ pub(crate) fn generate_internal<T: Service>(
         }
 
         /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
         #[must_use]
         pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
             self.max_encoding_message_size = Some(limit);
@@ -229,6 +242,7 @@ fn generate_trait<T: Service>(
     compile_well_known_types: bool,
     server_trait: Ident,
     disable_comments: &HashSet<String>,
+    use_arc_self: bool,
 ) -> TokenStream {
     let methods = generate_trait_methods(
         service,
@@ -236,6 +250,7 @@ fn generate_trait<T: Service>(
         proto_path,
         compile_well_known_types,
         disable_comments,
+        use_arc_self,
     );
     let trait_doc = generate_doc_comment(format!(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
@@ -257,6 +272,7 @@ fn generate_trait_methods<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
     disable_comments: &HashSet<String>,
+    use_arc_self: bool,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -278,19 +294,24 @@ fn generate_trait_methods<T: Service>(
         stream.extend(quote! {
             const #upper_name: &'static str = #method_name;
         });
+        let self_param = if use_arc_self {
+            quote!(self: std::sync::Arc<Self>)
+        } else {
+            quote!(&self)
+        };
 
         let method = match (method.client_streaming(), method.server_streaming()) {
             (false, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(&self, request: tonic::Request<#req_message>)
+                    async fn #name(#self_param, request: tonic::Request<#req_message>)
                         -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
             (true, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
+                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
                         -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
@@ -306,7 +327,7 @@ fn generate_trait_methods<T: Service>(
                     type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
-                    async fn #name(&self, request: tonic::Request<#req_message>)
+                    async fn #name(#self_param, request: tonic::Request<#req_message>)
                         -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
@@ -322,7 +343,7 @@ fn generate_trait_methods<T: Service>(
                     type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
-                    async fn #name(&self, request: tonic::Request<tonic::Streaming<#req_message>>)
+                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
                         -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
@@ -371,6 +392,7 @@ fn generate_methods<T: Service>(
     emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
+    use_arc_self: bool,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -387,6 +409,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident,
                 server_trait,
+                use_arc_self,
             ),
 
             (false, true) => generate_server_streaming(
@@ -395,6 +418,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident.clone(),
                 server_trait,
+                use_arc_self,
             ),
             (true, false) => generate_client_streaming(
                 method,
@@ -402,6 +426,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident.clone(),
                 server_trait,
+                use_arc_self,
             ),
 
             (true, true) => generate_streaming(
@@ -410,6 +435,7 @@ fn generate_methods<T: Service>(
                 compile_well_known_types,
                 ident.clone(),
                 server_trait,
+                use_arc_self,
             ),
         };
 
@@ -430,12 +456,19 @@ fn generate_unary<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    use_arc_self: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
+
+    let inner_arg = if use_arc_self {
+        quote!(inner)
+    } else {
+        quote!(&inner)
+    };
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -448,7 +481,7 @@ fn generate_unary<T: Method>(
             fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
-                    (*inner).#method_ident(request).await
+                    <T as #server_trait>::#method_ident(#inner_arg, request).await
                 };
                 Box::pin(fut)
             }
@@ -482,6 +515,7 @@ fn generate_server_streaming<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    use_arc_self: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
@@ -490,6 +524,12 @@ fn generate_server_streaming<T: Method>(
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
+
+    let inner_arg = if use_arc_self {
+        quote!(inner)
+    } else {
+        quote!(&inner)
+    };
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -503,7 +543,7 @@ fn generate_server_streaming<T: Method>(
             fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
-                    (*inner).#method_ident(request).await
+                    <T as #server_trait>::#method_ident(#inner_arg, request).await
                 };
                 Box::pin(fut)
             }
@@ -537,11 +577,18 @@ fn generate_client_streaming<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    use_arc_self: bool,
 ) -> TokenStream {
     let service_ident = quote::format_ident!("{}Svc", method.identifier());
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+
+    let inner_arg = if use_arc_self {
+        quote!(inner)
+    } else {
+        quote!(&inner)
+    };
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -555,8 +602,7 @@ fn generate_client_streaming<T: Method>(
             fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
-                    (*inner).#method_ident(request).await
-
+                    <T as #server_trait>::#method_ident(#inner_arg, request).await
                 };
                 Box::pin(fut)
             }
@@ -590,6 +636,7 @@ fn generate_streaming<T: Method>(
     compile_well_known_types: bool,
     method_ident: Ident,
     server_trait: Ident,
+    use_arc_self: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
@@ -598,6 +645,12 @@ fn generate_streaming<T: Method>(
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
     let response_stream = quote::format_ident!("{}Stream", method.identifier());
+
+    let inner_arg = if use_arc_self {
+        quote!(inner)
+    } else {
+        quote!(&inner)
+    };
 
     quote! {
         #[allow(non_camel_case_types)]
@@ -612,7 +665,7 @@ fn generate_streaming<T: Method>(
             fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 let fut = async move {
-                    (*inner).#method_ident(request).await
+                    <T as #server_trait>::#method_ident(#inner_arg, request).await
                 };
                 Box::pin(fut)
             }

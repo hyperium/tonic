@@ -12,8 +12,9 @@ use super::pb;
 
 pub use error_details::{vec::ErrorDetail, ErrorDetails};
 pub use std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, PreconditionFailure,
-    PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, LocalizedMessage,
+    PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo,
+    ResourceInfo, RetryInfo,
 };
 
 trait IntoAny {
@@ -446,6 +447,28 @@ pub trait StatusExt: crate::sealed::Sealed {
     /// }
     /// ```
     fn get_details_help(&self) -> Option<Help>;
+
+    /// Get first [`LocalizedMessage`] details found on `tonic::Status`, if
+    /// any. If some `prost::DecodeError` occurs, returns `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic::{Status, Response};
+    /// use tonic_types::StatusExt;
+    ///
+    /// fn handle_request_result<T>(req_result: Result<Response<T>, Status>) {
+    ///     match req_result {
+    ///         Ok(_) => {},
+    ///         Err(status) => {
+    ///             if let Some(localized_message) = status.get_details_localized_message() {
+    ///                 // Handle localized_message details
+    ///             }
+    ///         }
+    ///     };
+    /// }
+    /// ```
+    fn get_details_localized_message(&self) -> Option<LocalizedMessage>;
 }
 
 impl crate::sealed::Sealed for tonic::Status {}
@@ -497,6 +520,10 @@ impl StatusExt for tonic::Status {
             conv_details.push(help.into_any());
         }
 
+        if let Some(localized_message) = details.localized_message {
+            conv_details.push(localized_message.into_any());
+        }
+
         let details = gen_details_bytes(code, &message, conv_details);
 
         tonic::Status::with_details_and_metadata(code, message, details, metadata)
@@ -544,6 +571,9 @@ impl StatusExt for tonic::Status {
                 }
                 ErrorDetail::Help(help) => {
                     conv_details.push(help.into_any());
+                }
+                ErrorDetail::LocalizedMessage(loc_message) => {
+                    conv_details.push(loc_message.into_any());
                 }
             }
         }
@@ -600,6 +630,9 @@ impl StatusExt for tonic::Status {
                 Help::TYPE_URL => {
                     details.help = Some(Help::from_any(any)?);
                 }
+                LocalizedMessage::TYPE_URL => {
+                    details.localized_message = Some(LocalizedMessage::from_any(any)?);
+                }
                 _ => {}
             }
         }
@@ -644,6 +677,9 @@ impl StatusExt for tonic::Status {
                 }
                 Help::TYPE_URL => {
                     details.push(Help::from_any(any)?.into());
+                }
+                LocalizedMessage::TYPE_URL => {
+                    details.push(LocalizedMessage::from_any(any)?.into());
                 }
                 _ => {}
             }
@@ -781,6 +817,20 @@ impl StatusExt for tonic::Status {
 
         None
     }
+
+    fn get_details_localized_message(&self) -> Option<LocalizedMessage> {
+        let status = pb::Status::decode(self.details()).ok()?;
+
+        for any in status.details.into_iter() {
+            if any.type_url.as_str() == LocalizedMessage::TYPE_URL {
+                if let Ok(detail) = LocalizedMessage::from_any(any) {
+                    return Some(detail);
+                }
+            }
+        }
+
+        None
+    }
 }
 
 #[cfg(test)]
@@ -789,8 +839,8 @@ mod tests {
     use tonic::{Code, Status};
 
     use super::{
-        BadRequest, DebugInfo, ErrorDetails, ErrorInfo, Help, PreconditionFailure, QuotaFailure,
-        RequestInfo, ResourceInfo, RetryInfo, StatusExt,
+        BadRequest, DebugInfo, ErrorDetails, ErrorInfo, Help, LocalizedMessage,
+        PreconditionFailure, QuotaFailure, RequestInfo, ResourceInfo, RetryInfo, StatusExt,
     };
 
     #[test]
@@ -812,7 +862,8 @@ mod tests {
             .add_bad_request_violation("field", "description")
             .set_request_info("request-id", "some-request-data")
             .set_resource_info("resource-type", "resource-name", "owner", "description")
-            .add_help_link("link to resource", "resource.example.local");
+            .add_help_link("link to resource", "resource.example.local")
+            .set_localized_message("en-US", "message for the user");
 
         let fmt_details = format!("{:?}", err_details);
 
@@ -830,6 +881,7 @@ mod tests {
             RequestInfo::new("request-id", "some-request-data").into(),
             ResourceInfo::new("resource-type", "resource-name", "owner", "description").into(),
             Help::with_link("link to resource", "resource.example.local").into(),
+            LocalizedMessage::new("en-US", "message for the user").into(),
         ];
 
         let fmt_details_vec = format!("{:?}", err_details_vec);

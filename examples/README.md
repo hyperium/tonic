@@ -153,3 +153,33 @@ The autoload example requires the following crates installed globally:
 
 * [systemfd](https://crates.io/crates/systemfd)
 * [cargo-watch](https://crates.io/crates/cargo-watch)
+
+## Richer Error
+
+Both clients and both servers do the same thing, but using the two different
+approaches. Run one of the servers in one terminal, and then run the clients
+in another.
+
+### Client using the `ErrorDetails` struct
+
+```bash
+$ cargo run --bin richer-error-client
+```
+
+### Client using a vector of error message types
+
+```bash
+$ cargo run --bin richer-error-client-vec
+```
+
+### Server using the `ErrorDetails` struct
+
+```bash
+$ cargo run --bin richer-error-server
+```
+
+### Server using a vector of error message types
+
+```bash
+$ cargo run --bin richer-error-server-vec
+```

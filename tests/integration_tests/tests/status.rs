@@ -130,7 +130,7 @@ type Stream<T> =
 
 #[tokio::test]
 async fn status_from_server_stream() {
-    trace_init();
+    integration_tests::trace_init();
 
     struct Svc;
 
@@ -178,7 +178,7 @@ async fn status_from_server_stream() {
 
 #[tokio::test]
 async fn status_from_server_stream_with_source() {
-    trace_init();
+    integration_tests::trace_init();
 
     let channel = Endpoint::try_from("http://[::]:50051")
         .unwrap()
@@ -192,10 +192,4 @@ async fn status_from_server_stream_with_source() {
 
     let source = error.source().unwrap();
     source.downcast_ref::<tonic::transport::Error>().unwrap();
-}
-
-fn trace_init() {
-    let _ = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
 }

@@ -33,3 +33,7 @@ pub use resource_info::ResourceInfo;
 mod help;
 
 pub use help::{Help, HelpLink};
+
+mod loc_message;
+
+pub use loc_message::LocalizedMessage;

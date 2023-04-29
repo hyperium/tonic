@@ -1,5 +1,5 @@
 use super::compression::{decompress, CompressionEncoding};
-use super::{DecodeBuf, Decoder, DEFAULT_MAX_MESSAGE_SIZE, HEADER_SIZE};
+use super::{DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use futures_core::Stream;
@@ -47,7 +47,7 @@ enum State {
     Error,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Direction {
     Request,
     Response(StatusCode),
@@ -174,7 +174,9 @@ impl StreamingInner {
             };
 
             let len = self.buf.get_u32() as usize;
-            let limit = self.max_message_size.unwrap_or(DEFAULT_MAX_MESSAGE_SIZE);
+            let limit = self
+                .max_message_size
+                .unwrap_or(DEFAULT_MAX_RECV_MESSAGE_SIZE);
             if len > limit {
                 return Err(Status::new(
                     Code::OutOfRange,
@@ -232,6 +234,10 @@ impl StreamingInner {
         let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
             Some(Ok(d)) => Some(d),
             Some(Err(e)) => {
+                if self.direction == Direction::Request && e.code() == Code::Cancelled {
+                    return Poll::Ready(Ok(None));
+                }
+
                 let _ = std::mem::replace(&mut self.state, State::Error);
                 let err: crate::Error = e.into();
                 debug!("decoder inner stream error: {:?}", err);

@@ -115,12 +115,16 @@ pub mod health_client {
             self
         }
         /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
         #[must_use]
         pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
             self.inner = self.inner.max_decoding_message_size(limit);
             self
         }
         /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
         #[must_use]
         pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
             self.inner = self.inner.max_encoding_message_size(limit);
@@ -285,12 +289,16 @@ pub mod health_server {
             self
         }
         /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
         #[must_use]
         pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
             self.max_decoding_message_size = Some(limit);
             self
         }
         /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
         #[must_use]
         pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
             self.max_encoding_message_size = Some(limit);
@@ -332,7 +340,9 @@ pub mod health_server {
                             request: tonic::Request<super::HealthCheckRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).check(request).await };
+                            let fut = async move {
+                                <T as Health>::check(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }
@@ -377,7 +387,9 @@ pub mod health_server {
                             request: tonic::Request<super::HealthCheckRequest>,
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move { (*inner).watch(request).await };
+                            let fut = async move {
+                                <T as Health>::watch(&inner, request).await
+                            };
                             Box::pin(fut)
                         }
                     }

@@ -1,8 +1,9 @@
 use std::{collections::HashMap, time};
 
 use super::std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, PreconditionFailure,
-    PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo, ResourceInfo, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, LocalizedMessage,
+    PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo,
+    ResourceInfo, RetryInfo,
 };
 
 pub(crate) mod vec;
@@ -40,6 +41,9 @@ pub struct ErrorDetails {
 
     /// This field stores [`Help`] data, if any.
     pub(crate) help: Option<Help>,
+
+    /// This field stores [`LocalizedMessage`] data, if any.
+    pub(crate) localized_message: Option<LocalizedMessage>,
 }
 
 impl ErrorDetails {
@@ -337,49 +341,94 @@ impl ErrorDetails {
         }
     }
 
+    /// Generates an [`ErrorDetails`] struct with [`Help`] details (one
+    /// [`HelpLink`] set) and remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_help_link(
+    ///     "description of link a",
+    ///     "resource-a.example.local"
+    /// );
+    /// ```
+    pub fn with_help_link(description: impl Into<String>, url: impl Into<String>) -> Self {
+        ErrorDetails {
+            help: Some(Help::with_link(description, url)),
+            ..ErrorDetails::new()
+        }
+    }
+
+    /// Generates an [`ErrorDetails`] struct with [`LocalizedMessage`] details
+    /// and remaining fields set to `None`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let err_details = ErrorDetails::with_localized_message(
+    ///     "en-US",
+    ///     "message for the user"
+    /// );
+    /// ```
+    pub fn with_localized_message(locale: impl Into<String>, message: impl Into<String>) -> Self {
+        ErrorDetails {
+            localized_message: Some(LocalizedMessage::new(locale, message)),
+            ..ErrorDetails::new()
+        }
+    }
+
     /// Get [`RetryInfo`] details, if any.
-    pub fn retry_info(&self) -> Option<RetryInfo> {
-        self.retry_info.clone()
+    pub fn retry_info(&self) -> Option<&RetryInfo> {
+        self.retry_info.as_ref()
     }
 
     /// Get [`DebugInfo`] details, if any.
-    pub fn debug_info(&self) -> Option<DebugInfo> {
-        self.debug_info.clone()
+    pub fn debug_info(&self) -> Option<&DebugInfo> {
+        self.debug_info.as_ref()
     }
 
     /// Get [`QuotaFailure`] details, if any.
-    pub fn quota_failure(&self) -> Option<QuotaFailure> {
-        self.quota_failure.clone()
+    pub fn quota_failure(&self) -> Option<&QuotaFailure> {
+        self.quota_failure.as_ref()
     }
 
     /// Get [`ErrorInfo`] details, if any.
-    pub fn error_info(&self) -> Option<ErrorInfo> {
-        self.error_info.clone()
+    pub fn error_info(&self) -> Option<&ErrorInfo> {
+        self.error_info.as_ref()
     }
 
     /// Get [`PreconditionFailure`] details, if any.
-    pub fn precondition_failure(&self) -> Option<PreconditionFailure> {
-        self.precondition_failure.clone()
+    pub fn precondition_failure(&self) -> Option<&PreconditionFailure> {
+        self.precondition_failure.as_ref()
     }
 
     /// Get [`BadRequest`] details, if any.
-    pub fn bad_request(&self) -> Option<BadRequest> {
-        self.bad_request.clone()
+    pub fn bad_request(&self) -> Option<&BadRequest> {
+        self.bad_request.as_ref()
     }
 
     /// Get [`RequestInfo`] details, if any.
-    pub fn request_info(&self) -> Option<RequestInfo> {
-        self.request_info.clone()
+    pub fn request_info(&self) -> Option<&RequestInfo> {
+        self.request_info.as_ref()
     }
 
     /// Get [`ResourceInfo`] details, if any.
-    pub fn resource_info(&self) -> Option<ResourceInfo> {
-        self.resource_info.clone()
+    pub fn resource_info(&self) -> Option<&ResourceInfo> {
+        self.resource_info.as_ref()
     }
 
     /// Get [`Help`] details, if any.
-    pub fn help(&self) -> Option<Help> {
-        self.help.clone()
+    pub fn help(&self) -> Option<&Help> {
+        self.help.as_ref()
+    }
+
+    /// Get [`LocalizedMessage`] details, if any.
+    pub fn localized_message(&self) -> Option<&LocalizedMessage> {
+        self.localized_message.as_ref()
     }
 
     /// Set [`RetryInfo`] details. Can be chained with other `.set_` and
@@ -808,5 +857,26 @@ impl ErrorDetails {
             return !help.links.is_empty();
         }
         false
+    }
+
+    /// Set [`LocalizedMessage`] details. Can be chained with other `.set_` and
+    /// `.add_` [`ErrorDetails`] methods.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use tonic_types::ErrorDetails;
+    ///
+    /// let mut err_details = ErrorDetails::new();
+    ///
+    /// err_details.set_localized_message("en-US", "message for the user");
+    /// ```
+    pub fn set_localized_message(
+        &mut self,
+        locale: impl Into<String>,
+        message: impl Into<String>,
+    ) -> &mut Self {
+        self.localized_message = Some(LocalizedMessage::new(locale, message));
+        self
     }
 }

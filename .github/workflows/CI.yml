@@ -7,6 +7,16 @@ on:
   pull_request: {}
 
 jobs:
+
+  rustfmt:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: hecrj/setup-rust-action@v1
+      with:
+        components: rustfmt
+    - run: cargo fmt --all --check
+
   check:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -21,7 +31,6 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-        components: rustfmt
     - uses: actions/checkout@v3
     - name: Install cargo-hack
       uses: baptiste0928/cargo-install@v1
@@ -31,13 +40,11 @@ jobs:
       uses: baptiste0928/cargo-install@v1
       with:
         crate: cargo-machete
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
-    - name: Check fmt
-      run: cargo fmt -- --check
     - name: Check unused dependencies
       run: cargo machete
     - name: Check features
@@ -54,10 +61,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: "1.60"
@@ -81,10 +88,10 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: "1.60"
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - name: Check
       run: cargo check --all --all-targets --all-features
 
@@ -104,11 +111,10 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-        components: rustfmt
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
     - uses: actions/checkout@v3
     - name: Run tests
@@ -129,12 +135,11 @@ jobs:
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: ${{ matrix.rust }}
-        components: rustfmt
     - uses: actions/checkout@v3
-    - name: Install Protoc
-      uses: arduino/setup-protoc@v1
+    - name: Install protoc
+      uses: taiki-e/install-action@v2
       with:
-        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        tool: protoc@3.20.3
     - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh

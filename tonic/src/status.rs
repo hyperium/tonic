@@ -361,8 +361,17 @@ impl Status {
     // FIXME: bubble this into `transport` and expose generic http2 reasons.
     #[cfg(feature = "transport")]
     fn from_h2_error(err: Box<h2::Error>) -> Status {
+        let code = Self::code_from_h2(&err);
+
+        let mut status = Self::new(code, format!("h2 protocol error: {}", err));
+        status.source = Some(Arc::new(*err));
+        status
+    }
+
+    #[cfg(feature = "transport")]
+    fn code_from_h2(err: &h2::Error) -> Code {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors
-        let code = match err.reason() {
+        match err.reason() {
             Some(h2::Reason::NO_ERROR)
             | Some(h2::Reason::PROTOCOL_ERROR)
             | Some(h2::Reason::INTERNAL_ERROR)
@@ -376,11 +385,7 @@ impl Status {
             Some(h2::Reason::INADEQUATE_SECURITY) => Code::PermissionDenied,
 
             _ => Code::Unknown,
-        };
-
-        let mut status = Self::new(code, format!("h2 protocol error: {}", err));
-        status.source = Some(Arc::new(*err));
-        status
+        }
     }
 
     #[cfg(feature = "transport")]
@@ -416,6 +421,14 @@ impl Status {
         if err.is_timeout() || err.is_connect() {
             return Some(Status::unavailable(err.to_string()));
         }
+
+        if let Some(h2_err) = err.source().and_then(|e| e.downcast_ref::<h2::Error>()) {
+            let code = Status::code_from_h2(h2_err);
+            let status = Self::new(code, format!("h2 protocol error: {}", err));
+
+            return Some(status);
+        }
+
         None
     }
 

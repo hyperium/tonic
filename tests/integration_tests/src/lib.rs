@@ -53,3 +53,7 @@ pub mod mock {
         }
     }
 }
+
+pub fn trace_init() {
+    let _ = tracing_subscriber::fmt::try_init();
+}

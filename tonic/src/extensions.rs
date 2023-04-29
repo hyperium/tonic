@@ -88,10 +88,10 @@ impl GrpcMethod {
 
     /// gRPC service name
     pub fn service(&self) -> &str {
-        &self.service
+        self.service
     }
     /// gRPC method name
     pub fn method(&self) -> &str {
-        &self.method
+        self.method
     }
 }

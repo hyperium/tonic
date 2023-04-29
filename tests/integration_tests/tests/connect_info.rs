@@ -14,6 +14,7 @@ async fn getting_connect_info() {
     #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
+            assert!(req.local_addr().is_some());
             assert!(req.remote_addr().is_some());
             assert!(req.extensions().get::<TcpConnectInfo>().is_some());
 
@@ -73,6 +74,7 @@ pub mod unix {
             let conn_info = req.extensions().get::<UdsConnectInfo>().unwrap();
 
             // Client-side unix sockets are unnamed.
+            assert!(req.local_addr().is_none());
             assert!(req.remote_addr().is_none());
             assert!(conn_info.peer_addr.as_ref().unwrap().is_unnamed());
             // This should contain process credentials for the client socket.
