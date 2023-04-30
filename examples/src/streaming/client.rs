@@ -2,9 +2,8 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use futures::stream::Stream;
 use std::time::Duration;
-use tokio_stream::StreamExt;
+use tokio_stream::{Stream, StreamExt};
 use tonic::transport::Channel;
 
 use pb::{echo_client::EchoClient, EchoRequest};

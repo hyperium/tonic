@@ -3,7 +3,7 @@
 //! To hit the warp server you can run this command:
 //! `curl localhost:50051/hello`
 
-use futures::future::{self, Either, TryFutureExt};
+use futures_util::future::{self, Either, TryFutureExt};
 use http::version::Version;
 use hyper::{service::make_service_fn, Server};
 use std::convert::Infallible;
