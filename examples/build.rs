@@ -12,6 +12,17 @@ fn main() {
         .compile(&["proto/helloworld/helloworld.proto"], &["proto"])
         .unwrap();
 
+    tonic_build::configure()
+        .build_server(true)
+        .compile(
+            &[
+                "proto/multiple_protos/file1.proto",
+                "proto/multiple_protos/file2.proto",
+            ],
+            &["proto"],
+        )
+        .unwrap();
+
     tonic_build::compile_protos("proto/echo/echo.proto").unwrap();
 
     tonic_build::compile_protos("proto/unaryecho/echo.proto").unwrap();
