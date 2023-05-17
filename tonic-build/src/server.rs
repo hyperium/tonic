@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use super::{Attributes, Method, Service};
 use crate::{
-    format_method_name, format_method_path, format_service_name, generate_doc_comment,
-    generate_doc_comments, naive_snake_case,
+    format_method_name, format_service_name, generate_doc_comment, generate_doc_comments,
+    naive_snake_case,
 };
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
@@ -19,9 +19,9 @@ pub(crate) fn generate_internal<T: Service>(
     use_arc_self: bool,
     generate_default_stubs: bool,
 ) -> TokenStream {
+    let service_prefix = format_service_name(service, emit_package);
     let methods = generate_methods(
         service,
-        emit_package,
         proto_path,
         compile_well_known_types,
         use_arc_self,
@@ -164,17 +164,21 @@ pub(crate) fn generate_internal<T: Service>(
                 fn call(&mut self, req: http::Request<B>) -> Self::Future {
                     let inner = self.inner.clone();
 
-                    match req.uri().path() {
-                        #methods
+                    fn not_found() -> http::Response<tonic::body::BoxBody> {
+                        http::Response::builder()
+                                   .status(200)
+                                   .header("grpc-status", "12")
+                                   .header("content-type", "application/grpc")
+                                   .body(empty_body())
+                                   .unwrap()
+                    }
 
-                        _ => Box::pin(async move {
-                            Ok(http::Response::builder()
-                               .status(200)
-                               .header("grpc-status", "12")
-                               .header("content-type", "application/grpc")
-                               .body(empty_body())
-                               .unwrap())
-                        }),
+                    match req.uri().path().strip_prefix(concat!("/", #service_prefix, "/")) {
+                        Some(method) => match method {
+                            #methods
+                            _ => Box::pin(async move { Ok(not_found()) })
+                        },
+                        None => Box::pin(async move { Ok(not_found()) })
                     }
                 }
             }
@@ -383,7 +387,6 @@ fn generate_named(
 
 fn generate_methods<T: Service>(
     service: &T,
-    emit_package: bool,
     proto_path: &str,
     compile_well_known_types: bool,
     use_arc_self: bool,
@@ -392,8 +395,8 @@ fn generate_methods<T: Service>(
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
-        let path = format_method_path(service, method, emit_package);
-        let method_path = Lit::Str(LitStr::new(&path, Span::call_site()));
+        let path = method.identifier();
+        let method_path = Lit::Str(LitStr::new(path, Span::call_site()));
         let ident = quote::format_ident!("{}", method.name());
         let server_trait = quote::format_ident!("{}", service.name());
 
