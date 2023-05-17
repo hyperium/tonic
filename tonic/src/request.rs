@@ -5,8 +5,6 @@ use crate::transport::server::TlsConnectInfo;
 use crate::transport::{server::TcpConnectInfo, Certificate};
 use crate::Extensions;
 use futures_core::Stream;
-#[cfg(feature = "transport")]
-use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
 
 /// A gRPC request and metadata from an RPC call.
@@ -279,12 +277,23 @@ impl<T> Request<T> {
     /// TLS enabled connections.
     #[cfg(feature = "transport")]
     #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
-    pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
+    pub fn peer_certs(&self) -> Option<Vec<Certificate>> {
         #[cfg(feature = "tls")]
         {
             self.extensions()
                 .get::<TlsConnectInfo<TcpConnectInfo>>()
                 .and_then(|i| i.peer_certs())
+                .map(|der_certs| {
+                    der_certs
+                        .iter()
+                        .map(|der_cert| {
+                            pem::Pem::new("CERTIFICATE", der_cert.as_ref())
+                                .to_string()
+                                .into_bytes()
+                        })
+                        .map(|pem_cert| Certificate::from_pem(pem_cert))
+                        .collect()
+                })
         }
 
         #[cfg(not(feature = "tls"))]

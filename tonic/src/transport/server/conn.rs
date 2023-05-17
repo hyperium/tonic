@@ -3,9 +3,9 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
 #[cfg(feature = "tls")]
-use crate::transport::Certificate;
-#[cfg(feature = "tls")]
 use std::sync::Arc;
+#[cfg(feature = "tls")]
+use tokio_rustls::rustls::Certificate;
 #[cfg(feature = "tls")]
 use tokio_rustls::server::TlsStream;
 
@@ -124,8 +124,7 @@ where
         let inner = inner.connect_info();
 
         let certs = if let Some(certs) = session.peer_certificates() {
-            let certs = certs.iter().map(Certificate::from_pem).collect();
-            Some(Arc::new(certs))
+            Some(Arc::new(certs.to_vec()))
         } else {
             None
         };
