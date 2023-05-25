@@ -1,3 +1,5 @@
+all-features = true
+
 [bans]
 multiple-versions = "deny"
 deny = [
