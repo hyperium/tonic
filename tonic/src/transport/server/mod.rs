@@ -10,6 +10,8 @@ mod tls;
 mod unix;
 
 pub use super::service::Routes;
+pub use super::service::RoutesBuilder;
+
 pub use crate::server::NamedService;
 pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]
@@ -373,6 +375,17 @@ impl<L> Server<L> {
         L: Clone,
     {
         let routes = svc.map(Routes::new).unwrap_or_default();
+        Router::new(self.clone(), routes)
+    }
+
+    /// Create a router with given [`Routes`]. 
+    ///
+    /// This will clone the `Server` builder and create a router that will
+    /// route around different services that were already added to the provided `routes`.
+    pub fn add_routes(&mut self, routes: Routes) -> Router<L>
+    where
+        L: Clone,
+    {
         Router::new(self.clone(), routes)
     }
 

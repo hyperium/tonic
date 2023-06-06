@@ -21,8 +21,37 @@ pub struct Routes {
     router: axum::Router,
 }
 
+#[derive(Debug, Default, Clone)]
+/// Allows adding new services to routes by passing a mutable reference to this builder.
+pub struct RoutesBuilder {
+    routes: Option<Routes>
+}
+
+impl RoutesBuilder {
+    /// Add a new service.
+    pub fn add_service<S>(&mut self, svc: S) -> &mut Self
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+        {
+            let routes = self.routes.take().unwrap_or_default();
+            self.routes.replace(routes.add_service(svc));
+            self
+        }
+    
+    /// Returns the routes with added services or empty [`Routes`] if no service was added
+    pub fn routes(self) -> Routes {
+        self.routes.unwrap_or_default()
+    }
+}
 impl Routes {
-    pub(crate) fn new<S>(svc: S) -> Self
+    /// Create a new routes with `svc` already added to it.
+    pub fn new<S>(svc: S) -> Self
     where
         S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
@@ -35,8 +64,9 @@ impl Routes {
         let router = axum::Router::new().fallback(unimplemented);
         Self { router }.add_service(svc)
     }
-
-    pub(crate) fn add_service<S>(mut self, svc: S) -> Self
+    
+    /// Add a new service.
+    pub fn add_service<S>(mut self, svc: S) -> Self
     where
         S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService

@@ -253,6 +253,10 @@ name = "richer-error-server-vec"
 path = "src/richer-error/server_vec.rs"
 required-features = ["types"]
 
+[[bin]]
+name = "dynanmic-server"
+path = "src/dynamic/server.rs"
+
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
 routeguide = ["dep:async-stream", "dep:futures", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
