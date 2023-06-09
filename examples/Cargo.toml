@@ -254,7 +254,7 @@ path = "src/richer-error/server_vec.rs"
 required-features = ["types"]
 
 [[bin]]
-name = "dynanmic-server"
+name = "dynamic-server"
 path = "src/dynamic/server.rs"
 
 [features]
