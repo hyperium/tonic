@@ -13,7 +13,7 @@ bytes = "1.0"
 futures-util = "0.3"
 prost = "0.11"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
-tonic = {path = "../../tonic"}
+tonic = {path = "../../tonic", features = ["vsock"]}
 tracing-subscriber = {version = "0.3"}
 
 [dev-dependencies]
@@ -26,6 +26,8 @@ tokio-stream = {version = "0.1.5", features = ["net"]}
 tower = {version = "0.4", features = []}
 tower-http = { version = "0.4", features = ["set-header", "trace"] }
 tower-service = "0.3"
+tokio-vsock = "0.4.0"
+vsock = "0.3.0"
 tracing = "0.1"
 
 [build-dependencies]

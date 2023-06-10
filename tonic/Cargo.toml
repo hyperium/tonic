@@ -42,6 +42,7 @@ channel = [
   "dep:tower",
   "dep:hyper-timeout",
 ]
+vsock = ["tokio-vsock"]
 
 # [[bench]]
 # name = "bench_main"
@@ -75,6 +76,7 @@ tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = tru
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
 axum = {version = "0.6.9", default_features = false, optional = true}
+tokio-vsock = { version = "0.4.0", optional = true }
 
 # rustls
 async-stream = { version = "0.3", optional = true }

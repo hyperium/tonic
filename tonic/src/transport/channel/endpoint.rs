@@ -343,6 +343,8 @@ impl Endpoint {
     /// This allows you to build a [Channel](struct.Channel.html) that uses a non-HTTP transport.
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
+    /// See the `vsock` example for an example on how to use this function to build channel that
+    /// uses Virtio VSOCK as transport.
     ///
     /// The [`connect_timeout`](Endpoint::connect_timeout) will still be applied.
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
@@ -374,6 +376,8 @@ impl Endpoint {
     ///
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
+    /// See the `vsock` example for an example on how to use this function to build channel that
+    /// uses Virtio VSOCK as transport.
     pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
     where
         C: MakeConnection<Uri> + Send + 'static,

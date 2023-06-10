@@ -122,3 +122,77 @@ pub mod unix {
         std::fs::remove_file(unix_socket_path).unwrap();
     }
 }
+
+#[cfg(unix)]
+pub mod vsock {
+    use futures_util::FutureExt;
+    use tokio::sync::oneshot;
+    use tokio_vsock::{VsockListener, VsockStream};
+    use tonic::{
+        transport::{server::VsockConnectInfo, Endpoint, Server, Uri},
+        Request, Response, Status,
+    };
+    use tower::service_fn;
+
+    use integration_tests::pb::{test_client, test_server, Input, Output};
+
+    // Use vsock-loopback so we don't need to spin up a VM.
+    static TEST_CID: u32 = vsock::VMADDR_CID_LOCAL;
+    // Arbitrarily chosen.
+    static TEST_PORT: u32 = 8000;
+
+    // Virtio VSOCK does not use URIs, hence this URI will never be used.
+    // It is defined purely since in order to create a channel, since a URI has to
+    // be supplied to create an `Endpoint`.
+    static IGNORED_ENDPOINT_URI: &str = "file://[::]:0";
+
+    struct Svc {}
+
+    #[tonic::async_trait]
+    impl test_server::Test for Svc {
+        async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
+            let conn_info = req.extensions().get::<VsockConnectInfo>().unwrap();
+
+            assert!(conn_info.local_addr.is_some());
+            assert_eq!(conn_info.local_addr.unwrap().cid(), TEST_CID);
+            assert_eq!(conn_info.local_addr.unwrap().port(), TEST_PORT);
+            assert!(conn_info.peer_addr.is_some());
+            assert_eq!(conn_info.peer_addr.unwrap().cid(), TEST_CID);
+
+            Ok(Response::new(Output {}))
+        }
+    }
+
+    #[tokio::test]
+    async fn getting_connect_info() {
+        let stream = VsockListener::bind(TEST_CID, TEST_PORT)
+            .expect("failed to bind VsockListener")
+            .incoming();
+
+        let service = test_server::TestServer::new(Svc {});
+        let (tx, rx) = oneshot::channel::<()>();
+
+        let jh = tokio::spawn(async move {
+            Server::builder()
+                .add_service(service)
+                .serve_with_incoming_shutdown(stream, rx.map(drop))
+                .await
+                .unwrap();
+        });
+
+        let channel = Endpoint::try_from(IGNORED_ENDPOINT_URI)
+            .unwrap()
+            .connect_with_connector(service_fn(move |_: Uri| {
+                VsockStream::connect(TEST_CID, TEST_PORT)
+            }))
+            .await
+            .unwrap();
+
+        let mut client = test_client::TestClient::new(channel);
+
+        client.unary_call(Input {}).await.unwrap();
+
+        tx.send(()).unwrap();
+        jh.await.unwrap();
+    }
+}

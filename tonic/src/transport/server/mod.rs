@@ -8,6 +8,7 @@ mod recover_error;
 mod tls;
 #[cfg(unix)]
 mod unix;
+mod vsock;
 
 pub use super::service::Routes;
 pub use crate::server::NamedService;
@@ -23,6 +24,9 @@ use super::service::TlsAcceptor;
 
 #[cfg(unix)]
 pub use unix::UdsConnectInfo;
+
+#[cfg(all(unix, feature = "vsock"))]
+pub use vsock::VsockConnectInfo;
 
 pub use incoming::TcpIncoming;
 
