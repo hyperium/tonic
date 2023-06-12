@@ -1,13 +1,9 @@
 use super::Connected;
 
-/// Connection info for Unix domain socket streams.
-///
-/// This type will be accessible through [request extensions][ext] if you're using
-/// a unix stream.
+/// Connection info for VSOCK socket streams.
 ///
 /// See [Connected] for more details.
 ///
-/// [ext]: crate::Request::extensions
 /// [Connected]: crate::transport::server::Connected
 #[cfg_attr(docsrs, doc(cfg(unix)))]
 #[derive(Clone, Debug)]
