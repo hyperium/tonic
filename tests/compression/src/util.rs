@@ -130,10 +130,12 @@ impl AssertRightEncoding {
     }
 
     pub fn call<B: Body>(self, req: http::Request<B>) -> http::Request<B> {
-        assert_eq!(
-            req.headers().get("grpc-encoding").unwrap(),
-            self.encoding.as_str()
-        );
+        let expected = match self.encoding {
+            CompressionEncoding::Gzip => "gzip",
+            CompressionEncoding::Zstd => "zstd",
+            _ => panic!("unexpected encoding {:?}", self.encoding),
+        };
+        assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);
 
         req
     }
