@@ -36,6 +36,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
             let expected = match self.encoding {
                 CompressionEncoding::Gzip => "gzip",
                 CompressionEncoding::Zstd => "zstd",
+                _ => panic!("unexpected encoding {:?}", self.encoding),
             };
             assert_eq!(
                 req.headers()

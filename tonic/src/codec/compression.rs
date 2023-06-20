@@ -39,12 +39,11 @@ impl EnabledCompressionEncodings {
     }
 
     pub(crate) fn into_accept_encoding_header_value(self) -> Option<http::HeaderValue> {
-        if self.is_gzip_enabled() {
-            Some(http::HeaderValue::from_static("gzip,identity"))
-        } else if self.is_zstd_enabled() {
-            Some(http::HeaderValue::from_static("zstd,identity"))
-        } else {
-            None
+        match (self.is_gzip_enabled(), self.is_zstd_enabled()) {
+            (true, false) => Some(http::HeaderValue::from_static("gzip,identity")),
+            (false, true) => Some(http::HeaderValue::from_static("zstd,identity")),
+            (true, true) => Some(http::HeaderValue::from_static("gzip,zstd,identity")),
+            (false, false) => None,
         }
     }
 
