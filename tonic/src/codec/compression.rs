@@ -252,8 +252,10 @@ pub(crate) fn decompress(
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
-            let out_writer = bytes::BufMut::writer(out_buf);
-            zstd::stream::copy_decode(&compressed_buf[0..len], out_writer)?;
+            let mut zstd_decoder = zstd::Decoder::new(&compressed_buf[0..len])?;
+            let mut out_writer = bytes::BufMut::writer(out_buf);
+
+            std::io::copy(&mut zstd_decoder, &mut out_writer)?;
         }
     }
 
