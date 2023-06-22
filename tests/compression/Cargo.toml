@@ -21,6 +21,3 @@ tower-http = {version = "0.4", features = ["map-response-body", "map-request-bod
 
 [build-dependencies]
 tonic-build = {path = "../../tonic-build" }
-
-[package.metadata.cargo-machete]
-ignored = ["prost"]

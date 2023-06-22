@@ -6,7 +6,6 @@ use crate::{
     request::SanitizeHeaders,
     Code, Request, Response, Status,
 };
-use futures_core::Stream;
 use futures_util::{future, stream, TryStreamExt};
 use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
@@ -14,6 +13,7 @@ use http::{
 };
 use http_body::Body;
 use std::fmt;
+use tokio_stream::Stream;
 
 /// A gRPC client dispatcher.
 ///

@@ -1,4 +1,3 @@
-use futures::stream;
 use futures_util::FutureExt;
 use prost::Message;
 use std::net::SocketAddr;
@@ -123,7 +122,7 @@ async fn make_test_reflection_request(request: ServerReflectionRequest) -> Messa
         .unwrap();
     let mut client = ServerReflectionClient::new(conn);
 
-    let request = Request::new(stream::iter(vec![request]));
+    let request = Request::new(tokio_stream::iter(vec![request]));
     let mut inbound = client
         .server_reflection_info(request)
         .await

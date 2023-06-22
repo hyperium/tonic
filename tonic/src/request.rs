@@ -4,10 +4,10 @@ use crate::transport::server::TlsConnectInfo;
 #[cfg(feature = "transport")]
 use crate::transport::{server::TcpConnectInfo, Certificate};
 use crate::Extensions;
-use futures_core::Stream;
 #[cfg(feature = "transport")]
 use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
+use tokio_stream::Stream;
 
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
