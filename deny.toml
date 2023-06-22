@@ -16,6 +16,9 @@ deny = [
     # term is not fully maintained, and termcolor is replacing it
     { name = "term" },
 ]
+skip = [
+    { name = "bitflags" },
+]
 skip-tree = [
     { name = "windows-sys" },
     { name = "hermit-abi" },
