@@ -4,6 +4,8 @@ use bytes::{Buf, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};
 use std::fmt;
+#[cfg(feature = "zstd")]
+use zstd::stream::read::{Decoder, Encoder};
 
 pub(crate) const ENCODING_HEADER: &str = "grpc-encoding";
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
@@ -215,13 +217,14 @@ pub(crate) fn compress(
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
-            let out_writer = bytes::BufMut::writer(out_buf);
-            zstd::stream::copy_encode(
+            let mut zstd_encoder = Encoder::new(
                 &decompressed_buf[0..len],
-                out_writer,
-                // Use zstd's default level
+                // FIXME: support customizing the compression level
                 0,
             )?;
+            let mut out_writer = bytes::BufMut::writer(out_buf);
+
+            std::io::copy(&mut zstd_encoder, &mut out_writer)?;
         }
     }
 
@@ -252,7 +255,7 @@ pub(crate) fn decompress(
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
-            let mut zstd_decoder = zstd::Decoder::new(&compressed_buf[0..len])?;
+            let mut zstd_decoder = Decoder::new(&compressed_buf[0..len])?;
             let mut out_writer = bytes::BufMut::writer(out_buf);
 
             std::io::copy(&mut zstd_decoder, &mut out_writer)?;
