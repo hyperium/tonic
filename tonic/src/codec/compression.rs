@@ -202,6 +202,7 @@ pub(crate) fn compress(
 ) -> Result<(), std::io::Error> {
     let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
     out_buf.reserve(capacity);
+    let mut out_writer = bytes::BufMut::writer(out_buf);
 
     match encoding {
         #[cfg(feature = "gzip")]
@@ -211,8 +212,6 @@ pub(crate) fn compress(
                 // FIXME: support customizing the compression level
                 flate2::Compression::new(6),
             );
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut gzip_encoder, &mut out_writer)?;
         }
         #[cfg(feature = "zstd")]
@@ -220,10 +219,8 @@ pub(crate) fn compress(
             let mut zstd_encoder = Encoder::new(
                 &decompressed_buf[0..len],
                 // FIXME: support customizing the compression level
-                0,
+                zstd::DEFAULT_COMPRESSION_LEVEL,
             )?;
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut zstd_encoder, &mut out_writer)?;
         }
     }
@@ -244,20 +241,17 @@ pub(crate) fn decompress(
     let estimate_decompressed_len = len * 2;
     let capacity = ((estimate_decompressed_len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
     out_buf.reserve(capacity);
+    let mut out_writer = bytes::BufMut::writer(out_buf);
 
     match encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
             let mut gzip_decoder = GzDecoder::new(&compressed_buf[0..len]);
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut gzip_decoder, &mut out_writer)?;
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
             let mut zstd_decoder = Decoder::new(&compressed_buf[0..len])?;
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut zstd_decoder, &mut out_writer)?;
         }
     }
