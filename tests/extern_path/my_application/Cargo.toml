@@ -15,6 +15,3 @@ uuid = {package = "uuid1", path = "../uuid"}
 
 [build-dependencies]
 tonic-build = {path = "../../../tonic-build"}
-
-[package.metadata.cargo-machete]
-ignored = ["prost"]

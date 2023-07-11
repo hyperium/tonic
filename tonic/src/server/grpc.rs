@@ -7,8 +7,7 @@ use crate::{
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
 };
-use futures_core::TryStream;
-use futures_util::{future, stream, TryStreamExt};
+use futures_util::{future, stream, TryStream, TryStreamExt};
 use http_body::Body;
 use std::fmt;
 

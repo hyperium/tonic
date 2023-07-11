@@ -1,6 +1,5 @@
 use super::{Connected, Server};
 use crate::transport::service::ServerIo;
-use futures_core::Stream;
 use futures_util::stream::TryStreamExt;
 use hyper::server::{
     accept::Accept,
@@ -16,6 +15,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
 };
+use tokio_stream::Stream;
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE, L>(
