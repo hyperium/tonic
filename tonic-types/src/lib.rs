@@ -180,7 +180,7 @@ mod richer_error;
 pub use richer_error::{
     BadRequest, DebugInfo, ErrorDetail, ErrorDetails, ErrorInfo, FieldViolation, Help, HelpLink,
     LocalizedMessage, PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation,
-    RequestInfo, ResourceInfo, RetryInfo, StatusExt,
+    RequestInfo, ResourceInfo, RetryInfo, StatusExt, RpcStatusExt
 };
 
 mod sealed {

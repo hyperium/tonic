@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `ResourceInfo` standard error message described
@@ -63,7 +65,14 @@ impl IntoAny for ResourceInfo {
 }
 
 impl FromAny for ResourceInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for ResourceInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let res_info = pb::ResourceInfo::decode(buf)?;
 

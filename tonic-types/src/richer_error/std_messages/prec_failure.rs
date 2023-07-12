@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `violations` field of the [`PreconditionFailure`] struct.
@@ -129,7 +131,14 @@ impl IntoAny for PreconditionFailure {
 }
 
 impl FromAny for PreconditionFailure {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for PreconditionFailure {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let precondition_failure = pb::PreconditionFailure::decode(buf)?;
 

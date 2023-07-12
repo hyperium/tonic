@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `violations` field of the [`QuotaFailure`] struct. Describes a
@@ -106,7 +108,14 @@ impl IntoAny for QuotaFailure {
 }
 
 impl FromAny for QuotaFailure {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for QuotaFailure {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let quota_failure = pb::QuotaFailure::decode(buf)?;
 

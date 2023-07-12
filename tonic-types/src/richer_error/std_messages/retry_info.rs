@@ -3,6 +3,8 @@ use std::time;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
@@ -62,7 +64,14 @@ impl IntoAny for RetryInfo {
 }
 
 impl FromAny for RetryInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for RetryInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let retry_info = pb::RetryInfo::decode(buf)?;
 

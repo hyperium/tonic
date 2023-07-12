@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `field_violations` field of the [`BadRequest`] struct.
@@ -109,7 +111,14 @@ impl IntoAny for BadRequest {
 }
 
 impl FromAny for BadRequest {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for BadRequest {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let bad_req = pb::BadRequest::decode(buf)?;
 

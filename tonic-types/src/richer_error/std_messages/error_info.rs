@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `ErrorInfo` standard error message described in
@@ -63,7 +65,14 @@ impl IntoAny for ErrorInfo {
 }
 
 impl FromAny for ErrorInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for ErrorInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let error_info = pb::ErrorInfo::decode(buf)?;
 
