@@ -23,6 +23,24 @@ impl HelpLink {
     }
 }
 
+impl From<pb::help::Link> for HelpLink {
+    fn from(value: pb::help::Link) -> Self {
+        HelpLink {
+            description: value.description,
+            url: value.url,
+        }
+    }
+}
+
+impl From<HelpLink> for pb::help::Link {
+    fn from(value: HelpLink) -> Self {
+        pb::help::Link {
+            description: value.description,
+            url: value.url,
+        }
+    }
+}
+
 /// Used to encode/decode the `Help` standard error message described in
 /// [error_details.proto]. Provides links to documentation or for performing
 /// an out-of-band action.
@@ -77,16 +95,7 @@ impl Help {
 
 impl IntoAny for Help {
     fn into_any(self) -> Any {
-        let detail_data = pb::Help {
-            links: self
-                .links
-                .into_iter()
-                .map(|v| pb::help::Link {
-                    description: v.description,
-                    url: v.url,
-                })
-                .collect(),
-        };
+        let detail_data: pb::Help = self.into();
 
         Any {
             type_url: Help::TYPE_URL.to_string(),
@@ -100,18 +109,23 @@ impl FromAny for Help {
         let buf: &[u8] = &any.value;
         let help = pb::Help::decode(buf)?;
 
-        let help = Help {
-            links: help
-                .links
-                .into_iter()
-                .map(|v| HelpLink {
-                    description: v.description,
-                    url: v.url,
-                })
-                .collect(),
-        };
+        Ok(help.into())
+    }
+}
 
-        Ok(help)
+impl From<pb::Help> for Help {
+    fn from(value: pb::Help) -> Self {
+        Help {
+            links: value.links.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<Help> for pb::Help {
+    fn from(value: Help) -> Self {
+        pb::Help {
+            links: value.links.into_iter().map(Into::into).collect(),
+        }
     }
 }
 

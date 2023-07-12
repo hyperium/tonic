@@ -40,10 +40,7 @@ impl RequestInfo {
 
 impl IntoAny for RequestInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::RequestInfo {
-            request_id: self.request_id,
-            serving_data: self.serving_data,
-        };
+        let detail_data: pb::RequestInfo = self.into();
 
         Any {
             type_url: RequestInfo::TYPE_URL.to_string(),
@@ -57,12 +54,25 @@ impl FromAny for RequestInfo {
         let buf: &[u8] = &any.value;
         let req_info = pb::RequestInfo::decode(buf)?;
 
-        let req_info = RequestInfo {
+        Ok(req_info.into())
+    }
+}
+
+impl From<pb::RequestInfo> for RequestInfo {
+    fn from(req_info: pb::RequestInfo) -> Self {
+        RequestInfo {
             request_id: req_info.request_id,
             serving_data: req_info.serving_data,
-        };
+        }
+    }
+}
 
-        Ok(req_info)
+impl From<RequestInfo> for pb::RequestInfo {
+    fn from(req_info: RequestInfo) -> Self {
+        pb::RequestInfo {
+            request_id: req_info.request_id,
+            serving_data: req_info.serving_data,
+        }
     }
 }
 

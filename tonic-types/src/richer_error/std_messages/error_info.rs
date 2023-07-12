@@ -53,11 +53,7 @@ impl ErrorInfo {
 
 impl IntoAny for ErrorInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::ErrorInfo {
-            reason: self.reason,
-            domain: self.domain,
-            metadata: self.metadata,
-        };
+        let detail_data: pb::ErrorInfo = self.into();
 
         Any {
             type_url: ErrorInfo::TYPE_URL.to_string(),
@@ -71,13 +67,27 @@ impl FromAny for ErrorInfo {
         let buf: &[u8] = &any.value;
         let error_info = pb::ErrorInfo::decode(buf)?;
 
-        let error_info = ErrorInfo {
+        Ok(error_info.into())
+    }
+}
+
+impl From<pb::ErrorInfo> for ErrorInfo {
+    fn from(error_info: pb::ErrorInfo) -> Self {
+        ErrorInfo {
             reason: error_info.reason,
             domain: error_info.domain,
             metadata: error_info.metadata,
-        };
+        }
+    }
+}
 
-        Ok(error_info)
+impl From<ErrorInfo> for pb::ErrorInfo {
+    fn from(error_info: ErrorInfo) -> Self {
+        pb::ErrorInfo {
+            reason: error_info.reason,
+            domain: error_info.domain,
+            metadata: error_info.metadata,
+        }
     }
 }
 

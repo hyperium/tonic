@@ -37,10 +37,7 @@ impl DebugInfo {
 
 impl IntoAny for DebugInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::DebugInfo {
-            stack_entries: self.stack_entries,
-            detail: self.detail,
-        };
+        let detail_data: pb::DebugInfo = self.into();
 
         Any {
             type_url: DebugInfo::TYPE_URL.to_string(),
@@ -54,12 +51,25 @@ impl FromAny for DebugInfo {
         let buf: &[u8] = &any.value;
         let debug_info = pb::DebugInfo::decode(buf)?;
 
-        let debug_info = DebugInfo {
+        Ok(debug_info.into())
+    }
+}
+
+impl From<pb::DebugInfo> for DebugInfo {
+    fn from(debug_info: pb::DebugInfo) -> Self {
+        DebugInfo {
             stack_entries: debug_info.stack_entries,
             detail: debug_info.detail,
-        };
+        }
+    }
+}
 
-        Ok(debug_info)
+impl From<DebugInfo> for pb::DebugInfo {
+    fn from(debug_info: DebugInfo) -> Self {
+        pb::DebugInfo {
+            stack_entries: debug_info.stack_entries,
+            detail: debug_info.detail,
+        }
     }
 }
 
