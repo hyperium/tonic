@@ -38,4 +38,10 @@ pub mod pb {
 }
 
 /// Implementation of the server component of gRPC Server Reflection.
+#[cfg(not(feature = "protobuf-support"))]
 pub mod server;
+
+#[cfg(feature = "protobuf-support")]
+pub mod pf_server;
+#[cfg(feature = "protobuf-support")]
+pub use pf_server as server;

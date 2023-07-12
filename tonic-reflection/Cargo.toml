@@ -23,8 +23,12 @@ prost-types = "0.11"
 tokio = {version = "1.0", features = ["sync", "rt"]}
 tokio-stream = {version = "0.1", features = ["net"]}
 tonic = { version = "0.9", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
+protobuf = { version = "3.2",optional = true}
 
 [dev-dependencies]
 tonic = { version = "0.9", path = "../tonic", default-features = false, features = ["transport"] }
 tonic-build = { version = "0.9", path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"] }
 futures-util = "0.3"
+
+[features]
+protobuf-support = ["protobuf"]
