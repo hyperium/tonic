@@ -329,9 +329,8 @@ mod tests {
             #[allow(clippy::drop_ref)]
             fn poll_trailers(
                 self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
+                _cx: &mut Context<'_>,
             ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-                drop(cx);
                 Poll::Ready(Ok(None))
             }
         }
