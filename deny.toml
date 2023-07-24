@@ -21,6 +21,7 @@ skip-tree = [
     { name = "hermit-abi" },
     { name = "base64" },
     { name = "syn" },
+    { name = "bitflags" },
 ]
 
 [licenses]
