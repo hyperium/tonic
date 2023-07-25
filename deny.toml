@@ -22,7 +22,6 @@ skip-tree = [
     { name = "base64" },
     { name = "syn" },
     { name = "bitflags" },
-    { name = "webpki-roots" },
 ]
 
 [licenses]
