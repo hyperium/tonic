@@ -19,8 +19,6 @@ async-stream = "0.3"
 strum = {version = "0.25", features = ["derive"]}
 pico-args = {version = "0.5", features = ["eq-separator"]}
 console = "0.15"
-futures-core = "0.3"
-futures-util = "0.3"
 http = "0.2"
 http-body = "0.4.2"
 hyper = "0.14"
