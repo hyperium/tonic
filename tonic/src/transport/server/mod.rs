@@ -378,7 +378,7 @@ impl<L> Server<L> {
         Router::new(self.clone(), routes)
     }
 
-    /// Create a router with given [`Routes`]. 
+    /// Create a router with given [`Routes`].
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services that were already added to the provided `routes`.

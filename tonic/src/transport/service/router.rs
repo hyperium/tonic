@@ -24,7 +24,7 @@ pub struct Routes {
 #[derive(Debug, Default, Clone)]
 /// Allows adding new services to routes by passing a mutable reference to this builder.
 pub struct RoutesBuilder {
-    routes: Option<Routes>
+    routes: Option<Routes>,
 }
 
 impl RoutesBuilder {
@@ -38,12 +38,12 @@ impl RoutesBuilder {
             + 'static,
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
-        {
-            let routes = self.routes.take().unwrap_or_default();
-            self.routes.replace(routes.add_service(svc));
-            self
-        }
-    
+    {
+        let routes = self.routes.take().unwrap_or_default();
+        self.routes.replace(routes.add_service(svc));
+        self
+    }
+
     /// Returns the routes with added services or empty [`Routes`] if no service was added
     pub fn routes(self) -> Routes {
         self.routes.unwrap_or_default()
@@ -64,7 +64,7 @@ impl Routes {
         let router = axum::Router::new().fallback(unimplemented);
         Self { router }.add_service(svc)
     }
-    
+
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
