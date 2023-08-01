@@ -68,7 +68,7 @@ impl TlsConnector {
         let mut config = match identity {
             Some(identity) => {
                 let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
-                builder.with_single_cert(client_cert, client_key)?
+                builder.with_client_auth_cert(client_cert, client_key)?
             }
             None => builder.with_no_client_auth(),
         };

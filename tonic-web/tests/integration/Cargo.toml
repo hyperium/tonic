@@ -14,6 +14,8 @@ prost = "0.11"
 tokio = { version = "1", features = ["macros", "rt", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = { path = "../../../tonic" }
+
+[dev-dependencies]
 tonic-web = { path = "../../../tonic-web" }
 
 [build-dependencies]

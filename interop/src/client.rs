@@ -2,8 +2,8 @@ use crate::{
     pb::test_service_client::*, pb::unimplemented_service_client::*, pb::*, test_assert,
     TestAssertion,
 };
-use futures_util::{future, stream, StreamExt};
 use tokio::sync::mpsc;
+use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
 
@@ -87,7 +87,7 @@ pub async fn client_streaming(client: &mut TestClient, assertions: &mut Vec<Test
         ..Default::default()
     });
 
-    let stream = stream::iter(requests);
+    let stream = tokio_stream::iter(requests);
 
     let result = client.streaming_input_call(Request::new(stream)).await;
 
@@ -129,7 +129,7 @@ pub async fn server_streaming(client: &mut TestClient, assertions: &mut Vec<Test
     if let Ok(response) = result {
         let responses = response
             .into_inner()
-            .filter_map(|m| future::ready(m.ok()))
+            .filter_map(|m| m.ok())
             .collect::<Vec<_>>()
             .await;
         let actual_response_lengths = crate::response_lengths(&responses);
@@ -207,7 +207,7 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
 }
 
 pub async fn empty_stream(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
-    let stream = stream::iter(Vec::new());
+    let stream = tokio_stream::iter(Vec::new());
     let result = client.full_duplex_call(Request::new(stream)).await;
 
     assertions.push(test_assert!(
@@ -270,7 +270,7 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
     let result = client.unary_call(Request::new(simple_req)).await;
     validate_response(result, assertions);
 
-    let stream = stream::iter(vec![duplex_req]);
+    let stream = tokio_stream::iter(vec![duplex_req]);
     let result = match client.full_duplex_call(Request::new(stream)).await {
         Ok(response) => {
             let stream = response.into_inner();
@@ -356,7 +356,7 @@ pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestA
     req_unary.metadata_mut().insert(key1, value1.clone());
     req_unary.metadata_mut().insert_bin(key2, value2.clone());
 
-    let stream = stream::iter(vec![make_ping_pong_request(0)]);
+    let stream = tokio_stream::iter(vec![make_ping_pong_request(0)]);
     let mut req_stream = Request::new(stream);
     req_stream.metadata_mut().insert(key1, value1.clone());
     req_stream.metadata_mut().insert_bin(key2, value2.clone());

@@ -1,5 +1,6 @@
 use hyper::Body;
 use std::{
+    pin::Pin,
     task::{Context, Poll},
     time::Duration,
 };
@@ -81,6 +82,8 @@ struct MyMiddleware<S> {
     inner: S,
 }
 
+type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+
 impl<S> Service<hyper::Request<Body>> for MyMiddleware<S>
 where
     S: Service<hyper::Request<Body>, Response = hyper::Response<BoxBody>> + Clone + Send + 'static,
@@ -88,7 +91,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = futures::future::BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)

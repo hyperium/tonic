@@ -1,12 +1,12 @@
 use crate::pb::{self, *};
 use async_stream::try_stream;
-use futures_util::{stream, StreamExt, TryStreamExt};
 use http::header::{HeaderMap, HeaderName, HeaderValue};
 use http_body::Body;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tokio_stream::StreamExt;
 use tonic::{body::BoxBody, transport::NamedService, Code, Request, Response, Status};
 use tower::Service;
 
@@ -19,7 +19,7 @@ pub struct TestService;
 type Result<T> = std::result::Result<Response<T>, Status>;
 type Streaming<T> = Request<tonic::Streaming<T>>;
 type Stream<T> =
-    Pin<Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+    Pin<Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
 type BoxFuture<T, E> = Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'static>>;
 
 #[tonic::async_trait]
@@ -115,7 +115,7 @@ impl pb::test_service_server::TestService for TestService {
                 return Err(status);
             }
 
-            let single_message = stream::iter(vec![Ok(first_msg)]);
+            let single_message = tokio_stream::iter(vec![Ok(first_msg)]);
             let mut stream = single_message.chain(stream);
 
             let stream = try_stream! {
@@ -136,7 +136,7 @@ impl pb::test_service_server::TestService for TestService {
 
             Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
         } else {
-            let stream = stream::empty();
+            let stream = tokio_stream::empty();
             Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
         }
     }
