@@ -571,6 +571,11 @@ impl<L> Router<L> {
         self
     }
 
+    /// Convert this tonic `Router` into an axum `Router` consuming the tonic one.
+    pub fn into_router(self) -> axum::Router {
+        self.routes.into_router()
+    }
+
     /// Consume this [`Server`] creating a future that will execute the server
     /// on [tokio]'s default executor.
     ///
