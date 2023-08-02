@@ -313,7 +313,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<#req_message>)
@@ -329,7 +329,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
