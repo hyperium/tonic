@@ -261,7 +261,7 @@ autoreload = ["tokio-stream/net", "dep:listenfd"]
 health = ["dep:tonic-health"]
 grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:tracing-subscriber"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
-hyper-warp = ["dep:futures-util", "dep:tower", "dep:hyper", "dep:http", "dep:http-body", "dep:warp"]
+hyper-warp = ["dep:either", "dep:tower", "dep:hyper", "dep:http", "dep:http-body", "dep:warp"]
 hyper-warp-multiplex = ["hyper-warp"]
 uds = ["tokio-stream/net", "dep:tower", "dep:hyper"]
 streaming = ["tokio-stream", "dep:h2"]
@@ -289,8 +289,8 @@ tonic-web = { path = "../tonic-web", optional = true }
 tonic-health = { path = "../tonic-health", optional = true }
 tonic-reflection = { path = "../tonic-reflection", optional = true }
 tonic-types = { path = "../tonic-types", optional = true }
+either = { version = "1.9", optional = true }
 async-stream = { version = "0.3", optional = true }
-futures-util = { version = "0.3", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 tower = { version = "0.4", optional = true }
 rand = { version = "0.8", optional = true }
