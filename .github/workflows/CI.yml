@@ -6,6 +6,9 @@ on:
     - master
   pull_request: {}
 
+env:
+  PROTOC_VERSION: 3.23.4
+
 jobs:
 
   rustfmt:
@@ -34,7 +37,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - run: cargo hack udeps --workspace --each-feature ${{ matrix.option }}
 
@@ -60,7 +63,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - name: Check features
       run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
@@ -79,7 +82,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: "1.63"
@@ -106,7 +109,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - name: Check
       run: cargo check --all --all-targets --all-features
 
@@ -129,7 +132,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - uses: actions/checkout@v3
     - name: Run tests
@@ -154,7 +157,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh
