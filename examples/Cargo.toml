@@ -253,6 +253,15 @@ name = "richer-error-server-vec"
 path = "src/richer-error/server_vec.rs"
 required-features = ["types"]
 
+[[bin]]
+name = "h2c-server"
+path = "src/h2c/server.rs"
+
+[[bin]]
+name = "h2c-client"
+path = "src/h2c/client.rs"
+
+
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
 routeguide = ["dep:async-stream", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
@@ -281,6 +290,7 @@ default = ["full"]
 
 [dependencies]
 # Common dependencies
+axum = "0.6"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 prost = "0.11"
 tonic = { path = "../tonic" }
