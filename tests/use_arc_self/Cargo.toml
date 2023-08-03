@@ -7,7 +7,7 @@ publish = false
 version = "0.1.0"
 
 [dependencies]
-futures = "0.3"
+tokio-stream = "0.1"
 prost = "0.11"
 tonic = {path = "../../tonic", features = ["gzip"]}
 
