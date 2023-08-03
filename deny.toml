@@ -37,6 +37,7 @@ allow = [
     "Zlib",
     "Unicode-DFS-2016",
     "MPL-2.0",
+    "BSD-3-Clause"
 ]
 
 [[licenses.clarify]]
