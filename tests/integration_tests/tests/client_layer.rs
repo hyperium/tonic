@@ -1,8 +1,9 @@
 use std::time::Duration;
 
-use futures::{channel::oneshot, FutureExt};
+use futures_util::FutureExt;
 use http::{header::HeaderName, HeaderValue};
 use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
+use tokio::sync::oneshot;
 use tonic::{
     transport::{Endpoint, Server},
     Request, Response, Status,

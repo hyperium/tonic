@@ -125,8 +125,9 @@ async fn status_with_metadata() {
     jh.await.unwrap();
 }
 
-type Stream<T> =
-    std::pin::Pin<Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+type Stream<T> = std::pin::Pin<
+    Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>,
+>;
 
 #[tokio::test]
 async fn status_from_server_stream() {
@@ -142,7 +143,7 @@ async fn status_from_server_stream() {
             &self,
             _: Request<InputStream>,
         ) -> Result<Response<Self::StreamCallStream>, Status> {
-            let s = futures::stream::iter(vec![
+            let s = tokio_stream::iter(vec![
                 Err::<OutputStream, _>(Status::unavailable("foo")),
                 Err::<OutputStream, _>(Status::unavailable("bar")),
             ]);

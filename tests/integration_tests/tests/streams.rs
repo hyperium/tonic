@@ -1,9 +1,10 @@
-use futures::FutureExt;
+use futures_util::FutureExt;
 use integration_tests::pb::{test_stream_server, InputStream, OutputStream};
 use tonic::{transport::Server, Request, Response, Status};
 
-type Stream<T> =
-    std::pin::Pin<Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+type Stream<T> = std::pin::Pin<
+    Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>,
+>;
 
 #[tokio::test]
 async fn status_from_server_stream_with_source() {
@@ -35,7 +36,7 @@ struct Unsync(*mut ());
 
 unsafe impl Send for Unsync {}
 
-impl futures::Stream for Unsync {
+impl tokio_stream::Stream for Unsync {
     type Item = Result<OutputStream, Status>;
 
     fn poll_next(
