@@ -1,10 +1,12 @@
+use std::time::Duration;
+
 use futures_util::{stream, FutureExt};
+use tokio::sync::oneshot;
+use tokio_stream::StreamExt;
+
 use integration_tests::pb::{
     test1_client, test1_server, test_client, test_server, Input, Input1, Output, Output1,
 };
-use std::time::Duration;
-use tokio::sync::oneshot;
-use tokio_stream::StreamExt;
 use tonic::codegen::BoxStream;
 use tonic::transport::server::RoutesBuilder;
 use tonic::{
@@ -90,9 +92,11 @@ async fn multiple_service_using_routes_builder() {
         .await
         .unwrap()
         .into_inner();
-    let Some(Ok(first)) = stream_response.next().await else {
-        panic!("expected one non-error item in the stream call response");
+    let first = match stream_response.next().await {
+        Some(Ok(first)) => first,
+        _ => panic!("expected one non-error item in the stream call response"),
     };
+
     assert_eq!(&first.buf, b"world");
     assert!(stream_response.next().await.is_none());
 
