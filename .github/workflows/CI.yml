@@ -70,26 +70,6 @@ jobs:
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
 
-  check-docs:
-    name: check docs
-    runs-on: ubuntu-latest
-
-    env:
-      RUSTFLAGS: "-D warnings"
-
-    steps:
-    - uses: actions/checkout@v3
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
-    - uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: "1.63"
-    - uses: Swatinem/rust-cache@v2
-    - name: cargo doc
-      run: cargo doc --workspace --no-deps --exclude examples
-
   deny-check:
     name: cargo-deny check
     runs-on: ubuntu-latest
@@ -110,8 +90,11 @@ jobs:
       uses: taiki-e/install-action@v2
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
-    - name: Check
-      run: cargo check --all --all-targets --all-features
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo check --all --all-targets --all-features
+    - run: cargo doc --no-deps --package tonic --package tonic-build --package tonic-health --package tonic-reflection --package tonic-types --package tonic-web
+      env:
+        RUSTDOCFLAGS: "-D warnings"
 
   test:
     runs-on: ${{ matrix.os }}
