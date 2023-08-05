@@ -56,10 +56,7 @@ jobs:
       with:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@v3
-    - name: Install cargo-hack
-      uses: baptiste0928/cargo-install@v2
-      with:
-        crate: cargo-hack
+    - uses: taiki-e/install-action@cargo-hack
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
