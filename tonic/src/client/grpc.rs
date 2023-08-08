@@ -6,14 +6,14 @@ use crate::{
     request::SanitizeHeaders,
     Code, Request, Response, Status,
 };
-use futures_util::{future, stream, TryStreamExt};
+use futures_util::future;
 use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
     uri::{Parts, PathAndQuery, Uri},
 };
 use http_body::Body;
 use std::fmt;
-use tokio_stream::Stream;
+use tokio_stream::{Stream, StreamExt};
 
 /// A gRPC client dispatcher.
 ///
@@ -217,7 +217,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| stream::once(future::ready(m)));
+        let request = request.map(|m| tokio_stream::once(m));
         self.client_streaming(request, path, codec).await
     }
 
@@ -273,7 +273,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| stream::once(future::ready(m)));
+        let request = request.map(|m| tokio_stream::once(m));
         self.streaming(request, path, codec).await
     }
 

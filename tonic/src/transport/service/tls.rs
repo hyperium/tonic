@@ -51,7 +51,7 @@ impl TlsConnector {
         {
             use tokio_rustls::rustls::OwnedTrustAnchor;
 
-            roots.add_server_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.0.iter().map(|ta| {
+            roots.add_trust_anchors(webpki_roots::TLS_SERVER_ROOTS.iter().map(|ta| {
                 OwnedTrustAnchor::from_subject_spki_name_constraints(
                     ta.subject,
                     ta.spki,
@@ -68,7 +68,7 @@ impl TlsConnector {
         let mut config = match identity {
             Some(identity) => {
                 let (client_cert, client_key) = rustls_keys::load_identity(identity)?;
-                builder.with_single_cert(client_cert, client_key)?
+                builder.with_client_auth_cert(client_cert, client_key)?
             }
             None => builder.with_no_client_auth(),
         };

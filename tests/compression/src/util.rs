@@ -1,6 +1,6 @@
 use super::*;
 use bytes::Bytes;
-use futures::ready;
+use futures_core::ready;
 use http_body::Body;
 use pin_project::pin_project;
 use std::{

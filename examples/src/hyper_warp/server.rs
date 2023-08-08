@@ -3,7 +3,7 @@
 //! To hit the warp server you can run this command:
 //! `curl localhost:50051/hello`
 
-use futures_util::future::{self, Either, TryFutureExt};
+use either::Either;
 use http::version::Version;
 use hyper::{service::make_service_fn, Server};
 use std::convert::Infallible;
@@ -53,22 +53,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Server::bind(&addr)
         .serve(make_service_fn(move |_| {
             let mut tonic = tonic.clone();
-            future::ok::<_, Infallible>(tower::service_fn(
+            std::future::ready(Ok::<_, Infallible>(tower::service_fn(
                 move |req: hyper::Request<hyper::Body>| match req.version() {
-                    Version::HTTP_11 | Version::HTTP_10 => Either::Left(
-                        warp.call(req)
-                            .map_ok(|res| res.map(EitherBody::Left))
-                            .map_err(Error::from),
-                    ),
-                    Version::HTTP_2 => Either::Right(
-                        tonic
-                            .call(req)
-                            .map_ok(|res| res.map(EitherBody::Right))
-                            .map_err(Error::from),
-                    ),
+                    Version::HTTP_11 | Version::HTTP_10 => Either::Left({
+                        let res = warp.call(req);
+                        Box::pin(async move {
+                            let res = res.await.map(|res| res.map(EitherBody::Left))?;
+                            Ok::<_, Error>(res)
+                        })
+                    }),
+                    Version::HTTP_2 => Either::Right({
+                        let res = tonic.call(req);
+                        Box::pin(async move {
+                            let res = res.await.map(|res| res.map(EitherBody::Right))?;
+                            Ok::<_, Error>(res)
+                        })
+                    }),
                     _ => unimplemented!(),
                 },
-            ))
+            )))
         }))
         .await?;
 

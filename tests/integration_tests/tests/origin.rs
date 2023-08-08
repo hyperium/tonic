@@ -1,5 +1,4 @@
-use futures::future::BoxFuture;
-use futures_util::FutureExt;
+use futures_util::{future::BoxFuture, FutureExt};
 use integration_tests::pb::test_client;
 use integration_tests::pb::{test_server, Input, Output};
 use std::task::Context;

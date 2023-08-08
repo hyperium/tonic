@@ -8,7 +8,7 @@ version = "0.1.0"
 
 [dependencies]
 bytes = "1"
-futures = "0.3"
+futures-core = "0.3"
 http = "0.2"
 http-body = "0.4"
 hyper = "0.14.3"
@@ -16,6 +16,7 @@ paste = "1.0.12"
 pin-project = "1.0"
 prost = "0.11"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
+tokio-stream = "0.1"
 tonic = {path = "../../tonic", features = ["gzip", "zstd"]}
 tower = {version = "0.4", features = []}
 tower-http = {version = "0.4", features = ["map-response-body", "map-request-body"]}

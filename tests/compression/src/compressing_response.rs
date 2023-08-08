@@ -73,7 +73,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -167,7 +167,7 @@ async fn client_enabled_server_disabled_multi_encoding() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -239,7 +239,7 @@ async fn client_disabled(encoding: CompressionEncoding) {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -282,7 +282,7 @@ async fn server_replying_with_unsupported_encoding(encoding: CompressionEncoding
                     .into_inner(),
             )
             .add_service(svc)
-            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
             .await
             .unwrap();
     });
@@ -330,7 +330,7 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -386,7 +386,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -453,7 +453,7 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }
@@ -462,7 +462,7 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
     let mut client =
         test_client::TestClient::new(mock_io_channel(client).await).accept_compressed(encoding);
 
-    let stream = futures::stream::iter(vec![]);
+    let stream = tokio_stream::iter(vec![]);
     let req = Request::new(Box::pin(stream));
 
     let res = client.compress_output_client_stream(req).await.unwrap();

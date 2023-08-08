@@ -1,7 +1,8 @@
 use std::time::Duration;
 
-use futures::{channel::oneshot, FutureExt};
+use futures_util::FutureExt;
 use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
+use tokio::sync::oneshot;
 use tonic::{
     transport::{Endpoint, Server},
     GrpcMethod, Request, Response, Status,

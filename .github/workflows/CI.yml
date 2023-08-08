@@ -6,6 +6,9 @@ on:
     - master
   pull_request: {}
 
+env:
+  PROTOC_VERSION: 3.23.4
+
 jobs:
 
   rustfmt:
@@ -34,7 +37,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - run: cargo hack udeps --workspace --each-feature ${{ matrix.option }}
 
@@ -53,39 +56,16 @@ jobs:
       with:
         rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@v3
-    - name: Install cargo-hack
-      uses: baptiste0928/cargo-install@v1
-      with:
-        crate: cargo-hack
+    - uses: taiki-e/install-action@cargo-hack
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - name: Check features
       run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
       run: cargo check --all --all-targets --all-features
-
-  check-docs:
-    name: check docs
-    runs-on: ubuntu-latest
-
-    env:
-      RUSTFLAGS: "-D warnings"
-
-    steps:
-    - uses: actions/checkout@v3
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@3.20.3
-    - uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: "1.60"
-    - uses: Swatinem/rust-cache@v2
-    - name: cargo doc
-      run: cargo doc --workspace --no-deps --exclude examples
 
   deny-check:
     name: cargo-deny check
@@ -102,13 +82,16 @@ jobs:
       uses: actions/checkout@v3
     - uses: hecrj/setup-rust-action@v1
       with:
-        rust-version: "1.60"
+        rust-version: "1.63"
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
-    - name: Check
-      run: cargo check --all --all-targets --all-features
+        tool: protoc@${{ env.PROTOC_VERSION }}
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo check --all --all-targets --all-features
+    - run: cargo doc --no-deps --package tonic --package tonic-build --package tonic-health --package tonic-reflection --package tonic-types --package tonic-web
+      env:
+        RUSTDOCFLAGS: "-D warnings"
 
   test:
     runs-on: ${{ matrix.os }}
@@ -129,7 +112,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - uses: actions/checkout@v3
     - name: Run tests
@@ -154,7 +137,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@3.20.3
+        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh
