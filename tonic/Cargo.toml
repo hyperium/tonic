@@ -27,11 +27,12 @@ codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:async-stream", "tokio/rt"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "tokio/rt"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 transport = [
+  "dep:async-stream",
   "dep:axum",
   "channel",
   "dep:h2",
