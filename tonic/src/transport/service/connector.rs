@@ -87,8 +87,12 @@ where
             #[cfg(feature = "tls")]
             {
                 if let Some(tls) = tls {
-                    let conn = tls.connect(io).await?;
-                    return Ok(BoxedIo::new(conn));
+                    if is_https {
+                        let conn = tls.connect(io).await?;
+                        return Ok(BoxedIo::new(conn));
+                    } else {
+                        return Ok(BoxedIo::new(io));
+                    }
                 } else if is_https {
                     return Err(HttpsUriWithoutTlsSupport(()).into());
                 }
