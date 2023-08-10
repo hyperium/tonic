@@ -64,7 +64,7 @@ where
 {
     type Response = BoxedIo;
     type Error = crate::Error;
-    type Future = BoxFuture<Self::Response, Self::Error>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         MakeConnection::poll_ready(&mut self.inner, cx).map_err(Into::into)
