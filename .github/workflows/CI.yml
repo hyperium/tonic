@@ -8,6 +8,7 @@ on:
 
 env:
   PROTOC_VERSION: 3.23.4
+  RUSTFLAGS: "-D warnings"
 
 jobs:
 
@@ -47,10 +48,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         rust: [stable]
-
-    env:
-      RUSTFLAGS: "-D warnings"
-
     steps:
     - uses: hecrj/setup-rust-action@v1
       with:
@@ -99,12 +96,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         rust: [stable]
-
-    env:
-      RUSTFLAGS: "-D warnings"
-      # run a lot of quickcheck iterations
-      QUICKCHECK_TESTS: 1000
-
     steps:
     - uses: hecrj/setup-rust-action@v1
       with:
@@ -117,6 +108,8 @@ jobs:
     - uses: actions/checkout@v3
     - name: Run tests
       run: cargo test --all --all-features
+      env:
+        QUICKCHECK_TESTS: 1000  # run a lot of quickcheck iterations
 
   interop:
     name: Interop Tests
@@ -125,10 +118,6 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
         rust: [stable]
-
-    env:
-      RUSTFLAGS: "-D warnings"
-
     steps:
     - uses: hecrj/setup-rust-action@v1
       with:
