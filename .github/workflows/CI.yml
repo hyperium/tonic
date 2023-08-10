@@ -21,6 +21,13 @@ jobs:
         components: rustfmt
     - run: cargo fmt --all --check
 
+  deny-check:
+    name: cargo-deny check
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v3
+    - uses: EmbarkStudios/cargo-deny-action@v1
+
   udeps:
     name: Check unused dependencies
     runs-on: ${{ matrix.os }}
@@ -60,13 +67,6 @@ jobs:
       run: cargo hack check --workspace --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
       run: cargo check --workspace --all-targets --all-features
-
-  deny-check:
-    name: cargo-deny check
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - uses: EmbarkStudios/cargo-deny-action@v1
 
   msrv:
     name: Check MSRV
