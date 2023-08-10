@@ -47,11 +47,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        rust: [stable]
     steps:
     - uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@v3
     - uses: taiki-e/install-action@cargo-hack
     - name: Install protoc
@@ -95,11 +92,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        rust: [stable]
     steps:
     - uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: ${{ matrix.rust }}
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
@@ -117,11 +111,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
-        rust: [stable]
     steps:
     - uses: hecrj/setup-rust-action@v1
-      with:
-        rust-version: ${{ matrix.rust }}
     - uses: actions/checkout@v3
     - name: Install protoc
       uses: taiki-e/install-action@v2
