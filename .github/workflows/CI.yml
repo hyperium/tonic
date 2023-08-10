@@ -57,9 +57,9 @@ jobs:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - name: Check features
-      run: cargo hack check --all --ignore-private --each-feature --no-dev-deps
+      run: cargo hack check --workspace --ignore-private --each-feature --no-dev-deps
     - name: Check all targets
-      run: cargo check --all --all-targets --all-features
+      run: cargo check --workspace --all-targets --all-features
 
   deny-check:
     name: cargo-deny check
@@ -81,7 +81,7 @@ jobs:
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
-    - run: cargo check --all --all-targets --all-features
+    - run: cargo check --workspace --all-targets --all-features
     - run: cargo doc --no-deps --package tonic --package tonic-build --package tonic-health --package tonic-reflection --package tonic-types --package tonic-web
       env:
         RUSTDOCFLAGS: "-D warnings"
@@ -99,7 +99,7 @@ jobs:
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
-    - run: cargo test --all --all-features
+    - run: cargo test --workspace --all-features
       env:
         QUICKCHECK_TESTS: 1000  # run a lot of quickcheck iterations
 
