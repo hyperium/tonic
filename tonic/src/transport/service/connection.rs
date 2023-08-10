@@ -1,6 +1,8 @@
-use super::super::BoxFuture;
 use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
-use crate::{body::BoxBody, transport::Endpoint};
+use crate::{
+    body::BoxBody,
+    transport::{BoxFuture, Endpoint},
+};
 use http::Uri;
 use hyper::client::conn::Builder;
 use hyper::client::connect::Connection as HyperConnection;
@@ -100,7 +102,7 @@ impl Connection {
 impl Service<Request> for Connection {
     type Response = Response;
     type Error = crate::Error;
-    type Future = BoxFuture<Self::Response, Self::Error>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Service::poll_ready(&mut self.inner, cx).map_err(Into::into)
