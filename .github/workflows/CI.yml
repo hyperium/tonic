@@ -48,8 +48,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: hecrj/setup-rust-action@v1
     - uses: actions/checkout@v3
+    - uses: hecrj/setup-rust-action@v1
     - uses: taiki-e/install-action@cargo-hack
     - name: Install protoc
       uses: taiki-e/install-action@v2
@@ -72,8 +72,7 @@ jobs:
     name: Check MSRV
     runs-on: ubuntu-latest
     steps:
-    - name: Checkout
-      uses: actions/checkout@v3
+    - uses: actions/checkout@v3
     - uses: hecrj/setup-rust-action@v1
       with:
         rust-version: "1.63"
@@ -93,15 +92,14 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
+    - uses: actions/checkout@v3
     - uses: hecrj/setup-rust-action@v1
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
-    - uses: actions/checkout@v3
-    - name: Run tests
-      run: cargo test --all --all-features
+    - run: cargo test --all --all-features
       env:
         QUICKCHECK_TESTS: 1000  # run a lot of quickcheck iterations
 
@@ -112,8 +110,8 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: hecrj/setup-rust-action@v1
     - uses: actions/checkout@v3
+    - uses: hecrj/setup-rust-action@v1
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
