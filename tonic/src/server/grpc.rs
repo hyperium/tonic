@@ -7,9 +7,9 @@ use crate::{
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
 };
-use futures_util::{TryStream, TryStreamExt};
 use http_body::Body;
 use std::fmt;
+use tokio_stream::{Stream, StreamExt};
 
 macro_rules! t {
     ($result:expr) => {
@@ -428,7 +428,7 @@ where
         max_message_size: Option<usize>,
     ) -> http::Response<BoxBody>
     where
-        B: TryStream<Ok = T::Encode, Error = Status> + Send + 'static,
+        B: Stream<Item = Result<T::Encode, Status>> + Send + 'static,
     {
         let response = match response {
             Ok(r) => r,
@@ -453,7 +453,7 @@ where
 
         let body = encode_server(
             self.codec.encoder(),
-            body.into_stream(),
+            body,
             accept_encoding,
             compression_override,
             max_message_size,

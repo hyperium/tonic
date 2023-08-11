@@ -14,7 +14,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
 };
-use tokio_stream::Stream;
+use tokio_stream::{Stream, StreamExt};
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE, L>(
@@ -25,8 +25,13 @@ where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
-    use futures_util::stream::TryStreamExt;
-    incoming.err_into().map_ok(ServerIo::new_io)
+    async_stream::try_stream! {
+        futures_util::pin_mut!(incoming);
+
+        while let Some(item) = incoming.next().await {
+            yield item.map(ServerIo::new_io)?
+        }
+    }
 }
 
 #[cfg(feature = "tls")]
@@ -81,8 +86,6 @@ async fn select<IO: 'static, IE>(
 where
     IE: Into<crate::Error>,
 {
-    use tokio_stream::StreamExt;
-
     if tasks.is_empty() {
         return match incoming.try_next().await {
             Ok(Some(stream)) => SelectOutput::Incoming(stream),

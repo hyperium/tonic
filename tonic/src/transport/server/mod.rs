@@ -38,7 +38,7 @@ use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
 use crate::body::BoxBody;
 use bytes::Bytes;
-use futures_util::{future, ready};
+use futures_util::ready;
 use http::{Request, Response};
 use http_body::Body as _;
 use hyper::{server::accept, Body};
@@ -46,7 +46,7 @@ use pin_project::pin_project;
 use std::{
     convert::Infallible,
     fmt,
-    future::Future,
+    future::{self, Future},
     marker::PhantomData,
     net::SocketAddr,
     pin::Pin,

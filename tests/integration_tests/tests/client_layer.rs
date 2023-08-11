@@ -1,8 +1,6 @@
-use std::time::Duration;
-
-use futures_util::FutureExt;
 use http::{header::HeaderName, HeaderValue};
 use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
+use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{
     transport::{Endpoint, Server},
@@ -32,7 +30,7 @@ async fn connect_supports_standard_tower_layers() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1340".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1340".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
