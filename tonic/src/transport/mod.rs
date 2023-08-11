@@ -46,8 +46,7 @@
 //!
 //! ```no_run
 //! # use tonic::transport::{Server, Identity, ServerTlsConfig};
-//! # use tower::{Service, service_fn};
-//! # use futures_util::future::{err, ok};
+//! # use tower::Service;
 //! # #[cfg(feature = "rustls")]
 //! # async fn do_thing() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[derive(Clone)]
@@ -55,7 +54,7 @@
 //! # impl Service<hyper::Request<hyper::Body>> for Svc {
 //! #   type Response = hyper::Response<tonic::body::BoxBody>;
 //! #   type Error = tonic::Status;
-//! #   type Future = futures_util::future::Ready<Result<Self::Response, Self::Error>>;
+//! #   type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
 //! #   fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
 //! #       Ok(()).into()
 //! #  }
@@ -119,5 +118,4 @@ pub use self::server::ServerTlsConfig;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;
 
-type BoxFuture<T, E> =
-    std::pin::Pin<Box<dyn std::future::Future<Output = Result<T, E>> + Send + 'static>>;
+type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;

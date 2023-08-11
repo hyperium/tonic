@@ -1,5 +1,4 @@
 use crate::metadata::GRPC_TIMEOUT_HEADER;
-use crate::util::{OptionPin, OptionPinProj};
 use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
 use std::{
@@ -61,8 +60,8 @@ where
             inner: self.inner.call(req),
             sleep: timeout_duration
                 .map(tokio::time::sleep)
-                .map(OptionPin::Some)
-                .unwrap_or(OptionPin::None),
+                .map(Some)
+                .unwrap_or(None),
         }
     }
 }
@@ -72,7 +71,7 @@ pub(crate) struct ResponseFuture<F> {
     #[pin]
     inner: F,
     #[pin]
-    sleep: OptionPin<Sleep>,
+    sleep: Option<Sleep>,
 }
 
 impl<F, Res, E> Future for ResponseFuture<F>
@@ -89,7 +88,7 @@ where
             return Poll::Ready(result.map_err(Into::into));
         }
 
-        if let OptionPinProj::Some(sleep) = this.sleep.project() {
+        if let Some(sleep) = this.sleep.as_pin_mut() {
             futures_util::ready!(sleep.poll(cx));
             return Poll::Ready(Err(TimeoutExpired(()).into()));
         }

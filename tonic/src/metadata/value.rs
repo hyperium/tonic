@@ -77,52 +77,6 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
         }
     }
 
-    /// Attempt to convert a byte slice to a `MetadataValue`.
-    ///
-    /// For Ascii metadata values, If the argument contains invalid metadata
-    /// value bytes, an error is returned. Only byte values between 32 and 255
-    /// (inclusive) are permitted, excluding byte 127 (DEL).
-    ///
-    /// For Binary metadata values this method cannot fail. See also the Binary
-    /// only version of this method `from_bytes`.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use tonic::metadata::*;
-    /// let val = AsciiMetadataValue::try_from_bytes(b"hello\xfa").unwrap();
-    /// assert_eq!(val, &b"hello\xfa"[..]);
-    /// ```
-    ///
-    /// An invalid value
-    ///
-    /// ```
-    /// # use tonic::metadata::*;
-    /// let val = AsciiMetadataValue::try_from_bytes(b"\n");
-    /// assert!(val.is_err());
-    /// ```
-    #[inline]
-    #[deprecated = "Use TryFrom instead"]
-    pub fn try_from_bytes(src: &[u8]) -> Result<Self, InvalidMetadataValueBytes> {
-        Self::try_from(src)
-    }
-
-    /// Attempt to convert a `Bytes` buffer to a `MetadataValue`.
-    ///
-    /// For `MetadataValue<Ascii>`, if the argument contains invalid metadata
-    /// value bytes, an error is returned. Only byte values between 32 and 255
-    /// (inclusive) are permitted, excluding byte 127 (DEL).
-    ///
-    /// For `MetadataValue<Binary>`, if the argument is not valid base64, an
-    /// error is returned. In use cases where the input is not base64 encoded,
-    /// use `from_bytes`; if the value has to be encoded it's not possible to
-    /// share the memory anyways.
-    #[inline]
-    #[deprecated = "Use TryFrom instead"]
-    pub fn from_shared(src: Bytes) -> Result<Self, InvalidMetadataValueBytes> {
-        Self::try_from(src)
-    }
-
     /// Convert a `Bytes` directly into a `MetadataValue` without validating.
     /// For `MetadataValue<Binary>` the provided parameter must be base64
     /// encoded without padding bytes at the end.
@@ -430,35 +384,6 @@ impl TryFrom<String> for MetadataValue<Ascii> {
 // is_empty is defined in the generic impl block above
 #[allow(clippy::len_without_is_empty)]
 impl MetadataValue<Ascii> {
-    /// Attempt to convert a string to a `MetadataValue<Ascii>`.
-    ///
-    /// If the argument contains invalid metadata value characters, an error is
-    /// returned. Only visible ASCII characters (32-127) are permitted. Use
-    /// `from_bytes` to create a `MetadataValue` that includes opaque octets
-    /// (128-255).
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use tonic::metadata::*;
-    /// let val = AsciiMetadataValue::from_str("hello").unwrap();
-    /// assert_eq!(val, "hello");
-    /// ```
-    ///
-    /// An invalid value
-    ///
-    /// ```
-    /// # use tonic::metadata::*;
-    /// let val = AsciiMetadataValue::from_str("\n");
-    /// assert!(val.is_err());
-    /// ```
-    #[allow(clippy::should_implement_trait)]
-    #[deprecated = "Use TryFrom or FromStr instead"]
-    #[inline]
-    pub fn from_str(src: &str) -> Result<Self, InvalidMetadataValue> {
-        src.parse()
-    }
-
     /// Converts a MetadataKey into a `MetadataValue<Ascii>`.
     ///
     /// Since every valid MetadataKey is a valid MetadataValue this is done

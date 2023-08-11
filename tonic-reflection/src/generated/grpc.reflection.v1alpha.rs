@@ -271,7 +271,7 @@ pub mod server_reflection_server {
     #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {
         /// Server streaming response type for the ServerReflectionInfo method.
-        type ServerReflectionInfoStream: futures_core::Stream<
+        type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<
                     super::ServerReflectionResponse,
                     tonic::Status,

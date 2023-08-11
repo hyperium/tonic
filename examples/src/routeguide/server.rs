@@ -3,9 +3,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
-use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
