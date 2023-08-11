@@ -28,6 +28,8 @@ pub fn configure() -> Builder {
         enum_attributes: Vec::new(),
         type_attributes: Vec::new(),
         boxed: Vec::new(),
+        btree_map: None,
+        bytes: None,
         server_attributes: Attributes::default(),
         client_attributes: Attributes::default(),
         proto_path: "super".to_string(),
@@ -235,6 +237,8 @@ pub struct Builder {
     pub(crate) message_attributes: Vec<(String, String)>,
     pub(crate) enum_attributes: Vec<(String, String)>,
     pub(crate) boxed: Vec<String>,
+    pub(crate) btree_map: Option<Vec<String>>,
+    pub(crate) bytes: Option<Vec<String>>,
     pub(crate) server_attributes: Attributes,
     pub(crate) client_attributes: Attributes,
     pub(crate) proto_path: String,
@@ -352,6 +356,46 @@ impl Builder {
     /// Passed directly to `prost_build::Config.boxed`.
     pub fn boxed<P: AsRef<str>>(mut self, path: P) -> Self {
         self.boxed.push(path.as_ref().to_string());
+        self
+    }
+
+    /// Configure the code generator to generate Rust `BTreeMap` fields for Protobuf `map` type
+    /// fields.
+    ///
+    /// Passed directly to `prost_build::Config.btree_map`.
+    ///
+    /// Note: previous configurated paths for `btree_map` will be cleared.
+    pub fn btree_map<I, S>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.btree_map = Some(
+            paths
+                .into_iter()
+                .map(|path| path.as_ref().to_string())
+                .collect(),
+        );
+        self
+    }
+
+    /// Configure the code generator to generate Rust `bytes::Bytes` fields for Protobuf `bytes`
+    /// type fields.
+    ///
+    /// Passed directly to `prost_build::Config.bytes`.
+    ///
+    /// Note: previous configurated paths for `bytes` will be cleared.
+    pub fn bytes<I, S>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.bytes = Some(
+            paths
+                .into_iter()
+                .map(|path| path.as_ref().to_string())
+                .collect(),
+        );
         self
     }
 
@@ -513,6 +557,12 @@ impl Builder {
         }
         for prost_path in self.boxed.iter() {
             config.boxed(prost_path);
+        }
+        if let Some(ref paths) = self.btree_map {
+            config.btree_map(paths);
+        }
+        if let Some(ref paths) = self.bytes {
+            config.bytes(paths);
         }
         if self.compile_well_known_types {
             config.compile_well_known_types();
