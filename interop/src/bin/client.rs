@@ -29,8 +29,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let test_cases = matches.test_case;
 
+    let scheme = if matches.use_tls { "https" } else { "http" };
+
     #[allow(unused_mut)]
-    let mut endpoint = Endpoint::from_static("http://localhost:10000")
+    let mut endpoint = Endpoint::try_from(format!("{}://localhost:10000", scheme))?
         .timeout(Duration::from_secs(5))
         .concurrency_limit(30);
 

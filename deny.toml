@@ -22,6 +22,7 @@ skip-tree = [
     { name = "base64" },
     { name = "syn" },
     { name = "bitflags" },
+    { name = "socket2" },
 ]
 
 [licenses]
