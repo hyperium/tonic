@@ -1,6 +1,6 @@
-use futures_util::{future::BoxFuture, FutureExt};
 use integration_tests::pb::test_client;
 use integration_tests::pb::{test_server, Input, Output};
+use integration_tests::BoxFuture;
 use std::task::Context;
 use std::task::Poll;
 use std::time::Duration;
@@ -35,7 +35,7 @@ async fn writes_origin_header() {
         Server::builder()
             .layer(OriginLayer {})
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1442".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1442".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });

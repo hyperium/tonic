@@ -1,6 +1,8 @@
-use futures_util::FutureExt;
 use hyper::{Body, Request as HyperRequest, Response as HyperResponse};
-use integration_tests::pb::{test_client, test_server, Input, Output};
+use integration_tests::{
+    pb::{test_client, test_server, Input, Output},
+    BoxFuture,
+};
 use std::{
     task::{Context, Poll},
     time::Duration,
@@ -39,7 +41,7 @@ async fn setting_extension_from_interceptor() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1323".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1323".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -83,7 +85,7 @@ async fn setting_extension_from_tower() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1324".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1324".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -120,7 +122,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = futures_util::future::BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
