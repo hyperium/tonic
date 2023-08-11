@@ -1,5 +1,5 @@
-use futures_util::FutureExt;
 use integration_tests::pb::{test_stream_server, InputStream, OutputStream};
+use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
 
 type Stream<T> = std::pin::Pin<
@@ -26,10 +26,19 @@ async fn status_from_server_stream_with_source() {
 
     let svc = test_stream_server::TestStreamServer::new(Svc);
 
-    Server::builder()
-        .add_service(svc)
-        .serve("127.0.0.1:1339".parse().unwrap())
-        .now_or_never();
+    let (tx, rx) = oneshot::channel::<()>();
+
+    let jh = tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), async { drop(rx.await) })
+            .await
+            .unwrap();
+    });
+
+    tx.send(()).unwrap();
+
+    jh.await.unwrap();
 }
 
 struct Unsync(*mut ());
