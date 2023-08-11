@@ -26,3 +26,7 @@ members = [
   "tests/use_arc_self",
 ]
 resolver = "2"
+
+[patch.crates-io]
+prost = { git = "https://github.com/tokio-rs/prost" }
+prost-build = { git = "https://github.com/tokio-rs/prost" }
