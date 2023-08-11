@@ -57,3 +57,5 @@ pub mod mock {
 pub fn trace_init() {
     let _ = tracing_subscriber::fmt::try_init();
 }
+
+pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;

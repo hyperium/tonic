@@ -1,7 +1,4 @@
-use crate::{
-    util::{OptionPin, OptionPinProj},
-    Status,
-};
+use crate::Status;
 use futures_util::ready;
 use http::Response;
 use pin_project::pin_project;
@@ -82,20 +79,16 @@ where
 #[pin_project]
 pub(crate) struct MaybeEmptyBody<B> {
     #[pin]
-    inner: OptionPin<B>,
+    inner: Option<B>,
 }
 
 impl<B> MaybeEmptyBody<B> {
     fn full(inner: B) -> Self {
-        Self {
-            inner: OptionPin::Some(inner),
-        }
+        Self { inner: Some(inner) }
     }
 
     fn empty() -> Self {
-        Self {
-            inner: OptionPin::None,
-        }
+        Self { inner: None }
     }
 }
 
@@ -110,9 +103,9 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        match self.project().inner.project() {
-            OptionPinProj::Some(b) => b.poll_data(cx),
-            OptionPinProj::None => Poll::Ready(None),
+        match self.project().inner.as_pin_mut() {
+            Some(b) => b.poll_data(cx),
+            None => Poll::Ready(None),
         }
     }
 
@@ -120,16 +113,16 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        match self.project().inner.project() {
-            OptionPinProj::Some(b) => b.poll_trailers(cx),
-            OptionPinProj::None => Poll::Ready(Ok(None)),
+        match self.project().inner.as_pin_mut() {
+            Some(b) => b.poll_trailers(cx),
+            None => Poll::Ready(Ok(None)),
         }
     }
 
     fn is_end_stream(&self) -> bool {
         match &self.inner {
-            OptionPin::Some(b) => b.is_end_stream(),
-            OptionPin::None => true,
+            Some(b) => b.is_end_stream(),
+            None => true,
         }
     }
 }

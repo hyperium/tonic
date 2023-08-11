@@ -4,10 +4,10 @@ use crate::transport::server::TlsConnectInfo;
 #[cfg(feature = "transport")]
 use crate::transport::{server::TcpConnectInfo, Certificate};
 use crate::Extensions;
-use futures_core::Stream;
 #[cfg(feature = "transport")]
 use std::sync::Arc;
 use std::{net::SocketAddr, time::Duration};
+use tokio_stream::Stream;
 
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
@@ -77,12 +77,11 @@ pub trait IntoRequest<T>: sealed::Sealed {
 /// # }
 /// # let client = Client {};
 /// use tonic::Request;
-/// use futures_util::stream;
 ///
 /// let messages = vec![Point {}, Point {}];
 ///
-/// client.record_route(Request::new(stream::iter(messages.clone())));
-/// client.record_route(stream::iter(messages));
+/// client.record_route(Request::new(tokio_stream::iter(messages.clone())));
+/// client.record_route(tokio_stream::iter(messages));
 /// ```
 pub trait IntoStreamingRequest: sealed::Sealed {
     /// The RPC request stream type

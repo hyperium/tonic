@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use futures_util::FutureExt;
 use http::Uri;
 use integration_tests::mock::MockStream;
 use integration_tests::pb::{
@@ -35,7 +34,7 @@ async fn status_with_details() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1337".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1337".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -89,7 +88,7 @@ async fn status_with_metadata() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -125,8 +124,9 @@ async fn status_with_metadata() {
     jh.await.unwrap();
 }
 
-type Stream<T> =
-    std::pin::Pin<Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+type Stream<T> = std::pin::Pin<
+    Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>,
+>;
 
 #[tokio::test]
 async fn status_from_server_stream() {
@@ -142,7 +142,7 @@ async fn status_from_server_stream() {
             &self,
             _: Request<InputStream>,
         ) -> Result<Response<Self::StreamCallStream>, Status> {
-            let s = futures::stream::iter(vec![
+            let s = tokio_stream::iter(vec![
                 Err::<OutputStream, _>(Status::unavailable("foo")),
                 Err::<OutputStream, _>(Status::unavailable("bar")),
             ]);

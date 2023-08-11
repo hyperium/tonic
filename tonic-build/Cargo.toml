@@ -23,8 +23,8 @@ syn = "1.0"
 
 [features]
 default = ["transport", "prost"]
-cleanup-markdown = ["prost-build/cleanup-markdown"]
 prost = ["prost-build"]
+cleanup-markdown = ["prost", "prost-build/cleanup-markdown"]
 transport = []
 
 [package.metadata.docs.rs]

@@ -216,7 +216,7 @@ pub mod health_server {
             tonic::Status,
         >;
         /// Server streaming response type for the Watch method.
-        type WatchStream: futures_core::Stream<
+        type WatchStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::HealthCheckResponse, tonic::Status>,
             >
             + Send
