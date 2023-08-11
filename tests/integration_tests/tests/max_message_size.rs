@@ -1,10 +1,10 @@
 use std::pin::Pin;
 
-use futures::{stream, Stream};
 use integration_tests::{
     pb::{test1_client, test1_server, Input1, Output1},
     trace_init,
 };
+use tokio_stream::Stream;
 use tonic::{
     transport::{Endpoint, Server},
     Code, Request, Response, Status,
@@ -137,7 +137,7 @@ async fn response_stream_limit() {
             let blob = Output1 {
                 buf: vec![0; 6877902],
             };
-            let stream = stream::iter(vec![Ok(blob.clone()), Ok(blob.clone())]);
+            let stream = tokio_stream::iter(vec![Ok(blob.clone()), Ok(blob.clone())]);
 
             Ok(Response::new(Box::pin(stream)))
         }
@@ -148,7 +148,7 @@ async fn response_stream_limit() {
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
             .await
             .unwrap();
     });
@@ -317,7 +317,7 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
             .await
             .unwrap();
     });

@@ -2,8 +2,7 @@ use super::compression::{compress, CompressionEncoding, SingleMessageCompression
 use super::{EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_core::{Stream, TryStream};
-use futures_util::{ready, StreamExt, TryStreamExt};
+use futures_util::ready;
 use http::HeaderMap;
 use http_body::Body;
 use pin_project::pin_project;
@@ -11,6 +10,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tokio_stream::{Stream, StreamExt};
 
 pub(super) const BUFFER_SIZE: usize = 8 * 1024;
 
@@ -31,8 +31,7 @@ where
         compression_encoding,
         compression_override,
         max_message_size,
-    )
-    .into_stream();
+    );
 
     EncodeBody::new_server(stream)
 }
@@ -53,8 +52,7 @@ where
         compression_encoding,
         SingleMessageCompressionOverride::default(),
         max_message_size,
-    )
-    .into_stream();
+    );
     EncodeBody::new_client(stream)
 }
 
@@ -64,7 +62,7 @@ fn encode<T, U>(
     compression_encoding: Option<CompressionEncoding>,
     compression_override: SingleMessageCompressionOverride,
     max_message_size: Option<usize>,
-) -> impl TryStream<Ok = Bytes, Error = Status>
+) -> impl Stream<Item = Result<Bytes, Status>>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
@@ -251,8 +249,8 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let mut self_proj = self.project();
-        match ready!(self_proj.inner.try_poll_next_unpin(cx)) {
+        let self_proj = self.project();
+        match ready!(self_proj.inner.poll_next(cx)) {
             Some(Ok(d)) => Some(Ok(d)).into(),
             Some(Err(status)) => match self_proj.state.role {
                 Role::Client => Some(Err(status)).into(),

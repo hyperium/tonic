@@ -8,30 +8,6 @@ use crate::{
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
 
-/// Generate service for client.
-///
-/// This takes some `Service` and will generate a `TokenStream` that contains
-/// a public module with the generated client.
-#[deprecated(since = "0.8.3", note = "Use the CodeGenBuilder::generate_client")]
-pub fn generate<T: Service>(
-    service: &T,
-    emit_package: bool,
-    proto_path: &str,
-    compile_well_known_types: bool,
-    build_transport: bool,
-    attributes: &Attributes,
-) -> TokenStream {
-    generate_internal(
-        service,
-        emit_package,
-        proto_path,
-        compile_well_known_types,
-        build_transport,
-        attributes,
-        &HashSet::default(),
-    )
-}
-
 pub(crate) fn generate_internal<T: Service>(
     service: &T,
     emit_package: bool,

@@ -64,7 +64,7 @@ where
 {
     type Response = BoxedIo;
     type Error = crate::Error;
-    type Future = BoxFuture<Self::Response, Self::Error>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         MakeConnection::poll_ready(&mut self.inner, cx).map_err(Into::into)
@@ -87,8 +87,12 @@ where
             #[cfg(feature = "tls")]
             {
                 if let Some(tls) = tls {
-                    let conn = tls.connect(io).await?;
-                    return Ok(BoxedIo::new(conn));
+                    if is_https {
+                        let conn = tls.connect(io).await?;
+                        return Ok(BoxedIo::new(conn));
+                    } else {
+                        return Ok(BoxedIo::new(io));
+                    }
                 } else if is_https {
                     return Err(HttpsUriWithoutTlsSupport(()).into());
                 }

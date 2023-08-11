@@ -9,30 +9,6 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};
 
-/// Generate service for Server.
-///
-/// This takes some `Service` and will generate a `TokenStream` that contains
-/// a public module containing the server service and handler trait.
-#[deprecated(since = "0.8.3", note = "Use CodeGenBuilder::generate_server")]
-pub fn generate<T: Service>(
-    service: &T,
-    emit_package: bool,
-    proto_path: &str,
-    compile_well_known_types: bool,
-    attributes: &Attributes,
-) -> TokenStream {
-    generate_internal(
-        service,
-        emit_package,
-        proto_path,
-        compile_well_known_types,
-        attributes,
-        &HashSet::default(),
-        false,
-        false,
-    )
-}
-
 pub(crate) fn generate_internal<T: Service>(
     service: &T,
     emit_package: bool,
@@ -351,7 +327,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<#req_message>)
@@ -376,7 +352,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: futures_core::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)

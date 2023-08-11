@@ -27,21 +27,21 @@ codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:async-stream"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:rustls", "tokio/rt"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 transport = [
+  "dep:async-stream",
   "dep:axum",
-  "channel"
-]
-channel = [
+  "channel",
   "dep:h2",
   "dep:hyper",
-  "dep:tokio",
+  "tokio",
   "dep:tower",
   "dep:hyper-timeout",
 ]
+channel = []
 
 # [[bench]]
 # name = "bench_main"
@@ -50,7 +50,6 @@ channel = [
 [dependencies]
 base64 = "0.21"
 bytes = "1.0"
-futures-core = {version = "0.3", default-features = false}
 futures-util = {version = "0.3", default-features = false}
 http = "0.2"
 tracing = "0.1"
@@ -68,7 +67,7 @@ prost = {version = "0.11", default-features = false, features = ["std"], optiona
 async-trait = {version = "0.1.13", optional = true}
 
 # transport
-h2 = {version = "0.3", optional = true}
+h2 = {version = "0.3.17", optional = true}
 hyper = {version = "0.14.14", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
 tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = true}
@@ -80,8 +79,9 @@ axum = {version = "0.6.9", default_features = false, optional = true}
 async-stream = { version = "0.3", optional = true }
 rustls-pemfile = { version = "1.0", optional = true }
 rustls-native-certs = { version = "0.6.1", optional = true }
-tokio-rustls = { version = "0.24.0", optional = true }
-webpki-roots = { version = "0.23.0", optional = true }
+tokio-rustls = { version = "0.24", optional = true }
+rustls = { version = "0.21.6", optional = true }
+webpki-roots = { version = "0.25.0", optional = true }
 
 # compression
 flate2 = {version = "1.0", optional = true}

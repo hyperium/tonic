@@ -4,10 +4,11 @@ use std::task::{Context, Poll};
 
 use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use futures_core::{ready, Stream};
+use futures_core::ready;
 use http::{header, HeaderMap, HeaderValue};
 use http_body::{Body, SizeHint};
 use pin_project::pin_project;
+use tokio_stream::Stream;
 use tonic::Status;
 
 use self::content_types::*;
