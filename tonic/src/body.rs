@@ -14,8 +14,6 @@ where
     body.map_err(crate::Status::map_error).boxed_unsync()
 }
 
-// this also exists in `crate::codegen` but we need it here since `codegen` has
-// `#[cfg(feature = "codegen")]`.
 /// Create an empty `BoxBody`
 pub fn empty_body() -> BoxBody {
     http_body::Empty::new()

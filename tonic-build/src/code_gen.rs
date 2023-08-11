@@ -12,6 +12,7 @@ pub struct CodeGenBuilder {
     attributes: Attributes,
     build_transport: bool,
     disable_comments: HashSet<String>,
+    use_arc_self: bool,
 }
 
 impl CodeGenBuilder {
@@ -57,6 +58,12 @@ impl CodeGenBuilder {
         self
     }
 
+    /// Emit `Arc<Self>` instead of `&self` in service trait.
+    pub fn use_arc_self(&mut self, enable: bool) -> &mut Self {
+        self.use_arc_self = enable;
+        self
+    }
+
     /// Generate client code based on `Service`.
     ///
     /// This takes some `Service` and will generate a `TokenStream` that contains
@@ -85,6 +92,7 @@ impl CodeGenBuilder {
             self.compile_well_known_types,
             &self.attributes,
             &self.disable_comments,
+            self.use_arc_self,
         )
     }
 }
@@ -97,6 +105,7 @@ impl Default for CodeGenBuilder {
             attributes: Attributes::default(),
             build_transport: true,
             disable_comments: HashSet::default(),
+            use_arc_self: false,
         }
     }
 }

@@ -27,8 +27,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     let mut builder = Server::builder();
 
     if matches.use_tls {
-        let cert = tokio::fs::read("interop/data/server1.pem").await?;
-        let key = tokio::fs::read("interop/data/server1.key").await?;
+        let cert = std::fs::read_to_string("interop/data/server1.pem")?;
+        let key = std::fs::read_to_string("interop/data/server1.key")?;
         let identity = Identity::from_pem(cert, key);
 
         builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;

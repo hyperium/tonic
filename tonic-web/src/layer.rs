@@ -25,7 +25,7 @@ impl Default for GrpcWebLayer {
 impl<S> Layer<S> for GrpcWebLayer
 where
     S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
-    S: Clone + Send + 'static,
+    S: Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
 {

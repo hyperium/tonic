@@ -211,6 +211,22 @@ pub mod server_reflection_client {
             self.inner = self.inner.accept_compressed(encoding);
             self
         }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_decoding_message_size(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.inner = self.inner.max_encoding_message_size(limit);
+            self
+        }
         /// The reflection service is structured as a bidirectional stream, ensuring
         /// all related requests go to a single server.
         pub async fn server_reflection_info(
@@ -235,7 +251,15 @@ pub mod server_reflection_client {
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
             );
-            self.inner.streaming(request.into_streaming_request(), path, codec).await
+            let mut req = request.into_streaming_request();
+            req.extensions_mut()
+                .insert(
+                    GrpcMethod::new(
+                        "grpc.reflection.v1alpha.ServerReflection",
+                        "ServerReflectionInfo",
+                    ),
+                );
+            self.inner.streaming(req, path, codec).await
         }
     }
 }
@@ -247,7 +271,7 @@ pub mod server_reflection_server {
     #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {
         /// Server streaming response type for the ServerReflectionInfo method.
-        type ServerReflectionInfoStream: futures_core::Stream<
+        type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<
                     super::ServerReflectionResponse,
                     tonic::Status,
@@ -270,6 +294,8 @@ pub mod server_reflection_server {
         inner: _Inner<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
+        max_decoding_message_size: Option<usize>,
+        max_encoding_message_size: Option<usize>,
     }
     struct _Inner<T>(Arc<T>);
     impl<T: ServerReflection> ServerReflectionServer<T> {
@@ -282,6 +308,8 @@ pub mod server_reflection_server {
                 inner,
                 accept_compression_encodings: Default::default(),
                 send_compression_encodings: Default::default(),
+                max_decoding_message_size: None,
+                max_encoding_message_size: None,
             }
         }
         pub fn with_interceptor<F>(
@@ -303,6 +331,22 @@ pub mod server_reflection_server {
         #[must_use]
         pub fn send_compressed(mut self, encoding: CompressionEncoding) -> Self {
             self.send_compression_encodings.enable(encoding);
+            self
+        }
+        /// Limits the maximum size of a decoded message.
+        ///
+        /// Default: `4MB`
+        #[must_use]
+        pub fn max_decoding_message_size(mut self, limit: usize) -> Self {
+            self.max_decoding_message_size = Some(limit);
+            self
+        }
+        /// Limits the maximum size of an encoded message.
+        ///
+        /// Default: `usize::MAX`
+        #[must_use]
+        pub fn max_encoding_message_size(mut self, limit: usize) -> Self {
+            self.max_encoding_message_size = Some(limit);
             self
         }
     }
@@ -345,13 +389,19 @@ pub mod server_reflection_server {
                         ) -> Self::Future {
                             let inner = Arc::clone(&self.0);
                             let fut = async move {
-                                (*inner).server_reflection_info(request).await
+                                <T as ServerReflection>::server_reflection_info(
+                                        &inner,
+                                        request,
+                                    )
+                                    .await
                             };
                             Box::pin(fut)
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
                     let send_compression_encodings = self.send_compression_encodings;
+                    let max_decoding_message_size = self.max_decoding_message_size;
+                    let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
                     let fut = async move {
                         let inner = inner.0;
@@ -361,6 +411,10 @@ pub mod server_reflection_server {
                             .apply_compression_config(
                                 accept_compression_encodings,
                                 send_compression_encodings,
+                            )
+                            .apply_max_message_size_config(
+                                max_decoding_message_size,
+                                max_encoding_message_size,
                             );
                         let res = grpc.streaming(method, req).await;
                         Ok(res)
@@ -389,6 +443,8 @@ pub mod server_reflection_server {
                 inner,
                 accept_compression_encodings: self.accept_compression_encodings,
                 send_compression_encodings: self.send_compression_encodings,
+                max_decoding_message_size: self.max_decoding_message_size,
+                max_encoding_message_size: self.max_encoding_message_size,
             }
         }
     }

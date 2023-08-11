@@ -64,19 +64,19 @@ path = "src/tls/client.rs"
 required-features = ["tls"]
 
 [[bin]]
-name = "tls-client-rustls"
-path = "src/tls/client_rustls.rs"
-required-features = ["tls"]
-
-[[bin]]
 name = "tls-server"
 path = "src/tls/server.rs"
 required-features = ["tls"]
 
 [[bin]]
-name = "tls-server-rustls"
-path = "src/tls/server_rustls.rs"
-required-features = ["tls"]
+name = "tls-rustls-client"
+path = "src/tls_rustls/client.rs"
+required-features = ["tls-rustls"]
+
+[[bin]]
+name = "tls-rustls-server"
+path = "src/tls_rustls/server.rs"
+required-features = ["tls-rustls"]
 
 [[bin]]
 name = "tls-client-auth-server"
@@ -233,30 +233,50 @@ name = "json-codec-server"
 path = "src/json-codec/server.rs"
 required-features = ["json-codec"]
 
+[[bin]]
+name = "richer-error-client"
+path = "src/richer-error/client.rs"
+required-features = ["types"]
+
+[[bin]]
+name = "richer-error-server"
+path = "src/richer-error/server.rs"
+required-features = ["types"]
+
+[[bin]]
+name = "richer-error-client-vec"
+path = "src/richer-error/client_vec.rs"
+required-features = ["types"]
+
+[[bin]]
+name = "richer-error-server-vec"
+path = "src/richer-error/server_vec.rs"
+required-features = ["types"]
+
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
-routeguide = ["dep:async-stream", "dep:futures", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
+routeguide = ["dep:async-stream", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
 reflection = ["dep:tonic-reflection"]
 autoreload = ["tokio-stream/net", "dep:listenfd"]
 health = ["dep:tonic-health"]
-grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "hyper", "dep:tracing-subscriber"]
-tracing = ["dep:tracing", "dep:tracing-attributes", "dep:tracing-subscriber"]
-hyper-warp = ["dep:futures", "dep:tower", "hyper", "dep:http", "dep:http-body", "dep:warp"]
+grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:tracing-subscriber"]
+tracing = ["dep:tracing", "dep:tracing-subscriber"]
+hyper-warp = ["dep:either", "dep:tower", "dep:hyper", "dep:http", "dep:http-body", "dep:warp"]
 hyper-warp-multiplex = ["hyper-warp"]
-uds = ["tokio-stream/net", "dep:tower", "hyper"]
-streaming = ["dep:futures", "tokio-stream", "dep:h2"]
-mock = ["dep:futures", "dep:tower"]
-tower = ["dep:futures", "hyper", "dep:tower", "dep:http"]
+uds = ["tokio-stream/net", "dep:tower", "dep:hyper"]
+streaming = ["tokio-stream", "dep:h2"]
+mock = ["tokio-stream", "dep:tower"]
+tower = ["dep:hyper", "dep:tower", "dep:http"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
-tls = ["hyper", "tonic/tls", "dep:hyper-rustls", "dep:tower",
-       "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls"]
+tls = ["tonic/tls"]
+tls-rustls = ["dep:hyper", "dep:hyper-rustls", "dep:tower", "tower-http/util", "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls"]
 dynamic-load-balance = ["dep:tower"]
 timeout = ["tokio/time", "dep:tower"]
 tls-client-auth = ["tonic/tls"]
+types = ["dep:tonic-types"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex",
-        "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "dynamic-load-balance", "timeout","tls-client-auth"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types"]
 default = ["full"]
 
 [dependencies]
@@ -268,28 +288,28 @@ tonic = { path = "../tonic" }
 tonic-web = { path = "../tonic-web", optional = true }
 tonic-health = { path = "../tonic-health", optional = true }
 tonic-reflection = { path = "../tonic-reflection", optional = true }
+tonic-types = { path = "../tonic-types", optional = true }
+either = { version = "1.9", optional = true }
 async-stream = { version = "0.3", optional = true }
-futures = { version = "0.3", default-features = false, optional = true }
 tokio-stream = { version = "0.1", optional = true }
 tower = { version = "0.4", optional = true }
 rand = { version = "0.8", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tracing = { version = "0.1.16", optional = true }
-tracing-attributes = { version = "0.1", optional = true }
 tracing-subscriber = { version = "0.3", features = ["tracing-log", "fmt"], optional = true }
 prost-types = { version = "0.11", optional = true }
 http = { version = "0.2", optional = true }
 http-body = { version = "0.4.2", optional = true }
 hyper = { version = "0.14", optional = true }
-warp = { version = "0.3", default-features = false, optional = true }
+warp = { version = "0.3.4", default-features = false, optional = true }
 listenfd = { version = "1.0", optional = true }
 bytes = { version = "1", optional = true }
 h2 = { version = "0.3", optional = true }
-tokio-rustls = { version = "0.23", optional = true }
-hyper-rustls = { version = "0.23", features = ["http2"], optional = true }
+tokio-rustls = { version = "0.24.0", optional = true }
+hyper-rustls = { version = "0.24.0", features = ["http2"], optional = true }
 rustls-pemfile = { version = "1", optional = true }
-tower-http = { version = "0.3", optional = true }
+tower-http = { version = "0.4", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }

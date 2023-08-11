@@ -68,10 +68,18 @@ pub trait Connected {
 /// [ext]: crate::Request::extensions
 #[derive(Debug, Clone)]
 pub struct TcpConnectInfo {
-    remote_addr: Option<SocketAddr>,
+    /// Returns the local address of this connection.
+    pub local_addr: Option<SocketAddr>,
+    /// Returns the remote (peer) address of this connection.
+    pub remote_addr: Option<SocketAddr>,
 }
 
 impl TcpConnectInfo {
+    /// Return the local address the IO resource is connected.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.local_addr
+    }
+
     /// Return the remote address the IO resource is connected too.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.remote_addr
@@ -83,6 +91,7 @@ impl Connected for AddrStream {
 
     fn connect_info(&self) -> Self::ConnectInfo {
         TcpConnectInfo {
+            local_addr: Some(self.local_addr()),
             remote_addr: Some(self.remote_addr()),
         }
     }
@@ -93,6 +102,7 @@ impl Connected for TcpStream {
 
     fn connect_info(&self) -> Self::ConnectInfo {
         TcpConnectInfo {
+            local_addr: self.local_addr().ok(),
             remote_addr: self.peer_addr().ok(),
         }
     }

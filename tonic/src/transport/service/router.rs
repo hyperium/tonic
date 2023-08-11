@@ -1,6 +1,6 @@
 use crate::{
     body::{boxed, BoxBody},
-    transport::NamedService,
+    server::NamedService,
 };
 use http::{Request, Response};
 use hyper::Body;
@@ -59,6 +59,11 @@ impl Routes {
             // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
             router: self.router.with_state(()),
         }
+    }
+
+    /// Convert this `Routes` into an [`axum::Router`].
+    pub fn into_router(self) -> axum::Router {
+        self.router
     }
 }
 

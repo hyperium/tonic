@@ -1,6 +1,6 @@
 use crate::{Request, Response, Status, Streaming};
-use futures_core::Stream;
 use std::future::Future;
+use tokio_stream::Stream;
 use tower_service::Service;
 
 /// A specialization of tower_service::Service.

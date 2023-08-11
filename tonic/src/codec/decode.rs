@@ -1,8 +1,7 @@
 use super::compression::{decompress, CompressionEncoding};
-use super::{DecodeBuf, Decoder, HEADER_SIZE};
+use super::{DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
-use futures_core::Stream;
 use futures_util::{future, ready};
 use http::StatusCode;
 use http_body::Body;
@@ -11,6 +10,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tokio_stream::Stream;
 use tracing::{debug, trace};
 
 const BUFFER_SIZE: usize = 8 * 1024;
@@ -32,6 +32,7 @@ struct StreamingInner {
     trailers: Option<MetadataMap>,
     decompress_buf: BytesMut,
     encoding: Option<CompressionEncoding>,
+    max_message_size: Option<usize>,
 }
 
 impl<T> Unpin for Streaming<T> {}
@@ -46,7 +47,7 @@ enum State {
     Error,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum Direction {
     Request,
     Response(StatusCode),
@@ -59,13 +60,20 @@ impl<T> Streaming<T> {
         body: B,
         status_code: StatusCode,
         encoding: Option<CompressionEncoding>,
+        max_message_size: Option<usize>,
     ) -> Self
     where
         B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
-        Self::new(decoder, body, Direction::Response(status_code), encoding)
+        Self::new(
+            decoder,
+            body,
+            Direction::Response(status_code),
+            encoding,
+            max_message_size,
+        )
     }
 
     pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
@@ -74,17 +82,28 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
-        Self::new(decoder, body, Direction::EmptyResponse, None)
+        Self::new(decoder, body, Direction::EmptyResponse, None, None)
     }
 
     #[doc(hidden)]
-    pub fn new_request<B, D>(decoder: D, body: B, encoding: Option<CompressionEncoding>) -> Self
+    pub fn new_request<B, D>(
+        decoder: D,
+        body: B,
+        encoding: Option<CompressionEncoding>,
+        max_message_size: Option<usize>,
+    ) -> Self
     where
         B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
-        Self::new(decoder, body, Direction::Request, encoding)
+        Self::new(
+            decoder,
+            body,
+            Direction::Request,
+            encoding,
+            max_message_size,
+        )
     }
 
     fn new<B, D>(
@@ -92,6 +111,7 @@ impl<T> Streaming<T> {
         body: B,
         direction: Direction,
         encoding: Option<CompressionEncoding>,
+        max_message_size: Option<usize>,
     ) -> Self
     where
         B: Body + Send + 'static,
@@ -111,6 +131,7 @@ impl<T> Streaming<T> {
                 trailers: None,
                 decompress_buf: BytesMut::new(),
                 encoding,
+                max_message_size,
             },
         }
     }
@@ -151,7 +172,21 @@ impl StreamingInner {
                     return Err(Status::new(Code::Internal, message));
                 }
             };
+
             let len = self.buf.get_u32() as usize;
+            let limit = self
+                .max_message_size
+                .unwrap_or(DEFAULT_MAX_RECV_MESSAGE_SIZE);
+            if len > limit {
+                return Err(Status::new(
+                    Code::OutOfRange,
+                    format!(
+                        "Error, message length too large: found {} bytes, the limit is: {} bytes",
+                        len, limit
+                    ),
+                ));
+            }
+
             self.buf.reserve(len);
 
             self.state = State::ReadBody {
@@ -199,6 +234,10 @@ impl StreamingInner {
         let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
             Some(Ok(d)) => Some(d),
             Some(Err(e)) => {
+                if self.direction == Direction::Request && e.code() == Code::Cancelled {
+                    return Poll::Ready(Ok(None));
+                }
+
                 let _ = std::mem::replace(&mut self.state, State::Error);
                 let err: crate::Error = e.into();
                 debug!("decoder inner stream error: {:?}", err);

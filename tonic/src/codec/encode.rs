@@ -1,9 +1,8 @@
 use super::compression::{compress, CompressionEncoding, SingleMessageCompressionOverride};
-use super::{EncodeBuf, Encoder, HEADER_SIZE};
+use super::{EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_core::{Stream, TryStream};
-use futures_util::{ready, StreamExt, TryStreamExt};
+use futures_util::ready;
 use http::HeaderMap;
 use http_body::Body;
 use pin_project::pin_project;
@@ -11,6 +10,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
+use tokio_stream::{Stream, StreamExt};
 
 pub(super) const BUFFER_SIZE: usize = 8 * 1024;
 
@@ -19,12 +19,19 @@ pub(crate) fn encode_server<T, U>(
     source: U,
     compression_encoding: Option<CompressionEncoding>,
     compression_override: SingleMessageCompressionOverride,
+    max_message_size: Option<usize>,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
 {
-    let stream = encode(encoder, source, compression_encoding, compression_override).into_stream();
+    let stream = encode(
+        encoder,
+        source,
+        compression_encoding,
+        compression_override,
+        max_message_size,
+    );
 
     EncodeBody::new_server(stream)
 }
@@ -33,6 +40,7 @@ pub(crate) fn encode_client<T, U>(
     encoder: T,
     source: U,
     compression_encoding: Option<CompressionEncoding>,
+    max_message_size: Option<usize>,
 ) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
 where
     T: Encoder<Error = Status>,
@@ -43,8 +51,8 @@ where
         source.map(Ok),
         compression_encoding,
         SingleMessageCompressionOverride::default(),
-    )
-    .into_stream();
+        max_message_size,
+    );
     EncodeBody::new_client(stream)
 }
 
@@ -53,7 +61,8 @@ fn encode<T, U>(
     source: U,
     compression_encoding: Option<CompressionEncoding>,
     compression_override: SingleMessageCompressionOverride,
-) -> impl TryStream<Ok = Bytes, Error = Status>
+    max_message_size: Option<usize>,
+) -> impl Stream<Item = Result<Bytes, Status>>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
@@ -81,6 +90,7 @@ where
             &mut buf,
             &mut uncompression_buf,
             compression_encoding,
+            max_message_size,
             item,
         )
     })
@@ -91,6 +101,7 @@ fn encode_item<T>(
     buf: &mut BytesMut,
     uncompression_buf: &mut BytesMut,
     compression_encoding: Option<CompressionEncoding>,
+    max_message_size: Option<usize>,
     item: T::Item,
 ) -> Result<Bytes, Status>
 where
@@ -119,14 +130,26 @@ where
     }
 
     // now that we know length, we can write the header
-    finish_encoding(compression_encoding, buf)
+    finish_encoding(compression_encoding, max_message_size, buf)
 }
 
 fn finish_encoding(
     compression_encoding: Option<CompressionEncoding>,
+    max_message_size: Option<usize>,
     buf: &mut BytesMut,
 ) -> Result<Bytes, Status> {
     let len = buf.len() - HEADER_SIZE;
+    let limit = max_message_size.unwrap_or(DEFAULT_MAX_SEND_MESSAGE_SIZE);
+    if len > limit {
+        return Err(Status::new(
+            Code::OutOfRange,
+            format!(
+                "Error, message length too large: found {} bytes, the limit is: {} bytes",
+                len, limit
+            ),
+        ));
+    }
+
     if len > std::u32::MAX as usize {
         return Err(Status::resource_exhausted(format!(
             "Cannot return body with more than 4GB of data but got {len} bytes"
@@ -226,8 +249,8 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let mut self_proj = self.project();
-        match ready!(self_proj.inner.try_poll_next_unpin(cx)) {
+        let self_proj = self.project();
+        match ready!(self_proj.inner.poll_next(cx)) {
             Some(Ok(d)) => Some(Ok(d)).into(),
             Some(Err(status)) => match self_proj.state.role {
                 Role::Client => Some(Err(status)).into(),

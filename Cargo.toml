@@ -23,4 +23,6 @@ members = [
   "tests/compression",
   "tonic-web/tests/integration",
   "tests/service_named_result",
+  "tests/use_arc_self",
 ]
+resolver = "2"

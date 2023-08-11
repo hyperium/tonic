@@ -42,9 +42,7 @@ impl RetryInfo {
 
         RetryInfo { retry_delay }
     }
-}
 
-impl RetryInfo {
     /// Returns `true` if [`RetryInfo`]'s `retry_delay` is set as `None`, and
     /// `false` if it is not.
     pub fn is_empty(&self) -> bool {
@@ -107,9 +105,9 @@ mod tests {
 
     #[test]
     fn gen_retry_info() {
-        let error_info = RetryInfo::new(Some(Duration::from_secs(u64::MAX)));
+        let retry_info = RetryInfo::new(Some(Duration::from_secs(u64::MAX)));
 
-        let formatted = format!("{:?}", error_info);
+        let formatted = format!("{:?}", retry_info);
 
         let expected_filled = "RetryInfo { retry_delay: Some(315576000000.999999999s) }";
 
@@ -119,11 +117,11 @@ mod tests {
         );
 
         assert!(
-            !error_info.is_empty(),
+            !retry_info.is_empty(),
             "filled RetryInfo returns 'false' from .has_retry_delay()"
         );
 
-        let gen_any = error_info.into_any();
+        let gen_any = retry_info.into_any();
 
         let formatted = format!("{:?}", gen_any);
 

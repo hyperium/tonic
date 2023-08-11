@@ -14,6 +14,7 @@ fn bootstrap() {
         .build_server(true)
         .build_transport(false)
         .out_dir(&out_dir)
+        .file_descriptor_set_path(out_dir.join("grpc_health_v1.bin"))
         .compile(iface_files, dirs)
         .unwrap();
 

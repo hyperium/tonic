@@ -2,9 +2,8 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use futures::stream::Stream;
 use std::time::Duration;
-use tokio_stream::StreamExt;
+use tokio_stream::{Stream, StreamExt};
 use tonic::transport::Channel;
 
 use pb::{echo_client::EchoClient, EchoRequest};
@@ -76,9 +75,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("\r\nBidirectional stream echo:");
     bidirectional_streaming_echo(&mut client, 17).await;
 
-    // Echo stream that sends up to `usize::MAX` requets. One request each 2s.
+    // Echo stream that sends up to `usize::MAX` requests. One request each 2s.
     // Exiting client with CTRL+C demonstrate how to distinguish broken pipe from
-    //graceful client disconnection (above example) on the server side.
+    // graceful client disconnection (above example) on the server side.
     println!("\r\nBidirectional stream echo (kill client with CTLR+C):");
     bidirectional_streaming_echo_throttle(&mut client, Duration::from_secs(2)).await;
 

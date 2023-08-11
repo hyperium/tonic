@@ -1,4 +1,4 @@
-use futures_core::future::BoxFuture;
+use crate::transport::BoxFuture;
 use http::uri::Authority;
 use http::uri::Scheme;
 use http::{Request, Uri};

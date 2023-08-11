@@ -4,7 +4,7 @@ categories = ["network-programming", "asynchronous"]
 description = """
 grpc-web protocol translation for tonic services.
 """
-documentation = "https://docs.rs/tonic-web/0.4.0/tonic-web/"
+documentation = "https://docs.rs/tonic-web/0.9.2"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "grpc-web"]
@@ -12,20 +12,21 @@ license = "MIT"
 name = "tonic-web"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.5.0"
+version = "0.9.2"
 
 [dependencies]
 base64 = "0.21"
 bytes = "1.0"
 futures-core = "0.3"
+tokio-stream = "0.1"
 http = "0.2"
 http-body = "0.4"
-hyper = "0.14"
+hyper = {version = "0.14", default-features = false, features = ["stream"]}
 pin-project = "1"
-tonic = {version = "0.8", path = "../tonic", default-features = false, features = ["transport"]}
+tonic = {version = "0.9", path = "../tonic", default-features = false}
 tower-service = "0.3"
 tower-layer = "0.3"
-tower-http = { version = "0.3", features = ["cors"] }
+tower-http = { version = "0.4", features = ["cors"] }
 tracing = "0.1"
 
 [dev-dependencies]

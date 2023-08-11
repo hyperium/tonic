@@ -20,12 +20,14 @@ pub fn configure() -> Builder {
         build_server: true,
         build_transport: true,
         file_descriptor_set_path: None,
+        skip_protoc_run: false,
         out_dir: None,
         extern_path: Vec::new(),
         field_attributes: Vec::new(),
         message_attributes: Vec::new(),
         enum_attributes: Vec::new(),
         type_attributes: Vec::new(),
+        boxed: Vec::new(),
         server_attributes: Attributes::default(),
         client_attributes: Attributes::default(),
         proto_path: "super".to_string(),
@@ -35,6 +37,7 @@ pub fn configure() -> Builder {
         include_file: None,
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
         disable_comments: HashSet::default(),
+        use_arc_self: false,
     }
 }
 
@@ -168,6 +171,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .compile_well_known_types(self.builder.compile_well_known_types)
                 .attributes(self.builder.server_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
+                .use_arc_self(self.builder.use_arc_self)
                 .generate_server(&service, &self.builder.proto_path);
 
             self.servers.extend(server);
@@ -224,11 +228,13 @@ pub struct Builder {
     pub(crate) build_server: bool,
     pub(crate) build_transport: bool,
     pub(crate) file_descriptor_set_path: Option<PathBuf>,
+    pub(crate) skip_protoc_run: bool,
     pub(crate) extern_path: Vec<(String, String)>,
     pub(crate) field_attributes: Vec<(String, String)>,
     pub(crate) type_attributes: Vec<(String, String)>,
     pub(crate) message_attributes: Vec<(String, String)>,
     pub(crate) enum_attributes: Vec<(String, String)>,
+    pub(crate) boxed: Vec<String>,
     pub(crate) server_attributes: Attributes,
     pub(crate) client_attributes: Attributes,
     pub(crate) proto_path: String,
@@ -238,6 +244,7 @@ pub struct Builder {
     pub(crate) include_file: Option<PathBuf>,
     pub(crate) emit_rerun_if_changed: bool,
     pub(crate) disable_comments: HashSet<String>,
+    pub(crate) use_arc_self: bool,
 
     out_dir: Option<PathBuf>,
 }
@@ -268,6 +275,14 @@ impl Builder {
     /// modules. This is required for implementing gRPC Server Reflection.
     pub fn file_descriptor_set_path(mut self, path: impl AsRef<Path>) -> Self {
         self.file_descriptor_set_path = Some(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// In combination with with file_descriptor_set_path, this can be used to provide a file
+    /// descriptor set as an input file, rather than having prost-build generate the file by
+    /// calling protoc.
+    pub fn skip_protoc_run(mut self) -> Self {
+        self.skip_protoc_run = true;
         self
     }
 
@@ -332,6 +347,14 @@ impl Builder {
         self
     }
 
+    /// Add additional boxed fields.
+    ///
+    /// Passed directly to `prost_build::Config.boxed`.
+    pub fn boxed<P: AsRef<str>>(mut self, path: P) -> Self {
+        self.boxed.push(path.as_ref().to_string());
+        self
+    }
+
     /// Add additional attribute to matched server `mod`s. Matches on the package name.
     pub fn server_mod_attribute<P: AsRef<str>, A: AsRef<str>>(
         mut self,
@@ -388,6 +411,12 @@ impl Builder {
     /// Disable service and rpc comments emission.
     pub fn disable_comments(mut self, path: impl AsRef<str>) -> Self {
         self.disable_comments.insert(path.as_ref().to_string());
+        self
+    }
+
+    /// Emit `Arc<Self>` receiver type in server traits instead of `&self`.
+    pub fn use_arc_self(mut self, enable: bool) -> Self {
+        self.use_arc_self = enable;
         self
     }
 
@@ -464,6 +493,9 @@ impl Builder {
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }
+        if self.skip_protoc_run {
+            config.skip_protoc_run();
+        }
         for (proto_path, rust_path) in self.extern_path.iter() {
             config.extern_path(proto_path, rust_path);
         }
@@ -478,6 +510,9 @@ impl Builder {
         }
         for (prost_path, attr) in self.enum_attributes.iter() {
             config.enum_attribute(prost_path, attr);
+        }
+        for prost_path in self.boxed.iter() {
+            config.boxed(prost_path);
         }
         if self.compile_well_known_types {
             config.compile_well_known_types();

@@ -1,7 +1,5 @@
 use super::{Connected, Server};
 use crate::transport::service::ServerIo;
-use futures_core::Stream;
-use futures_util::stream::TryStreamExt;
 use hyper::server::{
     accept::Accept,
     conn::{AddrIncoming, AddrStream},
@@ -16,6 +14,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::TcpListener,
 };
+use tokio_stream::{Stream, StreamExt};
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE, L>(
@@ -26,7 +25,13 @@ where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
-    incoming.err_into().map_ok(ServerIo::new_io)
+    async_stream::try_stream! {
+        futures_util::pin_mut!(incoming);
+
+        while let Some(item) = incoming.next().await {
+            yield item.map(ServerIo::new_io)?
+        }
+    }
 }
 
 #[cfg(feature = "tls")]
@@ -41,21 +46,17 @@ where
     async_stream::try_stream! {
         futures_util::pin_mut!(incoming);
 
-        #[cfg(feature = "tls")]
-        let mut tasks = futures_util::stream::futures_unordered::FuturesUnordered::new();
+        let mut tasks = tokio::task::JoinSet::new();
 
         loop {
             match select(&mut incoming, &mut tasks).await {
                 SelectOutput::Incoming(stream) => {
                     if let Some(tls) = &server.tls {
                         let tls = tls.clone();
-
-                        let accept = tokio::spawn(async move {
+                        tasks.spawn(async move {
                             let io = tls.accept(stream).await?;
                             Ok(ServerIo::new_tls_io(io))
                         });
-
-                        tasks.push(accept);
                     } else {
                         yield ServerIo::new_io(stream);
                     }
@@ -78,17 +79,13 @@ where
 }
 
 #[cfg(feature = "tls")]
-async fn select<IO, IE>(
+async fn select<IO: 'static, IE>(
     incoming: &mut (impl Stream<Item = Result<IO, IE>> + Unpin),
-    tasks: &mut futures_util::stream::futures_unordered::FuturesUnordered<
-        tokio::task::JoinHandle<Result<ServerIo<IO>, crate::Error>>,
-    >,
+    tasks: &mut tokio::task::JoinSet<Result<ServerIo<IO>, crate::Error>>,
 ) -> SelectOutput<IO>
 where
     IE: Into<crate::Error>,
 {
-    use futures_util::StreamExt;
-
     if tasks.is_empty() {
         return match incoming.try_next().await {
             Ok(Some(stream)) => SelectOutput::Incoming(stream),
@@ -106,8 +103,8 @@ where
             }
         }
 
-        accept = tasks.next() => {
-            match accept.expect("FuturesUnordered stream should never end") {
+        accept = tasks.join_next() => {
+            match accept.expect("JoinSet should never end") {
                 Ok(Ok(io)) => SelectOutput::Io(io),
                 Ok(Err(e)) => SelectOutput::Err(e),
                 Err(e) => SelectOutput::Err(e.into()),
@@ -142,7 +139,7 @@ impl TcpIncoming {
     /// ```no_run
     /// # use tower_service::Service;
     /// # use http::{request::Request, response::Response};
-    /// # use tonic::{body::BoxBody, transport::{Body, NamedService, Server, server::TcpIncoming}};
+    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Body, Server, server::TcpIncoming}};
     /// # use core::convert::Infallible;
     /// # use std::error::Error;
     /// # fn main() { }  // Cannot have type parameters, hence instead define:

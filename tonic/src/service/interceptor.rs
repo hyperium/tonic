@@ -67,20 +67,6 @@ where
     InterceptorLayer { f }
 }
 
-#[deprecated(
-    since = "0.5.1",
-    note = "Please use the `interceptor` function instead"
-)]
-/// Create a new interceptor layer.
-///
-/// See [`Interceptor`] for more details.
-pub fn interceptor_fn<F>(f: F) -> InterceptorLayer<F>
-where
-    F: Interceptor,
-{
-    interceptor(f)
-}
-
 /// A gRPC interceptor that can be used as a [`Layer`],
 /// created by calling [`interceptor`].
 ///
@@ -100,16 +86,6 @@ where
         InterceptedService::new(service, self.f.clone())
     }
 }
-
-#[deprecated(
-    since = "0.5.1",
-    note = "Please use the `InterceptorLayer` type instead"
-)]
-/// A gRPC interceptor that can be used as a [`Layer`],
-/// created by calling [`interceptor`].
-///
-/// See [`Interceptor`] for more details.
-pub type InterceptorFn<F> = InterceptorLayer<F>;
 
 /// A service wrapped in an interceptor middleware.
 ///
@@ -189,10 +165,9 @@ where
 }
 
 // required to use `InterceptedService` with `Router`
-#[cfg(feature = "transport")]
-impl<S, F> crate::transport::NamedService for InterceptedService<S, F>
+impl<S, F> crate::server::NamedService for InterceptedService<S, F>
 where
-    S: crate::transport::NamedService,
+    S: crate::server::NamedService,
 {
     const NAME: &'static str = S::NAME;
 }
