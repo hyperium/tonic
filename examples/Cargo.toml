@@ -255,18 +255,18 @@ required-features = ["types"]
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
-routeguide = ["dep:async-stream", "dep:futures", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
+routeguide = ["dep:async-stream", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
 reflection = ["dep:tonic-reflection"]
 autoreload = ["tokio-stream/net", "dep:listenfd"]
 health = ["dep:tonic-health"]
 grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:tracing-subscriber"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
-hyper-warp = ["dep:futures", "dep:tower", "dep:hyper", "dep:http", "dep:http-body", "dep:warp"]
+hyper-warp = ["dep:either", "dep:tower", "dep:hyper", "dep:http", "dep:http-body", "dep:warp"]
 hyper-warp-multiplex = ["hyper-warp"]
 uds = ["tokio-stream/net", "dep:tower", "dep:hyper"]
-streaming = ["dep:futures", "tokio-stream", "dep:h2"]
-mock = ["dep:futures", "dep:tower"]
-tower = ["dep:futures", "dep:hyper", "dep:tower", "dep:http"]
+streaming = ["tokio-stream", "dep:h2"]
+mock = ["tokio-stream", "dep:tower"]
+tower = ["dep:hyper", "dep:tower", "dep:http"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
 tls = ["tonic/tls"]
@@ -289,8 +289,8 @@ tonic-web = { path = "../tonic-web", optional = true }
 tonic-health = { path = "../tonic-health", optional = true }
 tonic-reflection = { path = "../tonic-reflection", optional = true }
 tonic-types = { path = "../tonic-types", optional = true }
+either = { version = "1.9", optional = true }
 async-stream = { version = "0.3", optional = true }
-futures = { version = "0.3", default-features = false, optional = true }
 tokio-stream = { version = "0.1", optional = true }
 tower = { version = "0.4", optional = true }
 rand = { version = "0.8", optional = true }
@@ -313,6 +313,3 @@ tower-http = { version = "0.4", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
-
-[package.metadata.cargo-machete]
-ignored = ["prost-types"]

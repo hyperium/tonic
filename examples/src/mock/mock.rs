@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         Server::builder()
             .add_service(GreeterServer::new(greeter))
-            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
             .await
     });
 
