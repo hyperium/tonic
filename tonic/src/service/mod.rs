@@ -3,5 +3,4 @@
 pub mod interceptor;
 
 #[doc(inline)]
-#[allow(deprecated)]
-pub use self::interceptor::{interceptor, interceptor_fn, Interceptor};
+pub use self::interceptor::{interceptor, Interceptor};
