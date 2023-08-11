@@ -68,8 +68,10 @@ pub trait Connected {
 /// [ext]: crate::Request::extensions
 #[derive(Debug, Clone)]
 pub struct TcpConnectInfo {
-    local_addr: Option<SocketAddr>,
-    remote_addr: Option<SocketAddr>,
+    /// Returns the local address of this connection.
+    pub local_addr: Option<SocketAddr>,
+    /// Returns the remote (peer) address of this connection.
+    pub remote_addr: Option<SocketAddr>,
 }
 
 impl TcpConnectInfo {
