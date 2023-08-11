@@ -26,7 +26,7 @@ where
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
-        futures_util::pin_mut!(incoming);
+        pin_utils::pin_mut!(incoming);
 
         while let Some(item) = incoming.next().await {
             yield item.map(ServerIo::new_io)?
@@ -44,7 +44,7 @@ where
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
-        futures_util::pin_mut!(incoming);
+        pin_utils::pin_mut!(incoming);
 
         let mut tasks = tokio::task::JoinSet::new();
 

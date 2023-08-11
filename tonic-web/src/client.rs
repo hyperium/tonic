@@ -1,5 +1,4 @@
 use bytes::Bytes;
-use futures_core::ready;
 use http::header::CONTENT_TYPE;
 use http::{Request, Response, Version};
 use http_body::Body;
@@ -7,7 +6,7 @@ use pin_project::pin_project;
 use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use tower_layer::Layer;
 use tower_service::Service;
 use tracing::debug;

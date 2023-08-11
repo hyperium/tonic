@@ -50,7 +50,7 @@ channel = []
 [dependencies]
 base64 = "0.21"
 bytes = "1.0"
-futures-util = {version = "0.3", default-features = false}
+pin-utils = "0.1"
 http = "0.2"
 tracing = "0.1"
 
