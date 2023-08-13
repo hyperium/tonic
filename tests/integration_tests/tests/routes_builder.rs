@@ -1,18 +1,17 @@
 use std::time::Duration;
 
-use futures_util::{stream, FutureExt};
 use tokio::sync::oneshot;
 use tokio_stream::StreamExt;
 
 use integration_tests::pb::{
-    test1_client, test1_server, test_client, test_server, Input, Input1, Output, Output1,
+    Input, Input1, Output, Output1, test1_client, test1_server, test_client, test_server,
+};
+use tonic::{
+    Request,
+    Response, Status, transport::{Endpoint, Server},
 };
 use tonic::codegen::BoxStream;
 use tonic::transport::server::RoutesBuilder;
-use tonic::{
-    transport::{Endpoint, Server},
-    Request, Response, Status,
-};
 
 #[tokio::test]
 async fn multiple_service_using_routes_builder() {
@@ -44,7 +43,7 @@ async fn multiple_service_using_routes_builder() {
             let output = Output1 {
                 buf: request.into_inner().buf,
             };
-            let stream = stream::iter(vec![Ok(output)]);
+            let stream = tokio_stream::iter(vec![Ok(output)]);
 
             Ok(Response::new(Box::pin(stream)))
         }
@@ -60,7 +59,7 @@ async fn multiple_service_using_routes_builder() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_routes(routes_builder.routes())
-            .serve_with_shutdown("127.0.0.1:1400".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1400".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
