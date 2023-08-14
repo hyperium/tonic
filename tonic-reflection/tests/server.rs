@@ -1,4 +1,3 @@
-use futures_util::FutureExt;
 use prost::Message;
 use std::net::SocketAddr;
 use tokio::sync::oneshot;
@@ -106,7 +105,9 @@ async fn make_test_reflection_request(request: ServerReflectionRequest) -> Messa
 
         Server::builder()
             .add_service(service)
-            .serve_with_incoming_shutdown(TcpListenerStream::new(listener), shutdown_rx.map(drop))
+            .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
+                drop(shutdown_rx.await)
+            })
             .await
             .unwrap();
     });

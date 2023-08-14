@@ -1,7 +1,6 @@
 //! Codegen exports used by `tonic-build`.
 
 pub use async_trait::async_trait;
-pub use futures_util::future::{ok, poll_fn, Ready};
 pub use tokio_stream;
 
 pub use std::future::Future;

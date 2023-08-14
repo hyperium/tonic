@@ -60,6 +60,11 @@ impl Routes {
             router: self.router.with_state(()),
         }
     }
+
+    /// Convert this `Routes` into an [`axum::Router`].
+    pub fn into_router(self) -> axum::Router {
+        self.router
+    }
 }
 
 async fn unimplemented() -> impl axum::response::IntoResponse {

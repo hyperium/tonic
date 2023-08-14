@@ -1,4 +1,4 @@
-use futures_util::future::BoxFuture;
+use crate::transport::BoxFuture;
 use std::{future::Future, sync::Arc};
 
 pub(crate) use hyper::rt::Executor;

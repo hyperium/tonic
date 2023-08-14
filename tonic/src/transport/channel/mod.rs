@@ -188,7 +188,7 @@ impl Channel {
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
         D::Key: Hash + Send + Clone,
-        E: Executor<futures_util::future::BoxFuture<'static, ()>> + Send + Sync + 'static,
+        E: Executor<crate::transport::BoxFuture<'static, ()>> + Send + Sync + 'static,
     {
         let svc = Balance::new(discover);
 

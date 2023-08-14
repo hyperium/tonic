@@ -22,6 +22,7 @@ skip-tree = [
     { name = "base64" },
     { name = "syn" },
     { name = "bitflags" },
+    { name = "socket2" },
 ]
 
 [licenses]
@@ -37,6 +38,7 @@ allow = [
     "Zlib",
     "Unicode-DFS-2016",
     "MPL-2.0",
+    "BSD-3-Clause"
 ]
 
 [[licenses.clarify]]
