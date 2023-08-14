@@ -40,6 +40,7 @@ pub fn configure() -> Builder {
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
         disable_comments: HashSet::default(),
         use_arc_self: false,
+        generate_default_stubs: false,
     }
 }
 
@@ -174,6 +175,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .attributes(self.builder.server_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
                 .use_arc_self(self.builder.use_arc_self)
+                .generate_default_stubs(self.builder.generate_default_stubs)
                 .generate_server(&service, &self.builder.proto_path);
 
             self.servers.extend(server);
@@ -249,6 +251,7 @@ pub struct Builder {
     pub(crate) emit_rerun_if_changed: bool,
     pub(crate) disable_comments: HashSet<String>,
     pub(crate) use_arc_self: bool,
+    pub(crate) generate_default_stubs: bool,
 
     out_dir: Option<PathBuf>,
 }
@@ -507,6 +510,17 @@ impl Builder {
     /// explicitly.
     pub fn emit_rerun_if_changed(mut self, enable: bool) -> Self {
         self.emit_rerun_if_changed = enable;
+        self
+    }
+
+    /// Enable or disable directing service generation to providing a default implementation for service methods.
+    /// When this is false all gRPC methods must be explicitly implemented.
+    /// When this is true any unimplemented service methods will return 'unimplemented' gRPC error code.
+    /// When this is true all streaming server request RPC types explicitly use tonic::codegen::BoxStream type.
+    ///
+    /// This defaults to `false`.
+    pub fn generate_default_stubs(mut self, enable: bool) -> Self {
+        self.generate_default_stubs = enable;
         self
     }
 

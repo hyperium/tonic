@@ -17,6 +17,7 @@ pub(crate) fn generate_internal<T: Service>(
     attributes: &Attributes,
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
+    generate_default_stubs: bool,
 ) -> TokenStream {
     let methods = generate_methods(
         service,
@@ -24,6 +25,7 @@ pub(crate) fn generate_internal<T: Service>(
         proto_path,
         compile_well_known_types,
         use_arc_self,
+        generate_default_stubs,
     );
 
     let server_service = quote::format_ident!("{}Server", service.name());
@@ -37,6 +39,7 @@ pub(crate) fn generate_internal<T: Service>(
         server_trait.clone(),
         disable_comments,
         use_arc_self,
+        generate_default_stubs,
     );
     let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
@@ -214,6 +217,7 @@ fn generate_trait<T: Service>(
     server_trait: Ident,
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
+    generate_default_stubs: bool,
 ) -> TokenStream {
     let methods = generate_trait_methods(
         service,
@@ -222,6 +226,7 @@ fn generate_trait<T: Service>(
         compile_well_known_types,
         disable_comments,
         use_arc_self,
+        generate_default_stubs,
     );
     let trait_doc = generate_doc_comment(format!(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
@@ -244,6 +249,7 @@ fn generate_trait_methods<T: Service>(
     compile_well_known_types: bool,
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
+    generate_default_stubs: bool,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -266,22 +272,53 @@ fn generate_trait_methods<T: Service>(
             quote!(&self)
         };
 
-        let method = match (method.client_streaming(), method.server_streaming()) {
-            (false, false) => {
+        let method = match (
+            method.client_streaming(),
+            method.server_streaming(),
+            generate_default_stubs,
+        ) {
+            (false, false, true) => {
+                quote! {
+                    #method_doc
+                    async fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
+                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    }
+                }
+            }
+            (false, false, false) => {
                 quote! {
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<#req_message>)
                         -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
-            (true, false) => {
+            (true, false, true) => {
+                quote! {
+                    #method_doc
+                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
+                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    }
+                }
+            }
+            (true, false, false) => {
                 quote! {
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
                         -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
                 }
             }
-            (false, true) => {
+            (false, true, true) => {
+                quote! {
+                    #method_doc
+                    async fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
+                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    }
+                }
+            }
+            (false, true, false) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
                 let stream_doc = generate_doc_comment(format!(
                     " Server streaming response type for the {} method.",
@@ -297,7 +334,16 @@ fn generate_trait_methods<T: Service>(
                         -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
                 }
             }
-            (true, true) => {
+            (true, true, true) => {
+                quote! {
+                    #method_doc
+                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
+                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    }
+                }
+            }
+            (true, true, false) => {
                 let stream = quote::format_ident!("{}Stream", method.identifier());
                 let stream_doc = generate_doc_comment(format!(
                     " Server streaming response type for the {} method.",
@@ -341,6 +387,7 @@ fn generate_methods<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
     use_arc_self: bool,
+    generate_default_stubs: bool,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -367,6 +414,7 @@ fn generate_methods<T: Service>(
                 ident.clone(),
                 server_trait,
                 use_arc_self,
+                generate_default_stubs,
             ),
             (true, false) => generate_client_streaming(
                 method,
@@ -384,6 +432,7 @@ fn generate_methods<T: Service>(
                 ident.clone(),
                 server_trait,
                 use_arc_self,
+                generate_default_stubs,
             ),
         };
 
@@ -464,6 +513,7 @@ fn generate_server_streaming<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
     use_arc_self: bool,
+    generate_default_stubs: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
@@ -471,7 +521,12 @@ fn generate_server_streaming<T: Method>(
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
-    let response_stream = quote::format_ident!("{}Stream", method.identifier());
+    let response_stream = if !generate_default_stubs {
+        let stream = quote::format_ident!("{}Stream", method.identifier());
+        quote!(type ResponseStream = T::#stream)
+    } else {
+        quote!(type ResponseStream = BoxStream<#response>)
+    };
 
     let inner_arg = if use_arc_self {
         quote!(inner)
@@ -485,7 +540,7 @@ fn generate_server_streaming<T: Method>(
 
         impl<T: #server_trait> tonic::server::ServerStreamingService<#request> for #service_ident<T> {
             type Response = #response;
-            type ResponseStream = T::#response_stream;
+            #response_stream;
             type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
@@ -585,6 +640,7 @@ fn generate_streaming<T: Method>(
     method_ident: Ident,
     server_trait: Ident,
     use_arc_self: bool,
+    generate_default_stubs: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
@@ -592,7 +648,12 @@ fn generate_streaming<T: Method>(
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
-    let response_stream = quote::format_ident!("{}Stream", method.identifier());
+    let response_stream = if !generate_default_stubs {
+        let stream = quote::format_ident!("{}Stream", method.identifier());
+        quote!(type ResponseStream = T::#stream)
+    } else {
+        quote!(type ResponseStream = BoxStream<#response>)
+    };
 
     let inner_arg = if use_arc_self {
         quote!(inner)
@@ -607,7 +668,7 @@ fn generate_streaming<T: Method>(
         impl<T: #server_trait> tonic::server::StreamingService<#request> for #service_ident<T>
         {
             type Response = #response;
-            type ResponseStream = T::#response_stream;
+            #response_stream;
             type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
 
             fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
