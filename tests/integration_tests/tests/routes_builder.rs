@@ -4,14 +4,14 @@ use tokio::sync::oneshot;
 use tokio_stream::StreamExt;
 
 use integration_tests::pb::{
-    Input, Input1, Output, Output1, test1_client, test1_server, test_client, test_server,
-};
-use tonic::{
-    Request,
-    Response, Status, transport::{Endpoint, Server},
+    test1_client, test1_server, test_client, test_server, Input, Input1, Output, Output1,
 };
 use tonic::codegen::BoxStream;
 use tonic::transport::server::RoutesBuilder;
+use tonic::{
+    transport::{Endpoint, Server},
+    Request, Response, Status,
+};
 
 #[tokio::test]
 async fn multiple_service_using_routes_builder() {
