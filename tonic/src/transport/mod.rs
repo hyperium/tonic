@@ -18,6 +18,7 @@
 //! ## Client
 //!
 //! ```no_run
+//! # #[cfg(feature = "rustls")]
 //! # use tonic::transport::{Channel, Certificate, ClientTlsConfig};
 //! # use std::time::Duration;
 //! # use tonic::body::BoxBody;
@@ -45,6 +46,7 @@
 //! ## Server
 //!
 //! ```no_run
+//! # #[cfg(feature = "rustls")]
 //! # use tonic::transport::{Server, Identity, ServerTlsConfig};
 //! # use tower::Service;
 //! # #[cfg(feature = "rustls")]
