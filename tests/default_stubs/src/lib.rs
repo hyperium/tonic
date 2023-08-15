@@ -2,8 +2,8 @@
 
 mod test_defaults;
 
-use futures::{Stream, StreamExt};
 use std::pin::Pin;
+use tokio_stream::{Stream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 
 tonic::include_proto!("test");
