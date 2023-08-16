@@ -185,6 +185,9 @@ where
     S: NamedService,
 {
     const NAME: &'static str = S::NAME;
+    fn grpc_method(path: &str) -> Option<tonic::GrpcMethod> {
+        S::grpc_method(path)
+    }
 }
 
 pub(crate) mod util {

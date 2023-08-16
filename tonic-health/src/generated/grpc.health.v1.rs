@@ -203,9 +203,11 @@ pub mod health_client {
 pub mod health_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
+    pub const HEALTH_SERVICE_NAME: &str = "grpc.health.v1.Health";
     /// Generated trait containing gRPC methods that should be implemented for use with HealthServer.
     #[async_trait]
     pub trait Health: Send + Sync + 'static {
+        const CHECK: &'static str = "Check";
         /// If the requested service is unknown, the call will fail with status
         /// NOT_FOUND.
         async fn check(
@@ -215,6 +217,7 @@ pub mod health_server {
             tonic::Response<super::HealthCheckResponse>,
             tonic::Status,
         >;
+        const WATCH: &'static str = "Watch";
         /// Server streaming response type for the Watch method.
         type WatchStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::HealthCheckResponse, tonic::Status>,
@@ -452,5 +455,16 @@ pub mod health_server {
     }
     impl<T: Health> tonic::server::NamedService for HealthServer<T> {
         const NAME: &'static str = "grpc.health.v1.Health";
+        fn grpc_method(path: &str) -> Option<GrpcMethod> {
+            match path {
+                "/grpc.health.v1.Health/Check" => {
+                    Some(GrpcMethod::new("grpc.health.v1.Health", "Check"))
+                }
+                "/grpc.health.v1.Health/Watch" => {
+                    Some(GrpcMethod::new("grpc.health.v1.Health", "Watch"))
+                }
+                _ => None,
+            }
+        }
     }
 }

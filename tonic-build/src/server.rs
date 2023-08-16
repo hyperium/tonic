@@ -29,6 +29,10 @@ pub(crate) fn generate_internal<T: Service>(
     );
 
     let server_service = quote::format_ident!("{}Server", service.name());
+    let server_service_name = quote::format_ident!(
+        "{}_SERVICE_NAME",
+        naive_snake_case(service.name()).to_uppercase()
+    );
     let server_trait = quote::format_ident!("{}", service.name());
     let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
     let generated_trait = generate_trait(
@@ -51,7 +55,7 @@ pub(crate) fn generate_internal<T: Service>(
         generate_doc_comments(service.comment())
     };
 
-    let named = generate_named(&server_service, &server_trait, &service_name);
+    let named = generate_named(service, &server_service, &server_trait, &service_name);
     let mod_attributes = attributes.for_mod(package);
     let struct_attributes = attributes.for_struct(&service_name);
 
@@ -103,6 +107,8 @@ pub(crate) fn generate_internal<T: Service>(
                 clippy::let_unit_value,
             )]
             use tonic::codegen::*;
+
+            pub const #server_service_name : &str = #service_name;
 
             #generated_trait
 
@@ -254,7 +260,9 @@ fn generate_trait_methods<T: Service>(
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
+        let method_name = method.identifier();
         let name = quote::format_ident!("{}", method.name());
+        let upper_name = quote::format_ident!("{}", method.name().to_uppercase());
 
         let (req_message, res_message) =
             method.request_response_name(proto_path, compile_well_known_types);
@@ -266,6 +274,9 @@ fn generate_trait_methods<T: Service>(
                 generate_doc_comments(method.comment())
             };
 
+        stream.extend(quote! {
+            const #upper_name: &'static str = #method_name;
+        });
         let self_param = if use_arc_self {
             quote!(self: std::sync::Arc<Self>)
         } else {
@@ -367,16 +378,34 @@ fn generate_trait_methods<T: Service>(
     stream
 }
 
-fn generate_named(
+fn generate_named<T: Service>(
+    service: &T,
     server_service: &syn::Ident,
     server_trait: &syn::Ident,
     service_name: &str,
 ) -> TokenStream {
+    let mut stream = TokenStream::new();
+    for method in service.methods() {
+        let method_name = method.identifier();
+        let path = format!("/{}/{}", service_name, method_name);
+        let method_path = Lit::Str(LitStr::new(&path, Span::call_site()));
+        let method = quote! {
+            #method_path => {
+                Some(GrpcMethod::new(#service_name, #method_name))
+            }
+        };
+        stream.extend(method);
+    }
     let service_name = syn::LitStr::new(service_name, proc_macro2::Span::call_site());
-
     quote! {
         impl<T: #server_trait> tonic::server::NamedService for #server_service<T> {
             const NAME: &'static str = #service_name;
+            fn grpc_method(path: &str) -> Option<GrpcMethod> {
+                match path {
+                    #stream
+                    _ => None
+                }
+            }
         }
     }
 }

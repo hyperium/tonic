@@ -267,9 +267,11 @@ pub mod server_reflection_client {
 pub mod server_reflection_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
+    pub const SERVER_REFLECTION_SERVICE_NAME: &str = "grpc.reflection.v1alpha.ServerReflection";
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
     #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {
+        const SERVER_REFLECTION_INFO: &'static str = "ServerReflectionInfo";
         /// Server streaming response type for the ServerReflectionInfo method.
         type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<
@@ -460,5 +462,18 @@ pub mod server_reflection_server {
     }
     impl<T: ServerReflection> tonic::server::NamedService for ServerReflectionServer<T> {
         const NAME: &'static str = "grpc.reflection.v1alpha.ServerReflection";
+        fn grpc_method(path: &str) -> Option<GrpcMethod> {
+            match path {
+                "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo" => {
+                    Some(
+                        GrpcMethod::new(
+                            "grpc.reflection.v1alpha.ServerReflection",
+                            "ServerReflectionInfo",
+                        ),
+                    )
+                }
+                _ => None,
+            }
+        }
     }
 }

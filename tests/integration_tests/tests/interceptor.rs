@@ -8,7 +8,7 @@ use tonic::{
 
 #[tokio::test]
 async fn interceptor_retrieves_grpc_method() {
-    use test_server::Test;
+    use test_server::{Test, TEST_SERVICE_NAME};
 
     struct Svc;
 
@@ -19,7 +19,18 @@ async fn interceptor_retrieves_grpc_method() {
         }
     }
 
-    let svc = test_server::TestServer::new(Svc);
+    fn server_intercept(req: Request<()>) -> Result<Request<()>, Status> {
+        println!("Intercepting server request: {:?}", req);
+
+        let gm = req.extensions().get::<GrpcMethod>().unwrap();
+        assert_eq!(gm.service(), "test.Test");
+        assert_eq!(gm.service(), TEST_SERVICE_NAME);
+        assert_eq!(gm.method(), "UnaryCall");
+        assert_eq!(gm.method(), Svc::UNARY_CALL);
+
+        Ok(req)
+    }
+    let svc = test_server::TestServer::with_interceptor(Svc, server_intercept);
 
     let (tx, rx) = oneshot::channel();
     // Start the server now, second call should succeed
