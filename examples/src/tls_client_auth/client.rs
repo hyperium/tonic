@@ -19,7 +19,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .ca_certificate(server_root_ca_cert)
         .identity(client_identity);
 
-    let channel = Channel::from_static("http://[::1]:50051")
+    let channel = Channel::from_static("https://[::1]:50051")
         .tls_config(tls)?
         .connect()
         .await?;
