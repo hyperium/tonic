@@ -645,8 +645,10 @@ impl<L> Router<L> {
             .await
     }
 
-    /// Consume this [`Server`] creating a future that will execute the server on
-    /// the provided incoming stream of `AsyncRead + AsyncWrite`.
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on the provided incoming stream of `AsyncRead + AsyncWrite`.
+    ///
+    /// This method discards any provided [`Server`] TCP configuration.
     ///
     /// [`Server`]: struct.Server.html
     pub async fn serve_with_incoming<I, IO, IE, ResBody>(
@@ -674,10 +676,12 @@ impl<L> Router<L> {
             .await
     }
 
-    /// Consume this [`Server`] creating a future that will execute the server on
-    /// the provided incoming stream of `AsyncRead + AsyncWrite`. Similar to
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on the provided incoming stream of `AsyncRead + AsyncWrite`. Similar to
     /// `serve_with_shutdown` this method will also take a signal future to
     /// gracefully shutdown the server.
+    ///
+    /// This method discards any provided [`Server`] TCP configuration.
     ///
     /// [`Server`]: struct.Server.html
     pub async fn serve_with_incoming_shutdown<I, IO, IE, F, ResBody>(
