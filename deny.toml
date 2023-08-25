@@ -23,6 +23,7 @@ skip-tree = [
     { name = "syn" },
     { name = "bitflags" },
     { name = "socket2" },
+    { name = "indexmap" },
 ]
 
 [licenses]
