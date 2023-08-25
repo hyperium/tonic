@@ -27,6 +27,7 @@ impl Greeter for MyGreeter {
         let request_future = async move {
             println!("Got a request from {:?}", request.remote_addr());
 
+            // Take a long time to complete request for the client to cancel early
             sleep(Duration::from_secs(10)).await;
 
             let reply = hello_world::HelloReply {
@@ -37,6 +38,8 @@ impl Greeter for MyGreeter {
         };
         let cancellation_future = async move {
             println!("Request from {:?} cancelled by client", remote_addr);
+            // If this future is executed it means the request future was dropped, 
+            // so it doesn't actually matter what is returned here
             Err(Status::cancelled("Request cancelled by client"))
         };
         with_cancellation_handler(request_future, cancellation_future).await
@@ -52,8 +55,11 @@ where
     FCancellation: Future<Output = Result<Response<HelloReply>, Status>> + Send + 'static,
 {
     let token = CancellationToken::new();
+    // Will call token.cancel() when the future is dropped, such as when the client cancels the request
     let _drop_guard = token.clone().drop_guard();
     let select_task = tokio::spawn(async move {
+        // Can select on token cancellation on any cancellable future while handling the request,
+        // allowing for custom cleanup code or monitoring
         select! {
             res = request_future => res,
             _ = token.cancelled() => cancellation_future.await,
