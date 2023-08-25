@@ -97,10 +97,13 @@
 #![doc(html_root_url = "https://docs.rs/tonic-web/0.9.2")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
+pub use call::GrpcWebCall;
+pub use client::{GrpcWebClientLayer, GrpcWebClientService};
 pub use layer::GrpcWebLayer;
 pub use service::{GrpcWebService, ResponseFuture};
 
 mod call;
+mod client;
 mod layer;
 mod service;
 
