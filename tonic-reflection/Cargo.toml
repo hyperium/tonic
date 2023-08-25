@@ -26,4 +26,3 @@ tonic = { version = "0.9", path = "../tonic", default-features = false, features
 
 [dev-dependencies]
 tonic = { version = "0.9", path = "../tonic", default-features = false, features = ["transport"] }
-tonic-build = { version = "0.9", path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"] }
