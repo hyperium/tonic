@@ -254,6 +254,10 @@ path = "src/richer-error/server_vec.rs"
 required-features = ["types"]
 
 [[bin]]
+name = "dynamic-server"
+path = "src/dynamic/server.rs"
+
+[[bin]]
 name = "h2c-server"
 path = "src/h2c/server.rs"
 required-features = ["h2c"]
