@@ -38,7 +38,7 @@ impl Greeter for MyGreeter {
         };
         let cancellation_future = async move {
             println!("Request from {:?} cancelled by client", remote_addr);
-            // If this future is executed it means the request future was dropped, 
+            // If this future is executed it means the request future was dropped,
             // so it doesn't actually matter what is returned here
             Err(Status::cancelled("Request cancelled by client"))
         };
