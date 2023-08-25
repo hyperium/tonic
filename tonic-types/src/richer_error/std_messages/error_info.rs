@@ -3,6 +3,8 @@ use std::collections::HashMap;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `ErrorInfo` standard error message described in
@@ -53,11 +55,7 @@ impl ErrorInfo {
 
 impl IntoAny for ErrorInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::ErrorInfo {
-            reason: self.reason,
-            domain: self.domain,
-            metadata: self.metadata,
-        };
+        let detail_data: pb::ErrorInfo = self.into();
 
         Any {
             type_url: ErrorInfo::TYPE_URL.to_string(),
@@ -67,17 +65,38 @@ impl IntoAny for ErrorInfo {
 }
 
 impl FromAny for ErrorInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for ErrorInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let error_info = pb::ErrorInfo::decode(buf)?;
 
-        let error_info = ErrorInfo {
+        Ok(error_info.into())
+    }
+}
+
+impl From<pb::ErrorInfo> for ErrorInfo {
+    fn from(error_info: pb::ErrorInfo) -> Self {
+        ErrorInfo {
             reason: error_info.reason,
             domain: error_info.domain,
             metadata: error_info.metadata,
-        };
+        }
+    }
+}
 
-        Ok(error_info)
+impl From<ErrorInfo> for pb::ErrorInfo {
+    fn from(error_info: ErrorInfo) -> Self {
+        pb::ErrorInfo {
+            reason: error_info.reason,
+            domain: error_info.domain,
+            metadata: error_info.metadata,
+        }
     }
 }
 
