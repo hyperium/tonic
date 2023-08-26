@@ -53,6 +53,11 @@ fn codegen(
     build_client: bool,
     build_server: bool,
 ) {
+    let tempdir = tempfile::Builder::new()
+        .prefix("tonic-codegen-")
+        .tempdir()
+        .unwrap();
+
     let iface_files: Vec<PathBuf> = iface_files
         .into_iter()
         .map(|&path| root_dir.join(path))
@@ -68,8 +73,23 @@ fn codegen(
     tonic_build::configure()
         .build_client(build_client)
         .build_server(build_server)
-        .out_dir(&out_dir)
+        .out_dir(&tempdir)
         .file_descriptor_set_path(file_descriptor_set_path)
         .compile(&iface_files, &include_dirs)
         .unwrap();
+
+    for path in std::fs::read_dir(tempdir.path()).unwrap() {
+        let path = path.unwrap().path();
+        let to = out_dir.join(
+            path.file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .strip_suffix(".rs")
+                .unwrap()
+                .replace('.', "_")
+                + ".rs",
+        );
+        std::fs::copy(&path, &to).unwrap();
+    }
 }
