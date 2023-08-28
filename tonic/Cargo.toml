@@ -27,7 +27,7 @@ codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:rustls", "tokio/rt"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:rustls", "tokio/rt", "tokio/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
@@ -70,7 +70,7 @@ async-trait = {version = "0.1.13", optional = true}
 h2 = {version = "0.3.17", optional = true}
 hyper = {version = "0.14.14", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
-tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = true}
+tokio = {version = "1.0.1", features = ["net", "time"], optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
 axum = {version = "0.6.9", default_features = false, optional = true}
