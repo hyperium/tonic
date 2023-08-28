@@ -239,7 +239,7 @@ impl<T> Grpc<T> {
         let (mut parts, body, extensions) =
             self.streaming(request, path, codec).await?.into_parts();
 
-        pin_utils::pin_mut!(body);
+        tokio::pin!(body);
 
         let message = body
             .try_next()

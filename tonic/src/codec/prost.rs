@@ -165,7 +165,7 @@ mod tests {
             None,
         );
 
-        pin_utils::pin_mut!(body);
+        tokio::pin!(body);
 
         while let Some(r) = body.data().await {
             r.unwrap();
@@ -189,7 +189,7 @@ mod tests {
             Some(MAX_MESSAGE_SIZE),
         );
 
-        pin_utils::pin_mut!(body);
+        tokio::pin!(body);
 
         assert!(body.data().await.is_none());
         assert_eq!(
@@ -223,7 +223,7 @@ mod tests {
             Some(usize::MAX),
         );
 
-        pin_utils::pin_mut!(body);
+        tokio::pin!(body);
 
         assert!(body.data().await.is_none());
         assert_eq!(
