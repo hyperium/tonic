@@ -23,11 +23,11 @@
 
 use std::fmt::{Display, Formatter};
 
-/// Generated protobuf types from the `grpc.health.v1` package.
-pub mod pb {
+mod generated {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
-    include!("generated/grpc.health.v1.rs");
+    #[rustfmt::skip]
+    pub mod grpc_health_v1;
 
     /// Byte encoded FILE_DESCRIPTOR_SET.
     pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/grpc_health_v1.bin");
@@ -42,6 +42,11 @@ pub mod pb {
             prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
         }
     }
+}
+
+/// Generated protobuf types from the `grpc.health.v1` package.
+pub mod pb {
+    pub use crate::generated::{grpc_health_v1::*, FILE_DESCRIPTOR_SET};
 }
 
 pub mod server;
