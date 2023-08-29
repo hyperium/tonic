@@ -106,7 +106,7 @@ pub use self::service::grpc_timeout::TimeoutExpired;
 pub use self::tls::Certificate;
 #[doc(inline)]
 pub use crate::server::NamedService;
-pub use axum::Router as AxumRouter;
+pub use axum::{body::BoxBody as AxumBoxBody, Router as AxumRouter};
 pub use hyper::{Body, Uri};
 
 pub(crate) use self::service::executor::Executor;
