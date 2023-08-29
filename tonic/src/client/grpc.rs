@@ -6,13 +6,12 @@ use crate::{
     request::SanitizeHeaders,
     Code, Request, Response, Status,
 };
-use futures_util::future;
 use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
     uri::{Parts, PathAndQuery, Uri},
 };
 use http_body::Body;
-use std::fmt;
+use std::{fmt, future};
 use tokio_stream::{Stream, StreamExt};
 
 /// A gRPC client dispatcher.
@@ -240,7 +239,7 @@ impl<T> Grpc<T> {
         let (mut parts, body, extensions) =
             self.streaming(request, path, codec).await?.into_parts();
 
-        futures_util::pin_mut!(body);
+        tokio::pin!(body);
 
         let message = body
             .try_next()

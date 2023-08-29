@@ -10,7 +10,7 @@ use std::{
     fmt,
     future::Future,
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 use tower::ServiceExt;
 use tower_service::Service;
@@ -131,7 +131,7 @@ impl Future for RoutesFuture {
     type Output = Result<Response<BoxBody>, crate::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match futures_util::ready!(self.project().0.poll(cx)) {
+        match ready!(self.project().0.poll(cx)) {
             Ok(res) => Ok(res.map(boxed)).into(),
             Err(err) => match err {},
         }

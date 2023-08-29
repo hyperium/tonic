@@ -5,7 +5,7 @@ use std::{
     fmt,
     future::Future,
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
     time::Duration,
 };
 use tokio::time::Sleep;
@@ -89,7 +89,7 @@ where
         }
 
         if let Some(sleep) = this.sleep.as_pin_mut() {
-            futures_util::ready!(sleep.poll(cx));
+            ready!(sleep.poll(cx));
             return Poll::Ready(Err(TimeoutExpired(()).into()));
         }
 

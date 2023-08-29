@@ -37,7 +37,8 @@ transport = [
   "channel",
   "dep:h2",
   "dep:hyper",
-  "tokio",
+  "tokio/net",
+  "tokio/time",
   "dep:tower",
   "dep:hyper-timeout",
 ]
@@ -50,10 +51,10 @@ channel = []
 [dependencies]
 base64 = "0.21"
 bytes = "1.0"
-futures-util = {version = "0.3", default-features = false}
 http = "0.2"
 tracing = "0.1"
 
+tokio = "1.0.1"
 http-body = "0.4.4"
 percent-encoding = "2.1"
 pin-project = "1.0.11"
@@ -70,7 +71,6 @@ async-trait = {version = "0.1.13", optional = true}
 h2 = {version = "0.3.17", optional = true}
 hyper = {version = "0.14.14", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
-tokio = {version = "1.0.1", features = ["net", "time"], optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
 axum = {version = "0.6.9", default_features = false, optional = true}

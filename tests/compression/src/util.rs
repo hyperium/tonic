@@ -1,6 +1,5 @@
 use super::*;
 use bytes::Bytes;
-use futures_core::ready;
 use http_body::Body;
 use pin_project::pin_project;
 use std::{
@@ -9,7 +8,7 @@ use std::{
         atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
     },
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tonic::transport::{server::Connected, Channel};
