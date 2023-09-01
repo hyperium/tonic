@@ -1,3 +1,29 @@
+# [v0.10.0](https://github.com/hyperium/tonic/compare/v0.9.2...v0.10) (2023-09-01)
+
+### Breaking Changes
+
+- Update to `prost` 0.12
+- MSRV bumped to 1.64
+
+
+### Bug Fixes
+
+* **codegen:** Use stream type from codegen mod ([#1446](https://github.com/hyperium/tonic/issues/1446)) ([60d776b](https://github.com/hyperium/tonic/commit/60d776b019854b6a6881d69823a36dcc18b1b4ce))
+* **examples:** Use https scheme when using tls ([#1466](https://github.com/hyperium/tonic/issues/1466)) ([388b177](https://github.com/hyperium/tonic/commit/388b177d99e7b0a2c8d5eab1dee65c4dbb671db4))
+* **tls:** Don't use tls w/ `http` scheme ([#1454](https://github.com/hyperium/tonic/issues/1454)) ([95e81f5](https://github.com/hyperium/tonic/commit/95e81f51fbbc32a5cf2b94ac0d7005d56b44a8d3))
+
+
+### Features
+
+* **build:** Add optional default unimplemented stubs ([#1344](https://github.com/hyperium/tonic/issues/1344)) ([aff1daf](https://github.com/hyperium/tonic/commit/aff1daf65d9a0d55b92719318eba2b5a4769c4e1))
+* **core:** amortize many ready messages into fewer, larger buffers ([#1423](https://github.com/hyperium/tonic/issues/1423)) ([76eedc1](https://github.com/hyperium/tonic/commit/76eedc13d0dd891892301afa38c3dd8ae6646edf))
+* **types:** add ability to extract rich error details from `google.rpc.Status` ([#1430](https://github.com/hyperium/tonic/issues/1430)) ([5fd635a](https://github.com/hyperium/tonic/commit/5fd635a30568ff629c4197c603c45b6b94750e88))
+* **transport:** Add `Router::into_router` ([#1442](https://github.com/hyperium/tonic/issues/1442)) ([ea06a1b](https://github.com/hyperium/tonic/commit/ea06a1bb30bc325c7f6d7763fe48bf8b88c1c3ed))
+* **transport:** Expose TcpConnectInfo fields ([#1449](https://github.com/hyperium/tonic/issues/1449)) ([74b079c](https://github.com/hyperium/tonic/commit/74b079ce752311fbe760d748804d801c385a5e7a))
+* **web:** Add `GrpcWebClientService` ([#1472](https://github.com/hyperium/tonic/issues/1472)) ([dc29c17](https://github.com/hyperium/tonic/commit/dc29c17ae3ef729024e1f80c66566b09d7a01051))
+* **transport:** Support for adding services dynamically
+
+
 # [v0.9.2](https://github.com/hyperium/tonic/compare/v0.9.1...v0.9.2) (2023-04-17)
 
 ### Features
