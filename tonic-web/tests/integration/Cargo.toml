@@ -10,7 +10,7 @@ license = "MIT"
 base64 = "0.21"
 bytes = "1.0"
 hyper = "0.14"
-prost = "0.11"
+prost = "0.12"
 tokio = { version = "1", features = ["macros", "rt", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 tonic = { path = "../../../tonic" }
