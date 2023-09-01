@@ -19,7 +19,6 @@ deny = [
 skip-tree = [
     { name = "windows-sys" },
     { name = "hermit-abi" },
-    { name = "base64" },
     { name = "syn" },
     { name = "bitflags" },
     { name = "socket2" },
