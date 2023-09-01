@@ -38,7 +38,6 @@ use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
 use crate::body::BoxBody;
 use bytes::Bytes;
-use futures_util::ready;
 use http::{Request, Response};
 use http_body::Body as _;
 use hyper::{server::accept, Body};
@@ -51,7 +50,7 @@ use std::{
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};

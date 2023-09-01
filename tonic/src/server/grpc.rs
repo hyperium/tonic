@@ -382,7 +382,7 @@ where
             self.max_decoding_message_size,
         );
 
-        futures_util::pin_mut!(stream);
+        tokio::pin!(stream);
 
         let message = stream
             .try_next()
