@@ -61,7 +61,7 @@ mod h2c {
 
     impl<S> Service<Request<Body>> for H2c<S>
     where
-        S: Service<Request<Body>, Response = Response<axum::body::BoxBody>>
+        S: Service<Request<Body>, Response = Response<tonic::transport::AxumBoxBody>>
             + Clone
             + Send
             + 'static,
