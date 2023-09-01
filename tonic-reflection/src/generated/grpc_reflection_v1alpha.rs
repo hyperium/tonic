@@ -25,7 +25,7 @@ pub mod server_reflection_request {
         FileByFilename(::prost::alloc::string::String),
         /// Find the proto file that declares the given fully-qualified symbol name.
         /// This field should be a fully-qualified symbol name
-        /// (e.g. <package>.<service>\\[.<method>\\] or <package>.<type>).
+        /// (e.g. <package>.<service>\[.<method>\] or <package>.<type>).
         #[prost(string, tag = "4")]
         FileContainingSymbol(::prost::alloc::string::String),
         /// Find the proto file which defines an extension extending the given
@@ -271,7 +271,7 @@ pub mod server_reflection_server {
     #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {
         /// Server streaming response type for the ServerReflectionInfo method.
-        type ServerReflectionInfoStream: tokio_stream::Stream<
+        type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<
                     super::ServerReflectionResponse,
                     tonic::Status,

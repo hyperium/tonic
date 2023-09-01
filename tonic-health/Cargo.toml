@@ -28,5 +28,4 @@ tonic = { version = "0.9", path = "../tonic", default-features = false, features
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
 tokio-stream = "0.1"
-tonic-build = { version = "0.9", path = "../tonic-build", default-features = false, features = ["prost"] }
 prost-types = "0.11"

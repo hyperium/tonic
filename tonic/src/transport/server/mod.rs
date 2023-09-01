@@ -10,6 +10,8 @@ mod tls;
 mod unix;
 
 pub use super::service::Routes;
+pub use super::service::RoutesBuilder;
+
 pub use crate::server::NamedService;
 pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]
@@ -36,7 +38,6 @@ use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
 use crate::body::BoxBody;
 use bytes::Bytes;
-use futures_util::{future, ready};
 use http::{Request, Response};
 use http_body::Body as _;
 use hyper::{server::accept, Body};
@@ -44,12 +45,12 @@ use pin_project::pin_project;
 use std::{
     convert::Infallible,
     fmt,
-    future::Future,
+    future::{self, Future},
     marker::PhantomData,
     net::SocketAddr,
     pin::Pin,
     sync::Arc,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -91,6 +92,7 @@ pub struct Server<L = Identity> {
     http2_keepalive_interval: Option<Duration>,
     http2_keepalive_timeout: Option<Duration>,
     http2_adaptive_window: Option<bool>,
+    http2_max_pending_accept_reset_streams: Option<usize>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
@@ -112,6 +114,7 @@ impl Default for Server<Identity> {
             http2_keepalive_interval: None,
             http2_keepalive_timeout: None,
             http2_adaptive_window: None,
+            http2_max_pending_accept_reset_streams: None,
             max_frame_size: None,
             accept_http1: false,
             service_builder: Default::default(),
@@ -271,6 +274,19 @@ impl<L> Server<L> {
         }
     }
 
+    /// Configures the maximum number of pending reset streams allowed before a GOAWAY will be sent.
+    ///
+    /// This will default to whatever the default in h2 is. As of v0.3.17, it is 20.
+    ///
+    /// See <https://github.com/hyperium/hyper/issues/2877> for more information.
+    #[must_use]
+    pub fn http2_max_pending_accept_reset_streams(self, max: Option<usize>) -> Self {
+        Server {
+            http2_max_pending_accept_reset_streams: max,
+            ..self
+        }
+    }
+
     /// Set whether TCP keepalive messages are enabled on accepted connections.
     ///
     /// If `None` is specified, keepalive is disabled, otherwise the duration
@@ -376,6 +392,17 @@ impl<L> Server<L> {
         Router::new(self.clone(), routes)
     }
 
+    /// Create a router with given [`Routes`].
+    ///
+    /// This will clone the `Server` builder and create a router that will
+    /// route around different services that were already added to the provided `routes`.
+    pub fn add_routes(&mut self, routes: Routes) -> Router<L>
+    where
+        L: Clone,
+    {
+        Router::new(self.clone(), routes)
+    }
+
     /// Set the [Tower] [`Layer`] all services will be wrapped in.
     ///
     /// This enables using middleware from the [Tower ecosystem][eco].
@@ -453,6 +480,7 @@ impl<L> Server<L> {
             http2_keepalive_interval: self.http2_keepalive_interval,
             http2_keepalive_timeout: self.http2_keepalive_timeout,
             http2_adaptive_window: self.http2_adaptive_window,
+            http2_max_pending_accept_reset_streams: self.http2_max_pending_accept_reset_streams,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
         }
@@ -491,6 +519,7 @@ impl<L> Server<L> {
             .http2_keepalive_timeout
             .unwrap_or_else(|| Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
         let http2_adaptive_window = self.http2_adaptive_window;
+        let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
 
         let svc = self.service_builder.service(svc);
 
@@ -513,6 +542,7 @@ impl<L> Server<L> {
             .http2_keep_alive_interval(http2_keepalive_interval)
             .http2_keep_alive_timeout(http2_keepalive_timeout)
             .http2_adaptive_window(http2_adaptive_window.unwrap_or_default())
+            .http2_max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
             .http2_max_frame_size(max_frame_size);
 
         if let Some(signal) = signal {
@@ -571,6 +601,11 @@ impl<L> Router<L> {
         self
     }
 
+    /// Convert this tonic `Router` into an axum `Router` consuming the tonic one.
+    pub fn into_router(self) -> axum::Router {
+        self.routes.into_router()
+    }
+
     /// Consume this [`Server`] creating a future that will execute the server
     /// on [tokio]'s default executor.
     ///
@@ -622,8 +657,10 @@ impl<L> Router<L> {
             .await
     }
 
-    /// Consume this [`Server`] creating a future that will execute the server on
-    /// the provided incoming stream of `AsyncRead + AsyncWrite`.
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on the provided incoming stream of `AsyncRead + AsyncWrite`.
+    ///
+    /// This method discards any provided [`Server`] TCP configuration.
     ///
     /// [`Server`]: struct.Server.html
     pub async fn serve_with_incoming<I, IO, IE, ResBody>(
@@ -651,10 +688,12 @@ impl<L> Router<L> {
             .await
     }
 
-    /// Consume this [`Server`] creating a future that will execute the server on
-    /// the provided incoming stream of `AsyncRead + AsyncWrite`. Similar to
+    /// Consume this [`Server`] creating a future that will execute the server
+    /// on the provided incoming stream of `AsyncRead + AsyncWrite`. Similar to
     /// `serve_with_shutdown` this method will also take a signal future to
     /// gracefully shutdown the server.
+    ///
+    /// This method discards any provided [`Server`] TCP configuration.
     ///
     /// [`Server`]: struct.Server.html
     pub async fn serve_with_incoming_shutdown<I, IO, IE, F, ResBody>(

@@ -165,7 +165,7 @@ mod tests {
             None,
         );
 
-        futures_util::pin_mut!(body);
+        tokio::pin!(body);
 
         while let Some(r) = body.data().await {
             r.unwrap();
@@ -189,7 +189,7 @@ mod tests {
             Some(MAX_MESSAGE_SIZE),
         );
 
-        futures_util::pin_mut!(body);
+        tokio::pin!(body);
 
         assert!(body.data().await.is_none());
         assert_eq!(
@@ -223,7 +223,7 @@ mod tests {
             Some(usize::MAX),
         );
 
-        futures_util::pin_mut!(body);
+        tokio::pin!(body);
 
         assert!(body.data().await.is_none());
         assert_eq!(
@@ -329,9 +329,8 @@ mod tests {
             #[allow(clippy::drop_ref)]
             fn poll_trailers(
                 self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
+                _cx: &mut Context<'_>,
             ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-                drop(cx);
                 Poll::Ready(Ok(None))
             }
         }

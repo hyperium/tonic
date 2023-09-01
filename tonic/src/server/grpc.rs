@@ -7,9 +7,9 @@ use crate::{
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
 };
-use futures_util::{future, stream, TryStream, TryStreamExt};
 use http_body::Body;
 use std::fmt;
+use tokio_stream::{Stream, StreamExt};
 
 macro_rules! t {
     ($result:expr) => {
@@ -236,20 +236,19 @@ where
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self
-                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
-                        Err(status),
-                        accept_encoding,
-                        SingleMessageCompressionOverride::default(),
-                        self.max_encoding_message_size,
-                    );
+                return self.map_response::<tokio_stream::Once<Result<T::Encode, Status>>>(
+                    Err(status),
+                    accept_encoding,
+                    SingleMessageCompressionOverride::default(),
+                    self.max_encoding_message_size,
+                );
             }
         };
 
         let response = service
             .call(request)
             .await
-            .map(|r| r.map(|m| stream::once(future::ok(m))));
+            .map(|r| r.map(|m| tokio_stream::once(Ok(m))));
 
         let compression_override = compression_override_from_response(&response);
 
@@ -323,7 +322,7 @@ where
         let response = service
             .call(request)
             .await
-            .map(|r| r.map(|m| stream::once(future::ok(m))));
+            .map(|r| r.map(|m| tokio_stream::once(Ok(m))));
 
         let compression_override = compression_override_from_response(&response);
 
@@ -383,7 +382,7 @@ where
             self.max_decoding_message_size,
         );
 
-        futures_util::pin_mut!(stream);
+        tokio::pin!(stream);
 
         let message = stream
             .try_next()
@@ -429,7 +428,7 @@ where
         max_message_size: Option<usize>,
     ) -> http::Response<BoxBody>
     where
-        B: TryStream<Ok = T::Encode, Error = Status> + Send + 'static,
+        B: Stream<Item = Result<T::Encode, Status>> + Send + 'static,
     {
         let response = match response {
             Ok(r) => r,
@@ -454,7 +453,7 @@ where
 
         let body = encode_server(
             self.codec.encoder(),
-            body.into_stream(),
+            body,
             accept_encoding,
             compression_override,
             max_message_size,

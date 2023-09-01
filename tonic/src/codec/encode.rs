@@ -2,15 +2,16 @@ use super::compression::{compress, CompressionEncoding, SingleMessageCompression
 use super::{EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
-use futures_util::{ready, stream::Fuse, StreamExt, TryStreamExt};
 use http::HeaderMap;
 use http_body::Body;
 use pin_project::pin_project;
 use std::{
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
-use tokio_stream::Stream;
+use tokio_stream::{Stream, StreamExt};
+
+use fuse::Fuse;
 
 pub(super) const BUFFER_SIZE: usize = 8 * 1024;
 const YIELD_THRESHOLD: usize = 32 * 1024;
@@ -33,6 +34,7 @@ where
         compression_override,
         max_message_size,
     );
+
     EncodeBody::new_server(stream)
 }
 
@@ -105,7 +107,7 @@ where
         };
 
         return EncodedBytes {
-            source: source.fuse(),
+            source: Fuse::new(source),
             encoder,
             compression_encoding,
             max_message_size,
@@ -322,8 +324,8 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        let mut self_proj = self.project();
-        match ready!(self_proj.inner.try_poll_next_unpin(cx)) {
+        let self_proj = self.project();
+        match ready!(self_proj.inner.poll_next(cx)) {
             Some(Ok(d)) => Some(Ok(d)).into(),
             Some(Err(status)) => match self_proj.state.role {
                 Role::Client => Some(Err(status)).into(),
@@ -341,5 +343,59 @@ where
         _cx: &mut Context<'_>,
     ) -> Poll<Result<Option<HeaderMap>, Status>> {
         Poll::Ready(self.project().state.trailers())
+    }
+}
+
+mod fuse {
+    use std::{
+        pin::Pin,
+        task::{ready, Context, Poll},
+    };
+
+    use tokio_stream::Stream;
+
+    /// Stream for the [`fuse`](super::StreamExt::fuse) method.
+    #[derive(Debug)]
+    #[pin_project::pin_project]
+    #[must_use = "streams do nothing unless polled"]
+    pub(crate) struct Fuse<St> {
+        #[pin]
+        stream: St,
+        done: bool,
+    }
+
+    impl<St> Fuse<St> {
+        pub(crate) fn new(stream: St) -> Self {
+            Self {
+                stream,
+                done: false,
+            }
+        }
+    }
+
+    impl<S: Stream> Stream for Fuse<S> {
+        type Item = S::Item;
+
+        fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<S::Item>> {
+            let this = self.project();
+
+            if *this.done {
+                return Poll::Ready(None);
+            }
+
+            let item = ready!(this.stream.poll_next(cx));
+            if item.is_none() {
+                *this.done = true;
+            }
+            Poll::Ready(item)
+        }
+
+        fn size_hint(&self) -> (usize, Option<usize>) {
+            if self.done {
+                (0, Some(0))
+            } else {
+                self.stream.size_hint()
+            }
+        }
     }
 }

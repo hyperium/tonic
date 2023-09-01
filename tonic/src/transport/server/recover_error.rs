@@ -1,11 +1,10 @@
 use crate::Status;
-use futures_util::ready;
 use http::Response;
 use pin_project::pin_project;
 use std::{
     future::Future,
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 use tower::Service;
 

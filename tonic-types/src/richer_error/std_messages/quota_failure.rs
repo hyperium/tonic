@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `violations` field of the [`QuotaFailure`] struct. Describes a
@@ -20,6 +22,24 @@ impl QuotaViolation {
         QuotaViolation {
             subject: subject.into(),
             description: description.into(),
+        }
+    }
+}
+
+impl From<pb::quota_failure::Violation> for QuotaViolation {
+    fn from(value: pb::quota_failure::Violation) -> Self {
+        QuotaViolation {
+            subject: value.subject,
+            description: value.description,
+        }
+    }
+}
+
+impl From<QuotaViolation> for pb::quota_failure::Violation {
+    fn from(value: QuotaViolation) -> Self {
+        pb::quota_failure::Violation {
+            subject: value.subject,
+            description: value.description,
         }
     }
 }
@@ -78,16 +98,7 @@ impl QuotaFailure {
 
 impl IntoAny for QuotaFailure {
     fn into_any(self) -> Any {
-        let detail_data = pb::QuotaFailure {
-            violations: self
-                .violations
-                .into_iter()
-                .map(|v| pb::quota_failure::Violation {
-                    subject: v.subject,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        let detail_data: pb::QuotaFailure = self.into();
 
         Any {
             type_url: QuotaFailure::TYPE_URL.to_string(),
@@ -97,22 +108,34 @@ impl IntoAny for QuotaFailure {
 }
 
 impl FromAny for QuotaFailure {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for QuotaFailure {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let quota_failure = pb::QuotaFailure::decode(buf)?;
 
-        let quota_failure = QuotaFailure {
-            violations: quota_failure
-                .violations
-                .into_iter()
-                .map(|v| QuotaViolation {
-                    subject: v.subject,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        Ok(quota_failure.into())
+    }
+}
 
-        Ok(quota_failure)
+impl From<pb::QuotaFailure> for QuotaFailure {
+    fn from(value: pb::QuotaFailure) -> Self {
+        QuotaFailure {
+            violations: value.violations.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<QuotaFailure> for pb::QuotaFailure {
+    fn from(value: QuotaFailure) -> Self {
+        pb::QuotaFailure {
+            violations: value.violations.into_iter().map(Into::into).collect(),
+        }
     }
 }
 

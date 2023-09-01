@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `field_violations` field of the [`BadRequest`] struct.
@@ -22,6 +24,24 @@ impl FieldViolation {
         FieldViolation {
             field: field.into(),
             description: description.into(),
+        }
+    }
+}
+
+impl From<pb::bad_request::FieldViolation> for FieldViolation {
+    fn from(value: pb::bad_request::FieldViolation) -> Self {
+        FieldViolation {
+            field: value.field,
+            description: value.description,
+        }
+    }
+}
+
+impl From<FieldViolation> for pb::bad_request::FieldViolation {
+    fn from(value: FieldViolation) -> Self {
+        pb::bad_request::FieldViolation {
+            field: value.field,
+            description: value.description,
         }
     }
 }
@@ -81,16 +101,7 @@ impl BadRequest {
 
 impl IntoAny for BadRequest {
     fn into_any(self) -> Any {
-        let detail_data = pb::BadRequest {
-            field_violations: self
-                .field_violations
-                .into_iter()
-                .map(|v| pb::bad_request::FieldViolation {
-                    field: v.field,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        let detail_data: pb::BadRequest = self.into();
 
         Any {
             type_url: BadRequest::TYPE_URL.to_string(),
@@ -100,22 +111,34 @@ impl IntoAny for BadRequest {
 }
 
 impl FromAny for BadRequest {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for BadRequest {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let bad_req = pb::BadRequest::decode(buf)?;
 
-        let bad_req = BadRequest {
-            field_violations: bad_req
-                .field_violations
-                .into_iter()
-                .map(|v| FieldViolation {
-                    field: v.field,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        Ok(bad_req.into())
+    }
+}
 
-        Ok(bad_req)
+impl From<pb::BadRequest> for BadRequest {
+    fn from(value: pb::BadRequest) -> Self {
+        BadRequest {
+            field_violations: value.field_violations.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<BadRequest> for pb::BadRequest {
+    fn from(value: BadRequest) -> Self {
+        pb::BadRequest {
+            field_violations: value.field_violations.into_iter().map(Into::into).collect(),
+        }
     }
 }
 

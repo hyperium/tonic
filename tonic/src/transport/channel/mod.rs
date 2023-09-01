@@ -23,7 +23,7 @@ use std::{
     future::Future,
     hash::Hash,
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
@@ -188,7 +188,7 @@ impl Channel {
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
         D::Key: Hash + Send + Clone,
-        E: Executor<futures_util::future::BoxFuture<'static, ()>> + Send + Sync + 'static,
+        E: Executor<crate::transport::BoxFuture<'static, ()>> + Send + Sync + 'static,
     {
         let svc = Balance::new(discover);
 
@@ -220,8 +220,7 @@ impl Future for ResponseFuture {
     type Output = Result<Response<hyper::Body>, super::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let val = futures_util::ready!(Pin::new(&mut self.inner).poll(cx))
-            .map_err(super::Error::from_source)?;
+        let val = ready!(Pin::new(&mut self.inner).poll(cx)).map_err(super::Error::from_source)?;
         Ok(val).into()
     }
 }
