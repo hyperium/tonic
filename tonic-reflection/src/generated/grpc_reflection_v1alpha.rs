@@ -25,7 +25,7 @@ pub mod server_reflection_request {
         FileByFilename(::prost::alloc::string::String),
         /// Find the proto file that declares the given fully-qualified symbol name.
         /// This field should be a fully-qualified symbol name
-        /// (e.g. <package>.<service>\\[.<method>\\] or <package>.<type>).
+        /// (e.g. <package>.<service>\[.<method>\] or <package>.<type>).
         #[prost(string, tag = "4")]
         FileContainingSymbol(::prost::alloc::string::String),
         /// Find the proto file which defines an extension extending the given
