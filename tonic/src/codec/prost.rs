@@ -326,7 +326,6 @@ mod tests {
                 }
             }
 
-            #[allow(clippy::drop_ref)]
             fn poll_trailers(
                 self: Pin<&mut Self>,
                 _cx: &mut Context<'_>,
