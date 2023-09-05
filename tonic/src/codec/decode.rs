@@ -233,15 +233,13 @@ impl StreamingInner {
     fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
         let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
             Some(Ok(d)) => Some(d),
-            Some(Err(e)) => {
-                if self.direction == Direction::Request && e.code() == Code::Cancelled {
+            Some(Err(status)) => {
+                if self.direction == Direction::Request && status.code() == Code::Cancelled {
                     return Poll::Ready(Ok(None));
                 }
 
                 let _ = std::mem::replace(&mut self.state, State::Error);
-                let err: crate::Error = e.into();
-                debug!("decoder inner stream error: {:?}", err);
-                let status = Status::from_error(err);
+                debug!("decoder inner stream error: {:?}", status);
                 return Poll::Ready(Err(status));
             }
             None => None,
@@ -278,10 +276,8 @@ impl StreamingInner {
                         self.trailers = trailer.map(MetadataMap::from_headers);
                     }
                 }
-                Err(e) => {
-                    let err: crate::Error = e.into();
-                    debug!("decoder inner trailers error: {:?}", err);
-                    let status = Status::from_error(err);
+                Err(status) => {
+                    debug!("decoder inner trailers error: {:?}", status);
                     return Poll::Ready(Err(status));
                 }
             }
