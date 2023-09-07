@@ -159,7 +159,7 @@ impl<T> Grpc<T> {
         self
     }
 
-    /// Limits the maximum size of an ecoded message.
+    /// Limits the maximum size of an encoded message.
     ///
     /// # Example
     ///
@@ -189,7 +189,7 @@ impl<T> Grpc<T> {
         self
     }
 
-    /// Check if the inner [`GrpcService`] is able to accept a  new request.
+    /// Check if the inner [`GrpcService`] is able to accept a new request.
     ///
     /// This will call [`GrpcService::poll_ready`] until it returns ready or
     /// an error. If this returns ready the inner [`GrpcService`] is ready to
