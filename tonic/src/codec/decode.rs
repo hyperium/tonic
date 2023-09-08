@@ -162,6 +162,7 @@ impl StreamingInner {
                 f => {
                     trace!("unexpected compression flag");
                     let message = if let Direction::Response(status) = self.direction {
+                        println!("body: {:?}", self.buf);
                         format!(
                             "protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1) while receiving response with status: {}",
                             f, status
