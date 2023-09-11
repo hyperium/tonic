@@ -39,9 +39,7 @@ impl<C> Connector<C> {
             _ => return None,
         };
 
-        host.try_into()
-            .ok()
-            .and_then(|dns| TlsConnector::new(None, None, dns).ok())
+        TlsConnector::new(None, None, host).ok()
     }
 }
 
