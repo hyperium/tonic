@@ -105,6 +105,7 @@ pub use self::server::Server;
 pub use self::service::grpc_timeout::TimeoutExpired;
 pub use self::tls::Certificate;
 #[doc(inline)]
+/// A deprecated re-export. Please use `tonic::server::NamedService` directly.
 pub use crate::server::NamedService;
 pub use axum::{body::BoxBody as AxumBoxBody, Router as AxumRouter};
 pub use hyper::{Body, Uri};

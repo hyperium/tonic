@@ -10,7 +10,8 @@ use std::{
 use tokio::sync::oneshot;
 use tonic::{
     body::BoxBody,
-    transport::{Endpoint, NamedService, Server},
+    server::NamedService,
+    transport::{Endpoint, Server},
     Request, Response, Status,
 };
 use tower_service::Service;
