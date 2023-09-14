@@ -19,5 +19,5 @@
 mod grpc;
 mod service;
 
-pub use self::grpc::Grpc;
+pub use self::grpc::{Grpc, LocalGrpc};
 pub use self::service::GrpcService;

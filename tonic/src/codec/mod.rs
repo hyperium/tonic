@@ -6,7 +6,7 @@
 mod buffer;
 pub(crate) mod compression;
 mod decode;
-mod encode;
+pub(crate) mod encode;
 #[cfg(feature = "prost")]
 mod prost;
 
@@ -17,7 +17,7 @@ pub(crate) use self::encode::{encode_client, encode_server};
 
 pub use self::buffer::{DecodeBuf, EncodeBuf};
 pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
-pub use self::decode::Streaming;
+pub use self::decode::{LocalStreaming, Streaming};
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;

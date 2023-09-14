@@ -1,5 +1,6 @@
 use crate::transport::server::Connected;
 use hyper::client::connect::{Connected as HyperConnected, Connection};
+pub(crate) use sealed::ServerIo;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
@@ -67,10 +68,13 @@ impl AsyncWrite for BoxedIo {
     }
 }
 
-pub(crate) enum ServerIo<IO> {
-    Io(IO),
-    #[cfg(feature = "tls")]
-    TlsIo(Box<TlsStream<IO>>),
+mod sealed {
+    #[allow(missing_debug_implementations)]
+    pub enum ServerIo<IO> {
+        Io(IO),
+        #[cfg(feature = "tls")]
+        TlsIo(Box<super::TlsStream<IO>>),
+    }
 }
 
 use tower::util::Either;

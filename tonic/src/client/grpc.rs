@@ -1,4 +1,6 @@
 use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings};
+use crate::transport::{LocalExec, TokioExec};
+use crate::util::body::HasBoxedBodyWithMapDataErr;
 use crate::{
     body::BoxBody,
     client::GrpcService,
@@ -11,6 +13,7 @@ use http::{
     uri::{Parts, PathAndQuery, Uri},
 };
 use http_body::Body;
+use std::marker::PhantomData;
 use std::{fmt, future};
 use tokio_stream::{Stream, StreamExt};
 
@@ -27,10 +30,14 @@ use tokio_stream::{Stream, StreamExt};
 /// example of this path could look like `/greeter.Greeter/SayHello`.
 ///
 /// [gRPC protocol definition]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
-pub struct Grpc<T> {
+pub struct Grpc<T, Ex = TokioExec> {
     inner: T,
     config: GrpcConfig,
+    _marker: PhantomData<Ex>,
 }
+
+/// A type alias of [`Grpc`] for thread-local usage
+pub type LocalGrpc<T> = Grpc<T, LocalExec>;
 
 struct GrpcConfig {
     origin: Uri,
@@ -64,9 +71,21 @@ impl<T> Grpc<T> {
                 max_decoding_message_size: None,
                 max_encoding_message_size: None,
             },
+            _marker: PhantomData,
         }
     }
 
+    /// Use local executor
+    pub fn local_exec(self) -> Grpc<T, LocalExec> {
+        Grpc {
+            inner: self.inner,
+            config: self.config,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<T, Ex> Grpc<T, Ex> {
     /// Compress requests with the provided encoding.
     ///
     /// Requires the server to accept the specified encoding, otherwise it might return an error.
@@ -209,8 +228,9 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<M2>, Status>
     where
+        Ex: HasBoxedBodyWithMapDataErr<T::ResponseBody>,
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
+        T::ResponseBody: Body + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -228,8 +248,9 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<M2>, Status>
     where
+        Ex: HasBoxedBodyWithMapDataErr<T::ResponseBody>,
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
+        T::ResponseBody: Body + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
@@ -263,10 +284,11 @@ impl<T> Grpc<T> {
         request: Request<M1>,
         path: PathAndQuery,
         codec: C,
-    ) -> Result<Response<Streaming<M2>>, Status>
+    ) -> Result<Response<Streaming<M2, Ex>>, Status>
     where
+        Ex: HasBoxedBodyWithMapDataErr<T::ResponseBody>,
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
+        T::ResponseBody: Body + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -282,10 +304,11 @@ impl<T> Grpc<T> {
         request: Request<S>,
         path: PathAndQuery,
         mut codec: C,
-    ) -> Result<Response<Streaming<M2>>, Status>
+    ) -> Result<Response<Streaming<M2, Ex>>, Status>
     where
+        Ex: HasBoxedBodyWithMapDataErr<T::ResponseBody>,
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
+        T::ResponseBody: Body + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
         S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
@@ -322,10 +345,11 @@ impl<T> Grpc<T> {
         &self,
         decoder: impl Decoder<Item = M2, Error = Status> + Send + 'static,
         response: http::Response<T::ResponseBody>,
-    ) -> Result<Response<Streaming<M2>>, Status>
+    ) -> Result<Response<Streaming<M2, Ex>>, Status>
     where
+        Ex: HasBoxedBodyWithMapDataErr<T::ResponseBody>,
         T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
+        T::ResponseBody: Body + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
     {
         let encoding = CompressionEncoding::from_encoding_header(
@@ -420,7 +444,7 @@ impl GrpcConfig {
     }
 }
 
-impl<T: Clone> Clone for Grpc<T> {
+impl<T: Clone, Ex> Clone for Grpc<T, Ex> {
     fn clone(&self) -> Self {
         Self {
             inner: self.inner.clone(),
@@ -431,11 +455,12 @@ impl<T: Clone> Clone for Grpc<T> {
                 max_encoding_message_size: self.config.max_encoding_message_size,
                 max_decoding_message_size: self.config.max_decoding_message_size,
             },
+            _marker: self._marker.clone(),
         }
     }
 }
 
-impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
+impl<T: fmt::Debug, Ex> fmt::Debug for Grpc<T, Ex> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut f = f.debug_struct("Grpc");
 

@@ -13,6 +13,7 @@ pub struct CodeGenBuilder {
     build_transport: bool,
     disable_comments: HashSet<String>,
     use_arc_self: bool,
+    local_executor: bool,
     generate_default_stubs: bool,
 }
 
@@ -65,6 +66,12 @@ impl CodeGenBuilder {
         self
     }
 
+    /// Support ?Sync trait for current-thread executor usage
+    pub fn local_executor(&mut self, enable: bool) -> &mut Self {
+        self.local_executor = enable;
+        self
+    }
+
     /// Enable or disable returning automatic unimplemented gRPC error code for generated traits.
     pub fn generate_default_stubs(&mut self, generate_default_stubs: bool) -> &mut Self {
         self.generate_default_stubs = generate_default_stubs;
@@ -100,6 +107,7 @@ impl CodeGenBuilder {
             &self.attributes,
             &self.disable_comments,
             self.use_arc_self,
+            self.local_executor,
             self.generate_default_stubs,
         )
     }
@@ -114,6 +122,7 @@ impl Default for CodeGenBuilder {
             build_transport: true,
             disable_comments: HashSet::default(),
             use_arc_self: false,
+            local_executor: false,
             generate_default_stubs: false,
         }
     }

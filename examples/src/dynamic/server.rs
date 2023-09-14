@@ -1,5 +1,5 @@
 use std::env;
-use tonic::{transport::server::RoutesBuilder, transport::Server, Request, Response, Status};
+use tonic::{transport::server::Routes, transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -31,7 +31,7 @@ impl Echo for MyEcho {
     }
 }
 
-fn init_echo(args: &[String], builder: &mut RoutesBuilder) {
+fn init_echo(args: &[String], routes: &mut Routes) {
     let enabled = args
         .into_iter()
         .find(|arg| arg.as_str() == "echo")
@@ -39,7 +39,7 @@ fn init_echo(args: &[String], builder: &mut RoutesBuilder) {
     if enabled {
         println!("Adding Echo service...");
         let svc = EchoServer::new(MyEcho::default());
-        builder.add_service(svc);
+        routes.add_service(svc);
     }
 }
 
@@ -61,7 +61,7 @@ impl Greeter for MyGreeter {
     }
 }
 
-fn init_greeter(args: &[String], builder: &mut RoutesBuilder) {
+fn init_greeter(args: &[String], routes: &mut Routes) {
     let enabled = args
         .into_iter()
         .find(|arg| arg.as_str() == "greeter")
@@ -70,25 +70,22 @@ fn init_greeter(args: &[String], builder: &mut RoutesBuilder) {
     if enabled {
         println!("Adding Greeter service...");
         let svc = GreeterServer::new(MyGreeter::default());
-        builder.add_service(svc);
+        routes.add_service(svc);
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let mut routes_builder = RoutesBuilder::default();
-    init_greeter(&args, &mut routes_builder);
-    init_echo(&args, &mut routes_builder);
+    let mut routes = Routes::default();
+    init_greeter(&args, &mut routes);
+    init_echo(&args, &mut routes);
 
     let addr = "[::1]:50051".parse().unwrap();
 
     println!("Grpc server listening on {}", addr);
 
-    Server::builder()
-        .add_routes(routes_builder.routes())
-        .serve(addr)
-        .await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

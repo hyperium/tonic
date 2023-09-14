@@ -12,7 +12,7 @@ use tokio::time::Sleep;
 use tower_service::Service;
 
 #[derive(Debug, Clone)]
-pub(crate) struct GrpcTimeout<S> {
+pub struct GrpcTimeout<S> {
     inner: S,
     server_timeout: Option<Duration>,
 }
@@ -66,8 +66,9 @@ where
     }
 }
 
+#[allow(missing_docs, missing_debug_implementations)]
 #[pin_project]
-pub(crate) struct ResponseFuture<F> {
+pub struct ResponseFuture<F> {
     #[pin]
     inner: F,
     #[pin]

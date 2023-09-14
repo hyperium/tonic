@@ -9,6 +9,7 @@ members = [
   "examples",
   "codegen",
   "interop", # Tests
+  "tests/current_thread",
   "tests/disable_comments",
   "tests/included_service",
   "tests/same_name",

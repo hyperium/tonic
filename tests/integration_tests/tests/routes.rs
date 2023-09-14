@@ -7,14 +7,14 @@ use integration_tests::pb::{
     test1_client, test1_server, test_client, test_server, Input, Input1, Output, Output1,
 };
 use tonic::codegen::BoxStream;
-use tonic::transport::server::RoutesBuilder;
+use tonic::transport::server::Routes;
 use tonic::{
     transport::{Endpoint, Server},
     Request, Response, Status,
 };
 
 #[tokio::test]
-async fn multiple_service_using_routes_builder() {
+async fn multiple_service_using_routes() {
     struct Svc1;
 
     #[tonic::async_trait]
@@ -53,12 +53,12 @@ async fn multiple_service_using_routes_builder() {
     let svc2 = test1_server::Test1Server::new(Svc2);
 
     let (tx, rx) = oneshot::channel::<()>();
-    let mut routes_builder = RoutesBuilder::default();
-    routes_builder.add_service(svc1).add_service(svc2);
+    let mut routes = Routes::default();
+    routes.add_service(svc1).add_service(svc2);
 
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_routes(routes_builder.routes())
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1400".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
