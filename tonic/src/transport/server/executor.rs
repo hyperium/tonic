@@ -133,7 +133,7 @@ where
 /// An executor trait for `super::Server`.
 #[allow(missing_docs, missing_debug_implementations)]
 pub trait ServeWithShutdown<L, S, I, F, IO, IE, ResBody>: Sized {
-    type BoxFuture: Future<Output = Result<(), super::Error>>;
+    type BoxFuture: Future<Output = Result<(), crate::transport::Error>>;
     fn serve_with_shutdown(
         server: super::Server<Self, L>,
         svc: S,
@@ -161,7 +161,7 @@ where
     F: Future<Output = ()> + $($maybe_send +)* 'static,
     ResBody: http_body::Body<Data = Bytes>,
 {
-    type BoxFuture = crate::codegen::$box_future<(), super::Error>;
+    type BoxFuture = crate::codegen::$box_future<(), crate::transport::Error>;
 
     fn serve_with_shutdown(
         server: super::Server<Self, L>,
@@ -217,9 +217,9 @@ where
                     .serve(svc)
                     .with_graceful_shutdown(signal)
                     .await
-                    .map_err(super::Error::from_source)?;
+                    .map_err(crate::transport::Error::from_source)?;
             } else {
-                builder.serve(svc).await.map_err(super::Error::from_source)?;
+                builder.serve(svc).await.map_err(crate::transport::Error::from_source)?;
             }
 
             Ok(())

@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+package stream;
+
+service TestStream {
+  rpc StreamCall(InputStream) returns (stream OutputStream);
+}
+
+message InputStream {}
+message OutputStream {}

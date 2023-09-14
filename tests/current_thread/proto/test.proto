@@ -3,10 +3,21 @@ syntax = "proto3";
 package test;
 
 service Test {
-  rpc TestRequest(SomeData) returns (SomeData);
+  rpc UnaryCall(Input) returns (Output);
 }
 
-message SomeData {
-  // include a bunch of data so there actually is something to compress
-  bytes data = 1;
+message Input {}
+message Output {}
+
+service Test1 {
+  rpc UnaryCall(Input1) returns (Output1);
+
+  rpc StreamCall(Input1) returns (stream Output1);
+}
+
+message Input1 {
+  bytes buf = 1;
+}
+message Output1 {
+  bytes buf = 1;
 }
