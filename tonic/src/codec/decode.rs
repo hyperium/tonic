@@ -76,13 +76,19 @@ impl<T> Streaming<T> {
         )
     }
 
-    pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
+    pub(crate) fn new_empty<B, D>(decoder: D, body: B, max_message_size: Option<usize>) -> Self
     where
         B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
-        Self::new(decoder, body, Direction::EmptyResponse, None, None)
+        Self::new(
+            decoder,
+            body,
+            Direction::EmptyResponse,
+            None,
+            max_message_size,
+        )
     }
 
     #[doc(hidden)]

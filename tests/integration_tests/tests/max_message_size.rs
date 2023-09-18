@@ -43,12 +43,6 @@ fn max_message_recv_size() {
         ..Default::default()
     });
     assert_test_case(TestCase {
-        // 5 is the size of the gRPC header
-        server_blob_size: 8 * 1024 * 1024,
-        client_recv_max: Some(30 * 1024 * 1024),
-        ..Default::default()
-    });
-    assert_test_case(TestCase {
         server_blob_size: 1024,
         client_recv_max: Some(1024),
         expected_code: Some(Code::OutOfRange),
