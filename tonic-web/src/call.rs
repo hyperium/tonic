@@ -245,7 +245,8 @@ where
             let buf = ready!(self.as_mut().poll_decode(cx));
 
             return if let Some(Ok(mut buf)) = buf {
-                println!("body: {:?}", buf);
+                println!("");
+                println!("body: {:?}", &buf[..]);
                 // We found some trailers so extract them since we
                 // want to return them via `poll_trailers`.
                 if let Some(len) = find_trailers(&buf[..]) {
