@@ -112,12 +112,12 @@ name = "helloworld-client"
 path = "src/client.rs"
 
 [dependencies]
-tonic = "0.9"
+tonic = "0.10"
 prost = "0.12"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
-tonic-build = "0.9"
+tonic-build = "0.10"
 ```
 
 We include `tonic-build` as a useful way to incorporate the generation of our client and server gRPC code into the build process of our application. We will setup this build process now:
