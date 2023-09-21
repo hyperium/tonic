@@ -167,7 +167,7 @@ async fn client_enabled_server_disabled_multi_encoding() {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
         }

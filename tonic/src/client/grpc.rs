@@ -399,6 +399,7 @@ impl GrpcConfig {
             .headers_mut()
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
+        #[cfg(any(feature = "gzip", feature = "zstd"))]
         if let Some(encoding) = self.send_compression_encodings {
             request.headers_mut().insert(
                 crate::codec::compression::ENCODING_HEADER,

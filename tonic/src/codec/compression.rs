@@ -153,6 +153,7 @@ impl CompressionEncoding {
     }
 
     #[allow(missing_docs)]
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
             #[cfg(feature = "gzip")]
@@ -162,6 +163,7 @@ impl CompressionEncoding {
         }
     }
 
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
     pub(crate) fn into_header_value(self) -> http::HeaderValue {
         http::HeaderValue::from_static(self.as_str())
     }
@@ -202,6 +204,8 @@ pub(crate) fn compress(
 ) -> Result<(), std::io::Error> {
     let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
     out_buf.reserve(capacity);
+
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
     let mut out_writer = bytes::BufMut::writer(out_buf);
 
     match encoding {
@@ -241,6 +245,8 @@ pub(crate) fn decompress(
     let estimate_decompressed_len = len * 2;
     let capacity = ((estimate_decompressed_len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
     out_buf.reserve(capacity);
+
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
     let mut out_writer = bytes::BufMut::writer(out_buf);
 
     match encoding {
