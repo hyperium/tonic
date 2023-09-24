@@ -309,10 +309,10 @@ impl Endpoint {
         http.set_keepalive(self.tcp_keepalive);
 
         #[cfg(feature = "tls")]
-        let connector = service::connector(http, self.tls.clone());
+        let connector = service::Connector::new(http, self.tls.clone());
 
         #[cfg(not(feature = "tls"))]
-        let connector = service::connector(http);
+        let connector = service::Connector::new(http);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -334,10 +334,10 @@ impl Endpoint {
         http.set_keepalive(self.tcp_keepalive);
 
         #[cfg(feature = "tls")]
-        let connector = service::connector(http, self.tls.clone());
+        let connector = service::Connector::new(http, self.tls.clone());
 
         #[cfg(not(feature = "tls"))]
-        let connector = service::connector(http);
+        let connector = service::Connector::new(http);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -363,10 +363,10 @@ impl Endpoint {
         crate::Error: From<C::Error> + Send + 'static,
     {
         #[cfg(feature = "tls")]
-        let connector = service::connector(connector, self.tls.clone());
+        let connector = service::Connector::new(connector, self.tls.clone());
 
         #[cfg(not(feature = "tls"))]
-        let connector = service::connector(connector);
+        let connector = service::Connector::new(connector);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -392,10 +392,10 @@ impl Endpoint {
         crate::Error: From<C::Error> + Send + 'static,
     {
         #[cfg(feature = "tls")]
-        let connector = service::connector(connector, self.tls.clone());
+        let connector = service::Connector::new(connector, self.tls.clone());
 
         #[cfg(not(feature = "tls"))]
-        let connector = service::connector(connector);
+        let connector = service::Connector::new(connector);
 
         Channel::new(connector, self.clone())
     }

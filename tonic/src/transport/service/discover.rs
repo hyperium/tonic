@@ -39,10 +39,10 @@ impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
                     http.set_connect_timeout(endpoint.connect_timeout);
                     http.enforce_http(false);
                     #[cfg(feature = "tls")]
-                    let connector = service::connector(http, endpoint.tls.clone());
+                    let connector = service::Connector::new(http, endpoint.tls.clone());
 
                     #[cfg(not(feature = "tls"))]
-                    let connector = service::connector(http);
+                    let connector = service::Connector::new(http);
                     let connection = Connection::lazy(connector, endpoint);
                     let change = Ok(Change::Insert(k, connection));
                     Poll::Ready(Some(change))
