@@ -301,6 +301,16 @@ impl Endpoint {
         self
     }
 
+    pub(crate) fn connector<C>(&self, c: C) -> service::Connector<C> {
+        #[cfg(feature = "tls")]
+        let connector = service::Connector::new(c, self.tls.clone());
+
+        #[cfg(not(feature = "tls"))]
+        let connector = service::Connector::new(c);
+
+        connector
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
@@ -308,11 +318,7 @@ impl Endpoint {
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
 
-        #[cfg(feature = "tls")]
-        let connector = service::Connector::new(http, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::Connector::new(http);
+        let connector = self.connector(http);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -333,11 +339,7 @@ impl Endpoint {
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
 
-        #[cfg(feature = "tls")]
-        let connector = service::Connector::new(http, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::Connector::new(http);
+        let connector = self.connector(http);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -362,11 +364,7 @@ impl Endpoint {
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {
-        #[cfg(feature = "tls")]
-        let connector = service::Connector::new(connector, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::Connector::new(connector);
+        let connector = self.connector(connector);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -391,12 +389,7 @@ impl Endpoint {
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {
-        #[cfg(feature = "tls")]
-        let connector = service::Connector::new(connector, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::Connector::new(connector);
-
+        let connector = self.connector(connector);
         Channel::new(connector, self.clone())
     }
 
