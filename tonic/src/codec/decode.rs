@@ -253,7 +253,7 @@ impl StreamingInner {
         } else {
             // FIXME: improve buf usage.
             if self.buf.has_remaining() {
-                trace!("unexpected EOF decoding stream");
+                trace!("unexpected EOF decoding stream, state: {:?}", self.state);
                 Err(Status::new(
                     Code::Internal,
                     "Unexpected EOF decoding stream.".to_string(),
