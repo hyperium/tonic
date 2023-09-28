@@ -1,3 +1,11 @@
+# [0.10.2](https://github.com/hyperium/tonic/compare/v0.10.1...v0.10.2) (2023-09-28)
+
+
+### Bug Fixes
+
+* **web:** Client decoding incomplete buffer bug ([#1540](https://github.com/hyperium/tonic/issues/1540)) ([83e363a](https://github.com/hyperium/tonic/commit/83e363ace6cbe20ccc2efbe1eb10a4236e4b8065))
+
+
 # [0.10.1](https://github.com/hyperium/tonic/compare/v0.10.0...v0.10.1) (2023-09-21)
 
 ### Bug Fixes
