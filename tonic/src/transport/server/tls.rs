@@ -10,6 +10,7 @@ pub struct ServerTlsConfig {
     identity: Option<Identity>,
     client_ca_root: Option<Certificate>,
     client_auth_optional: bool,
+    use_key_log: bool,
 }
 
 impl fmt::Debug for ServerTlsConfig {
@@ -25,6 +26,7 @@ impl ServerTlsConfig {
             identity: None,
             client_ca_root: None,
             client_auth_optional: false,
+            use_key_log: false,
         }
     }
 
@@ -57,11 +59,20 @@ impl ServerTlsConfig {
         }
     }
 
+    /// Use key log as specified by the `SSLKEYLOGFILE` environment variable.
+    pub fn use_key_log(self) -> Self {
+        ServerTlsConfig {
+            use_key_log: true,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::Error> {
         TlsAcceptor::new(
             self.identity.clone().unwrap(),
             self.client_ca_root.clone(),
             self.client_auth_optional,
+            self.use_key_log,
         )
     }
 }

@@ -31,6 +31,7 @@ impl TlsConnector {
         ca_cert: Option<Certificate>,
         identity: Option<Identity>,
         domain: String,
+        use_key_log: bool,
     ) -> Result<Self, crate::Error> {
         let builder = ClientConfig::builder().with_safe_defaults();
         let mut roots = RootCertStore::empty();
@@ -61,6 +62,11 @@ impl TlsConnector {
         };
 
         config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
+
+        if use_key_log {
+            config.key_log = Arc::new(rustls::KeyLogFile::new());
+        }
+
         Ok(Self {
             config: Arc::new(config),
             domain: Arc::new(domain.as_str().try_into()?),
@@ -106,6 +112,7 @@ impl TlsAcceptor {
         identity: Identity,
         client_ca_root: Option<Certificate>,
         client_auth_optional: bool,
+        use_key_log: bool,
     ) -> Result<Self, crate::Error> {
         let builder = ServerConfig::builder().with_safe_defaults();
 
@@ -131,6 +138,11 @@ impl TlsAcceptor {
         let mut config = builder.with_single_cert(cert, key)?;
 
         config.alpn_protocols.push(ALPN_H2.as_bytes().to_vec());
+
+        if use_key_log {
+            config.key_log = Arc::new(rustls::KeyLogFile::new());
+        }
+
         Ok(Self {
             inner: Arc::new(config),
         })
