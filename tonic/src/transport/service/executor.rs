@@ -3,8 +3,8 @@ use std::{future::Future, sync::Arc};
 
 pub(crate) use hyper::rt::Executor;
 
-#[derive(Copy, Clone)]
-struct TokioExec;
+#[derive(Default, Debug, Copy, Clone)]
+pub struct TokioExec;
 
 impl<F> Executor<F> for TokioExec
 where
@@ -13,6 +13,19 @@ where
 {
     fn execute(&self, fut: F) {
         tokio::spawn(fut);
+    }
+}
+
+#[derive(Default, Debug, Copy, Clone)]
+pub struct LocalExec;
+
+impl<F> Executor<F> for LocalExec
+where
+    F: Future + 'static,
+    F::Output: 'static,
+{
+    fn execute(&self, fut: F) {
+        tokio::task::spawn_local(fut);
     }
 }
 

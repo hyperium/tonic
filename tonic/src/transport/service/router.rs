@@ -1,139 +1,103 @@
-use crate::{
-    body::{boxed, BoxBody},
-    server::NamedService,
-};
+use crate::server::NamedService;
+use crate::transport::server::executor::{HasBoxCloneService, HasBoxedCloneService};
+use crate::transport::{LocalExec, TokioExec};
+use crate::util::BoxCloneService;
 use http::{Request, Response};
 use hyper::Body;
-use pin_project::pin_project;
+use std::marker::PhantomData;
 use std::{
     convert::Infallible,
     fmt,
-    future::Future,
-    pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
-use tower::ServiceExt;
 use tower_service::Service;
 
 /// A [`Service`] router.
-#[derive(Debug, Default, Clone)]
-pub struct Routes {
-    router: axum::Router,
+#[derive(Clone)]
+pub struct Routes<Ex = TokioExec>
+where
+    Ex: HasBoxCloneService,
+{
+    router: matchit::Router<Ex::BoxCloneService>,
+    _marker: PhantomData<Ex>,
 }
 
-#[derive(Debug, Default, Clone)]
-/// Allows adding new services to routes by passing a mutable reference to this builder.
-pub struct RoutesBuilder {
-    routes: Option<Routes>,
-}
+/// A type alias of [`Routes`] for thread-local usage.
+pub type LocalRoutes = Routes<LocalExec>;
 
-impl RoutesBuilder {
-    /// Add a new service.
-    pub fn add_service<S>(&mut self, svc: S) -> &mut Self
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let routes = self.routes.take().unwrap_or_default();
-        self.routes.replace(routes.add_service(svc));
-        self
-    }
-
-    /// Returns the routes with added services or empty [`Routes`] if no service was added
-    pub fn routes(self) -> Routes {
-        self.routes.unwrap_or_default()
+impl<Ex> Default for Routes<Ex>
+where
+    Ex: HasBoxCloneService,
+{
+    fn default() -> Self {
+        Self {
+            router: matchit::Router::default(),
+            _marker: PhantomData,
+        }
     }
 }
-impl Routes {
+
+impl<Ex> Routes<Ex>
+where
+    Ex: HasBoxCloneService,
+{
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
+        Ex: HasBoxedCloneService<S>,
+        S: Service<Request<Body>> + NamedService,
         S::Error: Into<crate::Error> + Send,
     {
-        let router = axum::Router::new().fallback(unimplemented);
-        Self { router }.add_service(svc)
+        let router = matchit::Router::default();
+        let mut res = Self {
+            router,
+            _marker: PhantomData,
+        };
+        res.add_service(svc);
+        res
     }
 
     /// Add a new service.
-    pub fn add_service<S>(mut self, svc: S) -> Self
+    pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
+        Ex: HasBoxedCloneService<S>,
+        S: Service<Request<Body>> + NamedService,
         S::Error: Into<crate::Error> + Send,
     {
-        let svc = svc.map_response(|res| res.map(axum::body::boxed));
-        self.router = self
-            .router
-            .route_service(&format!("/{}/*rest", S::NAME), svc);
+        self.router
+            .insert(format!("/{}/*rest", S::NAME), Ex::boxed_clone_service(svc))
+            .unwrap();
         self
     }
+}
 
-    pub(crate) fn prepare(self) -> Self {
-        Self {
-            // this makes axum perform update some internals of the router that improves perf
-            // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
-            router: self.router.with_state(()),
-        }
-    }
-
-    /// Convert this `Routes` into an [`axum::Router`].
-    pub fn into_router(self) -> axum::Router {
-        self.router
+impl<Ex> fmt::Debug for Routes<Ex>
+where
+    Ex: HasBoxCloneService,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Routes").finish()
     }
 }
 
-async fn unimplemented() -> impl axum::response::IntoResponse {
-    let status = http::StatusCode::OK;
-    let headers = [("grpc-status", "12"), ("content-type", "application/grpc")];
-    (status, headers)
-}
-
-impl Service<Request<Body>> for Routes {
-    type Response = Response<BoxBody>;
-    type Error = crate::Error;
-    type Future = RoutesFuture;
+impl<Ex> Service<Request<Body>> for Routes<Ex>
+where
+    Ex: HasBoxCloneService,
+{
+    type Response = Response<<Ex::BoxCloneService as BoxCloneService>::BoxBody>;
+    type Error = Infallible;
+    type Future = <Ex::BoxCloneService as BoxCloneService>::BoxFuture;
 
     #[inline]
-    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Infallible>> {
         Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        RoutesFuture(self.router.call(req))
-    }
-}
-
-#[pin_project]
-pub struct RoutesFuture(#[pin] axum::routing::future::RouteFuture<Body, Infallible>);
-
-impl fmt::Debug for RoutesFuture {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("RoutesFuture").finish()
-    }
-}
-
-impl Future for RoutesFuture {
-    type Output = Result<Response<BoxBody>, crate::Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(self.project().0.poll(cx)) {
-            Ok(res) => Ok(res.map(boxed)).into(),
-            Err(err) => match err {},
+        if let Ok(matched) = self.router.at(req.uri().path()) {
+            matched.value.clone().call(req)
+        } else {
+            <Ex::BoxCloneService as BoxCloneService>::empty_response()
         }
     }
 }

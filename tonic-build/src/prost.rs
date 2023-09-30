@@ -40,6 +40,7 @@ pub fn configure() -> Builder {
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
         disable_comments: HashSet::default(),
         use_arc_self: false,
+        local_executor: false,
         generate_default_stubs: false,
     }
 }
@@ -175,6 +176,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .attributes(self.builder.server_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
                 .use_arc_self(self.builder.use_arc_self)
+                .local_executor(self.builder.local_executor)
                 .generate_default_stubs(self.builder.generate_default_stubs)
                 .generate_server(&service, &self.builder.proto_path);
 
@@ -251,6 +253,7 @@ pub struct Builder {
     pub(crate) emit_rerun_if_changed: bool,
     pub(crate) disable_comments: HashSet<String>,
     pub(crate) use_arc_self: bool,
+    pub(crate) local_executor: bool,
     pub(crate) generate_default_stubs: bool,
 
     out_dir: Option<PathBuf>,
@@ -464,6 +467,12 @@ impl Builder {
     /// Emit `Arc<Self>` receiver type in server traits instead of `&self`.
     pub fn use_arc_self(mut self, enable: bool) -> Self {
         self.use_arc_self = enable;
+        self
+    }
+
+    /// Support ?Sync trait for local executor usage
+    pub fn local_executor(mut self, enable: bool) -> Self {
+        self.local_executor = enable;
         self
     }
 

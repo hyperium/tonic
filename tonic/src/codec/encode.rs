@@ -22,7 +22,7 @@ pub(crate) fn encode_server<T, U>(
     compression_encoding: Option<CompressionEncoding>,
     compression_override: SingleMessageCompressionOverride,
     max_message_size: Option<usize>,
-) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
+) -> EncodeBody<EncodedBytes<T, U>>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
@@ -65,7 +65,7 @@ where
 ///  * The encoded buffer surpasses YIELD_THRESHOLD.
 #[pin_project(project = EncodedBytesProj)]
 #[derive(Debug)]
-pub(crate) struct EncodedBytes<T, U>
+pub struct EncodedBytes<T, U>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
@@ -247,7 +247,7 @@ enum Role {
 
 #[pin_project]
 #[derive(Debug)]
-pub(crate) struct EncodeBody<S> {
+pub struct EncodeBody<S> {
     #[pin]
     inner: S,
     state: EncodeState,

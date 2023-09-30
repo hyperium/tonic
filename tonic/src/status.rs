@@ -1,5 +1,5 @@
-use crate::body::BoxBody;
-use crate::metadata::MetadataMap;
+use crate::transport::{LocalExec, TokioExec};
+use crate::{metadata::MetadataMap, util::body::HasEmptyBody};
 use base64::Engine as _;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
@@ -584,7 +584,20 @@ impl Status {
 
     #[allow(clippy::wrong_self_convention)]
     /// Build an `http::Response` from the given `Status`.
-    pub fn to_http(self) -> http::Response<BoxBody> {
+    pub fn to_http(self) -> http::Response<crate::body::BoxBody> {
+        self.to_http_impl::<TokioExec>()
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    /// Build an `http::Response` from the given `Status` for thread-local usage
+    pub fn to_http_local(self) -> http::Response<crate::body::LocalBoxBody> {
+        self.to_http_impl::<LocalExec>()
+    }
+
+    pub(crate) fn to_http_impl<Ex>(self) -> http::Response<Ex::BoxBody>
+    where
+        Ex: HasEmptyBody,
+    {
         let (mut parts, _body) = http::Response::new(()).into_parts();
 
         parts.headers.insert(
@@ -594,7 +607,7 @@ impl Status {
 
         self.add_header(&mut parts.headers).unwrap();
 
-        http::Response::from_parts(parts, crate::body::empty_body())
+        http::Response::from_parts(parts, Ex::empty_body())
     }
 }
 

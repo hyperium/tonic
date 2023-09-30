@@ -11,7 +11,7 @@ use tower::Service;
 /// Middleware that attempts to recover from service errors by turning them into a response built
 /// from the `Status`.
 #[derive(Debug, Clone)]
-pub(crate) struct RecoverError<S> {
+pub struct RecoverError<S> {
     inner: S,
 }
 
@@ -41,8 +41,9 @@ where
     }
 }
 
+#[allow(missing_docs, missing_debug_implementations)]
 #[pin_project]
-pub(crate) struct ResponseFuture<F> {
+pub struct ResponseFuture<F> {
     #[pin]
     inner: F,
 }
@@ -75,8 +76,9 @@ where
     }
 }
 
+#[allow(missing_docs, missing_debug_implementations)]
 #[pin_project]
-pub(crate) struct MaybeEmptyBody<B> {
+pub struct MaybeEmptyBody<B> {
     #[pin]
     inner: Option<B>,
 }
@@ -93,7 +95,7 @@ impl<B> MaybeEmptyBody<B> {
 
 impl<B> http_body::Body for MaybeEmptyBody<B>
 where
-    B: http_body::Body + Send,
+    B: http_body::Body,
 {
     type Data = B::Data;
     type Error = B::Error;
