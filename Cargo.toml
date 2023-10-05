@@ -10,6 +10,7 @@ members = [
   "codegen",
   "interop", # Tests
   "tests/disable_comments",
+  "tests/manual_debug",
   "tests/included_service",
   "tests/same_name",
   "tests/service_named_service",

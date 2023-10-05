@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package test;
+
+message ManualDebug {
+    string manual = 1;
+}
+
+message DeriveDebug {
+    string derive = 1;
+}
