@@ -28,6 +28,7 @@ pub fn configure() -> Builder {
         enum_attributes: Vec::new(),
         type_attributes: Vec::new(),
         boxed: Vec::new(),
+        skip_debug: Vec::new(),
         btree_map: None,
         bytes: None,
         server_attributes: Attributes::default(),
@@ -289,6 +290,7 @@ pub struct Builder {
     pub(crate) message_attributes: Vec<(String, String)>,
     pub(crate) enum_attributes: Vec<(String, String)>,
     pub(crate) boxed: Vec<String>,
+    pub(crate) skip_debug: Vec<String>,
     pub(crate) btree_map: Option<Vec<String>>,
     pub(crate) bytes: Option<Vec<String>>,
     pub(crate) server_attributes: Attributes,
@@ -410,6 +412,12 @@ impl Builder {
     /// Passed directly to `prost_build::Config.boxed`.
     pub fn boxed<P: AsRef<str>>(mut self, path: P) -> Self {
         self.boxed.push(path.as_ref().to_string());
+        self
+    }
+
+    /// Add path to type that should not have a generated implementation of Debug
+    pub fn skip_debug<P: AsRef<str>>(mut self, path: P) -> Self {
+        self.skip_debug.push(path.as_ref().to_string());
         self
     }
 
@@ -629,6 +637,7 @@ impl Builder {
         for prost_path in self.boxed.iter() {
             config.boxed(prost_path);
         }
+        config.skip_debug(&self.skip_debug);
         if let Some(ref paths) = self.btree_map {
             config.btree_map(paths);
         }
