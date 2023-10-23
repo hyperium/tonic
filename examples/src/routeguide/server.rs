@@ -22,7 +22,6 @@ pub struct RouteGuideService {
     features: Arc<Vec<Feature>>,
 }
 
-#[tonic::async_trait]
 impl RouteGuide for RouteGuideService {
     async fn get_feature(&self, request: Request<Point>) -> Result<Response<Feature>, Status> {
         println!("GetFeature = {:?}", request);

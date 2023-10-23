@@ -204,17 +204,18 @@ pub mod health_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with HealthServer.
-    #[async_trait]
     pub trait Health: Send + Sync + 'static {
         /// If the requested service is unknown, the call will fail with status
         /// NOT_FOUND.
-        async fn check(
+        fn check(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::HealthCheckResponse>,
-            tonic::Status,
-        >;
+        ) -> impl Future<
+            Output = std::result::Result<
+                tonic::Response<super::HealthCheckResponse>,
+                tonic::Status,
+            >,
+        > + Send;
         /// Server streaming response type for the Watch method.
         type WatchStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::HealthCheckResponse, tonic::Status>,
@@ -236,10 +237,15 @@ pub mod health_server {
         /// should assume this method is not supported and should not retry the
         /// call.  If the call terminates with any other status (including OK),
         /// clients should retry the call with appropriate exponential backoff.
-        async fn watch(
+        fn watch(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
-        ) -> std::result::Result<tonic::Response<Self::WatchStream>, tonic::Status>;
+        ) -> impl Future<
+            Output = std::result::Result<
+                tonic::Response<Self::WatchStream>,
+                tonic::Status,
+            >,
+        > + Send;
     }
     #[derive(Debug)]
     pub struct HealthServer<T: Health> {

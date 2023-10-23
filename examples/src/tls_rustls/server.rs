@@ -102,7 +102,6 @@ type EchoResult<T> = Result<Response<T>, Status>;
 #[derive(Default)]
 pub struct EchoServer;
 
-#[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
         let conn_info = request.extensions().get::<Arc<ConnInfo>>().unwrap();
