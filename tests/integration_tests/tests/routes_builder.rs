@@ -17,7 +17,6 @@ use tonic::{
 async fn multiple_service_using_routes_builder() {
     struct Svc1;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc1 {
         async fn unary_call(&self, _req: Request<Input>) -> Result<Response<Output>, Status> {
             Ok(Response::new(Output {}))
@@ -26,7 +25,6 @@ async fn multiple_service_using_routes_builder() {
 
     struct Svc2;
 
-    #[tonic::async_trait]
     impl test1_server::Test1 for Svc2 {
         async fn unary_call(&self, request: Request<Input1>) -> Result<Response<Output1>, Status> {
             Ok(Response::new(Output1 {

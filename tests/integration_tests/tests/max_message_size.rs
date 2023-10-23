@@ -121,7 +121,6 @@ async fn response_stream_limit() {
 
     struct Svc;
 
-    #[tonic::async_trait]
     impl test1_server::Test1 for Svc {
         async fn unary_call(&self, _req: Request<Input1>) -> Result<Response<Output1>, Status> {
             unimplemented!()
@@ -281,7 +280,6 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
 
     struct Svc(Vec<u8>);
 
-    #[tonic::async_trait]
     impl test1_server::Test1 for Svc {
         async fn unary_call(&self, _req: Request<Input1>) -> Result<Response<Output1>, Status> {
             Ok(Response::new(Output1 {

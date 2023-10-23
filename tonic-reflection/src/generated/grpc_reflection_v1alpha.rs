@@ -268,7 +268,6 @@ pub mod server_reflection_server {
     #![allow(unused_variables, dead_code, missing_docs, clippy::let_unit_value)]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
-    #[async_trait]
     pub trait ServerReflection: Send + Sync + 'static {
         /// Server streaming response type for the ServerReflectionInfo method.
         type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
@@ -281,13 +280,15 @@ pub mod server_reflection_server {
             + 'static;
         /// The reflection service is structured as a bidirectional stream, ensuring
         /// all related requests go to a single server.
-        async fn server_reflection_info(
+        fn server_reflection_info(
             &self,
             request: tonic::Request<tonic::Streaming<super::ServerReflectionRequest>>,
-        ) -> std::result::Result<
-            tonic::Response<Self::ServerReflectionInfoStream>,
-            tonic::Status,
-        >;
+        ) -> impl Future<
+            Output = std::result::Result<
+                tonic::Response<Self::ServerReflectionInfoStream>,
+                tonic::Status,
+            >,
+        > + Send;
     }
     #[derive(Debug)]
     pub struct ServerReflectionServer<T: ServerReflection> {

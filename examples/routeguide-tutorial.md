@@ -269,7 +269,6 @@ use tokio_stream::{wrappers::ReceiverStream, Stream};
 ```
 
 ```rust
-#[tonic::async_trait]
 impl RouteGuide for RouteGuideService {
     async fn get_feature(&self, _request: Request<Point>) -> Result<Response<Feature>, Status> {
         unimplemented!()
@@ -302,13 +301,8 @@ impl RouteGuide for RouteGuideService {
 }
 ```
 
-**Note**: The `tonic::async_trait` attribute macro adds support for async functions in traits. It
-uses [async-trait] internally. You can learn more about `async fn` in traits in the [async book].
-
 
 [cargo book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
-[async-trait]: https://github.com/dtolnay/async-trait
-[async book]: https://rust-lang.github.io/async-book/07_workarounds/05_async_in_traits.html
 
 ### Server state
 Our service needs access to an immutable list of features. When the server starts, we are going to

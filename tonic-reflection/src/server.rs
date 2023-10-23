@@ -316,7 +316,6 @@ struct ReflectionService {
     state: Arc<ReflectionServiceState>,
 }
 
-#[tonic::async_trait]
 impl ServerReflection for ReflectionService {
     type ServerReflectionInfoStream = ReceiverStream<Result<ServerReflectionResponse, Status>>;
 

@@ -12,7 +12,6 @@ async fn interceptor_retrieves_grpc_method() {
 
     struct Svc;
 
-    #[tonic::async_trait]
     impl Test for Svc {
         async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
             Ok(Response::new(Output {}))

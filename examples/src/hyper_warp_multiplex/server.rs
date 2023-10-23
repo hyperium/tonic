@@ -37,7 +37,6 @@ use echo::{
 #[derive(Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,
@@ -53,7 +52,6 @@ impl Greeter for MyGreeter {
 #[derive(Default)]
 pub struct MyEcho;
 
-#[tonic::async_trait]
 impl Echo for MyEcho {
     async fn unary_echo(
         &self,

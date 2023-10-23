@@ -66,7 +66,6 @@ async fn run_service_in_background(latency: Duration, server_timeout: Duration) 
         latency: Duration,
     }
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, _req: Request<Input>) -> Result<Response<Output>, Status> {
             tokio::time::sleep(self.latency).await;

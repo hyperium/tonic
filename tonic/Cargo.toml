@@ -23,7 +23,8 @@ repository = "https://github.com/hyperium/tonic"
 version = "0.11.0"
 
 [features]
-codegen = ["dep:async-trait"]
+codegen = []
+# codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
@@ -64,7 +65,7 @@ tower-service = "0.3"
 prost = {version = "0.12", default-features = false, features = ["std"], optional = true}
 
 # codegen
-async-trait = {version = "0.1.13", optional = true}
+# async-trait = {version = "0.1.13", optional = true}
 
 # transport
 h2 = {version = "0.3.24", optional = true}
