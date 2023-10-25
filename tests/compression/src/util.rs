@@ -11,8 +11,10 @@ use std::{
     task::{ready, Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tonic::codec::CompressionEncoding;
-use tonic::transport::{server::Connected, Channel};
+use tonic::{
+    codec::{CompressionEncoding, SliceBuffer},
+    transport::{server::Connected, Channel},
+};
 use tower_http::map_request_body::MapRequestBodyLayer;
 
 macro_rules! parametrized_tests {
@@ -41,7 +43,7 @@ pub struct CountBytesBody<B> {
 
 impl<B> Body for CountBytesBody<B>
 where
-    B: Body<Data = Bytes>,
+    B: Body<Data = SliceBuffer>,
 {
     type Data = B::Data;
     type Error = B::Error;

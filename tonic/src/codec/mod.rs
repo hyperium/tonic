@@ -15,7 +15,7 @@ use std::io;
 
 pub(crate) use self::encode::{encode_client, encode_server};
 
-pub use self::buffer::{DecodeBuf, EncodeBuf};
+pub use self::buffer::{DecodeBuf, EncodeBuf, SliceBuffer};
 pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
 pub use self::decode::Streaming;
 #[cfg(feature = "prost")]

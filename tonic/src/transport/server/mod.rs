@@ -38,8 +38,7 @@ use crate::transport::Error;
 
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
-use crate::body::BoxBody;
-use bytes::Bytes;
+use crate::{body::BoxBody, codec::SliceBuffer};
 use http::{Request, Response};
 use http_body::Body as _;
 use hyper::{server::accept, Body};
@@ -65,7 +64,7 @@ use tower::{
     Service, ServiceBuilder,
 };
 
-type BoxHttpBody = http_body::combinators::UnsyncBoxBody<Bytes, crate::Error>;
+type BoxHttpBody = http_body::combinators::UnsyncBoxBody<SliceBuffer, crate::Error>;
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxHttpBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
@@ -504,7 +503,8 @@ impl<L> Server<L> {
         IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody: http_body::Body + Send + 'static,
+        ResBody::Data: Into<SliceBuffer>,
         ResBody::Error: Into<crate::Error>,
     {
         let trace_interceptor = self.trace_interceptor.clone();
@@ -603,9 +603,9 @@ impl<L> Router<L> {
         self
     }
 
-    /// Convert this tonic `Router` into an axum `Router` consuming the tonic one.
-    pub fn into_router(self) -> axum::Router {
-        self.routes.into_router()
+    /// Convert this `Router` to a [`Service`] router consuming the tonic one.
+    pub fn into_router(self) -> Routes {
+        self.routes
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
@@ -619,14 +619,15 @@ impl<L> Router<L> {
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody: http_body::Body + Send + 'static,
+        ResBody::Data: Into<SliceBuffer>,
         ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
-                self.routes.prepare(),
+                self.routes,
                 incoming,
                 None,
             )
@@ -649,13 +650,14 @@ impl<L> Router<L> {
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody: http_body::Body + Send + 'static,
+        ResBody::Data: Into<SliceBuffer>,
         ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
         self.server
-            .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
+            .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
     }
 
@@ -678,12 +680,13 @@ impl<L> Router<L> {
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody: http_body::Body + Send + 'static,
+        ResBody::Data: Into<SliceBuffer>,
         ResBody::Error: Into<crate::Error>,
     {
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
-                self.routes.prepare(),
+                self.routes,
                 incoming,
                 None,
             )
@@ -713,11 +716,12 @@ impl<L> Router<L> {
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody: http_body::Body + Send + 'static,
+        ResBody::Data: Into<SliceBuffer>,
         ResBody::Error: Into<crate::Error>,
     {
         self.server
-            .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
+            .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
     }
 
@@ -728,10 +732,11 @@ impl<L> Router<L> {
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody: http_body::Body + Send + 'static,
+        ResBody::Data: Into<SliceBuffer>,
         ResBody::Error: Into<crate::Error>,
     {
-        self.server.service_builder.service(self.routes.prepare())
+        self.server.service_builder.service(self.routes)
     }
 }
 
@@ -750,7 +755,8 @@ impl<S, ResBody> Service<Request<Body>> for Svc<S>
 where
     S: Service<Request<Body>, Response = Response<ResBody>>,
     S::Error: Into<crate::Error>,
-    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody: http_body::Body + Send + 'static,
+    ResBody::Data: Into<SliceBuffer>,
     ResBody::Error: Into<crate::Error>,
 {
     type Response = Response<BoxHttpBody>;
@@ -794,7 +800,8 @@ impl<F, E, ResBody> Future for SvcFuture<F>
 where
     F: Future<Output = Result<Response<ResBody>, E>>,
     E: Into<crate::Error>,
-    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody: http_body::Body + Send + 'static,
+    ResBody::Data: Into<SliceBuffer>,
     ResBody::Error: Into<crate::Error>,
 {
     type Output = Result<Response<BoxHttpBody>, crate::Error>;
@@ -804,7 +811,8 @@ where
         let _guard = this.span.enter();
 
         let response: Response<ResBody> = ready!(this.inner.poll(cx)).map_err(Into::into)?;
-        let response = response.map(|body| body.map_err(Into::into).boxed_unsync());
+        let response =
+            response.map(|body| body.map_data(Into::into).map_err(Into::into).boxed_unsync());
         Poll::Ready(Ok(response))
     }
 }
@@ -829,7 +837,8 @@ where
     S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::Error> + Send,
-    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody: http_body::Body + Send + 'static,
+    ResBody::Data: Into<SliceBuffer>,
     ResBody::Error: Into<crate::Error>,
 {
     type Response = BoxService;

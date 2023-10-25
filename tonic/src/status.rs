@@ -1,5 +1,7 @@
-use crate::body::BoxBody;
-use crate::metadata::MetadataMap;
+use crate::{
+    body::{empty_body, BoxBody},
+    metadata::MetadataMap,
+};
 use base64::Engine as _;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
@@ -594,7 +596,7 @@ impl Status {
 
         self.add_header(&mut parts.headers).unwrap();
 
-        http::Response::from_parts(parts, crate::body::empty_body())
+        http::Response::from_parts(parts, empty_body())
     }
 }
 

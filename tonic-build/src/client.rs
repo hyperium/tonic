@@ -68,7 +68,8 @@ pub(crate) fn generate_internal<T: Service>(
             where
                 T: tonic::client::GrpcService<tonic::body::BoxBody>,
                 T::Error: Into<StdError>,
-                T::ResponseBody: Body<Data = Bytes> + Send  + 'static,
+                T::ResponseBody: Body + Send  + 'static,
+                <T::ResponseBody as Body>::Data: Into<tonic::codec::SliceBuffer> + Send,
                 <T::ResponseBody as Body>::Error: Into<StdError> + Send,
             {
                 pub fn new(inner: T) -> Self {

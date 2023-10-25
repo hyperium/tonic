@@ -1,0 +1,25 @@
+[package]
+authors = ["Xiaoya Wei <xiaoya2wei@gmail.com>"]
+edition = "2021"
+license = "MIT"
+name = "arrow-flight"
+publish = false
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+prost = "0.12"
+tokio = { version = "1.0", features = ["rt-multi-thread"] }
+tonic = { path = "../../tonic" }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build", features = ["prost"] }
+
+[dev-dependencies]
+bencher = "0.1.5"
+futures-util = { version = "0.3", default-features = false }
+
+[[bench]]
+harness = false
+name = "end_to_end"

@@ -1,4 +1,3 @@
-use bytes::Bytes;
 use http::header::CONTENT_TYPE;
 use http::{Request, Response, Version};
 use http_body::Body;
@@ -7,6 +6,7 @@ use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
+use tonic::codec::SliceBuffer;
 use tower_layer::Layer;
 use tower_service::Service;
 use tracing::debug;
@@ -60,7 +60,9 @@ impl<S, B1, B2> Service<Request<B1>> for GrpcWebClientService<S>
 where
     S: Service<Request<GrpcWebCall<B1>>, Response = Response<B2>>,
     B1: Body,
-    B2: Body<Data = Bytes>,
+    B1::Data: Into<SliceBuffer>,
+    B2: Body,
+    B2::Data: Into<SliceBuffer>,
     B2::Error: Error,
 {
     type Response = Response<GrpcWebCall<B2>>;
@@ -100,7 +102,7 @@ pub struct ResponseFuture<F> {
 
 impl<F, B, E> Future for ResponseFuture<F>
 where
-    B: Body<Data = Bytes>,
+    B: Body,
     F: Future<Output = Result<Response<B>, E>>,
 {
     type Output = Result<Response<GrpcWebCall<B>>, E>;

@@ -1,7 +1,7 @@
-use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings};
 use crate::{
-    body::BoxBody,
+    body::{boxed, BoxBody},
     client::GrpcService,
+    codec::compression::{CompressionEncoding, EnabledCompressionEncodings},
     codec::{encode_client, Codec, Decoder, Streaming},
     request::SanitizeHeaders,
     Code, Request, Response, Status,
@@ -301,7 +301,7 @@ impl<T> Grpc<T> {
                     self.config.max_encoding_message_size,
                 )
             })
-            .map(BoxBody::new);
+            .map(boxed);
 
         let request = self.config.prepare_request(request, path);
 
@@ -318,13 +318,15 @@ impl<T> Grpc<T> {
 
     // Keeping this code in a separate function from Self::streaming lets functions that return the
     // same output share the generated binary code
-    fn create_response<M2>(
+    fn create_response<M2, B>(
         &self,
         decoder: impl Decoder<Item = M2, Error = Status> + Send + 'static,
         response: http::Response<T::ResponseBody>,
     ) -> Result<Response<Streaming<M2>>, Status>
     where
-        T: GrpcService<BoxBody>,
+        B: Body,
+        <B as Body>::Error: Into<Status>,
+        T: GrpcService<B>,
         T::ResponseBody: Body + Send + 'static,
         <T::ResponseBody as Body>::Error: Into<crate::Error>,
     {
@@ -367,11 +369,11 @@ impl<T> Grpc<T> {
 }
 
 impl GrpcConfig {
-    fn prepare_request(
-        &self,
-        request: Request<BoxBody>,
-        path: PathAndQuery,
-    ) -> http::Request<BoxBody> {
+    fn prepare_request<B>(&self, request: Request<B>, path: PathAndQuery) -> http::Request<B>
+    where
+        B: Body + 'static,
+        B::Error: Into<Status>,
+    {
         let mut parts = self.origin.clone().into_parts();
 
         match &parts.path_and_query {
