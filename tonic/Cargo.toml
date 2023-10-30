@@ -33,7 +33,7 @@ tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 transport = [
   "dep:async-stream",
-  "dep:axum",
+  "dep:matchit",
   "channel",
   "dep:h2",
   "dep:hyper",
@@ -73,7 +73,7 @@ hyper = {version = "0.14.26", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
-axum = {version = "0.6.9", default_features = false, optional = true}
+matchit = {version = "0.7.3", optional = true}
 
 # rustls
 async-stream = { version = "0.3", optional = true }

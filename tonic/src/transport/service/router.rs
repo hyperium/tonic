@@ -1,24 +1,24 @@
-use crate::{
-    body::{boxed, BoxBody},
-    server::NamedService,
-};
+use crate::{body::BoxBody, server::NamedService, transport::BoxFuture};
 use http::{Request, Response};
 use hyper::Body;
-use pin_project::pin_project;
 use std::{
     convert::Infallible,
     fmt,
-    future::Future,
-    pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
-use tower::ServiceExt;
+use tower::{util::BoxCloneService, ServiceExt};
 use tower_service::Service;
 
 /// A [`Service`] router.
-#[derive(Debug, Default, Clone)]
+#[derive(Default, Clone)]
 pub struct Routes {
-    router: axum::Router,
+    router: matchit::Router<BoxCloneService<Request<Body>, Response<BoxBody>, crate::Error>>,
+}
+
+impl fmt::Debug for Routes {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Routes").finish()
+    }
 }
 
 #[derive(Debug, Default, Clone)]
@@ -49,6 +49,7 @@ impl RoutesBuilder {
         self.routes.unwrap_or_default()
     }
 }
+
 impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
@@ -61,8 +62,7 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let router = axum::Router::new().fallback(unimplemented);
-        Self { router }.add_service(svc)
+        Self::default().add_service(svc)
     }
 
     /// Add a new service.
@@ -76,37 +76,28 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let svc = svc.map_response(|res| res.map(axum::body::boxed));
-        self.router = self
-            .router
-            .route_service(&format!("/{}/*rest", S::NAME), svc);
-        self
-    }
-
-    pub(crate) fn prepare(self) -> Self {
-        Self {
-            // this makes axum perform update some internals of the router that improves perf
-            // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
-            router: self.router.with_state(()),
-        }
-    }
-
-    /// Convert this `Routes` into an [`axum::Router`].
-    pub fn into_router(self) -> axum::Router {
+        let svc = svc.map_err(Into::into);
         self.router
+            .insert(format!("/{}/*rest", S::NAME), BoxCloneService::new(svc))
+            .unwrap_or_else(|e| panic!("failed to configurate routing: {e}"));
+        self
     }
 }
 
-async fn unimplemented() -> impl axum::response::IntoResponse {
-    let status = http::StatusCode::OK;
-    let headers = [("grpc-status", "12"), ("content-type", "application/grpc")];
-    (status, headers)
+async fn unimplemented() -> Result<Response<BoxBody>, crate::Error> {
+    let response = Response::builder()
+        .status(http::StatusCode::OK)
+        .header("grpc-status", "12")
+        .header("content-type", "application/grpc")
+        .body(crate::body::empty_body())
+        .unwrap();
+    Ok(response)
 }
 
 impl Service<Request<Body>> for Routes {
     type Response = Response<BoxBody>;
     type Error = crate::Error;
-    type Future = RoutesFuture;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     #[inline]
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -114,26 +105,9 @@ impl Service<Request<Body>> for Routes {
     }
 
     fn call(&mut self, req: Request<Body>) -> Self::Future {
-        RoutesFuture(self.router.call(req))
-    }
-}
-
-#[pin_project]
-pub struct RoutesFuture(#[pin] axum::routing::future::RouteFuture<Body, Infallible>);
-
-impl fmt::Debug for RoutesFuture {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_tuple("RoutesFuture").finish()
-    }
-}
-
-impl Future for RoutesFuture {
-    type Output = Result<Response<BoxBody>, crate::Error>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(self.project().0.poll(cx)) {
-            Ok(res) => Ok(res.map(boxed)).into(),
-            Err(err) => match err {},
+        match self.router.at_mut(req.uri().path()) {
+            Ok(found) => found.value.call(req),
+            Err(_) => Box::pin(unimplemented()),
         }
     }
 }
