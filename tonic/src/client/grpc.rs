@@ -8,7 +8,7 @@ use crate::{
 };
 use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
-    uri::{Parts, PathAndQuery, Uri},
+    uri::{PathAndQuery, Uri},
 };
 use http_body::Body;
 use std::{fmt, future};
@@ -372,13 +372,20 @@ impl GrpcConfig {
         request: Request<BoxBody>,
         path: PathAndQuery,
     ) -> http::Request<BoxBody> {
-        let scheme = self.origin.scheme().cloned();
-        let authority = self.origin.authority().cloned();
+        let mut parts = self.origin.clone().into_parts();
 
-        let mut parts = Parts::default();
-        parts.path_and_query = Some(path);
-        parts.scheme = scheme;
-        parts.authority = authority;
+        match &parts.path_and_query {
+            Some(pnq) if pnq != "/" => {
+                parts.path_and_query = Some(
+                    format!("{}{}", pnq.path(), path)
+                        .parse()
+                        .expect("must form valid path_and_query"),
+                )
+            }
+            _ => {
+                parts.path_and_query = Some(path);
+            }
+        }
 
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
