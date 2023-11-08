@@ -9,7 +9,7 @@ use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
 use hyper::rt;
 use hyper_util::client::legacy::connect::HttpConnector;
-use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
+use std::{fmt, future::Future, net::IpAddr, pin::Pin, str::FromStr, time::Duration};
 use tower_service::Service;
 
 /// Channel builder.
@@ -37,6 +37,7 @@ pub struct Endpoint {
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
     pub(crate) executor: SharedExec,
+    pub(crate) local_address: Option<IpAddr>,
 }
 
 impl Endpoint {
@@ -325,6 +326,23 @@ impl Endpoint {
         )
     }
 
+    /// Set the local address
+    ///
+    /// This sets  the IP address the client will use. By default we let hyper select the IP address.
+    /// ```
+    /// # use std::net::IpAddr;
+    /// # use std::str::FromStr;
+    /// # use tonic::transport::Endpoint;
+    /// # let mut builder = Endpoint::from_static("https://example.com");
+    /// # builder.local_address(IpAddr::from_str("127.0.0.1").expect("Unable to parse IP address"));
+    /// ```
+    pub fn local_address(self, addr: IpAddr) -> Self {
+        Endpoint {
+            local_address: Some(addr),
+            ..self
+        }
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = HttpConnector::new();
@@ -332,6 +350,7 @@ impl Endpoint {
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
         http.set_connect_timeout(self.connect_timeout);
+        http.set_local_address(self.local_address);
 
         let connector = self.connector(http);
 
@@ -459,6 +478,7 @@ impl From<Uri> for Endpoint {
             connect_timeout: None,
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
+            local_address: None,
         }
     }
 }
