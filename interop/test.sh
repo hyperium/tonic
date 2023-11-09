@@ -17,6 +17,7 @@ TEST_CASES=(
   "custom_metadata"
   "unimplemented_method"
   "unimplemented_service"
+  "timeout_on_sleeping_server"
 )
 
 # join all test cases in one comma separated string (dropping the first one)

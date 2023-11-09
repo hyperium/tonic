@@ -399,6 +399,43 @@ pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestA
     ));
 }
 
+pub async fn timeout_on_sleeping_server(
+    client: &mut TestClient,
+    assertions: &mut Vec<TestAssertion>,
+) {
+    let request = StreamingOutputCallRequest {
+        payload: Some(crate::client_payload(27182)),
+        ..Default::default()
+    };
+    let mut request = Request::new(tokio_stream::once(request).chain(tokio_stream::pending()));
+    request.set_timeout(std::time::Duration::from_millis(1));
+    let result = client.full_duplex_call(request).await;
+
+    match result {
+        Ok(res) => {
+            let result = res
+                .into_inner()
+                .next()
+                .await
+                .expect("stream should not close");
+
+            assertions.push(test_assert!(
+                "code must be DeadlineExceeded",
+                match &result {
+                    Err(status) => status.code() == Code::DeadlineExceeded,
+                    _ => false,
+                },
+                format!("error={:?}", result)
+            ))
+        }
+        Err(e) => assertions.push(test_assert!(
+            "code must be DeadlineExceeded",
+            e.code() == Code::DeadlineExceeded,
+            format!("error={:?}", e)
+        )),
+    }
+}
+
 fn make_ping_pong_request(idx: usize) -> StreamingOutputCallRequest {
     let req_len = REQUEST_LENGTHS[idx];
     let resp_len = RESPONSE_LENGTHS[idx];
