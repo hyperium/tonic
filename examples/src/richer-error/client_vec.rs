@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    println!(" Successfull response received.\n\n {:?}\n", response);
+    println!(" Successful response received.\n\n {:?}\n", response);
 
     Ok(())
 }

@@ -32,10 +32,7 @@ impl Echo for MyEcho {
 }
 
 fn init_echo(args: &[String], builder: &mut RoutesBuilder) {
-    let enabled = args
-        .into_iter()
-        .find(|arg| arg.as_str() == "echo")
-        .is_some();
+    let enabled = args.iter().any(|arg| arg.as_str() == "echo");
     if enabled {
         println!("Adding Echo service...");
         let svc = EchoServer::new(MyEcho::default());
@@ -62,10 +59,7 @@ impl Greeter for MyGreeter {
 }
 
 fn init_greeter(args: &[String], builder: &mut RoutesBuilder) {
-    let enabled = args
-        .into_iter()
-        .find(|arg| arg.as_str() == "greeter")
-        .is_some();
+    let enabled = args.iter().any(|arg| arg.as_str() == "greeter");
 
     if enabled {
         println!("Adding Greeter service...");

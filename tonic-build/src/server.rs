@@ -9,6 +9,7 @@ use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{Ident, Lit, LitStr};
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn generate_internal<T: Service>(
     service: &T,
     emit_package: bool,
@@ -209,6 +210,7 @@ pub(crate) fn generate_internal<T: Service>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_trait<T: Service>(
     service: &T,
     emit_package: bool,

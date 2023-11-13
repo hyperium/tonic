@@ -148,7 +148,7 @@ async fn response_stream_limit() {
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
             .unwrap();
     });
@@ -317,7 +317,7 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
             .unwrap();
     });

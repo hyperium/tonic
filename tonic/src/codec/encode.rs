@@ -106,14 +106,14 @@ where
             BytesMut::new()
         };
 
-        return EncodedBytes {
+        Self {
             source: Fuse::new(source),
             encoder,
             compression_encoding,
             max_message_size,
             buf,
             uncompression_buf,
-        };
+        }
     }
 }
 

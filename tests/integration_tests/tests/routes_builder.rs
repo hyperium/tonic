@@ -43,7 +43,7 @@ async fn multiple_service_using_routes_builder() {
             let output = Output1 {
                 buf: request.into_inner().buf,
             };
-            let stream = tokio_stream::iter(vec![Ok(output)]);
+            let stream = tokio_stream::once(Ok(output));
 
             Ok(Response::new(Box::pin(stream)))
         }

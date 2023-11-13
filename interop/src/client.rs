@@ -207,7 +207,7 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
 }
 
 pub async fn empty_stream(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
-    let stream = tokio_stream::iter(Vec::new());
+    let stream = tokio_stream::empty();
     let result = client.full_duplex_call(Request::new(stream)).await;
 
     assertions.push(test_assert!(
@@ -270,7 +270,7 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
     let result = client.unary_call(Request::new(simple_req)).await;
     validate_response(result, assertions);
 
-    let stream = tokio_stream::iter(vec![duplex_req]);
+    let stream = tokio_stream::once(duplex_req);
     let result = match client.full_duplex_call(Request::new(stream)).await {
         Ok(response) => {
             let stream = response.into_inner();
@@ -356,7 +356,7 @@ pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestA
     req_unary.metadata_mut().insert(key1, value1.clone());
     req_unary.metadata_mut().insert_bin(key2, value2.clone());
 
-    let stream = tokio_stream::iter(vec![make_ping_pong_request(0)]);
+    let stream = tokio_stream::once(make_ping_pong_request(0));
     let mut req_stream = Request::new(stream);
     req_stream.metadata_mut().insert(key1, value1.clone());
     req_stream.metadata_mut().insert_bin(key2, value2.clone());
