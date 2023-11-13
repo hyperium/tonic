@@ -13,21 +13,21 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-documentation = "https://docs.rs/tonic/0.10.0"
+documentation = "https://docs.rs/tonic/0.10.2"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.10.0"
+version = "0.10.2"
 
 [features]
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "tokio/rt", "tokio/macros"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:rustls", "tokio/rt", "tokio/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
@@ -69,7 +69,7 @@ async-trait = {version = "0.1.13", optional = true}
 
 # transport
 h2 = {version = "0.3.17", optional = true}
-hyper = {version = "0.14.14", features = ["full"], optional = true}
+hyper = {version = "0.14.26", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
@@ -79,7 +79,8 @@ axum = {version = "0.6.9", default_features = false, optional = true}
 async-stream = { version = "0.3", optional = true }
 rustls-pemfile = { version = "1.0", optional = true }
 rustls-native-certs = { version = "0.6.3", optional = true }
-tokio-rustls = { version = "0.24", optional = true }
+tokio-rustls = { version = "0.24.1", optional = true }
+rustls = { version = "0.21.7", optional = true }
 webpki-roots = { version = "0.25.0", optional = true }
 
 # compression
