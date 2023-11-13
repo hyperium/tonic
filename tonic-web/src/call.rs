@@ -425,7 +425,7 @@ fn make_trailers_frame(trailers: HeaderMap) -> Vec<u8> {
 /// Search some buffer for grpc-web trailers headers and return
 /// its location in the original buf. If `None` is returned we did
 /// not find a trailers in this buffer either because its incomplete
-/// or the buffer jsut contained grpc message frames.
+/// or the buffer just contained grpc message frames.
 fn find_trailers(buf: &[u8]) -> Result<FindTrailers, Status> {
     let mut len = 0;
     let mut temp_buf = &buf[..];
