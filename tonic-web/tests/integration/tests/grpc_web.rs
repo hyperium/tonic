@@ -65,7 +65,7 @@ async fn spawn() -> String {
     let url = format!("http://{}", listener.local_addr().unwrap());
     let listener_stream = TcpListenerStream::new(listener);
 
-    let _ = tokio::spawn(async move {
+    drop(tokio::spawn(async move {
         Server::builder()
             .accept_http1(true)
             .layer(GrpcWebLayer::new())
@@ -73,7 +73,7 @@ async fn spawn() -> String {
             .serve_with_incoming(listener_stream)
             .await
             .unwrap()
-    });
+    }));
 
     url
 }

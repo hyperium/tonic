@@ -428,7 +428,7 @@ fn make_trailers_frame(trailers: HeaderMap) -> Vec<u8> {
 /// or the buffer just contained grpc message frames.
 fn find_trailers(buf: &[u8]) -> Result<FindTrailers, Status> {
     let mut len = 0;
-    let mut temp_buf = &buf[..];
+    let mut temp_buf = buf;
 
     loop {
         // To check each frame, there must be at least GRPC_HEADER_SIZE
@@ -457,7 +457,7 @@ fn find_trailers(buf: &[u8]) -> Result<FindTrailers, Status> {
             return Ok(FindTrailers::IncompleteBuf);
         }
 
-        temp_buf = &buf[len as usize..];
+        temp_buf = &buf[len..];
     }
 }
 
@@ -514,7 +514,7 @@ mod tests {
     fn find_trailers_non_buffered() {
         // Byte version of this:
         // b"\x80\0\0\0\x0fgrpc-status:0\r\n"
-        let buf = vec![
+        let buf = [
             128, 0, 0, 0, 15, 103, 114, 112, 99, 45, 115, 116, 97, 116, 117, 115, 58, 48, 13, 10,
         ];
 
@@ -527,7 +527,7 @@ mod tests {
     fn find_trailers_buffered() {
         // Byte version of this:
         // b"\0\0\0\0L\n$975738af-1a17-4aea-b887-ed0bbced6093\x1a$da609e9b-f470-4cc0-a691-3fd6a005a436\x80\0\0\0\x0fgrpc-status:0\r\n"
-        let buf = vec![
+        let buf = [
             0, 0, 0, 0, 76, 10, 36, 57, 55, 53, 55, 51, 56, 97, 102, 45, 49, 97, 49, 55, 45, 52,
             97, 101, 97, 45, 98, 56, 56, 55, 45, 101, 100, 48, 98, 98, 99, 101, 100, 54, 48, 57,
             51, 26, 36, 100, 97, 54, 48, 57, 101, 57, 98, 45, 102, 52, 55, 48, 45, 52, 99, 99, 48,
