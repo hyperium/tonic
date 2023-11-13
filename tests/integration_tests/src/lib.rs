@@ -5,6 +5,7 @@ pub mod pb {
 
 pub mod mock {
     use std::{
+        io::IoSlice,
         pin::Pin,
         task::{Context, Poll},
     };
@@ -50,6 +51,18 @@ pub mod mock {
             cx: &mut Context<'_>,
         ) -> Poll<std::io::Result<()>> {
             Pin::new(&mut self.0).poll_shutdown(cx)
+        }
+
+        fn poll_write_vectored(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>],
+        ) -> Poll<Result<usize, std::io::Error>> {
+            Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.0.is_write_vectored()
         }
     }
 }
