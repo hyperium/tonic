@@ -506,7 +506,7 @@ impl Builder {
     /// should be enabled automatically when run from a build script. However,
     /// the method of detection is not completely reliable since the `CARGO`
     /// environment variable can have been set by anything else. If writing the
-    /// instructions to `stdout` is undesireable, you can disable this setting
+    /// instructions to `stdout` is undesirable, you can disable this setting
     /// explicitly.
     pub fn emit_rerun_if_changed(mut self, enable: bool) -> Self {
         self.emit_rerun_if_changed = enable;

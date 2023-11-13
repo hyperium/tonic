@@ -115,7 +115,7 @@ impl pb::test_service_server::TestService for TestService {
                 return Err(status);
             }
 
-            let single_message = tokio_stream::iter(vec![Ok(first_msg)]);
+            let single_message = tokio_stream::once(Ok(first_msg));
             let mut stream = single_message.chain(stream);
 
             let stream = try_stream! {
