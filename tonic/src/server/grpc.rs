@@ -443,6 +443,7 @@ where
             http::header::HeaderValue::from_static("application/grpc"),
         );
 
+        #[cfg(any(feature = "gzip", feature = "zstd"))]
         if let Some(encoding) = accept_encoding {
             // Set the content encoding
             parts.headers.insert(
