@@ -129,7 +129,7 @@ async fn spawn() -> Result<(Client, Client, Client, Client), Error> {
     let ((s1, u1), (s2, u2), (s3, u3), (s4, u4)) =
         join!(grpc(true), grpc(false), grpc_web(true), grpc_web(false));
 
-    let _ = tokio::spawn(async move { join!(s1, s2, s3, s4) });
+    drop(tokio::spawn(async move { join!(s1, s2, s3, s4) }));
 
     tokio::time::sleep(Duration::from_millis(30)).await;
 

@@ -4,6 +4,8 @@ use bytes::{Buf, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};
 use std::fmt;
+#[cfg(feature = "zstd")]
+use zstd::stream::read::{Decoder, Encoder};
 
 pub(crate) const ENCODING_HEADER: &str = "grpc-encoding";
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
@@ -13,6 +15,8 @@ pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
 pub struct EnabledCompressionEncodings {
     #[cfg(feature = "gzip")]
     pub(crate) gzip: bool,
+    #[cfg(feature = "zstd")]
+    pub(crate) zstd: bool,
 }
 
 impl EnabledCompressionEncodings {
@@ -21,6 +25,8 @@ impl EnabledCompressionEncodings {
         match encoding {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => self.gzip,
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => self.zstd,
         }
     }
 
@@ -29,14 +35,17 @@ impl EnabledCompressionEncodings {
         match encoding {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => self.gzip = true,
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => self.zstd = true,
         }
     }
 
     pub(crate) fn into_accept_encoding_header_value(self) -> Option<http::HeaderValue> {
-        if self.is_gzip_enabled() {
-            Some(http::HeaderValue::from_static("gzip,identity"))
-        } else {
-            None
+        match (self.is_gzip_enabled(), self.is_zstd_enabled()) {
+            (true, false) => Some(http::HeaderValue::from_static("gzip,identity")),
+            (false, true) => Some(http::HeaderValue::from_static("zstd,identity")),
+            (true, true) => Some(http::HeaderValue::from_static("gzip,zstd,identity")),
+            (false, false) => None,
         }
     }
 
@@ -49,6 +58,16 @@ impl EnabledCompressionEncodings {
     const fn is_gzip_enabled(&self) -> bool {
         false
     }
+
+    #[cfg(feature = "zstd")]
+    const fn is_zstd_enabled(&self) -> bool {
+        self.zstd
+    }
+
+    #[cfg(not(feature = "zstd"))]
+    const fn is_zstd_enabled(&self) -> bool {
+        false
+    }
 }
 
 /// The compression encodings Tonic supports.
@@ -59,6 +78,10 @@ pub enum CompressionEncoding {
     #[cfg(feature = "gzip")]
     #[cfg_attr(docsrs, doc(cfg(feature = "gzip")))]
     Gzip,
+    #[allow(missing_docs)]
+    #[cfg(feature = "zstd")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "zstd")))]
+    Zstd,
 }
 
 impl CompressionEncoding {
@@ -67,7 +90,7 @@ impl CompressionEncoding {
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
     ) -> Option<Self> {
-        if !enabled_encodings.is_gzip_enabled() {
+        if !enabled_encodings.is_gzip_enabled() && !enabled_encodings.is_zstd_enabled() {
             return None;
         }
 
@@ -77,6 +100,8 @@ impl CompressionEncoding {
         split_by_comma(header_value_str).find_map(|value| match value {
             #[cfg(feature = "gzip")]
             "gzip" => Some(CompressionEncoding::Gzip),
+            #[cfg(feature = "zstd")]
+            "zstd" => Some(CompressionEncoding::Zstd),
             _ => None,
         })
     }
@@ -103,6 +128,10 @@ impl CompressionEncoding {
             "gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
                 Ok(Some(CompressionEncoding::Gzip))
             }
+            #[cfg(feature = "zstd")]
+            "zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
+                Ok(Some(CompressionEncoding::Zstd))
+            }
             "identity" => Ok(None),
             other => {
                 let mut status = Status::unimplemented(format!(
@@ -123,17 +152,28 @@ impl CompressionEncoding {
         }
     }
 
-    pub(crate) fn into_header_value(self) -> http::HeaderValue {
+    #[allow(missing_docs)]
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
+    pub(crate) fn as_str(&self) -> &'static str {
         match self {
             #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => http::HeaderValue::from_static("gzip"),
+            CompressionEncoding::Gzip => "gzip",
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => "zstd",
         }
+    }
+
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
+    pub(crate) fn into_header_value(self) -> http::HeaderValue {
+        http::HeaderValue::from_static(self.as_str())
     }
 
     pub(crate) fn encodings() -> &'static [Self] {
         &[
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip,
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd,
         ]
     }
 }
@@ -144,6 +184,8 @@ impl fmt::Display for CompressionEncoding {
         match *self {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => write!(f, "gzip"),
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => write!(f, "zstd"),
         }
     }
 }
@@ -163,6 +205,9 @@ pub(crate) fn compress(
     let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
     out_buf.reserve(capacity);
 
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
+    let mut out_writer = bytes::BufMut::writer(out_buf);
+
     match encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
@@ -171,9 +216,16 @@ pub(crate) fn compress(
                 // FIXME: support customizing the compression level
                 flate2::Compression::new(6),
             );
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut gzip_encoder, &mut out_writer)?;
+        }
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd => {
+            let mut zstd_encoder = Encoder::new(
+                &decompressed_buf[0..len],
+                // FIXME: support customizing the compression level
+                zstd::DEFAULT_COMPRESSION_LEVEL,
+            )?;
+            std::io::copy(&mut zstd_encoder, &mut out_writer)?;
         }
     }
 
@@ -194,13 +246,19 @@ pub(crate) fn decompress(
     let capacity = ((estimate_decompressed_len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
     out_buf.reserve(capacity);
 
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
+    let mut out_writer = bytes::BufMut::writer(out_buf);
+
     match encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
             let mut gzip_decoder = GzDecoder::new(&compressed_buf[0..len]);
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut gzip_decoder, &mut out_writer)?;
+        }
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd => {
+            let mut zstd_decoder = Decoder::new(&compressed_buf[0..len])?;
+            std::io::copy(&mut zstd_decoder, &mut out_writer)?;
         }
     }
 

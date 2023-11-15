@@ -58,7 +58,7 @@
 //! ## Max Message Size
 //!
 //! Currently, both servers and clients can be configured to set the max message encoding and
-//! decoding size. This will ensure that an incoming gRPC message will not exahust the systems
+//! decoding size. This will ensure that an incoming gRPC message will not exhaust the systems
 //! memory. By default, the decoding message limit is `4MB` and the encoding limit is `usize::MAX`.
 //!
 //! [gRPC]: https://grpc.io

@@ -1,8 +1,11 @@
 use crate::metadata::{MetadataMap, MetadataValue};
+#[cfg(feature = "transport")]
+use crate::transport::server::TcpConnectInfo;
 #[cfg(all(feature = "transport", feature = "tls"))]
 use crate::transport::server::TlsConnectInfo;
 #[cfg(feature = "transport")]
-use crate::transport::{server::TcpConnectInfo, Certificate};
+#[allow(deprecated)]
+use crate::transport::Certificate;
 use crate::Extensions;
 #[cfg(feature = "transport")]
 use std::sync::Arc;
@@ -207,6 +210,13 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
+    #[cfg_attr(
+        not(feature = "transport"),
+        deprecated(
+            since = "0.10.3",
+            note = "`remote_addr` only returns `None` without transport feature. This API will require transport feature.",
+        )
+    )]
     pub fn local_addr(&self) -> Option<SocketAddr> {
         #[cfg(feature = "transport")]
         {
@@ -241,6 +251,13 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
+    #[cfg_attr(
+        not(feature = "transport"),
+        deprecated(
+            since = "0.10.3",
+            note = "`remote_addr` only returns `None` without transport feature. This API will require transport feature.",
+        )
+    )]
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         #[cfg(feature = "transport")]
         {
@@ -277,7 +294,15 @@ impl<T> Request<T> {
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
     #[cfg(feature = "transport")]
+    #[cfg_attr(
+        all(feature = "transport", not(feature = "tls")),
+        deprecated(
+            since = "0.10.3",
+            note = "`peer_certs` only returns `None` without tls feature. This API will require tls feature.",
+        )
+    )]
     #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
+    #[allow(deprecated)]
     pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
         #[cfg(feature = "tls")]
         {

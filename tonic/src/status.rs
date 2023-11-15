@@ -461,7 +461,7 @@ impl Status {
                         .expect("Invalid status header, expected base64 encoded value")
                 })
                 .map(Bytes::from)
-                .unwrap_or_else(Bytes::new);
+                .unwrap_or_default();
 
             let mut other_headers = header_map.clone();
             other_headers.remove(GRPC_STATUS_HEADER_CODE);
