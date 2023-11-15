@@ -91,13 +91,14 @@ jobs:
     - uses: hecrj/setup-rust-action@v2
       with:
         rust-version: "1.70"    # msrv
+    - uses: taiki-e/install-action@cargo-no-dev-deps
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
-    - run: cargo check --workspace --all-targets --all-features
-    - run: cargo doc --no-deps --package tonic --package tonic-build --package tonic-health --package tonic-reflection --package tonic-types --package tonic-web
+    - run: cargo no-dev-deps --no-private check --all-features
+    - run: cargo no-dev-deps --no-private doc --no-deps
       env:
         RUSTDOCFLAGS: "-D warnings"
 
