@@ -8,16 +8,6 @@ use std::task::{Context, Poll};
 use tower::make::MakeConnection;
 use tower_service::Service;
 
-#[cfg(not(feature = "tls"))]
-pub(crate) fn connector<C>(inner: C) -> Connector<C> {
-    Connector::new(inner)
-}
-
-#[cfg(feature = "tls")]
-pub(crate) fn connector<C>(inner: C, tls: Option<TlsConnector>) -> Connector<C> {
-    Connector::new(inner, tls)
-}
-
 pub(crate) struct Connector<C> {
     inner: C,
     #[cfg(feature = "tls")]
@@ -34,7 +24,7 @@ impl<C> Connector<C> {
     }
 
     #[cfg(feature = "tls")]
-    fn new(inner: C, tls: Option<TlsConnector>) -> Self {
+    pub(crate) fn new(inner: C, tls: Option<TlsConnector>) -> Self {
         Self { inner, tls }
     }
 
