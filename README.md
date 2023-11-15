@@ -45,7 +45,7 @@ For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust
 
 ### Rust Version
 
-`tonic`'s MSRV is `1.65`.
+`tonic`'s MSRV is `1.66`.
 
 ```bash
 $ rustup update
