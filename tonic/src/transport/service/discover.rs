@@ -1,4 +1,3 @@
-use super::super::service;
 use super::connection::Connection;
 use crate::transport::Endpoint;
 
@@ -38,12 +37,8 @@ impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
                     http.set_keepalive(endpoint.tcp_keepalive);
                     http.set_connect_timeout(endpoint.connect_timeout);
                     http.enforce_http(false);
-                    #[cfg(feature = "tls")]
-                    let connector = service::connector(http, endpoint.tls.clone());
 
-                    #[cfg(not(feature = "tls"))]
-                    let connector = service::connector(http);
-                    let connection = Connection::lazy(connector, endpoint);
+                    let connection = Connection::lazy(endpoint.connector(http), endpoint);
                     let change = Ok(Change::Insert(k, connection));
                     Poll::Ready(Some(change))
                 }

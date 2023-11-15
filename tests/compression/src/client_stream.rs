@@ -54,7 +54,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
         }
@@ -105,7 +105,7 @@ async fn client_disabled_server_enabled(encoding: CompressionEncoding) {
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
         }
@@ -138,7 +138,7 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
             .unwrap();
     });
@@ -196,7 +196,7 @@ async fn compressing_response_from_client_stream(encoding: CompressionEncoding) 
                         .into_inner(),
                 )
                 .add_service(svc)
-                .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+                .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
         }
@@ -205,8 +205,7 @@ async fn compressing_response_from_client_stream(encoding: CompressionEncoding) 
     let mut client =
         test_client::TestClient::new(mock_io_channel(client).await).accept_compressed(encoding);
 
-    let stream = tokio_stream::iter(vec![]);
-    let req = Request::new(Box::pin(stream));
+    let req = Request::new(Box::pin(tokio_stream::empty()));
 
     let res = client.compress_output_client_stream(req).await.unwrap();
     let expected = match encoding {

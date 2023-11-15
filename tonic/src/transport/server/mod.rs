@@ -12,6 +12,8 @@ mod unix;
 pub use super::service::Routes;
 pub use super::service::RoutesBuilder;
 
+#[doc(inline)]
+/// A deprecated re-export. Please use `tonic::server::NamedService` directly.
 pub use crate::server::NamedService;
 pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]

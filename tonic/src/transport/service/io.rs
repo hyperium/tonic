@@ -1,6 +1,7 @@
 use crate::transport::server::Connected;
 use hyper::client::connect::{Connected as HyperConnected, Connection};
 use std::io;
+use std::io::IoSlice;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
@@ -64,6 +65,18 @@ impl AsyncWrite for BoxedIo {
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         Pin::new(&mut self.0).poll_shutdown(cx)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<Result<usize, io::Error>> {
+        Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.0.is_write_vectored()
     }
 }
 
@@ -161,6 +174,26 @@ where
             Self::Io(io) => Pin::new(io).poll_shutdown(cx),
             #[cfg(feature = "tls")]
             Self::TlsIo(io) => Pin::new(io).poll_shutdown(cx),
+        }
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<Result<usize, io::Error>> {
+        match &mut *self {
+            Self::Io(io) => Pin::new(io).poll_write_vectored(cx, bufs),
+            #[cfg(feature = "tls")]
+            Self::TlsIo(io) => Pin::new(io).poll_write_vectored(cx, bufs),
+        }
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        match self {
+            Self::Io(io) => io.is_write_vectored(),
+            #[cfg(feature = "tls")]
+            Self::TlsIo(io) => io.is_write_vectored(),
         }
     }
 }
