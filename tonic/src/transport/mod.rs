@@ -103,6 +103,7 @@ pub use self::error::Error;
 pub use self::server::Server;
 #[doc(inline)]
 pub use self::service::grpc_timeout::TimeoutExpired;
+#[allow(deprecated)]
 pub use self::tls::Certificate;
 #[doc(inline)]
 /// A deprecated re-export. Please use `tonic::server::NamedService` directly.

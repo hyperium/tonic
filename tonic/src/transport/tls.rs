@@ -1,4 +1,11 @@
 /// Represents a X509 certificate.
+#[cfg_attr(
+    not(feature = "tls"),
+    deprecated(
+        since = "0.10.3",
+        note = "`Certificate` is used only by deprecated API without tls feature.",
+    )
+)]
 #[derive(Debug, Clone)]
 pub struct Certificate {
     pub(crate) pem: Vec<u8>,
@@ -13,6 +20,7 @@ pub struct Identity {
     pub(crate) key: Vec<u8>,
 }
 
+#[allow(deprecated)]
 impl Certificate {
     /// Parse a PEM encoded X509 Certificate.
     ///
@@ -38,6 +46,7 @@ impl Certificate {
     }
 }
 
+#[allow(deprecated)]
 impl AsRef<[u8]> for Certificate {
     fn as_ref(&self) -> &[u8] {
         self.pem.as_ref()
