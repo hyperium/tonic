@@ -107,12 +107,17 @@ mod client;
 mod layer;
 mod service;
 
+use bytes::Buf;
 use http::header::HeaderName;
-use std::time::Duration;
-use tonic::{body::BoxBody, server::NamedService};
-use tower_http::cors::{AllowOrigin, CorsLayer};
+use http_body::Body;
+use std::{error::Error, time::Duration};
+use tonic::{body::BoxBody, server::NamedService, Status};
+use tower_http::cors::{AllowOrigin, Cors, CorsLayer};
 use tower_layer::Layer;
 use tower_service::Service;
+
+/// Alias for a type-erased error type.
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 const DEFAULT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
 const DEFAULT_EXPOSED_HEADERS: [&str; 3] =
@@ -120,17 +125,16 @@ const DEFAULT_EXPOSED_HEADERS: [&str; 3] =
 const DEFAULT_ALLOW_HEADERS: [&str; 4] =
     ["x-grpc-web", "content-type", "x-user-agent", "grpc-timeout"];
 
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
 /// Enable a tonic service to handle grpc-web requests with the default configuration.
 ///
 /// You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
-pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
+pub fn enable<S, ResBody>(service: S) -> CorsGrpcWeb<S, ResBody>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<BoxBody>, Response = http::Response<ResBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
+    ResBody: Body,
 {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
@@ -156,34 +160,46 @@ where
 
 /// A newtype wrapper around [`GrpcWebLayer`] and [`tower_http::cors::CorsLayer`] to allow
 /// `tonic_web::enable` to implement the [`NamedService`] trait.
-#[derive(Debug, Clone)]
-pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
+#[derive(Debug)]
+pub struct CorsGrpcWeb<S, ResBody = BoxBody>(Cors<GrpcWebService<S, ResBody>>);
 
-impl<S> Service<http::Request<hyper::Body>> for CorsGrpcWeb<S>
+impl<S: Clone, ResBody> Clone for CorsGrpcWeb<S, ResBody> {
+    fn clone(&self) -> Self {
+        Self(self.0.clone())
+    }
+}
+
+impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for CorsGrpcWeb<S, ResBody>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<BoxBody>, Response = http::Response<ResBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
+    ReqBody: Body + Send + 'static,
+    ReqBody::Error: Error + Send + Sync,
+    ResBody: Body + Default + Send + 'static,
+    ResBody::Error: Error + Send + Sync + 'static,
 {
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future =
-        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<hyper::Body>>>::Future;
+    type Response = <Cors<GrpcWebService<S, ResBody>> as Service<http::Request<ReqBody>>>::Response;
+    type Error = <Cors<GrpcWebService<S, ResBody>> as Service<http::Request<ReqBody>>>::Error;
+    type Future = <Cors<GrpcWebService<S, ResBody>> as Service<http::Request<ReqBody>>>::Future;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx)
+        <Cors<GrpcWebService<S, ResBody>> as Service<http::Request<ReqBody>>>::poll_ready(
+            &mut self.0,
+            cx,
+        )
     }
 
-    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
         self.0.call(req)
     }
 }
 
-impl<S> NamedService for CorsGrpcWeb<S>
+impl<S, ResBody> NamedService for CorsGrpcWeb<S, ResBody>
 where
     S: NamedService,
 {
@@ -207,4 +223,13 @@ pub(crate) mod util {
                 .with_decode_padding_mode(DecodePaddingMode::Indifferent),
         );
     }
+}
+
+pub(crate) fn box_body<D: Buf, E: Into<BoxError> + Send>(
+    body: impl Body<Data = D, Error = E> + Send + 'static,
+) -> BoxBody {
+    let bod = body
+        .map_data(|mut d| d.copy_to_bytes(d.remaining()))
+        .map_err(|e| Status::from_error(e.into() as BoxError));
+    bod.boxed_unsync()
 }

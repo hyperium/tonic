@@ -1,9 +1,11 @@
 use crate::{
     body::{boxed, BoxBody},
     server::NamedService,
+    transport::server::BoxError,
 };
+use bytes::Bytes;
 use http::{Request, Response};
-use hyper::Body;
+use http_body::Body;
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -12,26 +14,47 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tower::ServiceExt;
 use tower_service::Service;
 
 /// A [`Service`] router.
-#[derive(Debug, Default, Clone)]
-pub struct Routes {
-    router: axum::Router,
+#[derive(Debug)]
+pub struct Routes<ReqBody = hyper::Body> {
+    router: axum::Router<(), ReqBody>,
+}
+
+impl<ReqBody> Clone for Routes<ReqBody> {
+    fn clone(&self) -> Self {
+        Self {
+            router: self.router.clone(),
+        }
+    }
+}
+
+impl<ReqBody> Default for Routes<ReqBody>
+where
+    ReqBody: http_body::Body + Send + 'static,
+{
+    fn default() -> Self {
+        Self {
+            router: axum::Router::new(),
+        }
+    }
 }
 
 #[derive(Debug, Default, Clone)]
 /// Allows adding new services to routes by passing a mutable reference to this builder.
-pub struct RoutesBuilder {
-    routes: Option<Routes>,
+pub struct RoutesBuilder<ReqBody = hyper::Body> {
+    routes: Option<Routes<ReqBody>>,
 }
 
-impl RoutesBuilder {
+impl<ReqBody> RoutesBuilder<ReqBody>
+where
+    ReqBody: http_body::Body + Send + 'static,
+{
     /// Add a new service.
     pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request<ReqBody>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -45,19 +68,24 @@ impl RoutesBuilder {
     }
 
     /// Returns the routes with added services or empty [`Routes`] if no service was added
-    pub fn routes(self) -> Routes {
+    pub fn routes(self) -> Routes<ReqBody> {
         self.routes.unwrap_or_default()
     }
 }
-impl Routes {
-    /// Create a new routes with `svc` already added to it.
-    pub fn new<S>(svc: S) -> Self
+
+impl<ReqBody> Routes<ReqBody>
+where
+    ReqBody: http_body::Body + Send + 'static,
+{
+    pub(crate) fn new<S, ResBody>(svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request<ReqBody>, Error = Infallible, Response = Response<ResBody>>
             + NamedService
             + Clone
             + Send
             + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<BoxError>,
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
@@ -66,17 +94,18 @@ impl Routes {
     }
 
     /// Add a new service.
-    pub fn add_service<S>(mut self, svc: S) -> Self
+    pub fn add_service<S, ResBody>(mut self, svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request<ReqBody>, Error = Infallible, Response = Response<ResBody>>
             + NamedService
             + Clone
             + Send
             + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<BoxError>,
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let svc = svc.map_response(|res| res.map(axum::body::boxed));
         self.router = self
             .router
             .route_service(&format!("/{}/*rest", S::NAME), svc);
@@ -92,7 +121,7 @@ impl Routes {
     }
 
     /// Convert this `Routes` into an [`axum::Router`].
-    pub fn into_router(self) -> axum::Router {
+    pub fn into_router(self) -> axum::Router<(), ReqBody> {
         self.router
     }
 }
@@ -103,31 +132,37 @@ async fn unimplemented() -> impl axum::response::IntoResponse {
     (status, headers)
 }
 
-impl Service<Request<Body>> for Routes {
+impl<B> Service<Request<B>> for Routes<B>
+where
+    B: http_body::Body + Send + 'static,
+{
     type Response = Response<BoxBody>;
     type Error = crate::Error;
-    type Future = RoutesFuture;
+    type Future = RoutesFuture<B>;
 
     #[inline]
     fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, req: Request<B>) -> Self::Future {
         RoutesFuture(self.router.call(req))
     }
 }
 
 #[pin_project]
-pub struct RoutesFuture(#[pin] axum::routing::future::RouteFuture<Body, Infallible>);
+pub struct RoutesFuture<B>(#[pin] axum::routing::future::RouteFuture<B, Infallible>);
 
-impl fmt::Debug for RoutesFuture {
+impl<B> fmt::Debug for RoutesFuture<B> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_tuple("RoutesFuture").finish()
     }
 }
 
-impl Future for RoutesFuture {
+impl<B> Future for RoutesFuture<B>
+where
+    B: Body,
+{
     type Output = Result<Response<BoxBody>, crate::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
