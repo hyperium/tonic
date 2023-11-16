@@ -4,10 +4,10 @@
 
 use crate::{
     body::{boxed, BoxBody},
+    codec::SliceBuffer,
     request::SanitizeHeaders,
     Status,
 };
-use bytes::Bytes;
 use pin_project::pin_project;
 use std::{
     fmt,
@@ -121,11 +121,13 @@ where
 
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
 where
-    ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
     F: Interceptor,
     S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
     S::Error: Into<crate::Error>,
-    ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    ReqBody: http_body::Body + Send + 'static,
+    ReqBody::Data: bytes::Buf,
+    ResBody: Default + http_body::Body + Send + 'static,
+    ResBody::Data: Into<SliceBuffer>,
     ResBody::Error: Into<crate::Error>,
 {
     type Response = http::Response<BoxBody>;
@@ -205,7 +207,8 @@ impl<F, E, B> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<http::Response<B>, E>>,
     E: Into<crate::Error>,
-    B: Default + http_body::Body<Data = Bytes> + Send + 'static,
+    B: Default + http_body::Body + Send + 'static,
+    B::Data: Into<SliceBuffer>,
     B::Error: Into<crate::Error>,
 {
     type Output = Result<http::Response<BoxBody>, E>;
@@ -243,7 +246,7 @@ mod tests {
     struct TestBody;
 
     impl http_body::Body for TestBody {
-        type Data = Bytes;
+        type Data = bytes::Bytes;
         type Error = Status;
 
         fn poll_data(

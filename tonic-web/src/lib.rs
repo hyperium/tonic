@@ -109,7 +109,7 @@ mod service;
 
 use http::header::HeaderName;
 use std::time::Duration;
-use tonic::{body::BoxBody, server::NamedService};
+use tonic::{body::BoxBody, server::NamedService, Status};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_layer::Layer;
 use tower_service::Service;
@@ -188,6 +188,10 @@ where
     S: NamedService,
 {
     const NAME: &'static str = S::NAME;
+}
+
+pub(crate) fn internal_error(e: impl std::fmt::Display) -> Status {
+    Status::internal(format!("tonic-web: {}", e))
 }
 
 pub(crate) mod util {

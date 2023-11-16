@@ -1,7 +1,9 @@
-use super::compression::{decompress, CompressionEncoding};
-use super::{DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
-use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
-use bytes::{Buf, BufMut, BytesMut};
+use super::{
+    compression::{decompress, CompressionEncoding},
+    DecodeBuf, Decoder, SliceBuffer, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE,
+};
+use crate::{metadata::MetadataMap, Code, Status};
+use bytes::Buf;
 use http::StatusCode;
 use http_body::Body;
 use std::{
@@ -15,6 +17,8 @@ use tracing::{debug, trace};
 
 const BUFFER_SIZE: usize = 8 * 1024;
 
+const SLICE_SIZE: usize = 128;
+
 /// Streaming requests and responses.
 ///
 /// This will wrap some inner [`Body`] and [`Decoder`] and provide an interface
@@ -25,12 +29,12 @@ pub struct Streaming<T> {
 }
 
 struct StreamingInner {
-    body: BoxBody,
+    body: http_body::combinators::UnsyncBoxBody<bytes::Bytes, Status>,
     state: State,
     direction: Direction,
-    buf: BytesMut,
+    buf: SliceBuffer,
     trailers: Option<MetadataMap>,
-    decompress_buf: BytesMut,
+    decompress_buf: SliceBuffer,
     encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
 }
@@ -118,6 +122,12 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
+        let decompress_buf = if encoding.is_some() {
+            SliceBuffer::with_capacity(0, BUFFER_SIZE)
+        } else {
+            SliceBuffer::default()
+        };
+
         Self {
             decoder: Box::new(decoder),
             inner: StreamingInner {
@@ -127,9 +137,9 @@ impl<T> Streaming<T> {
                     .boxed_unsync(),
                 state: State::ReadHeader,
                 direction,
-                buf: BytesMut::with_capacity(BUFFER_SIZE),
+                buf: SliceBuffer::with_capacity(SLICE_SIZE, 0),
                 trailers: None,
-                decompress_buf: BytesMut::new(),
+                decompress_buf,
                 encoding,
                 max_message_size,
             },
@@ -186,8 +196,6 @@ impl StreamingInner {
                     ),
                 ));
             }
-
-            self.buf.reserve(len);
 
             self.state = State::ReadBody {
                 compression: compression_encoding,
@@ -246,7 +254,7 @@ impl StreamingInner {
         };
 
         Poll::Ready(if let Some(data) = chunk {
-            self.buf.put(data);
+            self.buf.insert_slice(data);
             Ok(Some(()))
         } else {
             // FIXME: improve buf usage.

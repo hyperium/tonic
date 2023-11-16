@@ -1,9 +1,11 @@
-use crate::codec::compression::{
-    CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
-};
 use crate::{
     body::BoxBody,
-    codec::{encode_server, Codec, Streaming},
+    codec::{
+        compression::{
+            CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
+        },
+        encode_server, Codec, Streaming,
+    },
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Code, Request, Status,
 };
@@ -317,7 +319,11 @@ where
             self.send_compression_encodings,
         );
 
-        let request = t!(self.map_request_streaming(req));
+        // let request = t!(self.map_request_streaming(req));
+        let request = match self.map_request_streaming(req) {
+            Ok(value) => value,
+            Err(status) => return status.to_http(),
+        };
 
         let response = service
             .call(request)

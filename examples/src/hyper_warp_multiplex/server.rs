@@ -5,13 +5,14 @@
 
 use either::Either;
 use http::version::Version;
+use http_body::Body;
 use hyper::{service::make_service_fn, Server};
 use std::convert::Infallible;
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tonic::{transport::Server as TonicServer, Request, Response, Status};
+use tonic::{codec::SliceBuffer, transport::Server as TonicServer, Request, Response, Status};
 use tower::Service;
 use warp::Filter;
 
@@ -85,7 +86,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Version::HTTP_11 | Version::HTTP_10 => Either::Left({
                         let res = warp.call(req);
                         Box::pin(async move {
-                            let res = res.await.map(|res| res.map(EitherBody::Left))?;
+                            let res = res.await.map(|res| {
+                                res.map(|body| body.map_data(SliceBuffer::from))
+                                    .map(EitherBody::Left)
+                            })?;
                             Ok::<_, Error>(res)
                         })
                     }),

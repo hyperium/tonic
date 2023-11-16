@@ -9,6 +9,7 @@ members = [
   "examples",
   "codegen",
   "interop", # Tests
+  "benches/arrow-flight",
   "tests/disable_comments",
   "tests/included_service",
   "tests/same_name",

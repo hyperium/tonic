@@ -3,8 +3,10 @@
 //! To hit the warp server you can run this command:
 //! `curl localhost:50051/hello`
 
+use bytes::Buf;
 use either::Either;
 use http::version::Version;
+use http_body::Body;
 use hyper::{service::make_service_fn, Server};
 use std::convert::Infallible;
 use std::{
@@ -65,7 +67,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     Version::HTTP_2 => Either::Right({
                         let res = tonic.call(req);
                         Box::pin(async move {
-                            let res = res.await.map(|res| res.map(EitherBody::Right))?;
+                            let res = res.await.map(|res| {
+                                res.map(|body| {
+                                    EitherBody::Right(
+                                        body.map_data(|mut buf| buf.copy_to_bytes(buf.remaining())),
+                                    )
+                                })
+                            })?;
                             Ok::<_, Error>(res)
                         })
                     }),

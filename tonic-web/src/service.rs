@@ -216,7 +216,7 @@ fn coerce_request(mut req: Request<Body>, encoding: Encoding) -> Request<Body> {
         HeaderValue::from_static("identity,deflate,gzip"),
     );
 
-    req.map(|b| GrpcWebCall::request(b, encoding))
+    req.map(|body| GrpcWebCall::request(body, encoding))
         .map(Body::wrap_stream)
 }
 

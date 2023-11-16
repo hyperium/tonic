@@ -97,13 +97,11 @@ impl MockDecoder {
 }
 
 impl Decoder for MockDecoder {
-    type Item = Vec<u8>;
+    type Item = Bytes;
     type Error = Status;
 
     fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
-        let out = Vec::from(buf.chunk());
-        buf.advance(self.message_size);
-        Ok(Some(out))
+        Ok(Some(buf.copy_to_bytes(self.message_size)))
     }
 }
 
