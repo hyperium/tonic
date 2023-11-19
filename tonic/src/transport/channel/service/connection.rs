@@ -1,4 +1,5 @@
-use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
+use super::{reconnect::Reconnect, AddOrigin, UserAgent};
+use crate::transport::service::GrpcTimeout;
 use crate::{
     body::BoxBody,
     transport::{BoxFuture, Endpoint},

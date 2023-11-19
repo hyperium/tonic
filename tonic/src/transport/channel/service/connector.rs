@@ -1,12 +1,13 @@
-use super::super::BoxFuture;
-use super::io::BoxedIo;
-#[cfg(feature = "tls")]
-use super::tls::TlsConnector;
 use http::Uri;
 use std::fmt;
 use std::task::{Context, Poll};
 use tower::make::MakeConnection;
 use tower_service::Service;
+
+use super::io::BoxedIo;
+#[cfg(feature = "tls")]
+use super::tls::TlsConnector;
+use crate::transport::BoxFuture;
 
 pub(crate) struct Connector<C> {
     inner: C,

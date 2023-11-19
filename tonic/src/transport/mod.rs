@@ -87,6 +87,7 @@
 //!
 //! [rustls]: https://docs.rs/rustls/0.16.0/rustls/
 
+#[cfg(feature = "channel")]
 pub mod channel;
 pub mod server;
 
@@ -110,10 +111,11 @@ pub use self::tls::Certificate;
 pub use axum::{body::BoxBody as AxumBoxBody, Router as AxumRouter};
 pub use hyper::{Body, Uri};
 
-pub(crate) use self::service::executor::Executor;
+#[cfg(feature = "channel")]
+pub(crate) use self::channel::service::executor::Executor;
 
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[cfg(all(feature = "channel", feature = "tls"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "channel", feature = "tls"))))]
 pub use self::channel::ClientTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
@@ -122,4 +124,5 @@ pub use self::server::ServerTlsConfig;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;
 
+#[cfg(feature = "channel")]
 type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
