@@ -26,23 +26,26 @@ version = "0.11.0"
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
-default = ["transport", "codegen", "prost"]
+default = ["channel", "codegen", "prost"]
 prost = ["dep:prost"]
 tls = ["dep:rustls-pki-types", "dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
-tls-roots-common = ["tls"]
+tls-roots-common = ["tls", "channel"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 transport = [
   "dep:async-stream",
   "dep:axum",
-  "channel",
   "dep:h2",
-  "dep:hyper",
+  "dep:hyper", "hyper?/server",
   "dep:tokio", "tokio?/net", "tokio?/time",
-  "dep:tower",
+  "dep:tower", "tower?/util", "tower?/limit",
+]
+channel = [
+  "transport",
+  "dep:hyper", "hyper?/client",
+  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/load", "tower?/make",
   "dep:hyper-timeout",
 ]
-channel = []
 
 # [[bench]]
 # name = "bench_main"
@@ -68,12 +71,14 @@ async-trait = {version = "0.1.13", optional = true}
 
 # transport
 h2 = {version = "0.3.24", optional = true}
-hyper = {version = "0.14.26", features = ["full"], optional = true}
-hyper-timeout = {version = "0.4", optional = true}
+hyper = {version = "0.14.26", features = ["http1", "http2", "runtime", "stream"], optional = true}
 tokio = {version = "1.0.1", optional = true}
 tokio-stream = "0.1"
-tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
+tower = {version = "0.4.7", default-features = false, optional = true}
 axum = {version = "0.6.9", default_features = false, optional = true}
+
+# channel
+hyper-timeout = {version = "0.4", optional = true}
 
 # rustls
 async-stream = { version = "0.3", optional = true }

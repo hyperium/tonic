@@ -1,15 +1,18 @@
-use std::{
-    io::Cursor,
-    {fmt, sync::Arc},
-};
+use std::io::Cursor;
+use std::{fmt, sync::Arc};
 
-use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName};
+#[cfg(feature = "channel")]
+use rustls_pki_types::ServerName;
+use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::io::{AsyncRead, AsyncWrite};
+#[cfg(feature = "channel")]
+use tokio_rustls::{rustls::ClientConfig, TlsConnector as RustlsConnector};
 use tokio_rustls::{
-    rustls::{server::WebPkiClientVerifier, ClientConfig, RootCertStore, ServerConfig},
-    TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
+    rustls::{server::WebPkiClientVerifier, RootCertStore, ServerConfig},
+    TlsAcceptor as RustlsAcceptor,
 };
 
+#[cfg(feature = "channel")]
 use super::io::BoxedIo;
 use crate::transport::{
     server::{Connected, TlsStream},
@@ -21,17 +24,20 @@ const ALPN_H2: &[u8] = b"h2";
 
 #[derive(Debug)]
 enum TlsError {
+    #[cfg(feature = "channel")]
     H2NotNegotiated,
     CertificateParseError,
     PrivateKeyParseError,
 }
 
+#[cfg(feature = "channel")]
 #[derive(Clone)]
 pub(crate) struct TlsConnector {
     config: Arc<ClientConfig>,
     domain: Arc<ServerName<'static>>,
 }
 
+#[cfg(feature = "channel")]
 impl TlsConnector {
     pub(crate) fn new(
         ca_cert: Option<Certificate>,
@@ -67,6 +73,7 @@ impl TlsConnector {
         })
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) async fn connect<I>(&self, io: I) -> Result<BoxedIo, crate::Error>
     where
         I: AsyncRead + AsyncWrite + Send + Unpin + 'static,
@@ -84,6 +91,7 @@ impl TlsConnector {
     }
 }
 
+#[cfg(feature = "channel")]
 impl fmt::Debug for TlsConnector {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TlsConnector").finish()
@@ -145,6 +153,7 @@ impl fmt::Debug for TlsAcceptor {
 impl fmt::Display for TlsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            #[cfg(feature = "channel")]
             TlsError::H2NotNegotiated => write!(f, "HTTP/2 was not negotiated."),
             TlsError::CertificateParseError => write!(f, "Error parsing TLS certificate."),
             TlsError::PrivateKeyParseError => write!(

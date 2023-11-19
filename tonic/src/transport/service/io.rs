@@ -1,4 +1,5 @@
 use crate::transport::server::Connected;
+#[cfg(feature = "channel")]
 use hyper::client::connect::{Connected as HyperConnected, Connection};
 use std::io;
 use std::io::IoSlice;
@@ -15,20 +16,24 @@ pub(in crate::transport) trait Io:
 
 impl<T> Io for T where T: AsyncRead + AsyncWrite + Send + 'static {}
 
+#[cfg(feature = "channel")]
 pub(crate) struct BoxedIo(Pin<Box<dyn Io>>);
 
+#[cfg(feature = "channel")]
 impl BoxedIo {
     pub(in crate::transport) fn new<I: Io>(io: I) -> Self {
         BoxedIo(Box::pin(io))
     }
 }
 
+#[cfg(feature = "channel")]
 impl Connection for BoxedIo {
     fn connected(&self) -> HyperConnected {
         HyperConnected::new()
     }
 }
 
+#[cfg(feature = "channel")]
 impl Connected for BoxedIo {
     type ConnectInfo = NoneConnectInfo;
 
@@ -37,9 +42,11 @@ impl Connected for BoxedIo {
     }
 }
 
+#[cfg(feature = "channel")]
 #[derive(Copy, Clone)]
 pub(crate) struct NoneConnectInfo;
 
+#[cfg(feature = "channel")]
 impl AsyncRead for BoxedIo {
     fn poll_read(
         mut self: Pin<&mut Self>,
@@ -50,6 +57,7 @@ impl AsyncRead for BoxedIo {
     }
 }
 
+#[cfg(feature = "channel")]
 impl AsyncWrite for BoxedIo {
     fn poll_write(
         mut self: Pin<&mut Self>,
