@@ -5,8 +5,8 @@ use crate::{
 };
 use http::Uri;
 use hyper::client::conn::Builder;
-use hyper::client::connect::Connection as HyperConnection;
 use hyper::client::service::Connect as HyperConnect;
+use hyper_util::client::legacy::connect::Connection as HyperConnection;
 use std::{
     fmt,
     task::{Context, Poll},
@@ -126,3 +126,4 @@ impl fmt::Debug for Connection {
         f.debug_struct("Connection").finish()
     }
 }
+

@@ -17,7 +17,7 @@ use http::{
     uri::{InvalidUri, Uri},
     Request, Response,
 };
-use hyper::client::connect::Connection as HyperConnection;
+use hyper_util::client::legacy::connect::Connection as HyperConnection;
 use std::{
     fmt,
     future::Future,
@@ -236,3 +236,4 @@ impl fmt::Debug for ResponseFuture {
         f.debug_struct("ResponseFuture").finish()
     }
 }
+
