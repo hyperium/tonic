@@ -1,9 +1,5 @@
 use super::{Connected, Server};
 use crate::transport::service::ServerIo;
-use hyper::server::{
-    accept::Accept,
-    conn::{AddrIncoming, AddrStream},
-};
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -12,7 +8,7 @@ use std::{
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
 };
 use tokio_stream::{Stream, StreamExt};
 
@@ -127,7 +123,7 @@ enum SelectOutput<A> {
 /// of `AsyncRead + AsyncWrite` that communicate with clients that connect to a socket address.
 #[derive(Debug)]
 pub struct TcpIncoming {
-    inner: AddrIncoming,
+    inner: TcpListener,
 }
 
 impl TcpIncoming {
@@ -167,27 +163,21 @@ impl TcpIncoming {
         nodelay: bool,
         keepalive: Option<Duration>,
     ) -> Result<Self, crate::Error> {
-        let mut inner = AddrIncoming::bind(&addr)?;
-        inner.set_nodelay(nodelay);
-        inner.set_keepalive(keepalive);
-        Ok(TcpIncoming { inner })
-    }
-
-    /// Creates a new `TcpIncoming` from an existing `tokio::net::TcpListener`.
-    pub fn from_listener(
-        listener: TcpListener,
-        nodelay: bool,
-        keepalive: Option<Duration>,
-    ) -> Result<Self, crate::Error> {
-        let mut inner = AddrIncoming::from_listener(listener)?;
+        let mut inner = TcpListener::bind(&addr)?;
         inner.set_nodelay(nodelay);
         inner.set_keepalive(keepalive);
         Ok(TcpIncoming { inner })
     }
 }
 
+impl From<TcpListener> for TcpIncoming {
+    fn from(inner: TcpListener) -> Self {
+        TcpIncoming { inner }
+    }
+}
+
 impl Stream for TcpIncoming {
-    type Item = Result<AddrStream, std::io::Error>;
+    type Item = Result<TcpStream, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.inner).poll_accept(cx)
@@ -207,3 +197,4 @@ mod tests {
         let _t3 = TcpIncoming::new(addr, true, None).unwrap();
     }
 }
+

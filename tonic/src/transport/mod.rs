@@ -108,8 +108,8 @@ pub use self::tls::Certificate;
 #[doc(inline)]
 /// A deprecated re-export. Please use `tonic::server::NamedService` directly.
 pub use crate::server::NamedService;
-pub use axum::{body::BoxBody as AxumBoxBody, Router as AxumRouter};
-pub use hyper::{Body, Uri};
+pub use axum::{body::Body as AxumBoxBody, Router as AxumRouter};
+pub use hyper::Uri;
 
 pub(crate) use self::service::executor::Executor;
 
@@ -124,3 +124,4 @@ pub use self::server::ServerTlsConfig;
 pub use self::tls::Identity;
 
 type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+
