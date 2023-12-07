@@ -268,7 +268,7 @@ mod tests {
     mod body {
         use crate::Status;
         use bytes::Bytes;
-        use http_body::Body;
+        use http_body::{Body, Frame};
         use std::{
             pin::Pin,
             task::{Context, Poll},
@@ -299,10 +299,10 @@ mod tests {
             type Data = Bytes;
             type Error = Status;
 
-            fn poll_data(
+            fn poll_frame(
                 mut self: Pin<&mut Self>,
                 cx: &mut Context<'_>,
-            ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+            ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
                 // every other call to poll_data returns data
                 let should_send = self.count % 2 == 0;
                 let data_len = self.data.len();
@@ -325,13 +325,7 @@ mod tests {
                     Poll::Ready(None)
                 }
             }
-
-            fn poll_trailers(
-                self: Pin<&mut Self>,
-                _cx: &mut Context<'_>,
-            ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-                Poll::Ready(Ok(None))
-            }
         }
     }
 }
+
