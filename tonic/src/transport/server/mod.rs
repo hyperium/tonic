@@ -13,6 +13,7 @@ pub use super::service::Routes;
 pub use super::service::RoutesBuilder;
 
 pub use conn::{Connected, TcpConnectInfo};
+use hyper_util::rt::TokioExecutor;
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
 
@@ -534,16 +535,17 @@ impl<L> Server<L> {
             _io: PhantomData,
         };
 
-        let server = hyper::Server::builder(incoming)
-            .http2_only(http2_only)
-            .http2_initial_connection_window_size(init_connection_window_size)
-            .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams)
-            .http2_keep_alive_interval(http2_keepalive_interval)
-            .http2_keep_alive_timeout(http2_keepalive_timeout)
-            .http2_adaptive_window(http2_adaptive_window.unwrap_or_default())
-            .http2_max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
-            .http2_max_frame_size(max_frame_size);
+        let server = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new())
+            .http2()
+            .initial_connection_window_size(init_connection_window_size)
+            .initial_stream_window_size(init_stream_window_size)
+            .max_concurrent_streams(max_concurrent_streams)
+            .keep_alive_interval(http2_keepalive_interval)
+            .keep_alive_timeout(http2_keepalive_timeout)
+            .adaptive_window(http2_adaptive_window.unwrap_or_default())
+            // FIXME: wait for this to be added to hyper-util
+            //.max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
+            .max_frame_size(max_frame_size);
 
         if let Some(signal) = signal {
             server
@@ -885,3 +887,4 @@ where
         future::ready(Ok(svc))
     }
 }
+
