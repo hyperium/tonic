@@ -1,12 +1,8 @@
 use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
-use crate::{
-    body::BoxBody,
-    transport::{BoxFuture, Endpoint},
-};
+use crate::transport::{BoxFuture, Endpoint};
 use http::Uri;
-use hyper::client::conn::Builder;
-use hyper::client::service::Connect as HyperConnect;
-use hyper_util::client::legacy::connect::Connection as HyperConnection;
+use hyper::client::conn::http2::Builder;
+use hyper_util::client::legacy::connect::{Connect as HyperConnect, Connection as HyperConnection};
 use std::{
     fmt,
     task::{Context, Poll},
@@ -21,9 +17,8 @@ use tower::{
 };
 use tower_service::Service;
 
-pub(crate) type Request = http::Request<BoxBody>;
-pub(crate) type Response = http::Response<hyper::Body>;
-
+pub(crate) type Request = axum::extract::Request;
+pub(crate) type Response = axum::response::Response;
 pub(crate) struct Connection {
     inner: BoxService<Request, Response, crate::Error>,
 }
@@ -36,12 +31,10 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
     {
-        let mut settings = Builder::new()
-            .http2_initial_stream_window_size(endpoint.init_stream_window_size)
-            .http2_initial_connection_window_size(endpoint.init_connection_window_size)
-            .http2_only(true)
-            .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
-            .executor(endpoint.executor.clone())
+        let mut settings = Builder::new(endpoint.executor)
+            .initial_stream_window_size(endpoint.init_stream_window_size)
+            .initial_connection_window_size(endpoint.init_connection_window_size)
+            .keep_alive_interval(endpoint.http2_keep_alive_interval)
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
