@@ -1,9 +1,5 @@
 use super::{Connected, Server};
 use crate::transport::service::ServerIo;
-use hyper::server::{
-    accept::Accept,
-    conn::{AddrIncoming, AddrStream},
-};
 use std::{
     net::SocketAddr,
     pin::Pin,
@@ -12,7 +8,7 @@ use std::{
 };
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
 };
 use tokio_stream::{Stream, StreamExt};
 
@@ -187,7 +183,7 @@ impl TcpIncoming {
 }
 
 impl Stream for TcpIncoming {
-    type Item = Result<AddrStream, std::io::Error>;
+    type Item = Result<TcpStream, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         Pin::new(&mut self.inner).poll_accept(cx)
@@ -207,3 +203,4 @@ mod tests {
         let _t3 = TcpIncoming::new(addr, true, None).unwrap();
     }
 }
+
