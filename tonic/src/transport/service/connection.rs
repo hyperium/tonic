@@ -38,15 +38,15 @@ impl Connection {
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
-            settings.http2_keep_alive_timeout(val);
+            settings.keep_alive_timeout(val);
         }
 
         if let Some(val) = endpoint.http2_keep_alive_while_idle {
-            settings.http2_keep_alive_while_idle(val);
+            settings.keep_alive_while_idle(val);
         }
 
         if let Some(val) = endpoint.http2_adaptive_window {
-            settings.http2_adaptive_window(val);
+            settings.adaptive_window(val);
         }
 
         let stack = ServiceBuilder::new()
