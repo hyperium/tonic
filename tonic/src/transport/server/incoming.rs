@@ -123,7 +123,7 @@ enum SelectOutput<A> {
 /// of `AsyncRead + AsyncWrite` that communicate with clients that connect to a socket address.
 #[derive(Debug)]
 pub struct TcpIncoming {
-    inner: AddrIncoming,
+    inner: TcpListener,
 }
 
 impl TcpIncoming {
@@ -163,22 +163,16 @@ impl TcpIncoming {
         nodelay: bool,
         keepalive: Option<Duration>,
     ) -> Result<Self, crate::Error> {
-        let mut inner = AddrIncoming::bind(&addr)?;
+        let mut inner = TcpListener::bind(&addr)?;
         inner.set_nodelay(nodelay);
         inner.set_keepalive(keepalive);
         Ok(TcpIncoming { inner })
     }
+}
 
-    /// Creates a new `TcpIncoming` from an existing `tokio::net::TcpListener`.
-    pub fn from_listener(
-        listener: TcpListener,
-        nodelay: bool,
-        keepalive: Option<Duration>,
-    ) -> Result<Self, crate::Error> {
-        let mut inner = AddrIncoming::from_listener(listener)?;
-        inner.set_nodelay(nodelay);
-        inner.set_keepalive(keepalive);
-        Ok(TcpIncoming { inner })
+impl From<TcpListener> for TcpIncoming {
+    fn from(inner: TcpListener) -> Self {
+        TcpIncoming { inner }
     }
 }
 
