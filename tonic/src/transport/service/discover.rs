@@ -32,7 +32,7 @@ impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
             Poll::Pending | Poll::Ready(None) => Poll::Pending,
             Poll::Ready(Some(change)) => match change {
                 Change::Insert(k, endpoint) => {
-                    let mut http = hyper::client::connect::HttpConnector::new();
+                    let mut http = hyper_util::client::legacy::connect::HttpConnector::new();
                     http.set_nodelay(endpoint.tcp_nodelay);
                     http.set_keepalive(endpoint.tcp_keepalive);
                     http.set_connect_timeout(endpoint.connect_timeout);

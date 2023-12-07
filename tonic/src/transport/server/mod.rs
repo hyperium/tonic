@@ -63,7 +63,7 @@ use tower::{
     Service, ServiceBuilder,
 };
 
-type BoxHttpBody = http_body::combinators::UnsyncBoxBody<Bytes, crate::Error>;
+type BoxHttpBody = http_body_util::combinators::UnsyncBoxBody<Bytes, crate::Error>;
 type BoxService = tower::util::BoxService<Request<Body>, Response<BoxHttpBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
