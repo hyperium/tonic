@@ -1,26 +1,16 @@
 /// Represents a X509 certificate.
-#[cfg_attr(
-    not(feature = "tls"),
-    deprecated(
-        since = "0.10.3",
-        note = "`Certificate` is used only by deprecated API without tls feature.",
-    )
-)]
 #[derive(Debug, Clone)]
 pub struct Certificate {
     pub(crate) pem: Vec<u8>,
 }
 
 /// Represents a private key and X509 certificate.
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Debug, Clone)]
 pub struct Identity {
     pub(crate) cert: Certificate,
     pub(crate) key: Vec<u8>,
 }
 
-#[allow(deprecated)]
 impl Certificate {
     /// Parse a PEM encoded X509 Certificate.
     ///
@@ -46,14 +36,12 @@ impl Certificate {
     }
 }
 
-#[allow(deprecated)]
 impl AsRef<[u8]> for Certificate {
     fn as_ref(&self) -> &[u8] {
         self.pem.as_ref()
     }
 }
 
-#[cfg(feature = "tls")]
 impl Identity {
     /// Parse a PEM encoded certificate and private key.
     ///

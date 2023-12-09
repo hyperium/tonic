@@ -1,15 +1,14 @@
 use crate::metadata::{MetadataMap, MetadataValue};
 #[cfg(feature = "transport")]
 use crate::transport::server::TcpConnectInfo;
-#[cfg(all(feature = "transport", feature = "tls"))]
-use crate::transport::server::TlsConnectInfo;
-#[cfg(feature = "transport")]
-#[allow(deprecated)]
-use crate::transport::Certificate;
+#[cfg(feature = "tls")]
+use crate::transport::{server::TlsConnectInfo, Certificate};
 use crate::Extensions;
 #[cfg(feature = "transport")]
+use std::net::SocketAddr;
+#[cfg(feature = "tls")]
 use std::sync::Arc;
-use std::{net::SocketAddr, time::Duration};
+use std::time::Duration;
 use tokio_stream::Stream;
 
 /// A gRPC request and metadata from an RPC call.
@@ -210,39 +209,26 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
-    #[cfg_attr(
-        not(feature = "transport"),
-        deprecated(
-            since = "0.10.3",
-            note = "`remote_addr` only returns `None` without transport feature. This API will require transport feature.",
-        )
-    )]
+    #[cfg(feature = "transport")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        #[cfg(feature = "transport")]
+        #[cfg(feature = "tls")]
         {
-            #[cfg(feature = "tls")]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.local_addr())
-                    .or_else(|| {
-                        self.extensions()
-                            .get::<TlsConnectInfo<TcpConnectInfo>>()
-                            .and_then(|i| i.get_ref().local_addr())
-                    })
-            }
-
-            #[cfg(not(feature = "tls"))]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.local_addr())
-            }
+            self.extensions()
+                .get::<TcpConnectInfo>()
+                .and_then(|i| i.local_addr())
+                .or_else(|| {
+                    self.extensions()
+                        .get::<TlsConnectInfo<TcpConnectInfo>>()
+                        .and_then(|i| i.get_ref().local_addr())
+                })
         }
 
-        #[cfg(not(feature = "transport"))]
+        #[cfg(not(feature = "tls"))]
         {
-            None
+            self.extensions()
+                .get::<TcpConnectInfo>()
+                .and_then(|i| i.local_addr())
         }
     }
 
@@ -251,39 +237,26 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
-    #[cfg_attr(
-        not(feature = "transport"),
-        deprecated(
-            since = "0.10.3",
-            note = "`remote_addr` only returns `None` without transport feature. This API will require transport feature.",
-        )
-    )]
+    #[cfg(feature = "transport")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        #[cfg(feature = "transport")]
+        #[cfg(feature = "tls")]
         {
-            #[cfg(feature = "tls")]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.remote_addr())
-                    .or_else(|| {
-                        self.extensions()
-                            .get::<TlsConnectInfo<TcpConnectInfo>>()
-                            .and_then(|i| i.get_ref().remote_addr())
-                    })
-            }
-
-            #[cfg(not(feature = "tls"))]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.remote_addr())
-            }
+            self.extensions()
+                .get::<TcpConnectInfo>()
+                .and_then(|i| i.remote_addr())
+                .or_else(|| {
+                    self.extensions()
+                        .get::<TlsConnectInfo<TcpConnectInfo>>()
+                        .and_then(|i| i.get_ref().remote_addr())
+                })
         }
 
-        #[cfg(not(feature = "transport"))]
+        #[cfg(not(feature = "tls"))]
         {
-            None
+            self.extensions()
+                .get::<TcpConnectInfo>()
+                .and_then(|i| i.remote_addr())
         }
     }
 
@@ -293,28 +266,12 @@ impl<T> Request<T> {
     /// and is mostly used for mTLS. This currently only returns
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
-    #[cfg(feature = "transport")]
-    #[cfg_attr(
-        all(feature = "transport", not(feature = "tls")),
-        deprecated(
-            since = "0.10.3",
-            note = "`peer_certs` only returns `None` without tls feature. This API will require tls feature.",
-        )
-    )]
-    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
-    #[allow(deprecated)]
+    #[cfg(feature = "tls")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
     pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
-        #[cfg(feature = "tls")]
-        {
-            self.extensions()
-                .get::<TlsConnectInfo<TcpConnectInfo>>()
-                .and_then(|i| i.peer_certs())
-        }
-
-        #[cfg(not(feature = "tls"))]
-        {
-            None
-        }
+        self.extensions()
+            .get::<TlsConnectInfo<TcpConnectInfo>>()
+            .and_then(|i| i.peer_certs())
     }
 
     /// Set the max duration the request is allowed to take.
