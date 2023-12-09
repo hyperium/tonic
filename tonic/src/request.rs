@@ -212,24 +212,19 @@ impl<T> Request<T> {
     #[cfg(feature = "transport")]
     #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        #[cfg(feature = "tls")]
-        {
-            self.extensions()
-                .get::<TcpConnectInfo>()
-                .and_then(|i| i.local_addr())
-                .or_else(|| {
-                    self.extensions()
-                        .get::<TlsConnectInfo<TcpConnectInfo>>()
-                        .and_then(|i| i.get_ref().local_addr())
-                })
-        }
+        let addr = self
+            .extensions()
+            .get::<TcpConnectInfo>()
+            .and_then(|i| i.local_addr());
 
-        #[cfg(not(feature = "tls"))]
-        {
+        #[cfg(feature = "tls")]
+        let addr = addr.or_else(|| {
             self.extensions()
-                .get::<TcpConnectInfo>()
-                .and_then(|i| i.local_addr())
-        }
+                .get::<TlsConnectInfo<TcpConnectInfo>>()
+                .and_then(|i| i.get_ref().local_addr())
+        });
+
+        addr
     }
 
     /// Get the remote address of this connection.
@@ -240,24 +235,19 @@ impl<T> Request<T> {
     #[cfg(feature = "transport")]
     #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        #[cfg(feature = "tls")]
-        {
-            self.extensions()
-                .get::<TcpConnectInfo>()
-                .and_then(|i| i.remote_addr())
-                .or_else(|| {
-                    self.extensions()
-                        .get::<TlsConnectInfo<TcpConnectInfo>>()
-                        .and_then(|i| i.get_ref().remote_addr())
-                })
-        }
+        let addr = self
+            .extensions()
+            .get::<TcpConnectInfo>()
+            .and_then(|i| i.remote_addr());
 
-        #[cfg(not(feature = "tls"))]
-        {
+        #[cfg(feature = "tls")]
+        let addr = addr.or_else(|| {
             self.extensions()
-                .get::<TcpConnectInfo>()
-                .and_then(|i| i.remote_addr())
-        }
+                .get::<TlsConnectInfo<TcpConnectInfo>>()
+                .and_then(|i| i.get_ref().remote_addr())
+        });
+
+        addr
     }
 
     /// Get the peer certificates of the connected client.
