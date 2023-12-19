@@ -21,7 +21,6 @@ skip-tree = [
     { name = "hermit-abi" },
     { name = "syn" },
     { name = "bitflags" },
-    { name = "socket2" },
     { name = "indexmap" },
 ]
 
