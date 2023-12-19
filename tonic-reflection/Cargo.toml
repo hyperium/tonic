@@ -2,6 +2,7 @@
 authors = [
   "James Nugent <james@jen20.com>",
   "Samani G. Gikandi <samani@gojulas.com>",
+  "Ash Manning <10554686+A-Manning@users.noreply.github.com>"
 ]
 categories = ["network-programming", "asynchronous"]
 description = """
@@ -17,11 +18,19 @@ readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
 version = "0.10.2"
 
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+[features]
+server = ["dep:tokio", "dep:tokio-stream"]
+default = ["server"]
+
 [dependencies]
 prost = "0.12"
 prost-types = "0.12"
-tokio = {version = "1.0", features = ["sync", "rt"]}
-tokio-stream = {version = "0.1", features = ["net"]}
+tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
+tokio-stream = {version = "0.1", features = ["net"], optional = true }
 tonic = { version = "0.10", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
 
 [dev-dependencies]
