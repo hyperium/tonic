@@ -98,30 +98,18 @@ where
     type Data = B::Data;
     type Error = B::Error;
 
-    fn poll_data(
+    fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
-        match self.project().inner.as_pin_mut() {
-            Some(b) => b.poll_data(cx),
-            None => Poll::Ready(None),
-        }
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        Pin::new(&mut self.0).poll_frame(cx)
     }
 
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        match self.project().inner.as_pin_mut() {
-            Some(b) => b.poll_trailers(cx),
-            None => Poll::Ready(Ok(None)),
-        }
+    fn size_hint(&self) -> http_body::SizeHint {
+        self.0.size_hint()
     }
 
     fn is_end_stream(&self) -> bool {
-        match &self.inner {
-            Some(b) => b.is_end_stream(),
-            None => true,
-        }
+        self.body.is_end_stream()
     }
 }
