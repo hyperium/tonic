@@ -41,7 +41,7 @@ use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body::Body as _;
-use hyper::{server::accept, Body};
+use hyper::Body;
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -55,6 +55,7 @@ use std::{
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::TcpStream;
 use tokio_stream::Stream;
 use tower::{
     layer::util::{Identity, Stack},
@@ -525,7 +526,7 @@ impl<L> Server<L> {
         let svc = self.service_builder.service(svc);
 
         let tcp = incoming::tcp_incoming(incoming, self);
-        let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
+        let incoming = TcpStream::accept::from_stream::<_, _, crate::Error>(tcp);
 
         let svc = MakeSvc {
             inner: svc,
