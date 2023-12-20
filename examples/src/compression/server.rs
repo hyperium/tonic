@@ -1,3 +1,4 @@
+use tonic::transport::server::Routes;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -29,15 +30,16 @@ impl Greeter for MyGreeter {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
-    let greeter = MyGreeter::default();
 
-    println!("GreeterServer listening on {}", addr);
-
-    let service = GreeterServer::new(greeter)
+    let service = GreeterServer::new(MyGreeter::default())
         .send_compressed(CompressionEncoding::Gzip)
         .accept_compressed(CompressionEncoding::Gzip);
 
-    Server::builder().add_service(service).serve(addr).await?;
+    let routes = Routes::builder().add_service(service).build();
+
+    println!("GreeterServer listening on {}", addr);
+
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

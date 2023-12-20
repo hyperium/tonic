@@ -11,7 +11,8 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tonic::{transport::Server as TonicServer, Request, Response, Status};
+use tonic::transport::server::Routes;
+use tonic::{Request, Response, Status};
 use tower::Service;
 use warp::Filter;
 
@@ -75,10 +76,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let greeter = GreeterServer::new(MyGreeter::default());
             let echo = EchoServer::new(MyEcho::default());
 
-            let mut tonic = TonicServer::builder()
+            let mut tonic = Routes::builder()
                 .add_service(greeter)
                 .add_service(echo)
-                .into_service();
+                .build();
 
             std::future::ready(Ok::<_, Infallible>(tower::service_fn(
                 move |req: hyper::Request<hyper::Body>| match req.version() {

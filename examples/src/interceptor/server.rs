@@ -1,3 +1,4 @@
+use tonic::transport::server::Routes;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -35,10 +36,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // named interceptor that can be returned from functions or stored in
     // structs.
     let svc = GreeterServer::with_interceptor(greeter, intercept);
+    let routes = Routes::builder().add_service(svc).build();
 
     println!("GreeterServer listening on {}", addr);
 
-    Server::builder().add_service(svc).serve(addr).await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

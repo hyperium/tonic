@@ -7,7 +7,10 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::{server::Routes, Server},
+    Request, Response, Status,
+};
 use tower::{layer::Layer, BoxError, Service};
 
 // all we care about is that this compiles
@@ -22,10 +25,11 @@ async fn complex_tower_layers_work() {
     }
 
     let svc = test_server::TestServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     Server::builder()
         .layer(MyServiceLayer::new())
-        .add_service(svc)
+        .add_routes(routes)
         .serve("127.0.0.1:1322".parse().unwrap())
         .await
         .unwrap();

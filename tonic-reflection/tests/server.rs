@@ -2,7 +2,10 @@ use prost::Message;
 use std::net::SocketAddr;
 use tokio::sync::oneshot;
 use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
-use tonic::{transport::Server, Request};
+use tonic::{
+    transport::{server::Routes, Server},
+    Request,
+};
 use tonic_reflection::{
     pb::{
         server_reflection_client::ServerReflectionClient,
@@ -102,9 +105,10 @@ async fn make_test_reflection_request(request: ServerReflectionRequest) -> Messa
             .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
             .build()
             .unwrap();
+        let routes = Routes::builder().add_service(service).build();
 
         Server::builder()
-            .add_service(service)
+            .add_routes(routes)
             .serve_with_incoming_shutdown(TcpListenerStream::new(listener), async {
                 drop(shutdown_rx.await)
             })

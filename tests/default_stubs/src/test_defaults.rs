@@ -3,7 +3,7 @@
 use crate::*;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use tonic::transport::Server;
+use tonic::transport::{server::Routes, Server};
 
 #[cfg(test)]
 fn echo_requests_iter() -> impl Stream<Item = ()> {
@@ -82,7 +82,10 @@ async fn test_default_stubs() {
 #[cfg(test)]
 async fn run_services_in_background() -> (SocketAddr, SocketAddr) {
     let svc = test_server::TestServer::new(Svc {});
+    let routes = Routes::builder().add_service(svc).build();
+
     let svc_default_stubs = test_default_server::TestDefaultServer::new(Svc {});
+    let routes_default_stubs = Routes::builder().add_service(svc_default_stubs).build();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -92,7 +95,7 @@ async fn run_services_in_background() -> (SocketAddr, SocketAddr) {
 
     tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
             .await
             .unwrap();
@@ -100,7 +103,7 @@ async fn run_services_in_background() -> (SocketAddr, SocketAddr) {
 
     tokio::spawn(async move {
         Server::builder()
-            .add_service(svc_default_stubs)
+            .add_routes(routes_default_stubs)
             .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(
                 listener_default_stubs,
             ))

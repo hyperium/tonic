@@ -139,7 +139,7 @@ impl TcpIncoming {
     /// ```no_run
     /// # use tower_service::Service;
     /// # use http::{request::Request, response::Response};
-    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Body, Server, server::TcpIncoming}};
+    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Body, Server, server::{Routes, TcpIncoming}}};
     /// # use core::convert::Infallible;
     /// # use std::error::Error;
     /// # fn main() { }  // Cannot have type parameters, hence instead define:
@@ -157,8 +157,9 @@ impl TcpIncoming {
     ///       Err(_) => port += 1
     ///    }
     /// };
+    /// let routes = Routes::builder().add_service(some_service).build();
     /// Server::builder()
-    ///    .add_service(some_service)
+    ///    .add_routes(routes)
     ///    .serve_with_incoming(tinc);
     /// # Ok(())
     /// # }

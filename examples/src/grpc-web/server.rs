@@ -1,3 +1,4 @@
+use tonic::transport::server::Routes;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -30,16 +31,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt::init();
 
     let addr = "127.0.0.1:3000".parse().unwrap();
-
-    let greeter = MyGreeter::default();
-    let greeter = GreeterServer::new(greeter);
+    let routes = Routes::builder()
+        .add_service(GreeterServer::new(MyGreeter::default()))
+        .build();
 
     println!("GreeterServer listening on {}", addr);
 
     Server::builder()
         // GrpcWeb is over http1 so we must enable it.
         .accept_http1(true)
-        .add_service(tonic_web::enable(greeter))
+        .add_routes(routes)
         .serve(addr)
         .await?;
 

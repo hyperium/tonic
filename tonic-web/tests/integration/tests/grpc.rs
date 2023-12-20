@@ -6,7 +6,7 @@ use tokio::time::Duration;
 use tokio::{join, try_join};
 use tokio_stream::wrappers::TcpListenerStream;
 use tokio_stream::{self as stream, StreamExt};
-use tonic::transport::{Channel, Error, Server};
+use tonic::transport::{server::Routes, Channel, Error, Server};
 use tonic::{Response, Streaming};
 
 use integration::pb::{test_client::TestClient, test_server::TestServer, Input};
@@ -102,10 +102,11 @@ async fn bind() -> (TcpListener, String) {
 
 async fn grpc(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, String) {
     let (listener, url) = bind().await;
+    let routes = Routes::builder().add_service(TestServer::new(Svc)).build();
 
     let fut = Server::builder()
         .accept_http1(accept_h1)
-        .add_service(TestServer::new(Svc))
+        .add_routes(routes)
         .serve_with_incoming(TcpListenerStream::new(listener));
 
     (fut, url)
@@ -113,11 +114,12 @@ async fn grpc(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, Stri
 
 async fn grpc_web(accept_h1: bool) -> (impl Future<Output = Result<(), Error>>, String) {
     let (listener, url) = bind().await;
+    let routes = Routes::builder().add_service(TestServer::new(Svc)).build();
 
     let fut = Server::builder()
         .accept_http1(accept_h1)
         .layer(GrpcWebLayer::new())
-        .add_service(TestServer::new(Svc))
+        .add_routes(routes)
         .serve_with_incoming(TcpListenerStream::new(listener));
 
     (fut, url)

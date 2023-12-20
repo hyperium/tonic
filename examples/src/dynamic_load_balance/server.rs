@@ -4,7 +4,10 @@ pub mod pb {
 
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::{server::Routes, Server},
+    Request, Response, Status,
+};
 
 use pb::{EchoRequest, EchoResponse};
 
@@ -34,10 +37,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let addr = addr.parse()?;
         let tx = tx.clone();
 
-        let server = EchoServer { addr };
-        let serve = Server::builder()
-            .add_service(pb::echo_server::EchoServer::new(server))
-            .serve(addr);
+        let routes = Routes::builder()
+            .add_service(pb::echo_server::EchoServer::new(EchoServer { addr }))
+            .build();
+        let serve = Server::builder().add_routes(routes).serve(addr);
 
         tokio::spawn(async move {
             if let Err(e) = serve.await {

@@ -1,3 +1,4 @@
+use tonic::transport::server::Routes;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -53,15 +54,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(twiddle_service_status(health_reporter.clone()));
 
     let addr = "[::1]:50051".parse().unwrap();
-    let greeter = MyGreeter::default();
+
+    let routes = Routes::builder()
+        .add_service(health_service)
+        .add_service(GreeterServer::new(MyGreeter::default()))
+        .build();
 
     println!("HealthServer + GreeterServer listening on {}", addr);
 
-    Server::builder()
-        .add_service(health_service)
-        .add_service(GreeterServer::new(greeter))
-        .serve(addr)
-        .await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

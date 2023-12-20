@@ -7,7 +7,7 @@ use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::codegen::http::Request;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::Routes, Endpoint, Server},
     Response, Status,
 };
 use tower::Layer;
@@ -28,13 +28,14 @@ async fn writes_origin_header() {
     }
 
     let svc = test_server::TestServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     let (tx, rx) = oneshot::channel::<()>();
 
     let jh = tokio::spawn(async move {
         Server::builder()
             .layer(OriginLayer {})
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1442".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();

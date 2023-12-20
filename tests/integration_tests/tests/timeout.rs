@@ -1,7 +1,10 @@
 use integration_tests::pb::{test_client, test_server, Input, Output};
 use std::{net::SocketAddr, time::Duration};
 use tokio::net::TcpListener;
-use tonic::{transport::Server, Code, Request, Response, Status};
+use tonic::{
+    transport::{server::Routes, Server},
+    Code, Request, Response, Status,
+};
 
 #[tokio::test]
 async fn cancelation_on_timeout() {
@@ -75,6 +78,7 @@ async fn run_service_in_background(latency: Duration, server_timeout: Duration) 
     }
 
     let svc = test_server::TestServer::new(Svc { latency });
+    let routes = Routes::builder().add_service(svc).build();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -82,7 +86,7 @@ async fn run_service_in_background(latency: Duration, server_timeout: Duration) 
     tokio::spawn(async move {
         Server::builder()
             .timeout(server_timeout)
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
             .await
             .unwrap();

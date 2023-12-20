@@ -3,7 +3,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::Routes, Endpoint, Server},
     Code, Request, Response, Status,
 };
 
@@ -31,10 +31,11 @@ async fn connect_returns_err_via_call_after_connected() {
     let (tx, rx) = oneshot::channel();
     let sender = Arc::new(Mutex::new(Some(tx)));
     let svc = test_server::TestServer::new(Svc(sender));
+    let routes = Routes::builder().add_service(svc).build();
 
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
@@ -62,6 +63,7 @@ async fn connect_lazy_reconnects_after_first_failure() {
     let (tx, rx) = oneshot::channel();
     let sender = Arc::new(Mutex::new(Some(tx)));
     let svc = test_server::TestServer::new(Svc(sender));
+    let routes = Routes::builder().add_service(svc).build();
 
     let channel = Endpoint::from_static("http://127.0.0.1:1339").connect_lazy();
 
@@ -73,7 +75,7 @@ async fn connect_lazy_reconnects_after_first_failure() {
     // Start the server now, second call should succeed
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();

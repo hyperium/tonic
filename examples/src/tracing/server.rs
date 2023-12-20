@@ -1,4 +1,7 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::{server::Routes, Server},
+    Request, Response, Status,
+};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -42,9 +45,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     tracing::info!(message = "Starting server.", %addr);
 
+    let routes = Routes::builder()
+        .add_service(GreeterServer::new(greeter))
+        .build();
     Server::builder()
         .trace_fn(|_| tracing::info_span!("helloworld_server"))
-        .add_service(GreeterServer::new(greeter))
+        .add_routes(routes)
         .serve(addr)
         .await?;
 

@@ -16,57 +16,27 @@ use tower::ServiceExt;
 use tower_service::Service;
 
 /// A [`Service`] router.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Routes {
     router: axum::Router,
 }
 
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 /// Allows adding new services to routes by passing a mutable reference to this builder.
 pub struct RoutesBuilder {
-    routes: Option<Routes>,
+    router: axum::Router,
+}
+
+impl Default for RoutesBuilder {
+    fn default() -> Self {
+        let router = axum::Router::new().fallback(unimplemented);
+        Self { router }
+    }
 }
 
 impl RoutesBuilder {
     /// Add a new service.
-    pub fn add_service<S>(&mut self, svc: S) -> &mut Self
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let routes = self.routes.take().unwrap_or_default();
-        self.routes.replace(routes.add_service(svc));
-        self
-    }
-
-    /// Returns the routes with added services or empty [`Routes`] if no service was added
-    pub fn routes(self) -> Routes {
-        self.routes.unwrap_or_default()
-    }
-}
-impl Routes {
-    /// Create a new routes with `svc` already added to it.
-    pub fn new<S>(svc: S) -> Self
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
-    {
-        let router = axum::Router::new().fallback(unimplemented);
-        Self { router }.add_service(svc)
-    }
-
-    /// Add a new service.
-    pub fn add_service<S>(mut self, svc: S) -> Self
+    pub fn add_service<S>(self, svc: S) -> Self
     where
         S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
@@ -77,18 +47,25 @@ impl Routes {
         S::Error: Into<crate::Error> + Send,
     {
         let svc = svc.map_response(|res| res.map(axum::body::boxed));
-        self.router = self
+        let router = self
             .router
             .route_service(&format!("/{}/*rest", S::NAME), svc);
-        self
+        Self { router }
     }
 
-    pub(crate) fn prepare(self) -> Self {
-        Self {
-            // this makes axum perform update some internals of the router that improves perf
-            // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
-            router: self.router.with_state(()),
-        }
+    /// Returns the routes with added services or empty [`Routes`] if no service was added
+    pub fn build(self) -> Routes {
+        // this makes axum perform update some internals of the router that improves perf
+        // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
+        let router = self.router.with_state(());
+        Routes { router }
+    }
+}
+
+impl Routes {
+    /// Create a new routes with `svc` already added to it.
+    pub fn builder() -> RoutesBuilder {
+        RoutesBuilder::default()
     }
 
     /// Convert this `Routes` into an [`axum::Router`].
@@ -97,10 +74,13 @@ impl Routes {
     }
 }
 
-async fn unimplemented() -> impl axum::response::IntoResponse {
-    let status = http::StatusCode::OK;
-    let headers = [("grpc-status", "12"), ("content-type", "application/grpc")];
-    (status, headers)
+async fn unimplemented() -> Response<BoxBody> {
+    Response::builder()
+        .status(http::StatusCode::OK)
+        .header("grpc-status", "12")
+        .header("content-type", "application/grpc")
+        .body(crate::body::empty_body())
+        .unwrap()
 }
 
 impl Service<Request<Body>> for Routes {

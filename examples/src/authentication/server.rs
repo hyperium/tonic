@@ -3,7 +3,11 @@ pub mod pb {
 }
 
 use pb::{EchoRequest, EchoResponse};
-use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status};
+use tonic::{
+    metadata::MetadataValue,
+    transport::{server::Routes, Server},
+    Request, Response, Status,
+};
 
 type EchoResult<T> = Result<Response<T>, Status>;
 
@@ -24,8 +28,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server = EchoServer::default();
 
     let svc = pb::echo_server::EchoServer::with_interceptor(server, check_auth);
+    let routes = Routes::builder().add_service(svc).build();
 
-    Server::builder().add_service(svc).serve(addr).await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

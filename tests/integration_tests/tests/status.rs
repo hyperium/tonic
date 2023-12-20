@@ -9,7 +9,7 @@ use std::error::Error;
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::metadata::{MetadataMap, MetadataValue};
-use tonic::transport::Endpoint;
+use tonic::transport::{server::Routes, Endpoint};
 use tonic::{transport::Server, Code, Request, Response, Status};
 
 #[tokio::test]
@@ -28,12 +28,13 @@ async fn status_with_details() {
     }
 
     let svc = test_server::TestServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     let (tx, rx) = oneshot::channel::<()>();
 
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1337".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
@@ -82,12 +83,13 @@ async fn status_with_metadata() {
     }
 
     let svc = test_server::TestServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     let (tx, rx) = oneshot::channel::<()>();
 
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
@@ -151,10 +153,11 @@ async fn status_from_server_stream() {
     }
 
     let svc = test_stream_server::TestStreamServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve("127.0.0.1:1339".parse().unwrap())
             .await
             .unwrap();

@@ -5,6 +5,7 @@ use std::time::Instant;
 
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
+use tonic::transport::server::Routes;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
@@ -142,8 +143,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     };
 
     let svc = RouteGuideServer::new(route_guide);
+    let routes = Routes::builder().add_service(svc).build();
 
-    Server::builder().add_service(svc).serve(addr).await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

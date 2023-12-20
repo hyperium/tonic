@@ -35,7 +35,6 @@ use crate::transport::Error;
 
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
-use crate::body::BoxBody;
 use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
@@ -43,7 +42,6 @@ use http_body::Body as _;
 use hyper::{server::accept, Body};
 use pin_project::pin_project;
 use std::{
-    convert::Infallible,
     fmt,
     future::{self, Future},
     marker::PhantomData,
@@ -353,45 +351,6 @@ impl<L> Server<L> {
         }
     }
 
-    /// Create a router with the `S` typed service as the first service.
-    ///
-    /// This will clone the `Server` builder and create a router that will
-    /// route around different services.
-    pub fn add_service<S>(&mut self, svc: S) -> Router<L>
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        L: Clone,
-    {
-        Router::new(self.clone(), Routes::new(svc))
-    }
-
-    /// Create a router with the optional `S` typed service as the first service.
-    ///
-    /// This will clone the `Server` builder and create a router that will
-    /// route around different services.
-    ///
-    /// # Note
-    /// Even when the argument given is `None` this will capture *all* requests to this service name.
-    /// As a result, one cannot use this to toggle between two identically named implementations.
-    pub fn add_optional_service<S>(&mut self, svc: Option<S>) -> Router<L>
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-        L: Clone,
-    {
-        let routes = svc.map(Routes::new).unwrap_or_default();
-        Router::new(self.clone(), routes)
-    }
-
     /// Create a router with given [`Routes`].
     ///
     /// This will clone the `Server` builder and create a router that will
@@ -566,46 +525,6 @@ impl<L> Router<L> {
 }
 
 impl<L> Router<L> {
-    /// Add a new service to this router.
-    pub fn add_service<S>(mut self, svc: S) -> Self
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-    {
-        self.routes = self.routes.add_service(svc);
-        self
-    }
-
-    /// Add a new optional service to this router.
-    ///
-    /// # Note
-    /// Even when the argument given is `None` this will capture *all* requests to this service name.
-    /// As a result, one cannot use this to toggle between two identically named implementations.
-    #[allow(clippy::type_complexity)]
-    pub fn add_optional_service<S>(mut self, svc: Option<S>) -> Self
-    where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-    {
-        if let Some(svc) = svc {
-            self.routes = self.routes.add_service(svc);
-        }
-        self
-    }
-
-    /// Convert this tonic `Router` into an axum `Router` consuming the tonic one.
-    pub fn into_router(self) -> axum::Router {
-        self.routes.into_router()
-    }
-
     /// Consume this [`Server`] creating a future that will execute the server
     /// on [tokio]'s default executor.
     ///
@@ -624,7 +543,7 @@ impl<L> Router<L> {
             .map_err(super::Error::from_source)?;
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
-                self.routes.prepare(),
+                self.routes,
                 incoming,
                 None,
             )
@@ -653,7 +572,7 @@ impl<L> Router<L> {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
         self.server
-            .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
+            .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
     }
 
@@ -681,7 +600,7 @@ impl<L> Router<L> {
     {
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
-                self.routes.prepare(),
+                self.routes,
                 incoming,
                 None,
             )
@@ -715,7 +634,7 @@ impl<L> Router<L> {
         ResBody::Error: Into<crate::Error>,
     {
         self.server
-            .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
+            .serve_with_shutdown(self.routes, incoming, Some(signal))
             .await
     }
 
@@ -729,7 +648,7 @@ impl<L> Router<L> {
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
-        self.server.service_builder.service(self.routes.prepare())
+        self.server.service_builder.service(self.routes)
     }
 }
 

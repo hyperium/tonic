@@ -43,17 +43,21 @@ impl Greeter for MyGreeter {
 #[cfg(unix)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    use tonic::transport::server::Routes;
+
     let path = "/tmp/tonic/helloworld";
 
     std::fs::create_dir_all(Path::new(path).parent().unwrap())?;
 
-    let greeter = MyGreeter::default();
+    let routes = Routes::builder()
+        .add_service(GreeterServer::new(MyGreeter::default()))
+        .build();
 
     let uds = UnixListener::bind(path)?;
     let uds_stream = UnixListenerStream::new(uds);
 
     Server::builder()
-        .add_service(GreeterServer::new(greeter))
+        .add_routes(routes)
         .serve_with_incoming(uds_stream)
         .await?;
 

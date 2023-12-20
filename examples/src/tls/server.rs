@@ -5,7 +5,7 @@ pub mod pb {
 use pb::{EchoRequest, EchoResponse};
 use tonic::{
     transport::{
-        server::{TcpConnectInfo, TlsConnectInfo},
+        server::{Routes, TcpConnectInfo, TlsConnectInfo},
         Identity, Server, ServerTlsConfig,
     },
     Request, Response, Status,
@@ -43,11 +43,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let identity = Identity::from_pem(cert, key);
 
     let addr = "[::1]:50051".parse().unwrap();
-    let server = EchoServer::default();
+    let routes = Routes::builder()
+        .add_service(pb::echo_server::EchoServer::new(EchoServer::default()))
+        .build();
 
     Server::builder()
         .tls_config(ServerTlsConfig::new().identity(identity))?
-        .add_service(pb::echo_server::EchoServer::new(server))
+        .add_routes(routes)
         .serve(addr)
         .await?;
 
