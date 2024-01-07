@@ -1,25 +1,28 @@
-use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
-use crate::{
-    body::BoxBody,
-    transport::{BoxFuture, Endpoint},
-};
-use http::Uri;
-use hyper::client::conn::Builder;
-use hyper::client::connect::Connection as HyperConnection;
-use hyper::client::service::Connect as HyperConnect;
 use std::{
     fmt,
     task::{Context, Poll},
 };
+
+use http::Uri;
+use hyper::client::conn::Builder;
+use hyper::client::connect::Connection as HyperConnection;
+use hyper::client::service::Connect as HyperConnect;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tower::load::Load;
 use tower::{
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
-    util::BoxService,
-    ServiceBuilder, ServiceExt,
+    ServiceBuilder,
+    ServiceExt, util::BoxService,
 };
+use tower::load::Load;
 use tower_service::Service;
+
+use crate::{
+    body::BoxBody,
+    transport::{BoxFuture, Endpoint},
+};
+
+use super::{AddOrigin, grpc_timeout::GrpcTimeout, reconnect::Reconnect, UserAgent};
 
 pub(crate) type Request = http::Request<BoxBody>;
 pub(crate) type Response = http::Response<hyper::Body>;
@@ -40,20 +43,32 @@ impl Connection {
             .http2_initial_stream_window_size(endpoint.init_stream_window_size)
             .http2_initial_connection_window_size(endpoint.init_connection_window_size)
             .http2_only(true)
-            .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
             .executor(endpoint.executor.clone())
             .clone();
 
-        if let Some(val) = endpoint.http2_keep_alive_timeout {
-            settings.http2_keep_alive_timeout(val);
-        }
-
-        if let Some(val) = endpoint.http2_keep_alive_while_idle {
-            settings.http2_keep_alive_while_idle(val);
-        }
-
         if let Some(val) = endpoint.http2_adaptive_window {
             settings.http2_adaptive_window(val);
+        }
+
+        #[cfg(feature = "transport")]
+        {
+            settings
+                .http2_keep_alive_interval(endpoint.http2_keep_alive_interval);
+
+            if let Some(val) = endpoint.http2_keep_alive_timeout {
+                settings.http2_keep_alive_timeout(val);
+            }
+
+            if let Some(val) = endpoint.http2_keep_alive_while_idle {
+                settings.http2_keep_alive_while_idle(val);
+            }
+        }
+
+        #[cfg(target_arch = "wasm32")]
+        {
+            settings.executor(wasm::Executor)
+            // reset streams require `Instant::now` which is not available on wasm
+                .http2_max_concurrent_reset_streams(0);
         }
 
         let stack = ServiceBuilder::new()
@@ -124,5 +139,21 @@ impl Load for Connection {
 impl fmt::Debug for Connection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Connection").finish()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+mod wasm {
+    use std::future::Future;
+    use std::pin::Pin;
+
+    type BoxSendFuture = Pin<Box<dyn Future<Output = ()> + Send>>;
+
+    pub(crate) struct Executor;
+
+    impl hyper::rt::Executor<BoxSendFuture> for Executor {
+        fn execute(&self, fut: BoxSendFuture) {
+            wasm_bindgen_futures::spawn_local(fut)
+        }
     }
 }

@@ -3,9 +3,11 @@ use std::{future::Future, sync::Arc};
 
 pub(crate) use hyper::rt::Executor;
 
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Copy, Clone)]
 struct TokioExec;
 
+#[cfg(not(target_arch = "wasm32"))]
 impl<F> Executor<F> for TokioExec
 where
     F: Future + Send + 'static,
@@ -13,6 +15,21 @@ where
 {
     fn execute(&self, fut: F) {
         tokio::spawn(fut);
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+#[derive(Copy, Clone)]
+struct WasmBindgenExec;
+
+#[cfg(target_arch = "wasm32")]
+impl<F> Executor<F> for WasmBindgenExec
+where
+    F: Future + 'static,
+    F::Output: 'static,
+{
+    fn execute(&self, fut: F) {
+        wasm_bindgen_futures::spawn_local(async move {fut.await;});
     }
 }
 
@@ -31,8 +48,11 @@ impl SharedExec {
         }
     }
 
-    pub(crate) fn tokio() -> Self {
-        Self::new(TokioExec)
+    pub(crate) fn default_exec() -> Self {
+        #[cfg(not(target_arch = "wasm32"))]
+        return Self::new(TokioExec);
+        #[cfg(target_arch = "wasm32")]
+        Self::new(WasmBindgenExec)
     }
 }
 

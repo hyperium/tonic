@@ -9,7 +9,9 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, DynamicServiceStream, SharedExec};
+use super::service::{Connection};
+#[cfg(feature = "transport")]
+use super::service::{DynamicServiceStream, SharedExec};
 use crate::body::BoxBody;
 use crate::transport::Executor;
 use bytes::Bytes;
@@ -109,6 +111,7 @@ impl Channel {
     ///
     /// This creates a [`Channel`] that will load balance across all the
     /// provided endpoints.
+    #[cfg(feature = "transport")]
     pub fn balance_list(list: impl Iterator<Item = Endpoint>) -> Self {
         let (channel, tx) = Self::balance_channel(DEFAULT_BUFFER_SIZE);
         list.for_each(|endpoint| {
@@ -122,11 +125,12 @@ impl Channel {
     /// Balance a list of [`Endpoint`]'s.
     ///
     /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
+    #[cfg(feature = "transport")]
     pub fn balance_channel<K>(capacity: usize) -> (Self, Sender<Change<K, Endpoint>>)
     where
         K: Hash + Eq + Send + Clone + 'static,
     {
-        Self::balance_channel_with_executor(capacity, SharedExec::tokio())
+        Self::balance_channel_with_executor(capacity, SharedExec::default_exec())
     }
 
     /// Balance a list of [`Endpoint`]'s.
@@ -134,6 +138,7 @@ impl Channel {
     /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
     ///
     /// The [`Channel`] will use the given executor to spawn async tasks.
+    #[cfg(feature = "transport")]
     pub fn balance_channel_with_executor<K, E>(
         capacity: usize,
         executor: E,

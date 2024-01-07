@@ -312,6 +312,7 @@ impl Endpoint {
     }
 
     /// Create a channel from this config.
+    #[cfg(feature = "transport")]
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
         http.enforce_http(false);
@@ -333,6 +334,7 @@ impl Endpoint {
     ///
     /// The channel returned by this method does not attempt to connect to the endpoint until first
     /// use.
+    #[cfg(feature = "transport")]
     pub fn connect_lazy(&self) -> Channel {
         let mut http = hyper::client::connect::HttpConnector::new();
         http.enforce_http(false);
@@ -428,7 +430,7 @@ impl From<Uri> for Endpoint {
             http2_keep_alive_while_idle: None,
             connect_timeout: None,
             http2_adaptive_window: None,
-            executor: SharedExec::tokio(),
+            executor: SharedExec::default_exec(),
         }
     }
 }
