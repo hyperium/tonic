@@ -19,6 +19,7 @@ pub(crate) use self::connector::Connector;
 #[cfg(feature = "transport")]
 pub(crate) use self::discover::DynamicServiceStream;
 pub(crate) use self::executor::SharedExec;
+#[cfg(feature = "transport")]
 pub(crate) use self::grpc_timeout::GrpcTimeout;
 #[cfg(feature = "transport")]
 pub(crate) use self::io::ServerIo;

@@ -39,7 +39,6 @@ transport = [
   "dep:h2",
   "dep:hyper",
   "hyper/full",
-  "dep:tokio",
   "tokio/net",
   "tokio/time",
   "dep:tower",
@@ -47,10 +46,10 @@ transport = [
   "dep:hyper-timeout",
 ]
 client = [
+  "channel",
   "dep:h2",
   "hyper/client",
   "hyper/http2",
-  "dep:tokio",
   "dep:tower",
   "dep:hyper-timeout",
 ]
@@ -66,7 +65,7 @@ bytes = "1.0"
 http = "0.2"
 tracing = "0.1"
 
-tokio = { version = "1.0.1", default-features = false, optional = true }
+tokio = { version = "1.0.1" }
 http-body = "0.4.4"
 percent-encoding = "2.1"
 pin-project = "1.0.11"

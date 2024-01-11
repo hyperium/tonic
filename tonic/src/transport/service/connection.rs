@@ -8,13 +8,13 @@ use hyper::client::conn::Builder;
 use hyper::client::connect::Connection as HyperConnection;
 use hyper::client::service::Connect as HyperConnect;
 use tokio::io::{AsyncRead, AsyncWrite};
+use tower::load::Load;
 use tower::{
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
-    ServiceBuilder,
-    ServiceExt, util::BoxService,
+    util::BoxService,
+    ServiceBuilder, ServiceExt,
 };
-use tower::load::Load;
 use tower_service::Service;
 
 use crate::{
@@ -22,7 +22,7 @@ use crate::{
     transport::{BoxFuture, Endpoint},
 };
 
-use super::{AddOrigin, grpc_timeout::GrpcTimeout, reconnect::Reconnect, UserAgent};
+use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
 
 pub(crate) type Request = http::Request<BoxBody>;
 pub(crate) type Response = http::Response<hyper::Body>;
@@ -52,8 +52,7 @@ impl Connection {
 
         #[cfg(feature = "transport")]
         {
-            settings
-                .http2_keep_alive_interval(endpoint.http2_keep_alive_interval);
+            settings.http2_keep_alive_interval(endpoint.http2_keep_alive_interval);
 
             if let Some(val) = endpoint.http2_keep_alive_timeout {
                 settings.http2_keep_alive_timeout(val);
@@ -66,8 +65,9 @@ impl Connection {
 
         #[cfg(target_arch = "wasm32")]
         {
-            settings.executor(wasm::Executor)
-            // reset streams require `Instant::now` which is not available on wasm
+            settings
+                .executor(wasm::Executor)
+                // reset streams require `Instant::now` which is not available on wasm
                 .http2_max_concurrent_reset_streams(0);
         }
 

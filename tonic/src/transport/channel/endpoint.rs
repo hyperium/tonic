@@ -27,10 +27,15 @@ pub struct Endpoint {
     pub(crate) buffer_size: Option<usize>,
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
+    #[cfg(feature = "transport")]
     pub(crate) tcp_keepalive: Option<Duration>,
+    #[cfg(feature = "transport")]
     pub(crate) tcp_nodelay: bool,
+    #[cfg(feature = "transport")]
     pub(crate) http2_keep_alive_interval: Option<Duration>,
+    #[cfg(feature = "transport")]
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
+    #[cfg(feature = "transport")]
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
@@ -167,6 +172,7 @@ impl Endpoint {
     ///
     /// Default is no keepalive (`None`)
     ///
+    #[cfg(feature = "transport")]
     pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
         Endpoint {
             tcp_keepalive,
@@ -251,6 +257,7 @@ impl Endpoint {
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    #[cfg(feature = "transport")]
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Endpoint {
             tcp_nodelay: enabled,
@@ -259,6 +266,7 @@ impl Endpoint {
     }
 
     /// Set http2 KEEP_ALIVE_INTERVAL. Uses `hyper`'s default otherwise.
+    #[cfg(feature = "transport")]
     pub fn http2_keep_alive_interval(self, interval: Duration) -> Self {
         Endpoint {
             http2_keep_alive_interval: Some(interval),
@@ -267,6 +275,7 @@ impl Endpoint {
     }
 
     /// Set http2 KEEP_ALIVE_TIMEOUT. Uses `hyper`'s default otherwise.
+    #[cfg(feature = "transport")]
     pub fn keep_alive_timeout(self, duration: Duration) -> Self {
         Endpoint {
             http2_keep_alive_timeout: Some(duration),
@@ -275,6 +284,7 @@ impl Endpoint {
     }
 
     /// Set http2 KEEP_ALIVE_WHILE_IDLE. Uses `hyper`'s default otherwise.
+    #[cfg(feature = "transport")]
     pub fn keep_alive_while_idle(self, enabled: bool) -> Self {
         Endpoint {
             http2_keep_alive_while_idle: Some(enabled),
@@ -423,10 +433,15 @@ impl From<Uri> for Endpoint {
             buffer_size: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
+            #[cfg(feature = "transport")]
             tcp_keepalive: None,
+            #[cfg(feature = "transport")]
             tcp_nodelay: true,
+            #[cfg(feature = "transport")]
             http2_keep_alive_interval: None,
+            #[cfg(feature = "transport")]
             http2_keep_alive_timeout: None,
+            #[cfg(feature = "transport")]
             http2_keep_alive_while_idle: None,
             connect_timeout: None,
             http2_adaptive_window: None,

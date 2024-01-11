@@ -29,7 +29,9 @@ where
     F::Output: 'static,
 {
     fn execute(&self, fut: F) {
-        wasm_bindgen_futures::spawn_local(async move {fut.await;});
+        wasm_bindgen_futures::spawn_local(async move {
+            fut.await;
+        });
     }
 }
 
