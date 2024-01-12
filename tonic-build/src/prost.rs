@@ -1,4 +1,4 @@
-use crate::code_gen::CodeGenBuilder;
+use crate::{code_gen::CodeGenBuilder, compile_settings, CompileSettings};
 
 use super::Attributes;
 use proc_macro2::TokenStream;
@@ -41,6 +41,7 @@ pub fn configure() -> Builder {
         disable_comments: HashSet::default(),
         use_arc_self: false,
         generate_default_stubs: false,
+        compile_settings: CompileSettings::default(),
     }
 }
 
@@ -60,8 +61,6 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
 
     Ok(())
 }
-
-const PROST_CODEC_PATH: &str = "tonic::codec::ProstCodec";
 
 /// Non-path Rust types allowed for request/response types.
 const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
@@ -102,8 +101,17 @@ impl crate::Method for Method {
         &self.proto_name
     }
 
-    fn codec_path(&self) -> &str {
-        PROST_CODEC_PATH
+    /// For code generation, you can override the codec.
+    ///
+    /// You should set the codec path to an import path that has a free
+    /// function like `fn default()`. The default value is tonic::codec::ProstCodec,
+    /// which returns a default-configured ProstCodec. You may wish to configure
+    /// the codec, e.g., with a buffer configuration.
+    ///
+    /// Though ProstCodec implements Default, it is currently only required that
+    /// the function match the Default trait's function spec.
+    fn codec_path(&self) -> String {
+        compile_settings::load().codec_path
     }
 
     fn client_streaming(&self) -> bool {
@@ -252,6 +260,7 @@ pub struct Builder {
     pub(crate) disable_comments: HashSet<String>,
     pub(crate) use_arc_self: bool,
     pub(crate) generate_default_stubs: bool,
+    pub(crate) compile_settings: CompileSettings,
 
     out_dir: Option<PathBuf>,
 }
@@ -524,6 +533,16 @@ impl Builder {
         self
     }
 
+    /// Override the default codec.
+    ///
+    /// If set, writes `{codec_path}::default()` in generated code wherever a codec is created.
+    ///
+    /// This defaults to `"tonic::codec::ProstCodec"`
+    pub fn codec_path(mut self, codec_path: impl Into<String>) -> Self {
+        self.compile_settings.codec_path = codec_path.into();
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile(
         self,
@@ -597,6 +616,8 @@ impl Builder {
                 println!("cargo:rerun-if-changed={}", path.as_ref().display())
             }
         }
+
+        let _compile_settings_guard = compile_settings::set_context(self.compile_settings.clone());
 
         config.service_generator(self.service_generator());
 

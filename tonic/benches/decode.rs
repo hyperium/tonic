@@ -105,6 +105,10 @@ impl Decoder for MockDecoder {
         buf.advance(self.message_size);
         Ok(Some(out))
     }
+
+    fn buffer_settings(&self) -> tonic::codec::BufferSettings {
+        Default::default()
+    }
 }
 
 fn make_payload(message_length: usize, message_count: usize) -> Bytes {

@@ -276,6 +276,14 @@ required-features = ["cancellation"]
 name = "cancellation-client"
 path = "src/cancellation/client.rs"
 
+[[bin]]
+name = "codec-buffers-server"
+path = "src/codec_buffers/server.rs"
+
+[[bin]]
+name = "codec-buffers-client"
+path = "src/codec_buffers/client.rs"
+
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]

@@ -21,6 +21,41 @@ pub use self::decode::Streaming;
 #[cfg(feature = "prost")]
 #[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
+#[cfg(feature = "prost")]
+#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
+pub use self::prost::ProstDecoder;
+#[cfg(feature = "prost")]
+#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
+pub use self::prost::ProstEncoder;
+
+/// Unless overridden, this is the buffer size used for encoding requests.
+/// This is spent per-rpc, so you may wish to adjust it. The default is
+/// pretty good for most uses, but if you have a ton of concurrent rpcs
+/// you may find it too expensive.
+const DEFAULT_CODEC_BUFFER_SIZE: usize = 8 * 1024;
+const DEFAULT_YIELD_THRESHOLD: usize = 32 * 1024;
+
+/// Settings for how tonic allocates and grows buffers.
+#[derive(Clone, Copy, Debug)]
+pub struct BufferSettings {
+    /// Initial buffer size, and the growth unit for cases where the size
+    /// is larger than the buffer's current capacity. Defaults to 8 KiB.
+    ///
+    /// Notably, this is eagerly allocated per streaming rpc.
+    pub buffer_size: usize,
+
+    /// Soft maximum size for returning a stream's ready contents in a batch,
+    /// rather than one-by-one. Defaults to 32 KiB.
+    pub yield_threshold: usize,
+}
+impl Default for BufferSettings {
+    fn default() -> Self {
+        Self {
+            buffer_size: DEFAULT_CODEC_BUFFER_SIZE,
+            yield_threshold: DEFAULT_YIELD_THRESHOLD,
+        }
+    }
+}
 
 // 5 bytes
 const HEADER_SIZE: usize =
@@ -63,6 +98,9 @@ pub trait Encoder {
 
     /// Encodes a message into the provided buffer.
     fn encode(&mut self, item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error>;
+
+    /// Controls how tonic creates and expands encode buffers.
+    fn buffer_settings(&self) -> BufferSettings;
 }
 
 /// Decodes gRPC message types
@@ -79,4 +117,7 @@ pub trait Decoder {
     /// is no need to get the length from the bytes, gRPC framing is handled
     /// for you.
     fn decode(&mut self, src: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error>;
+
+    /// Controls how tonic creates and expands decode buffers.
+    fn buffer_settings(&self) -> BufferSettings;
 }

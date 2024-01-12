@@ -97,6 +97,9 @@ pub mod server;
 mod code_gen;
 pub use code_gen::CodeGenBuilder;
 
+mod compile_settings;
+pub(crate) use compile_settings::CompileSettings;
+
 /// Service generation trait.
 ///
 /// This trait can be implemented and consumed
@@ -137,7 +140,7 @@ pub trait Method {
     /// Identifier used to generate type name.
     fn identifier(&self) -> &str;
     /// Path to the codec.
-    fn codec_path(&self) -> &str;
+    fn codec_path(&self) -> String;
     /// Method is streamed by client.
     fn client_streaming(&self) -> bool;
     /// Method is streamed by server.

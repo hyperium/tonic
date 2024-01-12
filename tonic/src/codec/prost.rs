@@ -1,4 +1,4 @@
-use super::{Codec, DecodeBuf, Decoder, Encoder};
+use super::{BufferSettings, Codec, DecodeBuf, Decoder, Encoder};
 use crate::codec::EncodeBuf;
 use crate::{Code, Status};
 use prost::Message;
@@ -8,11 +8,23 @@ use std::marker::PhantomData;
 #[derive(Debug, Clone)]
 pub struct ProstCodec<T, U> {
     _pd: PhantomData<(T, U)>,
+    buffer_settings: BufferSettings,
+}
+
+impl<T, U> ProstCodec<T, U> {
+    /// Configure a ProstCodec with encoder/decoder buffer settings. This is used to control
+    /// how memory is allocated and grows per RPC.
+    pub fn new(buffer_settings: BufferSettings) -> Self {
+        Self {
+            _pd: PhantomData,
+            buffer_settings,
+        }
+    }
 }
 
 impl<T, U> Default for ProstCodec<T, U> {
     fn default() -> Self {
-        Self { _pd: PhantomData }
+        Self::new(Default::default())
     }
 }
 
@@ -28,17 +40,36 @@ where
     type Decoder = ProstDecoder<U>;
 
     fn encoder(&mut self) -> Self::Encoder {
-        ProstEncoder(PhantomData)
+        ProstEncoder {
+            _pd: PhantomData,
+            buffer_settings: self.buffer_settings,
+        }
     }
 
     fn decoder(&mut self) -> Self::Decoder {
-        ProstDecoder(PhantomData)
+        ProstDecoder {
+            _pd: PhantomData,
+            buffer_settings: self.buffer_settings,
+        }
     }
 }
 
 /// A [`Encoder`] that knows how to encode `T`.
 #[derive(Debug, Clone, Default)]
-pub struct ProstEncoder<T>(PhantomData<T>);
+pub struct ProstEncoder<T> {
+    _pd: PhantomData<T>,
+    buffer_settings: BufferSettings,
+}
+
+impl<T> ProstEncoder<T> {
+    /// Get a new encoder with explicit buffer settings
+    pub fn new(buffer_settings: BufferSettings) -> Self {
+        Self {
+            _pd: PhantomData,
+            buffer_settings,
+        }
+    }
+}
 
 impl<T: Message> Encoder for ProstEncoder<T> {
     type Item = T;
@@ -50,11 +81,28 @@ impl<T: Message> Encoder for ProstEncoder<T> {
 
         Ok(())
     }
+
+    fn buffer_settings(&self) -> BufferSettings {
+        self.buffer_settings
+    }
 }
 
 /// A [`Decoder`] that knows how to decode `U`.
 #[derive(Debug, Clone, Default)]
-pub struct ProstDecoder<U>(PhantomData<U>);
+pub struct ProstDecoder<U> {
+    _pd: PhantomData<U>,
+    buffer_settings: BufferSettings,
+}
+
+impl<U> ProstDecoder<U> {
+    /// Get a new decoder with explicit buffer settings
+    pub fn new(buffer_settings: BufferSettings) -> Self {
+        Self {
+            _pd: PhantomData,
+            buffer_settings,
+        }
+    }
+}
 
 impl<U: Message + Default> Decoder for ProstDecoder<U> {
     type Item = U;
@@ -66,6 +114,10 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
             .map_err(from_decode_error)?;
 
         Ok(item)
+    }
+
+    fn buffer_settings(&self) -> BufferSettings {
+        self.buffer_settings
     }
 }
 
@@ -244,6 +296,10 @@ mod tests {
             buf.put(&item[..]);
             Ok(())
         }
+
+        fn buffer_settings(&self) -> crate::codec::BufferSettings {
+            Default::default()
+        }
     }
 
     #[derive(Debug, Clone, Default)]
@@ -257,6 +313,10 @@ mod tests {
             let out = Vec::from(buf.chunk());
             buf.advance(LEN);
             Ok(Some(out))
+        }
+
+        fn buffer_settings(&self) -> crate::codec::BufferSettings {
+            Default::default()
         }
     }
 

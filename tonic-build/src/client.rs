@@ -221,7 +221,7 @@ fn generate_unary<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(&method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
@@ -252,7 +252,7 @@ fn generate_server_streaming<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(&method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
@@ -283,7 +283,7 @@ fn generate_client_streaming<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(&method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
@@ -314,7 +314,7 @@ fn generate_streaming<T: Service>(
     proto_path: &str,
     compile_well_known_types: bool,
 ) -> TokenStream {
-    let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
+    let codec_name = syn::parse_str::<syn::Path>(&method.codec_path()).unwrap();
     let ident = format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
