@@ -1,14 +1,14 @@
 /// A gRPC Method info extension.
 #[derive(Debug, Clone)]
-pub struct GrpcMethod {
-    service: &'static str,
-    method: &'static str,
+pub struct GrpcMethod<'a> {
+    service: &'a str,
+    method: &'a str,
 }
 
-impl GrpcMethod {
+impl<'a> GrpcMethod<'a> {
     /// Create a new `GrpcMethod` extension.
     #[doc(hidden)]
-    pub fn new(service: &'static str, method: &'static str) -> Self {
+    pub fn new(service: &'a str, method: &'a str) -> Self {
         Self { service, method }
     }
 
