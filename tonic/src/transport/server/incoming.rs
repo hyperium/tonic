@@ -1,7 +1,7 @@
 use super::{Connected, Server};
 use crate::transport::service::ServerIo;
 use std::{
-    net::SocketAddr,
+    net::{SocketAddr, TcpListener as StdTcpListener},
     pin::Pin,
     task::{Context, Poll},
     time::Duration,
@@ -10,6 +10,7 @@ use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
 };
+use tokio_stream::wrappers::TcpListenerStream;
 use tokio_stream::{Stream, StreamExt};
 
 #[cfg(not(feature = "tls"))]
@@ -123,7 +124,9 @@ enum SelectOutput<A> {
 /// of `AsyncRead + AsyncWrite` that communicate with clients that connect to a socket address.
 #[derive(Debug)]
 pub struct TcpIncoming {
-    inner: TcpListener,
+    inner: TcpListenerStream,
+    tcp_keepalive_timeout: Option<Duration>,
+    tcp_nodelay: bool,
 }
 
 impl TcpIncoming {
@@ -160,19 +163,29 @@ impl TcpIncoming {
     /// # }
     pub fn new(
         addr: SocketAddr,
-        nodelay: bool,
-        keepalive: Option<Duration>,
+        tcp_nodelay: bool,
+        tcp_keepalive_timeout: Option<Duration>,
     ) -> Result<Self, crate::Error> {
-        let mut inner = TcpListener::bind(&addr)?;
-        inner.set_nodelay(nodelay);
-        inner.set_keepalive(keepalive);
-        Ok(TcpIncoming { inner })
+        let std_listener = StdTcpListener::bind(addr)?;
+        let inner = TcpListenerStream::new(TcpListener::from_std(std_listener)?);
+        Ok(Self {
+            inner,
+            tcp_nodelay,
+            tcp_keepalive_timeout,
+        })
     }
-}
 
-impl From<TcpListener> for TcpIncoming {
-    fn from(inner: TcpListener) -> Self {
-        TcpIncoming { inner }
+    /// Creates a new `TcpIncoming` from an existing `tokio::net::TcpListener`.
+    pub fn from_listener(
+        listener: TcpListener,
+        tcp_nodelay: bool,
+        tcp_keepalive_timeout: Option<Duration>,
+    ) -> Result<Self, crate::Error> {
+        Ok(Self {
+            inner: TcpListenerStream::new(listener),
+            tcp_nodelay,
+            tcp_keepalive_timeout,
+        })
     }
 }
 
@@ -180,7 +193,7 @@ impl Stream for TcpIncoming {
     type Item = Result<TcpStream, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.inner).poll_accept(cx)
+        Pin::new(&mut self.inner).poll_next(cx)
     }
 }
 
@@ -197,4 +210,3 @@ mod tests {
         let _t3 = TcpIncoming::new(addr, true, None).unwrap();
     }
 }
-

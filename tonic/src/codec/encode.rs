@@ -315,17 +315,13 @@ where
     type Data = Bytes;
     type Error = Status;
 
-    fn is_end_stream(&self) -> bool {
-        self.state.is_end_stream
-    }
-
     fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let self_proj = self.project();
         match ready!(self_proj.inner.poll_next(cx)) {
-            Some(Ok(d)) => Some(Ok(d)).into(),
+            Some(Ok(d)) => Some(Ok(Frame::data(d))).into(),
             Some(Err(status)) => match self_proj.state.role {
                 Role::Client => Some(Err(status)).into(),
                 Role::Server => {
@@ -335,6 +331,10 @@ where
             },
             None => None.into(),
         }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        self.state.is_end_stream
     }
 }
 

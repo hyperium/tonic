@@ -20,4 +20,3 @@ pub fn empty_body() -> BoxBody {
         .map_err(|err| match err {})
         .boxed_unsync()
 }
-

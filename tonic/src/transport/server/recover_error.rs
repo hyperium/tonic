@@ -1,5 +1,6 @@
 use crate::Status;
 use http::Response;
+use http_body::{Body, Frame, SizeHint};
 use pin_project::pin_project;
 use std::{
     future::Future,
@@ -91,9 +92,9 @@ impl<B> MaybeEmptyBody<B> {
     }
 }
 
-impl<B> http_body::Body for MaybeEmptyBody<B>
+impl<B> Body for MaybeEmptyBody<B>
 where
-    B: http_body::Body + Send,
+    B: Body + Send,
 {
     type Data = B::Data;
     type Error = B::Error;
@@ -101,15 +102,24 @@ where
     fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
-        Pin::new(&mut self.0).poll_frame(cx)
-    }
-
-    fn size_hint(&self) -> http_body::SizeHint {
-        self.0.size_hint()
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+        match self.project().inner.as_pin_mut() {
+            Some(b) => b.poll_frame(cx),
+            None => Poll::Ready(None),
+        }
     }
 
     fn is_end_stream(&self) -> bool {
-        self.body.is_end_stream()
+        match &self.inner {
+            Some(b) => b.is_end_stream(),
+            None => true,
+        }
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        match &self.inner {
+            Some(b) => b.size_hint(),
+            None => SizeHint::default(),
+        }
     }
 }

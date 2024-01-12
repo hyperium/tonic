@@ -312,7 +312,7 @@ mod tests {
 
     #[tokio::test]
     async fn doesnt_change_http_method() {
-        let svc = tower::service_fn(|request: http::Request<Empty>| async move {
+        let svc = tower::service_fn(|request: http::Request<Empty<()>>| async move {
             assert_eq!(request.method(), http::Method::OPTIONS);
 
             Ok::<_, hyper::Error>(hyper::Response::new(Empty::new()))
@@ -328,4 +328,3 @@ mod tests {
         svc.oneshot(request).await.unwrap();
     }
 }
-
