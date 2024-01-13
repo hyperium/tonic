@@ -3,6 +3,7 @@ use crate::transport::{
     server::{Connected, TlsStream},
     Certificate, Identity,
 };
+use hyper_util::rt::TokioIo;
 use std::{fmt, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
@@ -83,7 +84,7 @@ impl TlsConnector {
                 _ => return Err(TlsError::H2NotNegotiated.into()),
             };
 
-            BoxedIo::new(io)
+            BoxedIo::new(TokioIo::new(io))
         };
 
         Ok(tls_io)
