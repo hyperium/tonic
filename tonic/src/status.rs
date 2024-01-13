@@ -1003,4 +1003,3 @@ mod tests {
         assert_eq!(status.details(), DETAILS);
     }
 }
-

@@ -95,4 +95,3 @@ impl GrpcMethod {
         self.method
     }
 }
-

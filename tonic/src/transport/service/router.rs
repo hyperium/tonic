@@ -1,4 +1,4 @@
-use crate::{body::boxed, server::NamedService};
+use crate::server::NamedService;
 use axum::{extract::Request, response::Response};
 use pin_project::pin_project;
 use std::{
@@ -8,7 +8,6 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tower::ServiceExt;
 use tower_service::Service;
 
 /// A [`Service`] router.
@@ -72,7 +71,6 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let svc = svc.map_response(|res| res.map(axum::body::boxed));
         self.router = self
             .router
             .route_service(&format!("/{}/*rest", S::NAME), svc);
@@ -128,9 +126,8 @@ impl Future for RoutesFuture {
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match ready!(self.project().0.poll(cx)) {
-            Ok(res) => Ok(res.map(boxed)).into(),
+            Ok(res) => Ok(res).into(),
             Err(err) => match err {},
         }
     }
 }
-

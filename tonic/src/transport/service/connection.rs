@@ -2,12 +2,11 @@ use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgen
 use crate::transport::{BoxFuture, Endpoint};
 use http::Uri;
 use hyper::client::conn::http2::Builder;
-use hyper_util::client::legacy::connect::{Connect as HyperConnect, Connection as HyperConnection};
+use hyper::rt;
 use std::{
     fmt,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
 use tower::load::Load;
 use tower::{
     layer::Layer,
@@ -29,7 +28,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         let mut settings = Builder::new(endpoint.executor)
             .initial_stream_window_size(endpoint.init_stream_window_size)
@@ -61,9 +60,7 @@ impl Connection {
             .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
-        let connector = HyperConnect::new(connector, settings);
         let conn = Reconnect::new(connector, endpoint.uri.clone(), is_lazy);
-
         let inner = stack.layer(conn);
 
         Self {
@@ -76,7 +73,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         Self::new(connector, endpoint, false).ready_oneshot().await
     }
@@ -86,7 +83,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         Self::new(connector, endpoint, true)
     }
@@ -119,4 +116,3 @@ impl fmt::Debug for Connection {
         f.debug_struct("Connection").finish()
     }
 }
-

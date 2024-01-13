@@ -4,6 +4,7 @@ use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use http::StatusCode;
 use http_body::Body;
+use http_body_util::BodyExt;
 use std::{
     fmt, future,
     pin::Pin,
@@ -122,7 +123,9 @@ impl<T> Streaming<T> {
             decoder: Box::new(decoder),
             inner: StreamingInner {
                 body: body
-                    .map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
+                    .map_frame(|mut frame| {
+                        frame.map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
+                    })
                     .map_err(|err| Status::map_error(err.into()))
                     .boxed_unsync(),
                 state: State::ReadHeader,
@@ -231,7 +234,7 @@ impl StreamingInner {
 
     // Returns Some(()) if data was found or None if the loop in `poll_next` should break
     fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
-        let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
+        let chunk = match ready!(Pin::new(&mut self.body).poll_frame(cx)) {
             Some(Ok(d)) => Some(d),
             Some(Err(status)) => {
                 if self.direction == Direction::Request && status.code() == Code::Cancelled {
