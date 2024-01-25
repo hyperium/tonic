@@ -43,4 +43,6 @@ pub mod pb {
 }
 
 /// Implementation of the server component of gRPC Server Reflection.
+#[cfg(feature = "server")]
+#[cfg_attr(docsrs, doc(cfg(feature = "server")))]
 pub mod server;
