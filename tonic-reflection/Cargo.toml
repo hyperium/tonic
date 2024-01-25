@@ -2,7 +2,6 @@
 authors = [
   "James Nugent <james@jen20.com>",
   "Samani G. Gikandi <samani@gojulas.com>",
-  "Ash Manning <10554686+A-Manning@users.noreply.github.com>"
 ]
 categories = ["network-programming", "asynchronous"]
 description = """
