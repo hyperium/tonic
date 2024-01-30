@@ -59,6 +59,7 @@ use tower::{
     layer::util::{Identity, Stack},
     layer::Layer,
     limit::concurrency::ConcurrencyLimitLayer,
+    load_shed::LoadShedLayer,
     util::Either,
     Service, ServiceBuilder,
 };
@@ -81,6 +82,7 @@ const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 pub struct Server<L = Identity> {
     trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
+    load_shed: bool,
     timeout: Option<Duration>,
     #[cfg(feature = "tls")]
     tls: Option<TlsAcceptor>,
@@ -103,6 +105,7 @@ impl Default for Server<Identity> {
         Self {
             trace_interceptor: None,
             concurrency_limit: None,
+            load_shed: false,
             timeout: None,
             #[cfg(feature = "tls")]
             tls: None,
@@ -171,6 +174,27 @@ impl<L> Server<L> {
             concurrency_limit: Some(limit),
             ..self
         }
+    }
+
+    /// Enable or disable load shedding. The default is disabled.
+    ///
+    /// When load shedding is enabled, if the service responds with not ready
+    /// the request will immediately be rejected with a
+    /// [`resource_exhausted`](https://docs.rs/tonic/latest/tonic/struct.Status.html#method.resource_exhausted) error.
+    /// The default is to buffer requests. This is especially useful in combination with
+    /// setting a concurrency limit per connection.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// # let builder = Server::builder();
+    /// builder.load_shed(true);
+    /// ```
+    #[must_use]
+    pub fn load_shed(self, load_shed: bool) -> Self {
+        Server { load_shed, ..self }
     }
 
     /// Set a timeout on for all request handlers.
@@ -469,6 +493,7 @@ impl<L> Server<L> {
             service_builder: self.service_builder.layer(new_layer),
             trace_interceptor: self.trace_interceptor,
             concurrency_limit: self.concurrency_limit,
+            load_shed: self.load_shed,
             timeout: self.timeout,
             #[cfg(feature = "tls")]
             tls: self.tls,
@@ -507,6 +532,7 @@ impl<L> Server<L> {
     {
         let trace_interceptor = self.trace_interceptor.clone();
         let concurrency_limit = self.concurrency_limit;
+        let load_shed = self.load_shed;
         let init_connection_window_size = self.init_connection_window_size;
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
@@ -529,6 +555,7 @@ impl<L> Server<L> {
         let svc = MakeSvc {
             inner: svc,
             concurrency_limit,
+            load_shed,
             timeout,
             trace_interceptor,
             _io: PhantomData,
@@ -815,6 +842,7 @@ impl<S> fmt::Debug for Svc<S> {
 
 struct MakeSvc<S, IO> {
     concurrency_limit: Option<usize>,
+    load_shed: bool,
     timeout: Option<Duration>,
     inner: S,
     trace_interceptor: Option<TraceInterceptor>,
@@ -848,6 +876,11 @@ where
 
         let svc = ServiceBuilder::new()
             .layer_fn(RecoverError::new)
+            .option_layer(if self.load_shed {
+                Some(LoadShedLayer::new())
+            } else {
+                None
+            })
             .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
             .layer_fn(|s| GrpcTimeout::new(s, timeout))
             .service(svc);
