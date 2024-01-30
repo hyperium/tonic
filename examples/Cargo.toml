@@ -287,7 +287,7 @@ grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:tracing-
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 hyper-warp = ["dep:either", "dep:tower", "dep:hyper", "dep:http", "dep:http-body", "dep:warp"]
 hyper-warp-multiplex = ["hyper-warp"]
-uds = ["tokio-stream/net", "dep:tower", "dep:hyper"]
+uds = ["tokio-stream/net", "dep:tower", "dep:hyper", "dep:ustr"]
 streaming = ["tokio-stream", "dep:h2"]
 mock = ["tokio-stream", "dep:tower"]
 tower = ["dep:hyper", "dep:tower", "dep:http"]
@@ -337,6 +337,7 @@ tokio-rustls = { version = "0.24.0", optional = true }
 hyper-rustls = { version = "0.24.0", features = ["http2"], optional = true }
 rustls-pemfile = { version = "1", optional = true }
 tower-http = { version = "0.4", optional = true }
+ustr = { version = "1.0.0", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
