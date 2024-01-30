@@ -12,6 +12,7 @@ pub struct ClientTlsConfig {
     domain: Option<String>,
     cert: Option<Certificate>,
     identity: Option<Identity>,
+    use_key_log: bool,
 }
 
 impl fmt::Debug for ClientTlsConfig {
@@ -31,6 +32,7 @@ impl ClientTlsConfig {
             domain: None,
             cert: None,
             identity: None,
+            use_key_log: false,
         }
     }
 
@@ -58,11 +60,24 @@ impl ClientTlsConfig {
         }
     }
 
+    /// Use key log as specified by the `SSLKEYLOGFILE` environment variable.
+    pub fn use_key_log(self) -> Self {
+        ClientTlsConfig {
+            use_key_log: true,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
             None => uri.host().ok_or_else(Error::new_invalid_uri)?.to_string(),
             Some(domain) => domain.clone(),
         };
-        TlsConnector::new(self.cert.clone(), self.identity.clone(), domain)
+        TlsConnector::new(
+            self.cert.clone(),
+            self.identity.clone(),
+            domain,
+            self.use_key_log,
+        )
     }
 }
