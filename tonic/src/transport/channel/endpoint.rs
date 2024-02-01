@@ -390,7 +390,13 @@ impl Endpoint {
         crate::Error: From<C::Error> + Send + 'static,
     {
         let connector = self.connector(connector);
-        Channel::new(connector, self.clone())
+        if let Some(connect_timeout) = self.connect_timeout {
+            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
+            connector.set_connect_timeout(Some(connect_timeout));
+            Channel::new(connector, self.clone())
+        } else {
+            Channel::new(connector, self.clone())
+        }
     }
 
     /// Get the endpoint uri.
