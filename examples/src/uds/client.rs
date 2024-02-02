@@ -18,7 +18,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Path needs to be a static str due to service_fn FnMut.
     let path = match env::var("EXAMPLE_UDS_PATH") {
         Ok(path) => ustr(path.as_ref()).as_str(),
-        Err(_) => "/tmp/tonic/helloworld"
+        Err(_) => "/tmp/tonic/helloworld",
     };
     println!("Using path {}", path);
 
