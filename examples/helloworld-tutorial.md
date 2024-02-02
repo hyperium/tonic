@@ -167,7 +167,7 @@ impl Greeter for MyGreeter {
         println!("Got a request: {:?}", request);
 
         let reply = hello_world::HelloReply {
-            message: format!("Hello {}!", request.into_inner().name).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
+            message: format!("Hello {}!", request.into_inner().name), // We must use .into_inner() as the fields of gRPC requests and responses are private
         };
 
         Ok(Response::new(reply)) // Send back our formatted greeting
@@ -216,7 +216,7 @@ impl Greeter for MyGreeter {
         println!("Got a request: {:?}", request);
 
         let reply = hello_world::HelloReply {
-            message: format!("Hello {}!", request.into_inner().name).into(),
+            message: format!("Hello {}!", request.into_inner().name),
         };
 
         Ok(Response::new(reply))
