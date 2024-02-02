@@ -10,14 +10,10 @@ pub use endpoint::Endpoint;
 pub use tls::ClientTlsConfig;
 
 use super::service::{Connection, DynamicServiceStream, SharedExec};
-use crate::body::BoxBody;
 use crate::transport::Executor;
 use bytes::Bytes;
-use http::{
-    uri::{InvalidUri, Uri},
-    Request, Response,
-};
-use hyper::client::connect::Connection as HyperConnection;
+use http::uri::{InvalidUri, Uri};
+use hyper_util::client::legacy::connect::Connection as HyperConnection;
 use std::{
     fmt,
     future::Future,
@@ -25,11 +21,10 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{channel, Sender},
-};
+use tokio::sync::mpsc::{channel, Sender};
 
+use axum::{body::Body, extract::Request, response::Response};
+use hyper::rt;
 use tower::balance::p2c::Balance;
 use tower::{
     buffer::{self, Buffer},
@@ -38,7 +33,7 @@ use tower::{
     Service,
 };
 
-type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
+type Svc = Either<Connection, BoxService<Request, Response, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
@@ -67,14 +62,14 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 /// cloning the `Channel` type is cheap and encouraged.
 #[derive(Clone)]
 pub struct Channel {
-    svc: Buffer<Svc, Request<BoxBody>>,
+    svc: Buffer<Svc, Request>,
 }
 
 /// A future that resolves to an HTTP response.
 ///
 /// This is returned by the `Service::call` on [`Channel`].
 pub struct ResponseFuture {
-    inner: buffer::future::ResponseFuture<<Svc as Service<Request<BoxBody>>>::Future>,
+    inner: buffer::future::ResponseFuture<<Svc as Service<Request>>::Future>,
 }
 
 impl Channel {
@@ -152,7 +147,7 @@ impl Channel {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
@@ -169,7 +164,7 @@ impl Channel {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
@@ -200,8 +195,8 @@ impl Channel {
     }
 }
 
-impl Service<http::Request<BoxBody>> for Channel {
-    type Response = http::Response<super::Body>;
+impl Service<Request> for Channel {
+    type Response = Response;
     type Error = super::Error;
     type Future = ResponseFuture;
 
@@ -209,7 +204,7 @@ impl Service<http::Request<BoxBody>> for Channel {
         Service::poll_ready(&mut self.svc, cx).map_err(super::Error::from_source)
     }
 
-    fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, request: Request<Body>) -> Self::Future {
         let inner = Service::call(&mut self.svc, request);
 
         ResponseFuture { inner }
@@ -217,7 +212,7 @@ impl Service<http::Request<BoxBody>> for Channel {
 }
 
 impl Future for ResponseFuture {
-    type Output = Result<Response<hyper::Body>, super::Error>;
+    type Output = Result<Response, super::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let val = ready!(Pin::new(&mut self.inner).poll(cx)).map_err(super::Error::from_source)?;

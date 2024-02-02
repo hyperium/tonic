@@ -1,9 +1,5 @@
-use crate::{
-    body::{boxed, BoxBody},
-    server::NamedService,
-};
-use http::{Request, Response};
-use hyper::Body;
+use crate::server::NamedService;
+use axum::{extract::Request, response::Response};
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -12,7 +8,6 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tower::ServiceExt;
 use tower_service::Service;
 
 /// A [`Service`] router.
@@ -31,7 +26,7 @@ impl RoutesBuilder {
     /// Add a new service.
     pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request, Response = Response, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -53,7 +48,7 @@ impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request, Response = Response, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -68,7 +63,7 @@ impl Routes {
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request, Response = Response, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -76,7 +71,6 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let svc = svc.map_response(|res| res.map(axum::body::boxed));
         self.router = self
             .router
             .route_service(&format!("/{}/*rest", S::NAME), svc);
@@ -103,8 +97,8 @@ async fn unimplemented() -> impl axum::response::IntoResponse {
     (status, headers)
 }
 
-impl Service<Request<Body>> for Routes {
-    type Response = Response<BoxBody>;
+impl Service<Request> for Routes {
+    type Response = Response;
     type Error = crate::Error;
     type Future = RoutesFuture;
 
@@ -113,13 +107,13 @@ impl Service<Request<Body>> for Routes {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&mut self, req: Request) -> Self::Future {
         RoutesFuture(self.router.call(req))
     }
 }
 
 #[pin_project]
-pub struct RoutesFuture(#[pin] axum::routing::future::RouteFuture<Body, Infallible>);
+pub struct RoutesFuture(#[pin] axum::routing::future::RouteFuture<Infallible>);
 
 impl fmt::Debug for RoutesFuture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -128,11 +122,11 @@ impl fmt::Debug for RoutesFuture {
 }
 
 impl Future for RoutesFuture {
-    type Output = Result<Response<BoxBody>, crate::Error>;
+    type Output = Result<Response, crate::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match ready!(self.project().0.poll(cx)) {
-            Ok(res) => Ok(res.map(boxed)).into(),
+            Ok(res) => Ok(res).into(),
             Err(err) => match err {},
         }
     }

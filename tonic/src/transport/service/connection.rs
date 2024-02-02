@@ -1,17 +1,12 @@
 use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
-use crate::{
-    body::BoxBody,
-    transport::{BoxFuture, Endpoint},
-};
+use crate::transport::{BoxFuture, Endpoint};
 use http::Uri;
-use hyper::client::conn::Builder;
-use hyper::client::connect::Connection as HyperConnection;
-use hyper::client::service::Connect as HyperConnect;
+use hyper::client::conn::http2::Builder;
+use hyper::rt;
 use std::{
     fmt,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
 use tower::load::Load;
 use tower::{
     layer::Layer,
@@ -21,9 +16,8 @@ use tower::{
 };
 use tower_service::Service;
 
-pub(crate) type Request = http::Request<BoxBody>;
-pub(crate) type Response = http::Response<hyper::Body>;
-
+pub(crate) type Request = axum::extract::Request;
+pub(crate) type Response = axum::response::Response;
 pub(crate) struct Connection {
     inner: BoxService<Request, Response, crate::Error>,
 }
@@ -34,26 +28,24 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        let mut settings = Builder::new()
-            .http2_initial_stream_window_size(endpoint.init_stream_window_size)
-            .http2_initial_connection_window_size(endpoint.init_connection_window_size)
-            .http2_only(true)
-            .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
-            .executor(endpoint.executor.clone())
+        let mut settings = Builder::new(endpoint.executor)
+            .initial_stream_window_size(endpoint.init_stream_window_size)
+            .initial_connection_window_size(endpoint.init_connection_window_size)
+            .keep_alive_interval(endpoint.http2_keep_alive_interval)
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
-            settings.http2_keep_alive_timeout(val);
+            settings.keep_alive_timeout(val);
         }
 
         if let Some(val) = endpoint.http2_keep_alive_while_idle {
-            settings.http2_keep_alive_while_idle(val);
+            settings.keep_alive_while_idle(val);
         }
 
         if let Some(val) = endpoint.http2_adaptive_window {
-            settings.http2_adaptive_window(val);
+            settings.adaptive_window(val);
         }
 
         let stack = ServiceBuilder::new()
@@ -68,9 +60,7 @@ impl Connection {
             .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
-        let connector = HyperConnect::new(connector, settings);
         let conn = Reconnect::new(connector, endpoint.uri.clone(), is_lazy);
-
         let inner = stack.layer(conn);
 
         Self {
@@ -83,7 +73,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         Self::new(connector, endpoint, false).ready_oneshot().await
     }
@@ -93,7 +83,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         Self::new(connector, endpoint, true)
     }

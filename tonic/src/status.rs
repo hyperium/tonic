@@ -412,13 +412,7 @@ impl Status {
         // > status. Note that the frequency of PINGs is highly dependent on the network
         // > environment, implementations are free to adjust PING frequency based on network and
         // > application requirements, which is why it's mapped to unavailable here.
-        //
-        // Likewise, if we are unable to connect to the server, map this to UNAVAILABLE.  This is
-        // consistent with the behavior of a C++ gRPC client when the server is not running, and
-        // matches the spec of:
-        // > The service is currently unavailable. This is most likely a transient condition that
-        // > can be corrected if retried with a backoff.
-        if err.is_timeout() || err.is_connect() {
+        if err.is_timeout() {
             return Some(Status::unavailable(err.to_string()));
         }
 

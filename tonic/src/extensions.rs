@@ -24,7 +24,7 @@ impl Extensions {
     /// If a extension of this type already existed, it will
     /// be returned.
     #[inline]
-    pub fn insert<T: Send + Sync + 'static>(&mut self, val: T) -> Option<T> {
+    pub fn insert<T: Send + Sync + Clone + 'static>(&mut self, val: T) -> Option<T> {
         self.inner.insert(val)
     }
 

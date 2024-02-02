@@ -13,6 +13,7 @@ pub use super::service::Routes;
 pub use super::service::RoutesBuilder;
 
 pub use conn::{Connected, TcpConnectInfo};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
 
@@ -35,12 +36,12 @@ use crate::transport::Error;
 
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
-use crate::body::BoxBody;
 use crate::server::NamedService;
+use axum::extract::Request;
+use axum::response::Response;
 use bytes::Bytes;
-use http::{Request, Response};
-use http_body::Body as _;
-use hyper::{server::accept, Body};
+use http_body_util::BodyExt;
+use hyper::body::Body;
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -63,9 +64,8 @@ use tower::{
     Service, ServiceBuilder,
 };
 
-type BoxHttpBody = http_body::combinators::UnsyncBoxBody<Bytes, crate::Error>;
-type BoxService = tower::util::BoxService<Request<Body>, Response<BoxHttpBody>, crate::Error>;
-type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
+type BoxService = tower::util::BoxService<Request, Response, crate::Error>;
+type TraceInterceptor = Arc<dyn Fn(&Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
 const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 
@@ -359,7 +359,7 @@ impl<L> Server<L> {
     /// route around different services.
     pub fn add_service<S>(&mut self, svc: S) -> Router<L>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request, Response = Response, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -380,7 +380,7 @@ impl<L> Server<L> {
     /// As a result, one cannot use this to toggle between two identically named implementations.
     pub fn add_optional_service<S>(&mut self, svc: Option<S>) -> Router<L>
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request, Response = Response, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -494,15 +494,15 @@ impl<L> Server<L> {
     ) -> Result<(), super::Error>
     where
         L: Layer<S>,
-        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send + 'static,
-        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
+        L::Service: Service<Request, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request>>::Future: Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request>>::Error: Into<crate::Error> + Send,
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody: Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         let trace_interceptor = self.trace_interceptor.clone();
@@ -523,9 +523,7 @@ impl<L> Server<L> {
 
         let svc = self.service_builder.service(svc);
 
-        let tcp = incoming::tcp_incoming(incoming, self);
-        let incoming = accept::from_stream::<_, _, crate::Error>(tcp);
-
+        let incoming = incoming::tcp_incoming(incoming, self);
         let svc = MakeSvc {
             inner: svc,
             concurrency_limit,
@@ -534,26 +532,22 @@ impl<L> Server<L> {
             _io: PhantomData,
         };
 
-        let server = hyper::Server::builder(incoming)
-            .http2_only(http2_only)
-            .http2_initial_connection_window_size(init_connection_window_size)
-            .http2_initial_stream_window_size(init_stream_window_size)
-            .http2_max_concurrent_streams(max_concurrent_streams)
-            .http2_keep_alive_interval(http2_keepalive_interval)
-            .http2_keep_alive_timeout(http2_keepalive_timeout)
-            .http2_adaptive_window(http2_adaptive_window.unwrap_or_default())
-            .http2_max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
-            .http2_max_frame_size(max_frame_size);
+        let mut builder = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new());
 
-        if let Some(signal) = signal {
-            server
-                .serve(svc)
-                .with_graceful_shutdown(signal)
-                .await
-                .map_err(super::Error::from_source)?
-        } else {
-            server.serve(svc).await.map_err(super::Error::from_source)?;
-        }
+        builder
+            .http2()
+            .initial_connection_window_size(init_connection_window_size)
+            .initial_stream_window_size(init_stream_window_size)
+            .max_concurrent_streams(max_concurrent_streams)
+            .keep_alive_interval(http2_keepalive_interval)
+            .keep_alive_timeout(http2_keepalive_timeout)
+            .adaptive_window(http2_adaptive_window.unwrap_or_default())
+            // FIXME: wait for this to be added to hyper-util
+            //.max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
+            .max_frame_size(max_frame_size);
+
+        let io = TokioIo::new(incoming);
+        let connection = builder.serve_connection(io, svc);
 
         Ok(())
     }
@@ -569,7 +563,7 @@ impl<L> Router<L> {
     /// Add a new service to this router.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request, Response = Response, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -588,7 +582,7 @@ impl<L> Router<L> {
     #[allow(clippy::type_complexity)]
     pub fn add_optional_service<S>(mut self, svc: Option<S>) -> Self
     where
-        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request, Response = Response, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -614,10 +608,10 @@ impl<L> Router<L> {
     pub async fn serve<ResBody>(self, addr: SocketAddr) -> Result<(), super::Error>
     where
         L: Layer<Routes>,
-        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        L::Service: Service<Request, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Error: Into<crate::Error> + Send,
+        ResBody: Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
@@ -644,10 +638,10 @@ impl<L> Router<L> {
     ) -> Result<(), super::Error>
     where
         L: Layer<Routes>,
-        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        L::Service: Service<Request, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Error: Into<crate::Error> + Send,
+        ResBody: Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
@@ -673,10 +667,10 @@ impl<L> Router<L> {
         IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::Error>,
         L: Layer<Routes>,
-        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        L::Service: Service<Request, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Error: Into<crate::Error> + Send,
+        ResBody: Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         self.server
@@ -708,10 +702,10 @@ impl<L> Router<L> {
         IE: Into<crate::Error>,
         F: Future<Output = ()>,
         L: Layer<Routes>,
-        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        L::Service: Service<Request, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Error: Into<crate::Error> + Send,
+        ResBody: Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         self.server
@@ -723,10 +717,10 @@ impl<L> Router<L> {
     pub fn into_service<ResBody>(self) -> L::Service
     where
         L: Layer<Routes>,
-        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error: Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        L::Service: Service<Request, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request>>::Error: Into<crate::Error> + Send,
+        ResBody: Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
     {
         self.server.service_builder.service(self.routes.prepare())
@@ -744,14 +738,14 @@ struct Svc<S> {
     trace_interceptor: Option<TraceInterceptor>,
 }
 
-impl<S, ResBody> Service<Request<Body>> for Svc<S>
+impl<S, ResBody> Service<Request> for Svc<S>
 where
-    S: Service<Request<Body>, Response = Response<ResBody>>,
+    S: Service<Request, Response = Response<ResBody>>,
     S::Error: Into<crate::Error>,
-    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody: Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
-    type Response = Response<BoxHttpBody>;
+    type Response = Response;
     type Error = crate::Error;
     type Future = SvcFuture<S::Future>;
 
@@ -759,7 +753,7 @@ where
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
+    fn call(&mut self, mut req: Request) -> Self::Future {
         let span = if let Some(trace_interceptor) = &self.trace_interceptor {
             let (parts, body) = req.into_parts();
             let bodyless_request = Request::from_parts(parts, ());
@@ -792,10 +786,10 @@ impl<F, E, ResBody> Future for SvcFuture<F>
 where
     F: Future<Output = Result<Response<ResBody>, E>>,
     E: Into<crate::Error>,
-    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody: Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
-    type Output = Result<Response<BoxHttpBody>, crate::Error>;
+    type Output = Result<Response, crate::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
@@ -824,10 +818,10 @@ struct MakeSvc<S, IO> {
 impl<S, ResBody, IO> Service<&ServerIo<IO>> for MakeSvc<S, IO>
 where
     IO: Connected,
-    S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+    S: Service<Request, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::Error> + Send,
-    ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+    ResBody: Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
     type Response = BoxService;
@@ -854,7 +848,7 @@ where
 
         let svc = ServiceBuilder::new()
             .layer(BoxService::layer())
-            .map_request(move |mut request: Request<Body>| {
+            .map_request(move |mut request: Request| {
                 match &conn_info {
                     tower::util::Either::A(inner) => {
                         request.extensions_mut().insert(inner.clone());
