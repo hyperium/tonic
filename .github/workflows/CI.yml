@@ -52,7 +52,9 @@ jobs:
           option: --exclude-features uds
     steps:
     - uses: actions/checkout@v3
-    - uses: dtolnay/rust-toolchain@nightly
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly-2024-02-06
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
     - name: Install protoc
