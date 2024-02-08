@@ -11,7 +11,7 @@ use http::{
     uri::{PathAndQuery, Uri},
 };
 use http_body::Body;
-use std::{fmt, future};
+use std::{fmt, future, pin::pin};
 use tokio_stream::{Stream, StreamExt};
 
 /// A gRPC client dispatcher.
@@ -239,7 +239,7 @@ impl<T> Grpc<T> {
         let (mut parts, body, extensions) =
             self.streaming(request, path, codec).await?.into_parts();
 
-        tokio::pin!(body);
+        let mut body = pin!(body);
 
         let message = body
             .try_next()
