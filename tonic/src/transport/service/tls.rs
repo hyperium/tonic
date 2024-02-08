@@ -1,101 +1,25 @@
 use std::io::Cursor;
 use std::{fmt, sync::Arc};
 
-#[cfg(feature = "channel")]
-use rustls_pki_types::ServerName;
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use tokio::io::{AsyncRead, AsyncWrite};
-#[cfg(feature = "channel")]
-use tokio_rustls::{rustls::ClientConfig, TlsConnector as RustlsConnector};
 use tokio_rustls::{
     rustls::{server::WebPkiClientVerifier, RootCertStore, ServerConfig},
     TlsAcceptor as RustlsAcceptor,
 };
 
-#[cfg(feature = "channel")]
-use super::io::BoxedIo;
 use crate::transport::{
     server::{Connected, TlsStream},
     Certificate, Identity,
 };
 
 /// h2 alpn in plain format for rustls.
-const ALPN_H2: &[u8] = b"h2";
+pub(crate) const ALPN_H2: &[u8] = b"h2";
 
 #[derive(Debug)]
 enum TlsError {
-    #[cfg(feature = "channel")]
-    H2NotNegotiated,
     CertificateParseError,
     PrivateKeyParseError,
-}
-
-#[cfg(feature = "channel")]
-#[derive(Clone)]
-pub(crate) struct TlsConnector {
-    config: Arc<ClientConfig>,
-    domain: Arc<ServerName<'static>>,
-}
-
-#[cfg(feature = "channel")]
-impl TlsConnector {
-    pub(crate) fn new(
-        ca_cert: Option<Certificate>,
-        identity: Option<Identity>,
-        domain: &str,
-    ) -> Result<Self, crate::Error> {
-        let builder = ClientConfig::builder();
-        let mut roots = RootCertStore::empty();
-
-        #[cfg(feature = "tls-roots")]
-        roots.add_parsable_certificates(rustls_native_certs::load_native_certs()?);
-
-        #[cfg(feature = "tls-webpki-roots")]
-        roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-
-        if let Some(cert) = ca_cert {
-            add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
-        }
-
-        let builder = builder.with_root_certificates(roots);
-        let mut config = match identity {
-            Some(identity) => {
-                let (client_cert, client_key) = load_identity(identity)?;
-                builder.with_client_auth_cert(client_cert, client_key)?
-            }
-            None => builder.with_no_client_auth(),
-        };
-
-        config.alpn_protocols.push(ALPN_H2.into());
-        Ok(Self {
-            config: Arc::new(config),
-            domain: Arc::new(ServerName::try_from(domain)?.to_owned()),
-        })
-    }
-
-    #[cfg(feature = "channel")]
-    pub(crate) async fn connect<I>(&self, io: I) -> Result<BoxedIo, crate::Error>
-    where
-        I: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
-        let io = RustlsConnector::from(self.config.clone())
-            .connect(self.domain.as_ref().to_owned(), io)
-            .await?;
-
-        let (_, session) = io.get_ref();
-        if session.alpn_protocol() != Some(ALPN_H2) {
-            return Err(TlsError::H2NotNegotiated)?;
-        }
-
-        Ok(BoxedIo::new(io))
-    }
-}
-
-#[cfg(feature = "channel")]
-impl fmt::Debug for TlsConnector {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TlsConnector").finish()
-    }
 }
 
 #[derive(Clone)]
@@ -153,8 +77,6 @@ impl fmt::Debug for TlsAcceptor {
 impl fmt::Display for TlsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            #[cfg(feature = "channel")]
-            TlsError::H2NotNegotiated => write!(f, "HTTP/2 was not negotiated."),
             TlsError::CertificateParseError => write!(f, "Error parsing TLS certificate."),
             TlsError::PrivateKeyParseError => write!(
                 f,
@@ -166,21 +88,21 @@ impl fmt::Display for TlsError {
 
 impl std::error::Error for TlsError {}
 
-fn load_identity(
+pub(crate) fn load_identity(
     identity: Identity,
-) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), crate::Error> {
     let cert = rustls_pemfile::certs(&mut Cursor::new(identity.cert))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| TlsError::CertificateParseError)?;
 
     let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(identity.key)) else {
-        return Err(TlsError::PrivateKeyParseError);
+        return Err(TlsError::PrivateKeyParseError.into());
     };
 
     Ok((cert, key))
 }
 
-fn add_certs_from_pem(
+pub(crate) fn add_certs_from_pem(
     mut certs: &mut dyn std::io::BufRead,
     roots: &mut RootCertStore,
 ) -> Result<(), crate::Error> {

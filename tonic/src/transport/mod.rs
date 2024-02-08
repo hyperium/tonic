@@ -112,7 +112,7 @@ pub use axum::{body::BoxBody as AxumBoxBody, Router as AxumRouter};
 pub use hyper::{Body, Uri};
 
 #[cfg(feature = "channel")]
-pub(crate) use self::service::executor::Executor;
+pub(crate) use self::channel::service::executor::Executor;
 
 #[cfg(all(feature = "channel", feature = "tls"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "channel", feature = "tls"))))]

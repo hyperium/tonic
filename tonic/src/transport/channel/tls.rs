@@ -1,5 +1,5 @@
+use super::service::TlsConnector;
 use crate::transport::{
-    service::TlsConnector,
     tls::{Certificate, Identity},
     Error,
 };
