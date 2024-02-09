@@ -1,8 +1,7 @@
-use crate::transport::{
-    service::TlsAcceptor,
-    tls::{Certificate, Identity},
-};
 use std::fmt;
+
+use crate::transport::server::service::tls::TlsAcceptor;
+use crate::transport::tls::{Certificate, Identity};
 
 /// Configures TLS settings for servers.
 #[derive(Clone, Default)]

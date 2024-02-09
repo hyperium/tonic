@@ -1,5 +1,5 @@
+use super::service::ServerIo;
 use super::{Connected, Server};
-use crate::transport::service::ServerIo;
 use hyper::server::{
     accept::Accept,
     conn::{AddrIncoming, AddrStream},

@@ -3,14 +3,14 @@
 mod conn;
 mod incoming;
 mod recover_error;
+mod service;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
 #[cfg(unix)]
 mod unix;
 
-pub use super::service::Routes;
-pub use super::service::RoutesBuilder;
+pub use self::service::{Routes, RoutesBuilder};
 
 pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]
@@ -20,7 +20,7 @@ pub use tls::ServerTlsConfig;
 pub use conn::TlsConnectInfo;
 
 #[cfg(feature = "tls")]
-use super::service::TlsAcceptor;
+use self::service::tls::TlsAcceptor;
 
 #[cfg(unix)]
 pub use unix::UdsConnectInfo;
@@ -34,7 +34,8 @@ pub(crate) use tokio_rustls::server::TlsStream;
 use crate::transport::Error;
 
 use self::recover_error::RecoverError;
-use super::service::{GrpcTimeout, ServerIo};
+use self::service::ServerIo;
+use super::service::GrpcTimeout;
 use crate::body::BoxBody;
 use crate::server::NamedService;
 use bytes::Bytes;

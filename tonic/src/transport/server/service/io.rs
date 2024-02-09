@@ -1,4 +1,3 @@
-use crate::transport::server::Connected;
 use std::io;
 use std::io::IoSlice;
 use std::pin::Pin;
@@ -6,6 +5,8 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 #[cfg(feature = "tls")]
 use tokio_rustls::server::TlsStream;
+
+use super::super::Connected;
 
 pub(crate) enum ServerIo<IO> {
     Io(IO),

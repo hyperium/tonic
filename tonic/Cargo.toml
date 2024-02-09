@@ -26,24 +26,29 @@ version = "0.11.0"
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
-default = ["channel", "codegen", "prost"]
+default = ["channel", "codegen", "prost", "server"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pki-types", "dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
+tls = ["dep:rustls-pki-types", "dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls", "channel"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 transport = [
+  "dep:tower", "tower?/util", "tower?/limit",
+  "dep:tokio", "tokio?/time",
+  "dep:hyper",
+]
+server = [
+  "transport",
   "dep:async-stream",
+  "tokio?/net",
   "dep:axum",
   "dep:h2",
-  "dep:hyper", "hyper?/server",
-  "dep:tokio", "tokio?/net", "tokio?/time",
-  "dep:tower", "tower?/util", "tower?/limit",
+  "hyper?/server",
 ]
 channel = [
   "transport",
-  "dep:hyper", "hyper?/client",
-  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/load", "tower?/make",
+  "hyper?/client",
+  "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/load", "tower?/make",
   "dep:hyper-timeout",
 ]
 
