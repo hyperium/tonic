@@ -1,4 +1,4 @@
-# [](https://github.com/hyperium/tonic/compare/v0.10.2...v0.11.0) (2024-02-08)
+# [0.11.0](https://github.com/hyperium/tonic/compare/v0.10.2...v0.11.0) (2024-02-08)
 
 BREAKING CHANGES:
 
