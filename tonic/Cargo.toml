@@ -7,20 +7,20 @@ name = "tonic"
 #   - Cargo.toml
 #   - README.md
 # - Update CHANGELOG.md.
-# - Create "v0.10.x" git tag.
+# - Create "v0.11.x" git tag.
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-documentation = "https://docs.rs/tonic/0.10.2"
+documentation = "https://docs.rs/tonic/0.11.0"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.10.2"
+version = "0.11.0"
 
 [features]
 codegen = ["dep:async-trait"]
@@ -28,7 +28,7 @@ gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:rustls", "tokio/rt", "tokio/macros"]
+tls = ["dep:rustls-pki-types", "dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
@@ -38,8 +38,7 @@ transport = [
   "channel",
   "dep:h2",
   "dep:hyper",
-  "tokio/net",
-  "tokio/time",
+  "dep:tokio", "tokio?/net", "tokio?/time",
   "dep:tower",
   "dep:hyper-timeout",
 ]
@@ -55,7 +54,6 @@ bytes = "1.0"
 http = "0.2"
 tracing = "0.1"
 
-tokio = "1.0.1"
 http-body = "0.4.4"
 percent-encoding = "2.1"
 pin-project = "1.0.11"
@@ -69,20 +67,21 @@ prost = {version = "0.12", default-features = false, features = ["std"], optiona
 async-trait = {version = "0.1.13", optional = true}
 
 # transport
-h2 = {version = "0.3.17", optional = true}
+h2 = {version = "0.3.24", optional = true}
 hyper = {version = "0.14.26", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
+tokio = {version = "1.0.1", optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
 axum = {version = "0.6.9", default_features = false, optional = true}
 
 # rustls
 async-stream = { version = "0.3", optional = true }
-rustls-pemfile = { version = "1.0", optional = true }
-rustls-native-certs = { version = "0.6.3", optional = true }
-tokio-rustls = { version = "0.24.1", optional = true }
-rustls = { version = "0.21.7", optional = true }
-webpki-roots = { version = "0.25.0", optional = true }
+rustls-pki-types = { version = "1.0", optional = true }
+rustls-pemfile = { version = "2.0", optional = true }
+rustls-native-certs = { version = "0.7", optional = true }
+tokio-rustls = { version = "0.25", optional = true }
+webpki-roots = { version = "0.26", optional = true }
 
 # compression
 flate2 = {version = "1.0", optional = true}

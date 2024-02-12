@@ -21,6 +21,7 @@ trait IntoAny {
     fn into_any(self) -> Any;
 }
 
+#[allow(dead_code)]
 trait FromAny {
     fn from_any(any: Any) -> Result<Self, DecodeError>
     where

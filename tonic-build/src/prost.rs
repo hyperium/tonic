@@ -541,13 +541,9 @@ impl Builder {
         protos: &[impl AsRef<Path>],
         includes: &[impl AsRef<Path>],
     ) -> io::Result<()> {
-        let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
-            out_dir.clone()
-        } else {
-            PathBuf::from(std::env::var("OUT_DIR").unwrap())
-        };
-
-        config.out_dir(out_dir);
+        if let Some(out_dir) = self.out_dir.as_ref() {
+            config.out_dir(out_dir);
+        }
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }
