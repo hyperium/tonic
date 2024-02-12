@@ -6,7 +6,7 @@ use hyper::server::{
 };
 use std::{
     net::SocketAddr,
-    pin::Pin,
+    pin::{pin, Pin},
     task::{Context, Poll},
     time::Duration,
 };
@@ -26,7 +26,7 @@ where
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
-        tokio::pin!(incoming);
+        let mut incoming = pin!(incoming);
 
         while let Some(item) = incoming.next().await {
             yield item.map(ServerIo::new_io)?
@@ -44,7 +44,7 @@ where
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
-        tokio::pin!(incoming);
+        let mut incoming = pin!(incoming);
 
         let mut tasks = tokio::task::JoinSet::new();
 

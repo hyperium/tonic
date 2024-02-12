@@ -84,6 +84,7 @@ mod tests {
     use crate::{Code, Status};
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
+    use std::pin::pin;
 
     const LEN: usize = 10000;
     // The maximum uncompressed size in bytes for a message. Set to 2MB.
@@ -157,15 +158,13 @@ mod tests {
         let messages = std::iter::repeat_with(move || Ok::<_, Status>(msg.clone())).take(10000);
         let source = tokio_stream::iter(messages);
 
-        let body = encode_server(
+        let mut body = pin!(encode_server(
             encoder,
             source,
             None,
             SingleMessageCompressionOverride::default(),
             None,
-        );
-
-        tokio::pin!(body);
+        ));
 
         while let Some(r) = body.data().await {
             r.unwrap();
@@ -181,15 +180,13 @@ mod tests {
         let messages = std::iter::once(Ok::<_, Status>(msg));
         let source = tokio_stream::iter(messages);
 
-        let body = encode_server(
+        let mut body = pin!(encode_server(
             encoder,
             source,
             None,
             SingleMessageCompressionOverride::default(),
             Some(MAX_MESSAGE_SIZE),
-        );
-
-        tokio::pin!(body);
+        ));
 
         assert!(body.data().await.is_none());
         assert_eq!(
@@ -215,15 +212,13 @@ mod tests {
         let messages = std::iter::once(Ok::<_, Status>(msg));
         let source = tokio_stream::iter(messages);
 
-        let body = encode_server(
+        let mut body = pin!(encode_server(
             encoder,
             source,
             None,
             SingleMessageCompressionOverride::default(),
             Some(usize::MAX),
-        );
-
-        tokio::pin!(body);
+        ));
 
         assert!(body.data().await.is_none());
         assert_eq!(
