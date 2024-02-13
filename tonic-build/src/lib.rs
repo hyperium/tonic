@@ -140,7 +140,7 @@ pub trait Method {
     /// Identifier used to generate type name.
     fn identifier(&self) -> &str;
     /// Path to the codec.
-    fn codec_path(&self) -> String;
+    fn codec_path(&self) -> &str;
     /// Method is streamed by client.
     fn client_streaming(&self) -> bool;
     /// Method is streamed by server.

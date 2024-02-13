@@ -1,4 +1,4 @@
-use crate::{code_gen::CodeGenBuilder, compile_settings, CompileSettings};
+use crate::{code_gen::CodeGenBuilder, CompileSettings};
 
 use super::Attributes;
 use proc_macro2::TokenStream;
@@ -65,40 +65,63 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
 /// Non-path Rust types allowed for request/response types.
 const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
 
-impl crate::Service for Service {
-    type Method = Method;
-    type Comment = String;
+/// Newtype wrapper for prost to add tonic-specific extensions
+struct TonicBuildService {
+    prost_service: Service,
+    methods: Vec<TonicBuildMethod>
+}
 
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn package(&self) -> &str {
-        &self.package
-    }
-
-    fn identifier(&self) -> &str {
-        &self.proto_name
-    }
-
-    fn comment(&self) -> &[Self::Comment] {
-        &self.comments.leading[..]
-    }
-
-    fn methods(&self) -> &[Self::Method] {
-        &self.methods[..]
+impl TonicBuildService {
+    fn new(prost_service: Service, settings: CompileSettings) -> Self {
+        Self {
+            // CompileSettings are currently only consumed method-by-method but if you need them in the Service, here's your spot.
+            // The tonic_build::Service trait specifies that methods are borrowed, so they have to reified up front.
+            methods: prost_service.methods.iter().map(|prost_method| TonicBuildMethod { prost_method: prost_method.clone(), settings: settings.clone() }).collect(),
+            prost_service,
+        }
     }
 }
 
-impl crate::Method for Method {
+/// Newtype wrapper for prost to add tonic-specific extensions
+struct TonicBuildMethod {
+    prost_method: Method,
+    settings: CompileSettings,
+}
+
+impl crate::Service for TonicBuildService {
+    type Method = TonicBuildMethod;
     type Comment = String;
 
     fn name(&self) -> &str {
-        &self.name
+        &self.prost_service.name
+    }
+
+    fn package(&self) -> &str {
+        &self.prost_service.package
     }
 
     fn identifier(&self) -> &str {
-        &self.proto_name
+        &self.prost_service.proto_name
+    }
+
+    fn comment(&self) -> &[Self::Comment] {
+        &self.prost_service.comments.leading[..]
+    }
+
+    fn methods(&self) -> &[Self::Method] {
+        &self.methods
+    }
+}
+
+impl crate::Method for TonicBuildMethod {
+    type Comment = String;
+
+    fn name(&self) -> &str {
+        &self.prost_method.name
+    }
+
+    fn identifier(&self) -> &str {
+        &self.prost_method.proto_name
     }
 
     /// For code generation, you can override the codec.
@@ -110,20 +133,20 @@ impl crate::Method for Method {
     ///
     /// Though ProstCodec implements Default, it is currently only required that
     /// the function match the Default trait's function spec.
-    fn codec_path(&self) -> String {
-        compile_settings::load().codec_path
+    fn codec_path(&self) -> &str {
+        &self.settings.codec_path
     }
 
     fn client_streaming(&self) -> bool {
-        self.client_streaming
+        self.prost_method.client_streaming
     }
 
     fn server_streaming(&self) -> bool {
-        self.server_streaming
+        self.prost_method.server_streaming
     }
 
     fn comment(&self) -> &[Self::Comment] {
-        &self.comments.leading[..]
+        &self.prost_method.comments.leading[..]
     }
 
     fn request_response_name(
@@ -148,8 +171,8 @@ impl crate::Method for Method {
             }
         };
 
-        let request = convert_type(&self.input_proto_type, &self.input_type);
-        let response = convert_type(&self.output_proto_type, &self.output_type);
+        let request = convert_type(&self.prost_method.input_proto_type, &self.prost_method.input_type);
+        let response = convert_type(&self.prost_method.output_proto_type, &self.prost_method.output_type);
         (request, response)
     }
 }
@@ -184,7 +207,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .disable_comments(self.builder.disable_comments.clone())
                 .use_arc_self(self.builder.use_arc_self)
                 .generate_default_stubs(self.builder.generate_default_stubs)
-                .generate_server(&service, &self.builder.proto_path);
+                .generate_server(&TonicBuildService::new(service.clone(), self.builder.compile_settings.clone()), &self.builder.proto_path);
 
             self.servers.extend(server);
         }
@@ -196,7 +219,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .attributes(self.builder.client_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
                 .build_transport(self.builder.build_transport)
-                .generate_client(&service, &self.builder.proto_path);
+                .generate_client(&TonicBuildService::new(service, self.builder.compile_settings.clone()), &self.builder.proto_path);
 
             self.clients.extend(client);
         }
@@ -616,8 +639,6 @@ impl Builder {
                 println!("cargo:rerun-if-changed={}", path.as_ref().display())
             }
         }
-
-        let _compile_settings_guard = compile_settings::set_context(self.compile_settings.clone());
 
         config.service_generator(self.service_generator());
 

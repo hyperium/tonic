@@ -195,8 +195,8 @@ impl crate::Method for Method {
         &self.route_name
     }
 
-    fn codec_path(&self) -> String {
-        self.codec_path.clone()
+    fn codec_path(&self) -> &str {
+        &self.codec_path
     }
 
     fn client_streaming(&self) -> bool {
