@@ -32,16 +32,10 @@ where
         // Here, we will just customize the prost codec's internal buffer settings.
         // You can of course implement a complete Codec, Encoder, and Decoder if
         // you wish!
-        ProstCodec::<T, U>::raw_encoder(BufferSettings {
-            buffer_size: 512,
-            yield_threshold: 4096,
-        })
+        ProstCodec::<T, U>::raw_encoder(BufferSettings::new(512, 4096))
     }
 
     fn decoder(&mut self) -> Self::Decoder {
-        ProstCodec::<T, U>::raw_decoder(BufferSettings {
-            buffer_size: 512,
-            yield_threshold: 4096,
-        })
+        ProstCodec::<T, U>::raw_decoder(BufferSettings::new(512, 4096))
     }
 }

@@ -68,7 +68,7 @@ const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
 /// Newtype wrapper for prost to add tonic-specific extensions
 struct TonicBuildService {
     prost_service: Service,
-    methods: Vec<TonicBuildMethod>
+    methods: Vec<TonicBuildMethod>,
 }
 
 impl TonicBuildService {
@@ -76,7 +76,14 @@ impl TonicBuildService {
         Self {
             // CompileSettings are currently only consumed method-by-method but if you need them in the Service, here's your spot.
             // The tonic_build::Service trait specifies that methods are borrowed, so they have to reified up front.
-            methods: prost_service.methods.iter().map(|prost_method| TonicBuildMethod { prost_method: prost_method.clone(), settings: settings.clone() }).collect(),
+            methods: prost_service
+                .methods
+                .iter()
+                .map(|prost_method| TonicBuildMethod {
+                    prost_method: prost_method.clone(),
+                    settings: settings.clone(),
+                })
+                .collect(),
             prost_service,
         }
     }
@@ -171,8 +178,14 @@ impl crate::Method for TonicBuildMethod {
             }
         };
 
-        let request = convert_type(&self.prost_method.input_proto_type, &self.prost_method.input_type);
-        let response = convert_type(&self.prost_method.output_proto_type, &self.prost_method.output_type);
+        let request = convert_type(
+            &self.prost_method.input_proto_type,
+            &self.prost_method.input_type,
+        );
+        let response = convert_type(
+            &self.prost_method.output_proto_type,
+            &self.prost_method.output_type,
+        );
         (request, response)
     }
 }
@@ -207,7 +220,10 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .disable_comments(self.builder.disable_comments.clone())
                 .use_arc_self(self.builder.use_arc_self)
                 .generate_default_stubs(self.builder.generate_default_stubs)
-                .generate_server(&TonicBuildService::new(service.clone(), self.builder.compile_settings.clone()), &self.builder.proto_path);
+                .generate_server(
+                    &TonicBuildService::new(service.clone(), self.builder.compile_settings.clone()),
+                    &self.builder.proto_path,
+                );
 
             self.servers.extend(server);
         }
@@ -219,7 +235,10 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .attributes(self.builder.client_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
                 .build_transport(self.builder.build_transport)
-                .generate_client(&TonicBuildService::new(service, self.builder.compile_settings.clone()), &self.builder.proto_path);
+                .generate_client(
+                    &TonicBuildService::new(service, self.builder.compile_settings.clone()),
+                    &self.builder.proto_path,
+                );
 
             self.clients.extend(client);
         }

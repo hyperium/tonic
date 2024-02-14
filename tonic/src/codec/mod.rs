@@ -82,7 +82,6 @@ impl BufferSettings {
     }
 }
 
-
 impl Default for BufferSettings {
     fn default() -> Self {
         Self {

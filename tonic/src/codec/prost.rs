@@ -14,9 +14,7 @@ impl<T, U> ProstCodec<T, U> {
     /// Configure a ProstCodec with encoder/decoder buffer settings. This is used to control
     /// how memory is allocated and grows per RPC.
     pub fn new() -> Self {
-        Self {
-            _pd: PhantomData,
-        }
+        Self { _pd: PhantomData }
     }
 }
 
