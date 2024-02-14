@@ -2,7 +2,7 @@ use std::collections::HashSet;
 
 use proc_macro2::TokenStream;
 
-use crate::{Attributes, CompileSettings, Service};
+use crate::{Attributes, Service};
 
 /// Builder for the generic code generation of server and clients.
 #[derive(Debug)]
@@ -14,7 +14,6 @@ pub struct CodeGenBuilder {
     disable_comments: HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
-    compile_settings: CompileSettings,
 }
 
 impl CodeGenBuilder {
@@ -116,7 +115,6 @@ impl Default for CodeGenBuilder {
             disable_comments: HashSet::default(),
             use_arc_self: false,
             generate_default_stubs: false,
-            compile_settings: CompileSettings::default(),
         }
     }
 }

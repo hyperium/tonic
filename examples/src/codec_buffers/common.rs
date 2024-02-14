@@ -12,7 +12,7 @@
 use std::marker::PhantomData;
 
 use prost::Message;
-use tonic::codec::{BufferSettings, Codec, ProstDecoder, ProstEncoder};
+use tonic::codec::{BufferSettings, Codec, ProstCodec};
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SmallBufferCodec<T, U>(PhantomData<(T, U)>);
@@ -25,18 +25,21 @@ where
     type Encode = T;
     type Decode = U;
 
-    type Encoder = ProstEncoder<T>;
-    type Decoder = ProstDecoder<U>;
+    type Encoder = <ProstCodec<T, U> as Codec>::Encoder;
+    type Decoder = <ProstCodec<T, U> as Codec>::Decoder;
 
     fn encoder(&mut self) -> Self::Encoder {
-        ProstEncoder::new(BufferSettings {
+        // Here, we will just customize the prost codec's internal buffer settings.
+        // You can of course implement a complete Codec, Encoder, and Decoder if
+        // you wish!
+        ProstCodec::<T, U>::raw_encoder(BufferSettings {
             buffer_size: 512,
             yield_threshold: 4096,
         })
     }
 
     fn decoder(&mut self) -> Self::Decoder {
-        ProstDecoder::new(BufferSettings {
+        ProstCodec::<T, U>::raw_decoder(BufferSettings {
             buffer_size: 512,
             yield_threshold: 4096,
         })

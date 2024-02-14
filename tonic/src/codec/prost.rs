@@ -8,23 +8,45 @@ use std::marker::PhantomData;
 #[derive(Debug, Clone)]
 pub struct ProstCodec<T, U> {
     _pd: PhantomData<(T, U)>,
-    buffer_settings: BufferSettings,
 }
 
 impl<T, U> ProstCodec<T, U> {
     /// Configure a ProstCodec with encoder/decoder buffer settings. This is used to control
     /// how memory is allocated and grows per RPC.
-    pub fn new(buffer_settings: BufferSettings) -> Self {
+    pub fn new() -> Self {
         Self {
             _pd: PhantomData,
-            buffer_settings,
         }
     }
 }
 
 impl<T, U> Default for ProstCodec<T, U> {
     fn default() -> Self {
-        Self::new(Default::default())
+        Self::new()
+    }
+}
+
+impl<T, U> ProstCodec<T, U>
+where
+    T: Message + Send + 'static,
+    U: Message + Default + Send + 'static,
+{
+    /// A tool for building custom codecs based on prost encoding and decoding.
+    /// See the codec_buffers example for one possible way to use this.
+    pub fn raw_encoder(buffer_settings: BufferSettings) -> <Self as Codec>::Encoder {
+        ProstEncoder {
+            _pd: PhantomData,
+            buffer_settings,
+        }
+    }
+
+    /// A tool for building custom codecs based on prost encoding and decoding.
+    /// See the codec_buffers example for one possible way to use this.
+    pub fn raw_decoder(buffer_settings: BufferSettings) -> <Self as Codec>::Decoder {
+        ProstDecoder {
+            _pd: PhantomData,
+            buffer_settings,
+        }
     }
 }
 
@@ -42,14 +64,14 @@ where
     fn encoder(&mut self) -> Self::Encoder {
         ProstEncoder {
             _pd: PhantomData,
-            buffer_settings: self.buffer_settings,
+            buffer_settings: BufferSettings::default(),
         }
     }
 
     fn decoder(&mut self) -> Self::Decoder {
         ProstDecoder {
             _pd: PhantomData,
-            buffer_settings: self.buffer_settings,
+            buffer_settings: BufferSettings::default(),
         }
     }
 }
