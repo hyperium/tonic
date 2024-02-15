@@ -98,7 +98,6 @@ mod code_gen;
 pub use code_gen::CodeGenBuilder;
 
 mod compile_settings;
-pub(crate) use compile_settings::CompileSettings;
 
 /// Service generation trait.
 ///

@@ -30,10 +30,6 @@ impl<T: serde::Serialize> Encoder for JsonEncoder<T> {
     fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
         serde_json::to_writer(buf.writer(), &item).map_err(|e| Status::internal(e.to_string()))
     }
-
-    fn buffer_settings(&self) -> tonic::codec::BufferSettings {
-        Default::default()
-    }
 }
 
 #[derive(Debug)]
@@ -51,10 +47,6 @@ impl<U: serde::de::DeserializeOwned> Decoder for JsonDecoder<U> {
         let item: Self::Item =
             serde_json::from_reader(buf.reader()).map_err(|e| Status::internal(e.to_string()))?;
         Ok(Some(item))
-    }
-
-    fn buffer_settings(&self) -> tonic::codec::BufferSettings {
-        Default::default()
     }
 }
 

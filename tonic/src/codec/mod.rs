@@ -36,7 +36,7 @@ const DEFAULT_YIELD_THRESHOLD: usize = 32 * 1024;
 /// Buffer size defaults to 8KiB.
 ///
 /// Example:
-/// ```
+/// ```ignore
 /// Buffer start:       | 8kb |
 /// Message received:   |   24612 bytes    |
 /// Buffer grows:       | 8kb | 8kb | 8kb | 8kb |

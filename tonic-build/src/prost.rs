@@ -1,4 +1,4 @@
-use crate::{code_gen::CodeGenBuilder, CompileSettings};
+use crate::{code_gen::CodeGenBuilder, compile_settings::CompileSettings};
 
 use super::Attributes;
 use proc_macro2::TokenStream;
