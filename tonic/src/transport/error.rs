@@ -14,31 +14,39 @@ struct ErrorImpl {
 
 #[derive(Debug)]
 pub(crate) enum Kind {
+    #[allow(unused)]
     Transport,
+    #[cfg(feature = "channel")]
     InvalidUri,
+    #[cfg(feature = "channel")]
     InvalidUserAgent,
 }
 
 impl Error {
-    pub(crate) fn new(kind: Kind) -> Self {
+    #[cfg(any(feature = "server", feature = "channel"))]
+    fn new(kind: Kind) -> Self {
         Self {
             inner: ErrorImpl { kind, source: None },
         }
     }
 
+    #[cfg(any(feature = "server", feature = "channel"))]
     pub(crate) fn with(mut self, source: impl Into<Source>) -> Self {
         self.inner.source = Some(source.into());
         self
     }
 
+    #[cfg(any(feature = "server", feature = "channel"))]
     pub(crate) fn from_source(source: impl Into<crate::Error>) -> Self {
         Error::new(Kind::Transport).with(source)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_uri() -> Self {
         Error::new(Kind::InvalidUri)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_user_agent() -> Self {
         Error::new(Kind::InvalidUserAgent)
     }
@@ -46,7 +54,9 @@ impl Error {
     fn description(&self) -> &str {
         match &self.inner.kind {
             Kind::Transport => "transport error",
+            #[cfg(feature = "channel")]
             Kind::InvalidUri => "invalid URI",
+            #[cfg(feature = "channel")]
             Kind::InvalidUserAgent => "user agent is not a valid header value",
         }
     }

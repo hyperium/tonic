@@ -342,7 +342,7 @@ impl Status {
             Err(err) => err,
         };
 
-        #[cfg(feature = "transport")]
+        #[cfg(feature = "server")]
         let err = match err.downcast::<h2::Error>() {
             Ok(h2) => {
                 return Ok(Status::from_h2_error(h2));
@@ -359,7 +359,7 @@ impl Status {
     }
 
     // FIXME: bubble this into `transport` and expose generic http2 reasons.
-    #[cfg(feature = "transport")]
+    #[cfg(feature = "server")]
     fn from_h2_error(err: Box<h2::Error>) -> Status {
         let code = Self::code_from_h2(&err);
 
@@ -368,7 +368,7 @@ impl Status {
         status
     }
 
-    #[cfg(feature = "transport")]
+    #[cfg(feature = "server")]
     fn code_from_h2(err: &h2::Error) -> Code {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors
         match err.reason() {
@@ -388,7 +388,7 @@ impl Status {
         }
     }
 
-    #[cfg(feature = "transport")]
+    #[cfg(feature = "server")]
     fn to_h2_error(&self) -> h2::Error {
         // conservatively transform to h2 error codes...
         let reason = match self.code {
@@ -404,7 +404,7 @@ impl Status {
     ///
     /// Returns Some if there's a way to handle the error, or None if the information from this
     /// hyper error, but perhaps not its source, should be ignored.
-    #[cfg(feature = "transport")]
+    #[cfg(feature = "server")]
     fn from_hyper_error(err: &hyper::Error) -> Option<Status> {
         // is_timeout results from hyper's keep-alive logic
         // (https://docs.rs/hyper/0.14.11/src/hyper/error.rs.html#192-194).  Per the grpc spec
@@ -614,12 +614,12 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
             });
         }
 
-        #[cfg(feature = "transport")]
+        #[cfg(any(feature = "server", feature = "channel"))]
         if let Some(timeout) = err.downcast_ref::<crate::transport::TimeoutExpired>() {
             return Some(Status::cancelled(timeout.to_string()));
         }
 
-        #[cfg(feature = "transport")]
+        #[cfg(feature = "server")]
         if let Some(hyper) = err
             .downcast_ref::<hyper::Error>()
             .and_then(Status::from_hyper_error)
@@ -666,14 +666,14 @@ fn invalid_header_value_byte<Error: fmt::Display>(err: Error) -> Status {
     )
 }
 
-#[cfg(feature = "transport")]
+#[cfg(feature = "server")]
 impl From<h2::Error> for Status {
     fn from(err: h2::Error) -> Self {
         Status::from_h2_error(Box::new(err))
     }
 }
 
-#[cfg(feature = "transport")]
+#[cfg(feature = "server")]
 impl From<Status> for h2::Error {
     fn from(status: Status) -> Self {
         status.to_h2_error()

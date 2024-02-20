@@ -1,12 +1,12 @@
 use crate::metadata::{MetadataMap, MetadataValue};
-#[cfg(feature = "transport")]
+#[cfg(feature = "server")]
 use crate::transport::server::TcpConnectInfo;
-#[cfg(feature = "tls")]
+#[cfg(all(feature = "server", feature = "tls"))]
 use crate::transport::{server::TlsConnectInfo, Certificate};
 use crate::Extensions;
-#[cfg(feature = "transport")]
+#[cfg(feature = "server")]
 use std::net::SocketAddr;
-#[cfg(feature = "tls")]
+#[cfg(all(feature = "server", feature = "tls"))]
 use std::sync::Arc;
 use std::time::Duration;
 use tokio_stream::Stream;
@@ -209,8 +209,8 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
-    #[cfg(feature = "transport")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
+    #[cfg(feature = "server")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "server")))]
     pub fn local_addr(&self) -> Option<SocketAddr> {
         let addr = self
             .extensions()
@@ -232,8 +232,8 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
-    #[cfg(feature = "transport")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
+    #[cfg(feature = "server")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "server")))]
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         let addr = self
             .extensions()
@@ -256,8 +256,8 @@ impl<T> Request<T> {
     /// and is mostly used for mTLS. This currently only returns
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
-    #[cfg(feature = "tls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+    #[cfg(all(feature = "server", feature = "tls"))]
+    #[cfg_attr(docsrs, doc(cfg(all(feature = "server", feature = "tls"))))]
     pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
         self.extensions()
             .get::<TlsConnectInfo<TcpConnectInfo>>()
