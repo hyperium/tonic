@@ -97,6 +97,8 @@ pub mod server;
 mod code_gen;
 pub use code_gen::CodeGenBuilder;
 
+mod compile_settings;
+
 /// Service generation trait.
 ///
 /// This trait can be implemented and consumed

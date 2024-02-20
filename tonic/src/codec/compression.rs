@@ -1,4 +1,3 @@
-use super::encode::BUFFER_SIZE;
 use crate::{metadata::MetadataValue, Status};
 use bytes::{Buf, BytesMut};
 #[cfg(feature = "gzip")]
@@ -68,6 +67,14 @@ impl EnabledCompressionEncodings {
     const fn is_zstd_enabled(&self) -> bool {
         false
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CompressionSettings {
+    pub(crate) encoding: CompressionEncoding,
+    /// buffer_growth_interval controls memory growth for internal buffers to balance resizing cost against memory waste.
+    /// The default buffer growth interval is 8 kilobytes.
+    pub(crate) buffer_growth_interval: usize,
 }
 
 /// The compression encodings Tonic supports.
@@ -195,20 +202,22 @@ fn split_by_comma(s: &str) -> impl Iterator<Item = &str> {
 }
 
 /// Compress `len` bytes from `decompressed_buf` into `out_buf`.
+/// buffer_size_increment is a hint to control the growth of out_buf versus the cost of resizing it.
 #[allow(unused_variables, unreachable_code)]
 pub(crate) fn compress(
-    encoding: CompressionEncoding,
+    settings: CompressionSettings,
     decompressed_buf: &mut BytesMut,
     out_buf: &mut BytesMut,
     len: usize,
 ) -> Result<(), std::io::Error> {
-    let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
+    let buffer_growth_interval = settings.buffer_growth_interval;
+    let capacity = ((len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
     #[cfg(any(feature = "gzip", feature = "zstd"))]
     let mut out_writer = bytes::BufMut::writer(out_buf);
 
-    match encoding {
+    match settings.encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
             let mut gzip_encoder = GzEncoder::new(
@@ -237,19 +246,21 @@ pub(crate) fn compress(
 /// Decompress `len` bytes from `compressed_buf` into `out_buf`.
 #[allow(unused_variables, unreachable_code)]
 pub(crate) fn decompress(
-    encoding: CompressionEncoding,
+    settings: CompressionSettings,
     compressed_buf: &mut BytesMut,
     out_buf: &mut BytesMut,
     len: usize,
 ) -> Result<(), std::io::Error> {
+    let buffer_growth_interval = settings.buffer_growth_interval;
     let estimate_decompressed_len = len * 2;
-    let capacity = ((estimate_decompressed_len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
+    let capacity =
+        ((estimate_decompressed_len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
     #[cfg(any(feature = "gzip", feature = "zstd"))]
     let mut out_writer = bytes::BufMut::writer(out_buf);
 
-    match encoding {
+    match settings.encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
             let mut gzip_decoder = GzDecoder::new(&compressed_buf[0..len]);

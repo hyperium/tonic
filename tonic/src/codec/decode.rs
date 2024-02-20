@@ -1,5 +1,5 @@
-use super::compression::{decompress, CompressionEncoding};
-use super::{DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
+use super::compression::{decompress, CompressionEncoding, CompressionSettings};
+use super::{BufferSettings, DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use http::StatusCode;
@@ -12,8 +12,6 @@ use std::{
 };
 use tokio_stream::Stream;
 use tracing::{debug, trace};
-
-const BUFFER_SIZE: usize = 8 * 1024;
 
 /// Streaming requests and responses.
 ///
@@ -118,6 +116,7 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
+        let buffer_size = decoder.buffer_settings().buffer_size;
         Self {
             decoder: Box::new(decoder),
             inner: StreamingInner {
@@ -127,7 +126,7 @@ impl<T> Streaming<T> {
                     .boxed_unsync(),
                 state: State::ReadHeader,
                 direction,
-                buf: BytesMut::with_capacity(BUFFER_SIZE),
+                buf: BytesMut::with_capacity(buffer_size),
                 trailers: None,
                 decompress_buf: BytesMut::new(),
                 encoding,
@@ -138,7 +137,10 @@ impl<T> Streaming<T> {
 }
 
 impl StreamingInner {
-    fn decode_chunk(&mut self) -> Result<Option<DecodeBuf<'_>>, Status> {
+    fn decode_chunk(
+        &mut self,
+        buffer_settings: BufferSettings,
+    ) -> Result<Option<DecodeBuf<'_>>, Status> {
         if let State::ReadHeader = self.state {
             if self.buf.remaining() < HEADER_SIZE {
                 return Ok(None);
@@ -205,8 +207,15 @@ impl StreamingInner {
             let decode_buf = if let Some(encoding) = compression {
                 self.decompress_buf.clear();
 
-                if let Err(err) = decompress(encoding, &mut self.buf, &mut self.decompress_buf, len)
-                {
+                if let Err(err) = decompress(
+                    CompressionSettings {
+                        encoding,
+                        buffer_growth_interval: buffer_settings.buffer_size,
+                    },
+                    &mut self.buf,
+                    &mut self.decompress_buf,
+                    len,
+                ) {
                     let message = if let Direction::Response(status) = self.direction {
                         format!(
                             "Error decompressing: {}, while receiving response with status: {}",
@@ -364,7 +373,7 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
-        match self.inner.decode_chunk()? {
+        match self.inner.decode_chunk(self.decoder.buffer_settings())? {
             Some(mut decode_buf) => match self.decoder.decode(&mut decode_buf)? {
                 Some(msg) => {
                     self.inner.state = State::ReadHeader;
