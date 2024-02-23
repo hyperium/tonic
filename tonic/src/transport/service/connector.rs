@@ -12,20 +12,15 @@ pub(crate) struct Connector<C> {
     inner: C,
     #[cfg(feature = "tls")]
     tls: Option<TlsConnector>,
-    #[cfg(not(feature = "tls"))]
-    #[allow(dead_code)]
-    tls: Option<()>,
 }
 
 impl<C> Connector<C> {
-    #[cfg(not(feature = "tls"))]
-    pub(crate) fn new(inner: C) -> Self {
-        Self { inner, tls: None }
-    }
-
-    #[cfg(feature = "tls")]
-    pub(crate) fn new(inner: C, tls: Option<TlsConnector>) -> Self {
-        Self { inner, tls }
+    pub(crate) fn new(inner: C, #[cfg(feature = "tls")] tls: Option<TlsConnector>) -> Self {
+        Self {
+            inner,
+            #[cfg(feature = "tls")]
+            tls,
+        }
     }
 
     #[cfg(feature = "tls-roots-common")]
