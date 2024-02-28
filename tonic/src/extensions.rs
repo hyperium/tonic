@@ -55,7 +55,8 @@ impl Extensions {
     }
 
     #[inline]
-    pub(crate) fn from_http(http: http::Extensions) -> Self {
+    /// Convert from `http::Extensions`
+    pub fn from_http(http: http::Extensions) -> Self {
         Self { inner: http }
     }
 
