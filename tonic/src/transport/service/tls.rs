@@ -30,6 +30,7 @@ enum TlsError {
 pub(crate) struct TlsConnector {
     config: Arc<ClientConfig>,
     domain: Arc<ServerName<'static>>,
+    assume_http2: bool,
 }
 
 impl TlsConnector {
@@ -37,6 +38,7 @@ impl TlsConnector {
         ca_cert: Option<Certificate>,
         identity: Option<Identity>,
         domain: &str,
+        assume_http2: bool,
     ) -> Result<Self, crate::Error> {
         let builder = ClientConfig::builder();
         let mut roots = RootCertStore::empty();
@@ -64,6 +66,7 @@ impl TlsConnector {
         Ok(Self {
             config: Arc::new(config),
             domain: Arc::new(ServerName::try_from(domain)?.to_owned()),
+            assume_http2,
         })
     }
 
@@ -75,11 +78,15 @@ impl TlsConnector {
             .connect(self.domain.as_ref().to_owned(), io)
             .await?;
 
+        // Generally we require ALPN to be negotiated, but if the user has
+        // explicitly set `assume_http2` to true, we'll allow it to be missing.
         let (_, session) = io.get_ref();
-        if session.alpn_protocol() != Some(ALPN_H2) {
-            return Err(TlsError::H2NotNegotiated)?;
+        let alpn_protocol = session.alpn_protocol();
+        if alpn_protocol != Some(ALPN_H2) {
+            if alpn_protocol.is_some() || !self.assume_http2 {
+                return Err(TlsError::H2NotNegotiated.into());
+            }
         }
-
         Ok(BoxedIo::new(io))
     }
 }

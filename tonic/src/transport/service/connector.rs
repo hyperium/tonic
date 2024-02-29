@@ -12,14 +12,24 @@ pub(crate) struct Connector<C> {
     inner: C,
     #[cfg(feature = "tls")]
     tls: Option<TlsConnector>,
+    // When connecting to a URI with the https scheme, assume that the server
+    // is capable of speaking HTTP/2 even if it doesn't offer ALPN.
+    #[cfg(feature = "tls-roots-common")]
+    assume_http2: bool,
 }
 
 impl<C> Connector<C> {
-    pub(crate) fn new(inner: C, #[cfg(feature = "tls")] tls: Option<TlsConnector>) -> Self {
+    pub(crate) fn new(
+        inner: C,
+        #[cfg(feature = "tls")] tls: Option<TlsConnector>,
+        #[cfg(feature = "tls-roots-common")] assume_http2: bool,
+    ) -> Self {
         Self {
             inner,
             #[cfg(feature = "tls")]
             tls,
+            #[cfg(feature = "tls-roots-common")]
+            assume_http2,
         }
     }
 
@@ -34,7 +44,7 @@ impl<C> Connector<C> {
             _ => return None,
         };
 
-        TlsConnector::new(None, None, host).ok()
+        TlsConnector::new(None, None, host, self.assume_http2).ok()
     }
 }
 
