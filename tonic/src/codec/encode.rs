@@ -1,5 +1,7 @@
-use super::compression::{compress, CompressionEncoding, SingleMessageCompressionOverride};
-use super::{EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
+use super::compression::{
+    compress, CompressionEncoding, CompressionSettings, SingleMessageCompressionOverride,
+};
+use super::{BufferSettings, EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use http::HeaderMap;
@@ -10,9 +12,6 @@ use std::{
     task::{ready, Context, Poll},
 };
 use tokio_stream::{Stream, StreamExt};
-
-pub(super) const BUFFER_SIZE: usize = 8 * 1024;
-const YIELD_THRESHOLD: usize = 32 * 1024;
 
 pub(crate) fn encode_server<T, U>(
     encoder: T,
@@ -90,7 +89,8 @@ where
         compression_override: SingleMessageCompressionOverride,
         max_message_size: Option<usize>,
     ) -> Self {
-        let buf = BytesMut::with_capacity(BUFFER_SIZE);
+        let buffer_settings = encoder.buffer_settings();
+        let buf = BytesMut::with_capacity(buffer_settings.buffer_size);
 
         let compression_encoding =
             if compression_override == SingleMessageCompressionOverride::Disable {
@@ -100,7 +100,7 @@ where
             };
 
         let uncompression_buf = if compression_encoding.is_some() {
-            BytesMut::with_capacity(BUFFER_SIZE)
+            BytesMut::with_capacity(buffer_settings.buffer_size)
         } else {
             BytesMut::new()
         };
@@ -132,6 +132,7 @@ where
             buf,
             uncompression_buf,
         } = self.project();
+        let buffer_settings = encoder.buffer_settings();
 
         loop {
             match source.as_mut().poll_next(cx) {
@@ -151,12 +152,13 @@ where
                         uncompression_buf,
                         *compression_encoding,
                         *max_message_size,
+                        buffer_settings,
                         item,
                     ) {
                         return Poll::Ready(Some(Err(status)));
                     }
 
-                    if buf.len() >= YIELD_THRESHOLD {
+                    if buf.len() >= buffer_settings.yield_threshold {
                         return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
                     }
                 }
@@ -174,6 +176,7 @@ fn encode_item<T>(
     uncompression_buf: &mut BytesMut,
     compression_encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
+    buffer_settings: BufferSettings,
     item: T::Item,
 ) -> Result<(), Status>
 where
@@ -195,8 +198,16 @@ where
 
         let uncompressed_len = uncompression_buf.len();
 
-        compress(encoding, uncompression_buf, buf, uncompressed_len)
-            .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
+        compress(
+            CompressionSettings {
+                encoding,
+                buffer_growth_interval: buffer_settings.buffer_size,
+            },
+            uncompression_buf,
+            buf,
+            uncompressed_len,
+        )
+        .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
     } else {
         encoder
             .encode(item, &mut EncodeBuf::new(buf))

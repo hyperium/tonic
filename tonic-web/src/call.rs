@@ -444,7 +444,10 @@ fn find_trailers(buf: &[u8]) -> Result<FindTrailers, Status> {
         }
 
         if !(header == 0 || header == 1) {
-            return Err(Status::internal("Invalid header bit {} expected 0 or 1"));
+            return Err(Status::internal(format!(
+                "Invalid header bit {} expected 0 or 1",
+                header
+            )));
         }
 
         let msg_len = temp_buf.get_u32();

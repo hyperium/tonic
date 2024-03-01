@@ -42,6 +42,12 @@ impl AsRef<[u8]> for Certificate {
     }
 }
 
+impl AsMut<[u8]> for Certificate {
+    fn as_mut(&mut self) -> &mut [u8] {
+        self.pem.as_mut()
+    }
+}
+
 impl Identity {
     /// Parse a PEM encoded certificate and private key.
     ///

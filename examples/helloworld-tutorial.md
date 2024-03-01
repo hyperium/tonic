@@ -112,12 +112,12 @@ name = "helloworld-client"
 path = "src/client.rs"
 
 [dependencies]
-tonic = "0.10"
+tonic = "0.11"
 prost = "0.12"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
-tonic-build = "0.10"
+tonic-build = "0.11"
 ```
 
 We include `tonic-build` as a useful way to incorporate the generation of our client and server gRPC code into the build process of our application. We will setup this build process now:
@@ -167,7 +167,7 @@ impl Greeter for MyGreeter {
         println!("Got a request: {:?}", request);
 
         let reply = hello_world::HelloReply {
-            message: format!("Hello {}!", request.into_inner().name).into(), // We must use .into_inner() as the fields of gRPC requests and responses are private
+            message: format!("Hello {}!", request.into_inner().name), // We must use .into_inner() as the fields of gRPC requests and responses are private
         };
 
         Ok(Response::new(reply)) // Send back our formatted greeting
@@ -216,7 +216,7 @@ impl Greeter for MyGreeter {
         println!("Got a request: {:?}", request);
 
         let reply = hello_world::HelloReply {
-            message: format!("Hello {}!", request.into_inner().name).into(),
+            message: format!("Hello {}!", request.into_inner().name),
         };
 
         Ok(Response::new(reply))

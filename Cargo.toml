@@ -28,4 +28,3 @@ members = [
   "tests/default_stubs",
 ]
 resolver = "2"
-

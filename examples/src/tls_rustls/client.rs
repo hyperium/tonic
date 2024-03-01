@@ -5,8 +5,6 @@ pub mod pb {
     tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
-use std::iter::FromIterator;
-
 use hyper::{client::HttpConnector, Uri};
 use pb::{echo_client::EchoClient, EchoRequest};
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};

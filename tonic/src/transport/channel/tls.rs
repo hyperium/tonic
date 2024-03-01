@@ -12,6 +12,7 @@ pub struct ClientTlsConfig {
     domain: Option<String>,
     cert: Option<Certificate>,
     identity: Option<Identity>,
+    assume_http2: bool,
 }
 
 impl fmt::Debug for ClientTlsConfig {
@@ -31,6 +32,7 @@ impl ClientTlsConfig {
             domain: None,
             cert: None,
             identity: None,
+            assume_http2: false,
         }
     }
 
@@ -58,11 +60,25 @@ impl ClientTlsConfig {
         }
     }
 
+    /// If true, the connector should assume that the server supports HTTP/2,
+    /// even if it doesn't provide protocol negotiation via ALPN.
+    pub fn assume_http2(self, assume_http2: bool) -> Self {
+        ClientTlsConfig {
+            assume_http2,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
-            None => uri.host().ok_or_else(Error::new_invalid_uri)?.to_string(),
-            Some(domain) => domain.clone(),
+            Some(domain) => domain,
+            None => uri.host().ok_or_else(Error::new_invalid_uri)?,
         };
-        TlsConnector::new(self.cert.clone(), self.identity.clone(), domain)
+        TlsConnector::new(
+            self.cert.clone(),
+            self.identity.clone(),
+            domain,
+            self.assume_http2,
+        )
     }
 }

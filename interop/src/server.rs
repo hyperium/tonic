@@ -194,15 +194,12 @@ where
     }
 
     fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
-        let echo_header = req
-            .headers()
-            .get("x-grpc-test-echo-initial")
-            .map(Clone::clone);
+        let echo_header = req.headers().get("x-grpc-test-echo-initial").cloned();
 
         let echo_trailer = req
             .headers()
             .get("x-grpc-test-echo-trailing-bin")
-            .map(Clone::clone)
+            .cloned()
             .map(|v| (HeaderName::from_static("x-grpc-test-echo-trailing-bin"), v));
 
         let call = self.inner.call(req);

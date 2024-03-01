@@ -1,6 +1,6 @@
 # tonic-build
 
-Compiles proto files via prost and generates service stubs and proto definitiones for use with tonic.
+Compiles proto files via prost and generates service stubs and proto definitions for use with tonic.
 
 ## Features
 

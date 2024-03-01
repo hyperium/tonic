@@ -8,7 +8,7 @@ use crate::{
     Code, Request, Status,
 };
 use http_body::Body;
-use std::fmt;
+use std::{fmt, pin::pin};
 use tokio_stream::{Stream, StreamExt};
 
 macro_rules! t {
@@ -375,14 +375,12 @@ where
 
         let (parts, body) = request.into_parts();
 
-        let stream = Streaming::new_request(
+        let mut stream = pin!(Streaming::new_request(
             self.codec.decoder(),
             body,
             request_compression_encoding,
             self.max_decoding_message_size,
-        );
-
-        tokio::pin!(stream);
+        ));
 
         let message = stream
             .try_next()

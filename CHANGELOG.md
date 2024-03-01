@@ -1,3 +1,19 @@
+# [0.11.0](https://github.com/hyperium/tonic/compare/v0.10.2...v0.11.0) (2024-02-08)
+
+BREAKING CHANGES:
+
+- Removed `NamedService` from the `transport` module, please import it via
+    `tonic::server::NamedService`.
+- MSRV bumped to `1.70`.
+
+### Features
+
+- Added `zstd` compression support.
+- Added connection timeout for `connecto_with_connector_lazy`.
+- Upgrade rustls to `v0.22`
+- Feature gate server implementation for `tonic-reflection`.
+
+
 # [0.10.2](https://github.com/hyperium/tonic/compare/v0.10.1...v0.10.2) (2023-09-28)
 
 
