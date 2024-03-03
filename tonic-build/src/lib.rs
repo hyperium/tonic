@@ -1,5 +1,5 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
-//! and proto definitiones for use with `tonic`.
+//! and proto definitions for use with `tonic`.
 //!
 //! # Feature flags
 //!
