@@ -79,7 +79,7 @@ jobs:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - name: Check features
-      run: cargo hack check --workspace --ignore-private --each-feature --no-dev-deps
+      run: cargo hack check --workspace --no-private --each-feature --no-dev-deps
     - name: Check all targets
       run: cargo check --workspace --all-targets --all-features
 
