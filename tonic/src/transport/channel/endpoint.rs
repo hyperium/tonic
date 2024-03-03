@@ -1,10 +1,11 @@
-use super::super::service;
+use super::service::Connector;
+#[cfg(feature = "tls")]
+use super::service::TlsConnector;
+use super::service::{Executor, SharedExec};
 use super::Channel;
 #[cfg(feature = "tls")]
 use super::ClientTlsConfig;
-#[cfg(feature = "tls")]
-use crate::transport::service::TlsConnector;
-use crate::transport::{service::SharedExec, Error, Executor};
+use crate::transport::Error;
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
 use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
@@ -318,15 +319,15 @@ impl Endpoint {
         self
     }
 
-    pub(crate) fn connector<C>(&self, c: C) -> service::Connector<C> {
+    pub(crate) fn connector<C>(&self, c: C) -> Connector<C> {
         #[cfg(all(feature = "tls", not(feature = "tls-roots-common")))]
-        let connector = service::Connector::new(c, self.tls.clone());
+        let connector = Connector::new(c, self.tls.clone());
 
         #[cfg(all(feature = "tls", feature = "tls-roots-common"))]
-        let connector = service::Connector::new(c, self.tls.clone(), self.tls_assume_http2);
+        let connector = Connector::new(c, self.tls.clone(), self.tls_assume_http2);
 
         #[cfg(not(feature = "tls"))]
-        let connector = service::Connector::new(c);
+        let connector = Connector::new(c);
 
         connector
     }
