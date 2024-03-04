@@ -1,5 +1,6 @@
 use crate::{
     body::{boxed, BoxBody},
+    metadata::GRPC_CONTENT_TYPE,
     server::NamedService,
 };
 use http::{Request, Response};
@@ -98,7 +99,10 @@ impl Routes {
 
 async fn unimplemented() -> impl axum::response::IntoResponse {
     let status = http::StatusCode::OK;
-    let headers = [("grpc-status", "12"), ("content-type", "application/grpc")];
+    let headers = [
+        ("grpc-status", "12"),
+        (http::header::CONTENT_TYPE.as_str(), GRPC_CONTENT_TYPE),
+    ];
     (status, headers)
 }
 
