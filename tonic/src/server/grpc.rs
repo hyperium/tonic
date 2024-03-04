@@ -1,6 +1,7 @@
 use crate::codec::compression::{
     CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
 };
+use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
     body::BoxBody,
     codec::{encode_server, Codec, Streaming},
@@ -438,7 +439,7 @@ where
         // Set the content type
         parts.headers.insert(
             http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
+            http::header::HeaderValue::from_static(GRPC_CONTENT_TYPE),
         );
 
         #[cfg(any(feature = "gzip", feature = "zstd"))]

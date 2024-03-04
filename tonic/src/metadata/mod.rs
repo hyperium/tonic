@@ -33,6 +33,9 @@ pub use self::value::MetadataValue;
 
 pub(crate) use self::map::GRPC_TIMEOUT_HEADER;
 
+/// HTTP Header `content-type` value for gRPC calls.
+pub const GRPC_CONTENT_TYPE: &str = "application/grpc";
+
 /// The metadata::errors module contains types for errors that can occur
 /// while handling gRPC custom metadata.
 pub mod errors {
