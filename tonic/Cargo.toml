@@ -49,7 +49,7 @@ channel = []
 # harness = false
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 bytes = "1.0"
 http = "0.2"
 tracing = "0.1"

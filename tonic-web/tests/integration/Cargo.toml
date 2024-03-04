@@ -7,7 +7,7 @@ version = "0.1.0"
 license = "MIT"
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 bytes = "1.0"
 hyper = "0.14"
 prost = "0.12"
