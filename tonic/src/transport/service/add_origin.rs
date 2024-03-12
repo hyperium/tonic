@@ -49,7 +49,7 @@ where
         // Split the request into the head and the body.
         let (mut head, body) = req.into_parts();
 
-        // Update the the request URI
+        // Update the request URI
         head.uri = {
             // Split the request URI into parts.
             let mut uri: http::uri::Parts = head.uri.into();
