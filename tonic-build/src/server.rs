@@ -111,14 +111,12 @@ pub(crate) fn generate_internal<T: Service>(
             #(#struct_attributes)*
             #[derive(Debug)]
             pub struct #server_service<T: #server_trait> {
-                inner: _Inner<T>,
+                inner: Arc<T>,
                 accept_compression_encodings: EnabledCompressionEncodings,
                 send_compression_encodings: EnabledCompressionEncodings,
                 max_decoding_message_size: Option<usize>,
                 max_encoding_message_size: Option<usize>,
             }
-
-            struct _Inner<T>(Arc<T>);
 
             impl<T: #server_trait> #server_service<T> {
                 pub fn new(inner: T) -> Self {
@@ -126,7 +124,6 @@ pub(crate) fn generate_internal<T: Service>(
                 }
 
                 pub fn from_arc(inner: Arc<T>) -> Self {
-                    let inner = _Inner(inner);
                     Self {
                         inner,
                         accept_compression_encodings: Default::default(),
@@ -163,8 +160,6 @@ pub(crate) fn generate_internal<T: Service>(
                 }
 
                 fn call(&mut self, req: http::Request<B>) -> Self::Future {
-                    let inner = self.inner.clone();
-
                     match req.uri().path() {
                         #methods
 
@@ -190,18 +185,6 @@ pub(crate) fn generate_internal<T: Service>(
                         max_decoding_message_size: self.max_decoding_message_size,
                         max_encoding_message_size: self.max_encoding_message_size,
                     }
-                }
-            }
-
-            impl<T: #server_trait> Clone for _Inner<T> {
-                fn clone(&self) -> Self {
-                    Self(Arc::clone(&self.0))
-                }
-            }
-
-            impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                   write!(f, "{:?}", self.0)
                 }
             }
 
@@ -492,7 +475,6 @@ fn generate_unary<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
@@ -560,7 +542,6 @@ fn generate_server_streaming<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
@@ -619,7 +600,6 @@ fn generate_client_streaming<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
@@ -688,7 +668,6 @@ fn generate_streaming<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
