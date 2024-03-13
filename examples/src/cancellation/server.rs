@@ -1,6 +1,7 @@
 use std::future::Future;
 
 use tokio_util::sync::CancellationToken;
+use tonic::transport::server::Routes;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -72,14 +73,14 @@ where
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
-    let greeter = MyGreeter::default();
+
+    let routes = Routes::builder()
+        .add_service(GreeterServer::new(MyGreeter::default()))
+        .build();
 
     println!("GreeterServer listening on {}", addr);
 
-    Server::builder()
-        .add_service(GreeterServer::new(greeter))
-        .serve(addr)
-        .await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

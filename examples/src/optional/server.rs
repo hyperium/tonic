@@ -1,4 +1,5 @@
 use std::env;
+use tonic::transport::server::Routes;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -42,12 +43,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         None
     };
 
+    let routes_builder = Routes::builder();
+    let routes_builder = if let Some(svc) = optional_service {
+        routes_builder.add_service(svc)
+    } else {
+        routes_builder
+    };
+    let routes = routes_builder.build();
+
     println!("GreeterServer listening on {}", addr);
 
-    Server::builder()
-        .add_optional_service(optional_service)
-        .serve(addr)
-        .await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

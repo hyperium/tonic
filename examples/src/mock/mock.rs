@@ -1,5 +1,5 @@
 use tonic::{
-    transport::{Endpoint, Server, Uri},
+    transport::{server::Routes, Endpoint, Server, Uri},
     Request, Response, Status,
 };
 use tower::service_fn;
@@ -21,8 +21,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let greeter = MyGreeter::default();
 
     tokio::spawn(async move {
-        Server::builder()
+        let routes = Routes::builder()
             .add_service(GreeterServer::new(greeter))
+            .build();
+        Server::builder()
+            .add_routes(routes)
             .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
     });

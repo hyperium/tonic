@@ -1,4 +1,5 @@
 use interop::server;
+use tonic::transport::server::Routes;
 use tonic::transport::Server;
 use tonic::transport::{Identity, ServerTlsConfig};
 
@@ -41,11 +42,12 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Wrap this test_service with a service that will echo headers as trailers.
     let test_service_svc = server::EchoHeadersSvc::new(test_service);
 
-    builder
+    let routes = Routes::builder()
         .add_service(test_service_svc)
         .add_service(unimplemented_service)
-        .serve(addr)
-        .await?;
+        .build();
+
+    builder.add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

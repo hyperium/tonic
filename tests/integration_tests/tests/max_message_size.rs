@@ -6,7 +6,7 @@ use integration_tests::{
 };
 use tokio_stream::Stream;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::Routes, Endpoint, Server},
     Code, Request, Response, Status,
 };
 
@@ -144,10 +144,11 @@ async fn response_stream_limit() {
     }
 
     let svc = test1_server::Test1Server::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
             .unwrap();
@@ -314,9 +315,11 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
         svc
     };
 
+    let routes = Routes::builder().add_service(svc).build();
+
     tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
             .unwrap();

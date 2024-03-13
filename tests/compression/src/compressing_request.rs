@@ -1,6 +1,6 @@
 use super::*;
 use http_body::Body;
-use tonic::codec::CompressionEncoding;
+use tonic::{codec::CompressionEncoding, transport::server::Routes};
 
 util::parametrized_tests! {
     client_enabled_server_enabled,
@@ -13,6 +13,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default()).accept_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -55,7 +56,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                         )
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
@@ -90,6 +91,7 @@ async fn client_enabled_server_enabled_multi_encoding(encoding: CompressionEncod
     let svc = test_server::TestServer::new(Svc::default())
         .accept_compressed(CompressionEncoding::Gzip)
         .accept_compressed(CompressionEncoding::Zstd);
+    let routes = Routes::builder().add_service(svc).build();
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -115,7 +117,7 @@ async fn client_enabled_server_enabled_multi_encoding(encoding: CompressionEncod
                         )
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
@@ -148,10 +150,11 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default());
+    let routes = Routes::builder().add_service(svc).build();
 
     tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
             .unwrap();
@@ -197,11 +200,12 @@ async fn client_mark_compressed_without_header_server_enabled(encoding: Compress
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default()).accept_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     tokio::spawn({
         async move {
             Server::builder()
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();

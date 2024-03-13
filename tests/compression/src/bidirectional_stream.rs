@@ -1,6 +1,6 @@
 use super::*;
 use http_body::Body;
-use tonic::codec::CompressionEncoding;
+use tonic::{codec::CompressionEncoding, transport::server::Routes};
 
 util::parametrized_tests! {
     client_enabled_server_enabled,
@@ -15,6 +15,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let svc = test_server::TestServer::new(Svc::default())
         .accept_compressed(encoding)
         .send_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
@@ -63,7 +64,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();

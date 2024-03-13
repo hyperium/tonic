@@ -1,3 +1,4 @@
+use tonic::transport::server::Routes;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -30,12 +31,12 @@ impl Greeter for MyGreeter {
 
 fn main() {
     let addr = "[::1]:50051".parse().unwrap();
-    let greeter = MyGreeter::default();
+    let routes = Routes::builder()
+        .add_service(GreeterServer::new(MyGreeter::default()))
+        .build();
 
     let rt = Runtime::new().expect("failed to obtain a new RunTime object");
-    let server_future = Server::builder()
-        .add_service(GreeterServer::new(greeter))
-        .serve(addr);
+    let server_future = Server::builder().add_routes(routes).serve(addr);
     rt.block_on(server_future)
         .expect("failed to successfully run the future on RunTime");
 }

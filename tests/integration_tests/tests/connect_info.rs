@@ -2,7 +2,10 @@ use integration_tests::pb::{test_client, test_server, Input, Output};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{
-    transport::{server::TcpConnectInfo, Endpoint, Server},
+    transport::{
+        server::{Routes, TcpConnectInfo},
+        Endpoint, Server,
+    },
     Request, Response, Status,
 };
 
@@ -22,12 +25,13 @@ async fn getting_connect_info() {
     }
 
     let svc = test_server::TestServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     let (tx, rx) = oneshot::channel::<()>();
 
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1400".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
@@ -57,7 +61,10 @@ pub mod unix {
     };
     use tokio_stream::wrappers::UnixListenerStream;
     use tonic::{
-        transport::{server::UdsConnectInfo, Endpoint, Server, Uri},
+        transport::{
+            server::{Routes, UdsConnectInfo},
+            Endpoint, Server, Uri,
+        },
         Request, Response, Status,
     };
     use tower::service_fn;
@@ -90,12 +97,14 @@ pub mod unix {
         let uds = UnixListener::bind(&unix_socket_path).unwrap();
         let uds_stream = UnixListenerStream::new(uds);
 
-        let service = test_server::TestServer::new(Svc {});
+        let svc = test_server::TestServer::new(Svc {});
+        let routes = Routes::builder().add_service(svc).build();
+
         let (tx, rx) = oneshot::channel::<()>();
 
         let jh = tokio::spawn(async move {
             Server::builder()
-                .add_service(service)
+                .add_routes(routes)
                 .serve_with_incoming_shutdown(uds_stream, async { drop(rx.await) })
                 .await
                 .unwrap();

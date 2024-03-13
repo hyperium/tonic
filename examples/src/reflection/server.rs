@@ -1,3 +1,4 @@
+use tonic::transport::server::Routes;
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
@@ -34,13 +35,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap();
 
     let addr = "[::1]:50052".parse().unwrap();
-    let greeter = MyGreeter::default();
+    let greeter = proto::greeter_server::GreeterServer::new(MyGreeter::default());
 
-    Server::builder()
+    let routes = Routes::builder()
         .add_service(service)
-        .add_service(proto::greeter_server::GreeterServer::new(greeter))
-        .serve(addr)
-        .await?;
+        .add_service(greeter)
+        .build();
+
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }
