@@ -17,7 +17,6 @@ use tower::Service;
 async fn writes_origin_header() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(
             &self,

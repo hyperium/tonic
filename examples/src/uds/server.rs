@@ -21,7 +21,6 @@ use hello_world::{
 #[derive(Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,

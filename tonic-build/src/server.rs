@@ -237,7 +237,6 @@ fn generate_trait<T: Service>(
 
     quote! {
         #trait_doc
-        #[async_trait]
         pub trait #server_trait : Send + Sync + 'static {
             #methods
         }
@@ -282,41 +281,41 @@ fn generate_trait_methods<T: Service>(
             (false, false, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
             (false, false, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send;
                 }
             }
             (true, false, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
             (true, false, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send;
                 }
             }
             (false, true, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
@@ -332,16 +331,16 @@ fn generate_trait_methods<T: Service>(
                     type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<Self::#stream>, tonic::Status>> + Send;
                 }
             }
             (true, true, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
@@ -357,8 +356,8 @@ fn generate_trait_methods<T: Service>(
                     type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl Future<Output = std::result::Result<tonic::Response<Self::#stream>, tonic::Status>> + Send;
                 }
             }
         };

@@ -16,7 +16,6 @@ use tonic::{transport::Server, Code, Request, Response, Status};
 async fn status_with_details() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
             Err(Status::with_details(
@@ -70,7 +69,6 @@ async fn status_with_metadata() {
 
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
             let mut metadata = MetadataMap::new();
@@ -134,7 +132,6 @@ async fn status_from_server_stream() {
 
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_stream_server::TestStream for Svc {
         type StreamCallStream = Stream<OutputStream>;
 
