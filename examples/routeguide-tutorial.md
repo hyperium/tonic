@@ -678,7 +678,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
 As in the simple RPC, we pass a single value request. However, instead of getting a
 single value back, we get a stream of `Features`.
 
-We use the the `message()` method from the `tonic::Streaming` struct to repeatedly read in the
+We use the `message()` method from the `tonic::Streaming` struct to repeatedly read in the
 server's responses to a response protocol buffer object (in this case a `Feature`) until there are
 no more messages left in the stream.
 
