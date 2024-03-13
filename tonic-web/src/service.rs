@@ -5,6 +5,7 @@ use std::task::{ready, Context, Poll};
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
 use hyper::Body;
 use pin_project::pin_project;
+use tonic::metadata::GRPC_CONTENT_TYPE;
 use tonic::{
     body::{empty_body, BoxBody},
     server::NamedService,
@@ -15,8 +16,6 @@ use tracing::{debug, trace};
 use crate::call::content_types::is_grpc_web;
 use crate::call::{Encoding, GrpcWebCall};
 use crate::BoxError;
-
-const GRPC: &str = "application/grpc";
 
 /// Service implementing the grpc-web protocol.
 #[derive(Debug, Clone)]
@@ -205,8 +204,10 @@ impl<'a> RequestKind<'a> {
 fn coerce_request(mut req: Request<Body>, encoding: Encoding) -> Request<Body> {
     req.headers_mut().remove(header::CONTENT_LENGTH);
 
-    req.headers_mut()
-        .insert(header::CONTENT_TYPE, HeaderValue::from_static(GRPC));
+    req.headers_mut().insert(
+        header::CONTENT_TYPE,
+        HeaderValue::from_static(GRPC_CONTENT_TYPE),
+    );
 
     req.headers_mut()
         .insert(header::TE, HeaderValue::from_static("trailers"));
@@ -376,7 +377,7 @@ mod tests {
         fn request() -> Request<Body> {
             Request::builder()
                 .version(Version::HTTP_2)
-                .header(CONTENT_TYPE, GRPC)
+                .header(CONTENT_TYPE, GRPC_CONTENT_TYPE)
                 .body(Body::empty())
                 .unwrap()
         }
@@ -396,7 +397,7 @@ mod tests {
             let mut svc = crate::enable(Svc);
 
             let req = Request::builder()
-                .header(CONTENT_TYPE, GRPC)
+                .header(CONTENT_TYPE, GRPC_CONTENT_TYPE)
                 .body(Body::empty())
                 .unwrap();
 

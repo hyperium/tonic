@@ -1,5 +1,5 @@
-use crate::body::BoxBody;
 use crate::metadata::MetadataMap;
+use crate::{body::BoxBody, metadata::GRPC_CONTENT_TYPE};
 use base64::Engine as _;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
@@ -582,14 +582,13 @@ impl Status {
         self
     }
 
-    #[allow(clippy::wrong_self_convention)]
     /// Build an `http::Response` from the given `Status`.
     pub fn to_http(self) -> http::Response<BoxBody> {
         let (mut parts, _body) = http::Response::new(()).into_parts();
 
         parts.headers.insert(
             http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
+            http::header::HeaderValue::from_static(GRPC_CONTENT_TYPE),
         );
 
         self.add_header(&mut parts.headers).unwrap();

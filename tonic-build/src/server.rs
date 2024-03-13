@@ -171,8 +171,8 @@ pub(crate) fn generate_internal<T: Service>(
                         _ => Box::pin(async move {
                             Ok(http::Response::builder()
                                .status(200)
-                               .header("grpc-status", "12")
-                               .header("content-type", "application/grpc")
+                               .header("grpc-status", tonic::Code::Unimplemented as i32)
+                               .header(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE)
                                .body(empty_body())
                                .unwrap())
                         }),
