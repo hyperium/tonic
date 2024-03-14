@@ -16,7 +16,7 @@ path = "src/bin/server.rs"
 
 [dependencies]
 async-stream = "0.3"
-strum = {version = "0.25", features = ["derive"]}
+strum = {version = "0.26", features = ["derive"]}
 pico-args = {version = "0.5", features = ["eq-separator"]}
 console = "0.15"
 http = "0.2"
