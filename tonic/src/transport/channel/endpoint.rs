@@ -337,16 +337,11 @@ impl Endpoint {
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_connect_timeout(self.connect_timeout);
 
         let connector = self.connector(http);
 
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::connect(connector, self.clone()).await
-        } else {
-            Channel::connect(connector, self.clone()).await
-        }
+        Channel::connect(connector, self.clone()).await
     }
 
     /// Create a channel from this config.
@@ -358,16 +353,11 @@ impl Endpoint {
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_connect_timeout(self.connect_timeout);
 
         let connector = self.connector(http);
 
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::new(connector, self.clone())
-        } else {
-            Channel::new(connector, self.clone())
-        }
+        Channel::new(connector, self.clone())
     }
 
     /// Connect with a custom connector.
