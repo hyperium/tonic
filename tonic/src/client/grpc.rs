@@ -358,7 +358,7 @@ impl<T> Grpc<T> {
                     self.config.max_decoding_message_size,
                 )
             } else {
-                Streaming::new_empty(decoder, body)
+                Streaming::new_empty(decoder, body, self.config.max_decoding_message_size)
             }
         });
 

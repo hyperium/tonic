@@ -4,8 +4,10 @@ use integration_tests::{
     pb::{test1_client, test1_server, Input1, Output1},
     trace_init,
 };
+use prost::Message;
 use tokio_stream::Stream;
 use tonic::{
+    body::BoxBody,
     transport::{Endpoint, Server},
     Code, Request, Response, Status,
 };
@@ -363,4 +365,49 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
     });
 
     client.unary_call(req).await.map(|_| ())
+}
+
+#[tokio::test]
+async fn max_message_size_blob() {
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    struct HelloRequest {
+        #[prost(string, tag = "1")]
+        name: std::string::String,
+    }
+
+    #[derive(Clone, PartialEq, ::prost::Message)]
+    struct HelloReply {
+        #[prost(string, tag = "1")]
+        message: std::string::String,
+    }
+
+    let svc = tower::service_fn(|_: http::Request<BoxBody>| async {
+        let mut buffer: Vec<u8> = vec![0];
+        let length: u32 = 5 * 1024 * 1024 + 5;
+        buffer.extend(length.to_be_bytes());
+
+        HelloReply {
+            message: "a".repeat(5 * 1024 * 1024),
+        }
+        .encode(&mut buffer)
+        .unwrap();
+        Result::<_, Status>::Ok(
+            http::Response::builder()
+                .header("grpc-status", 0)
+                .body(hyper::Body::from(buffer))
+                .unwrap(),
+        )
+    });
+
+    let mut grpc = tonic::client::Grpc::new(svc).max_decoding_message_size(6 * 1024 * 1024);
+    let _ = grpc
+        .unary::<_, HelloReply, _>(
+            tonic::Request::new(HelloRequest {
+                name: "Tonic".into(),
+            }),
+            http::uri::PathAndQuery::from_static("/foo"),
+            tonic::codec::ProstCodec::default(),
+        )
+        .await
+        .unwrap();
 }
