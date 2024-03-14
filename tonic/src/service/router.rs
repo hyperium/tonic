@@ -83,6 +83,7 @@ impl Routes {
         self
     }
 
+    #[cfg(feature = "transport")]
     pub(crate) fn prepare(self) -> Self {
         Self {
             // this makes axum perform update some internals of the router that improves perf

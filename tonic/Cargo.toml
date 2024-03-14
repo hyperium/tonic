@@ -32,14 +32,15 @@ tls = ["dep:rustls-pki-types", "dep:rustls-pemfile", "transport", "dep:tokio-rus
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
+router = ["dep:hyper", "dep:axum", "dep:tower"]
 transport = [
-  "dep:async-stream",
-  "dep:axum",
+  "router",
   "channel",
+  "dep:async-stream",
   "dep:h2",
-  "dep:hyper",
+  "dep:hyper", "hyper?/full",
   "dep:tokio", "tokio?/net", "tokio?/time",
-  "dep:tower",
+  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit", "tower?/load", "tower?/make", "tower?/timeout", "tower?/util",
   "dep:hyper-timeout",
 ]
 channel = []
@@ -68,11 +69,11 @@ async-trait = {version = "0.1.13", optional = true}
 
 # transport
 h2 = {version = "0.3.24", optional = true}
-hyper = {version = "0.14.26", features = ["full"], optional = true}
+hyper = {version = "0.14.26", optional = true}
 hyper-timeout = {version = "0.4", optional = true}
 tokio = {version = "1.0.1", optional = true}
 tokio-stream = "0.1"
-tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
+tower = {version = "0.4.7", default-features = false, optional = true}
 axum = {version = "0.6.9", default_features = false, optional = true}
 
 # rustls

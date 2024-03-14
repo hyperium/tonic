@@ -9,8 +9,8 @@ mod tls;
 #[cfg(unix)]
 mod unix;
 
-pub use super::service::Routes;
-pub use super::service::RoutesBuilder;
+/// A deprecated re-export. Please use `tonic::service::{Routes, RoutesBuilder}` directly.
+pub use super::service::{Routes, RoutesBuilder};
 
 pub use conn::{Connected, TcpConnectInfo};
 #[cfg(feature = "tls")]
