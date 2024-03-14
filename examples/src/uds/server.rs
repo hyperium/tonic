@@ -1,6 +1,6 @@
 #![cfg_attr(not(unix), allow(unused_imports))]
 
-use std::path::Path;
+use std::{env, path::Path};
 #[cfg(unix)]
 use tokio::net::UnixListener;
 #[cfg(unix)]
@@ -43,9 +43,9 @@ impl Greeter for MyGreeter {
 #[cfg(unix)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let path = "/tmp/tonic/helloworld";
-
-    std::fs::create_dir_all(Path::new(path).parent().unwrap())?;
+    let path = env::var("EXAMPLE_UDS_PATH").unwrap_or("/tmp/tonic/helloworld".to_owned());
+    std::fs::create_dir_all(Path::new(&path).parent().unwrap())?;
+    println!("Using path {}", path);
 
     let greeter = MyGreeter::default();
 
