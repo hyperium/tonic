@@ -229,7 +229,7 @@ fn finish_encoding(
         return Err(Status::new(
             Code::OutOfRange,
             format!(
-                "Error, message length too large: found {} bytes, the limit is: {} bytes",
+                "Error, encoded message length too large: found {} bytes, the limit is: {} bytes",
                 len, limit
             ),
         ));

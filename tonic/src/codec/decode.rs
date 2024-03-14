@@ -183,7 +183,7 @@ impl StreamingInner {
                 return Err(Status::new(
                     Code::OutOfRange,
                     format!(
-                        "Error, message length too large: found {} bytes, the limit is: {} bytes",
+                        "Error, decoded message length too large: found {} bytes, the limit is: {} bytes",
                         len, limit
                     ),
                 ));
