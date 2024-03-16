@@ -3,9 +3,9 @@ use std::time;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
-use crate::richer_error::FromAnyRef;
+use crate::{pb, richer_error::FromAnyRef};
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::{FromAny, IntoAny};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
 /// [error_details.proto]. Describes when the clients can retry a failed

@@ -1,9 +1,9 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
-use crate::richer_error::FromAnyRef;
+use crate::pb;
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::*;
 
 /// Used to encode/decode the `LocalizedMessage` standard error message
 /// described in [error_details.proto]. Provides a localized error message
