@@ -110,13 +110,6 @@ impl IntoAny for BadRequest {
     }
 }
 
-impl FromAny for BadRequest {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for BadRequest {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -144,8 +137,7 @@ impl From<BadRequest> for pb::BadRequest {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{FromAny, IntoAny};
-    use super::BadRequest;
+    use super::*;
 
     #[test]
     fn gen_bad_request() {
@@ -192,7 +184,7 @@ mod tests {
             "Any from filled BadRequest differs from expected result"
         );
 
-        let br_details = match BadRequest::from_any(gen_any) {
+        let br_details = match BadRequest::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating BadRequest from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

@@ -106,13 +106,6 @@ impl IntoAny for Help {
     }
 }
 
-impl FromAny for Help {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for Help {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -140,8 +133,7 @@ impl From<Help> for pb::Help {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{FromAny, IntoAny};
-    use super::Help;
+    use super::*;
 
     #[test]
     fn gen_help() {
@@ -188,7 +180,7 @@ mod tests {
             "Any from filled Help differs from expected result"
         );
 
-        let br_details = match Help::from_any(gen_any) {
+        let br_details = match Help::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating Help from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

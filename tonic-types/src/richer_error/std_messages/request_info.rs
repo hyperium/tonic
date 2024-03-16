@@ -51,13 +51,6 @@ impl IntoAny for RequestInfo {
     }
 }
 
-impl FromAny for RequestInfo {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for RequestInfo {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -87,8 +80,7 @@ impl From<RequestInfo> for pb::RequestInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{FromAny, IntoAny};
-    use super::RequestInfo;
+    use super::*;
 
     #[test]
     fn gen_request_info() {
@@ -116,7 +108,7 @@ mod tests {
             "Any from filled RequestInfo differs from expected result"
         );
 
-        let br_details = match RequestInfo::from_any(gen_any) {
+        let br_details = match RequestInfo::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating RequestInfo from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

@@ -3,9 +3,9 @@ use std::time;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
-use crate::{pb, richer_error::FromAnyRef};
+use crate::pb;
 
-use super::super::{FromAny, IntoAny};
+use super::super::{FromAnyRef, IntoAny};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
 /// [error_details.proto]. Describes when the clients can retry a failed
@@ -63,13 +63,6 @@ impl IntoAny for RetryInfo {
     }
 }
 
-impl FromAny for RetryInfo {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for RetryInfo {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -119,8 +112,7 @@ impl From<RetryInfo> for pb::RetryInfo {
 mod tests {
     use core::time::Duration;
 
-    use super::super::super::{FromAny, IntoAny};
-    use super::RetryInfo;
+    use super::*;
 
     #[test]
     fn gen_retry_info() {
@@ -152,7 +144,7 @@ mod tests {
             "Any from filled RetryInfo differs from expected result"
         );
 
-        let br_details = match RetryInfo::from_any(gen_any) {
+        let br_details = match RetryInfo::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating RetryInfo from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

@@ -130,13 +130,6 @@ impl IntoAny for PreconditionFailure {
     }
 }
 
-impl FromAny for PreconditionFailure {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for PreconditionFailure {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -164,8 +157,7 @@ impl From<PreconditionFailure> for pb::PreconditionFailure {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{FromAny, IntoAny};
-    use super::PreconditionFailure;
+    use super::*;
 
     #[test]
     fn gen_prec_failure() {
@@ -213,7 +205,7 @@ mod tests {
             "Any from filled PreconditionFailure differs from expected result"
         );
 
-        let br_details = match PreconditionFailure::from_any(gen_any) {
+        let br_details = match PreconditionFailure::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating PreconditionFailure from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

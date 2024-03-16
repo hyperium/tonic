@@ -11,13 +11,6 @@ pub(super) trait IntoAny {
     fn into_any(self) -> Any;
 }
 
-#[allow(dead_code)]
-pub(super) trait FromAny {
-    fn from_any(any: Any) -> Result<Self, DecodeError>
-    where
-        Self: Sized;
-}
-
 pub(super) trait FromAnyRef {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError>
     where

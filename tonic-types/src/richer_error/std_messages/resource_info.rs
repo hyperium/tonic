@@ -64,13 +64,6 @@ impl IntoAny for ResourceInfo {
     }
 }
 
-impl FromAny for ResourceInfo {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for ResourceInfo {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -104,8 +97,7 @@ impl From<ResourceInfo> for pb::ResourceInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{FromAny, IntoAny};
-    use super::ResourceInfo;
+    use super::*;
 
     #[test]
     fn gen_resource_info() {
@@ -132,7 +124,7 @@ mod tests {
             "Any from filled ResourceInfo differs from expected result"
         );
 
-        let br_details = match ResourceInfo::from_any(gen_any) {
+        let br_details = match ResourceInfo::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating ResourceInfo from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

@@ -52,13 +52,6 @@ impl IntoAny for LocalizedMessage {
     }
 }
 
-impl FromAny for LocalizedMessage {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for LocalizedMessage {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -88,8 +81,7 @@ impl From<LocalizedMessage> for pb::LocalizedMessage {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{FromAny, IntoAny};
-    use super::LocalizedMessage;
+    use super::*;
 
     #[test]
     fn gen_localized_message() {
@@ -117,7 +109,7 @@ mod tests {
             "Any from filled LocalizedMessage differs from expected result"
         );
 
-        let br_details = match LocalizedMessage::from_any(gen_any) {
+        let br_details = match LocalizedMessage::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating LocalizedMessage from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

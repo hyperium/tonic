@@ -48,13 +48,6 @@ impl IntoAny for DebugInfo {
     }
 }
 
-impl FromAny for DebugInfo {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for DebugInfo {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -84,8 +77,7 @@ impl From<DebugInfo> for pb::DebugInfo {
 
 #[cfg(test)]
 mod tests {
-    use super::super::super::{FromAny, IntoAny};
-    use super::DebugInfo;
+    use super::*;
 
     #[test]
     fn gen_debug_info() {
@@ -114,7 +106,7 @@ mod tests {
             "Any from filled DebugInfo differs from expected result"
         );
 
-        let br_details = match DebugInfo::from_any(gen_any) {
+        let br_details = match DebugInfo::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating DebugInfo from Any: {:?}", error),
             Ok(from_any) => from_any,
         };

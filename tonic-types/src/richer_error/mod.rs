@@ -11,4 +11,4 @@ mod rpc_status_ext;
 pub use rpc_status_ext::RpcStatusExt;
 
 mod helpers;
-use helpers::{gen_details_bytes, FromAny, FromAnyRef, IntoAny};
+use helpers::{gen_details_bytes, FromAnyRef, IntoAny};
