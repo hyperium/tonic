@@ -6,6 +6,8 @@ This crate also introduces the [`StatusExt`] trait and implements it in
 [`tonic::Status`], allowing the implementation of the [gRPC Richer Error Model] 
 with [`tonic`] in a convenient way.
 
+[`CodeExt`] adds [gRPC Richer Error Model] functionality to [`tonic::Code`]. Notably [`http::status::StatusCode`] mapping as described [here](https://cloud.google.com/apis/design/errors#generating_errors) and [here](https://github.com/googleapis/googleapis/blob/master/google/rpc/code.proto).
+
 ## Usage
 
 Useful protobuf types are available through the [`pb`] module. They can be
@@ -130,16 +132,19 @@ more direct way of extracting a [`BadRequest`] error message from
 [`tonic::Status`].
 
 [`tonic::Status`]: https://docs.rs/tonic/latest/tonic/struct.Status.html
+[`tonic::Code`]: https://docs.rs/tonic/latest/tonic/enum.Code.html
 [`tonic`]: https://docs.rs/tonic/latest/tonic/
 [gRPC Richer Error Model]: https://www.grpc.io/docs/guides/error/
 [`pb`]: https://docs.rs/tonic-types/latest/tonic_types/pb/index.html
-[`StatusExt`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html
 [examples]: https://github.com/hyperium/tonic/tree/master/examples
+[`ErrorDetail`]: https://docs.rs/tonic-types/latest/tonic_types/enum.ErrorDetail.html
 [`ErrorDetails`]: https://docs.rs/tonic-types/latest/tonic_types/struct.ErrorDetails.html
 [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
-[`ErrorDetail`]: https://docs.rs/tonic-types/latest/tonic_types/enum.ErrorDetail.html
+[`StatusExt`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html
 [`StatusExt::with_error_details_vec`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html#tymethod.with_error_details_vec
 [`StatusExt::get_error_details_vec`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html#tymethod.get_error_details_vec
-[Richer Error example]: https://github.com/hyperium/tonic/tree/master/examples/src/richer-error
 [`StatusExt::get_details_bad_request`]: https://docs.rs/tonic-types/latest/tonic_types/trait.StatusExt.html#tymethod.get_details_bad_request
+[`CodeExt`]: https://docs.rs/tonic-types/latest/tonic_types/trait.CodeExt.html
+[`http::status::StatusCode`]: https://docs.rs/http/latest/http/status/struct.StatusCode.html
+[Richer Error example]: https://github.com/hyperium/tonic/tree/master/examples/src/richer-error
 [`BadRequest`]: https://docs.rs/tonic-types/latest/tonic_types/struct.BadRequest.html
