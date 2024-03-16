@@ -880,3 +880,51 @@ impl ErrorDetails {
         self
     }
 }
+
+impl From<ErrorDetails> for Vec<Any> {
+    fn from(details: ErrorDetails) -> Self {
+        let mut any_vec: Vec<Any> = Vec::with_capacity(10);
+
+        if let Some(retry_info) = details.retry_info {
+            any_vec.push(retry_info.into_any());
+        }
+
+        if let Some(debug_info) = details.debug_info {
+            any_vec.push(debug_info.into_any());
+        }
+
+        if let Some(quota_failure) = details.quota_failure {
+            any_vec.push(quota_failure.into_any());
+        }
+
+        if let Some(error_info) = details.error_info {
+            any_vec.push(error_info.into_any());
+        }
+
+        if let Some(precondition_failure) = details.precondition_failure {
+            any_vec.push(precondition_failure.into_any());
+        }
+
+        if let Some(bad_request) = details.bad_request {
+            any_vec.push(bad_request.into_any());
+        }
+
+        if let Some(request_info) = details.request_info {
+            any_vec.push(request_info.into_any());
+        }
+
+        if let Some(resource_info) = details.resource_info {
+            any_vec.push(resource_info.into_any());
+        }
+
+        if let Some(help) = details.help {
+            any_vec.push(help.into_any());
+        }
+
+        if let Some(localized_message) = details.localized_message {
+            any_vec.push(localized_message.into_any());
+        }
+
+        any_vec
+    }
+}
