@@ -10,5 +10,8 @@ pub use status_ext::StatusExt;
 mod rpc_status_ext;
 pub use rpc_status_ext::RpcStatusExt;
 
+mod code_ext;
+pub use code_ext::CodeExt;
+
 mod helpers;
 use helpers::{gen_details_bytes, FromAnyRef, IntoAny};
