@@ -1,3 +1,5 @@
+use std::marker::PhantomData;
+
 use integration_tests::pb::{test_stream_server, InputStream, OutputStream};
 use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
@@ -18,7 +20,7 @@ async fn status_from_server_stream_with_source() {
             &self,
             _: Request<InputStream>,
         ) -> Result<Response<Self::StreamCallStream>, Status> {
-            let s = Unsync(std::ptr::null_mut::<()>());
+            let s = Unsync::default();
 
             Ok(Response::new(Box::pin(s) as Self::StreamCallStream))
         }
@@ -41,7 +43,8 @@ async fn status_from_server_stream_with_source() {
     jh.await.unwrap();
 }
 
-struct Unsync(*mut ());
+#[derive(Default)]
+struct Unsync(PhantomData<*mut ()>);
 
 unsafe impl Send for Unsync {}
 
