@@ -3,10 +3,13 @@ use std::{
     {fmt, sync::Arc},
 };
 
-use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
-    rustls::{server::WebPkiClientVerifier, ClientConfig, RootCertStore, ServerConfig},
+    rustls::{
+        pki_types::{CertificateDer, PrivateKeyDer, ServerName},
+        server::WebPkiClientVerifier,
+        ClientConfig, RootCertStore, ServerConfig,
+    },
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
 
