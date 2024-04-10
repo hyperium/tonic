@@ -85,10 +85,8 @@ impl TlsConnector {
         // explicitly set `assume_http2` to true, we'll allow it to be missing.
         let (_, session) = io.get_ref();
         let alpn_protocol = session.alpn_protocol();
-        if alpn_protocol != Some(ALPN_H2) {
-            if alpn_protocol.is_some() || !self.assume_http2 {
-                return Err(TlsError::H2NotNegotiated.into());
-            }
+        if !(alpn_protocol == Some(ALPN_H2) || self.assume_http2) {
+            return Err(TlsError::H2NotNegotiated.into());
         }
         Ok(BoxedIo::new(io))
     }
