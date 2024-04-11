@@ -4,7 +4,6 @@ use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use http::StatusCode;
 use http_body::Body;
-use std::os::macos::raw::stat;
 use std::{
     fmt, future,
     pin::Pin,
