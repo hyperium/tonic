@@ -444,6 +444,10 @@ fn find_trailers(buf: &[u8]) -> Result<FindTrailers, Status> {
         }
 
         if !(header == 0 || header == 1) {
+            tracing::debug!(
+                "invalid header: got body of {}",
+                String::from_utf8_lossy(&buf[..])
+            );
             return Err(Status::internal(format!(
                 "Invalid header bit {} expected 0 or 1",
                 header
