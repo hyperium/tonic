@@ -389,10 +389,6 @@ fn generate_named(
     }
 }
 
-impl<T: ServerTrait> tonic::server::NamedService for ServiceServer<T> {
-    const NAME: &'static str = "service_api.Service";
-}
-
 fn generate_methods<T: Service>(
     service: &T,
     emit_package: bool,
