@@ -23,10 +23,11 @@ repository = "https://github.com/hyperium/tonic"
 version = "0.11.0"
 
 [features]
-codegen = ["dep:async-trait"]
+codegen = []
+async_trait = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
-default = ["transport", "codegen", "prost"]
+default = ["transport", "codegen", "async_trait", "prost"]
 prost = ["dep:prost"]
 tls = ["dep:rustls-pki-types", "dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]

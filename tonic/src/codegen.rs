@@ -1,5 +1,6 @@
 //! Codegen exports used by `tonic-build`.
 
+#[cfg(feature = "async_trait")]
 pub use async_trait::async_trait;
 pub use tokio_stream;
 

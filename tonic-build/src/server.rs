@@ -234,10 +234,18 @@ fn generate_trait<T: Service>(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
         service.name()
     ));
-
+    
+    #[cfg(feature = "async_trait")]
     quote! {
         #trait_doc
         #[async_trait]
+        pub trait #server_trait : Send + Sync + 'static {
+            #methods
+        }
+    }
+    #[cfg(not(feature = "async_trait"))]
+    quote! {
+        #trait_doc
         pub trait #server_trait : Send + Sync + 'static {
             #methods
         }

@@ -304,6 +304,8 @@ impl RouteGuide for RouteGuideService {
 
 **Note**: The `tonic::async_trait` attribute macro adds support for async functions in traits. It
 uses [async-trait] internally. You can learn more about `async fn` in traits in the [async book].
+This attribute is only needed for Rust 1.74 and below, as async fn in traits have been stabilized
+in Rust 1.75.
 
 
 [cargo book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts

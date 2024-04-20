@@ -113,8 +113,8 @@ mod status;
 mod util;
 
 /// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
-#[cfg(feature = "codegen")]
-#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
+#[cfg(feature = "async_trait")]
+#[cfg_attr(docsrs, doc(cfg(feature = "async_trait")))]
 pub use async_trait::async_trait;
 
 #[doc(inline)]
