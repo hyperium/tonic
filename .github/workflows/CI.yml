@@ -22,11 +22,29 @@ jobs:
     - run: cargo fmt --all --check
 
   deny-check:
+    # NOTE(kate): this allows for duplicate dependencies of a single crate.
+    # Since 0.10.2 was released, releases have drifted and `prost-build` and
+    # `strum-macros` depend on different versions of `heck`.
+    #
+    # rather than changing v0.10.2, we pass `--allow duplicate` for now, until
+    # we upgrade to tonic@0.11.
+    #
+    # ```
+    # error[duplicate]: found 2 duplicate entries for crate 'heck'
+    #    ┌─ /home/katie/work/tonic/Cargo.lock:58:1
+    #    │
+    # 58 │ ╭ heck 0.4.1 registry+https://github.com/rust-lang/crates.io-index
+    # 59 │ │ heck 0.5.0 registry+https://github.com/rust-lang/crates.io-index
+    #    │ ╰────────────────────────────────────────────────────────────────^ lock entries
+    # ```
     name: cargo-deny check
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
     - uses: EmbarkStudios/cargo-deny-action@v1
+      with:
+        command: check
+        command-arguments: "--allow duplicate"
 
   codegen:
     runs-on: ubuntu-latest
