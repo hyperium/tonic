@@ -3,6 +3,7 @@ use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
+#[cfg(feature = "tls")]
 use std::fmt;
 use std::task::{Context, Poll};
 use tower::make::MakeConnection;
@@ -97,9 +98,11 @@ where
 }
 
 /// Error returned when trying to connect to an HTTPS endpoint without TLS enabled.
+#[cfg(feature = "tls")]
 #[derive(Debug)]
 pub(crate) struct HttpsUriWithoutTlsSupport(());
 
+#[cfg(feature = "tls")]
 impl fmt::Display for HttpsUriWithoutTlsSupport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Connecting to HTTPS without TLS enabled")
@@ -107,4 +110,5 @@ impl fmt::Display for HttpsUriWithoutTlsSupport {
 }
 
 // std::error::Error only requires a type to impl Debug and Display
+#[cfg(feature = "tls")]
 impl std::error::Error for HttpsUriWithoutTlsSupport {}
