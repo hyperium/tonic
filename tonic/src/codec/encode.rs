@@ -235,7 +235,7 @@ fn finish_encoding(
         ));
     }
 
-    if len > std::u32::MAX as usize {
+    if len > u32::MAX as usize {
         return Err(Status::resource_exhausted(format!(
             "Cannot return body with more than 4GB of data but got {len} bytes"
         )));
