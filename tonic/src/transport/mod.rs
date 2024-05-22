@@ -89,6 +89,7 @@
 //!
 //! [rustls]: https://docs.rs/rustls/0.16.0/rustls/
 
+#[cfg(feature = "channel")]
 pub mod channel;
 pub mod server;
 
@@ -106,6 +107,7 @@ pub use self::error::Error;
 pub use self::server::Server;
 #[doc(inline)]
 pub use self::service::grpc_timeout::TimeoutExpired;
+#[cfg(feature = "channel")]
 pub(crate) use self::service::ConnectError;
 
 #[cfg(feature = "tls")]
@@ -116,10 +118,11 @@ pub use hyper::{body::Body, Uri};
 #[cfg(feature = "tls")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
 
+#[cfg(feature = "channel")]
 pub(crate) use self::service::executor::Executor;
 
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[cfg(all(feature = "channel", feature = "tls"))]
+#[cfg_attr(docsrs, doc(cfg(all(feature = "channel", feature = "tls"))))]
 pub use self::channel::ClientTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
@@ -128,4 +131,5 @@ pub use self::server::ServerTlsConfig;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;
 
+#[cfg(feature = "channel")]
 use crate::service::router::BoxFuture;

@@ -15,7 +15,9 @@ struct ErrorImpl {
 #[derive(Debug)]
 pub(crate) enum Kind {
     Transport,
+    #[cfg(feature = "channel")]
     InvalidUri,
+    #[cfg(feature = "channel")]
     InvalidUserAgent,
 }
 
@@ -35,10 +37,12 @@ impl Error {
         Error::new(Kind::Transport).with(source)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_uri() -> Self {
         Error::new(Kind::InvalidUri)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_user_agent() -> Self {
         Error::new(Kind::InvalidUserAgent)
     }
@@ -46,7 +50,9 @@ impl Error {
     fn description(&self) -> &str {
         match &self.inner.kind {
             Kind::Transport => "transport error",
+            #[cfg(feature = "channel")]
             Kind::InvalidUri => "invalid URI",
+            #[cfg(feature = "channel")]
             Kind::InvalidUserAgent => "user agent is not a valid header value",
         }
     }

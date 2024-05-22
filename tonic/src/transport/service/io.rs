@@ -19,6 +19,7 @@ impl<T> Io for T where T: rt::Read + rt::Write + Send + 'static {}
 pub(crate) struct BoxedIo(Pin<Box<dyn Io>>);
 
 impl BoxedIo {
+    #[cfg(feature = "channel")]
     pub(in crate::transport) fn new<I: Io>(io: I) -> Self {
         BoxedIo(Box::pin(io))
     }
