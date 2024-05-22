@@ -20,7 +20,6 @@ use small_buf::{
 #[derive(Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,

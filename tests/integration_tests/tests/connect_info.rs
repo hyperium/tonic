@@ -10,7 +10,6 @@ use tonic::{
 async fn getting_connect_info() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
             assert!(req.local_addr().is_some());
@@ -66,7 +65,6 @@ pub mod unix {
 
     struct Svc {}
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
             let conn_info = req.extensions().get::<UdsConnectInfo>().unwrap();
