@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::server::Routes, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -33,8 +33,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     println!("GreeterServer listening on {}", addr);
 
-    let svc = Server::builder()
+    let svc = Routes::builder()
         .add_service(GreeterServer::new(greeter))
+        .build()
         .into_router();
 
     let h2c = h2c::H2c { s: svc };

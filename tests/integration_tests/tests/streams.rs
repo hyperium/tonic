@@ -1,6 +1,9 @@
 use integration_tests::pb::{test_stream_server, InputStream, OutputStream};
 use tokio::sync::oneshot;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::{server::Routes, Server},
+    Request, Response, Status,
+};
 
 type Stream<T> = std::pin::Pin<
     Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>,
@@ -25,12 +28,13 @@ async fn status_from_server_stream_with_source() {
     }
 
     let svc = test_stream_server::TestStreamServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     let (tx, rx) = oneshot::channel::<()>();
 
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();

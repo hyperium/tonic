@@ -5,7 +5,10 @@ pub mod pb {
 use std::{error::Error, io::ErrorKind, net::ToSocketAddrs, pin::Pin, time::Duration};
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
-use tonic::{transport::Server, Request, Response, Status, Streaming};
+use tonic::{
+    transport::{server::Routes, Server},
+    Request, Response, Status, Streaming,
+};
 
 use pb::{EchoRequest, EchoResponse};
 
@@ -143,9 +146,11 @@ impl pb::echo_server::Echo for EchoServer {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let server = EchoServer {};
+    let routes = Routes::builder()
+        .add_service(pb::echo_server::EchoServer::new(EchoServer {}))
+        .build();
     Server::builder()
-        .add_service(pb::echo_server::EchoServer::new(server))
+        .add_routes(routes)
         .serve("[::1]:50051".to_socket_addrs().unwrap().next().unwrap())
         .await
         .unwrap();

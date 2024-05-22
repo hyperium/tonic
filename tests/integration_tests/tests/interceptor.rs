@@ -2,7 +2,7 @@ use integration_tests::pb::{test_client::TestClient, test_server, Input, Output}
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::Routes, Endpoint, Server},
     GrpcMethod, Request, Response, Status,
 };
 
@@ -20,12 +20,13 @@ async fn interceptor_retrieves_grpc_method() {
     }
 
     let svc = test_server::TestServer::new(Svc);
+    let routes = Routes::builder().add_service(svc).build();
 
     let (tx, rx) = oneshot::channel();
     // Start the server now, second call should succeed
     let jh = tokio::spawn(async move {
         Server::builder()
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_shutdown("127.0.0.1:1340".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();

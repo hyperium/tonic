@@ -1,5 +1,5 @@
 use super::*;
-use tonic::codec::CompressionEncoding;
+use tonic::{codec::CompressionEncoding, transport::server::Routes};
 
 util::parametrized_tests! {
     client_enabled_server_enabled,
@@ -51,6 +51,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     }
 
     let svc = test_server::TestServer::new(Svc::default()).send_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -72,7 +73,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
@@ -107,6 +108,7 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default());
+    let routes = Routes::builder().add_service(svc).build();
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -125,7 +127,7 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::iter(vec![Ok::<_, std::io::Error>(server)]))
                 .await
                 .unwrap();
@@ -148,6 +150,7 @@ async fn client_enabled_server_disabled_multi_encoding() {
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default());
+    let routes = Routes::builder().add_service(svc).build();
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -166,7 +169,7 @@ async fn client_enabled_server_disabled_multi_encoding() {
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
@@ -220,6 +223,7 @@ async fn client_disabled(encoding: CompressionEncoding) {
     }
 
     let svc = test_server::TestServer::new(Svc::default()).send_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -238,7 +242,7 @@ async fn client_disabled(encoding: CompressionEncoding) {
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
@@ -266,6 +270,7 @@ async fn server_replying_with_unsupported_encoding(encoding: CompressionEncoding
     let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
 
     let svc = test_server::TestServer::new(Svc::default()).send_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     fn add_weird_content_encoding<B>(mut response: http::Response<B>) -> http::Response<B> {
         response
@@ -281,7 +286,7 @@ async fn server_replying_with_unsupported_encoding(encoding: CompressionEncoding
                     .map_response(add_weird_content_encoding)
                     .into_inner(),
             )
-            .add_service(svc)
+            .add_routes(routes)
             .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
             .unwrap();
@@ -312,6 +317,7 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
         disable_compressing_on_response: true,
     })
     .send_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -329,7 +335,7 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
@@ -368,6 +374,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
         disable_compressing_on_response: true,
     })
     .send_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -385,7 +392,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();
@@ -435,6 +442,7 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
         disable_compressing_on_response: true,
     })
     .send_compressed(encoding);
+    let routes = Routes::builder().add_service(svc).build();
 
     let response_bytes_counter = Arc::new(AtomicUsize::new(0));
 
@@ -452,7 +460,7 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
                         }))
                         .into_inner(),
                 )
-                .add_service(svc)
+                .add_routes(routes)
                 .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
                 .await
                 .unwrap();

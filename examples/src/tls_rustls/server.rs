@@ -10,7 +10,7 @@ use tokio_rustls::{
     rustls::{Certificate, PrivateKey, ServerConfig},
     TlsAcceptor,
 };
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::server::Routes, Request, Response, Status};
 use tower_http::ServiceBuilderExt;
 
 #[tokio::main]
@@ -45,9 +45,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = EchoServer::default();
 
-    let svc = Server::builder()
+    let routes = Routes::builder()
         .add_service(pb::echo_server::EchoServer::new(server))
-        .into_service();
+        .build();
 
     let mut http = Http::new();
     http.http2_only(true);
@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let http = http.clone();
         let tls_acceptor = tls_acceptor.clone();
-        let svc = svc.clone();
+        let routes = routes.clone();
 
         tokio::spawn(async move {
             let mut certificates = Vec::new();
@@ -84,7 +84,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             let svc = tower::ServiceBuilder::new()
                 .add_extension(Arc::new(ConnInfo { addr, certificates }))
-                .service(svc);
+                .service(routes);
 
             http.serve_connection(conn, svc).await.unwrap();
         });

@@ -1,5 +1,5 @@
 use std::env;
-use tonic::{transport::server::RoutesBuilder, transport::Server, Request, Response, Status};
+use tonic::{transport::server::Routes, transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -31,15 +31,6 @@ impl Echo for MyEcho {
     }
 }
 
-fn init_echo(args: &[String], builder: &mut RoutesBuilder) {
-    let enabled = args.iter().any(|arg| arg.as_str() == "echo");
-    if enabled {
-        println!("Adding Echo service...");
-        let svc = EchoServer::new(MyEcho::default());
-        builder.add_service(svc);
-    }
-}
-
 #[derive(Default)]
 pub struct MyGreeter {}
 
@@ -58,31 +49,33 @@ impl Greeter for MyGreeter {
     }
 }
 
-fn init_greeter(args: &[String], builder: &mut RoutesBuilder) {
-    let enabled = args.iter().any(|arg| arg.as_str() == "greeter");
-
-    if enabled {
-        println!("Adding Greeter service...");
-        let svc = GreeterServer::new(MyGreeter::default());
-        builder.add_service(svc);
-    }
-}
-
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    let mut routes_builder = RoutesBuilder::default();
-    init_greeter(&args, &mut routes_builder);
-    init_echo(&args, &mut routes_builder);
+
+    let routes_builder = Routes::builder();
+
+    let routes_builder = if args.iter().any(|arg| arg.as_str() == "greeter") {
+        println!("Adding Greeter service...");
+        routes_builder.add_service(GreeterServer::new(MyGreeter::default()))
+    } else {
+        routes_builder
+    };
+
+    let routes_builder = if args.iter().any(|arg| arg.as_str() == "echo") {
+        println!("Adding Echo service...");
+        routes_builder.add_service(EchoServer::new(MyEcho::default()))
+    } else {
+        routes_builder
+    };
+
+    let routes = routes_builder.build();
 
     let addr = "[::1]:50051".parse().unwrap();
 
     println!("Grpc server listening on {}", addr);
 
-    Server::builder()
-        .add_routes(routes_builder.routes())
-        .serve(addr)
-        .await?;
+    Server::builder().add_routes(routes).serve(addr).await?;
 
     Ok(())
 }

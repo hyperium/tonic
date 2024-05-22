@@ -4,7 +4,11 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tonic::{
+    body::BoxBody,
+    transport::{server::Routes, Server},
+    Request, Response, Status,
+};
 use tower::{Layer, Service};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -51,10 +55,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .layer(tonic::service::interceptor(intercept))
         .into_inner();
 
+    let routes = Routes::builder().add_service(svc).build();
+
     Server::builder()
         // Wrap all services in the middleware stack
         .layer(layer)
-        .add_service(svc)
+        .add_routes(routes)
         .serve(addr)
         .await?;
 

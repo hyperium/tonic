@@ -7,7 +7,7 @@ use hyper::{Body, Client, Method, Request, Uri};
 use prost::Message;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
-use tonic::transport::Server;
+use tonic::transport::{server::Routes, Server};
 
 use integration::pb::{test_server::TestServer, Input, Output};
 use integration::Svc;
@@ -64,12 +64,13 @@ async fn spawn() -> String {
     let listener = TcpListener::bind(addr).await.expect("listener");
     let url = format!("http://{}", listener.local_addr().unwrap());
     let listener_stream = TcpListenerStream::new(listener);
+    let routes = Routes::builder().add_service(TestServer::new(Svc)).build();
 
     drop(tokio::spawn(async move {
         Server::builder()
             .accept_http1(true)
             .layer(GrpcWebLayer::new())
-            .add_service(TestServer::new(Svc))
+            .add_routes(routes)
             .serve_with_incoming(listener_stream)
             .await
             .unwrap()

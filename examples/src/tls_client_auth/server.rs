@@ -3,6 +3,7 @@ pub mod pb {
 }
 
 use pb::{EchoRequest, EchoResponse};
+use tonic::transport::server::Routes;
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status};
 
@@ -36,7 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
     let addr = "[::1]:50051".parse().unwrap();
-    let server = EchoServer::default();
+    let routes = Routes::builder()
+        .add_service(pb::echo_server::EchoServer::new(EchoServer::default()))
+        .build();
 
     let tls = ServerTlsConfig::new()
         .identity(server_identity)
@@ -44,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Server::builder()
         .tls_config(tls)?
-        .add_service(pb::echo_server::EchoServer::new(server))
+        .add_routes(routes)
         .serve(addr)
         .await?;
 
