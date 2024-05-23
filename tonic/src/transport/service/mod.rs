@@ -8,8 +8,6 @@ mod discover;
 pub(crate) mod executor;
 pub(crate) mod grpc_timeout;
 mod io;
-#[cfg(feature = "channel")]
-mod reconnect;
 #[cfg(feature = "tls")]
 mod tls;
 
