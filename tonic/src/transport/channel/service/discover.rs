@@ -1,4 +1,4 @@
-use crate::transport::{channel::service::Connection, Endpoint};
+use super::super::{Connection, Endpoint};
 
 use hyper_util::client::legacy::connect::HttpConnector;
 use std::{
