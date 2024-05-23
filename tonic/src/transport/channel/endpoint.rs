@@ -1,9 +1,8 @@
-use super::super::service;
 #[cfg(feature = "tls")]
 use super::service::TlsConnector;
-use super::Channel;
 #[cfg(feature = "tls")]
 use super::ClientTlsConfig;
+use super::{service, Channel};
 use crate::transport::{service::SharedExec, Error, Executor};
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
