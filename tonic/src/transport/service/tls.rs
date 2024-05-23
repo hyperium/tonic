@@ -19,7 +19,7 @@ use tokio_rustls::{
 };
 
 #[cfg(feature = "channel")]
-use super::io::BoxedIo;
+use crate::transport::channel::service::BoxedIo;
 use crate::transport::{
     server::{Connected, TlsStream},
     Certificate, Identity,

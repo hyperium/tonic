@@ -12,3 +12,6 @@ pub(crate) use self::connection::Connection;
 
 pub(crate) mod discover;
 pub(crate) use self::discover::DynamicServiceStream;
+
+pub(crate) mod io;
+pub(crate) use self::io::BoxedIo;
