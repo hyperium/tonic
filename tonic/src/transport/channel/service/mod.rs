@@ -19,6 +19,9 @@ pub(crate) use self::io::BoxedIo;
 pub(crate) mod connector;
 pub(crate) use self::connector::{ConnectError, Connector};
 
+pub(crate) mod executor;
+pub(crate) use self::executor::{Executor, SharedExec};
+
 #[cfg(feature = "tls")]
 pub(crate) mod tls;
 #[cfg(feature = "tls")]

@@ -118,9 +118,6 @@ pub use hyper::{body::Body, Uri};
 #[cfg(feature = "tls")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
 
-#[cfg(feature = "channel")]
-pub(crate) use self::service::executor::Executor;
-
 #[cfg(all(feature = "channel", feature = "tls"))]
 #[cfg_attr(docsrs, doc(cfg(all(feature = "channel", feature = "tls"))))]
 pub use self::channel::ClientTlsConfig;
