@@ -5,7 +5,7 @@ pub(crate) mod executor;
 pub(crate) mod grpc_timeout;
 mod io;
 #[cfg(feature = "tls")]
-mod tls;
+pub(crate) mod tls;
 
 #[cfg(feature = "channel")]
 pub(crate) use self::connector::{ConnectError, Connector};
@@ -15,5 +15,3 @@ pub(crate) use self::grpc_timeout::GrpcTimeout;
 pub(crate) use self::io::ServerIo;
 #[cfg(feature = "tls")]
 pub(crate) use self::tls::TlsAcceptor;
-#[cfg(all(feature = "channel", feature = "tls"))]
-pub(crate) use self::tls::TlsConnector;

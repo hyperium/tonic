@@ -4,11 +4,6 @@ use std::{
 };
 
 use tokio::io::{AsyncRead, AsyncWrite};
-#[cfg(feature = "channel")]
-use tokio_rustls::{
-    rustls::{pki_types::ServerName, ClientConfig},
-    TlsConnector as RustlsConnector,
-};
 use tokio_rustls::{
     rustls::{
         pki_types::{CertificateDer, PrivateKeyDer},
@@ -18,97 +13,20 @@ use tokio_rustls::{
     TlsAcceptor as RustlsAcceptor,
 };
 
-#[cfg(feature = "channel")]
-use crate::transport::channel::service::BoxedIo;
 use crate::transport::{
     server::{Connected, TlsStream},
     Certificate, Identity,
 };
-#[cfg(feature = "channel")]
-use hyper_util::rt::TokioIo;
 
 /// h2 alpn in plain format for rustls.
-const ALPN_H2: &[u8] = b"h2";
+pub(crate) const ALPN_H2: &[u8] = b"h2";
 
 #[derive(Debug)]
-enum TlsError {
+pub(crate) enum TlsError {
     #[cfg(feature = "channel")]
     H2NotNegotiated,
     CertificateParseError,
     PrivateKeyParseError,
-}
-
-#[cfg(feature = "channel")]
-#[derive(Clone)]
-pub(crate) struct TlsConnector {
-    config: Arc<ClientConfig>,
-    domain: Arc<ServerName<'static>>,
-    assume_http2: bool,
-}
-
-#[cfg(feature = "channel")]
-impl TlsConnector {
-    pub(crate) fn new(
-        ca_certs: Vec<Certificate>,
-        identity: Option<Identity>,
-        domain: &str,
-        assume_http2: bool,
-    ) -> Result<Self, crate::Error> {
-        let builder = ClientConfig::builder();
-        let mut roots = RootCertStore::empty();
-
-        #[cfg(feature = "tls-roots")]
-        roots.add_parsable_certificates(rustls_native_certs::load_native_certs()?);
-
-        #[cfg(feature = "tls-webpki-roots")]
-        roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-
-        for cert in ca_certs {
-            add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
-        }
-
-        let builder = builder.with_root_certificates(roots);
-        let mut config = match identity {
-            Some(identity) => {
-                let (client_cert, client_key) = load_identity(identity)?;
-                builder.with_client_auth_cert(client_cert, client_key)?
-            }
-            None => builder.with_no_client_auth(),
-        };
-
-        config.alpn_protocols.push(ALPN_H2.into());
-        Ok(Self {
-            config: Arc::new(config),
-            domain: Arc::new(ServerName::try_from(domain)?.to_owned()),
-            assume_http2,
-        })
-    }
-
-    #[cfg(feature = "channel")]
-    pub(crate) async fn connect<I>(&self, io: I) -> Result<BoxedIo, crate::Error>
-    where
-        I: AsyncRead + AsyncWrite + Send + Unpin + 'static,
-    {
-        let io = RustlsConnector::from(self.config.clone())
-            .connect(self.domain.as_ref().to_owned(), io)
-            .await?;
-
-        // Generally we require ALPN to be negotiated, but if the user has
-        // explicitly set `assume_http2` to true, we'll allow it to be missing.
-        let (_, session) = io.get_ref();
-        let alpn_protocol = session.alpn_protocol();
-        if !(alpn_protocol == Some(ALPN_H2) || self.assume_http2) {
-            return Err(TlsError::H2NotNegotiated.into());
-        }
-        Ok(BoxedIo::new(TokioIo::new(io)))
-    }
-}
-
-#[cfg(feature = "channel")]
-impl fmt::Debug for TlsConnector {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TlsConnector").finish()
-    }
 }
 
 #[derive(Clone)]
@@ -179,7 +97,7 @@ impl fmt::Display for TlsError {
 
 impl std::error::Error for TlsError {}
 
-fn load_identity(
+pub(crate) fn load_identity(
     identity: Identity,
 ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
     let cert = rustls_pemfile::certs(&mut Cursor::new(identity.cert))
@@ -193,7 +111,7 @@ fn load_identity(
     Ok((cert, key))
 }
 
-fn add_certs_from_pem(
+pub(crate) fn add_certs_from_pem(
     mut certs: &mut dyn std::io::BufRead,
     roots: &mut RootCertStore,
 ) -> Result<(), crate::Error> {

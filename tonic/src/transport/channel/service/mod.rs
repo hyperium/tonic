@@ -15,3 +15,8 @@ pub(crate) use self::discover::DynamicServiceStream;
 
 pub(crate) mod io;
 pub(crate) use self::io::BoxedIo;
+
+#[cfg(feature = "tls")]
+pub(crate) mod tls;
+#[cfg(feature = "tls")]
+pub(crate) use self::tls::TlsConnector;
