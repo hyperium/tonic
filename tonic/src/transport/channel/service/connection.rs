@@ -1,5 +1,4 @@
-use super::{AddOrigin, Reconnect, UserAgent};
-use crate::transport::service::SharedExec;
+use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
 use crate::{
     body::{boxed, BoxBody},
     transport::{service::GrpcTimeout, BoxFuture, Endpoint},

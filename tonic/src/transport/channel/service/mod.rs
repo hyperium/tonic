@@ -1,28 +1,28 @@
-pub(crate) mod add_origin;
-pub(crate) use self::add_origin::AddOrigin;
+mod add_origin;
+use self::add_origin::AddOrigin;
 
-pub(crate) mod user_agent;
-pub(crate) use self::user_agent::UserAgent;
+mod user_agent;
+use self::user_agent::UserAgent;
 
-pub(crate) mod reconnect;
-pub(crate) use self::reconnect::Reconnect;
+mod reconnect;
+use self::reconnect::Reconnect;
 
-pub(crate) mod connection;
-pub(crate) use self::connection::Connection;
+mod connection;
+pub(super) use self::connection::Connection;
 
-pub(crate) mod discover;
-pub(crate) use self::discover::DynamicServiceStream;
+mod discover;
+pub(super) use self::discover::DynamicServiceStream;
 
-pub(crate) mod io;
-pub(crate) use self::io::BoxedIo;
+mod io;
+use self::io::BoxedIo;
 
-pub(crate) mod connector;
+mod connector;
 pub(crate) use self::connector::{ConnectError, Connector};
 
-pub(crate) mod executor;
-pub(crate) use self::executor::{Executor, SharedExec};
+mod executor;
+pub(super) use self::executor::{Executor, SharedExec};
 
 #[cfg(feature = "tls")]
-pub(crate) mod tls;
+mod tls;
 #[cfg(feature = "tls")]
-pub(crate) use self::tls::TlsConnector;
+pub(super) use self::tls::TlsConnector;

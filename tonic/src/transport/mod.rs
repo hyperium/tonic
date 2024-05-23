@@ -98,8 +98,6 @@ mod service;
 #[cfg(feature = "tls")]
 mod tls;
 
-#[cfg(feature = "channel")]
-pub(crate) use self::channel::service::ConnectError;
 #[doc(inline)]
 #[cfg(feature = "channel")]
 #[cfg_attr(docsrs, doc(cfg(feature = "channel")))]
