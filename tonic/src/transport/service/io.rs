@@ -31,17 +31,6 @@ impl Connection for BoxedIo {
     }
 }
 
-impl Connected for BoxedIo {
-    type ConnectInfo = NoneConnectInfo;
-
-    fn connect_info(&self) -> Self::ConnectInfo {
-        NoneConnectInfo
-    }
-}
-
-#[derive(Copy, Clone)]
-pub(crate) struct NoneConnectInfo;
-
 impl rt::Read for BoxedIo {
     fn poll_read(
         mut self: Pin<&mut Self>,
