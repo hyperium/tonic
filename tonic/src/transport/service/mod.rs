@@ -1,6 +1,4 @@
 #[cfg(feature = "channel")]
-mod connection;
-#[cfg(feature = "channel")]
 mod connector;
 #[cfg(feature = "channel")]
 mod discover;
@@ -11,8 +9,6 @@ mod io;
 #[cfg(feature = "tls")]
 mod tls;
 
-#[cfg(feature = "channel")]
-pub(crate) use self::connection::Connection;
 #[cfg(feature = "channel")]
 pub(crate) use self::connector::{ConnectError, Connector};
 #[cfg(feature = "channel")]

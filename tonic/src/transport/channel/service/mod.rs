@@ -6,3 +6,6 @@ pub(crate) use self::user_agent::UserAgent;
 
 pub(crate) mod reconnect;
 pub(crate) use self::reconnect::Reconnect;
+
+pub(crate) mod connection;
+pub(crate) use self::connection::Connection;

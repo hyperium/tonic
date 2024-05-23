@@ -10,7 +10,8 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, DynamicServiceStream, SharedExec};
+use self::service::Connection;
+use super::service::{DynamicServiceStream, SharedExec};
 use crate::body::BoxBody;
 use crate::transport::Executor;
 use bytes::Bytes;
