@@ -12,8 +12,6 @@ mod io;
 mod reconnect;
 #[cfg(feature = "tls")]
 mod tls;
-#[cfg(feature = "channel")]
-mod user_agent;
 
 #[cfg(feature = "channel")]
 pub(crate) use self::connection::Connection;
@@ -29,5 +27,3 @@ pub(crate) use self::io::ServerIo;
 pub(crate) use self::tls::TlsAcceptor;
 #[cfg(all(feature = "channel", feature = "tls"))]
 pub(crate) use self::tls::TlsConnector;
-#[cfg(feature = "channel")]
-pub(crate) use self::user_agent::UserAgent;

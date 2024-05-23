@@ -1,8 +1,8 @@
 use super::SharedExec;
-use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, UserAgent};
+use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect};
 use crate::{
     body::{boxed, BoxBody},
-    transport::channel::service::AddOrigin,
+    transport::channel::service::{AddOrigin, UserAgent},
     transport::{BoxFuture, Endpoint},
 };
 use http::Uri;
