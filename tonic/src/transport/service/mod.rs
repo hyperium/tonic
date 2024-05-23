@@ -1,6 +1,4 @@
 #[cfg(feature = "channel")]
-mod add_origin;
-#[cfg(feature = "channel")]
 mod connection;
 #[cfg(feature = "channel")]
 mod connector;
@@ -17,8 +15,6 @@ mod tls;
 #[cfg(feature = "channel")]
 mod user_agent;
 
-#[cfg(feature = "channel")]
-pub(crate) use self::add_origin::AddOrigin;
 #[cfg(feature = "channel")]
 pub(crate) use self::connection::Connection;
 #[cfg(feature = "channel")]
