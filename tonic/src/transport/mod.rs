@@ -106,7 +106,7 @@ pub use self::server::Server;
 pub use self::service::grpc_timeout::TimeoutExpired;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-pub use self::tls::Certificate;
+pub use self::tls::{Certificate, CertificateDer};
 pub use axum::{body::BoxBody as AxumBoxBody, Router as AxumRouter};
 pub use hyper::{Body, Uri};
 

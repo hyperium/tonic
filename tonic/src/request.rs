@@ -2,7 +2,7 @@ use crate::metadata::{MetadataMap, MetadataValue};
 #[cfg(feature = "transport")]
 use crate::transport::server::TcpConnectInfo;
 #[cfg(feature = "tls")]
-use crate::transport::{server::TlsConnectInfo, Certificate};
+use crate::transport::{server::TlsConnectInfo, CertificateDer};
 use crate::Extensions;
 #[cfg(feature = "transport")]
 use std::net::SocketAddr;
@@ -258,7 +258,7 @@ impl<T> Request<T> {
     /// TLS enabled connections.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-    pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
+    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer>>> {
         self.extensions()
             .get::<TlsConnectInfo<TcpConnectInfo>>()
             .and_then(|i| i.peer_certs())
