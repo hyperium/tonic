@@ -3,9 +3,9 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
 #[cfg(feature = "tls")]
-use crate::transport::CertificateDer;
-#[cfg(feature = "tls")]
 use std::sync::Arc;
+#[cfg(feature = "tls")]
+use tokio_rustls::rustls::pki_types::CertificateDer;
 #[cfg(feature = "tls")]
 use tokio_rustls::server::TlsStream;
 
@@ -126,8 +126,7 @@ where
         let inner = inner.connect_info();
 
         let certs = if let Some(certs) = session.peer_certificates() {
-            let certs = certs.iter().map(CertificateDer::new).collect();
-            Some(Arc::new(certs))
+            Some(Arc::new(certs.to_owned()))
         } else {
             None
         };
@@ -148,7 +147,7 @@ where
 #[derive(Debug, Clone)]
 pub struct TlsConnectInfo<T> {
     inner: T,
-    certs: Option<Arc<Vec<CertificateDer>>>,
+    certs: Option<Arc<Vec<CertificateDer<'static>>>>,
 }
 
 #[cfg(feature = "tls")]
@@ -165,7 +164,7 @@ impl<T> TlsConnectInfo<T> {
     }
 
     /// Return the set of connected peer TLS certificates.
-    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer>>> {
+    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
         self.certs.clone()
     }
 }

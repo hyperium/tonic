@@ -2,13 +2,15 @@ use crate::metadata::{MetadataMap, MetadataValue};
 #[cfg(feature = "transport")]
 use crate::transport::server::TcpConnectInfo;
 #[cfg(feature = "tls")]
-use crate::transport::{server::TlsConnectInfo, CertificateDer};
+use crate::transport::server::TlsConnectInfo;
 use crate::Extensions;
 #[cfg(feature = "transport")]
 use std::net::SocketAddr;
 #[cfg(feature = "tls")]
 use std::sync::Arc;
 use std::time::Duration;
+#[cfg(feature = "tls")]
+use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_stream::Stream;
 
 /// A gRPC request and metadata from an RPC call.
@@ -258,7 +260,7 @@ impl<T> Request<T> {
     /// TLS enabled connections.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
-    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer>>> {
+    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
         self.extensions()
             .get::<TlsConnectInfo<TcpConnectInfo>>()
             .and_then(|i| i.peer_certs())

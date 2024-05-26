@@ -11,12 +11,6 @@ pub struct Identity {
     pub(crate) key: Vec<u8>,
 }
 
-/// Reprensents a DER encoded certificate.
-#[derive(Debug, Clone)]
-pub struct CertificateDer {
-    bytes: Vec<u8>,
-}
-
 impl Certificate {
     /// Parse a PEM encoded X509 Certificate.
     ///
@@ -62,29 +56,5 @@ impl Identity {
         let cert = Certificate::from_pem(cert);
         let key = key.as_ref().into();
         Self { cert, key }
-    }
-}
-
-impl CertificateDer {
-    pub(crate) fn new(bytes: impl AsRef<[u8]>) -> Self {
-        let bytes = bytes.as_ref().into();
-        Self { bytes }
-    }
-
-    /// Consumes `self`, returning the underlying DER encoded certificate
-    pub fn into_bytes(self) -> Vec<u8> {
-        self.bytes
-    }
-}
-
-impl AsRef<[u8]> for CertificateDer {
-    fn as_ref(&self) -> &[u8] {
-        self.bytes.as_ref()
-    }
-}
-
-impl AsMut<[u8]> for CertificateDer {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.bytes.as_mut()
     }
 }
