@@ -54,7 +54,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2024-02-06
+        toolchain: nightly-2024-04-16
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
     - name: Install protoc
