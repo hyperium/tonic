@@ -3,7 +3,7 @@ use crate::metadata::{MetadataMap, MetadataValue};
 use crate::transport::server::TcpConnectInfo;
 #[cfg(feature = "tls")]
 use crate::transport::server::TlsConnectInfo;
-use crate::Extensions;
+use http::Extensions;
 #[cfg(feature = "transport")]
 use std::net::SocketAddr;
 #[cfg(feature = "tls")]
@@ -161,7 +161,7 @@ impl<T> Request<T> {
         Request {
             metadata: MetadataMap::from_headers(parts.headers),
             message,
-            extensions: Extensions::from_http(parts.extensions),
+            extensions: parts.extensions,
         }
     }
 
@@ -187,7 +187,7 @@ impl<T> Request<T> {
             SanitizeHeaders::Yes => self.metadata.into_sanitized_headers(),
             SanitizeHeaders::No => self.metadata.into_headers(),
         };
-        *request.extensions_mut() = self.extensions.into_http();
+        *request.extensions_mut() = self.extensions;
 
         request
     }
