@@ -139,7 +139,7 @@ pub async fn mock_io_channel(client: tokio::io::DuplexStream) -> Channel {
     Endpoint::try_from("http://[::]:50051")
         .unwrap()
         .connect_with_connector(service_fn(move |_: Uri| {
-            let client = client.take().unwrap();
+            let client = TokioIo::new(client.take().unwrap());
             async move { Ok::<_, std::io::Error>(client) }
         }))
         .await

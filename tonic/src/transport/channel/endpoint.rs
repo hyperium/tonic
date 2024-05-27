@@ -7,6 +7,7 @@ use crate::transport::service::TlsConnector;
 use crate::transport::{service::SharedExec, Error, Executor};
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
+use hyper::rt;
 use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
 use tower::make::MakeConnection;
 
@@ -369,7 +370,7 @@ impl Endpoint {
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
         C: MakeConnection<Uri> + Send + 'static,
-        C::Connection: Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin + 'static,
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {
@@ -394,7 +395,7 @@ impl Endpoint {
     pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
     where
         C: MakeConnection<Uri> + Send + 'static,
-        C::Connection: Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin + 'static,
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {

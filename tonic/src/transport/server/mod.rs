@@ -13,6 +13,7 @@ pub use super::service::Routes;
 pub use super::service::RoutesBuilder;
 
 pub use conn::{Connected, TcpConnectInfo};
+use hyper_util::rt::{TokioExecutor, TokioIo};
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
 

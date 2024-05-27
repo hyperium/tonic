@@ -37,10 +37,9 @@ transport = [
   "dep:axum",
   "channel",
   "dep:h2",
-  "dep:hyper",
   "dep:tokio", "tokio?/net", "tokio?/time",
+  "dep:hyper", "dep:hyper-util", "dep:hyper-timeout",
   "dep:tower",
-  "dep:hyper-timeout",
 ]
 channel = []
 

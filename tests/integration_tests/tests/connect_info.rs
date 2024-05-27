@@ -51,6 +51,9 @@ async fn getting_connect_info() {
 
 #[cfg(unix)]
 pub mod unix {
+    use std::io;
+
+    use hyper_util::rt::TokioIo;
     use tokio::{
         net::{UnixListener, UnixStream},
         sync::oneshot,
@@ -106,7 +109,10 @@ pub mod unix {
         let path = unix_socket_path.clone();
         let channel = Endpoint::try_from("http://[::]:50051")
             .unwrap()
-            .connect_with_connector(service_fn(move |_: Uri| UnixStream::connect(path.clone())))
+            .connect_with_connector(service_fn(move |_: Uri| {
+                let path = path.clone();
+                async move { Ok::<_, io::Error>(TokioIo::new(UnixStream::connect(path).await?)) }
+            }))
             .await
             .unwrap();
 

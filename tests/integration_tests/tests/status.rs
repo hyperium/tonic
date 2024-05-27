@@ -1,5 +1,6 @@
 use bytes::Bytes;
 use http::Uri;
+use hyper_util::rt::TokioIo;
 use integration_tests::mock::MockStream;
 use integration_tests::pb::{
     test_client, test_server, test_stream_client, test_stream_server, Input, InputStream, Output,
@@ -183,7 +184,7 @@ async fn status_from_server_stream_with_source() {
     let channel = Endpoint::try_from("http://[::]:50051")
         .unwrap()
         .connect_with_connector_lazy(tower::service_fn(move |_: Uri| async move {
-            Err::<MockStream, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
+            Err::<TokioIo<MockStream>, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
         }));
 
     let mut client = test_stream_client::TestStreamClient::new(channel);

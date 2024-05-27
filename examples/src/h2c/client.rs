@@ -2,6 +2,7 @@ use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
 use http::Uri;
 use hyper::Client;
+use hyper_util::rt::TokioExecutor;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -12,6 +13,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = Uri::from_static("http://[::1]:50051");
     let h2c_client = h2c::H2cChannel {
         client: Client::new(),
+        client: Client::builder(TokioExecutor::new()).build_http(),
     };
 
     let mut client = GreeterClient::with_origin(h2c_client, origin);

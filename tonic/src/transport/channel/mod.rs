@@ -25,11 +25,9 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{channel, Sender},
-};
+use tokio::sync::mpsc::{channel, Sender};
 
+use hyper::rt;
 use tower::balance::p2c::Balance;
 use tower::{
     buffer::{self, Buffer},
@@ -152,7 +150,7 @@ impl Channel {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
@@ -169,7 +167,7 @@ impl Channel {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();

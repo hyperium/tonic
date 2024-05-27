@@ -1,5 +1,6 @@
 use std::pin::Pin;
 
+use hyper_util::rt::TokioIo;
 use integration_tests::{
     pb::{test1_client, test1_server, Input1, Output1},
     trace_init,
@@ -163,7 +164,7 @@ async fn response_stream_limit() {
 
             async move {
                 if let Some(client) = client {
-                    Ok(client)
+                    Ok(TokioIo::new(client))
                 } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
@@ -332,7 +333,7 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
 
             async move {
                 if let Some(client) = client {
-                    Ok(client)
+                    Ok(TokioIo::new(client))
                 } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::Other,

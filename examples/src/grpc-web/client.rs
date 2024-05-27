@@ -1,4 +1,5 @@
 use hello_world::{greeter_client::GreeterClient, HelloRequest};
+use hyper_util::rt::TokioExecutor;
 use tonic_web::GrpcWebClientLayer;
 
 pub mod hello_world {

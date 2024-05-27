@@ -7,11 +7,11 @@ use http::Uri;
 use hyper::client::conn::Builder;
 use hyper::client::connect::Connection as HyperConnection;
 use hyper::client::service::Connect as HyperConnect;
+use hyper::rt;
 use std::{
     fmt,
     task::{Context, Poll},
 };
-use tokio::io::{AsyncRead, AsyncWrite};
 use tower::load::Load;
 use tower::{
     layer::Layer,
@@ -34,7 +34,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         let mut settings = Builder::new()
             .http2_initial_stream_window_size(endpoint.init_stream_window_size)
@@ -83,7 +83,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         Self::new(connector, endpoint, false).ready_oneshot().await
     }
@@ -93,7 +93,7 @@ impl Connection {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         Self::new(connector, endpoint, true)
     }
