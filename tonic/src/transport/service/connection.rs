@@ -1,13 +1,12 @@
+use super::SharedExec;
 use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
 use crate::{
     body::{boxed, BoxBody},
     transport::{BoxFuture, Endpoint},
 };
 use http::Uri;
-use hyper::client::conn::Builder;
-use hyper::client::connect::Connection as HyperConnection;
-use hyper::client::service::Connect as HyperConnect;
 use hyper::rt;
+use hyper::{client::conn::http2::Builder, rt::Executor};
 use std::{
     fmt,
     task::{Context, Poll},
@@ -36,24 +35,22 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        let mut settings = Builder::new()
-            .http2_initial_stream_window_size(endpoint.init_stream_window_size)
-            .http2_initial_connection_window_size(endpoint.init_connection_window_size)
-            .http2_only(true)
-            .http2_keep_alive_interval(endpoint.http2_keep_alive_interval)
-            .executor(endpoint.executor.clone())
+        let mut settings: Builder<super::SharedExec> = Builder::new(endpoint.executor.clone())
+            .initial_stream_window_size(endpoint.init_stream_window_size)
+            .initial_connection_window_size(endpoint.init_connection_window_size)
+            .keep_alive_interval(endpoint.http2_keep_alive_interval)
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
-            settings.http2_keep_alive_timeout(val);
+            settings.keep_alive_timeout(val);
         }
 
         if let Some(val) = endpoint.http2_keep_alive_while_idle {
-            settings.http2_keep_alive_while_idle(val);
+            settings.keep_alive_while_idle(val);
         }
 
         if let Some(val) = endpoint.http2_adaptive_window {
-            settings.http2_adaptive_window(val);
+            settings.adaptive_window(val);
         }
 
         let stack = ServiceBuilder::new()
@@ -68,13 +65,13 @@ impl Connection {
             .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
             .into_inner();
 
-        let connector = HyperConnect::new(connector, settings);
-        let conn = Reconnect::new(connector, endpoint.uri.clone(), is_lazy);
+        let make_service =
+            MakeSendRequestService::new(connector, endpoint.executor.clone(), settings);
 
-        let inner = stack.layer(conn);
+        let conn = Reconnect::new(make_service, endpoint.uri.clone(), is_lazy);
 
         Self {
-            inner: BoxService::new(inner),
+            inner: BoxService::new(stack.layer(conn)),
         }
     }
 
@@ -124,5 +121,89 @@ impl Load for Connection {
 impl fmt::Debug for Connection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Connection").finish()
+    }
+}
+
+struct SendRequest {
+    inner: hyper::client::conn::http2::SendRequest<BoxBody>,
+}
+
+impl From<hyper::client::conn::http2::SendRequest<BoxBody>> for SendRequest {
+    fn from(inner: hyper::client::conn::http2::SendRequest<BoxBody>) -> Self {
+        Self { inner }
+    }
+}
+
+impl tower::Service<http::Request<BoxBody>> for SendRequest {
+    type Response = http::Response<BoxBody>;
+    type Error = crate::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn call(&mut self, req: Request) -> Self::Future {
+        let fut = self.inner.send_request(req);
+
+        Box::pin(async move {
+            fut.await
+                .map_err(Into::into)
+                .map(|res| res.map(|body| boxed(body)))
+        })
+    }
+}
+
+struct MakeSendRequestService<C> {
+    connector: C,
+    executor: super::SharedExec,
+    settings: Builder<super::SharedExec>,
+}
+
+impl<C> MakeSendRequestService<C> {
+    fn new(connector: C, executor: SharedExec, settings: Builder<super::SharedExec>) -> Self {
+        Self {
+            connector,
+            executor,
+            settings,
+        }
+    }
+}
+
+impl<C> tower::Service<Uri> for MakeSendRequestService<C>
+where
+    C: Service<Uri> + Send + 'static,
+    C::Error: Into<crate::Error> + Send,
+    C::Future: Unpin + Send,
+    C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+{
+    type Response = SendRequest;
+    type Error = crate::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.connector.poll_ready(cx).map_err(Into::into)
+    }
+
+    fn call(&mut self, req: Uri) -> Self::Future {
+        let fut = self.connector.call(req);
+        let builder = self.settings.clone();
+        let executor = self.executor.clone();
+
+        Box::pin(async move {
+            let io = fut.await.map_err(Into::into)?;
+            let (send_request, conn) = builder.handshake(io).await?;
+
+            Executor::<BoxFuture<'static, ()>>::execute(
+                &executor,
+                Box::pin(async move {
+                    if let Err(e) = conn.await {
+                        tracing::debug!("connection task error: {:?}", e);
+                    }
+                }) as _,
+            );
+
+            Ok(SendRequest::from(send_request))
+        })
     }
 }
