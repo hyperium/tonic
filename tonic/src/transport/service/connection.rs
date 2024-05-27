@@ -21,7 +21,8 @@ use tower::{
 };
 use tower_service::Service;
 
-pub(crate) use crate::transport::{Request, Response};
+pub(crate) type Response<B = BoxBody> = http::Response<B>;
+pub(crate) type Request<B = BoxBody> = http::Request<B>;
 
 pub(crate) struct Connection {
     inner: BoxService<Request, Response, crate::Error>,

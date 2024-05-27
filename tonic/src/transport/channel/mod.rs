@@ -38,7 +38,7 @@ use tower::{
     Service,
 };
 
-type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
+type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<BoxBody>, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
@@ -201,7 +201,7 @@ impl Channel {
 }
 
 impl Service<http::Request<BoxBody>> for Channel {
-    type Response = http::Response<super::Body>;
+    type Response = http::Response<BoxBody>;
     type Error = super::Error;
     type Future = ResponseFuture;
 
@@ -217,7 +217,7 @@ impl Service<http::Request<BoxBody>> for Channel {
 }
 
 impl Future for ResponseFuture {
-    type Output = Result<Response<hyper::Body>, super::Error>;
+    type Output = Result<Response<BoxBody>, super::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let val = ready!(Pin::new(&mut self.inner).poll(cx)).map_err(super::Error::from_source)?;
