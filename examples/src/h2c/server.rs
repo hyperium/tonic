@@ -1,9 +1,14 @@
+use std::net::SocketAddr;
+
 use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::conn::auto::Builder;
+use hyper_util::service::TowerToHyperService;
+use tokio::net::TcpListener;
+// use tonic::transport::server::TowerToHyperService;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
-use tower::make::Shared;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -29,21 +34,36 @@ impl Greeter for MyGreeter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse().unwrap();
+    let addr: SocketAddr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
     println!("GreeterServer listening on {}", addr);
 
+    let incoming = TcpListener::bind(addr).await?;
     let svc = Server::builder()
         .add_service(GreeterServer::new(greeter))
         .into_router();
 
     let h2c = h2c::H2c { s: svc };
 
-    let server = hyper::Server::bind(&addr).serve(Shared::new(h2c));
-    server.await.unwrap();
-
-    Ok(())
+    loop {
+        match incoming.accept().await {
+            Ok((io, _)) => {
+                let router = h2c.clone();
+                tokio::spawn(async move {
+                    let builder = Builder::new(TokioExecutor::new());
+                    let conn = builder.serve_connection_with_upgrades(
+                        TokioIo::new(io),
+                        TowerToHyperService::new(router),
+                    );
+                    let _ = conn.await;
+                });
+            }
+            Err(e) => {
+                eprintln!("Error accepting connection: {}", e);
+            }
+        }
+    }
 }
 
 mod h2c {
