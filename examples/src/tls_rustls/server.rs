@@ -2,45 +2,51 @@ pub mod pb {
     tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
-use hyper::server::conn::Http;
+use hyper::server::conn::http2::Builder;
+use hyper_util::rt::{TokioExecutor, TokioIo};
 use pb::{EchoRequest, EchoResponse};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::{
-    rustls::{Certificate, PrivateKey, ServerConfig},
+    rustls::{
+        pki_types::{CertificateDer, PrivatePkcs8KeyDer},
+        ServerConfig,
+    },
     TlsAcceptor,
 };
+use tonic::transport::server::TowerToHyperService;
 use tonic::{transport::Server, Request, Response, Status};
 use tower_http::ServiceBuilderExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
-    let certs = {
+    let certs: Vec<CertificateDer<'static>> = {
         let fd = std::fs::File::open(data_dir.join("tls/server.pem"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        rustls_pemfile::certs(&mut buf)?
+        rustls_pemfile::certs(&mut buf)
             .into_iter()
-            .map(Certificate)
-            .collect()
+            .map(|res| res.map(|cert| cert.to_owned()))
+            .collect::<Result<Vec<_>, _>>()?
     };
-    let key = {
+    let key: PrivatePkcs8KeyDer<'static> = {
         let fd = std::fs::File::open(data_dir.join("tls/server.key"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        rustls_pemfile::pkcs8_private_keys(&mut buf)?
+        let key = rustls_pemfile::pkcs8_private_keys(&mut buf)
             .into_iter()
-            .map(PrivateKey)
             .next()
-            .unwrap()
+            .unwrap()?
+            .clone_key();
+
+        key
 
         // let key = std::fs::read(data_dir.join("tls/server.key"))?;
         // PrivateKey(key)
     };
 
     let mut tls = ServerConfig::builder()
-        .with_safe_defaults()
         .with_no_client_auth()
-        .with_single_cert(certs, key)?;
+        .with_single_cert(certs, key.into())?;
     tls.alpn_protocols = vec![b"h2".to_vec()];
 
     let server = EchoServer::default();
@@ -49,8 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .add_service(pb::echo_server::EchoServer::new(server))
         .into_service();
 
-    let mut http = Http::new();
-    http.http2_only(true);
+    let http = Builder::new(TokioExecutor::new());
 
     let listener = TcpListener::bind("[::1]:50051").await?;
     let tls_acceptor = TlsAcceptor::from(Arc::new(tls));
@@ -86,7 +91,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_extension(Arc::new(ConnInfo { addr, certificates }))
                 .service(svc);
 
-            http.serve_connection(conn, svc).await.unwrap();
+            http.serve_connection(TokioIo::new(conn), TowerToHyperService::new(svc))
+                .await
+                .unwrap();
         });
     }
 }
@@ -94,7 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[derive(Debug)]
 struct ConnInfo {
     addr: std::net::SocketAddr,
-    certificates: Vec<Certificate>,
+    certificates: Vec<CertificateDer<'static>>,
 }
 
 type EchoResult<T> = Result<Response<T>, Status>;

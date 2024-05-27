@@ -18,11 +18,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut roots = RootCertStore::empty();
 
     let mut buf = std::io::BufReader::new(&fd);
-    let certs = rustls_pemfile::certs(&mut buf)?;
-    roots.add_parsable_certificates(&certs);
+    let certs = rustls_pemfile::certs(&mut buf).collect::<Result<Vec<_>, _>>()?;
+    roots.add_parsable_certificates(certs.into_iter());
 
     let tls = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(roots)
         .with_no_client_auth();
 

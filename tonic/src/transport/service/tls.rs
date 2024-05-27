@@ -18,6 +18,7 @@ use crate::transport::{
     server::{Connected, TlsStream},
     Certificate, Identity,
 };
+use hyper_util::rt::TokioIo;
 
 /// h2 alpn in plain format for rustls.
 const ALPN_H2: &[u8] = b"h2";
@@ -88,7 +89,7 @@ impl TlsConnector {
         if !(alpn_protocol == Some(ALPN_H2) || self.assume_http2) {
             return Err(TlsError::H2NotNegotiated.into());
         }
-        Ok(BoxedIo::new(io))
+        Ok(BoxedIo::new(TokioIo::new(io)))
     }
 }
 
