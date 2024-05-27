@@ -156,6 +156,7 @@ mod tests {
     use crate::{Code, Status};
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
+    use http_body_util::BodyExt as _;
     use std::pin::pin;
 
     const LEN: usize = 10000;
@@ -238,7 +239,7 @@ mod tests {
             None,
         ));
 
-        while let Some(r) = body.data().await {
+        while let Some(r) = body.frame().await {
             r.unwrap();
         }
     }
@@ -260,12 +261,15 @@ mod tests {
             Some(MAX_MESSAGE_SIZE),
         ));
 
-        assert!(body.data().await.is_none());
+        let frame = body
+            .frame()
+            .await
+            .expect("at least one frame")
+            .expect("no error polling frame");
         assert_eq!(
-            body.trailers()
-                .await
-                .expect("no error polling trailers")
-                .expect("some trailers")
+            frame
+                .into_trailers()
+                .expect("got trailers")
                 .get("grpc-status")
                 .expect("grpc-status header"),
             "11"
@@ -292,12 +296,15 @@ mod tests {
             Some(usize::MAX),
         ));
 
-        assert!(body.data().await.is_none());
+        let frame = body
+            .frame()
+            .await
+            .expect("at least one frame")
+            .expect("no error polling frame");
         assert_eq!(
-            body.trailers()
-                .await
-                .expect("no error polling trailers")
-                .expect("some trailers")
+            frame
+                .into_trailers()
+                .expect("got trailers")
                 .get("grpc-status")
                 .expect("grpc-status header"),
             "8"
@@ -343,7 +350,7 @@ mod tests {
     mod body {
         use crate::Status;
         use bytes::Bytes;
-        use http_body::Body;
+        use http_body::{Body, Frame};
         use std::{
             pin::Pin,
             task::{Context, Poll},
@@ -374,10 +381,10 @@ mod tests {
             type Data = Bytes;
             type Error = Status;
 
-            fn poll_data(
+            fn poll_frame(
                 mut self: Pin<&mut Self>,
                 cx: &mut Context<'_>,
-            ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+            ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
                 // every other call to poll_data returns data
                 let should_send = self.count % 2 == 0;
                 let data_len = self.data.len();
@@ -395,17 +402,10 @@ mod tests {
                     };
                     // make some fake progress
                     self.count += 1;
-                    result
+                    result.map(|opt| opt.map(|res| res.map(|data| Frame::data(data))))
                 } else {
                     Poll::Ready(None)
                 }
-            }
-
-            fn poll_trailers(
-                self: Pin<&mut Self>,
-                _cx: &mut Context<'_>,
-            ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-                Poll::Ready(Ok(None))
             }
         }
     }
