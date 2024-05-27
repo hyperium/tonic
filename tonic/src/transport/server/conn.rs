@@ -125,11 +125,9 @@ where
         let (inner, session) = self.get_ref();
         let inner = inner.connect_info();
 
-        let certs = if let Some(certs) = session.peer_certificates() {
-            Some(Arc::new(certs.to_owned()))
-        } else {
-            None
-        };
+        let certs = session
+            .peer_certificates()
+            .map(|certs| certs.to_owned().into());
 
         TlsConnectInfo { inner, certs }
     }
