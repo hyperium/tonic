@@ -19,9 +19,9 @@ async-stream = "0.3"
 strum = {version = "0.26", features = ["derive"]}
 pico-args = {version = "0.5", features = ["eq-separator"]}
 console = "0.15"
-http = "0.2"
-http-body = "0.4.2"
-hyper = "0.14"
+http = "1"
+http-body = "1"
+hyper = "1"
 prost = "0.12"
 tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"

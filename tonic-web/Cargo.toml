@@ -18,9 +18,9 @@ version = "0.11.0"
 base64 = "0.22"
 bytes = "1"
 tokio-stream = "0.1"
-http = "0.2"
-http-body = "0.4"
-hyper = {version = "0.14", default-features = false, features = ["stream"]}
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
 pin-project = "1"
 tonic = {version = "0.11", path = "../tonic", default-features = false}
 tower-service = "0.3"

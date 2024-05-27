@@ -9,7 +9,10 @@ license = "MIT"
 [dependencies]
 base64 = "0.22"
 bytes = "1.0"
-hyper = "0.14"
+http-body = "1"
+http-body-util = "0.1"
+hyper = "1"
+hyper-util = "0.1"
 prost = "0.12"
 tokio = { version = "1", features = ["macros", "rt", "net"] }
 tokio-stream = { version = "0.1", features = ["net"] }

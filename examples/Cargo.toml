@@ -311,16 +311,18 @@ serde_json = { version = "1.0", optional = true }
 tracing = { version = "0.1.16", optional = true }
 tracing-subscriber = { version = "0.3", features = ["tracing-log", "fmt"], optional = true }
 prost-types = { version = "0.12", optional = true }
-http = { version = "0.2", optional = true }
-http-body = { version = "0.4.2", optional = true }
-hyper = { version = "0.14", optional = true }
+http = { version = "1", optional = true }
+http-body = { version = "1", optional = true }
+http-body-util = { version = "0.1", optional = true }
+hyper = { version = "1", optional = true }
+hyper-util = { version = "0.1", optional = true }
 listenfd = { version = "1.0", optional = true }
 bytes = { version = "1", optional = true }
 h2 = { version = "0.3", optional = true }
-tokio-rustls = { version = "0.24.0", optional = true }
-hyper-rustls = { version = "0.24.0", features = ["http2"], optional = true }
-rustls-pemfile = { version = "1", optional = true }
-tower-http = { version = "0.4", optional = true }
+tokio-rustls = { version = "0.26", optional = true, features = ["ring", "tls12"], default-features = false }
+hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
+rustls-pemfile = { version = "2.0.0", optional = true }
+tower-http = { version = "0.5", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
