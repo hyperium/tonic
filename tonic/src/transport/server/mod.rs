@@ -35,12 +35,13 @@ use crate::transport::Error;
 
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
+use crate::body::boxed;
 use crate::body::BoxBody;
 use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
-use http_body::Body as _;
-use hyper::{server::accept, Body};
+use http_body_util::BodyExt;
+use hyper::server::accept;
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -63,9 +64,11 @@ use tower::{
     Service, ServiceBuilder,
 };
 
-type BoxHttpBody = http_body::combinators::UnsyncBoxBody<Bytes, crate::Error>;
-type BoxService = tower::util::BoxService<Request<Body>, Response<BoxHttpBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
+type BoxHttpBody = crate::body::BoxBody;
+type Body = hyper::body::Incoming; // Temporary type alias to ease transition
+type BoxError = crate::Error;
+type BoxService = tower::util::BoxCloneService<Request<Body>, Response<BoxBody>, crate::Error>;
 
 const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
 

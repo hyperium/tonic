@@ -1,6 +1,6 @@
 use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
 use crate::{
-    body::BoxBody,
+    body::{boxed, BoxBody},
     transport::{BoxFuture, Endpoint},
 };
 use http::Uri;
@@ -21,8 +21,7 @@ use tower::{
 };
 use tower_service::Service;
 
-pub(crate) type Request = http::Request<BoxBody>;
-pub(crate) type Response = http::Response<hyper::Body>;
+pub(crate) use crate::transport::{Request, Response};
 
 pub(crate) struct Connection {
     inner: BoxService<Request, Response, crate::Error>,

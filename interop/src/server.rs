@@ -180,9 +180,9 @@ impl<S> EchoHeadersSvc<S> {
     }
 }
 
-impl<S> Service<http::Request<hyper::Body>> for EchoHeadersSvc<S>
+impl<S> Service<http::Request<BoxBody>> for EchoHeadersSvc<S>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>> + Send,
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>> + Send,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -193,7 +193,7 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
         let echo_header = req.headers().get("x-grpc-test-echo-initial").cloned();
 
         let echo_trailer = req
