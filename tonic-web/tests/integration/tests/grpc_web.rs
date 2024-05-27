@@ -3,6 +3,7 @@ use std::net::SocketAddr;
 use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http_body_util::{BodyExt as _, Full};
+use hyper::body::Incoming;
 use hyper::http::{header, StatusCode};
 use hyper::{Method, Request, Uri};
 use prost::Message;
@@ -131,8 +132,8 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
         .unwrap()
 }
 
-async fn decode_body(body: Body, content_type: &str) -> (Output, Bytes) {
-    let mut body = hyper::body::to_bytes(body).await.unwrap();
+async fn decode_body(body: Incoming, content_type: &str) -> (Output, Bytes) {
+    let mut body = body.collect().await.unwrap().to_bytes();
 
     if content_type == "application/grpc-web-text+proto" {
         body = integration::util::base64::STANDARD
