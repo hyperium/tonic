@@ -1,7 +1,7 @@
 //! Batteries included server and client.
 //!
 //! This module provides a set of batteries included, fully featured and
-//! fast set of HTTP/2 server and client's. These components each provide a or
+//! fast set of HTTP/2 server and client's. These components each provide a
 //! `rustls` tls backend when the respective feature flag is enabled, and
 //! provides builders to configure transport behavior.
 //!
@@ -22,6 +22,7 @@
 //! # use tonic::transport::{Channel, Certificate, ClientTlsConfig};
 //! # use std::time::Duration;
 //! # use tonic::body::BoxBody;
+//! # use tonic::body::empty_body;
 //! # use tonic::client::GrpcService;;
 //! # use http::Request;
 //! # #[cfg(feature = "rustls")]
@@ -38,7 +39,7 @@
 //!     .connect()
 //!     .await?;
 //!
-//! channel.call(Request::new(BoxBody::empty())).await?;
+//! channel.call(Request::new(empty_body())).await?;
 //! # Ok(())
 //! # }
 //! ```
@@ -46,21 +47,23 @@
 //! ## Server
 //!
 //! ```no_run
+//! # use std::convert::Infallible;
 //! # #[cfg(feature = "rustls")]
 //! # use tonic::transport::{Server, Identity, ServerTlsConfig};
+//! # use tonic::body::BoxBody;
 //! # use tower::Service;
 //! # #[cfg(feature = "rustls")]
 //! # async fn do_thing() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[derive(Clone)]
 //! # pub struct Svc;
-//! # impl Service<hyper::Request<hyper::Body>> for Svc {
 //! #   type Response = hyper::Response<tonic::body::BoxBody>;
-//! #   type Error = tonic::Status;
+//! # impl Service<hyper::Request<BoxBody>> for Svc {
+//! #   type Error = Infallible;
 //! #   type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
 //! #   fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
 //! #       Ok(()).into()
 //! #  }
-//! #   fn call(&mut self, _req: hyper::Request<hyper::Body>) -> Self::Future {
+//! #   fn call(&mut self, _req: hyper::Request<BoxBody>) -> Self::Future {
 //! #       unimplemented!()
 //! #   }
 //! # }
@@ -123,5 +126,8 @@ pub use self::server::ServerTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;
+use crate::body::BoxBody;
 
 type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+pub(crate) type Response<B = BoxBody> = http::Response<B>;
+pub(crate) type Request<B = BoxBody> = http::Request<B>;
