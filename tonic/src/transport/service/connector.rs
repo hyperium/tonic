@@ -3,7 +3,6 @@ use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
-#[cfg(feature = "tls")]
 use std::fmt;
 use std::task::{Context, Poll};
 
@@ -12,6 +11,23 @@ use hyper::rt;
 #[cfg(feature = "tls")]
 use hyper_util::rt::TokioIo;
 use tower_service::Service;
+
+/// Wrapper type to indicate that an error occurs during the connection
+/// process, so that the appropriate gRPC Status can be inferred.
+#[derive(Debug)]
+pub(crate) struct ConnectError(pub(crate) crate::Error);
+
+impl fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::error::Error for ConnectError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.0.as_ref())
+    }
+}
 
 pub(crate) struct Connector<C> {
     inner: C,
@@ -61,11 +77,13 @@ where
     crate::Error: From<C::Error> + Send + 'static,
 {
     type Response = BoxedIo;
-    type Error = crate::Error;
+    type Error = ConnectError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(Into::into)
+        self.inner
+            .poll_ready(cx)
+            .map_err(|err| ConnectError(From::from(err)))
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
@@ -80,23 +98,27 @@ where
         let connect = self.inner.call(uri);
 
         Box::pin(async move {
-            let io = connect.await?;
+            async {
+                let io = connect.await?;
 
-            #[cfg(feature = "tls")]
-            {
-                if let Some(tls) = tls {
-                    return if is_https {
-                        let io = tls.connect(TokioIo::new(io)).await?;
-                        Ok(io)
-                    } else {
-                        Ok(BoxedIo::new(io))
-                    };
-                } else if is_https {
-                    return Err(HttpsUriWithoutTlsSupport(()).into());
+                #[cfg(feature = "tls")]
+                {
+                    if let Some(tls) = tls {
+                        return if is_https {
+                            let io = tls.connect(TokioIo::new(io)).await?;
+                            Ok(io)
+                        } else {
+                            Ok(BoxedIo::new(io))
+                        };
+                    } else if is_https {
+                        return Err(HttpsUriWithoutTlsSupport(()).into());
+                    }
                 }
-            }
 
-            Ok(BoxedIo::new(io))
+                Ok::<_, crate::Error>(BoxedIo::new(io))
+            }
+            .await
+            .map_err(|err| ConnectError(From::from(err)))
         })
     }
 }
