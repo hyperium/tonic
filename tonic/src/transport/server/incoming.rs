@@ -139,13 +139,13 @@ impl TcpIncoming {
     /// ```no_run
     /// # use tower_service::Service;
     /// # use http::{request::Request, response::Response};
-    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Body, Server, server::TcpIncoming}};
+    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Server, server::TcpIncoming}};
     /// # use core::convert::Infallible;
     /// # use std::error::Error;
     /// # fn main() { }  // Cannot have type parameters, hence instead define:
     /// # fn run<S>(some_service: S) -> Result<(), Box<dyn Error + Send + Sync>>
     /// # where
-    /// #   S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+    /// #   S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
     /// #   S::Future: Send + 'static,
     /// # {
     /// // Find a free port

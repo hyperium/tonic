@@ -56,8 +56,8 @@
 //! # async fn do_thing() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[derive(Clone)]
 //! # pub struct Svc;
-//! #   type Response = hyper::Response<tonic::body::BoxBody>;
 //! # impl Service<hyper::Request<BoxBody>> for Svc {
+//! #   type Response = hyper::Response<BoxBody>;
 //! #   type Error = Infallible;
 //! #   type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
 //! #   fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
@@ -126,8 +126,5 @@ pub use self::server::ServerTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;
-use crate::body::BoxBody;
 
 type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
-pub(crate) type Response<B = BoxBody> = http::Response<B>;
-pub(crate) type Request<B = BoxBody> = http::Request<B>;
