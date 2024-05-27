@@ -34,15 +34,18 @@ mod h2c {
     };
 
     use hyper::{client::HttpConnector, Client};
-    use tonic::body::BoxBody;
+    use hyper::body::Incoming;
+    use hyper_util::{
+        rt::TokioExecutor,
+    use tonic::body::{empty_body, BoxBody};
     use tower::Service;
 
     pub struct H2cChannel {
-        pub client: Client<HttpConnector>,
+        pub client: Client<HttpConnector, BoxBody>,
     }
 
     impl Service<http::Request<BoxBody>> for H2cChannel {
-        type Response = http::Response<hyper::Body>;
+        type Response = http::Response<Incoming>;
         type Error = hyper::Error;
         type Future =
             Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -60,7 +63,7 @@ mod h2c {
                 let h2c_req = hyper::Request::builder()
                     .uri(origin)
                     .header(http::header::UPGRADE, "h2c")
-                    .body(hyper::Body::empty())
+                    .body(empty_body())
                     .unwrap();
 
                 let res = client.request(h2c_req).await.unwrap();
