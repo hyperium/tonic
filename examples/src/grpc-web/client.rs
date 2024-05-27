@@ -9,7 +9,7 @@ pub mod hello_world {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Must use hyper directly...
-    let client = hyper::Client::builder().build_http();
+    let client = hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build_http();
 
     let svc = tower::ServiceBuilder::new()
         .layer(GrpcWebClientLayer::new())

@@ -17,7 +17,7 @@ use http::{
     uri::{InvalidUri, Uri},
     Request, Response,
 };
-use hyper::client::connect::Connection as HyperConnection;
+use hyper_util::client::legacy::connect::Connection as HyperConnection;
 use std::{
     fmt,
     future::Future,
@@ -42,7 +42,7 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 
 /// A default batteries included `transport` channel.
 ///
-/// This provides a fully featured http2 gRPC client based on [`hyper::Client`]
+/// This provides a fully featured http2 gRPC client based on `hyper`
 /// and `tower` services.
 ///
 /// # Multiplexing requests

@@ -6,6 +6,7 @@ use http_body_util::{BodyExt as _, Full};
 use hyper::body::Incoming;
 use hyper::http::{header, StatusCode};
 use hyper::{Method, Request, Uri};
+use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 use prost::Message;
 use tokio::net::TcpListener;
@@ -15,12 +16,12 @@ use tonic::transport::Server;
 
 use integration::pb::{test_server::TestServer, Input, Output};
 use integration::Svc;
+use tonic::Status;
 use tonic_web::GrpcWebLayer;
 
 #[tokio::test]
 async fn binary_request() {
     let server_url = spawn().await;
-    let client = Client::new();
     let client = Client::builder(TokioExecutor::new()).build_http();
 
     let req = build_request(server_url, "grpc-web", "grpc-web");
@@ -44,7 +45,6 @@ async fn binary_request() {
 #[tokio::test]
 async fn text_request() {
     let server_url = spawn().await;
-    let client = Client::new();
     let client = Client::builder(TokioExecutor::new()).build_http();
 
     let req = build_request(server_url, "grpc-web-text", "grpc-web-text");

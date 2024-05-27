@@ -1,7 +1,7 @@
 use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
 use http::Uri;
-use hyper::Client;
+use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
 
 pub mod hello_world {
@@ -12,7 +12,6 @@ pub mod hello_world {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = Uri::from_static("http://[::1]:50051");
     let h2c_client = h2c::H2cChannel {
-        client: Client::new(),
         client: Client::builder(TokioExecutor::new()).build_http(),
     };
 
@@ -35,10 +34,11 @@ mod h2c {
         task::{Context, Poll},
     };
 
-    use hyper::{client::HttpConnector, Client};
     use hyper::body::Incoming;
     use hyper_util::{
+        client::legacy::{connect::HttpConnector, Client},
         rt::TokioExecutor,
+    };
     use tonic::body::{empty_body, BoxBody};
     use tower::Service;
 
@@ -77,11 +77,11 @@ mod h2c {
                 let upgraded_io = hyper::upgrade::on(res).await.unwrap();
 
                 // In an ideal world you would somehow cache this connection
-                let (mut h2_client, conn) = hyper::client::conn::Builder::new()
-                    .http2_only(true)
-                    .handshake(upgraded_io)
-                    .await
-                    .unwrap();
+                let (mut h2_client, conn) =
+                    hyper::client::conn::http2::Builder::new(TokioExecutor::new())
+                        .handshake(upgraded_io)
+                        .await
+                        .unwrap();
                 tokio::spawn(conn);
 
                 h2_client.send_request(request).await
