@@ -8,11 +8,11 @@ Required dependencies
 
 ```toml
 [dependencies]
-tonic = <tonic-version>
-prost = <prost-version>
+tonic = "<tonic-version>"
+prost = "<prost-version>"
 
 [build-dependencies]
-tonic-build = <tonic-version>
+tonic-build = "<tonic-version>"
 ```
 
 ## Examples

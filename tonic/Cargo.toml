@@ -28,7 +28,7 @@ gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pki-types", "dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
@@ -49,7 +49,7 @@ channel = []
 # harness = false
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 bytes = "1.0"
 http = "0.2"
 tracing = "0.1"
@@ -67,25 +67,24 @@ prost = {version = "0.12", default-features = false, features = ["std"], optiona
 async-trait = {version = "0.1.13", optional = true}
 
 # transport
+async-stream = {version = "0.3", optional = true}
 h2 = {version = "0.3.24", optional = true}
 hyper = {version = "0.14.26", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
 tokio = {version = "1.0.1", optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
-axum = {version = "0.6.9", default_features = false, optional = true}
+axum = {version = "0.6.9", default-features = false, optional = true}
 
 # rustls
-async-stream = { version = "0.3", optional = true }
-rustls-pki-types = { version = "1.0", optional = true }
 rustls-pemfile = { version = "2.0", optional = true }
 rustls-native-certs = { version = "0.7", optional = true }
-tokio-rustls = { version = "0.25", optional = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12", "ring"], optional = true }
 webpki-roots = { version = "0.26", optional = true }
 
 # compression
 flate2 = {version = "1.0", optional = true}
-zstd = { version = "0.12.3", optional = true }
+zstd = { version = "0.13.0", optional = true }
 
 [dev-dependencies]
 bencher = "0.1.5"
