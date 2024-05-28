@@ -9,7 +9,6 @@ use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
 use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
 use tower::make::MakeConnection;
-// use crate::transport::E
 
 /// Channel builder.
 ///
