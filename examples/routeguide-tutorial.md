@@ -182,7 +182,7 @@ tokio-stream = "0.1"
 async-stream = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rand = "0.7"
+rand = "0.8"
 
 [build-dependencies]
 tonic-build = "0.11"
