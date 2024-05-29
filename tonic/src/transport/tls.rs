@@ -15,6 +15,11 @@ impl Certificate {
     /// Parse a PEM encoded X509 Certificate.
     ///
     /// The provided PEM should include at least one PEM encoded certificate.
+    ///
+    /// ## SAFETY
+    /// `pem` must contain valid PEM encoded certificate. It is undefined
+    /// behavior to call this with `pem` that is not valid PEM encoded
+    /// certificate.
     pub fn from_pem(pem: impl AsRef<[u8]>) -> Self {
         let pem = pem.as_ref().into();
         Self { pem }
