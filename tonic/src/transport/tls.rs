@@ -16,10 +16,10 @@ impl Certificate {
     ///
     /// The provided PEM should include at least one PEM encoded certificate.
     ///
-    /// ## SAFETY
-    /// `pem` must contain valid PEM encoded certificate. It is undefined
-    /// behavior to call this with `pem` that is not valid PEM encoded
-    /// certificate.
+    /// ## NOTE
+    /// `pem` should be resolved to valid PEM encoded certificate by `AsRef`.
+    /// When the prerequisite is not satisfied, the constructed value will be
+    /// invalid certificate.
     pub fn from_pem(pem: impl AsRef<[u8]>) -> Self {
         let pem = pem.as_ref().into();
         Self { pem }
