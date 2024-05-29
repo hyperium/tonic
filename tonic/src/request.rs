@@ -256,6 +256,12 @@ impl<T> Request<T> {
     /// and is mostly used for mTLS. This currently only returns
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
+    ///
+    /// ## NOTE
+    /// Although the returned ['Certificate'] is supposed to contain PEM
+    /// encoded certificate, it actually contains a DER encoded certificate.
+    /// This issue is planned to be addressed.
+    /// See <https://github.com/hyperium/tonic/pull/1707>.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
     pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
