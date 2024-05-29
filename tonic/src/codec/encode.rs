@@ -330,6 +330,16 @@ where
         self.state.is_end_stream
     }
 
+    fn size_hint(&self) -> http_body::SizeHint {
+        let sh = self.inner.size_hint();
+        let mut size_hint = http_body::SizeHint::new();
+        size_hint.set_lower(sh.0 as u64);
+        if let Some(upper) = sh.1 {
+            size_hint.set_upper(upper as u64);
+        }
+        size_hint
+    }
+
     fn poll_data(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
