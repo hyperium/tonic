@@ -19,27 +19,52 @@ mod generated {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
     #![allow(rustdoc::invalid_html_tags)]
+
     #[rustfmt::skip]
     pub mod grpc_reflection_v1alpha;
 
+    #[rustfmt::skip]
+    pub mod grpc_reflection_v1;
+
     /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/reflection_v1alpha1.bin");
+    pub const FILE_DESCRIPTOR_SET_V1ALPHA: &[u8] =
+        include_bytes!("generated/reflection_v1alpha1.bin");
+
+    /// Byte encoded FILE_DESCRIPTOR_SET.
+    pub const FILE_DESCRIPTOR_SET_V1: &[u8] = include_bytes!("generated/reflection_v1.bin");
 
     #[cfg(test)]
     mod tests {
-        use super::FILE_DESCRIPTOR_SET;
+        use super::{FILE_DESCRIPTOR_SET_V1, FILE_DESCRIPTOR_SET_V1ALPHA};
         use prost::Message as _;
 
         #[test]
-        fn file_descriptor_set_is_valid() {
-            prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
+        fn v1alpha_file_descriptor_set_is_valid() {
+            prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET_V1ALPHA).unwrap();
+        }
+
+        #[test]
+        fn v1_file_descriptor_set_is_valid() {
+            prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET_V1).unwrap();
         }
     }
 }
 
-/// Generated protobuf types from the `grpc.reflection.v1alpha` package.
+/// Generated protobuf types from the `grpc.reflection` namespace.
 pub mod pb {
-    pub use crate::generated::{grpc_reflection_v1alpha::*, FILE_DESCRIPTOR_SET};
+    /// Generated protobuf types from the `grpc.reflection.v1` package.
+    pub mod v1 {
+        pub use crate::generated::{
+            grpc_reflection_v1::*, FILE_DESCRIPTOR_SET_V1 as FILE_DESCRIPTOR_SET,
+        };
+    }
+
+    /// Generated protobuf types from the `grpc.reflection.v1alpha` package.
+    pub mod v1alpha {
+        pub use crate::generated::{
+            grpc_reflection_v1alpha::*, FILE_DESCRIPTOR_SET_V1ALPHA as FILE_DESCRIPTOR_SET,
+        };
+    }
 }
 
 /// Implementation of the server component of gRPC Server Reflection.

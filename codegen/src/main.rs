@@ -21,7 +21,19 @@ fn main() {
             .parent()
             .unwrap()
             .join("tonic-reflection"),
-        &["proto/reflection.proto"],
+        &["proto/reflection_v1.proto"],
+        &["proto"],
+        &PathBuf::from("src/generated"),
+        &PathBuf::from("src/generated/reflection_v1.bin"),
+        true,
+        true,
+    );
+    codegen(
+        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("tonic-reflection"),
+        &["proto/reflection_v1alpha.proto"],
         &["proto"],
         &PathBuf::from("src/generated"),
         &PathBuf::from("src/generated/reflection_v1alpha1.bin"),
