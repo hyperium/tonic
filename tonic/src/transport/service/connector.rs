@@ -3,39 +3,35 @@ use super::io::BoxedIo;
 #[cfg(feature = "tls")]
 use super::tls::TlsConnector;
 use http::Uri;
+#[cfg(feature = "tls")]
 use std::fmt;
 use std::task::{Context, Poll};
 use tower::make::MakeConnection;
 use tower_service::Service;
 
-#[cfg(not(feature = "tls"))]
-pub(crate) fn connector<C>(inner: C) -> Connector<C> {
-    Connector::new(inner)
-}
-
-#[cfg(feature = "tls")]
-pub(crate) fn connector<C>(inner: C, tls: Option<TlsConnector>) -> Connector<C> {
-    Connector::new(inner, tls)
-}
-
 pub(crate) struct Connector<C> {
     inner: C,
     #[cfg(feature = "tls")]
     tls: Option<TlsConnector>,
-    #[cfg(not(feature = "tls"))]
-    #[allow(dead_code)]
-    tls: Option<()>,
+    // When connecting to a URI with the https scheme, assume that the server
+    // is capable of speaking HTTP/2 even if it doesn't offer ALPN.
+    #[cfg(feature = "tls-roots-common")]
+    assume_http2: bool,
 }
 
 impl<C> Connector<C> {
-    #[cfg(not(feature = "tls"))]
-    pub(crate) fn new(inner: C) -> Self {
-        Self { inner, tls: None }
-    }
-
-    #[cfg(feature = "tls")]
-    fn new(inner: C, tls: Option<TlsConnector>) -> Self {
-        Self { inner, tls }
+    pub(crate) fn new(
+        inner: C,
+        #[cfg(feature = "tls")] tls: Option<TlsConnector>,
+        #[cfg(feature = "tls-roots-common")] assume_http2: bool,
+    ) -> Self {
+        Self {
+            inner,
+            #[cfg(feature = "tls")]
+            tls,
+            #[cfg(feature = "tls-roots-common")]
+            assume_http2,
+        }
     }
 
     #[cfg(feature = "tls-roots-common")]
@@ -49,9 +45,7 @@ impl<C> Connector<C> {
             _ => return None,
         };
 
-        host.try_into()
-            .ok()
-            .and_then(|dns| TlsConnector::new(None, None, dns).ok())
+        TlsConnector::new(None, None, host, self.assume_http2).ok()
     }
 }
 
@@ -64,7 +58,7 @@ where
 {
     type Response = BoxedIo;
     type Error = crate::Error;
-    type Future = BoxFuture<Self::Response, Self::Error>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         MakeConnection::poll_ready(&mut self.inner, cx).map_err(Into::into)
@@ -87,8 +81,12 @@ where
             #[cfg(feature = "tls")]
             {
                 if let Some(tls) = tls {
-                    let conn = tls.connect(io).await?;
-                    return Ok(BoxedIo::new(conn));
+                    if is_https {
+                        let conn = tls.connect(io).await?;
+                        return Ok(BoxedIo::new(conn));
+                    } else {
+                        return Ok(BoxedIo::new(io));
+                    }
                 } else if is_https {
                     return Err(HttpsUriWithoutTlsSupport(()).into());
                 }
@@ -100,9 +98,11 @@ where
 }
 
 /// Error returned when trying to connect to an HTTPS endpoint without TLS enabled.
+#[cfg(feature = "tls")]
 #[derive(Debug)]
 pub(crate) struct HttpsUriWithoutTlsSupport(());
 
+#[cfg(feature = "tls")]
 impl fmt::Display for HttpsUriWithoutTlsSupport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Connecting to HTTPS without TLS enabled")
@@ -110,4 +110,5 @@ impl fmt::Display for HttpsUriWithoutTlsSupport {
 }
 
 // std::error::Error only requires a type to impl Debug and Display
+#[cfg(feature = "tls")]
 impl std::error::Error for HttpsUriWithoutTlsSupport {}

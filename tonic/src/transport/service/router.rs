@@ -10,7 +10,7 @@ use std::{
     fmt,
     future::Future,
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
 };
 use tower::ServiceExt;
 use tower_service::Service;
@@ -21,8 +21,37 @@ pub struct Routes {
     router: axum::Router,
 }
 
+#[derive(Debug, Default, Clone)]
+/// Allows adding new services to routes by passing a mutable reference to this builder.
+pub struct RoutesBuilder {
+    routes: Option<Routes>,
+}
+
+impl RoutesBuilder {
+    /// Add a new service.
+    pub fn add_service<S>(&mut self, svc: S) -> &mut Self
+    where
+        S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<crate::Error> + Send,
+    {
+        let routes = self.routes.take().unwrap_or_default();
+        self.routes.replace(routes.add_service(svc));
+        self
+    }
+
+    /// Returns the routes with added services or empty [`Routes`] if no service was added
+    pub fn routes(self) -> Routes {
+        self.routes.unwrap_or_default()
+    }
+}
 impl Routes {
-    pub(crate) fn new<S>(svc: S) -> Self
+    /// Create a new routes with `svc` already added to it.
+    pub fn new<S>(svc: S) -> Self
     where
         S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
@@ -36,7 +65,8 @@ impl Routes {
         Self { router }.add_service(svc)
     }
 
-    pub(crate) fn add_service<S>(mut self, svc: S) -> Self
+    /// Add a new service.
+    pub fn add_service<S>(mut self, svc: S) -> Self
     where
         S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible>
             + NamedService
@@ -59,6 +89,11 @@ impl Routes {
             // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
             router: self.router.with_state(()),
         }
+    }
+
+    /// Convert this `Routes` into an [`axum::Router`].
+    pub fn into_router(self) -> axum::Router {
+        self.router
     }
 }
 
@@ -96,7 +131,7 @@ impl Future for RoutesFuture {
     type Output = Result<Response<BoxBody>, crate::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match futures_util::ready!(self.project().0.poll(cx)) {
+        match ready!(self.project().0.poll(cx)) {
             Ok(res) => Ok(res.map(boxed)).into(),
             Err(err) => match err {},
         }

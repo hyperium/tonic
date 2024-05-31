@@ -1,5 +1,5 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
-//! and proto definitiones for use with `tonic`.
+//! and proto definitions for use with `tonic`.
 //!
 //! # Feature flags
 //!
@@ -70,7 +70,7 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.9.2")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.11.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]
@@ -96,6 +96,8 @@ pub mod server;
 
 mod code_gen;
 pub use code_gen::CodeGenBuilder;
+
+mod compile_settings;
 
 /// Service generation trait.
 ///

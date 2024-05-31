@@ -7,7 +7,7 @@
 //! # Usage
 //!
 //! Useful protobuf types are available through the [`pb`] module. They can be
-//! imported and worked with directly.  
+//! imported and worked with directly.
 //!
 //! The [`StatusExt`] trait adds associated functions to [`tonic::Status`] that
 //! can be used on the server side to create a status with error details, which
@@ -124,7 +124,7 @@
 //! that was received, if necessary. To see how to adopt this approach, please
 //! check the [`StatusExt::with_error_details_vec`] and
 //! [`StatusExt::get_error_details_vec`] docs, and also the main repo's
-//! [Richer Error example] directory.  
+//! [Richer Error example] directory.
 //!
 //! Besides that, multiple examples with alternative error details extraction
 //! methods are provided in the [`StatusExt`] doc, which can be specially
@@ -150,13 +150,14 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-types/0.9.2")]
+#![doc(html_root_url = "https://docs.rs/tonic-types/0.11.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
-/// Useful protobuf types
-pub mod pb {
+mod generated {
+    #![allow(unreachable_pub)]
     #![allow(rustdoc::invalid_html_tags)]
-    include!("generated/google.rpc.rs");
+    #[rustfmt::skip]
+    pub mod google_rpc;
 
     /// Byte encoded FILE_DESCRIPTOR_SET.
     pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/types.bin");
@@ -173,6 +174,11 @@ pub mod pb {
     }
 }
 
+/// Useful protobuf types
+pub mod pb {
+    pub use crate::generated::{google_rpc::*, FILE_DESCRIPTOR_SET};
+}
+
 pub use pb::Status;
 
 mod richer_error;
@@ -180,7 +186,7 @@ mod richer_error;
 pub use richer_error::{
     BadRequest, DebugInfo, ErrorDetail, ErrorDetails, ErrorInfo, FieldViolation, Help, HelpLink,
     LocalizedMessage, PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation,
-    RequestInfo, ResourceInfo, RetryInfo, StatusExt,
+    RequestInfo, ResourceInfo, RetryInfo, RpcStatusExt, StatusExt,
 };
 
 mod sealed {

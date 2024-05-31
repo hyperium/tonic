@@ -55,7 +55,8 @@ impl Extensions {
     }
 
     #[inline]
-    pub(crate) fn from_http(http: http::Extensions) -> Self {
+    /// Convert from `http::Extensions`
+    pub fn from_http(http: http::Extensions) -> Self {
         Self { inner: http }
     }
 
@@ -73,7 +74,7 @@ impl fmt::Debug for Extensions {
 }
 
 /// A gRPC Method info extension.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct GrpcMethod {
     service: &'static str,
     method: &'static str,

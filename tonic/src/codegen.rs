@@ -1,8 +1,7 @@
 //! Codegen exports used by `tonic-build`.
 
 pub use async_trait::async_trait;
-pub use futures_core;
-pub use futures_util::future::{ok, poll_fn, Ready};
+pub use tokio_stream;
 
 pub use std::future::Future;
 pub use std::pin::Pin;
@@ -19,6 +18,6 @@ pub use http_body::Body;
 
 pub type BoxFuture<T, E> = self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
 pub type BoxStream<T> =
-    self::Pin<Box<dyn futures_core::Stream<Item = Result<T, crate::Status>> + Send + 'static>>;
+    self::Pin<Box<dyn tokio_stream::Stream<Item = Result<T, crate::Status>> + Send + 'static>>;
 
 pub use crate::body::empty_body;

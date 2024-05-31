@@ -9,7 +9,6 @@ use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
 use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
 use tower::make::MakeConnection;
-// use crate::transport::E
 
 /// Channel builder.
 ///
@@ -24,6 +23,11 @@ pub struct Endpoint {
     pub(crate) rate_limit: Option<(u64, Duration)>,
     #[cfg(feature = "tls")]
     pub(crate) tls: Option<TlsConnector>,
+    // Only applies if the tls config is not explicitly set. This allows users
+    // to connect to a server that doesn't support ALPN while using the
+    // tls-roots-common feature for setting up TLS.
+    #[cfg(feature = "tls-roots-common")]
+    pub(crate) tls_assume_http2: bool,
     pub(crate) buffer_size: Option<usize>,
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
@@ -208,7 +212,7 @@ impl Endpoint {
     ///
     /// Default is 65,535
     ///
-    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    /// [spec]: https://httpwg.org/specs/rfc9113.html#InitialWindowSize
     pub fn initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> Self {
         Endpoint {
             init_stream_window_size: sz.into(),
@@ -226,6 +230,16 @@ impl Endpoint {
         }
     }
 
+    /// Sets the tower service default internal buffer size
+    ///
+    /// Default is 1024
+    pub fn buffer_size(self, sz: impl Into<Option<usize>>) -> Self {
+        Endpoint {
+            buffer_size: sz.into(),
+            ..self
+        }
+    }
+
     /// Configures TLS for the endpoint.
     #[cfg(feature = "tls")]
     #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
@@ -238,6 +252,18 @@ impl Endpoint {
             ),
             ..self
         })
+    }
+
+    /// Configures TLS to assume that the server offers HTTP/2 even if it
+    /// doesn't perform ALPN negotiation. This only applies if a tls_config has
+    /// not been set.
+    #[cfg(feature = "tls-roots-common")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls-roots-common")))]
+    pub fn tls_assume_http2(self, assume_http2: bool) -> Self {
+        Endpoint {
+            tls_assume_http2: assume_http2,
+            ..self
+        }
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
@@ -291,26 +317,30 @@ impl Endpoint {
         self
     }
 
+    pub(crate) fn connector<C>(&self, c: C) -> service::Connector<C> {
+        #[cfg(all(feature = "tls", not(feature = "tls-roots-common")))]
+        let connector = service::Connector::new(c, self.tls.clone());
+
+        #[cfg(all(feature = "tls", feature = "tls-roots-common"))]
+        let connector = service::Connector::new(c, self.tls.clone(), self.tls_assume_http2);
+
+        #[cfg(not(feature = "tls"))]
+        let connector = service::Connector::new(c);
+
+        connector
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         let mut http = hyper::client::connect::HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_connect_timeout(self.connect_timeout);
 
-        #[cfg(feature = "tls")]
-        let connector = service::connector(http, self.tls.clone());
+        let connector = self.connector(http);
 
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(http);
-
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::connect(connector, self.clone()).await
-        } else {
-            Channel::connect(connector, self.clone()).await
-        }
+        Channel::connect(connector, self.clone()).await
     }
 
     /// Create a channel from this config.
@@ -322,20 +352,11 @@ impl Endpoint {
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_connect_timeout(self.connect_timeout);
 
-        #[cfg(feature = "tls")]
-        let connector = service::connector(http, self.tls.clone());
+        let connector = self.connector(http);
 
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(http);
-
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::new(connector, self.clone())
-        } else {
-            Channel::new(connector, self.clone())
-        }
+        Channel::new(connector, self.clone())
     }
 
     /// Connect with a custom connector.
@@ -352,11 +373,7 @@ impl Endpoint {
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {
-        #[cfg(feature = "tls")]
-        let connector = service::connector(connector, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(connector);
+        let connector = self.connector(connector);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -381,13 +398,14 @@ impl Endpoint {
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {
-        #[cfg(feature = "tls")]
-        let connector = service::connector(connector, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(connector);
-
-        Channel::new(connector, self.clone())
+        let connector = self.connector(connector);
+        if let Some(connect_timeout) = self.connect_timeout {
+            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
+            connector.set_connect_timeout(Some(connect_timeout));
+            Channel::new(connector, self.clone())
+        } else {
+            Channel::new(connector, self.clone())
+        }
     }
 
     /// Get the endpoint uri.
@@ -415,6 +433,8 @@ impl From<Uri> for Endpoint {
             timeout: None,
             #[cfg(feature = "tls")]
             tls: None,
+            #[cfg(feature = "tls-roots-common")]
+            tls_assume_http2: false,
             buffer_size: None,
             init_stream_window_size: None,
             init_connection_window_size: None,

@@ -7,51 +7,50 @@ name = "tonic"
 #   - Cargo.toml
 #   - README.md
 # - Update CHANGELOG.md.
-# - Create "v0.9.x" git tag.
+# - Create "v0.11.x" git tag.
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-documentation = "https://docs.rs/tonic/0.9.2"
+documentation = "https://docs.rs/tonic/0.11.0"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.9.2"
+version = "0.11.0"
 
 [features]
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
+zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:async-stream"]
+tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 transport = [
+  "dep:async-stream",
   "dep:axum",
-  "channel"
-]
-channel = [
+  "channel",
   "dep:h2",
   "dep:hyper",
-  "dep:tokio",
+  "dep:tokio", "tokio?/net", "tokio?/time",
   "dep:tower",
   "dep:hyper-timeout",
 ]
+channel = []
 
 # [[bench]]
 # name = "bench_main"
 # harness = false
 
 [dependencies]
-base64 = "0.21"
+base64 = "0.22"
 bytes = "1.0"
-futures-core = {version = "0.3", default-features = false}
-futures-util = {version = "0.3", default-features = false}
 http = "0.2"
 tracing = "0.1"
 
@@ -62,29 +61,30 @@ tower-layer = "0.3"
 tower-service = "0.3"
 
 # prost
-prost = {version = "0.11", default-features = false, features = ["std"], optional = true}
+prost = {version = "0.12", default-features = false, features = ["std"], optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
 
 # transport
-h2 = {version = "0.3", optional = true}
-hyper = {version = "0.14.14", features = ["full"], optional = true}
+async-stream = {version = "0.3", optional = true}
+h2 = {version = "0.3.24", optional = true}
+hyper = {version = "0.14.26", features = ["full"], optional = true}
 hyper-timeout = {version = "0.4", optional = true}
-tokio = {version = "1.0.1", features = ["net", "time", "macros"], optional = true}
+tokio = {version = "1.0.1", optional = true}
 tokio-stream = "0.1"
 tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
-axum = {version = "0.6.9", default_features = false, optional = true}
+axum = {version = "0.6.9", default-features = false, optional = true}
 
 # rustls
-async-stream = { version = "0.3", optional = true }
-rustls-pemfile = { version = "1.0", optional = true }
-rustls-native-certs = { version = "0.6.1", optional = true }
-tokio-rustls = { version = "0.24.0", optional = true }
-webpki-roots = { version = "0.23.0", optional = true }
+rustls-pemfile = { version = "2.0", optional = true }
+rustls-native-certs = { version = "0.7", optional = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12", "ring"], optional = true }
+webpki-roots = { version = "0.26", optional = true }
 
 # compression
 flate2 = {version = "1.0", optional = true}
+zstd = { version = "0.13.0", optional = true }
 
 [dev-dependencies]
 bencher = "0.1.5"

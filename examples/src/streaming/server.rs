@@ -2,10 +2,9 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.echo");
 }
 
-use futures::Stream;
 use std::{error::Error, io::ErrorKind, net::ToSocketAddrs, pin::Pin, time::Duration};
 use tokio::sync::mpsc;
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::{transport::Server, Request, Response, Status, Streaming};
 
 use pb::{EchoRequest, EchoResponse};
@@ -104,7 +103,7 @@ impl pb::echo_server::Echo for EchoServer {
 
         // this spawn here is required if you want to handle connection error.
         // If we just map `in_stream` and write it back as `out_stream` the `out_stream`
-        // will be drooped when connection error occurs and error will never be propagated
+        // will be dropped when connection error occurs and error will never be propagated
         // to mapped version of `in_stream`.
         tokio::spawn(async move {
             while let Some(result) = in_stream.next().await {

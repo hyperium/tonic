@@ -150,16 +150,6 @@ name = "interceptor-server"
 path = "src/interceptor/server.rs"
 
 [[bin]]
-name = "hyper-warp-client"
-path = "src/hyper_warp/client.rs"
-required-features = ["hyper-warp"]
-
-[[bin]]
-name = "hyper-warp-server"
-path = "src/hyper_warp/server.rs"
-required-features = ["hyper-warp"]
-
-[[bin]]
 name = "health-server"
 path = "src/health/server.rs"
 required-features = ["health"]
@@ -177,16 +167,6 @@ required-features = ["autoreload"]
 [[bin]]
 name = "optional-server"
 path = "src/optional/server.rs"
-
-[[bin]]
-name = "hyper-warp-multiplex-client"
-path = "src/hyper_warp_multiplex/client.rs"
-required-features = ["hyper-warp-multiplex"]
-
-[[bin]]
-name = "hyper-warp-multiplex-server"
-path = "src/hyper_warp_multiplex/server.rs"
-required-features = ["hyper-warp-multiplex"]
 
 [[bin]]
 name = "compression-server"
@@ -253,20 +233,50 @@ name = "richer-error-server-vec"
 path = "src/richer-error/server_vec.rs"
 required-features = ["types"]
 
+[[bin]]
+name = "dynamic-server"
+path = "src/dynamic/server.rs"
+
+[[bin]]
+name = "h2c-server"
+path = "src/h2c/server.rs"
+required-features = ["h2c"]
+
+[[bin]]
+name = "h2c-client"
+path = "src/h2c/client.rs"
+required-features = ["h2c"]
+
+[[bin]]
+name = "cancellation-server"
+path = "src/cancellation/server.rs"
+required-features = ["cancellation"]
+
+[[bin]]
+name = "cancellation-client"
+path = "src/cancellation/client.rs"
+
+[[bin]]
+name = "codec-buffers-server"
+path = "src/codec_buffers/server.rs"
+
+[[bin]]
+name = "codec-buffers-client"
+path = "src/codec_buffers/client.rs"
+
+
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
-routeguide = ["dep:async-stream", "dep:futures", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
+routeguide = ["dep:async-stream", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
 reflection = ["dep:tonic-reflection"]
 autoreload = ["tokio-stream/net", "dep:listenfd"]
 health = ["dep:tonic-health"]
-grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:tracing-subscriber"]
+grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:tracing-subscriber", "dep:tower"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
-hyper-warp = ["dep:futures", "dep:tower", "dep:hyper", "dep:http", "dep:http-body", "dep:warp"]
-hyper-warp-multiplex = ["hyper-warp"]
 uds = ["tokio-stream/net", "dep:tower", "dep:hyper"]
-streaming = ["dep:futures", "tokio-stream", "dep:h2"]
-mock = ["dep:futures", "dep:tower"]
-tower = ["dep:futures", "dep:hyper", "dep:tower", "dep:http"]
+streaming = ["tokio-stream", "dep:h2"]
+mock = ["tokio-stream", "dep:tower"]
+tower = ["dep:hyper", "dep:tower", "dep:http"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
 tls = ["tonic/tls"]
@@ -275,14 +285,16 @@ dynamic-load-balance = ["dep:tower"]
 timeout = ["tokio/time", "dep:tower"]
 tls-client-auth = ["tonic/tls"]
 types = ["dep:tonic-types"]
+h2c = ["dep:hyper", "dep:tower", "dep:http"]
+cancellation = ["dep:tokio-util"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "hyper-warp", "hyper-warp-multiplex", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types", "cancellation", "h2c"]
 default = ["full"]
 
 [dependencies]
 # Common dependencies
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
-prost = "0.11"
+prost = "0.12"
 tonic = { path = "../tonic" }
 # Optional dependencies
 tonic-web = { path = "../tonic-web", optional = true }
@@ -290,19 +302,18 @@ tonic-health = { path = "../tonic-health", optional = true }
 tonic-reflection = { path = "../tonic-reflection", optional = true }
 tonic-types = { path = "../tonic-types", optional = true }
 async-stream = { version = "0.3", optional = true }
-futures = { version = "0.3", default-features = false, optional = true }
 tokio-stream = { version = "0.1", optional = true }
+tokio-util = { version = "0.7.8", optional = true }
 tower = { version = "0.4", optional = true }
 rand = { version = "0.8", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tracing = { version = "0.1.16", optional = true }
 tracing-subscriber = { version = "0.3", features = ["tracing-log", "fmt"], optional = true }
-prost-types = { version = "0.11", optional = true }
+prost-types = { version = "0.12", optional = true }
 http = { version = "0.2", optional = true }
 http-body = { version = "0.4.2", optional = true }
 hyper = { version = "0.14", optional = true }
-warp = { version = "0.3.4", default-features = false, optional = true }
 listenfd = { version = "1.0", optional = true }
 bytes = { version = "1", optional = true }
 h2 = { version = "0.3", optional = true }
@@ -313,6 +324,3 @@ tower-http = { version = "0.4", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
-
-[package.metadata.cargo-machete]
-ignored = ["prost-types"]

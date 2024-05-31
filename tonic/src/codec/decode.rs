@@ -1,19 +1,17 @@
-use super::compression::{decompress, CompressionEncoding};
-use super::{DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
+use super::compression::{decompress, CompressionEncoding, CompressionSettings};
+use super::{BufferSettings, DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
-use futures_core::Stream;
-use futures_util::{future, ready};
 use http::StatusCode;
 use http_body::Body;
 use std::{
-    fmt,
+    fmt, future,
     pin::Pin,
+    task::ready,
     task::{Context, Poll},
 };
+use tokio_stream::Stream;
 use tracing::{debug, trace};
-
-const BUFFER_SIZE: usize = 8 * 1024;
 
 /// Streaming requests and responses.
 ///
@@ -118,6 +116,7 @@ impl<T> Streaming<T> {
         B::Error: Into<crate::Error>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
+        let buffer_size = decoder.buffer_settings().buffer_size;
         Self {
             decoder: Box::new(decoder),
             inner: StreamingInner {
@@ -127,7 +126,7 @@ impl<T> Streaming<T> {
                     .boxed_unsync(),
                 state: State::ReadHeader,
                 direction,
-                buf: BytesMut::with_capacity(BUFFER_SIZE),
+                buf: BytesMut::with_capacity(buffer_size),
                 trailers: None,
                 decompress_buf: BytesMut::new(),
                 encoding,
@@ -138,7 +137,10 @@ impl<T> Streaming<T> {
 }
 
 impl StreamingInner {
-    fn decode_chunk(&mut self) -> Result<Option<DecodeBuf<'_>>, Status> {
+    fn decode_chunk(
+        &mut self,
+        buffer_settings: BufferSettings,
+    ) -> Result<Option<DecodeBuf<'_>>, Status> {
         if let State::ReadHeader = self.state {
             if self.buf.remaining() < HEADER_SIZE {
                 return Ok(None);
@@ -205,8 +207,15 @@ impl StreamingInner {
             let decode_buf = if let Some(encoding) = compression {
                 self.decompress_buf.clear();
 
-                if let Err(err) = decompress(encoding, &mut self.buf, &mut self.decompress_buf, len)
-                {
+                if let Err(err) = decompress(
+                    CompressionSettings {
+                        encoding,
+                        buffer_growth_interval: buffer_settings.buffer_size,
+                    },
+                    &mut self.buf,
+                    &mut self.decompress_buf,
+                    len,
+                ) {
                     let message = if let Direction::Response(status) = self.direction {
                         format!(
                             "Error decompressing: {}, while receiving response with status: {}",
@@ -233,15 +242,13 @@ impl StreamingInner {
     fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
         let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
             Some(Ok(d)) => Some(d),
-            Some(Err(e)) => {
-                if self.direction == Direction::Request && e.code() == Code::Cancelled {
+            Some(Err(status)) => {
+                if self.direction == Direction::Request && status.code() == Code::Cancelled {
                     return Poll::Ready(Ok(None));
                 }
 
                 let _ = std::mem::replace(&mut self.state, State::Error);
-                let err: crate::Error = e.into();
-                debug!("decoder inner stream error: {:?}", err);
-                let status = Status::from_error(err);
+                debug!("decoder inner stream error: {:?}", status);
                 return Poll::Ready(Err(status));
             }
             None => None,
@@ -253,7 +260,7 @@ impl StreamingInner {
         } else {
             // FIXME: improve buf usage.
             if self.buf.has_remaining() {
-                trace!("unexpected EOF decoding stream");
+                trace!("unexpected EOF decoding stream, state: {:?}", self.state);
                 Err(Status::new(
                     Code::Internal,
                     "Unexpected EOF decoding stream.".to_string(),
@@ -278,10 +285,8 @@ impl StreamingInner {
                         self.trailers = trailer.map(MetadataMap::from_headers);
                     }
                 }
-                Err(e) => {
-                    let err: crate::Error = e.into();
-                    debug!("decoder inner trailers error: {:?}", err);
-                    let status = Status::from_error(err);
+                Err(status) => {
+                    debug!("decoder inner trailers error: {:?}", status);
                     return Poll::Ready(Err(status));
                 }
             }
@@ -368,7 +373,7 @@ impl<T> Streaming<T> {
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
-        match self.inner.decode_chunk()? {
+        match self.inner.decode_chunk(self.decoder.buffer_settings())? {
             Some(mut decode_buf) => match self.decoder.decode(&mut decode_buf)? {
                 Some(msg) => {
                     self.inner.state = State::ReadHeader;

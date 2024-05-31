@@ -6,14 +6,13 @@ use crate::{
     request::SanitizeHeaders,
     Code, Request, Response, Status,
 };
-use futures_core::Stream;
-use futures_util::{future, stream, TryStreamExt};
 use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
-    uri::{Parts, PathAndQuery, Uri},
+    uri::{PathAndQuery, Uri},
 };
 use http_body::Body;
-use std::fmt;
+use std::{fmt, future, pin::pin};
+use tokio_stream::{Stream, StreamExt};
 
 /// A gRPC client dispatcher.
 ///
@@ -160,7 +159,7 @@ impl<T> Grpc<T> {
         self
     }
 
-    /// Limits the maximum size of an ecoded message.
+    /// Limits the maximum size of an encoded message.
     ///
     /// # Example
     ///
@@ -217,7 +216,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| stream::once(future::ready(m)));
+        let request = request.map(|m| tokio_stream::once(m));
         self.client_streaming(request, path, codec).await
     }
 
@@ -240,7 +239,7 @@ impl<T> Grpc<T> {
         let (mut parts, body, extensions) =
             self.streaming(request, path, codec).await?.into_parts();
 
-        futures_util::pin_mut!(body);
+        let mut body = pin!(body);
 
         let message = body
             .try_next()
@@ -273,7 +272,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| stream::once(future::ready(m)));
+        let request = request.map(|m| tokio_stream::once(m));
         self.streaming(request, path, codec).await
     }
 
@@ -373,13 +372,20 @@ impl GrpcConfig {
         request: Request<BoxBody>,
         path: PathAndQuery,
     ) -> http::Request<BoxBody> {
-        let scheme = self.origin.scheme().cloned();
-        let authority = self.origin.authority().cloned();
+        let mut parts = self.origin.clone().into_parts();
 
-        let mut parts = Parts::default();
-        parts.path_and_query = Some(path);
-        parts.scheme = scheme;
-        parts.authority = authority;
+        match &parts.path_and_query {
+            Some(pnq) if pnq != "/" => {
+                parts.path_and_query = Some(
+                    format!("{}{}", pnq.path(), path)
+                        .parse()
+                        .expect("must form valid path_and_query"),
+                )
+            }
+            _ => {
+                parts.path_and_query = Some(path);
+            }
+        }
 
         let uri = Uri::from_parts(parts).expect("path_and_query only is valid Uri");
 
@@ -400,6 +406,7 @@ impl GrpcConfig {
             .headers_mut()
             .insert(CONTENT_TYPE, HeaderValue::from_static("application/grpc"));
 
+        #[cfg(any(feature = "gzip", feature = "zstd"))]
         if let Some(encoding) = self.send_compression_encodings {
             request.headers_mut().insert(
                 crate::codec::compression::ENCODING_HEADER,

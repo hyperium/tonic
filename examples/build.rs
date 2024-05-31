@@ -33,6 +33,14 @@ fn main() {
         .unwrap();
 
     build_json_codec_service();
+
+    let smallbuff_copy = out_dir.join("smallbuf");
+    let _ = std::fs::create_dir(smallbuff_copy.clone()); // This will panic below if the directory failed to create
+    tonic_build::configure()
+        .out_dir(smallbuff_copy)
+        .codec_path("crate::common::SmallBufferCodec")
+        .compile(&["proto/helloworld/helloworld.proto"], &["proto"])
+        .unwrap();
 }
 
 // Manually define the json.helloworld.Greeter service which used a custom JsonCodec to use json

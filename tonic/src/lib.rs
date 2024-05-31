@@ -58,7 +58,7 @@
 //! ## Max Message Size
 //!
 //! Currently, both servers and clients can be configured to set the max message encoding and
-//! decoding size. This will ensure that an incoming gRPC message will not exahust the systems
+//! decoding size. This will ensure that an incoming gRPC message will not exhaust the systems
 //! memory. By default, the decoding message limit is `4MB` and the encoding limit is `usize::MAX`.
 //!
 //! [gRPC]: https://grpc.io
@@ -89,7 +89,7 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic/0.9.2")]
+#![doc(html_root_url = "https://docs.rs/tonic/0.11.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_cfg))]

@@ -1,7 +1,8 @@
-use crate::pb::server_reflection_request::MessageRequest;
-use crate::pb::server_reflection_response::MessageResponse;
-pub use crate::pb::server_reflection_server::{ServerReflection, ServerReflectionServer};
-use crate::pb::{
+pub use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
+
+use crate::pb::v1::server_reflection_request::MessageRequest;
+use crate::pb::v1::server_reflection_response::MessageResponse;
+use crate::pb::v1::{
     ExtensionNumberResponse, FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest,
     ServerReflectionResponse, ServiceResponse,
 };
@@ -109,7 +110,7 @@ impl<'b> Builder<'b> {
     /// Build a gRPC Reflection Service to be served via Tonic.
     pub fn build(mut self) -> Result<ServerReflectionServer<impl ServerReflection>, Error> {
         if self.include_reflection_service {
-            self = self.register_encoded_file_descriptor_set(crate::pb::FILE_DESCRIPTOR_SET);
+            self = self.register_encoded_file_descriptor_set(crate::pb::v1::FILE_DESCRIPTOR_SET);
         }
 
         for encoded in &self.encoded_file_descriptor_sets {

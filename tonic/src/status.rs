@@ -422,6 +422,10 @@ impl Status {
             return Some(Status::unavailable(err.to_string()));
         }
 
+        if err.is_canceled() {
+            return Some(Status::cancelled(err.to_string()));
+        }
+
         if let Some(h2_err) = err.source().and_then(|e| e.downcast_ref::<h2::Error>()) {
             let code = Status::code_from_h2(h2_err);
             let status = Self::new(code, format!("h2 protocol error: {}", err));
@@ -461,7 +465,7 @@ impl Status {
                         .expect("Invalid status header, expected base64 encoded value")
                 })
                 .map(Bytes::from)
-                .unwrap_or_else(Bytes::new);
+                .unwrap_or_default();
 
             let mut other_headers = header_map.clone();
             other_headers.remove(GRPC_STATUS_HEADER_CODE);

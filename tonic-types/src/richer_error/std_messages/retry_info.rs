@@ -3,6 +3,8 @@ use std::time;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
@@ -52,7 +54,49 @@ impl RetryInfo {
 
 impl IntoAny for RetryInfo {
     fn into_any(self) -> Any {
-        let retry_delay = match self.retry_delay {
+        let detail_data: pb::RetryInfo = self.into();
+
+        Any {
+            type_url: RetryInfo::TYPE_URL.to_string(),
+            value: detail_data.encode_to_vec(),
+        }
+    }
+}
+
+impl FromAny for RetryInfo {
+    #[inline]
+    fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for RetryInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
+        let buf: &[u8] = &any.value;
+        let retry_info = pb::RetryInfo::decode(buf)?;
+
+        Ok(retry_info.into())
+    }
+}
+
+impl From<pb::RetryInfo> for RetryInfo {
+    fn from(retry_info: pb::RetryInfo) -> Self {
+        let retry_delay = match retry_info.retry_delay {
+            Some(duration) => {
+                // Negative retry_delays become 0
+                let duration = time::Duration::try_from(duration).unwrap_or(time::Duration::ZERO);
+                Some(duration)
+            }
+            None => None,
+        };
+
+        RetryInfo { retry_delay }
+    }
+}
+
+impl From<RetryInfo> for pb::RetryInfo {
+    fn from(value: RetryInfo) -> Self {
+        let retry_delay = match value.retry_delay {
             Some(duration) => {
                 // If duration is too large, uses max `prost_types::Duration`
                 let duration = match prost_types::Duration::try_from(duration) {
@@ -67,32 +111,7 @@ impl IntoAny for RetryInfo {
             None => None,
         };
 
-        let detail_data = pb::RetryInfo { retry_delay };
-
-        Any {
-            type_url: RetryInfo::TYPE_URL.to_string(),
-            value: detail_data.encode_to_vec(),
-        }
-    }
-}
-
-impl FromAny for RetryInfo {
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        let buf: &[u8] = &any.value;
-        let retry_info = pb::RetryInfo::decode(buf)?;
-
-        let retry_delay = match retry_info.retry_delay {
-            Some(duration) => {
-                // Negative retry_delays become 0
-                let duration = time::Duration::try_from(duration).unwrap_or(time::Duration::ZERO);
-                Some(duration)
-            }
-            None => None,
-        };
-
-        let retry_info = RetryInfo { retry_delay };
-
-        Ok(retry_info)
+        pb::RetryInfo { retry_delay }
     }
 }
 
