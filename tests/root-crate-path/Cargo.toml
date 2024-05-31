@@ -10,5 +10,5 @@ version = "0.1.0"
 prost = "0.12"
 tonic = {path = "../../tonic"}
 
-[build_dependencies]
+[build-dependencies]
 tonic-build = {path = "../../tonic-build"}
