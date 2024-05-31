@@ -262,7 +262,15 @@ impl StreamingInner {
                     Ok(Some(()))
                 }
                 frame if frame.is_trailers() => {
-                    self.trailers = Some(frame.into_trailers().unwrap());
+                    match &mut self.trailers {
+                        Some(trailers) => {
+                            trailers.extend(frame.into_trailers().unwrap());
+                        }
+                        None => {
+                            self.trailers = Some(frame.into_trailers().unwrap());
+                        }
+                    }
+
                     Ok(None)
                 }
                 frame => panic!("unexpected frame: {:?}", frame),
