@@ -22,7 +22,6 @@
 //! # use tonic::transport::{Channel, Certificate, ClientTlsConfig};
 //! # use std::time::Duration;
 //! # use tonic::body::BoxBody;
-//! # use tonic::body::empty_body;
 //! # use tonic::client::GrpcService;;
 //! # use http::Request;
 //! # #[cfg(feature = "rustls")]
@@ -39,7 +38,7 @@
 //!     .connect()
 //!     .await?;
 //!
-//! channel.call(Request::new(empty_body())).await?;
+//! channel.call(Request::new(tonic::body::empty_body())).await?;
 //! # Ok(())
 //! # }
 //! ```
