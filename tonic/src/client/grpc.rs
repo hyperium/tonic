@@ -159,7 +159,7 @@ impl<T> Grpc<T> {
         self
     }
 
-    /// Limits the maximum size of an ecoded message.
+    /// Limits the maximum size of an encoded message.
     ///
     /// # Example
     ///

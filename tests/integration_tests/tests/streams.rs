@@ -41,6 +41,7 @@ async fn status_from_server_stream_with_source() {
     jh.await.unwrap();
 }
 
+#[allow(dead_code)]
 struct Unsync(*mut ());
 
 unsafe impl Send for Unsync {}
