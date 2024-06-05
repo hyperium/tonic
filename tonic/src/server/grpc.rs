@@ -15,7 +15,7 @@ macro_rules! t {
     ($result:expr) => {
         match $result {
             Ok(value) => value,
-            Err(status) => return status.to_http(),
+            Err(status) => return status.into_http(),
         }
     };
 }
