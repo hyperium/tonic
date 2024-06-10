@@ -379,9 +379,7 @@ fn generate_named(
 
     quote! {
         #name_doc
-        pub const fn service_name() -> &'static str {
-            #service_name
-        }
+        const SERVICE_NAME: &'static str = #service_name;
 
         impl<T: #server_trait> tonic::server::NamedService for #server_service<T> {
             const NAME: &'static str = #service_name;
