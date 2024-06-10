@@ -1,3 +1,4 @@
+[graph]
 all-features = true
 
 [bans]
@@ -26,10 +27,9 @@ skip-tree = [
 ]
 
 [licenses]
-unlicensed = "deny"
+version = 2
 # We want really high confidence when inferring licenses from text
 confidence-threshold = 0.92
-copyleft = "deny"
 allow = [
     "Apache-2.0",
     "ISC",

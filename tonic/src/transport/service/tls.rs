@@ -3,10 +3,13 @@ use std::{
     {fmt, sync::Arc},
 };
 
-use rustls_pki_types::{CertificateDer, PrivateKeyDer, ServerName};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
-    rustls::{server::WebPkiClientVerifier, ClientConfig, RootCertStore, ServerConfig},
+    rustls::{
+        pki_types::{CertificateDer, PrivateKeyDer, ServerName},
+        server::WebPkiClientVerifier,
+        ClientConfig, RootCertStore, ServerConfig,
+    },
     TlsAcceptor as RustlsAcceptor, TlsConnector as RustlsConnector,
 };
 
@@ -82,10 +85,8 @@ impl TlsConnector {
         // explicitly set `assume_http2` to true, we'll allow it to be missing.
         let (_, session) = io.get_ref();
         let alpn_protocol = session.alpn_protocol();
-        if alpn_protocol != Some(ALPN_H2) {
-            if alpn_protocol.is_some() || !self.assume_http2 {
-                return Err(TlsError::H2NotNegotiated.into());
-            }
+        if !(alpn_protocol == Some(ALPN_H2) || self.assume_http2) {
+            return Err(TlsError::H2NotNegotiated.into());
         }
         Ok(BoxedIo::new(io))
     }

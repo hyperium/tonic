@@ -229,13 +229,13 @@ fn finish_encoding(
         return Err(Status::new(
             Code::OutOfRange,
             format!(
-                "Error, message length too large: found {} bytes, the limit is: {} bytes",
+                "Error, encoded message length too large: found {} bytes, the limit is: {} bytes",
                 len, limit
             ),
         ));
     }
 
-    if len > std::u32::MAX as usize {
+    if len > u32::MAX as usize {
         return Err(Status::resource_exhausted(format!(
             "Cannot return body with more than 4GB of data but got {len} bytes"
         )));
@@ -328,6 +328,16 @@ where
 
     fn is_end_stream(&self) -> bool {
         self.state.is_end_stream
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        let sh = self.inner.size_hint();
+        let mut size_hint = http_body::SizeHint::new();
+        size_hint.set_lower(sh.0 as u64);
+        if let Some(upper) = sh.1 {
+            size_hint.set_upper(upper as u64);
+        }
+        size_hint
     }
 
     fn poll_data(

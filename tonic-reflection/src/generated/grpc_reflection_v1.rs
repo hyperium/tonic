@@ -33,8 +33,8 @@ pub mod server_reflection_request {
         /// message type with the given field number.
         #[prost(message, tag = "5")]
         FileContainingExtension(super::ExtensionRequest),
-        /// Finds the tag numbers used by all known extensions of extendee_type, and
-        /// appends them to ExtensionNumberResponse in an undefined order.
+        /// Finds the tag numbers used by all known extensions of the given message
+        /// type, and appends them to ExtensionNumberResponse in an undefined order.
         /// Its corresponding method is best-effort: it's not guaranteed that the
         /// reflection service will implement this method, and it's not guaranteed
         /// that this method will provide all extensions. Returns
@@ -68,8 +68,8 @@ pub struct ServerReflectionResponse {
     pub valid_host: ::prost::alloc::string::String,
     #[prost(message, optional, tag = "2")]
     pub original_request: ::core::option::Option<ServerReflectionRequest>,
-    /// The server sets one of the following fields according to the
-    /// message_request in the request.
+    /// The server sets one of the following fields according to the message_request
+    /// in the request.
     #[prost(oneof = "server_reflection_response::MessageResponse", tags = "4, 5, 6, 7")]
     pub message_response: ::core::option::Option<
         server_reflection_response::MessageResponse,
@@ -77,8 +77,8 @@ pub struct ServerReflectionResponse {
 }
 /// Nested message and enum types in `ServerReflectionResponse`.
 pub mod server_reflection_response {
-    /// The server sets one of the following fields according to the
-    /// message_request in the request.
+    /// The server sets one of the following fields according to the message_request
+    /// in the request.
     #[allow(clippy::derive_partial_eq_without_eq)]
     #[derive(Clone, PartialEq, ::prost::Oneof)]
     pub enum MessageResponse {
@@ -250,13 +250,13 @@ pub mod server_reflection_client {
                 })?;
             let codec = tonic::codec::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
-                "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo",
+                "/grpc.reflection.v1.ServerReflection/ServerReflectionInfo",
             );
             let mut req = request.into_streaming_request();
             req.extensions_mut()
                 .insert(
                     GrpcMethod::new(
-                        "grpc.reflection.v1alpha.ServerReflection",
+                        "grpc.reflection.v1.ServerReflection",
                         "ServerReflectionInfo",
                     ),
                 );
@@ -369,7 +369,7 @@ pub mod server_reflection_server {
         fn call(&mut self, req: http::Request<B>) -> Self::Future {
             let inner = self.inner.clone();
             match req.uri().path() {
-                "/grpc.reflection.v1alpha.ServerReflection/ServerReflectionInfo" => {
+                "/grpc.reflection.v1.ServerReflection/ServerReflectionInfo" => {
                     #[allow(non_camel_case_types)]
                     struct ServerReflectionInfoSvc<T: ServerReflection>(pub Arc<T>);
                     impl<
@@ -460,6 +460,6 @@ pub mod server_reflection_server {
         }
     }
     impl<T: ServerReflection> tonic::server::NamedService for ServerReflectionServer<T> {
-        const NAME: &'static str = "grpc.reflection.v1alpha.ServerReflection";
+        const NAME: &'static str = "grpc.reflection.v1.ServerReflection";
     }
 }

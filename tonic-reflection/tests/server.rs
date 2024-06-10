@@ -4,7 +4,7 @@ use tokio::sync::oneshot;
 use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
 use tonic::{transport::Server, Request};
 use tonic_reflection::{
-    pb::{
+    pb::v1::{
         server_reflection_client::ServerReflectionClient,
         server_reflection_request::MessageRequest, server_reflection_response::MessageResponse,
         ServerReflectionRequest, ServiceResponse, FILE_DESCRIPTOR_SET,
@@ -34,7 +34,7 @@ async fn test_list_services() {
         assert_eq!(
             services.service,
             vec![ServiceResponse {
-                name: String::from("grpc.reflection.v1alpha.ServerReflection")
+                name: String::from("grpc.reflection.v1.ServerReflection")
             }]
         );
     } else {
@@ -47,7 +47,7 @@ async fn test_file_by_filename() {
     let response = make_test_reflection_request(ServerReflectionRequest {
         host: "".to_string(),
         message_request: Some(MessageRequest::FileByFilename(String::from(
-            "reflection.proto",
+            "reflection_v1.proto",
         ))),
     })
     .await;
@@ -71,7 +71,7 @@ async fn test_file_containing_symbol() {
     let response = make_test_reflection_request(ServerReflectionRequest {
         host: "".to_string(),
         message_request: Some(MessageRequest::FileContainingSymbol(String::from(
-            "grpc.reflection.v1alpha.ServerReflection",
+            "grpc.reflection.v1.ServerReflection",
         ))),
     })
     .await;

@@ -124,4 +124,11 @@ where
             None => true,
         }
     }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match &self.inner {
+            Some(body) => body.size_hint(),
+            None => http_body::SizeHint::with_exact(0),
+        }
+    }
 }
