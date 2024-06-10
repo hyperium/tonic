@@ -589,16 +589,13 @@ impl Status {
     #[allow(clippy::wrong_self_convention)]
     /// Build an `http::Response` from the given `Status`.
     pub fn to_http(self) -> http::Response<BoxBody> {
-        let (mut parts, _body) = http::Response::new(()).into_parts();
-
-        parts.headers.insert(
+        let mut response = http::Response::new(crate::body::empty_body());
+        response.headers_mut().insert(
             http::header::CONTENT_TYPE,
             http::header::HeaderValue::from_static("application/grpc"),
         );
-
-        self.add_header(&mut parts.headers).unwrap();
-
-        http::Response::from_parts(parts, crate::body::empty_body())
+        self.add_header(response.headers_mut()).unwrap();
+        response
     }
 }
 
