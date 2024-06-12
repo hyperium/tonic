@@ -128,4 +128,4 @@ pub use self::server::ServerTlsConfig;
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;
 
-type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
+use crate::service::router::BoxFuture;

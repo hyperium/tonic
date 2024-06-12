@@ -32,9 +32,10 @@ tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "toki
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
+router = ["dep:axum"]
 transport = [
+  "router",
   "dep:async-stream",
-  "dep:axum",
   "channel",
   "dep:h2",
   "dep:hyper", "dep:hyper-util", "dep:hyper-timeout",
