@@ -580,9 +580,8 @@ impl Status {
         self
     }
 
-    #[allow(clippy::wrong_self_convention)]
     /// Build an `http::Response` from the given `Status`.
-    pub fn to_http(self) -> http::Response<BoxBody> {
+    pub fn into_http(self) -> http::Response<BoxBody> {
         let mut response = http::Response::new(crate::body::empty_body());
         response.headers_mut().insert(
             http::header::CONTENT_TYPE,
