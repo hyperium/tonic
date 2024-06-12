@@ -20,9 +20,6 @@ deny = [
 skip-tree = [
     { name = "windows-sys" },
     { name = "hermit-abi" },
-    { name = "syn" },
-    { name = "bitflags" },
-    { name = "indexmap" },
     { name = "examples" },
 ]
 
