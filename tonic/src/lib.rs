@@ -119,7 +119,8 @@ pub use async_trait::async_trait;
 
 #[doc(inline)]
 pub use codec::Streaming;
-pub use extensions::{Extensions, GrpcMethod};
+pub use extensions::GrpcMethod;
+pub use http::Extensions;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, Status};

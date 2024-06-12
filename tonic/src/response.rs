@@ -1,4 +1,6 @@
-use crate::{metadata::MetadataMap, Extensions};
+use http::Extensions;
+
+use crate::metadata::MetadataMap;
 
 /// A gRPC response and metadata from an RPC call.
 #[derive(Debug)]
@@ -73,7 +75,7 @@ impl<T> Response<T> {
         Response {
             metadata: MetadataMap::from_headers(head.headers),
             message,
-            extensions: Extensions::from_http(head.extensions),
+            extensions: head.extensions,
         }
     }
 
@@ -82,7 +84,7 @@ impl<T> Response<T> {
 
         *res.version_mut() = http::Version::HTTP_2;
         *res.headers_mut() = self.metadata.into_sanitized_headers();
-        *res.extensions_mut() = self.extensions.into_http();
+        *res.extensions_mut() = self.extensions;
 
         res
     }
