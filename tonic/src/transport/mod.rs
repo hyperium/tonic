@@ -111,8 +111,8 @@ pub(crate) use self::service::ConnectError;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Certificate;
-pub use axum::{body::BoxBody as AxumBoxBody, Router as AxumRouter};
-pub use hyper::{Body, Uri};
+pub use axum::{body::Body as AxumBoxBody, Router as AxumRouter};
+pub use hyper::{body::Body, Uri};
 #[cfg(feature = "tls")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
 
