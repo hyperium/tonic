@@ -280,7 +280,7 @@ tower = ["dep:hyper", "dep:hyper-util", "dep:tower", "dep:http"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
 tls = ["tonic/tls"]
-tls-rustls = ["dep:hyper", "dep:hyper-util", "dep:hyper-rustls", "dep:tower", "tower-http/util", "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls"]
+tls-rustls = ["dep:hyper", "dep:hyper-util", "dep:hyper-rustls", "dep:tower", "tower-http/util", "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls", "dep:pin-project", "dep:http-body-util"]
 dynamic-load-balance = ["dep:tower"]
 timeout = ["tokio/time", "dep:tower"]
 tls-client-auth = ["tonic/tls"]
@@ -315,7 +315,7 @@ http = { version = "1", optional = true }
 http-body = { version = "1", optional = true }
 http-body-util = { version = "0.1", optional = true }
 hyper = { version = "1", optional = true }
-hyper-util = { version = "0.1", optional = true }
+hyper-util = { version = ">=0.1.4, <0.2", optional = true }
 listenfd = { version = "1.0", optional = true }
 bytes = { version = "1", optional = true }
 h2 = { version = "0.3", optional = true }
@@ -323,6 +323,7 @@ tokio-rustls = { version = "0.26", optional = true, features = ["ring", "tls12"]
 hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
 rustls-pemfile = { version = "2.0.0", optional = true }
 tower-http = { version = "0.5", optional = true }
+pin-project = { version = "1.0.11", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }

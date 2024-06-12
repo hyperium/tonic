@@ -10,14 +10,9 @@ mod tls;
 mod unix;
 
 use tokio_stream::StreamExt as _;
-use tower::util::BoxCloneService;
-use tower::util::Oneshot;
-use tower::ServiceExt;
-use tracing::debug;
-use tracing::trace;
+use tracing::{debug, trace};
 
-pub use super::service::Routes;
-pub use super::service::RoutesBuilder;
+pub use super::service::{Routes, RoutesBuilder};
 
 pub use conn::{Connected, TcpConnectInfo};
 use hyper_util::rt::{TokioExecutor, TokioIo};
@@ -43,19 +38,17 @@ use crate::transport::Error;
 
 use self::recover_error::RecoverError;
 use super::service::{GrpcTimeout, ServerIo};
-use crate::body::boxed;
-use crate::body::BoxBody;
+use crate::body::{boxed, BoxBody};
 use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
 use hyper::body::Incoming;
 use pin_project::pin_project;
-use std::future::poll_fn;
 use std::{
     convert::Infallible,
     fmt,
-    future::{self, Future},
+    future::{self, poll_fn, Future},
     marker::PhantomData,
     net::SocketAddr,
     pin::{pin, Pin},
@@ -69,8 +62,8 @@ use tower::{
     layer::util::{Identity, Stack},
     layer::Layer,
     limit::concurrency::ConcurrencyLimitLayer,
-    util::Either,
-    Service, ServiceBuilder,
+    util::{BoxCloneService, Either, Oneshot},
+    Service, ServiceBuilder, ServiceExt,
 };
 
 type BoxHttpBody = crate::body::BoxBody;
@@ -673,29 +666,14 @@ type ConnectionBuilder = hyper_util::server::conn::auto::Builder<TokioExecutor>;
 /// The [`hyper::service::Service`] trait is used by hyper to handle incoming requests,
 /// and does not support the `poll_ready` method that is used by tower services.
 #[derive(Debug, Copy, Clone)]
-pub struct TowerToHyperService<S> {
+pub(crate) struct TowerToHyperService<S> {
     service: S,
 }
 
 impl<S> TowerToHyperService<S> {
     /// Create a new `TowerToHyperService` from a tower service.
-    pub fn new(service: S) -> Self {
+    pub(crate) fn new(service: S) -> Self {
         Self { service }
-    }
-
-    /// Extract the inner tower service.
-    pub fn into_inner(self) -> S {
-        self.service
-    }
-
-    /// Get a reference to the inner tower service.
-    pub fn as_inner(&self) -> &S {
-        &self.service
-    }
-
-    /// Get a mutable reference to the inner tower service.
-    pub fn as_inner_mut(&mut self) -> &mut S {
-        &mut self.service
     }
 }
 
@@ -719,7 +697,7 @@ where
 /// Future returned by [`TowerToHyperService`].
 #[derive(Debug)]
 #[pin_project]
-pub struct TowerToHyperServiceFuture<S, R>
+pub(crate) struct TowerToHyperServiceFuture<S, R>
 where
     S: tower_service::Service<R>,
 {
