@@ -264,7 +264,14 @@ where
                     }
                     Some(Ok(incoming_buf)) if incoming_buf.is_trailers() => {
                         let trailers = incoming_buf.into_trailers().unwrap();
-                        me.as_mut().project().trailers.replace(trailers);
+                        match me.as_mut().project().trailers {
+                            Some(current_trailers) => {
+                                current_trailers.extend(trailers);
+                            }
+                            None => {
+                                me.as_mut().project().trailers.replace(trailers);
+                            }
+                        }
                         continue;
                     }
                     Some(Ok(_)) => unreachable!("unexpected frame type"),
