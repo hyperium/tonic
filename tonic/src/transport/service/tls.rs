@@ -39,7 +39,7 @@ pub(crate) struct TlsConnector {
 
 impl TlsConnector {
     pub(crate) fn new(
-        ca_cert: Option<Certificate>,
+        ca_certs: Vec<Certificate>,
         identity: Option<Identity>,
         domain: &str,
         assume_http2: bool,
@@ -53,7 +53,7 @@ impl TlsConnector {
         #[cfg(feature = "tls-webpki-roots")]
         roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
 
-        if let Some(cert) = ca_cert {
+        for cert in ca_certs {
             add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
         }
 
