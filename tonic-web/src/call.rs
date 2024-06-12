@@ -219,9 +219,7 @@ where
                 let mut res = frame.into_data().unwrap();
 
                 if *this.encoding == Encoding::Base64 {
-                    let mut buf = Vec::with_capacity(res.len());
-                    buf.extend_from_slice(&res);
-                    res = crate::util::base64::STANDARD.encode(buf).into();
+                    res = crate::util::base64::STANDARD.encode(res).into();
                 }
 
                 Poll::Ready(Some(Ok(Frame::data(res))))
