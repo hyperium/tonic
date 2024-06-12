@@ -428,10 +428,7 @@ where
     where
         B: Stream<Item = Result<T::Encode, Status>> + Send + 'static,
     {
-        let response = match response {
-            Ok(r) => r,
-            Err(status) => return status.to_http(),
-        };
+        let response = t!(response);
 
         let (mut parts, body) = response.into_http().into_parts();
 
