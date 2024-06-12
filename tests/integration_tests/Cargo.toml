@@ -17,12 +17,13 @@ tracing-subscriber = {version = "0.3"}
 
 [dev-dependencies]
 async-stream = "0.3"
-http = "0.2"
-http-body = "0.4"
-hyper = "0.14"
+http = "1"
+http-body = "1"
+hyper = "1"
+hyper-util = "0.1"
 tokio-stream = {version = "0.1.5", features = ["net"]}
 tower = {version = "0.4", features = []}
-tower-http = { version = "0.4", features = ["set-header", "trace"] }
+tower-http = { version = "0.5", features = ["set-header", "trace"] }
 tower-service = "0.3"
 tracing = "0.1"
 

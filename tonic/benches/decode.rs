@@ -1,6 +1,6 @@
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use http_body::Body;
+use http_body::{Body, Frame, SizeHint};
 use std::{
     fmt::{Error, Formatter},
     pin::Pin,
@@ -58,23 +58,24 @@ impl Body for MockBody {
     type Data = Bytes;
     type Error = Status;
 
-    fn poll_data(
+    fn poll_frame(
         mut self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        _cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         if self.data.has_remaining() {
             let split = std::cmp::min(self.chunk_size, self.data.remaining());
-            Poll::Ready(Some(Ok(self.data.split_to(split))))
+            Poll::Ready(Some(Ok(Frame::data(self.data.split_to(split)))))
         } else {
             Poll::Ready(None)
         }
     }
 
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _: &mut Context<'_>,
-    ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-        Poll::Ready(Ok(None))
+    fn is_end_stream(&self) -> bool {
+        !self.data.is_empty()
+    }
+
+    fn size_hint(&self) -> SizeHint {
+        SizeHint::with_exact(self.data.len() as u64)
     }
 }
 

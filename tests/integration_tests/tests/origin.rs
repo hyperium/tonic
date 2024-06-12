@@ -76,9 +76,9 @@ struct OriginService<S> {
     inner: S,
 }
 
-impl<T> Service<Request<tonic::transport::Body>> for OriginService<T>
+impl<T> Service<Request<tonic::body::BoxBody>> for OriginService<T>
 where
-    T: Service<Request<tonic::transport::Body>>,
+    T: Service<Request<tonic::body::BoxBody>>,
     T::Future: Send + 'static,
     T::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
@@ -90,7 +90,7 @@ where
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<tonic::transport::Body>) -> Self::Future {
+    fn call(&mut self, req: Request<tonic::body::BoxBody>) -> Self::Future {
         assert_eq!(req.uri().host(), Some("docs.rs"));
         let fut = self.inner.call(req);
 

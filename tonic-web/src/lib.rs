@@ -127,7 +127,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
 pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
@@ -159,9 +159,9 @@ where
 #[derive(Debug, Clone)]
 pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
 
-impl<S> Service<http::Request<hyper::Body>> for CorsGrpcWeb<S>
+impl<S> Service<http::Request<BoxBody>> for CorsGrpcWeb<S>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
@@ -169,7 +169,7 @@ where
     type Response = S::Response;
     type Error = S::Error;
     type Future =
-        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<hyper::Body>>>::Future;
+        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<BoxBody>>>::Future;
 
     fn poll_ready(
         &mut self,
@@ -178,7 +178,7 @@ where
         self.0.poll_ready(cx)
     }
 
-    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
         self.0.call(req)
     }
 }

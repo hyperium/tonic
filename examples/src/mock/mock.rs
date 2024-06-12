@@ -1,3 +1,4 @@
+use hyper_util::rt::TokioIo;
 use tonic::{
     transport::{Endpoint, Server, Uri},
     Request, Response, Status,
@@ -36,7 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             async move {
                 if let Some(client) = client {
-                    Ok(client)
+                    Ok(TokioIo::new(client))
                 } else {
                     Err(std::io::Error::new(
                         std::io::ErrorKind::Other,

@@ -1,10 +1,10 @@
 use crate::pb::{self, *};
 use async_stream::try_stream;
-use http::header::{HeaderMap, HeaderName, HeaderValue};
+use http::header::{HeaderName, HeaderValue};
 use http_body::Body;
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use tokio_stream::StreamExt;
 use tonic::{body::BoxBody, server::NamedService, Code, Request, Response, Status};
@@ -180,9 +180,9 @@ impl<S> EchoHeadersSvc<S> {
     }
 }
 
-impl<S> Service<http::Request<hyper::Body>> for EchoHeadersSvc<S>
+impl<S> Service<http::Request<BoxBody>> for EchoHeadersSvc<S>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>> + Send,
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>> + Send,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -193,7 +193,7 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
         let echo_header = req.headers().get("x-grpc-test-echo-initial").cloned();
 
         let echo_trailer = req
@@ -235,25 +235,19 @@ impl<B: Body + Unpin> Body for MergeTrailers<B> {
     type Data = B::Data;
     type Error = B::Error;
 
-    fn poll_data(
-        mut self: Pin<&mut Self>,
+    fn poll_frame(
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<std::result::Result<Self::Data, Self::Error>>> {
-        Pin::new(&mut self.inner).poll_data(cx)
-    }
-
-    fn poll_trailers(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::result::Result<Option<HeaderMap>, Self::Error>> {
-        Pin::new(&mut self.inner).poll_trailers(cx).map_ok(|h| {
-            h.map(|mut headers| {
-                if let Some((key, value)) = &self.trailer {
-                    headers.insert(key.clone(), value.clone());
+    ) -> Poll<Option<std::prelude::v1::Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        let this = self.get_mut();
+        let mut frame = ready!(Pin::new(&mut this.inner).poll_frame(cx)?);
+        if let Some(frame) = frame.as_mut() {
+            if let Some(trailers) = frame.trailers_mut() {
+                if let Some((key, value)) = &this.trailer {
+                    trailers.insert(key.clone(), value.clone());
                 }
-
-                headers
-            })
-        })
+            }
+        }
+        Poll::Ready(frame.map(Ok))
     }
 }

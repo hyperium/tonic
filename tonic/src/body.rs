@@ -1,9 +1,9 @@
 //! HTTP specific body utilities.
 
-use http_body::Body;
+use http_body_util::BodyExt;
 
 /// A type erased HTTP body used for tonic services.
-pub type BoxBody = http_body::combinators::UnsyncBoxBody<bytes::Bytes, crate::Status>;
+pub type BoxBody = http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, crate::Status>;
 
 /// Convert a [`http_body::Body`] into a [`BoxBody`].
 pub(crate) fn boxed<B>(body: B) -> BoxBody
@@ -16,7 +16,7 @@ where
 
 /// Create an empty `BoxBody`
 pub fn empty_body() -> BoxBody {
-    http_body::Empty::new()
+    http_body_util::Empty::new()
         .map_err(|err| match err {})
         .boxed_unsync()
 }

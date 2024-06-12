@@ -5,7 +5,8 @@ pub mod pb {
     tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
-use hyper::{client::HttpConnector, Uri};
+use hyper::Uri;
+use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 use pb::{echo_client::EchoClient, EchoRequest};
 use tokio_rustls::rustls::{ClientConfig, RootCertStore};
 
@@ -17,11 +18,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut roots = RootCertStore::empty();
 
     let mut buf = std::io::BufReader::new(&fd);
-    let certs = rustls_pemfile::certs(&mut buf)?;
-    roots.add_parsable_certificates(&certs);
+    let certs = rustls_pemfile::certs(&mut buf).collect::<Result<Vec<_>, _>>()?;
+    roots.add_parsable_certificates(certs.into_iter());
 
     let tls = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(roots)
         .with_no_client_auth();
 
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_request(|_| Uri::from_static("https://[::1]:50051"))
         .service(http);
 
-    let client = hyper::Client::builder().build(connector);
+    let client = hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build(connector);
 
     // Using `with_origin` will let the codegenerated client set the `scheme` and
     // `authority` from the porvided `Uri`.
