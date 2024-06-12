@@ -2,20 +2,30 @@ use crate::{metadata::MetadataValue, Status};
 use bytes::{Buf, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};
+use http::HeaderValue;
 use std::fmt;
+use strum::EnumCount;
+use strum_macros::EnumCount as EnumCountMacro;
 #[cfg(feature = "zstd")]
 use zstd::stream::read::{Decoder, Encoder};
 
 pub(crate) const ENCODING_HEADER: &str = "grpc-encoding";
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
 
+/// This should always match the cardinality of `CompressionEncoding`
+pub(crate) const COMPRESSION_ENCODINGS_LENGTH: usize = CompressionEncoding::COUNT;
+
 /// Struct used to configure which encodings are enabled on a server or channel.
+/// Supports setting the priority of each compression
 #[derive(Debug, Default, Clone, Copy)]
 pub struct EnabledCompressionEncodings {
+    // We keep the encodings as struct values so we get `const fn` compatibility
     #[cfg(feature = "gzip")]
     pub(crate) gzip: bool,
     #[cfg(feature = "zstd")]
     pub(crate) zstd: bool,
+    // And we have an array so we can keep the order of the encodings (i.e prefer `zstd` over `gzip`)
+    pub(crate) order: [Option<CompressionEncoding>; COMPRESSION_ENCODINGS_LENGTH],
 }
 
 impl EnabledCompressionEncodings {
@@ -30,6 +40,9 @@ impl EnabledCompressionEncodings {
     }
 
     /// Enable a [`CompressionEncoding`].
+    /// Every time an encoding is enabled, it is given the lowest priority (the start of the list)
+    /// In order to enable both `gzip` and `zstd`, and have zstd have higher priority, you would call:
+    /// `enable(CompressionEncoding::Zstd).enable(CompressionEncoding::Gzip)`
     pub fn enable(&mut self, encoding: CompressionEncoding) {
         match encoding {
             #[cfg(feature = "gzip")]
@@ -37,15 +50,44 @@ impl EnabledCompressionEncodings {
             #[cfg(feature = "zstd")]
             CompressionEncoding::Zstd => self.zstd = true,
         }
+
+        // If it is already enabled, move everything after it left to overwrite it
+        if let Some(index) = self.order.iter().position(|&e| e == Some(encoding)) {
+            for i in (0..index).rev() {
+                self.order[i + 1] = self.order[i];
+            }
+        }
+
+        // Free up the element at the front of the list by shifting all elements to the right
+        self.order.rotate_right(1);
+
+        // Add the new encoding to the front of the list
+        self.order[0] = Some(encoding);
+    }
+
+    /// Get the priority of a given encoding
+    #[inline]
+    pub fn priority(&self, encoding: CompressionEncoding) -> Option<usize> {
+        self.order.iter().position(|&e| e == Some(encoding))
     }
 
     pub(crate) fn into_accept_encoding_header_value(self) -> Option<http::HeaderValue> {
-        match (self.is_gzip_enabled(), self.is_zstd_enabled()) {
-            (true, false) => Some(http::HeaderValue::from_static("gzip,identity")),
-            (false, true) => Some(http::HeaderValue::from_static("zstd,identity")),
-            (true, true) => Some(http::HeaderValue::from_static("gzip,zstd,identity")),
-            (false, false) => None,
+        if !self.is_gzip_enabled() && !self.is_zstd_enabled() {
+            return None;
         }
+        // Here we are guaranteed to have at least one, so we can concat with comma
+        // They are sent in priority order (i.e `zstd,gzip,identity`)
+        HeaderValue::from_str(
+            &(self
+                .order
+                .iter()
+                .rev()
+                .filter_map(|encoding| encoding.map(|e| e.as_str()))
+                .collect::<Vec<_>>()
+                .join(",")
+                + ",identity"),
+        )
+        .ok()
     }
 
     #[cfg(feature = "gzip")]
@@ -78,7 +120,7 @@ pub(crate) struct CompressionSettings {
 }
 
 /// The compression encodings Tonic supports.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, EnumCountMacro, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum CompressionEncoding {
     #[allow(missing_docs)]
@@ -93,7 +135,7 @@ pub enum CompressionEncoding {
 
 impl CompressionEncoding {
     /// Based on the `grpc-accept-encoding` header, pick an encoding to use.
-    pub(crate) fn from_accept_encoding_header(
+    pub fn from_accept_encoding_header(
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
     ) -> Option<Self> {
@@ -104,13 +146,28 @@ impl CompressionEncoding {
         let header_value = map.get(ACCEPT_ENCODING_HEADER)?;
         let header_value_str = header_value.to_str().ok()?;
 
-        split_by_comma(header_value_str).find_map(|value| match value {
-            #[cfg(feature = "gzip")]
-            "gzip" => Some(CompressionEncoding::Gzip),
-            #[cfg(feature = "zstd")]
-            "zstd" => Some(CompressionEncoding::Zstd),
-            _ => None,
-        })
+        // Get the highest priority supported encoding
+        split_by_comma(header_value_str)
+            // We allow for +1 to account for the identity encoding
+            .take(COMPRESSION_ENCODINGS_LENGTH + 1)
+            .filter_map(|value| {
+                let encoding = match value {
+                    #[cfg(feature = "gzip")]
+                    "gzip" => Some(CompressionEncoding::Gzip),
+                    #[cfg(feature = "zstd")]
+                    "zstd" => Some(CompressionEncoding::Zstd),
+                    _ => None,
+                };
+                if let Some(encoding) = encoding {
+                    enabled_encodings
+                        .priority(encoding)
+                        .map(|priority| (encoding, priority))
+                } else {
+                    None
+                }
+            })
+            .max_by_key(|(_, priority)| *priority)
+            .map(|(encoding, _)| encoding)
     }
 
     /// Get the value of `grpc-encoding` header. Returns an error if the encoding isn't supported.
@@ -150,6 +207,7 @@ impl CompressionEncoding {
                     .into_accept_encoding_header_value()
                     .map(MetadataValue::unchecked_from_header_value)
                     .unwrap_or_else(|| MetadataValue::from_static("identity"));
+
                 status
                     .metadata_mut()
                     .insert(ACCEPT_ENCODING_HEADER, header_value);
@@ -173,15 +231,6 @@ impl CompressionEncoding {
     #[cfg(any(feature = "gzip", feature = "zstd"))]
     pub(crate) fn into_header_value(self) -> http::HeaderValue {
         http::HeaderValue::from_static(self.as_str())
-    }
-
-    pub(crate) fn encodings() -> &'static [Self] {
-        &[
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip,
-            #[cfg(feature = "zstd")]
-            CompressionEncoding::Zstd,
-        ]
     }
 }
 

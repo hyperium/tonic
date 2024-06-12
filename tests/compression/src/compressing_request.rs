@@ -1,6 +1,6 @@
 use super::*;
 use http_body::Body;
-use tonic::codec::CompressionEncoding;
+use tonic::codec::{CompressionEncoding, EnabledCompressionEncodings};
 
 util::parametrized_tests! {
     client_enabled_server_enabled,
@@ -215,7 +215,7 @@ async fn client_mark_compressed_without_header_server_enabled(encoding: Compress
             Ok(req)
         },
     )
-    .send_compressed(CompressionEncoding::Gzip);
+        .send_compressed(CompressionEncoding::Gzip);
 
     let status = client
         .compress_input_unary(SomeData {
@@ -228,5 +228,95 @@ async fn client_mark_compressed_without_header_server_enabled(encoding: Compress
     assert_eq!(
         status.message(),
         "protocol error: received message with compressed-flag but no grpc-encoding was specified"
+    );
+}
+
+#[test]
+fn test_compression_priority() {
+    let mut encodings = EnabledCompressionEncodings::default();
+    encodings.enable(CompressionEncoding::Gzip);
+    encodings.enable(CompressionEncoding::Zstd);
+
+    assert_eq!(encodings.priority(CompressionEncoding::Gzip), Some(1));
+    assert_eq!(encodings.priority(CompressionEncoding::Zstd), Some(0));
+
+    encodings.enable(CompressionEncoding::Gzip);
+
+    assert_eq!(encodings.priority(CompressionEncoding::Gzip), Some(0));
+    assert_eq!(encodings.priority(CompressionEncoding::Zstd), Some(1));
+}
+
+
+fn build_accept_encoding_header(encodings: &str) -> http::HeaderMap {
+    let mut headers = http::HeaderMap::new();
+    headers.insert("grpc-accept-encoding", encodings.parse().unwrap());
+    headers
+}
+
+fn build_enabled_compression_settings(encodings: &[CompressionEncoding]) -> EnabledCompressionEncodings {
+    let mut settings = EnabledCompressionEncodings::default();
+    for encoding in encodings {
+        settings.enable(*encoding);
+    }
+    settings
+}
+
+fn build_and_run_accept_encoding_header_test(
+    encodings: &str,
+    enabled_encodings: &[CompressionEncoding],
+    expected: Option<CompressionEncoding>,
+) {
+    let header = build_accept_encoding_header(encodings);
+    let compression = CompressionEncoding::from_accept_encoding_header(&header, build_enabled_compression_settings(enabled_encodings));
+    assert_eq!(compression, expected);
+}
+
+#[test]
+fn test_from_accept_encoding_header() {
+    build_and_run_accept_encoding_header_test(
+        "gzip",
+        &[CompressionEncoding::Gzip],
+        Some(CompressionEncoding::Gzip),
+    );
+
+    build_and_run_accept_encoding_header_test(
+        "zstd",
+        &[CompressionEncoding::Zstd],
+        Some(CompressionEncoding::Zstd),
+    );
+
+    // Client provides ordering preferring gzip, but we prefer zstd
+    build_and_run_accept_encoding_header_test(
+        "gzip,zstd",
+        &[CompressionEncoding::Zstd, CompressionEncoding::Gzip],
+        Some(CompressionEncoding::Zstd),
+    );
+
+    // Client provides ordering preferring zstd, but we prefer gzip
+    build_and_run_accept_encoding_header_test(
+        "zstd,gzip",
+        &[CompressionEncoding::Gzip, CompressionEncoding::Zstd],
+        Some(CompressionEncoding::Gzip),
+    );
+
+    // Client provides ordering preferring gzip, and we also prefer gzip
+    build_and_run_accept_encoding_header_test(
+        "gzip,zstd",
+        &[CompressionEncoding::Gzip, CompressionEncoding::Zstd],
+        Some(CompressionEncoding::Gzip),
+    );
+
+    // Client provides two, but we don't support any
+    build_and_run_accept_encoding_header_test(
+        "gzip,zstd",
+        &[],
+        None,
+    );
+
+    // Client provides gzip, but we only support zstd
+    build_and_run_accept_encoding_header_test(
+        "gzip",
+        &[CompressionEncoding::Zstd],
+        None,
     );
 }
