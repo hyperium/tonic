@@ -614,6 +614,11 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
             return Some(Status::cancelled(timeout.to_string()));
         }
 
+        // If we are unable to connect to the server, map this to UNAVAILABLE.  This is
+        // consistent with the behavior of a C++ gRPC client when the server is not running, and
+        // matches the spec of:
+        // > The service is currently unavailable. This is most likely a transient condition that
+        // > can be corrected if retried with a backoff.
         #[cfg(feature = "transport")]
         if let Some(connect) = err.downcast_ref::<crate::transport::ConnectError>() {
             return Some(Status::unavailable(connect.to_string()));
