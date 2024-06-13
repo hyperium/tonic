@@ -1,7 +1,6 @@
 use crate::{
     body::{boxed, BoxBody},
     server::NamedService,
-    transport::BoxFuture,
 };
 use http::{Request, Response};
 use pin_project::pin_project;
@@ -82,10 +81,11 @@ impl Routes {
         self
     }
 
-    pub(crate) fn prepare(self) -> Self {
+    /// This makes axum perform update some internals of the router that improves perf.
+    ///
+    /// See <https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance>
+    pub fn prepare(self) -> Self {
         Self {
-            // this makes axum perform update some internals of the router that improves perf
-            // see https://docs.rs/axum/latest/axum/routing/struct.Router.html#a-note-about-performance
             router: self.router.with_state(()),
         }
     }
@@ -141,6 +141,8 @@ impl Future for RoutesFuture {
 struct AxumBodyService<S> {
     service: S,
 }
+
+pub(crate) type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 impl<S> Service<Request<axum::body::Body>> for AxumBodyService<S>
 where
