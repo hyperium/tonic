@@ -18,7 +18,7 @@ impl test_server::Test for Svc {
 }
 
 #[tokio::test]
-async fn connect_returns_err_via_call_after_connected() {
+async fn http2_keepalive_does_not_cause_panics() {
     let svc = test_server::TestServer::new(Svc {});
     let (tx, rx) = oneshot::channel::<()>();
     let jh = tokio::spawn(async move {
