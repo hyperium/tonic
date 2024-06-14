@@ -344,8 +344,8 @@ pub mod health_server {
                             Box::pin(fut)
                         }
                     }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
+                    let accept_compression_encodings = self.accept_compression_encodings.clone();
+                    let send_compression_encodings = self.send_compression_encodings.clone();
                     let max_decoding_message_size = self.max_decoding_message_size;
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
@@ -391,8 +391,8 @@ pub mod health_server {
                             Box::pin(fut)
                         }
                     }
-                    let accept_compression_encodings = self.accept_compression_encodings;
-                    let send_compression_encodings = self.send_compression_encodings;
+                    let accept_compression_encodings = self.accept_compression_encodings.clone();
+                    let send_compression_encodings = self.send_compression_encodings.clone();
                     let max_decoding_message_size = self.max_decoding_message_size;
                     let max_encoding_message_size = self.max_encoding_message_size;
                     let inner = self.inner.clone();
@@ -434,8 +434,8 @@ pub mod health_server {
             let inner = self.inner.clone();
             Self {
                 inner,
-                accept_compression_encodings: self.accept_compression_encodings,
-                send_compression_encodings: self.send_compression_encodings,
+                accept_compression_encodings: self.accept_compression_encodings.clone(),
+                send_compression_encodings: self.send_compression_encodings.clone(),
                 max_decoding_message_size: self.max_decoding_message_size,
                 max_encoding_message_size: self.max_encoding_message_size,
             }

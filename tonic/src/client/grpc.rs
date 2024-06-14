@@ -330,7 +330,7 @@ impl<T> Grpc<T> {
     {
         let encoding = CompressionEncoding::from_encoding_header(
             response.headers(),
-            self.config.accept_compression_encodings,
+            &self.config.accept_compression_encodings,
         )?;
 
         let status_code = response.status();
@@ -435,7 +435,7 @@ impl<T: Clone> Clone for Grpc<T> {
             config: GrpcConfig {
                 origin: self.config.origin.clone(),
                 send_compression_encodings: self.config.send_compression_encodings,
-                accept_compression_encodings: self.config.accept_compression_encodings,
+                accept_compression_encodings: self.config.accept_compression_encodings.clone(),
                 max_encoding_message_size: self.config.max_encoding_message_size,
                 max_decoding_message_size: self.config.max_decoding_message_size,
             },

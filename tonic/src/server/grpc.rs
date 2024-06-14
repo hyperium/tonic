@@ -187,14 +187,8 @@ where
     ) -> Self {
         let mut this = self;
 
-        for &encoding in CompressionEncoding::encodings() {
-            if accept_encodings.is_enabled(encoding) {
-                this = this.accept_compressed(encoding);
-            }
-            if send_encodings.is_enabled(encoding) {
-                this = this.send_compressed(encoding);
-            }
-        }
+        this.accept_compression_encodings = accept_encodings;
+        this.send_compression_encodings = send_encodings;
 
         this
     }
@@ -230,7 +224,7 @@ where
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
-            self.send_compression_encodings,
+            &self.send_compression_encodings,
         );
 
         let request = match self.map_request_unary(req).await {
@@ -274,7 +268,7 @@ where
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
-            self.send_compression_encodings,
+            &self.send_compression_encodings,
         );
 
         let request = match self.map_request_unary(req).await {
@@ -314,7 +308,7 @@ where
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
-            self.send_compression_encodings,
+            &self.send_compression_encodings,
         );
 
         let request = t!(self.map_request_streaming(req));
@@ -348,7 +342,7 @@ where
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
-            self.send_compression_encodings,
+            &self.send_compression_encodings,
         );
 
         let request = t!(self.map_request_streaming(req));
@@ -467,7 +461,7 @@ where
     ) -> Result<Option<CompressionEncoding>, Status> {
         CompressionEncoding::from_encoding_header(
             request.headers(),
-            self.accept_compression_encodings,
+            &self.accept_compression_encodings,
         )
     }
 }

@@ -185,8 +185,8 @@ pub(crate) fn generate_internal<T: Service>(
                     let inner = self.inner.clone();
                     Self {
                         inner,
-                        accept_compression_encodings: self.accept_compression_encodings,
-                        send_compression_encodings: self.send_compression_encodings,
+                        accept_compression_encodings: self.accept_compression_encodings.clone(),
+                        send_compression_encodings: self.send_compression_encodings.clone(),
                         max_decoding_message_size: self.max_decoding_message_size,
                         max_encoding_message_size: self.max_encoding_message_size,
                     }
@@ -486,8 +486,8 @@ fn generate_unary<T: Method>(
             }
         }
 
-        let accept_compression_encodings = self.accept_compression_encodings;
-        let send_compression_encodings = self.send_compression_encodings;
+        let accept_compression_encodings = self.accept_compression_encodings.clone();
+        let send_compression_encodings = self.send_compression_encodings.clone();
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
@@ -554,8 +554,8 @@ fn generate_server_streaming<T: Method>(
             }
         }
 
-        let accept_compression_encodings = self.accept_compression_encodings;
-        let send_compression_encodings = self.send_compression_encodings;
+        let accept_compression_encodings = self.accept_compression_encodings.clone();
+        let send_compression_encodings = self.send_compression_encodings.clone();
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
@@ -613,8 +613,8 @@ fn generate_client_streaming<T: Method>(
             }
         }
 
-        let accept_compression_encodings = self.accept_compression_encodings;
-        let send_compression_encodings = self.send_compression_encodings;
+        let accept_compression_encodings = self.accept_compression_encodings.clone();
+        let send_compression_encodings = self.send_compression_encodings.clone();
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
@@ -682,8 +682,8 @@ fn generate_streaming<T: Method>(
             }
         }
 
-        let accept_compression_encodings = self.accept_compression_encodings;
-        let send_compression_encodings = self.send_compression_encodings;
+        let accept_compression_encodings = self.accept_compression_encodings.clone();
+        let send_compression_encodings = self.send_compression_encodings.clone();
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
