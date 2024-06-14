@@ -11,6 +11,7 @@ use std::{
     fmt,
     task::{Context, Poll},
 };
+use hyper_util::rt::TokioTimer;
 use tower::load::Load;
 use tower::{
     layer::Layer,
@@ -39,6 +40,7 @@ impl Connection {
             .initial_stream_window_size(endpoint.init_stream_window_size)
             .initial_connection_window_size(endpoint.init_connection_window_size)
             .keep_alive_interval(endpoint.http2_keep_alive_interval)
+            .timer(TokioTimer::new())
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
