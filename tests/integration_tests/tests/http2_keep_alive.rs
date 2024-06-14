@@ -1,18 +1,15 @@
-use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
-use std::sync::{Arc, Mutex};
 use std::time::Duration;
+
 use tokio::sync::oneshot;
-use tonic::{
-    transport::{Endpoint, Server},
-    Code, Request, Response, Status,
-};
+
+use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
+use tonic::{transport::Server, Request, Response, Status};
 
 struct Svc;
 
 #[tonic::async_trait]
 impl test_server::Test for Svc {
     async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
-
         Ok(Response::new(Output {}))
     }
 }
