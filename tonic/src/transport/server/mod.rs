@@ -16,7 +16,7 @@ use tracing::{debug, trace};
 pub use crate::service::{Routes, RoutesBuilder};
 
 pub use conn::{Connected, TcpConnectInfo};
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::rt::{TokioExecutor, TokioIo, TokioTimer};
 #[cfg(feature = "tls")]
 pub use tls::ServerTlsConfig;
 
@@ -548,6 +548,7 @@ impl<L> Server<L> {
 
             builder
                 .http2()
+                .timer(TokioTimer::new())
                 .initial_connection_window_size(init_connection_window_size)
                 .initial_stream_window_size(init_stream_window_size)
                 .max_concurrent_streams(max_concurrent_streams)
