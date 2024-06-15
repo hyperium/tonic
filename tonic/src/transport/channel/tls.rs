@@ -51,6 +51,13 @@ impl ClientTlsConfig {
         ClientTlsConfig { certs, ..self }
     }
 
+    /// Sets the multiple CA Certificates against which to verify the server's TLS certificate.
+    pub fn ca_certificates(self, ca_certificates: impl IntoIterator<Item = Certificate>) -> Self {
+        let mut certs = self.certs;
+        certs.extend(ca_certificates);
+        ClientTlsConfig { certs, ..self }
+    }
+
     /// Sets the client identity to present to the server.
     pub fn identity(self, identity: Identity) -> Self {
         ClientTlsConfig {
