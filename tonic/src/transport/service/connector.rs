@@ -65,7 +65,7 @@ impl<C> Connector<C> {
             _ => return None,
         };
 
-        TlsConnector::new(None, None, host, self.assume_http2).ok()
+        TlsConnector::new(Vec::new(), None, host, self.assume_http2).ok()
     }
 }
 
