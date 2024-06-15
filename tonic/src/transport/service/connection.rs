@@ -7,11 +7,11 @@ use crate::{
 use http::Uri;
 use hyper::rt;
 use hyper::{client::conn::http2::Builder, rt::Executor};
+use hyper_util::rt::TokioTimer;
 use std::{
     fmt,
     task::{Context, Poll},
 };
-use hyper_util::rt::TokioTimer;
 use tower::load::Load;
 use tower::{
     layer::Layer,
