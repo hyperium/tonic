@@ -7,6 +7,7 @@ use crate::{
 use http::Uri;
 use hyper::rt;
 use hyper::{client::conn::http2::Builder, rt::Executor};
+use hyper_util::rt::TokioTimer;
 use std::{
     fmt,
     task::{Context, Poll},
@@ -39,6 +40,7 @@ impl Connection {
             .initial_stream_window_size(endpoint.init_stream_window_size)
             .initial_connection_window_size(endpoint.init_connection_window_size)
             .keep_alive_interval(endpoint.http2_keep_alive_interval)
+            .timer(TokioTimer::new())
             .clone();
 
         if let Some(val) = endpoint.http2_keep_alive_timeout {
