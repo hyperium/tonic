@@ -1,8 +1,9 @@
 use crate::{
     body::{boxed, BoxBody},
+    metadata::GRPC_CONTENT_TYPE,
     server::NamedService,
 };
-use http::{Request, Response};
+use http::{HeaderName, HeaderValue, Request, Response};
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -98,7 +99,13 @@ impl Routes {
 
 async fn unimplemented() -> impl axum::response::IntoResponse {
     let status = http::StatusCode::OK;
-    let headers = [("grpc-status", "12"), ("content-type", "application/grpc")];
+    let headers = [
+        (
+            HeaderName::from_static("grpc-status"),
+            HeaderValue::from_static("12"),
+        ),
+        (http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE),
+    ];
     (status, headers)
 }
 

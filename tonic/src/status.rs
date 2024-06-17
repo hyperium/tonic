@@ -1,5 +1,5 @@
-use crate::body::BoxBody;
 use crate::metadata::MetadataMap;
+use crate::{body::BoxBody, metadata::GRPC_CONTENT_TYPE};
 use base64::Engine as _;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
@@ -583,10 +583,9 @@ impl Status {
     /// Build an `http::Response` from the given `Status`.
     pub fn into_http(self) -> http::Response<BoxBody> {
         let mut response = http::Response::new(crate::body::empty_body());
-        response.headers_mut().insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
-        );
+        response
+            .headers_mut()
+            .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
         self.add_header(response.headers_mut()).unwrap();
         response
     }
