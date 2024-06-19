@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches:
-    - master
+    branches: [ "master" ]
   pull_request: {}
+  merge_group:
+    branches: [ "master" ]
 
 env:
   PROTOC_VERSION: 3.25.1
