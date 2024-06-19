@@ -21,6 +21,7 @@ trait IntoAny {
     fn into_any(self) -> Any;
 }
 
+#[allow(dead_code)]
 trait FromAny {
     fn from_any(any: Any) -> Result<Self, DecodeError>
     where
@@ -488,7 +489,49 @@ impl StatusExt for tonic::Status {
     ) -> Self {
         let message: String = message.into();
 
-        let details = gen_details_bytes(code, &message, details.into());
+        let mut conv_details: Vec<Any> = Vec::with_capacity(10);
+
+        if let Some(retry_info) = details.retry_info {
+            conv_details.push(retry_info.into_any());
+        }
+
+        if let Some(debug_info) = details.debug_info {
+            conv_details.push(debug_info.into_any());
+        }
+
+        if let Some(quota_failure) = details.quota_failure {
+            conv_details.push(quota_failure.into_any());
+        }
+
+        if let Some(error_info) = details.error_info {
+            conv_details.push(error_info.into_any());
+        }
+
+        if let Some(precondition_failure) = details.precondition_failure {
+            conv_details.push(precondition_failure.into_any());
+        }
+
+        if let Some(bad_request) = details.bad_request {
+            conv_details.push(bad_request.into_any());
+        }
+
+        if let Some(request_info) = details.request_info {
+            conv_details.push(request_info.into_any());
+        }
+
+        if let Some(resource_info) = details.resource_info {
+            conv_details.push(resource_info.into_any());
+        }
+
+        if let Some(help) = details.help {
+            conv_details.push(help.into_any());
+        }
+
+        if let Some(localized_message) = details.localized_message {
+            conv_details.push(localized_message.into_any());
+        }
+
+        let details = gen_details_bytes(code, &message, conv_details);
 
         tonic::Status::with_details_and_metadata(code, message, details, metadata)
     }
