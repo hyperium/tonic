@@ -1,5 +1,5 @@
-use crate::body::BoxBody;
 use crate::metadata::MetadataMap;
+use crate::{body::BoxBody, metadata::GRPC_CONTENT_TYPE};
 use base64::Engine as _;
 use bytes::Bytes;
 use http::header::{HeaderMap, HeaderValue};
@@ -412,14 +412,12 @@ impl Status {
         // > status. Note that the frequency of PINGs is highly dependent on the network
         // > environment, implementations are free to adjust PING frequency based on network and
         // > application requirements, which is why it's mapped to unavailable here.
-        //
-        // Likewise, if we are unable to connect to the server, map this to UNAVAILABLE.  This is
-        // consistent with the behavior of a C++ gRPC client when the server is not running, and
-        // matches the spec of:
-        // > The service is currently unavailable. This is most likely a transient condition that
-        // > can be corrected if retried with a backoff.
-        if err.is_timeout() || err.is_connect() {
+        if err.is_timeout() {
             return Some(Status::unavailable(err.to_string()));
+        }
+
+        if err.is_canceled() {
+            return Some(Status::cancelled(err.to_string()));
         }
 
         if let Some(h2_err) = err.source().and_then(|e| e.downcast_ref::<h2::Error>()) {
@@ -582,19 +580,14 @@ impl Status {
         self
     }
 
-    #[allow(clippy::wrong_self_convention)]
     /// Build an `http::Response` from the given `Status`.
-    pub fn to_http(self) -> http::Response<BoxBody> {
-        let (mut parts, _body) = http::Response::new(()).into_parts();
-
-        parts.headers.insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
-        );
-
-        self.add_header(&mut parts.headers).unwrap();
-
-        http::Response::from_parts(parts, crate::body::empty_body())
+    pub fn into_http(self) -> http::Response<BoxBody> {
+        let mut response = http::Response::new(crate::body::empty_body());
+        response
+            .headers_mut()
+            .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
+        self.add_header(response.headers_mut()).unwrap();
+        response
     }
 }
 
@@ -617,6 +610,18 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
         #[cfg(feature = "transport")]
         if let Some(timeout) = err.downcast_ref::<crate::transport::TimeoutExpired>() {
             return Some(Status::cancelled(timeout.to_string()));
+        }
+
+        // If we are unable to connect to the server, map this to UNAVAILABLE.  This is
+        // consistent with the behavior of a C++ gRPC client when the server is not running, and
+        // matches the spec of:
+        // > The service is currently unavailable. This is most likely a transient condition that
+        // > can be corrected if retried with a backoff.
+        #[cfg(feature = "channel")]
+        if let Some(connect) =
+            err.downcast_ref::<crate::transport::channel::service::ConnectError>()
+        {
+            return Some(Status::unavailable(connect.to_string()));
         }
 
         #[cfg(feature = "transport")]

@@ -1,7 +1,8 @@
 use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
 use http::Uri;
-use hyper::Client;
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -11,7 +12,7 @@ pub mod hello_world {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let origin = Uri::from_static("http://[::1]:50051");
     let h2c_client = h2c::H2cChannel {
-        client: Client::new(),
+        client: Client::builder(TokioExecutor::new()).build_http(),
     };
 
     let mut client = GreeterClient::with_origin(h2c_client, origin);
@@ -33,16 +34,20 @@ mod h2c {
         task::{Context, Poll},
     };
 
-    use hyper::{client::HttpConnector, Client};
-    use tonic::body::BoxBody;
+    use hyper::body::Incoming;
+    use hyper_util::{
+        client::legacy::{connect::HttpConnector, Client},
+        rt::TokioExecutor,
+    };
+    use tonic::body::{empty_body, BoxBody};
     use tower::Service;
 
     pub struct H2cChannel {
-        pub client: Client<HttpConnector>,
+        pub client: Client<HttpConnector, BoxBody>,
     }
 
     impl Service<http::Request<BoxBody>> for H2cChannel {
-        type Response = http::Response<hyper::Body>;
+        type Response = http::Response<Incoming>;
         type Error = hyper::Error;
         type Future =
             Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -60,7 +65,7 @@ mod h2c {
                 let h2c_req = hyper::Request::builder()
                     .uri(origin)
                     .header(http::header::UPGRADE, "h2c")
-                    .body(hyper::Body::empty())
+                    .body(empty_body())
                     .unwrap();
 
                 let res = client.request(h2c_req).await.unwrap();
@@ -72,11 +77,11 @@ mod h2c {
                 let upgraded_io = hyper::upgrade::on(res).await.unwrap();
 
                 // In an ideal world you would somehow cache this connection
-                let (mut h2_client, conn) = hyper::client::conn::Builder::new()
-                    .http2_only(true)
-                    .handshake(upgraded_io)
-                    .await
-                    .unwrap();
+                let (mut h2_client, conn) =
+                    hyper::client::conn::http2::Builder::new(TokioExecutor::new())
+                        .handshake(upgraded_io)
+                        .await
+                        .unwrap();
                 tokio::spawn(conn);
 
                 h2_client.send_request(request).await

@@ -1,8 +1,13 @@
+use std::net::SocketAddr;
+
+use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::server::conn::auto::Builder;
+use hyper_util::service::TowerToHyperService;
+use tokio::net::TcpListener;
 use tonic::{transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
-use tower::make::Shared;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -28,28 +33,45 @@ impl Greeter for MyGreeter {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let addr = "[::1]:50051".parse().unwrap();
+    let addr: SocketAddr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
     println!("GreeterServer listening on {}", addr);
 
+    let incoming = TcpListener::bind(addr).await?;
     let svc = Server::builder()
         .add_service(GreeterServer::new(greeter))
         .into_router();
 
     let h2c = h2c::H2c { s: svc };
 
-    let server = hyper::Server::bind(&addr).serve(Shared::new(h2c));
-    server.await.unwrap();
-
-    Ok(())
+    loop {
+        match incoming.accept().await {
+            Ok((io, _)) => {
+                let router = h2c.clone();
+                tokio::spawn(async move {
+                    let builder = Builder::new(TokioExecutor::new());
+                    let conn = builder.serve_connection_with_upgrades(
+                        TokioIo::new(io),
+                        TowerToHyperService::new(router),
+                    );
+                    let _ = conn.await;
+                });
+            }
+            Err(e) => {
+                eprintln!("Error accepting connection: {}", e);
+            }
+        }
+    }
 }
 
 mod h2c {
     use std::pin::Pin;
 
     use http::{Request, Response};
-    use hyper::Body;
+    use hyper::body::Incoming;
+    use hyper_util::{rt::TokioExecutor, service::TowerToHyperService};
+    use tonic::{body::empty_body, transport::AxumBoxBody};
     use tower::Service;
 
     #[derive(Clone)]
@@ -59,17 +81,14 @@ mod h2c {
 
     type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
-    impl<S> Service<Request<Body>> for H2c<S>
+    impl<S> Service<Request<Incoming>> for H2c<S>
     where
-        S: Service<Request<Body>, Response = Response<tonic::transport::AxumBoxBody>>
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<Incoming>, Response = Response<AxumBoxBody>> + Clone + Send + 'static,
         S::Future: Send + 'static,
         S::Error: Into<BoxError> + Sync + Send + 'static,
         S::Response: Send + 'static,
     {
-        type Response = hyper::Response<Body>;
+        type Response = hyper::Response<tonic::body::BoxBody>;
         type Error = hyper::Error;
         type Future =
             Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -81,20 +100,19 @@ mod h2c {
             std::task::Poll::Ready(Ok(()))
         }
 
-        fn call(&mut self, mut req: hyper::Request<Body>) -> Self::Future {
+        fn call(&mut self, mut req: hyper::Request<Incoming>) -> Self::Future {
             let svc = self.s.clone();
             Box::pin(async move {
                 tokio::spawn(async move {
                     let upgraded_io = hyper::upgrade::on(&mut req).await.unwrap();
 
-                    hyper::server::conn::Http::new()
-                        .http2_only(true)
-                        .serve_connection(upgraded_io, svc)
+                    hyper::server::conn::http2::Builder::new(TokioExecutor::new())
+                        .serve_connection(upgraded_io, TowerToHyperService::new(svc))
                         .await
                         .unwrap();
                 });
 
-                let mut res = hyper::Response::new(hyper::Body::empty());
+                let mut res = hyper::Response::new(empty_body());
                 *res.status_mut() = http::StatusCode::SWITCHING_PROTOCOLS;
                 res.headers_mut().insert(
                     hyper::header::UPGRADE,

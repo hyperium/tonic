@@ -16,10 +16,9 @@
 //!
 //! # Feature Flags
 //!
-//! - `transport`: Enables the fully featured, batteries included client and server
-//!     implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
-//! - `channel`: Enables just the full featured channel/client portion of the `transport`
-//!     feature.
+//! - `transport`: Enables just the full featured server portion of the `channel` feature.
+//! - `channel`: Enables the fully featured, batteries included client and server
+//! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //! for [`tonic-build`]. Enabled by default.
 //! - `tls`: Enables the `rustls` based TLS options for the `transport` feature. Not
@@ -119,7 +118,8 @@ pub use async_trait::async_trait;
 
 #[doc(inline)]
 pub use codec::Streaming;
-pub use extensions::{Extensions, GrpcMethod};
+pub use extensions::GrpcMethod;
+pub use http::Extensions;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, Status};

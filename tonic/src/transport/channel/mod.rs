@@ -1,6 +1,7 @@
 //! Client implementation and builder.
 
 mod endpoint;
+pub(crate) mod service;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
@@ -9,15 +10,14 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, DynamicServiceStream, SharedExec};
+use self::service::{Connection, DynamicServiceStream, Executor, SharedExec};
 use crate::body::BoxBody;
-use crate::transport::Executor;
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},
     Request, Response,
 };
-use hyper::client::connect::Connection as HyperConnection;
+use hyper_util::client::legacy::connect::Connection as HyperConnection;
 use std::{
     fmt,
     future::Future,
@@ -25,11 +25,9 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    sync::mpsc::{channel, Sender},
-};
+use tokio::sync::mpsc::{channel, Sender};
 
+use hyper::rt;
 use tower::balance::p2c::Balance;
 use tower::{
     buffer::{self, Buffer},
@@ -38,13 +36,13 @@ use tower::{
     Service,
 };
 
-type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<hyper::Body>, crate::Error>>;
+type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<BoxBody>, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
 /// A default batteries included `transport` channel.
 ///
-/// This provides a fully featured http2 gRPC client based on [`hyper::Client`]
+/// This provides a fully featured http2 gRPC client based on `hyper`
 /// and `tower` services.
 ///
 /// # Multiplexing requests
@@ -152,7 +150,7 @@ impl Channel {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
@@ -169,7 +167,7 @@ impl Channel {
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
         C::Future: Unpin + Send,
-        C::Response: AsyncRead + AsyncWrite + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
@@ -201,7 +199,7 @@ impl Channel {
 }
 
 impl Service<http::Request<BoxBody>> for Channel {
-    type Response = http::Response<super::Body>;
+    type Response = http::Response<BoxBody>;
     type Error = super::Error;
     type Future = ResponseFuture;
 
@@ -217,7 +215,7 @@ impl Service<http::Request<BoxBody>> for Channel {
 }
 
 impl Future for ResponseFuture {
-    type Output = Result<Response<hyper::Body>, super::Error>;
+    type Output = Result<Response<BoxBody>, super::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let val = ready!(Pin::new(&mut self.inner).poll(cx)).map_err(super::Error::from_source)?;

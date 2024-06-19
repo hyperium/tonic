@@ -1,12 +1,33 @@
-use super::super::BoxFuture;
-use super::io::BoxedIo;
+use super::BoxedIo;
 #[cfg(feature = "tls")]
-use super::tls::TlsConnector;
+use super::TlsConnector;
+use crate::transport::BoxFuture;
 use http::Uri;
 use std::fmt;
 use std::task::{Context, Poll};
-use tower::make::MakeConnection;
+
+use hyper::rt;
+
+#[cfg(feature = "tls")]
+use hyper_util::rt::TokioIo;
 use tower_service::Service;
+
+/// Wrapper type to indicate that an error occurs during the connection
+/// process, so that the appropriate gRPC Status can be inferred.
+#[derive(Debug)]
+pub(crate) struct ConnectError(pub(crate) crate::Error);
+
+impl fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::error::Error for ConnectError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.0.as_ref())
+    }
+}
 
 pub(crate) struct Connector<C> {
     inner: C,
@@ -44,23 +65,25 @@ impl<C> Connector<C> {
             _ => return None,
         };
 
-        TlsConnector::new(None, None, host, self.assume_http2).ok()
+        TlsConnector::new(Vec::new(), None, host, self.assume_http2).ok()
     }
 }
 
 impl<C> Service<Uri> for Connector<C>
 where
-    C: MakeConnection<Uri>,
-    C::Connection: Unpin + Send + 'static,
+    C: Service<Uri>,
+    C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     C::Future: Send + 'static,
     crate::Error: From<C::Error> + Send + 'static,
 {
     type Response = BoxedIo;
-    type Error = crate::Error;
+    type Error = ConnectError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        MakeConnection::poll_ready(&mut self.inner, cx).map_err(Into::into)
+        self.inner
+            .poll_ready(cx)
+            .map_err(|err| ConnectError(From::from(err)))
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
@@ -72,34 +95,40 @@ where
 
         #[cfg(feature = "tls")]
         let is_https = uri.scheme_str() == Some("https");
-        let connect = self.inner.make_connection(uri);
+        let connect = self.inner.call(uri);
 
         Box::pin(async move {
-            let io = connect.await?;
+            async {
+                let io = connect.await?;
 
-            #[cfg(feature = "tls")]
-            {
-                if let Some(tls) = tls {
-                    if is_https {
-                        let conn = tls.connect(io).await?;
-                        return Ok(BoxedIo::new(conn));
-                    } else {
-                        return Ok(BoxedIo::new(io));
+                #[cfg(feature = "tls")]
+                {
+                    if let Some(tls) = tls {
+                        return if is_https {
+                            let io = tls.connect(TokioIo::new(io)).await?;
+                            Ok(io)
+                        } else {
+                            Ok(BoxedIo::new(io))
+                        };
+                    } else if is_https {
+                        return Err(HttpsUriWithoutTlsSupport(()).into());
                     }
-                } else if is_https {
-                    return Err(HttpsUriWithoutTlsSupport(()).into());
                 }
-            }
 
-            Ok(BoxedIo::new(io))
+                Ok::<_, crate::Error>(BoxedIo::new(io))
+            }
+            .await
+            .map_err(|err| ConnectError(From::from(err)))
         })
     }
 }
 
 /// Error returned when trying to connect to an HTTPS endpoint without TLS enabled.
+#[cfg(feature = "tls")]
 #[derive(Debug)]
 pub(crate) struct HttpsUriWithoutTlsSupport(());
 
+#[cfg(feature = "tls")]
 impl fmt::Display for HttpsUriWithoutTlsSupport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Connecting to HTTPS without TLS enabled")
@@ -107,4 +136,5 @@ impl fmt::Display for HttpsUriWithoutTlsSupport {
 }
 
 // std::error::Error only requires a type to impl Debug and Display
+#[cfg(feature = "tls")]
 impl std::error::Error for HttpsUriWithoutTlsSupport {}

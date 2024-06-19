@@ -1,15 +1,16 @@
-use super::super::service;
+#[cfg(feature = "tls")]
+use super::service::TlsConnector;
+use super::service::{self, Executor, SharedExec};
 use super::Channel;
 #[cfg(feature = "tls")]
 use super::ClientTlsConfig;
-#[cfg(feature = "tls")]
-use crate::transport::service::TlsConnector;
-use crate::transport::{service::SharedExec, Error, Executor};
+use crate::transport::Error;
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
+use hyper::rt;
+use hyper_util::client::legacy::connect::HttpConnector;
 use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
-use tower::make::MakeConnection;
-// use crate::transport::E
+use tower_service::Service;
 
 /// Channel builder.
 ///
@@ -333,20 +334,15 @@ impl Endpoint {
 
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
-        let mut http = hyper::client::connect::HttpConnector::new();
+        let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_connect_timeout(self.connect_timeout);
 
         let connector = self.connector(http);
 
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::connect(connector, self.clone()).await
-        } else {
-            Channel::connect(connector, self.clone()).await
-        }
+        Channel::connect(connector, self.clone()).await
     }
 
     /// Create a channel from this config.
@@ -354,20 +350,15 @@ impl Endpoint {
     /// The channel returned by this method does not attempt to connect to the endpoint until first
     /// use.
     pub fn connect_lazy(&self) -> Channel {
-        let mut http = hyper::client::connect::HttpConnector::new();
+        let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_connect_timeout(self.connect_timeout);
 
         let connector = self.connector(http);
 
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::new(connector, self.clone())
-        } else {
-            Channel::new(connector, self.clone())
-        }
+        Channel::new(connector, self.clone())
     }
 
     /// Connect with a custom connector.
@@ -379,8 +370,8 @@ impl Endpoint {
     /// The [`connect_timeout`](Endpoint::connect_timeout) will still be applied.
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
-        C: MakeConnection<Uri> + Send + 'static,
-        C::Connection: Unpin + Send + 'static,
+        C: Service<Uri> + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin + 'static,
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {
@@ -404,8 +395,8 @@ impl Endpoint {
     /// uses a Unix socket transport.
     pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
     where
-        C: MakeConnection<Uri> + Send + 'static,
-        C::Connection: Unpin + Send + 'static,
+        C: Service<Uri> + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin + 'static,
         C::Future: Send + 'static,
         crate::Error: From<C::Error> + Send + 'static,
     {

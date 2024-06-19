@@ -5,7 +5,7 @@ use super::{BufferSettings, EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, H
 use crate::{Code, Status};
 use bytes::{BufMut, Bytes, BytesMut};
 use http::HeaderMap;
-use http_body::Body;
+use http_body::{Body, Frame};
 use pin_project::pin_project;
 use std::{
     pin::Pin,
@@ -229,13 +229,13 @@ fn finish_encoding(
         return Err(Status::new(
             Code::OutOfRange,
             format!(
-                "Error, message length too large: found {} bytes, the limit is: {} bytes",
+                "Error, encoded message length too large: found {} bytes, the limit is: {} bytes",
                 len, limit
             ),
         ));
     }
 
-    if len > std::u32::MAX as usize {
+    if len > u32::MAX as usize {
         return Err(Status::resource_exhausted(format!(
             "Cannot return body with more than 4GB of data but got {len} bytes"
         )));
@@ -298,22 +298,21 @@ where
 }
 
 impl EncodeState {
-    fn trailers(&mut self) -> Result<Option<HeaderMap>, Status> {
+    fn trailers(&mut self) -> Option<Result<HeaderMap, Status>> {
         match self.role {
-            Role::Client => Ok(None),
+            Role::Client => None,
             Role::Server => {
                 if self.is_end_stream {
-                    return Ok(None);
+                    return None;
                 }
 
+                self.is_end_stream = true;
                 let status = if let Some(status) = self.error.take() {
-                    self.is_end_stream = true;
                     status
                 } else {
                     Status::new(Code::Ok, "")
                 };
-
-                Ok(Some(status.to_header_map()?))
+                Some(status.to_header_map())
             }
         }
     }
@@ -330,28 +329,25 @@ where
         self.state.is_end_stream
     }
 
-    fn poll_data(
+    fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
         let self_proj = self.project();
         match ready!(self_proj.inner.poll_next(cx)) {
-            Some(Ok(d)) => Some(Ok(d)).into(),
+            Some(Ok(d)) => Some(Ok(Frame::data(d))).into(),
             Some(Err(status)) => match self_proj.state.role {
                 Role::Client => Some(Err(status)).into(),
                 Role::Server => {
-                    self_proj.state.error = Some(status);
-                    None.into()
+                    self_proj.state.is_end_stream = true;
+                    Some(Ok(Frame::trailers(status.to_header_map()?))).into()
                 }
             },
-            None => None.into(),
+            None => self_proj
+                .state
+                .trailers()
+                .map(|t| t.map(Frame::trailers))
+                .into(),
         }
-    }
-
-    fn poll_trailers(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<Result<Option<HeaderMap>, Status>> {
-        Poll::Ready(self.project().state.trailers())
     }
 }

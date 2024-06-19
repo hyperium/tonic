@@ -1,5 +1,5 @@
+use super::service::TlsConnector;
 use crate::transport::{
-    service::TlsConnector,
     tls::{Certificate, Identity},
     Error,
 };
@@ -10,7 +10,7 @@ use std::fmt;
 #[derive(Clone, Default)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
-    cert: Option<Certificate>,
+    certs: Vec<Certificate>,
     identity: Option<Identity>,
     assume_http2: bool,
 }
@@ -19,7 +19,7 @@ impl fmt::Debug for ClientTlsConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("ClientTlsConfig")
             .field("domain", &self.domain)
-            .field("cert", &self.cert)
+            .field("certs", &self.certs)
             .field("identity", &self.identity)
             .finish()
     }
@@ -30,7 +30,7 @@ impl ClientTlsConfig {
     pub fn new() -> Self {
         ClientTlsConfig {
             domain: None,
-            cert: None,
+            certs: Vec::new(),
             identity: None,
             assume_http2: false,
         }
@@ -46,10 +46,16 @@ impl ClientTlsConfig {
 
     /// Sets the CA Certificate against which to verify the server's TLS certificate.
     pub fn ca_certificate(self, ca_certificate: Certificate) -> Self {
-        ClientTlsConfig {
-            cert: Some(ca_certificate),
-            ..self
-        }
+        let mut certs = self.certs;
+        certs.push(ca_certificate);
+        ClientTlsConfig { certs, ..self }
+    }
+
+    /// Sets the multiple CA Certificates against which to verify the server's TLS certificate.
+    pub fn ca_certificates(self, ca_certificates: impl IntoIterator<Item = Certificate>) -> Self {
+        let mut certs = self.certs;
+        certs.extend(ca_certificates);
+        ClientTlsConfig { certs, ..self }
     }
 
     /// Sets the client identity to present to the server.
@@ -75,7 +81,7 @@ impl ClientTlsConfig {
             None => uri.host().ok_or_else(Error::new_invalid_uri)?,
         };
         TlsConnector::new(
-            self.cert.clone(),
+            self.certs.clone(),
             self.identity.clone(),
             domain,
             self.assume_http2,

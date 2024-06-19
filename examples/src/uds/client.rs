@@ -5,6 +5,7 @@ pub mod hello_world {
 }
 
 use hello_world::{greeter_client::GreeterClient, HelloRequest};
+use hyper_util::rt::TokioIo;
 #[cfg(unix)]
 use tokio::net::UnixStream;
 use tonic::transport::{Endpoint, Uri};
@@ -16,12 +17,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // We will ignore this uri because uds do not use it
     // if your connector does use the uri it will be provided
     // as the request to the `MakeConnection`.
+
     let channel = Endpoint::try_from("http://[::]:50051")?
-        .connect_with_connector(service_fn(|_: Uri| {
+        .connect_with_connector(service_fn(|_: Uri| async {
             let path = "/tmp/tonic/helloworld";
 
             // Connect to a Uds socket
-            UnixStream::connect(path)
+            Ok::<_, std::io::Error>(TokioIo::new(UnixStream::connect(path).await?))
         }))
         .await?;
 

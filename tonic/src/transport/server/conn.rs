@@ -1,11 +1,10 @@
-use hyper::server::conn::AddrStream;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
 #[cfg(feature = "tls")]
-use crate::transport::Certificate;
-#[cfg(feature = "tls")]
 use std::sync::Arc;
+#[cfg(feature = "tls")]
+use tokio_rustls::rustls::pki_types::CertificateDer;
 #[cfg(feature = "tls")]
 use tokio_rustls::server::TlsStream;
 
@@ -86,17 +85,6 @@ impl TcpConnectInfo {
     }
 }
 
-impl Connected for AddrStream {
-    type ConnectInfo = TcpConnectInfo;
-
-    fn connect_info(&self) -> Self::ConnectInfo {
-        TcpConnectInfo {
-            local_addr: Some(self.local_addr()),
-            remote_addr: Some(self.remote_addr()),
-        }
-    }
-}
-
 impl Connected for TcpStream {
     type ConnectInfo = TcpConnectInfo;
 
@@ -125,12 +113,9 @@ where
         let (inner, session) = self.get_ref();
         let inner = inner.connect_info();
 
-        let certs = if let Some(certs) = session.peer_certificates() {
-            let certs = certs.iter().map(Certificate::from_pem).collect();
-            Some(Arc::new(certs))
-        } else {
-            None
-        };
+        let certs = session
+            .peer_certificates()
+            .map(|certs| certs.to_owned().into());
 
         TlsConnectInfo { inner, certs }
     }
@@ -148,7 +133,7 @@ where
 #[derive(Debug, Clone)]
 pub struct TlsConnectInfo<T> {
     inner: T,
-    certs: Option<Arc<Vec<Certificate>>>,
+    certs: Option<Arc<Vec<CertificateDer<'static>>>>,
 }
 
 #[cfg(feature = "tls")]
@@ -165,7 +150,7 @@ impl<T> TlsConnectInfo<T> {
     }
 
     /// Return the set of connected peer TLS certificates.
-    pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
+    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
         self.certs.clone()
     }
 }

@@ -1,4 +1,3 @@
-use hyper::Body;
 use std::{
     pin::Pin,
     task::{Context, Poll},
@@ -84,9 +83,12 @@ struct MyMiddleware<S> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-impl<S> Service<hyper::Request<Body>> for MyMiddleware<S>
+impl<S> Service<hyper::Request<BoxBody>> for MyMiddleware<S>
 where
-    S: Service<hyper::Request<Body>, Response = hyper::Response<BoxBody>> + Clone + Send + 'static,
+    S: Service<hyper::Request<BoxBody>, Response = hyper::Response<BoxBody>>
+        + Clone
+        + Send
+        + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -97,7 +99,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: hyper::Request<Body>) -> Self::Future {
+    fn call(&mut self, req: hyper::Request<BoxBody>) -> Self::Future {
         // This is necessary because tonic internally uses `tower::buffer::Buffer`.
         // See https://github.com/tower-rs/tower/issues/547#issuecomment-767629149
         // for details on why this is necessary
