@@ -36,14 +36,14 @@ struct StreamingInner {
 
 impl<T> Unpin for Streaming<T> {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum State {
     ReadHeader,
     ReadBody {
         compression: Option<CompressionEncoding>,
         len: usize,
     },
-    Error,
+    Error(Status),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -248,7 +248,7 @@ impl StreamingInner {
                     return Poll::Ready(Ok(None));
                 }
 
-                let _ = std::mem::replace(&mut self.state, State::Error);
+                let _ = std::mem::replace(&mut self.state, State::Error(status.clone()));
                 debug!("decoder inner stream error: {:?}", status);
                 return Poll::Ready(Err(status));
             }
@@ -395,8 +395,8 @@ impl<T> Stream for Streaming<T> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            if let State::Error = &self.inner.state {
-                return Poll::Ready(None);
+            if let State::Error(status) = &self.inner.state {
+                return Poll::Ready(Some(Err(status.clone())));
             }
 
             if let Some(item) = self.decode_chunk()? {
