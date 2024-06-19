@@ -1,6 +1,7 @@
 //! Client implementation and builder.
 
 mod endpoint;
+pub(crate) mod service;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 mod tls;
@@ -9,9 +10,8 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "tls")]
 pub use tls::ClientTlsConfig;
 
-use super::service::{Connection, DynamicServiceStream, SharedExec};
+use self::service::{Connection, DynamicServiceStream, Executor, SharedExec};
 use crate::body::BoxBody;
-use crate::transport::Executor;
 use bytes::Bytes;
 use http::{
     uri::{InvalidUri, Uri},

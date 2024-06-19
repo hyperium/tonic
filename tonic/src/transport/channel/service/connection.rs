@@ -1,8 +1,7 @@
-use super::SharedExec;
-use super::{grpc_timeout::GrpcTimeout, reconnect::Reconnect, AddOrigin, UserAgent};
+use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
 use crate::{
     body::{boxed, BoxBody},
-    transport::{BoxFuture, Endpoint},
+    transport::{service::GrpcTimeout, BoxFuture, Endpoint},
 };
 use http::Uri;
 use hyper::rt;
@@ -36,7 +35,7 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        let mut settings: Builder<super::SharedExec> = Builder::new(endpoint.executor.clone())
+        let mut settings: Builder<SharedExec> = Builder::new(endpoint.executor.clone())
             .initial_stream_window_size(endpoint.init_stream_window_size)
             .initial_connection_window_size(endpoint.init_connection_window_size)
             .keep_alive_interval(endpoint.http2_keep_alive_interval)
@@ -158,12 +157,12 @@ impl tower::Service<http::Request<BoxBody>> for SendRequest {
 
 struct MakeSendRequestService<C> {
     connector: C,
-    executor: super::SharedExec,
-    settings: Builder<super::SharedExec>,
+    executor: SharedExec,
+    settings: Builder<SharedExec>,
 }
 
 impl<C> MakeSendRequestService<C> {
-    fn new(connector: C, executor: SharedExec, settings: Builder<super::SharedExec>) -> Self {
+    fn new(connector: C, executor: SharedExec, settings: Builder<SharedExec>) -> Self {
         Self {
             connector,
             executor,

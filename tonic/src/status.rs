@@ -617,8 +617,10 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
         // matches the spec of:
         // > The service is currently unavailable. This is most likely a transient condition that
         // > can be corrected if retried with a backoff.
-        #[cfg(feature = "transport")]
-        if let Some(connect) = err.downcast_ref::<crate::transport::ConnectError>() {
+        #[cfg(feature = "channel")]
+        if let Some(connect) =
+            err.downcast_ref::<crate::transport::channel::service::ConnectError>()
+        {
             return Some(Status::unavailable(connect.to_string()));
         }
 
