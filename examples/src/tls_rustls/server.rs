@@ -26,7 +26,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let fd = std::fs::File::open(data_dir.join("tls/server.pem"))?;
         let mut buf = std::io::BufReader::new(&fd);
         rustls_pemfile::certs(&mut buf)
-            .into_iter()
             .map(|res| res.map(|cert| cert.to_owned()))
             .collect::<Result<Vec<_>, _>>()?
     };
@@ -34,7 +33,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let fd = std::fs::File::open(data_dir.join("tls/server.key"))?;
         let mut buf = std::io::BufReader::new(&fd);
         let key = rustls_pemfile::pkcs8_private_keys(&mut buf)
-            .into_iter()
             .next()
             .unwrap()?
             .clone_key();
