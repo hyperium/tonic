@@ -41,8 +41,8 @@ pub(crate) use tokio_rustls::server::TlsStream;
 #[cfg(feature = "tls")]
 use crate::transport::Error;
 
-use self::recover_error::RecoverError;
-use super::service::{GrpcTimeout, ServerIo};
+use self::{recover_error::RecoverError, service::ServerIo};
+use super::service::GrpcTimeout;
 use crate::body::{boxed, BoxBody};
 use crate::server::NamedService;
 use bytes::Bytes;

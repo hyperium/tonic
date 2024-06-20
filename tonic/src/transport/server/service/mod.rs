@@ -1,3 +1,6 @@
+mod io;
+pub(crate) use self::io::ServerIo;
+
 #[cfg(feature = "tls")]
 mod tls;
 #[cfg(feature = "tls")]
