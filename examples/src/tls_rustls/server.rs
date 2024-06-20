@@ -12,7 +12,7 @@ use tokio_rustls::{
     rustls::{pki_types::CertificateDer, ServerConfig},
     TlsAcceptor,
 };
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tonic::{body::BoxBody, service::Routes, Request, Response, Status};
 use tower::{BoxError, ServiceExt};
 use tower_http::ServiceBuilderExt;
 
@@ -37,9 +37,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = EchoServer::default();
 
-    let svc = Server::builder()
-        .add_service(pb::echo_server::EchoServer::new(server))
-        .into_service();
+    let svc = Routes::new(pb::echo_server::EchoServer::new(server));
 
     let http = Builder::new(TokioExecutor::new());
 
