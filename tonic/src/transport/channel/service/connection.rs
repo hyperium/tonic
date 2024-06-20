@@ -147,11 +147,7 @@ impl tower::Service<http::Request<BoxBody>> for SendRequest {
     fn call(&mut self, req: Request) -> Self::Future {
         let fut = self.inner.send_request(req);
 
-        Box::pin(async move {
-            fut.await
-                .map_err(Into::into)
-                .map(|res| res.map(|body| boxed(body)))
-        })
+        Box::pin(async move { fut.await.map_err(Into::into).map(|res| res.map(boxed)) })
     }
 }
 

@@ -118,7 +118,7 @@ where
                 Ok::<_, crate::Error>(BoxedIo::new(io))
             }
             .await
-            .map_err(|err| ConnectError(From::from(err)))
+            .map_err(ConnectError)
         })
     }
 }

@@ -9,52 +9,35 @@ use pb::{EchoRequest, EchoResponse};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::{
-    rustls::{
-        pki_types::{CertificateDer, PrivatePkcs8KeyDer},
-        ServerConfig,
-    },
+    rustls::{pki_types::CertificateDer, ServerConfig},
     TlsAcceptor,
 };
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tonic::{body::BoxBody, service::Routes, Request, Response, Status};
 use tower::{BoxError, ServiceExt};
 use tower_http::ServiceBuilderExt;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
-    let certs: Vec<CertificateDer<'static>> = {
+    let certs = {
         let fd = std::fs::File::open(data_dir.join("tls/server.pem"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        rustls_pemfile::certs(&mut buf)
-            .into_iter()
-            .map(|res| res.map(|cert| cert.to_owned()))
-            .collect::<Result<Vec<_>, _>>()?
+        rustls_pemfile::certs(&mut buf).collect::<Result<Vec<_>, _>>()?
     };
-    let key: PrivatePkcs8KeyDer<'static> = {
+    let key = {
         let fd = std::fs::File::open(data_dir.join("tls/server.key"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        let key = rustls_pemfile::pkcs8_private_keys(&mut buf)
-            .into_iter()
-            .next()
-            .unwrap()?
-            .clone_key();
-
-        key
-
-        // let key = std::fs::read(data_dir.join("tls/server.key"))?;
-        // PrivateKey(key)
+        rustls_pemfile::private_key(&mut buf)?.unwrap()
     };
 
     let mut tls = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, key.into())?;
+        .with_single_cert(certs, key)?;
     tls.alpn_protocols = vec![b"h2".to_vec()];
 
     let server = EchoServer::default();
 
-    let svc = Server::builder()
-        .add_service(pb::echo_server::EchoServer::new(server))
-        .into_service();
+    let svc = Routes::new(pb::echo_server::EchoServer::new(server));
 
     let http = Builder::new(TokioExecutor::new());
 

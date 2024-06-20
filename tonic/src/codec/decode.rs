@@ -291,13 +291,11 @@ impl StreamingInner {
 
     fn response(&mut self) -> Result<(), Status> {
         if let Direction::Response(status) = self.direction {
-            if let Err(e) = crate::status::infer_grpc_status(self.trailers.as_ref(), status) {
-                if let Some(e) = e {
-                    // If the trailers contain a grpc-status, then we should return that as the error
-                    // and otherwise stop the stream (by taking the error state)
-                    self.trailers.take();
-                    return Err(e);
-                }
+            if let Err(Some(e)) = crate::status::infer_grpc_status(self.trailers.as_ref(), status) {
+                // If the trailers contain a grpc-status, then we should return that as the error
+                // and otherwise stop the stream (by taking the error state)
+                self.trailers.take();
+                return Err(e);
             }
         }
         Ok(())
