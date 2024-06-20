@@ -1,4 +1,4 @@
-use crate::transport::BoxFuture;
+use crate::transport::channel::BoxFuture;
 use http::uri::Authority;
 use http::uri::Scheme;
 use http::{Request, Uri};

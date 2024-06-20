@@ -36,6 +36,7 @@ use tower::{
     Service,
 };
 
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<BoxBody>, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
@@ -186,7 +187,7 @@ impl Channel {
         D: Discover<Service = Connection> + Unpin + Send + 'static,
         D::Error: Into<crate::Error>,
         D::Key: Hash + Send + Clone,
-        E: Executor<crate::transport::BoxFuture<'static, ()>> + Send + Sync + 'static,
+        E: Executor<BoxFuture<'static, ()>> + Send + Sync + 'static,
     {
         let svc = Balance::new(discover);
 

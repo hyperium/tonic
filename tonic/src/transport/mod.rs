@@ -129,7 +129,3 @@ pub use self::server::ServerTlsConfig;
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;
-
-#[cfg(feature = "channel")]
-pub(crate) type BoxFuture<'a, T> =
-    std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;

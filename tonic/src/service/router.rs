@@ -149,7 +149,7 @@ struct AxumBodyService<S> {
     service: S,
 }
 
-pub(crate) type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 impl<S> Service<Request<axum::body::Body>> for AxumBodyService<S>
 where

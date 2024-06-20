@@ -1,7 +1,7 @@
 use super::BoxedIo;
 #[cfg(feature = "tls")]
 use super::TlsConnector;
-use crate::transport::BoxFuture;
+use crate::transport::channel::BoxFuture;
 use http::Uri;
 use std::fmt;
 use std::task::{Context, Poll};
