@@ -19,12 +19,10 @@ use tower_http::ServiceBuilderExt;
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
-    let certs: Vec<CertificateDer<'static>> = {
+    let certs = {
         let fd = std::fs::File::open(data_dir.join("tls/server.pem"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        rustls_pemfile::certs(&mut buf)
-            .map(|res| res.map(|cert| cert.to_owned()))
-            .collect::<Result<Vec<_>, _>>()?
+        rustls_pemfile::certs(&mut buf).collect::<Result<Vec<_>, _>>()?
     };
     let key = {
         let fd = std::fs::File::open(data_dir.join("tls/server.key"))?;
