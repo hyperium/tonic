@@ -9,10 +9,7 @@ use pb::{EchoRequest, EchoResponse};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::{
-    rustls::{
-        pki_types::{CertificateDer, PrivatePkcs8KeyDer},
-        ServerConfig,
-    },
+    rustls::{pki_types::CertificateDer, ServerConfig},
     TlsAcceptor,
 };
 use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
@@ -29,23 +26,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             .map(|res| res.map(|cert| cert.to_owned()))
             .collect::<Result<Vec<_>, _>>()?
     };
-    let key: PrivatePkcs8KeyDer<'static> = {
+    let key = {
         let fd = std::fs::File::open(data_dir.join("tls/server.key"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        let key = rustls_pemfile::pkcs8_private_keys(&mut buf)
-            .next()
-            .unwrap()?
-            .clone_key();
-
-        key
-
-        // let key = std::fs::read(data_dir.join("tls/server.key"))?;
-        // PrivateKey(key)
+        rustls_pemfile::private_key(&mut buf)?.unwrap()
     };
 
     let mut tls = ServerConfig::builder()
         .with_no_client_auth()
-        .with_single_cert(certs, key.into())?;
+        .with_single_cert(certs, key)?;
     tls.alpn_protocols = vec![b"h2".to_vec()];
 
     let server = EchoServer::default();
