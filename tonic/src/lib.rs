@@ -16,9 +16,10 @@
 //!
 //! # Feature Flags
 //!
-//! - `transport`: Enables just the full featured server portion of the `channel` feature.
-//! - `channel`: Enables the fully featured, batteries included client and server
+//! - `transport`: Enables the fully featured, batteries included client and server
 //! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
+//! - `server`: Enables just the full featured server portion of the `transport` feature.
+//! - `channel`: Enables just the full featured channel portion of the `transport` feature.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //! for [`tonic-build`]. Enabled by default.
 //! - `tls`: Enables the `rustls` based TLS options for the `transport` feature. Not
@@ -100,8 +101,8 @@ pub mod metadata;
 pub mod server;
 pub mod service;
 
-#[cfg(feature = "transport")]
-#[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
+#[cfg(any(feature = "server", feature = "channel"))]
+#[cfg_attr(docsrs, doc(cfg(any(feature = "server", feature = "channel"))))]
 pub mod transport;
 
 mod extensions;

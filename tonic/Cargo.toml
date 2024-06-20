@@ -26,29 +26,31 @@ version = "0.11.0"
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
-default = ["channel", "codegen", "prost"]
+default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
+tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
 tls-roots-common = ["tls", "channel"]
 tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
 router = ["dep:axum"]
-transport = [
+server = [
   "router",
   "dep:async-stream",
   "dep:h2",
-  "dep:hyper", "dep:hyper-util",
+  "dep:hyper", "hyper?/server",
+  "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
   "dep:socket2",
   "dep:tokio", "tokio?/macros", "tokio?/net", "tokio?/time",
   "dep:tower", "tower?/util", "tower?/limit",
 ]
 channel = [
-  "transport",
   "dep:hyper", "hyper?/client",
   "dep:hyper-util", "hyper-util?/client-legacy",
-  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/load", "tower?/make",
+  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit",
+  "dep:tokio", "tokio?/time",
   "dep:hyper-timeout",
 ]
+transport = ["server", "channel"]
 
 # [[bench]]
 # name = "bench_main"
@@ -76,8 +78,8 @@ async-trait = {version = "0.1.13", optional = true}
 # transport
 async-stream = {version = "0.3", optional = true}
 h2 = {version = "0.4", optional = true}
-hyper = {version = "1", features = ["http1", "http2", "server"], optional = true}
-hyper-util = { version = ">=0.1.4, <0.2", features = ["service", "server-auto", "tokio"], optional = true }
+hyper = {version = "1", features = ["http1", "http2"], optional = true}
+hyper-util = { version = ">=0.1.4, <0.2", features = ["tokio"], optional = true }
 socket2 = { version = ">=0.4.7, <0.6.0", optional = true, features = ["all"] }
 tokio = {version = "1", default-features = false, optional = true}
 tokio-stream = { version = "0.1", features = ["net"] }
