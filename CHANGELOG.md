@@ -1,3 +1,32 @@
+# [v0.12.0](https://github.com/hyperium/tonic/compare/v0.11.0...v0.12.0) (2024-06-20)
+
+This breaking release updates tonic to the hyper 1.0 ecosystem.
+
+### Features
+
+* **build:** Custom codecs for generated code ([#1599](https://github.com/hyperium/tonic/issues/1599)) ([18a2b30](https://github.com/hyperium/tonic/commit/18a2b30922460be02829706cf9dd0cd1ec6a19c1))
+* **channel:** Make channel feature additive ([#1574](https://github.com/hyperium/tonic/issues/1574)) ([b947e1a](https://github.com/hyperium/tonic/commit/b947e1ac0727ceb0a0267a30854ada4ba18931db))
+* Implement http_body::Body::size_hint for custom body ([#1713](https://github.com/hyperium/tonic/issues/1713)) ([9728c01](https://github.com/hyperium/tonic/commit/9728c01132bd64dca046675198edc751c4547966))
+* Relax GrpcMethod lifetime ([#1598](https://github.com/hyperium/tonic/issues/1598)) ([68bf17d](https://github.com/hyperium/tonic/commit/68bf17d67ad71af44c34d565566c3dd58ea3ab87))
+* **tls:** Add ability to add multiple ca certificates ([#1724](https://github.com/hyperium/tonic/issues/1724)) ([3457f92](https://github.com/hyperium/tonic/commit/3457f9203226f88524b31bf5d64ce6e5ec7c993c))
+* **tls:** Use rustls_pki_types::CertificateDer to describe DER encoded certificate ([#1707](https://github.com/hyperium/tonic/issues/1707)) ([96a8cbc](https://github.com/hyperium/tonic/commit/96a8cbc04d0cad6d30d2944dba6b32aac8975f91))
+* **transport:** Make service router independent from transport ([#1572](https://github.com/hyperium/tonic/issues/1572)) ([da48235](https://github.com/hyperium/tonic/commit/da482359933f52e84c0263b28a5a83ab1efe6c33))
+* **transport:** Make transport server and channel independent ([#1630](https://github.com/hyperium/tonic/issues/1630)) ([654289f](https://github.com/hyperium/tonic/commit/654289fdc24f56d6845ec0ceb233deb46b640fac))
+* Use http::Extensions directly ([#1710](https://github.com/hyperium/tonic/issues/1710)) ([ed95d27](https://github.com/hyperium/tonic/commit/ed95d2762146f001970b74941f3bad77b7560426))
+
+### BREAKING CHANGES
+
+* `tonic` and crates updated to hyper 1.0 (#1670)
+* `tonic_reflection::server` is updated to use the generated
+  `tonic_reflection::pb::v1` code.
+
+
+[v1.8.8]: https://github.com/fullstorydev/grpcurl/releases/tag/v1.8.8
+[proto]: https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1/reflection.proto
+[grpcurl]: https://github.com/fullstorydev/grpcurl
+
+
+
 # [0.11.0](https://github.com/hyperium/tonic/compare/v0.10.2...v0.11.0) (2024-02-08)
 
 BREAKING CHANGES:
