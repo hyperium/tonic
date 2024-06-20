@@ -168,10 +168,7 @@ where
     }
 
     fn call(&mut self, req: Request<axum::body::Body>) -> Self::Future {
-        let fut = self.service.call(req.map(|body| boxed(body)));
-        Box::pin(async move {
-            fut.await
-                .map(|res| res.map(|body| axum::body::Body::new(body)))
-        })
+        let fut = self.service.call(req.map(boxed));
+        Box::pin(async move { fut.await.map(|res| res.map(axum::body::Body::new)) })
     }
 }
