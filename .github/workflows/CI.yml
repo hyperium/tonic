@@ -63,7 +63,10 @@ jobs:
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --each-feature ${{ matrix.option }}
+    - run: cargo hack udeps --workspace --exclude-features tls --each-feature ${{ matrix.option }}
+    - run: cargo udeps --package tonic --features tls,transport
+    - run: cargo udeps --package tonic --features tls,server
+    - run: cargo udeps --package tonic --features tls,channel
 
   check:
     runs-on: ${{ matrix.os }}
@@ -81,6 +84,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Check features
       run: cargo hack check --workspace --no-private --each-feature --no-dev-deps
+    - name: Check tonic feature powerset
+      run: cargo hack check --package tonic --feature-powerset --depth 2
     - name: Check all targets
       run: cargo check --workspace --all-targets --all-features
 

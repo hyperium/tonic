@@ -1,21 +1,24 @@
-use std::{
-    io::Cursor,
-    {fmt, sync::Arc},
-};
+#[cfg(feature = "server")]
+use std::sync::Arc;
+use std::{fmt, io::Cursor};
 
+#[cfg(feature = "server")]
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_rustls::rustls::{
+    pki_types::{CertificateDer, PrivateKeyDer},
+    RootCertStore,
+};
+#[cfg(feature = "server")]
 use tokio_rustls::{
-    rustls::{
-        pki_types::{CertificateDer, PrivateKeyDer},
-        server::WebPkiClientVerifier,
-        RootCertStore, ServerConfig,
-    },
+    rustls::{server::WebPkiClientVerifier, ServerConfig},
     TlsAcceptor as RustlsAcceptor,
 };
 
+use crate::transport::Identity;
+#[cfg(feature = "server")]
 use crate::transport::{
     server::{Connected, TlsStream},
-    Certificate, Identity,
+    Certificate,
 };
 
 /// h2 alpn in plain format for rustls.
@@ -29,11 +32,13 @@ pub(crate) enum TlsError {
     PrivateKeyParseError,
 }
 
+#[cfg(feature = "server")]
 #[derive(Clone)]
 pub(crate) struct TlsAcceptor {
     inner: Arc<ServerConfig>,
 }
 
+#[cfg(feature = "server")]
 impl TlsAcceptor {
     pub(crate) fn new(
         identity: Identity,
@@ -75,6 +80,7 @@ impl TlsAcceptor {
     }
 }
 
+#[cfg(feature = "server")]
 impl fmt::Debug for TlsAcceptor {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TlsAcceptor").finish()
