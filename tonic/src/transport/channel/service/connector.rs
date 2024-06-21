@@ -65,7 +65,17 @@ impl<C> Connector<C> {
             _ => return None,
         };
 
-        TlsConnector::new(Vec::new(), None, host, self.assume_http2).ok()
+        TlsConnector::new(
+            Vec::new(),
+            None,
+            host,
+            self.assume_http2,
+            #[cfg(feature = "tls-roots")]
+            true,
+            #[cfg(feature = "tls-webpki-roots")]
+            true,
+        )
+        .ok()
     }
 }
 
