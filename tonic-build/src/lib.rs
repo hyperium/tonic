@@ -73,18 +73,16 @@
 #![doc(html_root_url = "https://docs.rs/tonic-build/0.11.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use quote::TokenStreamExt;
 
 /// Prost generator
 #[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 mod prost;
 
 #[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use prost::{compile_protos, configure, Builder};
 
 pub mod manual;

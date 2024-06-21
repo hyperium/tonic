@@ -92,7 +92,7 @@
 #![doc(html_root_url = "https://docs.rs/tonic/0.11.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 pub mod body;
 pub mod client;
@@ -102,7 +102,6 @@ pub mod server;
 pub mod service;
 
 #[cfg(any(feature = "server", feature = "channel"))]
-#[cfg_attr(docsrs, doc(cfg(any(feature = "server", feature = "channel"))))]
 pub mod transport;
 
 mod extensions;
@@ -114,7 +113,6 @@ mod util;
 
 /// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
 #[cfg(feature = "codegen")]
-#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub use async_trait::async_trait;
 
 #[doc(inline)]
@@ -129,7 +127,6 @@ pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
 
 #[doc(hidden)]
 #[cfg(feature = "codegen")]
-#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;
 
 /// `Result` is a type that represents either success ([`Ok`]) or failure ([`Err`]).

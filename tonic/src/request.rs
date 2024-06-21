@@ -212,7 +212,6 @@ impl<T> Request<T> {
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
     #[cfg(feature = "server")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "server")))]
     pub fn local_addr(&self) -> Option<SocketAddr> {
         let addr = self
             .extensions()
@@ -235,7 +234,6 @@ impl<T> Request<T> {
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
     #[cfg(feature = "server")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "server")))]
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         let addr = self
             .extensions()
@@ -259,7 +257,6 @@ impl<T> Request<T> {
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
     #[cfg(all(feature = "server", feature = "tls"))]
-    #[cfg_attr(docsrs, doc(all(feature = "server", feature = "tls")))]
     pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
         self.extensions()
             .get::<TlsConnectInfo<TcpConnectInfo>>()
