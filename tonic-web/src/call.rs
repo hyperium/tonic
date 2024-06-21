@@ -232,7 +232,7 @@ where
                 }
                 Poll::Ready(Some(Ok(Frame::data(frame.into()))))
             }
-            Some(Ok(_)) => Poll::Ready(Some(Err(internal_error("unexepected frame type")))),
+            Some(Ok(_)) => Poll::Ready(Some(Err(internal_error("unexpected frame type")))),
             Some(Err(e)) => Poll::Ready(Some(Err(internal_error(e)))),
             None => Poll::Ready(None),
         }
