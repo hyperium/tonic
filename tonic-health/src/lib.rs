@@ -19,7 +19,7 @@
 #![doc(html_root_url = "https://docs.rs/tonic-health/0.11.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use std::fmt::{Display, Formatter};
 

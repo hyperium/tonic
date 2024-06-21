@@ -129,7 +129,6 @@ where
 ///
 /// [ext]: crate::Request::extensions
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Debug, Clone)]
 pub struct TlsConnectInfo<T> {
     inner: T,
@@ -137,7 +136,6 @@ pub struct TlsConnectInfo<T> {
 }
 
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 impl<T> TlsConnectInfo<T> {
     /// Get a reference to the underlying connection info.
     pub fn get_ref(&self) -> &T {

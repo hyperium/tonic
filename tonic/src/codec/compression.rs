@@ -83,11 +83,9 @@ pub(crate) struct CompressionSettings {
 pub enum CompressionEncoding {
     #[allow(missing_docs)]
     #[cfg(feature = "gzip")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "gzip")))]
     Gzip,
     #[allow(missing_docs)]
     #[cfg(feature = "zstd")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "zstd")))]
     Zstd,
 }
 

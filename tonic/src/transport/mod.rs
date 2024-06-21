@@ -101,7 +101,6 @@ mod tls;
 
 #[doc(inline)]
 #[cfg(feature = "channel")]
-#[cfg_attr(docsrs, doc(cfg(feature = "channel")))]
 pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
@@ -111,21 +110,16 @@ pub use self::server::Server;
 pub use self::service::grpc_timeout::TimeoutExpired;
 
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Certificate;
 #[cfg(feature = "server")]
-#[cfg_attr(docsrs, doc(cfg(feature = "server")))]
 pub use axum::{body::Body as AxumBoxBody, Router as AxumRouter};
 pub use hyper::{body::Body, Uri};
 #[cfg(feature = "tls")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
 
 #[cfg(all(feature = "channel", feature = "tls"))]
-#[cfg_attr(docsrs, doc(cfg(all(feature = "channel", feature = "tls"))))]
 pub use self::channel::ClientTlsConfig;
 #[cfg(all(feature = "server", feature = "tls"))]
-#[cfg_attr(docsrs, doc(all(feature = "server", feature = "tls")))]
 pub use self::server::ServerTlsConfig;
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Identity;

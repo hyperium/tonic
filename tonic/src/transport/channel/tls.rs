@@ -85,7 +85,6 @@ impl ClientTlsConfig {
 
     /// Enables the platform's trusted certs.
     #[cfg(feature = "tls-roots")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tls-roots")))]
     pub fn with_native_roots(self) -> Self {
         ClientTlsConfig {
             with_native_roots: true,
@@ -95,7 +94,6 @@ impl ClientTlsConfig {
 
     /// Enables the webpki roots.
     #[cfg(feature = "tls-webpki-roots")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tls-webpki-roots")))]
     pub fn with_webpki_roots(self) -> Self {
         ClientTlsConfig {
             with_webpki_roots: true,
