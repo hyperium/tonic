@@ -50,7 +50,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client = hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build(connector);
 
     // Using `with_origin` will let the codegenerated client set the `scheme` and
-    // `authority` from the porvided `Uri`.
+    // `authority` from the provided `Uri`.
     let uri = Uri::from_static("https://example.com");
     let mut client = EchoClient::with_origin(client, uri);
 

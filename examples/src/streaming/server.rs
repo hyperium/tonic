@@ -124,7 +124,7 @@ impl pb::echo_server::Echo for EchoServer {
 
                         match tx.send(Err(err)).await {
                             Ok(_) => (),
-                            Err(_err) => break, // response was droped
+                            Err(_err) => break, // response was dropped
                         }
                     }
                 }

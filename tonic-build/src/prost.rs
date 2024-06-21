@@ -418,7 +418,7 @@ impl Builder {
     ///
     /// Passed directly to `prost_build::Config.btree_map`.
     ///
-    /// Note: previous configurated paths for `btree_map` will be cleared.
+    /// Note: previous configured paths for `btree_map` will be cleared.
     pub fn btree_map<I, S>(mut self, paths: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -438,7 +438,7 @@ impl Builder {
     ///
     /// Passed directly to `prost_build::Config.bytes`.
     ///
-    /// Note: previous configurated paths for `bytes` will be cleared.
+    /// Note: previous configured paths for `bytes` will be cleared.
     pub fn bytes<I, S>(mut self, paths: I) -> Self
     where
         I: IntoIterator<Item = S>,
