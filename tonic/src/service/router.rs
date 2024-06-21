@@ -12,7 +12,7 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tower_service::Service;
+use tower::{Service, ServiceExt};
 
 /// A [`Service`] router.
 #[derive(Debug, Default, Clone)]
@@ -77,7 +77,7 @@ impl Routes {
     {
         self.router = self.router.route_service(
             &format!("/{}/*rest", S::NAME),
-            AxumBodyService { service: svc },
+            svc.map_request(|req: Request<axum::body::Body>| req.map(boxed)),
         );
         self
     }
@@ -141,34 +141,5 @@ impl Future for RoutesFuture {
             Ok(res) => Ok(res.map(boxed)).into(),
             Err(err) => match err {},
         }
-    }
-}
-
-#[derive(Clone)]
-struct AxumBodyService<S> {
-    service: S,
-}
-
-type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-
-impl<S> Service<Request<axum::body::Body>> for AxumBodyService<S>
-where
-    S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
-        + Clone
-        + Send
-        + 'static,
-    S::Future: Send + 'static,
-{
-    type Response = Response<axum::body::Body>;
-    type Error = Infallible;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.service.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: Request<axum::body::Body>) -> Self::Future {
-        let fut = self.service.call(req.map(boxed));
-        Box::pin(async move { fut.await.map(|res| res.map(axum::body::Body::new)) })
     }
 }

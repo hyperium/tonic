@@ -31,7 +31,7 @@ prost = ["dep:prost"]
 tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
 tls-roots = ["tls", "channel", "dep:rustls-native-certs"]
 tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
-router = ["dep:axum"]
+router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
   "router",
   "dep:async-stream",
