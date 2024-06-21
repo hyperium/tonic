@@ -244,7 +244,7 @@ impl Endpoint {
         Ok(Endpoint {
             tls: Some(
                 tls_config
-                    .tls_connector(self.uri.clone())
+                    .into_tls_connector(&self.uri)
                     .map_err(Error::from_source)?,
             ),
             ..self
