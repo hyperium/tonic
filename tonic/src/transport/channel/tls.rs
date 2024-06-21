@@ -13,6 +13,10 @@ pub struct ClientTlsConfig {
     certs: Vec<Certificate>,
     identity: Option<Identity>,
     assume_http2: bool,
+    #[cfg(feature = "tls-roots")]
+    with_native_roots: bool,
+    #[cfg(feature = "tls-webpki-roots")]
+    with_webpki_roots: bool,
 }
 
 impl fmt::Debug for ClientTlsConfig {
@@ -33,6 +37,10 @@ impl ClientTlsConfig {
             certs: Vec::new(),
             identity: None,
             assume_http2: false,
+            #[cfg(feature = "tls-roots")]
+            with_native_roots: false,
+            #[cfg(feature = "tls-webpki-roots")]
+            with_webpki_roots: false,
         }
     }
 
@@ -75,6 +83,26 @@ impl ClientTlsConfig {
         }
     }
 
+    /// Enables the platform's trusted certs.
+    #[cfg(feature = "tls-roots")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls-roots")))]
+    pub fn with_native_roots(self) -> Self {
+        ClientTlsConfig {
+            with_native_roots: true,
+            ..self
+        }
+    }
+
+    /// Enables the webpki roots.
+    #[cfg(feature = "tls-webpki-roots")]
+    #[cfg_attr(docsrs, doc(cfg(feature = "tls-webpki-roots")))]
+    pub fn with_webpki_roots(self) -> Self {
+        ClientTlsConfig {
+            with_webpki_roots: true,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
             Some(domain) => domain,
@@ -85,6 +113,10 @@ impl ClientTlsConfig {
             self.identity.clone(),
             domain,
             self.assume_http2,
+            #[cfg(feature = "tls-roots")]
+            self.with_native_roots,
+            #[cfg(feature = "tls-webpki-roots")]
+            self.with_webpki_roots,
         )
     }
 }

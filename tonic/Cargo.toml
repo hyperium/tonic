@@ -29,9 +29,8 @@ zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
 tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
-tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
-tls-roots-common = ["tls", "channel"]
-tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
+tls-roots = ["tls", "channel", "dep:rustls-native-certs"]
+tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
 router = ["dep:axum"]
 server = [
   "router",

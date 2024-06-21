@@ -33,39 +33,15 @@ pub(crate) struct Connector<C> {
     inner: C,
     #[cfg(feature = "tls")]
     tls: Option<TlsConnector>,
-    // When connecting to a URI with the https scheme, assume that the server
-    // is capable of speaking HTTP/2 even if it doesn't offer ALPN.
-    #[cfg(feature = "tls-roots-common")]
-    assume_http2: bool,
 }
 
 impl<C> Connector<C> {
-    pub(crate) fn new(
-        inner: C,
-        #[cfg(feature = "tls")] tls: Option<TlsConnector>,
-        #[cfg(feature = "tls-roots-common")] assume_http2: bool,
-    ) -> Self {
+    pub(crate) fn new(inner: C, #[cfg(feature = "tls")] tls: Option<TlsConnector>) -> Self {
         Self {
             inner,
             #[cfg(feature = "tls")]
             tls,
-            #[cfg(feature = "tls-roots-common")]
-            assume_http2,
         }
-    }
-
-    #[cfg(feature = "tls-roots-common")]
-    fn tls_or_default(&self, scheme: Option<&str>, host: Option<&str>) -> Option<TlsConnector> {
-        if self.tls.is_some() {
-            return self.tls.clone();
-        }
-
-        let host = match (scheme, host) {
-            (Some("https"), Some(host)) => host,
-            _ => return None,
-        };
-
-        TlsConnector::new(Vec::new(), None, host, self.assume_http2).ok()
     }
 }
 
@@ -87,11 +63,8 @@ where
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        #[cfg(all(feature = "tls", not(feature = "tls-roots-common")))]
+        #[cfg(feature = "tls")]
         let tls = self.tls.clone();
-
-        #[cfg(feature = "tls-roots-common")]
-        let tls = self.tls_or_default(uri.scheme_str(), uri.host());
 
         #[cfg(feature = "tls")]
         let is_https = uri.scheme_str() == Some("https");
