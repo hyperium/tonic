@@ -2,7 +2,6 @@
 
 mod conn;
 mod incoming;
-mod recover_error;
 mod service;
 #[cfg(feature = "tls")]
 mod tls;
@@ -40,7 +39,7 @@ pub(crate) use tokio_rustls::server::TlsStream;
 #[cfg(feature = "tls")]
 use crate::transport::Error;
 
-use self::{recover_error::RecoverError, service::ServerIo};
+use self::service::{RecoverError, ServerIo};
 use super::service::GrpcTimeout;
 use crate::body::{boxed, BoxBody};
 use crate::server::NamedService;
