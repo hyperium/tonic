@@ -534,7 +534,11 @@ impl<L> Server<L> {
 
         let svc = self.service_builder.service(svc);
 
-        let incoming = incoming::tcp_incoming(incoming, self);
+        let incoming = incoming::tcp_incoming(
+            incoming,
+            #[cfg(feature = "tls")]
+            self.tls,
+        );
         let mut svc = MakeSvc {
             inner: svc,
             concurrency_limit,

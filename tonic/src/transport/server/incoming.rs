@@ -1,4 +1,6 @@
-use super::{service::ServerIo, Connected, Server};
+#[cfg(feature = "tls")]
+use super::service::TlsAcceptor;
+use super::{service::ServerIo, Connected};
 use std::{
     net::{SocketAddr, TcpListener as StdTcpListener},
     pin::{pin, Pin},
@@ -14,9 +16,8 @@ use tokio_stream::{Stream, StreamExt};
 use tracing::warn;
 
 #[cfg(not(feature = "tls"))]
-pub(crate) fn tcp_incoming<IO, IE, L>(
+pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
-    _server: Server<L>,
 ) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
@@ -32,9 +33,9 @@ where
 }
 
 #[cfg(feature = "tls")]
-pub(crate) fn tcp_incoming<IO, IE, L>(
+pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
-    server: Server<L>,
+    tls: Option<TlsAcceptor>,
 ) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
@@ -48,7 +49,7 @@ where
         loop {
             match select(&mut incoming, &mut tasks).await {
                 SelectOutput::Incoming(stream) => {
-                    if let Some(tls) = &server.tls {
+                    if let Some(tls) = &tls {
                         let tls = tls.clone();
                         tasks.spawn(async move {
                             let io = tls.accept(stream).await?;
