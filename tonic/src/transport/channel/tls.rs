@@ -4,10 +4,9 @@ use crate::transport::{
     Error,
 };
 use http::Uri;
-use std::fmt;
 
 /// Configures TLS settings for endpoints.
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
     certs: Vec<Certificate>,
@@ -19,29 +18,10 @@ pub struct ClientTlsConfig {
     with_webpki_roots: bool,
 }
 
-impl fmt::Debug for ClientTlsConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClientTlsConfig")
-            .field("domain", &self.domain)
-            .field("certs", &self.certs)
-            .field("identity", &self.identity)
-            .finish()
-    }
-}
-
 impl ClientTlsConfig {
     /// Creates a new `ClientTlsConfig` using Rustls.
     pub fn new() -> Self {
-        ClientTlsConfig {
-            domain: None,
-            certs: Vec::new(),
-            identity: None,
-            assume_http2: false,
-            #[cfg(feature = "tls-roots")]
-            with_native_roots: false,
-            #[cfg(feature = "tls-webpki-roots")]
-            with_webpki_roots: false,
-        }
+        Self::default()
     }
 
     /// Sets the domain name against which to verify the server's TLS certificate.
