@@ -44,7 +44,7 @@ impl TlsConnector {
         }
 
         for cert in ca_certs {
-            add_certificate_to_root_store(&cert, &mut roots)?;
+            add_certificate_to_root_store(cert, &mut roots)?;
         }
 
         let builder = builder.with_root_certificates(roots);

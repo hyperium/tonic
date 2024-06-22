@@ -30,7 +30,7 @@ impl TlsAcceptor {
             None => builder.with_no_client_auth(),
             Some(cert) => {
                 let mut roots = RootCertStore::empty();
-                add_certificate_to_root_store(&cert, &mut roots)?;
+                add_certificate_to_root_store(cert, &mut roots)?;
                 let verifier = if client_auth_optional {
                     WebPkiClientVerifier::builder(roots.into()).allow_unauthenticated()
                 } else {
