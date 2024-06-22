@@ -78,7 +78,6 @@
 //! [flate2]: https://crates.io/crates/flate2
 
 #![recursion_limit = "256"]
-#![allow(clippy::inconsistent_struct_constructor)]
 #![warn(
     missing_debug_implementations,
     missing_docs,

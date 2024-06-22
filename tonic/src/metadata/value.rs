@@ -1,5 +1,3 @@
-#![allow(clippy::upper_case_acronyms)]
-
 use super::encoding::{
     Ascii, Binary, InvalidMetadataValue, InvalidMetadataValueBytes, ValueEncoding,
 };
@@ -381,8 +379,6 @@ impl TryFrom<String> for MetadataValue<Ascii> {
     }
 }
 
-// is_empty is defined in the generic impl block above
-#[allow(clippy::len_without_is_empty)]
 impl MetadataValue<Ascii> {
     /// Converts a MetadataKey into a `MetadataValue<Ascii>`.
     ///
