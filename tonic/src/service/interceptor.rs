@@ -230,7 +230,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
     use http_body::Frame;
     use http_body_util::Empty;
