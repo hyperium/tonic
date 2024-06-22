@@ -5,7 +5,7 @@ use tokio_rustls::rustls::{
     RootCertStore,
 };
 
-use crate::transport::Identity;
+use crate::transport::{Certificate, Identity};
 
 /// h2 alpn in plain format for rustls.
 pub(crate) const ALPN_H2: &[u8] = b"h2";
@@ -48,10 +48,11 @@ pub(crate) fn load_identity(
     Ok((cert, key))
 }
 
-pub(crate) fn add_certs_from_pem(
-    mut certs: &mut dyn std::io::BufRead,
+pub(crate) fn add_certificate_to_root_store(
+    certificate: &Certificate,
     roots: &mut RootCertStore,
 ) -> Result<(), crate::Error> {
+    let mut certs = &mut Cursor::new(certificate);
     for cert in rustls_pemfile::certs(&mut certs).collect::<Result<Vec<_>, _>>()? {
         roots
             .add(cert)
