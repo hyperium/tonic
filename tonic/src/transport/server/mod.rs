@@ -34,9 +34,6 @@ pub use unix::UdsConnectInfo;
 pub use incoming::TcpIncoming;
 
 #[cfg(feature = "tls")]
-pub(crate) use tokio_rustls::server::TlsStream;
-
-#[cfg(feature = "tls")]
 use crate::transport::Error;
 
 use self::service::{RecoverError, ServerIo};

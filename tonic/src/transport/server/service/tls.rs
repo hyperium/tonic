@@ -3,11 +3,12 @@ use std::{fmt, io::Cursor, sync::Arc};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
     rustls::{server::WebPkiClientVerifier, RootCertStore, ServerConfig},
+    server::TlsStream,
     TlsAcceptor as RustlsAcceptor,
 };
 
 use crate::transport::{
-    server::{Connected, TlsStream},
+    server::Connected,
     service::tls::{add_certs_from_pem, load_identity, ALPN_H2},
     Certificate, Identity,
 };
