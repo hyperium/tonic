@@ -71,7 +71,7 @@ mod h2c {
     use http::{Request, Response};
     use hyper::body::Incoming;
     use hyper_util::{rt::TokioExecutor, service::TowerToHyperService};
-    use tonic::{body::empty_body, transport::AxumBoxBody};
+    use tonic::{body::empty_body, transport::AxumBody};
     use tower::Service;
 
     #[derive(Clone)]
@@ -83,7 +83,7 @@ mod h2c {
 
     impl<S> Service<Request<Incoming>> for H2c<S>
     where
-        S: Service<Request<Incoming>, Response = Response<AxumBoxBody>> + Clone + Send + 'static,
+        S: Service<Request<Incoming>, Response = Response<AxumBody>> + Clone + Send + 'static,
         S::Future: Send + 'static,
         S::Error: Into<BoxError> + Sync + Send + 'static,
         S::Response: Send + 'static,
