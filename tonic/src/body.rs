@@ -6,7 +6,7 @@ use http_body_util::BodyExt;
 pub type BoxBody = http_body_util::combinators::UnsyncBoxBody<bytes::Bytes, crate::Status>;
 
 /// Convert a [`http_body::Body`] into a [`BoxBody`].
-pub(crate) fn boxed<B>(body: B) -> BoxBody
+pub fn boxed<B>(body: B) -> BoxBody
 where
     B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     B::Error: Into<crate::Error>,
