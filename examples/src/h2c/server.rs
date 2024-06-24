@@ -71,7 +71,7 @@ mod h2c {
     use http::{Request, Response};
     use hyper::body::Incoming;
     use hyper_util::{rt::TokioExecutor, service::TowerToHyperService};
-    use tonic::{body::empty_body, transport::AxumBody};
+    use tonic::{body::empty_body, service::AxumBody};
     use tower::Service;
 
     #[derive(Clone)]

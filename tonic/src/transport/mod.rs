@@ -111,8 +111,6 @@ pub use self::service::grpc_timeout::TimeoutExpired;
 
 #[cfg(feature = "tls")]
 pub use self::tls::Certificate;
-#[cfg(feature = "server")]
-pub use axum::{body::Body as AxumBody, Router as AxumRouter};
 pub use hyper::{body::Body, Uri};
 #[cfg(feature = "tls")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
