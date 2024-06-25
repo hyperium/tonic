@@ -1,7 +1,7 @@
 [package]
 authors = [
   "Lucio Franco <luciofranco14@gmail.com>",
-  "Rafael Lemos <flemos.rafael.dev@gmail.com>"
+  "Rafael Lemos <flemos.rafael.dev@gmail.com>",
 ]
 categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
@@ -18,6 +18,7 @@ repository = "https://github.com/hyperium/tonic"
 version = "0.11.0"
 
 [dependencies]
+http = "0.2"
 prost = "0.12"
 prost-types = "0.12"
-tonic = {version = "0.11", path = "../tonic", default-features = false}
+tonic = { version = "0.11", path = "../tonic", default-features = false }
