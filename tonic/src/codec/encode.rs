@@ -74,6 +74,7 @@ where
     max_message_size: Option<usize>,
     buf: BytesMut,
     uncompression_buf: BytesMut,
+    error: Option<Status>,
 }
 
 impl<T, U> EncodedBytes<T, U>
@@ -112,6 +113,7 @@ where
             max_message_size,
             buf,
             uncompression_buf,
+            error: None,
         }
     }
 }
@@ -131,8 +133,13 @@ where
             max_message_size,
             buf,
             uncompression_buf,
+            error,
         } = self.project();
         let buffer_settings = encoder.buffer_settings();
+
+        if let Some(status) = error.take() {
+            return Poll::Ready(Some(Err(status)));
+        }
 
         loop {
             match source.as_mut().poll_next(cx) {
@@ -163,7 +170,11 @@ where
                     }
                 }
                 Poll::Ready(Some(Err(status))) => {
-                    return Poll::Ready(Some(Err(status)));
+                    if buf.is_empty() {
+                        return Poll::Ready(Some(Err(status)));
+                    }
+                    *error = Some(status);
+                    return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
                 }
             }
         }
