@@ -194,3 +194,52 @@ async fn status_from_server_stream_with_source() {
     let source = error.source().unwrap();
     source.downcast_ref::<tonic::transport::Error>().unwrap();
 }
+
+#[tokio::test]
+async fn message_and_then_status_from_server_stream() {
+    integration_tests::trace_init();
+
+    struct Svc;
+
+    #[tonic::async_trait]
+    impl test_stream_server::TestStream for Svc {
+        type StreamCallStream = Stream<OutputStream>;
+
+        async fn stream_call(
+            &self,
+            _: Request<InputStream>,
+        ) -> Result<Response<Self::StreamCallStream>, Status> {
+            let s = tokio_stream::iter(vec![
+                Ok(OutputStream {}),
+                Err::<OutputStream, _>(Status::unavailable("foo")),
+            ]);
+            Ok(Response::new(Box::pin(s) as Self::StreamCallStream))
+        }
+    }
+
+    let svc = test_stream_server::TestStreamServer::new(Svc);
+
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve("127.0.0.1:1340".parse().unwrap())
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let mut client = test_stream_client::TestStreamClient::connect("http://127.0.0.1:1340")
+        .await
+        .unwrap();
+
+    let mut stream = client
+        .stream_call(InputStream {})
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert_eq!(stream.message().await.unwrap(), Some(OutputStream {}));
+    assert_eq!(stream.message().await.unwrap_err().message(), "foo");
+    assert_eq!(stream.message().await.unwrap(), None);
+}
