@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let client_ca_cert = Certificate::from_pem(client_ca_cert);
 
     let addr = "[::1]:50051".parse().unwrap();
-    let server = EchoServer::default();
+    let server = EchoServer;
 
     let tls = ServerTlsConfig::new()
         .identity(server_identity)

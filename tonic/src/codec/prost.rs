@@ -165,7 +165,7 @@ mod tests {
 
     #[tokio::test]
     async fn decode() {
-        let decoder = MockDecoder::default();
+        let decoder = MockDecoder;
 
         let msg = vec![0u8; LEN];
 
@@ -191,7 +191,7 @@ mod tests {
 
     #[tokio::test]
     async fn decode_max_message_size_exceeded() {
-        let decoder = MockDecoder::default();
+        let decoder = MockDecoder;
 
         let msg = vec![0u8; MAX_MESSAGE_SIZE + 1];
 
@@ -224,7 +224,7 @@ mod tests {
 
     #[tokio::test]
     async fn encode() {
-        let encoder = MockEncoder::default();
+        let encoder = MockEncoder;
 
         let msg = Vec::from(&[0u8; 1024][..]);
 
@@ -246,7 +246,7 @@ mod tests {
 
     #[tokio::test]
     async fn encode_max_message_size_exceeded() {
-        let encoder = MockEncoder::default();
+        let encoder = MockEncoder;
 
         let msg = vec![0u8; MAX_MESSAGE_SIZE + 1];
 
@@ -281,7 +281,7 @@ mod tests {
     #[cfg(not(target_family = "windows"))]
     #[tokio::test]
     async fn encode_too_big() {
-        let encoder = MockEncoder::default();
+        let encoder = MockEncoder;
 
         let msg = vec![0u8; u32::MAX as usize + 1];
 
@@ -402,7 +402,7 @@ mod tests {
                     };
                     // make some fake progress
                     self.count += 1;
-                    result.map(|opt| opt.map(|res| res.map(|data| Frame::data(data))))
+                    result.map(|opt| opt.map(|res| res.map(Frame::data)))
                 } else {
                     Poll::Ready(None)
                 }

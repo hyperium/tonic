@@ -23,7 +23,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
 
     let greeter = GreeterServer::new(MyGreeter::default());
-    let echo = EchoServer::new(MyEcho::default());
+    let echo = EchoServer::new(MyEcho);
 
     Server::builder()
         .add_service(greeter)

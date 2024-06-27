@@ -35,6 +35,7 @@ use http::HeaderValue;
 pub(crate) use self::map::GRPC_TIMEOUT_HEADER;
 
 /// HTTP Header `content-type` value for gRPC calls.
+#[allow(clippy::declare_interior_mutable_const)] // https://github.com/rust-lang/rust-clippy/issues/9776
 pub const GRPC_CONTENT_TYPE: HeaderValue = HeaderValue::from_static("application/grpc");
 
 /// The metadata::errors module contains types for errors that can occur

@@ -34,9 +34,9 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
     }
 
-    let test_service = server::TestServiceServer::new(server::TestService::default());
+    let test_service = server::TestServiceServer::new(server::TestService);
     let unimplemented_service =
-        server::UnimplementedServiceServer::new(server::UnimplementedService::default());
+        server::UnimplementedServiceServer::new(server::UnimplementedService);
 
     // Wrap this test_service with a service that will echo headers as trailers.
     let test_service_svc = server::EchoHeadersSvc::new(test_service);

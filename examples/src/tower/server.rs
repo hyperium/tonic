@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         // Apply middleware from tower
         .timeout(Duration::from_secs(30))
         // Apply our own middleware
-        .layer(MyMiddlewareLayer::default())
+        .layer(MyMiddlewareLayer)
         // Interceptors can be also be applied as middleware
         .layer(tonic::service::interceptor(intercept))
         .into_inner();

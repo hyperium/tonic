@@ -84,6 +84,7 @@
     rust_2018_idioms,
     unreachable_pub
 )]
+#![allow(clippy::assigning_clones)] // moving to pedantic soon https://github.com/rust-lang/rust-clippy/pull/12779
 #![deny(rustdoc::broken_intra_doc_links)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"

@@ -43,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let identity = Identity::from_pem(cert, key);
 
     let addr = "[::1]:50051".parse().unwrap();
-    let server = EchoServer::default();
+    let server = EchoServer;
 
     Server::builder()
         .tls_config(ServerTlsConfig::new().identity(identity))?

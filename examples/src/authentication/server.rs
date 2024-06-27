@@ -21,7 +21,7 @@ impl pb::echo_server::Echo for EchoServer {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
-    let server = EchoServer::default();
+    let server = EchoServer;
 
     let svc = pb::echo_server::EchoServer::with_interceptor(server, check_auth);
 
