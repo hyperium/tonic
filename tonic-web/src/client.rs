@@ -15,7 +15,7 @@ use crate::call::content_types::GRPC_WEB;
 use crate::call::GrpcWebCall;
 
 /// Layer implementing the grpc-web protocol for clients.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct GrpcWebClientLayer {
     _priv: (),
 }
@@ -23,13 +23,7 @@ pub struct GrpcWebClientLayer {
 impl GrpcWebClientLayer {
     /// Create a new grpc-web for clients layer.
     pub fn new() -> GrpcWebClientLayer {
-        Self { _priv: () }
-    }
-}
-
-impl Default for GrpcWebClientLayer {
-    fn default() -> Self {
-        Self::new()
+        Self::default()
     }
 }
 
