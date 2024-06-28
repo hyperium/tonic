@@ -1,5 +1,5 @@
 use crate::{metadata::MetadataValue, Status};
-use bytes::{Buf, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};
 use std::fmt;
@@ -10,62 +10,64 @@ pub(crate) const ENCODING_HEADER: &str = "grpc-encoding";
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
 
 /// Struct used to configure which encodings are enabled on a server or channel.
+///
+/// Represents an ordered list of compression encodings that are enabled.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct EnabledCompressionEncodings {
-    #[cfg(feature = "gzip")]
-    pub(crate) gzip: bool,
-    #[cfg(feature = "zstd")]
-    pub(crate) zstd: bool,
+    inner: [Option<CompressionEncoding>; 2],
 }
 
 impl EnabledCompressionEncodings {
-    /// Check if a [`CompressionEncoding`] is enabled.
-    pub fn is_enabled(&self, encoding: CompressionEncoding) -> bool {
-        match encoding {
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => self.gzip,
-            #[cfg(feature = "zstd")]
-            CompressionEncoding::Zstd => self.zstd,
+    /// Enable a [`CompressionEncoding`].
+    ///
+    /// Adds the new encoding to the end of the encoding list.
+    pub fn enable(&mut self, encoding: CompressionEncoding) {
+        for e in self.inner.iter_mut() {
+            match e {
+                Some(e) if *e == encoding => return,
+                None => {
+                    *e = Some(encoding);
+                    return;
+                }
+                _ => continue,
+            }
         }
     }
 
-    /// Enable a [`CompressionEncoding`].
-    pub fn enable(&mut self, encoding: CompressionEncoding) {
-        match encoding {
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => self.gzip = true,
-            #[cfg(feature = "zstd")]
-            CompressionEncoding::Zstd => self.zstd = true,
-        }
+    /// Remove the last [`CompressionEncoding`].
+    pub fn pop(&mut self) -> Option<CompressionEncoding> {
+        self.inner
+            .iter_mut()
+            .rev()
+            .find(|entry| entry.is_some())?
+            .take()
     }
 
     pub(crate) fn into_accept_encoding_header_value(self) -> Option<http::HeaderValue> {
-        match (self.is_gzip_enabled(), self.is_zstd_enabled()) {
-            (true, false) => Some(http::HeaderValue::from_static("gzip,identity")),
-            (false, true) => Some(http::HeaderValue::from_static("zstd,identity")),
-            (true, true) => Some(http::HeaderValue::from_static("gzip,zstd,identity")),
-            (false, false) => None,
+        let mut value = BytesMut::new();
+        for encoding in self.inner.into_iter().flatten() {
+            if !value.is_empty() {
+                value.put_slice(b",");
+            }
+            value.put_slice(encoding.as_str().as_bytes());
         }
+
+        if value.is_empty() {
+            return None;
+        }
+
+        value.put_slice(b",identity");
+        Some(http::HeaderValue::from_maybe_shared(value).unwrap())
     }
 
-    #[cfg(feature = "gzip")]
-    const fn is_gzip_enabled(&self) -> bool {
-        self.gzip
+    /// Check if a [`CompressionEncoding`] is enabled.
+    pub fn is_enabled(&self, encoding: CompressionEncoding) -> bool {
+        self.inner.iter().any(|e| *e == Some(encoding))
     }
 
-    #[cfg(not(feature = "gzip"))]
-    const fn is_gzip_enabled(&self) -> bool {
-        false
-    }
-
-    #[cfg(feature = "zstd")]
-    const fn is_zstd_enabled(&self) -> bool {
-        self.zstd
-    }
-
-    #[cfg(not(feature = "zstd"))]
-    const fn is_zstd_enabled(&self) -> bool {
-        false
+    /// Check if any [`CompressionEncoding`]s are enabled.
+    pub fn is_empty(&self) -> bool {
+        self.inner.iter().all(|e| e.is_none())
     }
 }
 
@@ -95,7 +97,7 @@ impl CompressionEncoding {
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
     ) -> Option<Self> {
-        if !enabled_encodings.is_gzip_enabled() && !enabled_encodings.is_zstd_enabled() {
+        if enabled_encodings.is_empty() {
             return None;
         }
 
@@ -157,9 +159,7 @@ impl CompressionEncoding {
         }
     }
 
-    #[allow(missing_docs)]
-    #[cfg(any(feature = "gzip", feature = "zstd"))]
-    pub(crate) fn as_str(&self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => "gzip",
