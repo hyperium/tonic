@@ -12,7 +12,7 @@ use tokio_rustls::{
 };
 
 use super::io::BoxedIo;
-use crate::transport::service::tls::{load_identity, TlsError, ALPN_H2};
+use crate::transport::service::tls::{TlsError, ALPN_H2};
 use crate::transport::tls::{Certificate, Identity};
 
 #[derive(Clone)]
@@ -60,7 +60,7 @@ impl TlsConnector {
         let builder = builder.with_root_certificates(roots);
         let mut config = match identity {
             Some(identity) => {
-                let (client_cert, client_key) = load_identity(identity)?;
+                let (client_cert, client_key) = identity.parse()?;
                 builder.with_client_auth_cert(client_cert, client_key)?
             }
             None => builder.with_no_client_auth(),
