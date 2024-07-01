@@ -46,17 +46,15 @@ impl EnabledCompressionEncodings {
     pub(crate) fn into_accept_encoding_header_value(self) -> Option<http::HeaderValue> {
         let mut value = BytesMut::new();
         for encoding in self.inner.into_iter().flatten() {
-            if !value.is_empty() {
-                value.put_slice(b",");
-            }
             value.put_slice(encoding.as_str().as_bytes());
+            value.put_slice(b",");
         }
 
         if value.is_empty() {
             return None;
         }
 
-        value.put_slice(b",identity");
+        value.put_slice(b"identity");
         Some(http::HeaderValue::from_maybe_shared(value).unwrap())
     }
 
