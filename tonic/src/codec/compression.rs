@@ -62,7 +62,7 @@ impl EnabledCompressionEncodings {
 
     /// Check if a [`CompressionEncoding`] is enabled.
     pub fn is_enabled(&self, encoding: CompressionEncoding) -> bool {
-        self.inner.iter().any(|e| *e == Some(encoding))
+        self.inner.contains(&Some(encoding))
     }
 
     /// Check if any [`CompressionEncoding`]s are enabled.
