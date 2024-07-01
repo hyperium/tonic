@@ -129,26 +129,30 @@ impl CompressionEncoding {
             return Ok(None);
         };
 
-        let header_value_str = if let Ok(value) = header_value.to_str() {
-            value
-        } else {
-            return Ok(None);
-        };
-
-        match header_value_str {
+        match header_value.as_bytes() {
             #[cfg(feature = "gzip")]
-            "gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
+            b"gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
                 Ok(Some(CompressionEncoding::Gzip))
             }
             #[cfg(feature = "zstd")]
-            "zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
+            b"zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
                 Ok(Some(CompressionEncoding::Zstd))
             }
-            "identity" => Ok(None),
+            b"identity" => Ok(None),
             other => {
+                // NOTE: Workaround for lifetime limitation. Resolved at Rust 1.79.
+                // https://blog.rust-lang.org/2024/06/13/Rust-1.79.0.html#extending-automatic-temporary-lifetime-extension
+                let other_debug_string;
+
                 let mut status = Status::unimplemented(format!(
                     "Content is compressed with `{}` which isn't supported",
-                    other
+                    match std::str::from_utf8(other) {
+                        Ok(s) => s,
+                        Err(_) => {
+                            other_debug_string = format!("{other:?}");
+                            &other_debug_string
+                        }
+                    }
                 ));
 
                 let header_value = enabled_encodings
