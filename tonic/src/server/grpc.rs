@@ -188,7 +188,7 @@ where
     ) -> Self {
         let mut this = self;
 
-        for &encoding in CompressionEncoding::encodings() {
+        for &encoding in CompressionEncoding::ENCODINGS {
             if accept_encodings.is_enabled(encoding) {
                 this = this.accept_compressed(encoding);
             }
