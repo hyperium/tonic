@@ -285,3 +285,81 @@ pub(crate) enum SingleMessageCompressionOverride {
     /// Don't compress this message, even if compression is enabled on the stream.
     Disable,
 }
+
+#[cfg(test)]
+mod tests {
+    use http::HeaderValue;
+
+    use super::*;
+
+    #[test]
+    fn convert_none_into_header_value() {
+        let encodings = EnabledCompressionEncodings::default();
+
+        assert!(encodings.into_accept_encoding_header_value().is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "gzip")]
+    fn convert_gzip_into_header_value() {
+        const GZIP: HeaderValue = HeaderValue::from_static("gzip,identity");
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [Some(CompressionEncoding::Gzip), None],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), GZIP);
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [None, Some(CompressionEncoding::Gzip)],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), GZIP);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    fn convert_zstd_into_header_value() {
+        const ZSTD: HeaderValue = HeaderValue::from_static("zstd,identity");
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [Some(CompressionEncoding::Zstd), None],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), ZSTD);
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [None, Some(CompressionEncoding::Zstd)],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), ZSTD);
+    }
+
+    #[test]
+    #[cfg(all(feature = "gzip", feature = "zstd"))]
+    fn convert_gzip_and_zstd_into_header_value() {
+        let encodings = EnabledCompressionEncodings {
+            inner: [
+                Some(CompressionEncoding::Gzip),
+                Some(CompressionEncoding::Zstd),
+            ],
+        };
+
+        assert_eq!(
+            encodings.into_accept_encoding_header_value().unwrap(),
+            HeaderValue::from_static("gzip,zstd,identity"),
+        );
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [
+                Some(CompressionEncoding::Zstd),
+                Some(CompressionEncoding::Gzip),
+            ],
+        };
+
+        assert_eq!(
+            encodings.into_accept_encoding_header_value().unwrap(),
+            HeaderValue::from_static("zstd,gzip,identity"),
+        );
+    }
+}
