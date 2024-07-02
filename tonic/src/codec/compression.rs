@@ -92,6 +92,13 @@ pub enum CompressionEncoding {
 }
 
 impl CompressionEncoding {
+    pub(crate) const ENCODINGS: &'static [CompressionEncoding] = &[
+        #[cfg(feature = "gzip")]
+        CompressionEncoding::Gzip,
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd,
+    ];
+
     /// Based on the `grpc-accept-encoding` header, pick an encoding to use.
     pub(crate) fn from_accept_encoding_header(
         map: &http::HeaderMap,
@@ -171,15 +178,6 @@ impl CompressionEncoding {
     #[cfg(any(feature = "gzip", feature = "zstd"))]
     pub(crate) fn into_header_value(self) -> http::HeaderValue {
         http::HeaderValue::from_static(self.as_str())
-    }
-
-    pub(crate) fn encodings() -> &'static [Self] {
-        &[
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip,
-            #[cfg(feature = "zstd")]
-            CompressionEncoding::Zstd,
-        ]
     }
 }
 
