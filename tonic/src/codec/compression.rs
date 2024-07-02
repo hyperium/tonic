@@ -180,14 +180,8 @@ impl CompressionEncoding {
 }
 
 impl fmt::Display for CompressionEncoding {
-    #[allow(unused_variables)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => write!(f, "gzip"),
-            #[cfg(feature = "zstd")]
-            CompressionEncoding::Zstd => write!(f, "zstd"),
-        }
+        f.write_str(self.as_str())
     }
 }
 
