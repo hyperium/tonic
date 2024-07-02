@@ -174,7 +174,7 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.11"
+tonic = "0.12"
 prost = "0.12"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1"
@@ -185,7 +185,7 @@ serde_json = "1.0"
 rand = "0.8"
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 ```
 
 Create a `build.rs` file at the root of your crate:
