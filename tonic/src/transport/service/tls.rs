@@ -35,22 +35,20 @@ impl fmt::Display for TlsError {
 
 impl std::error::Error for TlsError {}
 
-impl Certificate {
-    pub(crate) fn parse(&self) -> Result<Vec<CertificateDer<'static>>, TlsError> {
-        rustls_pemfile::certs(&mut Cursor::new(&self.pem))
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(|_| TlsError::CertificateParseError)
-    }
+pub(crate) fn convert_certificate_to_pki_types(
+    certificate: &Certificate,
+) -> Result<Vec<CertificateDer<'static>>, TlsError> {
+    rustls_pemfile::certs(&mut Cursor::new(certificate))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| TlsError::CertificateParseError)
 }
 
-impl Identity {
-    pub(crate) fn parse(
-        &self,
-    ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
-        let cert = self.cert.parse()?;
-        let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(&self.key)) else {
-            return Err(TlsError::PrivateKeyParseError);
-        };
-        Ok((cert, key))
-    }
+pub(crate) fn convert_identity_to_pki_types(
+    identity: &Identity,
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
+    let cert = convert_certificate_to_pki_types(&identity.cert)?;
+    let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(&identity.key)) else {
+        return Err(TlsError::PrivateKeyParseError);
+    };
+    Ok((cert, key))
 }
