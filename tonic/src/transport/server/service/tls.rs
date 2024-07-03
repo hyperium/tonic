@@ -7,7 +7,10 @@ use tokio_rustls::{
     TlsAcceptor as RustlsAcceptor,
 };
 
-use crate::transport::{service::tls::ALPN_H2, Certificate, Identity};
+use crate::transport::{
+    service::tls::{convert_certificate_to_pki_types, convert_identity_to_pki_types, ALPN_H2},
+    Certificate, Identity,
+};
 
 #[derive(Clone)]
 pub(crate) struct TlsAcceptor {
@@ -26,7 +29,7 @@ impl TlsAcceptor {
             None => builder.with_no_client_auth(),
             Some(cert) => {
                 let mut roots = RootCertStore::empty();
-                roots.add_parsable_certificates(cert.parse()?);
+                roots.add_parsable_certificates(convert_certificate_to_pki_types(&cert)?);
                 let verifier = if client_auth_optional {
                     WebPkiClientVerifier::builder(roots.into()).allow_unauthenticated()
                 } else {
@@ -37,7 +40,7 @@ impl TlsAcceptor {
             }
         };
 
-        let (cert, key) = identity.parse()?;
+        let (cert, key) = convert_identity_to_pki_types(&identity)?;
         let mut config = builder.with_single_cert(cert, key)?;
 
         config.alpn_protocols.push(ALPN_H2.into());
