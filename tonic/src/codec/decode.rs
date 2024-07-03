@@ -32,15 +32,14 @@ struct StreamingInner {
     decompress_buf: BytesMut,
     encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
+    span: tracing::Span,
 }
 
 impl<T> Unpin for Streaming<T> {}
 
 #[derive(Debug, Clone)]
 enum State {
-    ReadHeader {
-        span: Option<tracing::Span>,
-    },
+    ReadHeader,
     ReadBody {
         span: tracing::Span,
         compression: Option<CompressionEncoding>,
@@ -50,10 +49,6 @@ enum State {
 }
 
 impl State {
-    fn read_header() -> Self {
-        Self::ReadHeader { span: None }
-    }
-
     fn read_body(compression: Option<CompressionEncoding>, len: usize) -> Self {
         let span = tracing::debug_span!(
             "read_body",
@@ -70,9 +65,8 @@ impl State {
 
     fn span(&self) -> Option<&tracing::Span> {
         match self {
-            Self::ReadHeader { span } => span.as_ref(),
             Self::ReadBody { span, .. } => Some(span),
-            Self::Error(_) => None,
+            Self::ReadHeader | Self::Error(_) => None,
         }
     }
 }
@@ -156,13 +150,14 @@ impl<T> Streaming<T> {
                     .map_frame(|frame| frame.map_data(|mut buf| buf.copy_to_bytes(buf.remaining())))
                     .map_err(|err| Status::map_error(err.into()))
                     .boxed_unsync(),
-                state: State::read_header(),
+                state: State::ReadHeader,
                 direction,
                 buf: BytesMut::with_capacity(buffer_size),
                 trailers: None,
                 decompress_buf: BytesMut::new(),
                 encoding,
                 max_message_size,
+                span: tracing::debug_span!("streaming"),
             },
         }
     }
@@ -173,19 +168,8 @@ impl StreamingInner {
         &mut self,
         buffer_settings: BufferSettings,
     ) -> Result<Option<DecodeBuf<'_>>, Status> {
-        if let State::ReadHeader { span } = &mut self.state {
-            if !self.buf.has_remaining() {
-                return Ok(None);
-            }
-
-            let span = span.get_or_insert_with(|| {
-                tracing::debug_span!(
-                    "read_header",
-                    body.compression = "none",
-                    body.bytes = tracing::field::Empty,
-                )
-            });
-            let _guard = span.enter();
+        let _guard = self.span.enter();
+        if let State::ReadHeader = &self.state {
             if self.buf.remaining() < HEADER_SIZE {
                 return Ok(None);
             }
@@ -194,8 +178,7 @@ impl StreamingInner {
                 0 => None,
                 1 => {
                     {
-                        if let Some(ce) = self.encoding {
-                            span.record("body.compression", ce.as_str());
+                        if self.encoding.is_some() {
                             self.encoding
                         } else {
                             // https://grpc.github.io/grpc/core/md_doc_compression.html
@@ -221,7 +204,6 @@ impl StreamingInner {
             };
 
             let len = self.buf.get_u32() as usize;
-            span.record("body.bytes", len);
             let limit = self
                 .max_message_size
                 .unwrap_or(DEFAULT_MAX_RECV_MESSAGE_SIZE);
@@ -236,7 +218,6 @@ impl StreamingInner {
             }
 
             self.buf.reserve(len);
-            drop(_guard);
 
             self.state = State::read_body(compression_encoding, len)
         }
@@ -292,7 +273,7 @@ impl StreamingInner {
 
     // Returns Some(()) if data was found or None if the loop in `poll_next` should break
     fn poll_frame(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
-        let _guard = self.state.span().map(|s| s.enter());
+        let _guard = self.state.span().unwrap_or(&self.span).enter();
         let chunk = match ready!(Pin::new(&mut self.body).poll_frame(cx)) {
             Some(Ok(d)) => Some(d),
             Some(Err(status)) => {
@@ -431,7 +412,7 @@ impl<T> Streaming<T> {
         match self.inner.decode_chunk(self.decoder.buffer_settings())? {
             Some(mut decode_buf) => match self.decoder.decode(&mut decode_buf)? {
                 Some(msg) => {
-                    self.inner.state = State::read_header();
+                    self.inner.state = State::ReadHeader;
                     Ok(Some(msg))
                 }
                 None => Ok(None),
