@@ -45,7 +45,7 @@ enum State {
         compression: Option<CompressionEncoding>,
         len: usize,
     },
-    Error(Box<Status>),
+    Error(Status),
 }
 
 impl State {
@@ -282,7 +282,7 @@ impl StreamingInner {
                 }
 
                 drop(_guard);
-                let _ = std::mem::replace(&mut self.state, State::Error(Box::new(status.clone())));
+                let _ = std::mem::replace(&mut self.state, State::Error(status.clone()));
                 debug!("decoder inner stream error: {:?}", status);
                 return Poll::Ready(Err(status));
             }
@@ -428,7 +428,7 @@ impl<T> Stream for Streaming<T> {
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
             if let State::Error(status) = &self.inner.state {
-                return Poll::Ready(Some(Err(*status.clone())));
+                return Poll::Ready(Some(Err(status.clone())));
             }
 
             if let Some(item) = self.decode_chunk()? {
