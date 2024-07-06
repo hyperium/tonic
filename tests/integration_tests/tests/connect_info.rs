@@ -2,7 +2,7 @@ use integration_tests::pb::{test_client, test_server, Input, Output};
 use std::time::Duration;
 use tokio::sync::oneshot;
 use tonic::{
-    transport::{server::TcpConnectInfo, Endpoint, Server},
+    transport::{server::TcpConnectInfo, Endpoint, RequestExt, Server},
     Request, Response, Status,
 };
 
@@ -60,7 +60,7 @@ pub mod unix {
     };
     use tokio_stream::wrappers::UnixListenerStream;
     use tonic::{
-        transport::{server::UdsConnectInfo, Endpoint, Server, Uri},
+        transport::{server::UdsConnectInfo, Endpoint, RequestExt, Server, Uri},
         Request, Response, Status,
     };
     use tower::service_fn;

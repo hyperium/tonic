@@ -5,7 +5,10 @@
 //! The generated code assumes that a module `crate::common` exists which defines
 //! `SmallBufferCodec`, and `SmallBufferCodec` must have a Default implementation.
 
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::{RequestExt, Server},
+    Request, Response, Status,
+};
 
 pub mod common;
 

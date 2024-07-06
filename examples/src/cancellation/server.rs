@@ -1,7 +1,10 @@
 use std::future::Future;
 
 use tokio_util::sync::CancellationToken;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{
+    transport::{RequestExt, Server},
+    Request, Response, Status,
+};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};

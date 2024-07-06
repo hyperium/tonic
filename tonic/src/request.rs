@@ -1,17 +1,9 @@
-use crate::metadata::{MetadataMap, MetadataValue};
-#[cfg(feature = "server")]
-use crate::transport::server::TcpConnectInfo;
-#[cfg(all(feature = "server", feature = "tls"))]
-use crate::transport::server::TlsConnectInfo;
-use http::Extensions;
-#[cfg(feature = "server")]
-use std::net::SocketAddr;
-#[cfg(all(feature = "server", feature = "tls"))]
-use std::sync::Arc;
 use std::time::Duration;
-#[cfg(all(feature = "server", feature = "tls"))]
-use tokio_rustls::rustls::pki_types::CertificateDer;
+
+use http::Extensions;
 use tokio_stream::Stream;
+
+use crate::metadata::{MetadataMap, MetadataValue};
 
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
@@ -204,63 +196,6 @@ impl<T> Request<T> {
             message,
             extensions: self.extensions,
         }
-    }
-
-    /// Get the local address of this connection.
-    ///
-    /// This will return `None` if the `IO` type used
-    /// does not implement `Connected` or when using a unix domain socket.
-    /// This currently only works on the server side.
-    #[cfg(feature = "server")]
-    pub fn local_addr(&self) -> Option<SocketAddr> {
-        let addr = self
-            .extensions()
-            .get::<TcpConnectInfo>()
-            .and_then(|i| i.local_addr());
-
-        #[cfg(feature = "tls")]
-        let addr = addr.or_else(|| {
-            self.extensions()
-                .get::<TlsConnectInfo<TcpConnectInfo>>()
-                .and_then(|i| i.get_ref().local_addr())
-        });
-
-        addr
-    }
-
-    /// Get the remote address of this connection.
-    ///
-    /// This will return `None` if the `IO` type used
-    /// does not implement `Connected` or when using a unix domain socket.
-    /// This currently only works on the server side.
-    #[cfg(feature = "server")]
-    pub fn remote_addr(&self) -> Option<SocketAddr> {
-        let addr = self
-            .extensions()
-            .get::<TcpConnectInfo>()
-            .and_then(|i| i.remote_addr());
-
-        #[cfg(feature = "tls")]
-        let addr = addr.or_else(|| {
-            self.extensions()
-                .get::<TlsConnectInfo<TcpConnectInfo>>()
-                .and_then(|i| i.get_ref().remote_addr())
-        });
-
-        addr
-    }
-
-    /// Get the peer certificates of the connected client.
-    ///
-    /// This is used to fetch the certificates from the TLS session
-    /// and is mostly used for mTLS. This currently only returns
-    /// `Some` on the server side of the `transport` server with
-    /// TLS enabled connections.
-    #[cfg(all(feature = "server", feature = "tls"))]
-    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
-        self.extensions()
-            .get::<TlsConnectInfo<TcpConnectInfo>>()
-            .and_then(|i| i.peer_certs())
     }
 
     /// Set the max duration the request is allowed to take.

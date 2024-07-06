@@ -3,7 +3,11 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tonic::{
+    body::BoxBody,
+    transport::{RequestExt, Server},
+    Request, Response, Status,
+};
 use tower::{Layer, Service};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};

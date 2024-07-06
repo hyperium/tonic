@@ -105,7 +105,7 @@ pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
 #[cfg(feature = "server")]
-pub use self::server::Server;
+pub use self::server::{RequestExt, Server};
 /// Deprecated. Please use [`crate::status::TimeoutExpired`] instead.
 pub use crate::status::TimeoutExpired;
 
