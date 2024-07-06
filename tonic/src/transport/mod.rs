@@ -105,7 +105,7 @@ pub use self::channel::{Channel, Endpoint};
 pub use self::error::Error;
 #[doc(inline)]
 #[cfg(feature = "server")]
-pub use self::server::Server;
+pub use self::server::{RequestExt, Server};
 #[doc(inline)]
 pub use self::service::grpc_timeout::TimeoutExpired;
 
