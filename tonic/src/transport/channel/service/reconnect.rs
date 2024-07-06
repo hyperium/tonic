@@ -145,9 +145,8 @@ where
             return ResponseFuture::error(error);
         }
 
-        let service = match self.state {
-            State::Connected(ref mut service) => service,
-            _ => panic!("service not ready; poll_ready must be called first"),
+        let State::Connected(service) = &mut self.state else {
+            panic!("service not ready; poll_ready must be called first");
         };
 
         let fut = service.call(request);
