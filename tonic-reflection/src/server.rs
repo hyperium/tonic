@@ -332,11 +332,8 @@ impl ServerReflection for ReflectionService {
 
         tokio::spawn(async move {
             while let Some(req) = req_rx.next().await {
-                let req = match req {
-                    Ok(req) => req,
-                    Err(_) => {
-                        return;
-                    }
+                let Ok(req) = req else {
+                    return;
                 };
 
                 let resp_msg = match req.message_request.clone() {

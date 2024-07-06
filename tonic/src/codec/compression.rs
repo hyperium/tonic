@@ -123,9 +123,7 @@ impl CompressionEncoding {
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
     ) -> Result<Option<Self>, Status> {
-        let header_value = if let Some(value) = map.get(ENCODING_HEADER) {
-            value
-        } else {
+        let Some(header_value) = map.get(ENCODING_HEADER) else {
             return Ok(None);
         };
 
