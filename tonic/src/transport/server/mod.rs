@@ -11,8 +11,7 @@ mod unix;
 use tokio_stream::StreamExt as _;
 use tracing::{debug, trace};
 
-/// A deprecated re-export. Please use `tonic::service::{Routes, RoutesBuilder}` directly.
-pub use crate::service::{Routes, RoutesBuilder};
+use crate::service::Routes;
 
 pub use conn::{Connected, TcpConnectInfo};
 use hyper_util::{
