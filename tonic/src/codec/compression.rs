@@ -47,7 +47,7 @@ impl EnabledCompressionEncodings {
         let mut value = BytesMut::new();
         for encoding in self.inner.into_iter().flatten() {
             value.put_slice(encoding.as_str().as_bytes());
-            value.put_slice(b",");
+            value.put_u8(b',');
         }
 
         if value.is_empty() {
