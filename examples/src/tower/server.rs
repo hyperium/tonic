@@ -66,7 +66,7 @@ fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
 }
 
 #[derive(Debug, Clone, Default)]
-struct MyMiddlewareLayer;
+struct MyMiddlewareLayer {}
 
 impl<S> Layer<S> for MyMiddlewareLayer {
     type Service = MyMiddleware<S>;

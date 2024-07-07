@@ -8,7 +8,7 @@ use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Statu
 type EchoResult<T> = Result<Response<T>, Status>;
 
 #[derive(Default)]
-pub struct EchoServer;
+pub struct EchoServer {}
 
 #[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
