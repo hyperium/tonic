@@ -1,9 +1,6 @@
 use std::{fmt, io::Cursor};
 
-use tokio_rustls::rustls::{
-    pki_types::{CertificateDer, PrivateKeyDer},
-    RootCertStore,
-};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
 /// Represents a X509 certificate.
 #[derive(Debug, Clone)]
@@ -18,6 +15,12 @@ impl Certificate {
     pub fn from_pem(pem: impl AsRef<[u8]>) -> Self {
         let pem = pem.as_ref().into();
         Self { pem }
+    }
+
+    pub(crate) fn to_der_certificates(&self) -> Result<Vec<CertificateDer<'static>>, TlsError> {
+        rustls_pemfile::certs(&mut Cursor::new(&self.pem))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| TlsError::CertificateParseError)
     }
 
     /// Get a immutable reference to underlying certificate
@@ -78,19 +81,6 @@ pub(crate) fn load_identity(
     };
 
     Ok((cert, key))
-}
-
-pub(crate) fn add_certs_from_pem(
-    mut certs: &mut dyn std::io::BufRead,
-    roots: &mut RootCertStore,
-) -> Result<(), crate::Error> {
-    for cert in rustls_pemfile::certs(&mut certs).collect::<Result<Vec<_>, _>>()? {
-        roots
-            .add(cert)
-            .map_err(|_| TlsError::CertificateParseError)?;
-    }
-
-    Ok(())
 }
 
 #[derive(Debug)]
