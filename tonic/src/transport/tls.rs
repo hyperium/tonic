@@ -11,13 +11,6 @@ pub struct Certificate {
     pub(crate) pem: Vec<u8>,
 }
 
-/// Represents a private key and X509 certificate.
-#[derive(Debug, Clone)]
-pub struct Identity {
-    pub(crate) cert: Certificate,
-    pub(crate) key: Vec<u8>,
-}
-
 impl Certificate {
     /// Parse a PEM encoded X509 Certificate.
     ///
@@ -53,6 +46,13 @@ impl AsMut<[u8]> for Certificate {
     fn as_mut(&mut self) -> &mut [u8] {
         self.pem.as_mut()
     }
+}
+
+/// Represents a private key and X509 certificate.
+#[derive(Debug, Clone)]
+pub struct Identity {
+    pub(crate) cert: Certificate,
+    pub(crate) key: Vec<u8>,
 }
 
 impl Identity {
