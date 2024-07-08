@@ -10,8 +10,9 @@ use tokio_rustls::{
 };
 
 use super::io::BoxedIo;
-use crate::transport::service::tls::{add_certs_from_pem, load_identity, TlsError, ALPN_H2};
-use crate::transport::tls::{Certificate, Identity};
+use crate::transport::tls::{
+    add_certs_from_pem, load_identity, Certificate, Identity, TlsError, ALPN_H2,
+};
 
 #[derive(Clone)]
 pub(crate) struct TlsConnector {
