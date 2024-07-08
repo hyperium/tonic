@@ -1,3 +1,42 @@
+# [v0.12.0](https://github.com/hyperium/tonic/compare/v0.11.0...v0.12.0) (2024-06-20)
+
+This breaking release updates tonic to the hyper `1.0` ecosystem and also updates
+to prost `v0.13.0`.
+
+### Features
+
+* **build:** Custom codecs for generated code ([#1599](https://github.com/hyperium/tonic/issues/1599)) ([18a2b30](https://github.com/hyperium/tonic/commit/18a2b30922460be02829706cf9dd0cd1ec6a19c1))
+* **channel:** Make channel feature additive ([#1574](https://github.com/hyperium/tonic/issues/1574)) ([b947e1a](https://github.com/hyperium/tonic/commit/b947e1ac0727ceb0a0267a30854ada4ba18931db))
+* **codec:** Make error when not utf8 value in compression encoding ([#1768](https://github.com/hyperium/tonic/issues/1768)) ([f8e1f87](https://github.com/hyperium/tonic/commit/f8e1f87eb862676147fd6215b58c9090d259104d))
+* Implement http_body::Body::size_hint for custom body ([#1713](https://github.com/hyperium/tonic/issues/1713)) ([9728c01](https://github.com/hyperium/tonic/commit/9728c01132bd64dca046675198edc751c4547966))
+* Make boxed function public ([#1754](https://github.com/hyperium/tonic/issues/1754)) ([2cc868f](https://github.com/hyperium/tonic/commit/2cc868f80b20379d6635ac182f523b4971d016b7))
+* Relax GrpcMethod lifetime ([#1598](https://github.com/hyperium/tonic/issues/1598)) ([68bf17d](https://github.com/hyperium/tonic/commit/68bf17d67ad71af44c34d565566c3dd58ea3ab87))
+* **tls:** Add ability to add multiple ca certificates ([#1724](https://github.com/hyperium/tonic/issues/1724)) ([3457f92](https://github.com/hyperium/tonic/commit/3457f9203226f88524b31bf5d64ce6e5ec7c993c))
+* **tls:** Use rustls_pki_types::CertificateDer to describe DER encoded certificate ([#1707](https://github.com/hyperium/tonic/issues/1707)) ([96a8cbc](https://github.com/hyperium/tonic/commit/96a8cbc04d0cad6d30d2944dba6b32aac8975f91))
+* **tls:** Remove tls roots implicit configuration ([#1731](https://github.com/hyperium/tonic/issues/1731)) ([de73617](https://github.com/hyperium/tonic/commit/de736171f20ec5d485c26ee5eda4a9ccf5fc75e5))
+* **transport:** Make service router independent from transport ([#1572](https://github.com/hyperium/tonic/issues/1572)) ([da48235](https://github.com/hyperium/tonic/commit/da482359933f52e84c0263b28a5a83ab1efe6c33))
+* **transport:** Make transport server and channel independent ([#1630](https://github.com/hyperium/tonic/issues/1630)) ([654289f](https://github.com/hyperium/tonic/commit/654289fdc24f56d6845ec0ceb233deb46b640fac))
+* **transport:** Rename reexported axum body ([#1752](https://github.com/hyperium/tonic/issues/1752)) ([5d7bfc2](https://github.com/hyperium/tonic/commit/5d7bfc22c590982463f2d93464b0a7fb90e17083))
+* Use http::Extensions directly ([#1710](https://github.com/hyperium/tonic/issues/1710)) ([ed95d27](https://github.com/hyperium/tonic/commit/ed95d2762146f001970b74941f3bad77b7560426))
+
+### Bug Fixes
+
+* **tonic:** flush accumulated ready messages when status received ([#1756](https://github.com/hyperium/tonic/issues/1756)) ([d312dcc](https://github.com/hyperium/tonic/commit/d312dcc0ec362cb12f6e54072622761d7466a650)), closes [#1423](https://github.com/hyperium/tonic/issues/1423)
+
+### BREAKING CHANGES
+
+* `tonic` and crates updated to hyper 1.0 (#1670)
+* `tonic` and crates updated to prost 0.13 (#1779)
+* `tonic_reflection::server` is updated to use the generated
+  `tonic_reflection::pb::v1` code.
+* Make compression encoding configuration more malleable (#1757)
+
+
+[v1.8.8]: https://github.com/fullstorydev/grpcurl/releases/tag/v1.8.8
+[proto]: https://github.com/grpc/grpc/blob/master/src/proto/grpc/reflection/v1/reflection.proto
+[grpcurl]: https://github.com/fullstorydev/grpcurl
+
+
 # [0.11.0](https://github.com/hyperium/tonic/compare/v0.10.2...v0.11.0) (2024-02-08)
 
 BREAKING CHANGES:
