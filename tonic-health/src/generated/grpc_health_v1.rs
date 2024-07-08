@@ -6,7 +6,7 @@ pub struct HealthCheckRequest {
     pub service: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, ::prost::Message)]
 pub struct HealthCheckResponse {
     #[prost(enumeration = "health_check_response::ServingStatus", tag = "1")]
     pub status: i32,

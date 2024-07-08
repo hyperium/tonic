@@ -22,7 +22,7 @@ console = "0.15"
 http = "1"
 http-body = "1"
 hyper = "1"
-prost = "0.12"
+prost = "0.13"
 tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
 tonic = {path = "../tonic", features = ["tls"]}
