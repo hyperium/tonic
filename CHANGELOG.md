@@ -1,4 +1,4 @@
-# [v0.12.0](https://github.com/hyperium/tonic/compare/v0.11.0...v0.12.0) (2024-06-20)
+# [v0.12.0](https://github.com/hyperium/tonic/compare/v0.11.0...v0.12.0) (2024-07-08)
 
 This breaking release updates tonic to the hyper `1.0` ecosystem and also updates
 to prost `v0.13.0`.
