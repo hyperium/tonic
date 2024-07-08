@@ -14,7 +14,7 @@ pub use pb::test_service_server::TestServiceServer;
 pub use pb::unimplemented_service_server::UnimplementedServiceServer;
 
 #[derive(Default, Clone)]
-pub struct TestService;
+pub struct TestService {}
 
 type Result<T> = std::result::Result<Response<T>, Status>;
 type Streaming<T> = Request<tonic::Streaming<T>>;
@@ -156,7 +156,7 @@ impl pb::test_service_server::TestService for TestService {
 }
 
 #[derive(Default)]
-pub struct UnimplementedService;
+pub struct UnimplementedService {}
 
 #[tonic::async_trait]
 impl pb::unimplemented_service_server::UnimplementedService for UnimplementedService {
