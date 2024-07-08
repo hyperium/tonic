@@ -1,4 +1,4 @@
-use std::{fmt, io::Cursor, sync::Arc};
+use std::{fmt, sync::Arc};
 
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
@@ -7,7 +7,7 @@ use tokio_rustls::{
     TlsAcceptor as RustlsAcceptor,
 };
 
-use crate::transport::tls::{add_certs_from_pem, load_identity, Certificate, Identity, ALPN_H2};
+use crate::transport::tls::{load_identity, Certificate, Identity, ALPN_H2};
 
 #[derive(Clone)]
 pub(crate) struct TlsAcceptor {
@@ -26,7 +26,7 @@ impl TlsAcceptor {
             None => builder.with_no_client_auth(),
             Some(cert) => {
                 let mut roots = RootCertStore::empty();
-                add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
+                roots.add_parsable_certificates(cert.to_der_certificates()?);
                 let verifier = if client_auth_optional {
                     WebPkiClientVerifier::builder(roots.into()).allow_unauthenticated()
                 } else {

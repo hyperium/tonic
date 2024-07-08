@@ -1,5 +1,4 @@
 use std::fmt;
-use std::io::Cursor;
 use std::sync::Arc;
 
 use hyper_util::rt::TokioIo;
@@ -10,9 +9,7 @@ use tokio_rustls::{
 };
 
 use super::io::BoxedIo;
-use crate::transport::tls::{
-    add_certs_from_pem, load_identity, Certificate, Identity, TlsError, ALPN_H2,
-};
+use crate::transport::tls::{load_identity, Certificate, Identity, TlsError, ALPN_H2};
 
 #[derive(Clone)]
 pub(crate) struct TlsConnector {
@@ -44,7 +41,7 @@ impl TlsConnector {
         }
 
         for cert in ca_certs {
-            add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
+            roots.add_parsable_certificates(cert.to_der_certificates()?);
         }
 
         let builder = builder.with_root_certificates(roots);
