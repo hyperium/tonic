@@ -107,7 +107,7 @@ pub use self::error::Error;
 #[cfg(feature = "server")]
 pub use self::server::Server;
 #[doc(inline)]
-pub use self::service::grpc_timeout::TimeoutExpired;
+pub use self::service::TimeoutExpired;
 
 #[cfg(feature = "tls")]
 pub use self::tls::Certificate;
