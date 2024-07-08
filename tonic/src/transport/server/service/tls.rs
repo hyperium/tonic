@@ -9,7 +9,7 @@ use tokio_rustls::{
 
 use crate::transport::{
     server::Connected,
-    service::tls::{add_certs_from_pem, load_identity, ALPN_H2},
+    tls::{add_certs_from_pem, load_identity, ALPN_H2},
     Certificate, Identity,
 };
 
