@@ -7,11 +7,7 @@ use tokio_rustls::{
     TlsAcceptor as RustlsAcceptor,
 };
 
-use crate::transport::{
-    server::Connected,
-    tls::{load_identity, ALPN_H2},
-    Certificate, Identity,
-};
+use crate::transport::{server::Connected, tls::ALPN_H2, Certificate, Identity};
 
 #[derive(Clone)]
 pub(crate) struct TlsAcceptor {
@@ -41,7 +37,7 @@ impl TlsAcceptor {
             }
         };
 
-        let (cert, key) = load_identity(identity)?;
+        let (cert, key) = identity.to_der_parts()?;
         let mut config = builder.with_single_cert(cert, key)?;
 
         config.alpn_protocols.push(ALPN_H2.into());
