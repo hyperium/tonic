@@ -1,6 +1,7 @@
 # [v0.12.0](https://github.com/hyperium/tonic/compare/v0.11.0...v0.12.0) (2024-06-20)
 
-This breaking release updates tonic to the hyper 1.0 ecosystem.
+This breaking release updates tonic to the hyper `1.0` ecosystem and also updates
+to prost `v0.13.0`.
 
 ### Features
 
@@ -25,6 +26,7 @@ This breaking release updates tonic to the hyper 1.0 ecosystem.
 ### BREAKING CHANGES
 
 * `tonic` and crates updated to hyper 1.0 (#1670)
+* `tonic` and crates updated to prost 0.13 (#1779)
 * `tonic_reflection::server` is updated to use the generated
   `tonic_reflection::pb::v1` code.
 * Make compression encoding configuration more malleable (#1757)
