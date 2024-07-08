@@ -17,7 +17,7 @@ version = "0.11.0"
 [dependencies]
 prettyplease = { version = "0.2" }
 proc-macro2 = "1.0"
-prost-build = { version = "0.12", optional = true }
+prost-build = { version = "0.13", optional = true }
 quote = "1.0"
 syn = "2.0"
 
