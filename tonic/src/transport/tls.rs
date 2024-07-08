@@ -67,18 +67,17 @@ impl Identity {
         let key = key.as_ref().into();
         Self { cert, key }
     }
-}
 
-pub(crate) fn load_identity(
-    identity: Identity,
-) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
-    let cert = identity.cert.to_der_certificates()?;
+    pub(crate) fn to_der_parts(
+        &self,
+    ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
+        let cert = self.cert.to_der_certificates()?;
+        let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(&self.key)) else {
+            return Err(TlsError::PrivateKeyParseError);
+        };
 
-    let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(identity.key)) else {
-        return Err(TlsError::PrivateKeyParseError);
-    };
-
-    Ok((cert, key))
+        Ok((cert, key))
+    }
 }
 
 #[derive(Debug)]
