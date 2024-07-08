@@ -72,9 +72,7 @@ impl Identity {
 pub(crate) fn load_identity(
     identity: Identity,
 ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
-    let cert = rustls_pemfile::certs(&mut Cursor::new(identity.cert))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| TlsError::CertificateParseError)?;
+    let cert = identity.cert.to_der_certificates()?;
 
     let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(identity.key)) else {
         return Err(TlsError::PrivateKeyParseError);
