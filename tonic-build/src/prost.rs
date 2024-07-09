@@ -62,8 +62,90 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
     Ok(())
 }
 
+const PROST_CODEC_PATH: &str = "tonic::codec::ProstCodec";
+
 /// Non-path Rust types allowed for request/response types.
 const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
+
+impl crate::Service for Service {
+    type Comment = String;
+    type Method = Method;
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn package(&self) -> &str {
+        &self.package
+    }
+
+    fn identifier(&self) -> &str {
+        &self.proto_name
+    }
+
+    fn methods(&self) -> &[Self::Method] {
+        &self.methods[..]
+    }
+
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
+    }
+}
+
+impl crate::Method for Method {
+    type Comment = String;
+
+    fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn identifier(&self) -> &str {
+        &self.proto_name
+    }
+
+    fn codec_path(&self) -> &str {
+        PROST_CODEC_PATH
+    }
+
+    fn client_streaming(&self) -> bool {
+        self.client_streaming
+    }
+
+    fn server_streaming(&self) -> bool {
+        self.server_streaming
+    }
+
+    fn comment(&self) -> &[Self::Comment] {
+        &self.comments.leading[..]
+    }
+
+    fn request_response_name(
+        &self,
+        proto_path: &str,
+        compile_well_known_types: bool,
+    ) -> (TokenStream, TokenStream) {
+        let convert_type = |proto_type: &str, rust_type: &str| -> TokenStream {
+            if (is_google_type(proto_type) && !compile_well_known_types)
+                || rust_type.starts_with("::")
+                || NON_PATH_TYPE_ALLOWLIST.iter().any(|ty| *ty == rust_type)
+            {
+                rust_type.parse::<TokenStream>().unwrap()
+            } else if rust_type.starts_with("crate::") {
+                syn::parse_str::<syn::Path>(rust_type)
+                    .unwrap()
+                    .to_token_stream()
+            } else {
+                syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, rust_type))
+                    .unwrap()
+                    .to_token_stream()
+            }
+        };
+
+        let request = convert_type(&self.input_proto_type, &self.input_type);
+        let response = convert_type(&self.output_proto_type, &self.output_type);
+        (request, response)
+    }
+}
 
 /// Newtype wrapper for prost to add tonic-specific extensions
 struct TonicBuildService {
