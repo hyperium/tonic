@@ -30,6 +30,7 @@ to prost `v0.13.0`.
 * `tonic_reflection::server` is updated to use the generated
   `tonic_reflection::pb::v1` code.
 * Make compression encoding configuration more malleable (#1757)
+* Removed implicit configuration of client TLS roots setup (#1731)
 
 
 [v1.8.8]: https://github.com/fullstorydev/grpcurl/releases/tag/v1.8.8
