@@ -1,6 +1,7 @@
 //! Server implementation and builder.
 
 mod conn;
+mod graceful;
 mod incoming;
 mod service;
 #[cfg(feature = "tls")]
@@ -36,7 +37,10 @@ pub use incoming::TcpIncoming;
 #[cfg(feature = "tls")]
 use crate::transport::Error;
 
-use self::service::{RecoverError, ServerIo};
+use self::{
+    graceful::GracefulShutdown,
+    service::{RecoverError, ServerIo},
+};
 use super::service::GrpcTimeout;
 use crate::body::{boxed, BoxBody};
 use crate::server::NamedService;
@@ -561,10 +565,7 @@ impl<L> Server<L> {
             builder
         };
 
-        let (signal_tx, signal_rx) = tokio::sync::watch::channel(());
-        let signal_tx = Arc::new(signal_tx);
-
-        let graceful = signal.is_some();
+        let graceful = signal.is_some().then(GracefulShutdown::new);
         let mut sig = pin!(Fuse { inner: signal });
         let mut incoming = pin!(incoming);
 
@@ -600,21 +601,13 @@ impl<L> Server<L> {
                     let hyper_io = TokioIo::new(io);
                     let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(boxed)));
 
-                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()));
+                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.clone());
                 }
             }
         }
 
-        if graceful {
-            let _ = signal_tx.send(());
-            drop(signal_rx);
-            trace!(
-                "waiting for {} connections to close",
-                signal_tx.receiver_count()
-            );
-
-            // Wait for all connections to close
-            signal_tx.closed().await;
+        if let Some(graceful) = graceful {
+            graceful.shutdown().await;
         }
 
         Ok(())
@@ -627,7 +620,7 @@ fn serve_connection<B, IO, S, E>(
     hyper_io: IO,
     hyper_svc: S,
     builder: ConnectionBuilder<E>,
-    mut watcher: Option<tokio::sync::watch::Receiver<()>>,
+    graceful: Option<GracefulShutdown>,
 ) where
     B: http_body::Body + Send + 'static,
     B::Data: Send,
@@ -640,28 +633,20 @@ fn serve_connection<B, IO, S, E>(
 {
     tokio::spawn(async move {
         {
-            let mut sig = pin!(Fuse {
-                inner: watcher.as_mut().map(|w| w.changed()),
-            });
+            let conn = builder.serve_connection(hyper_io, hyper_svc);
 
-            let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
+            let result = if let Some(graceful) = graceful {
+                let conn = graceful.watch(conn);
+                conn.await
+            } else {
+                conn.await
+            };
 
-            loop {
-                tokio::select! {
-                    rv = &mut conn => {
-                        if let Err(err) = rv {
-                            debug!("failed serving connection: {:#}", err);
-                        }
-                        break;
-                    },
-                    _ = &mut sig => {
-                        conn.as_mut().graceful_shutdown();
-                    }
-                }
+            if let Err(err) = result {
+                debug!("failed serving connection: {:#}", err);
             }
         }
 
-        drop(watcher);
         trace!("connection closed");
     });
 }
