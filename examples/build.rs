@@ -65,4 +65,93 @@ fn build_json_codec_service() {
         .build();
 
     tonic_build::manual::Builder::new().compile(&[greeter_service]);
+
+    protobuf_codec::build();
+}
+
+mod protobuf_codec {
+    use heck::ToSnakeCase;
+    use protobuf::reflect::{FileDescriptor, MessageDescriptor};
+    use protobuf_parse::Parser;
+    use std::fs;
+    use std::path::PathBuf;
+
+    pub fn build() {
+        protobuf_codegen::Codegen::new()
+            .include("proto")
+            .inputs(&["proto/helloworld/helloworld.proto"])
+            .cargo_out_dir("protos")
+            .run_from_script();
+
+        let parser = Parser::new()
+            .include("proto")
+            .inputs(&["proto/helloworld/helloworld.proto"])
+            .parse_and_typecheck()
+            .unwrap();
+
+        let file_descriptors =
+            FileDescriptor::new_dynamic_fds(parser.file_descriptors, &[]).unwrap();
+
+        build_service(&file_descriptors)
+    }
+
+    fn build_service(file_descriptors: &[FileDescriptor]) {
+        let services = file_descriptors
+            .iter()
+            .flat_map(|file_descriptor| {
+                file_descriptor
+                    .services()
+                    .map(move |service_descriptor| (file_descriptor, service_descriptor))
+            })
+            .map(|(file_descriptor, service_descriptor)| {
+                let builder = tonic_build::manual::Service::builder()
+                    .name(service_descriptor.proto().name())
+                    .package(file_descriptor.package());
+                let mut builder_container = Some(builder);
+
+                for method in service_descriptor.methods() {
+                    let method_descriptor = method.proto();
+
+                    let output_type = method.output_type();
+                    let input_type = method.input_type();
+
+                    builder_container = builder_container.map(|builder| {
+                        builder.method(
+                            tonic_build::manual::Method::builder()
+                                .name(method_descriptor.name().to_snake_case())
+                                .route_name(method_descriptor.name())
+                                .output_type(type_string(&output_type))
+                                .input_type(type_string(&input_type))
+                                .codec_path("crate::codec::ProtobufCodec")
+                                .build(),
+                        )
+                    });
+                }
+
+                builder_container.unwrap().build()
+            })
+            .collect::<Vec<_>>();
+
+        tonic_build::manual::Builder::new()
+            .out_dir({
+                let mut base = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+                base.push("protobuf_codec");
+                fs::create_dir_all(&base).unwrap();
+                base
+            })
+            .compile(&services);
+    }
+
+    fn type_string(message_descriptor: &MessageDescriptor) -> String {
+        let path = message_descriptor
+            .file_descriptor()
+            .name()
+            .split("/")
+            .last()
+            .unwrap()
+            .strip_suffix(".proto")
+            .unwrap();
+
+        format!("crate::protos::{}::{}", path, message_descriptor.name())
+    }
 }

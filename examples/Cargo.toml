@@ -264,6 +264,14 @@ path = "src/codec_buffers/server.rs"
 name = "codec-buffers-client"
 path = "src/codec_buffers/client.rs"
 
+[[bin]]
+name = "protobuf-codec-server"
+path = "src/protobuf-codec/server.rs"
+
+[[bin]]
+name = "protobuf-codec-client"
+path = "src/protobuf-codec/client.rs"
+
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
@@ -324,6 +332,11 @@ hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], opti
 rustls-pemfile = { version = "2.0.0", optional = true }
 tower-http = { version = "0.5", optional = true }
 pin-project = { version = "1.0.11", optional = true }
+protobuf = "3.5.0"
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
+protobuf = "3.5.0"
+heck = "0.5.0"
+protobuf-parse = "3.5.0"
+protobuf-codegen = "3.5.0"
