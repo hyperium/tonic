@@ -40,6 +40,7 @@ server = [
   "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
   "dep:socket2",
   "dep:tokio", "tokio?/macros", "tokio?/net", "tokio?/time",
+  "tokio-stream/net",
   "dep:tower", "tower?/util", "tower?/limit",
 ]
 channel = [
@@ -67,6 +68,7 @@ percent-encoding = "2.1"
 pin-project = "1.0.11"
 tower-layer = "0.3"
 tower-service = "0.3"
+tokio-stream = {version = "0.1", default-features = false}
 
 # prost
 prost = {version = "0.13", default-features = false, features = ["std"], optional = true}
@@ -81,7 +83,6 @@ hyper = {version = "1", features = ["http1", "http2"], optional = true}
 hyper-util = { version = "0.1.4", features = ["tokio"], optional = true }
 socket2 = { version = "0.5", optional = true, features = ["all"] }
 tokio = {version = "1", default-features = false, optional = true}
-tokio-stream = { version = "0.1", features = ["net"] }
 tower = {version = "0.4.7", default-features = false, optional = true}
 axum = {version = "0.7", default-features = false, optional = true}
 
