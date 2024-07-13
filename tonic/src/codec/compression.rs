@@ -188,7 +188,7 @@ impl fmt::Display for CompressionEncoding {
 }
 
 fn split_by_comma(s: &str) -> impl Iterator<Item = &str> {
-    s.trim().split(',').map(|s| s.trim())
+    s.split(',').map(|s| s.trim())
 }
 
 /// Compress `len` bytes from `decompressed_buf` into `out_buf`.
