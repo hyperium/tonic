@@ -42,7 +42,7 @@ use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
-use hyper::body::Incoming;
+use hyper::{body::Incoming, service::Service as HyperService};
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -599,9 +599,10 @@ impl<L> Server<L> {
                         .map_err(super::Error::from_source)?
                         .map_request(|req: Request<Incoming>| req.map(boxed));
 
+                    let hyper_io = TokioIo::new(io);
                     let hyper_svc = TowerToHyperService::new(req_svc);
 
-                    serve_connection(io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()));
+                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()));
                 }
             }
         }
@@ -625,16 +626,15 @@ impl<L> Server<L> {
 // This is moved to its own function as a way to get around
 // https://github.com/rust-lang/rust/issues/102211
 fn serve_connection<IO, S>(
-    io: ServerIo<IO>,
-    hyper_svc: TowerToHyperService<S>,
+    hyper_io: IO,
+    hyper_svc: S,
     builder: ConnectionBuilder,
     mut watcher: Option<tokio::sync::watch::Receiver<()>>,
 ) where
-    S: Service<Request<Incoming>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    IO: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
+    S: HyperService<Request<Incoming>, Response = Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
-    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
-    IO::ConnectInfo: Clone + Send + Sync + 'static,
 {
     tokio::spawn(async move {
         {
@@ -642,7 +642,7 @@ fn serve_connection<IO, S>(
                 inner: watcher.as_mut().map(|w| w.changed()),
             });
 
-            let mut conn = pin!(builder.serve_connection(TokioIo::new(io), hyper_svc));
+            let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
             loop {
                 tokio::select! {
