@@ -1,6 +1,6 @@
+use super::service::ServerIo;
 #[cfg(feature = "tls")]
 use super::service::TlsAcceptor;
-use super::{service::ServerIo, Connected};
 use std::{
     net::{SocketAddr, TcpListener as StdTcpListener},
     pin::{pin, Pin},
@@ -20,7 +20,7 @@ pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
 ) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
-    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
@@ -38,7 +38,7 @@ pub(crate) fn tcp_incoming<IO, IE>(
     tls: Option<TlsAcceptor>,
 ) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
-    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
