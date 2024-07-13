@@ -42,7 +42,7 @@ use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
-use hyper::body::Incoming;
+use hyper::{body::Incoming, service::Service as HyperService};
 use pin_project::pin_project;
 use std::{
     convert::Infallible,
@@ -626,11 +626,11 @@ impl<L> Server<L> {
 // https://github.com/rust-lang/rust/issues/102211
 fn serve_connection<IO, S>(
     io: ServerIo<IO>,
-    hyper_svc: TowerToHyperService<S>,
+    hyper_svc: S,
     builder: ConnectionBuilder,
     mut watcher: Option<tokio::sync::watch::Receiver<()>>,
 ) where
-    S: Service<Request<Incoming>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    S: HyperService<Request<Incoming>, Response = Response<BoxBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
     IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
