@@ -175,7 +175,7 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 ```toml
 [dependencies]
 tonic = "0.12"
-prost = "0.12"
+prost = "0.13"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1"
 
