@@ -116,7 +116,7 @@ impl RouteGuide for RouteGuideService {
             while let Some(note) = stream.next().await {
                 let note = note?;
 
-                let location = note.location.clone().unwrap();
+                let location = note.location.unwrap();
 
                 let location_notes = notes.entry(location).or_insert(vec![]);
                 location_notes.push(note);
