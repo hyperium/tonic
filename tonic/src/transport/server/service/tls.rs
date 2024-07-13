@@ -8,7 +8,6 @@ use tokio_rustls::{
 };
 
 use crate::transport::{
-    server::Connected,
     service::tls::{add_certs_from_pem, load_identity, ALPN_H2},
     Certificate, Identity,
 };
@@ -52,7 +51,7 @@ impl TlsAcceptor {
 
     pub(crate) async fn accept<IO>(&self, io: IO) -> Result<TlsStream<IO>, crate::Error>
     where
-        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let acceptor = RustlsAcceptor::from(self.inner.clone());
         acceptor.accept(io).await.map_err(Into::into)
