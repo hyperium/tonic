@@ -1,7 +1,13 @@
 /// Represents a X509 certificate.
 #[derive(Debug, Clone)]
 pub struct Certificate {
-    pub(crate) pem: Vec<u8>,
+    pub(super) kind: CertKind,
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum CertKind {
+    Der(Vec<u8>),
+    Pem(Vec<u8>),
 }
 
 /// Represents a private key and X509 certificate.
@@ -12,39 +18,68 @@ pub struct Identity {
 }
 
 impl Certificate {
+    fn new(kind: CertKind) -> Self {
+        Self { kind }
+    }
+
+    /// Parse a DER encoded X509 Certificate.
+    ///
+    /// The provided DER should include at least one PEM encoded certificate.
+    pub fn from_der(der: impl AsRef<[u8]>) -> Self {
+        let der = der.as_ref().into();
+        Self::new(CertKind::Der(der))
+    }
+
     /// Parse a PEM encoded X509 Certificate.
     ///
     /// The provided PEM should include at least one PEM encoded certificate.
     pub fn from_pem(pem: impl AsRef<[u8]>) -> Self {
         let pem = pem.as_ref().into();
-        Self { pem }
+        Self::new(CertKind::Pem(pem))
     }
 
-    /// Get a immutable reference to underlying certificate
-    pub fn get_ref(&self) -> &[u8] {
-        self.pem.as_slice()
+    /// Returns whether this is a DER encoded certificate.
+    pub fn is_der(&self) -> bool {
+        matches!(self.kind, CertKind::Der(_))
     }
 
-    /// Get a mutable reference to underlying certificate
-    pub fn get_mut(&mut self) -> &mut [u8] {
-        self.pem.as_mut()
+    /// Returns whether this is a PEM encoded certificate.
+    pub fn is_pem(&self) -> bool {
+        matches!(self.kind, CertKind::Pem(_))
     }
 
-    /// Consumes `self`, returning the underlying certificate
-    pub fn into_inner(self) -> Vec<u8> {
-        self.pem
+    /// Returns the reference to DER encoded certificate.
+    /// Returns `None` When this is not encoded as DER.
+    pub fn der(&self) -> Option<&[u8]> {
+        match &self.kind {
+            CertKind::Der(der) => Some(der),
+            _ => None,
+        }
     }
-}
 
-impl AsRef<[u8]> for Certificate {
-    fn as_ref(&self) -> &[u8] {
-        self.pem.as_ref()
+    /// Returns the reference to PEM encoded certificate.
+    /// Returns `None` When this is not encoded as PEM.
+    pub fn pem(&self) -> Option<&[u8]> {
+        match &self.kind {
+            CertKind::Pem(pem) => Some(pem),
+            _ => None,
+        }
     }
-}
 
-impl AsMut<[u8]> for Certificate {
-    fn as_mut(&mut self) -> &mut [u8] {
-        self.pem.as_mut()
+    /// Turns this value into the DER encoded bytes.
+    pub fn into_der(self) -> Result<Vec<u8>, Self> {
+        match self.kind {
+            CertKind::Der(der) => Ok(der),
+            _ => Err(self),
+        }
+    }
+
+    /// Turns this value into the PEM encoded bytes.
+    pub fn into_pem(self) -> Result<Vec<u8>, Self> {
+        match self.kind {
+            CertKind::Pem(pem) => Ok(pem),
+            _ => Err(self),
+        }
     }
 }
 
