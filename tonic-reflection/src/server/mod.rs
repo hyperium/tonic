@@ -7,6 +7,9 @@ mod v1;
 
 pub use v1::Builder;
 
+/// `v1alpha` variant of the gRPC Reflection Service
+pub mod v1alpha;
+
 /// Represents an error in the construction of a gRPC Reflection Service.
 #[derive(Debug)]
 pub enum Error {
