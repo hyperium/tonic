@@ -157,7 +157,7 @@ impl Channel {
 
         let svc = Connection::lazy(connector, endpoint);
         let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
-        executor.execute(Box::pin(worker));
+        executor.execute(worker);
 
         Channel { svc }
     }
@@ -176,7 +176,7 @@ impl Channel {
             .await
             .map_err(super::Error::from_source)?;
         let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
-        executor.execute(Box::pin(worker));
+        executor.execute(worker);
 
         Ok(Channel { svc })
     }
