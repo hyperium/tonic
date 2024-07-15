@@ -51,7 +51,7 @@ impl TlsAcceptor {
 
     pub(crate) async fn accept<IO>(&self, io: IO) -> Result<TlsStream<IO>, crate::Error>
     where
-        IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        IO: AsyncRead + AsyncWrite + Unpin,
     {
         let acceptor = RustlsAcceptor::from(self.inner.clone());
         acceptor.accept(io).await.map_err(Into::into)
