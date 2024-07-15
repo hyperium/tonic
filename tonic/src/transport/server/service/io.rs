@@ -32,25 +32,14 @@ impl<IO> ServerIo<IO> {
         Self::TlsIo(Box::new(io))
     }
 
-    #[cfg(feature = "tls")]
     pub(in crate::transport) fn connect_info(&self) -> ServerIoConnectInfo<IO>
     where
         IO: Connected,
-        TlsStream<IO>: Connected,
     {
         match self {
             Self::Io(io) => Either::A(io.connect_info()),
+            #[cfg(feature = "tls")]
             Self::TlsIo(io) => Either::B(io.connect_info()),
-        }
-    }
-
-    #[cfg(not(feature = "tls"))]
-    pub(in crate::transport) fn connect_info(&self) -> ServerIoConnectInfo<IO>
-    where
-        IO: Connected,
-    {
-        match self {
-            Self::Io(io) => Either::A(io.connect_info()),
         }
     }
 }
