@@ -167,8 +167,8 @@ pub mod server_reflection_client {
     where
         T: tonic::client::GrpcService<tonic::body::BoxBody>,
         T::Error: Into<StdError>,
-        T::ResponseBody: Body<Data = Bytes> + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<StdError> + Send,
+        T::ResponseBody: Body<Data = Bytes> + std::marker::Send + 'static,
+        <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
     {
         pub fn new(inner: T) -> Self {
             let inner = tonic::client::Grpc::new(inner);
@@ -193,7 +193,7 @@ pub mod server_reflection_client {
             >,
             <T as tonic::codegen::Service<
                 http::Request<tonic::body::BoxBody>,
-            >>::Error: Into<StdError> + Send + Sync,
+            >>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
         {
             ServerReflectionClient::new(InterceptedService::new(inner, interceptor))
         }
@@ -270,7 +270,7 @@ pub mod server_reflection_server {
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
     #[async_trait]
-    pub trait ServerReflection: Send + Sync + 'static {
+    pub trait ServerReflection: std::marker::Send + std::marker::Sync + 'static {
         /// Server streaming response type for the ServerReflectionInfo method.
         type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<
@@ -278,7 +278,7 @@ pub mod server_reflection_server {
                     tonic::Status,
                 >,
             >
-            + Send
+            + std::marker::Send
             + 'static;
         /// The reflection service is structured as a bidirectional stream, ensuring
         /// all related requests go to a single server.
@@ -352,8 +352,8 @@ pub mod server_reflection_server {
     impl<T, B> tonic::codegen::Service<http::Request<B>> for ServerReflectionServer<T>
     where
         T: ServerReflection,
-        B: Body + Send + 'static,
-        B::Error: Into<StdError> + Send + 'static,
+        B: Body + std::marker::Send + 'static,
+        B::Error: Into<StdError> + std::marker::Send + 'static,
     {
         type Response = http::Response<tonic::body::BoxBody>;
         type Error = std::convert::Infallible;
