@@ -1,4 +1,10 @@
-# [v0.12.0](https://github.com/hyperium/tonic/compare/v0.11.0...v0.12.0) (2024-07-08)
+# [0.12.1](https://github.com/hyperium/tonic/compare/v0.12.0...v0.12.1) (2024-07-17)
+
+### Bug Fixes
+
+* Reduce tokio-stream feature (#1795)
+
+# [0.12.0](https://github.com/hyperium/tonic/compare/v0.11.0...v0.12.0) (2024-07-08)
 
 This breaking release updates tonic to the hyper `1.0` ecosystem and also updates
 to prost `v0.13.0`.
