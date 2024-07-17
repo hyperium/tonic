@@ -399,58 +399,40 @@ Since the Tonic project consists of a number of crates, many of which depend on
 each other, releasing new versions to crates.io can involve some complexities.
 When releasing a new version of a crate, follow these steps:
 
-1. **Ensure that the release crate has no path dependencies.** When the HEAD
-   version of a Tonic crate requires unreleased changes in another Tonic crate,
-   the crates.io dependency on the second crate will be replaced with a path
-   dependency. Crates with path dependencies cannot be published, so before
-   publishing the dependent crate, any path dependencies must also be published.
-   This should be done through a form of depth-first tree traversal:
+1. First you must pick the correct version to release, if there are breaking
+   changes make sure to select a semver compatible version bump.
 
-   1. Starting with the first path dependency in the crate to be released,
-      inspect the `Cargo.toml` for the dependency. If the dependency has any
-      path dependencies of its own, repeat this step with the first such
-      dependency.
-   2. Begin the release process for the path dependency.
-   3. Once the path dependency has been published to crates.io, update the
-      dependent crate to depend on the crates.io version.
-   4. When all path dependencies have been published, the dependent crate may
-      be published.
-
-   To verify that a crate is ready to publish, run:
-
-   ```bash
-   cd <CRATE NAME>
-   cargo publish --dry-run -p <CRATE NAME>
+2. In general, tonic tries to keep all crates at the same version to make it
+   easy to release and figure out what sub crates you need that will work with
+   the core version of tonic. To prepare a release branch you can follow the
+   commands below:
+   ```
+   git checkout -b <release-branch-name>
+   ./prepare-release.sh <version> # where version is X.Y.Z 
    ```
 
-2. **Update Cargo metadata.** After releasing any path dependencies, update the
-   `version` field in `Cargo.toml` to the new version, and the `documentation`
-   field to the docs.rs URL of the new version.
-3. **Update other documentation links.** Update the `#![doc(html_root_url)]`
-   attribute in the crate's `lib.rs` and the "Documentation" link in the crate's
-   `README.md` to point to the docs.rs URL of the new version.
-4. **Update the changelog for the crate.** Each crate in the Tokio repository
-   has its own `CHANGELOG.md` in that crate's subdirectory. Any changes to that
-   crate since the last release should be added to the changelog. Change
-   descriptions may be taken from the Git history, but should be edited to
-   ensure a consistent format, based on [Keep A Changelog][keep-a-changelog].
-   Other entries in that crate's changelog may also be used for reference.
-5. **Perform a final audit for breaking changes.** Compare the HEAD version of
-   crate with the Git tag for the most recent release version. If there are any
-   breaking API changes, determine if those changes can be made without breaking
-   existing APIs. If so, resolve those issues. Otherwise, if it is necessary to
-   make a breaking release, update the version numbers to reflect this.
-6. **Open a pull request with your changes.** Once that pull request has been
-   approved by a maintainer and the pull request has been merged, continue to
-   the next step.
-7. **Release the crate.** Run the following command:
+3. Once all the crate versions have been updated its time to update the
+   changelog. Tonic uses conventional changelog and its cli to generate the
+   changelog.
 
-   ```bash
-   cd <CRATE NAME>
-   cargo publish --dry-run -p <CRATE NAME>
+   ```
+   conventional-changelog -p angular -i CHANGELOG.md -s
    ```
 
-   Your editor and prompt you to edit a message for the tag. Copy the changelog
-   entry for that release version into your editor and close the window.
+   Once the entries have been generated, you must edit the `CHANGELOG.md` file
+   to add the version and tag to the title and edit any changelog entries. You
+   must also add any breaking changes here as sometimes they get lost.
 
-[keep-a-changelog]: https://github.com/olivierlacan/keep-a-changelog/blob/master/CHANGELOG.md
+4. Once the changelog has been updated you can now create a `chore: release
+   vX.Y.Z` commit and push the release branch and open a release PR.
+
+5. Once the release PR has been approved and merged into `master` the following
+   command will release those changes.
+
+   ```
+   ./publish-release.sh
+   ```
+
+6. Once all the crates have been released you now must create a release on
+   github using the text from the changelog.
+
