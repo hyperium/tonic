@@ -98,10 +98,6 @@ jobs:
       with:
         rust-version: "1.70"    # msrv
     - uses: taiki-e/install-action@cargo-no-dev-deps
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - run: cargo no-dev-deps --no-private check --all-features
     - run: cargo no-dev-deps --no-private doc --no-deps
