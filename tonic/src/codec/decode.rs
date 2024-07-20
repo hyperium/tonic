@@ -308,15 +308,15 @@ impl<T> Streaming<T> {
     /// # Return value
     ///
     /// - `Result::Err(val)` means a gRPC error was sent by the sender instead
-    /// of a valid response message. Refer to [`Status::code`] and
-    /// [`Status::message`] to examine possible error causes.
+    ///   of a valid response message. Refer to [`Status::code`] and
+    ///   [`Status::message`] to examine possible error causes.
     ///
     /// - `Result::Ok(None)` means the stream was closed by the sender and no
-    /// more messages will be delivered. Further attempts to call
-    /// [`Streaming::message`] will result in the same return value.
+    ///   more messages will be delivered. Further attempts to call
+    ///   [`Streaming::message`] will result in the same return value.
     ///
     /// - `Result::Ok(Some(val))` means the sender streamed a valid response
-    /// message `val`.
+    ///   message `val`.
     ///
     /// ```rust
     /// # use tonic::{Streaming, Status, codec::Decoder};
