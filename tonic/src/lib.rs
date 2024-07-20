@@ -17,22 +17,22 @@
 //! # Feature Flags
 //!
 //! - `transport`: Enables the fully featured, batteries included client and server
-//! implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
+//!   implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
 //! - `server`: Enables just the full featured server portion of the `transport` feature.
 //! - `channel`: Enables just the full featured channel portion of the `transport` feature.
 //! - `codegen`: Enables all the required exports and optional dependencies required
-//! for [`tonic-build`]. Enabled by default.
+//!   for [`tonic-build`]. Enabled by default.
 //! - `tls`: Enables the `rustls` based TLS options for the `transport` feature. Not
-//! enabled by default.
+//!   enabled by default.
 //! - `tls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
-//! `rustls-native-certs` crate. Not enabled by default. `tls` must be enabled to use
-//! `tls-roots`.
+//!   `rustls-native-certs` crate. Not enabled by default. `tls` must be enabled to use
+//!   `tls-roots`.
 //! - `tls-webpki-roots`: Add the standard trust roots from the `webpki-roots` crate to
-//! `rustls`-based gRPC clients. Not enabled by default.
+//!   `rustls`-based gRPC clients. Not enabled by default.
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
 //! - `gzip`: Enables compressing requests, responses, and streams.
-//! Depends on [flate2]. Not enabled by default.
-//! Replaces the `compression` flag from earlier versions of `tonic` (<= 0.7).
+//!   Depends on [flate2]. Not enabled by default.
+//!   Replaces the `compression` flag from earlier versions of `tonic` (<= 0.7).
 //!
 //! # Structure
 //!
