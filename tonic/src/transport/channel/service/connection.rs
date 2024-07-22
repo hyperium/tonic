@@ -32,7 +32,7 @@ impl Connection {
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
-        C::Future: Unpin + Send,
+        C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         let mut settings: Builder<SharedExec> = Builder::new(endpoint.executor.clone())
@@ -90,7 +90,7 @@ impl Connection {
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
-        C::Future: Unpin + Send,
+        C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         Self::new(connector, endpoint, true)
@@ -171,8 +171,8 @@ impl<C> tower::Service<Uri> for MakeSendRequestService<C>
 where
     C: Service<Uri> + Send + 'static,
     C::Error: Into<crate::Error> + Send,
-    C::Future: Unpin + Send,
-    C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+    C::Future: Send,
+    C::Response: rt::Read + rt::Write + Unpin + Send,
 {
     type Response = SendRequest;
     type Error = crate::Error;

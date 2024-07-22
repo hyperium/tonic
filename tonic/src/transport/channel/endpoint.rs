@@ -348,9 +348,9 @@ impl Endpoint {
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
         C: Service<Uri> + Send + 'static,
-        C::Response: rt::Read + rt::Write + Send + Unpin + 'static,
-        C::Future: Send + 'static,
-        crate::Error: From<C::Error> + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin,
+        C::Future: Send,
+        crate::Error: From<C::Error> + Send,
     {
         let connector = self.connector(connector);
 
@@ -373,9 +373,9 @@ impl Endpoint {
     pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
     where
         C: Service<Uri> + Send + 'static,
-        C::Response: rt::Read + rt::Write + Send + Unpin + 'static,
-        C::Future: Send + 'static,
-        crate::Error: From<C::Error> + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin,
+        C::Future: Send,
+        crate::Error: From<C::Error> + Send,
     {
         let connector = self.connector(connector);
         if let Some(connect_timeout) = self.connect_timeout {
