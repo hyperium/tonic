@@ -1,20 +1,8 @@
 use crate::transport::channel::BoxFuture;
+use hyper_util::rt::TokioExecutor;
 use std::{future::Future, sync::Arc};
 
 pub(crate) use hyper::rt::Executor;
-
-#[derive(Copy, Clone)]
-struct TokioExec;
-
-impl<F> Executor<F> for TokioExec
-where
-    F: Future + Send + 'static,
-    F::Output: Send + 'static,
-{
-    fn execute(&self, fut: F) {
-        tokio::spawn(fut);
-    }
-}
 
 #[derive(Clone)]
 pub(crate) struct SharedExec {
@@ -32,7 +20,7 @@ impl SharedExec {
     }
 
     pub(crate) fn tokio() -> Self {
-        Self::new(TokioExec)
+        Self::new(TokioExecutor::new())
     }
 }
 

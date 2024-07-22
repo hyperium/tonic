@@ -74,12 +74,12 @@
 //! ## Limitations
 //!
 //! * `tonic_web` is designed to work with grpc-web-compliant clients only. It is not expected to
-//! handle arbitrary HTTP/x.x requests or bespoke protocols.
+//!   handle arbitrary HTTP/x.x requests or bespoke protocols.
 //! * Similarly, the cors support implemented  by this crate will *only* handle grpc-web and
-//! grpc-web preflight requests.
+//!   grpc-web preflight requests.
 //! * Currently, grpc-web clients can only perform `unary` and `server-streaming` calls. These
-//! are the only requests this crate is designed to handle. Support for client and bi-directional
-//! streaming will be officially supported when clients do.
+//!   are the only requests this crate is designed to handle. Support for client and bi-directional
+//!   streaming will be officially supported when clients do.
 //! * There is no support for web socket transports.
 //!
 //!
@@ -94,7 +94,7 @@
     rust_2018_idioms,
     unreachable_pub
 )]
-#![doc(html_root_url = "https://docs.rs/tonic-web/0.12.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-web/0.12.1")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
 pub use call::GrpcWebCall;

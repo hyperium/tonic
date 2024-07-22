@@ -75,17 +75,13 @@ where
                 let io = connect.await?;
 
                 #[cfg(feature = "tls")]
-                {
-                    if let Some(tls) = tls {
-                        return if is_https {
-                            let io = tls.connect(TokioIo::new(io)).await?;
-                            Ok(io)
-                        } else {
-                            Ok(BoxedIo::new(io))
-                        };
-                    } else if is_https {
-                        return Err(HttpsUriWithoutTlsSupport(()).into());
-                    }
+                if is_https {
+                    return if let Some(tls) = tls {
+                        let io = tls.connect(TokioIo::new(io)).await?;
+                        Ok(io)
+                    } else {
+                        Err(HttpsUriWithoutTlsSupport(()).into())
+                    };
                 }
 
                 Ok::<_, crate::Error>(BoxedIo::new(io))

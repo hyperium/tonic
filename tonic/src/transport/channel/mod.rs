@@ -149,7 +149,7 @@ impl Channel {
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::Error> + Send,
-        C::Future: Unpin + Send,
+        C::Future: Send,
         C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);

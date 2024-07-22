@@ -58,10 +58,7 @@ where
 
         ResponseFuture {
             inner: self.inner.call(req),
-            sleep: timeout_duration
-                .map(tokio::time::sleep)
-                .map(Some)
-                .unwrap_or(None),
+            sleep: timeout_duration.map(tokio::time::sleep),
         }
     }
 }
