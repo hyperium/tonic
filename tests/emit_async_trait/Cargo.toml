@@ -1,0 +1,26 @@
+[package]
+edition = "2021"
+license = "MIT"
+name = "emit_async_trait"
+publish = false
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[features]
+# default = ["async_trait"]
+async_trait = ["tonic-build/async_trait"]
+
+[dependencies]
+tokio = { version = "1.0", features = ["macros", "rt-multi-thread", "net"] }
+tokio-stream = { version = "0.1", features = ["net"] }
+prost = "0.12"
+tonic = { path = "../../tonic" }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build", default-features = false, features = [
+    "transport",
+    "prost",
+] }
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]

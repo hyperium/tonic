@@ -218,9 +218,15 @@ fn generate_trait<T: Service>(
         service.name()
     ));
 
+    let async_trait = if cfg!(feature = "async_trait") {
+        quote!(#[async_trait])
+    } else {
+        TokenStream::new()
+    };
+
     quote! {
         #trait_doc
-        #[async_trait]
+        #async_trait
         pub trait #server_trait : Send + Sync + 'static {
             #methods
         }
@@ -257,91 +263,136 @@ fn generate_trait_methods<T: Service>(
             quote!(&self)
         };
 
-        let method = match (
-            method.client_streaming(),
-            method.server_streaming(),
-            generate_default_stubs,
-        ) {
-            (false, false, true) => {
-                quote! {
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+        let r#async = if cfg!(feature = "async_trait") {
+            quote!(async)
+        } else {
+            TokenStream::new()
+        };
+
+        let ret_type = |ret| {
+            if cfg!(feature = "async_trait") {
+                ret
+            } else {
+                let lifetime = if use_arc_self {
+                    quote!('static)
+                } else {
+                    quote!('_)
+                };
+                quote!(impl std::future::Future<Output = #ret> + Send + #lifetime)
+            }
+        };
+
+        let method = {
+            match (
+                method.client_streaming(),
+                method.server_streaming(),
+                generate_default_stubs,
+            ) {
+                (false, false, true) => {
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<#res_message>, tonic::Status>),
+                    );
+                    quote! {
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<#req_message>)
+                            -> #return_type {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
                     }
                 }
-            }
-            (false, false, false) => {
-                quote! {
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
-                }
-            }
-            (true, false, true) => {
-                quote! {
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                (false, false, false) => {
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<#res_message>, tonic::Status>),
+                    );
+                    quote! {
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<#req_message>)
+                            -> #return_type;
                     }
                 }
-            }
-            (true, false, false) => {
-                quote! {
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
-                }
-            }
-            (false, true, true) => {
-                quote! {
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                (true, false, true) => {
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<#res_message>, tonic::Status>),
+                    );
+                    quote! {
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                            -> #return_type {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
                     }
                 }
-            }
-            (false, true, false) => {
-                let stream = quote::format_ident!("{}Stream", method.identifier());
-                let stream_doc = generate_doc_comment(format!(
-                    " Server streaming response type for the {} method.",
-                    method.identifier()
-                ));
-
-                quote! {
-                    #stream_doc
-                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
-
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
-                }
-            }
-            (true, true, true) => {
-                quote! {
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                (true, false, false) => {
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<#res_message>, tonic::Status>),
+                    );
+                    quote! {
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                            -> #return_type;
                     }
                 }
-            }
-            (true, true, false) => {
-                let stream = quote::format_ident!("{}Stream", method.identifier());
-                let stream_doc = generate_doc_comment(format!(
-                    " Server streaming response type for the {} method.",
-                    method.identifier()
-                ));
+                (false, true, true) => {
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status>),
+                    );
+                    quote! {
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<#req_message>)
+                            -> #return_type {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
+                    }
+                }
+                (false, true, false) => {
+                    let stream = quote::format_ident!("{}Stream", method.identifier());
+                    let stream_doc = generate_doc_comment(format!(
+                        " Server streaming response type for the {} method.",
+                        method.identifier()
+                    ));
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<Self::#stream>, tonic::Status>),
+                    );
 
-                quote! {
-                    #stream_doc
-                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+                    quote! {
+                        #stream_doc
+                        type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
 
-                    #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<#req_message>)
+                            -> #return_type;
+                    }
+                }
+                (true, true, true) => {
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status>),
+                    );
+                    quote! {
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                            -> #return_type {
+                            Err(tonic::Status::unimplemented("Not yet implemented"))
+                        }
+                    }
+                }
+                (true, true, false) => {
+                    let stream = quote::format_ident!("{}Stream", method.identifier());
+                    let stream_doc = generate_doc_comment(format!(
+                        " Server streaming response type for the {} method.",
+                        method.identifier()
+                    ));
+                    let return_type = ret_type(
+                        quote!(std::result::Result<tonic::Response<Self::#stream>, tonic::Status>),
+                    );
+
+                    quote! {
+                        #stream_doc
+                        type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+
+                        #method_doc
+                        #r#async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                            -> #return_type;
+                    }
                 }
             }
         };
