@@ -3,7 +3,7 @@ use crate::{
     body::{boxed, BoxBody},
     transport::{channel::BoxFuture, service::GrpcTimeout, Endpoint},
 };
-use http::Uri;
+use http::{Request, Response, Uri};
 use hyper::rt;
 use hyper::{client::conn::http2::Builder, rt::Executor};
 use hyper_util::rt::TokioTimer;
@@ -20,11 +20,8 @@ use tower::{
 };
 use tower_service::Service;
 
-pub(crate) type Response<B = BoxBody> = http::Response<B>;
-pub(crate) type Request<B = BoxBody> = http::Request<B>;
-
 pub(crate) struct Connection {
-    inner: BoxService<Request, Response, crate::Error>,
+    inner: BoxService<Request<BoxBody>, Response<BoxBody>, crate::Error>,
 }
 
 impl Connection {
@@ -97,8 +94,8 @@ impl Connection {
     }
 }
 
-impl Service<Request> for Connection {
-    type Response = Response;
+impl Service<Request<BoxBody>> for Connection {
+    type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -106,7 +103,7 @@ impl Service<Request> for Connection {
         Service::poll_ready(&mut self.inner, cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request) -> Self::Future {
+    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
         self.inner.call(req)
     }
 }
@@ -135,8 +132,8 @@ impl From<hyper::client::conn::http2::SendRequest<BoxBody>> for SendRequest {
     }
 }
 
-impl tower::Service<http::Request<BoxBody>> for SendRequest {
-    type Response = http::Response<BoxBody>;
+impl tower::Service<Request<BoxBody>> for SendRequest {
+    type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
@@ -144,7 +141,7 @@ impl tower::Service<http::Request<BoxBody>> for SendRequest {
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request) -> Self::Future {
+    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
         let fut = self.inner.send_request(req);
 
         Box::pin(async move { fut.await.map_err(Into::into).map(|res| res.map(boxed)) })
