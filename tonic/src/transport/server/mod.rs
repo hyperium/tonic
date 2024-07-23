@@ -65,7 +65,6 @@ use tower::{
     Service, ServiceBuilder, ServiceExt,
 };
 
-type BoxHttpBody = crate::body::BoxBody;
 type BoxError = crate::Error;
 type BoxService = tower::util::BoxCloneService<Request<BoxBody>, Response<BoxBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
@@ -869,7 +868,7 @@ where
     ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
-    type Response = Response<BoxHttpBody>;
+    type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = SvcFuture<S::Future>;
 
@@ -913,7 +912,7 @@ where
     ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
-    type Output = Result<Response<BoxHttpBody>, crate::Error>;
+    type Output = Result<Response<BoxBody>, crate::Error>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
