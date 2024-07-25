@@ -7,5 +7,5 @@ fn main() {
 
     protos
         .iter()
-        .for_each(|file| println!("cargo:rerun-if-changed={}", file));
+        .for_each(|file| println!("cargo::rerun-if-changed={}", file));
 }

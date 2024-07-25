@@ -547,7 +547,7 @@ impl Builder {
     }
 
     /// Enable or disable emitting
-    /// [`cargo:rerun-if-changed=PATH`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-changed)
+    /// [`cargo::rerun-if-changed=PATH`](https://doc.rust-lang.org/cargo/reference/build-scripts.html#rerun-if-changed)
     /// instructions for Cargo.
     ///
     /// If set, writes instructions to `stdout` for Cargo so that it understands
@@ -648,14 +648,14 @@ impl Builder {
 
         if self.emit_rerun_if_changed {
             for path in protos.iter() {
-                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+                println!("cargo::rerun-if-changed={}", path.as_ref().display())
             }
 
             for path in includes.iter() {
                 // Cargo will watch the **entire** directory recursively. If we
                 // could figure out which files are imported by our protos we
                 // could specify only those files instead.
-                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+                println!("cargo::rerun-if-changed={}", path.as_ref().display())
             }
         }
 
