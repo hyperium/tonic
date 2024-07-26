@@ -2,6 +2,7 @@
 
 mod conn;
 mod incoming;
+mod request_ext;
 mod service;
 #[cfg(feature = "tls")]
 mod tls;
@@ -23,6 +24,8 @@ pub use tls::ServerTlsConfig;
 
 #[cfg(feature = "tls")]
 pub use conn::TlsConnectInfo;
+
+pub use self::request_ext::RequestExt;
 
 #[cfg(feature = "tls")]
 use self::service::TlsAcceptor;
