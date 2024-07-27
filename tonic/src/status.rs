@@ -615,9 +615,8 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
         // matches the spec of:
         // > The service is currently unavailable. This is most likely a transient condition that
         // > can be corrected if retried with a backoff.
-        #[cfg(feature = "channel")]
         if let Some(connect) =
-            err.downcast_ref::<crate::transport::channel::service::ConnectError>()
+            err.downcast_ref::<ConnectError>()
         {
             return Some(Status::unavailable(connect.to_string()));
         }
@@ -1032,3 +1031,20 @@ impl fmt::Display for TimeoutExpired {
 
 // std::error::Error only requires a type to impl Debug and Display
 impl std::error::Error for TimeoutExpired {}
+
+/// Wrapper type to indicate that an error occurs during the connection
+/// process, so that the appropriate gRPC Status can be inferred.
+#[derive(Debug)]
+pub struct ConnectError(pub Box<dyn std::error::Error + Send + Sync>);
+
+impl fmt::Display for ConnectError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        fmt::Display::fmt(&self.0, f)
+    }
+}
+
+impl std::error::Error for ConnectError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(self.0.as_ref())
+    }
+}

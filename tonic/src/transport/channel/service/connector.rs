@@ -1,8 +1,10 @@
 use super::BoxedIo;
 #[cfg(feature = "tls")]
 use super::TlsConnector;
+use crate::ConnectError;
 use crate::transport::channel::BoxFuture;
 use http::Uri;
+#[cfg(feature = "tls")]
 use std::fmt;
 use std::task::{Context, Poll};
 
@@ -11,23 +13,6 @@ use hyper::rt;
 #[cfg(feature = "tls")]
 use hyper_util::rt::TokioIo;
 use tower_service::Service;
-
-/// Wrapper type to indicate that an error occurs during the connection
-/// process, so that the appropriate gRPC Status can be inferred.
-#[derive(Debug)]
-pub(crate) struct ConnectError(pub(crate) crate::Error);
-
-impl fmt::Display for ConnectError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt::Display::fmt(&self.0, f)
-    }
-}
-
-impl std::error::Error for ConnectError {
-    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
-        Some(self.0.as_ref())
-    }
-}
 
 pub(crate) struct Connector<C> {
     inner: C,
