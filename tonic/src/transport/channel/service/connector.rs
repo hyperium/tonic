@@ -1,8 +1,8 @@
 use super::BoxedIo;
 #[cfg(feature = "tls")]
 use super::TlsConnector;
-use crate::ConnectError;
 use crate::transport::channel::BoxFuture;
+use crate::ConnectError;
 use http::Uri;
 #[cfg(feature = "tls")]
 use std::fmt;
