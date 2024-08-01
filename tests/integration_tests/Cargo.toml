@@ -19,7 +19,6 @@ tracing-subscriber = {version = "0.3"}
 async-stream = "0.3"
 http = "1"
 http-body = "1"
-hyper = "1"
 hyper-util = "0.1"
 tokio-stream = {version = "0.1.5", features = ["net"]}
 tower = {version = "0.4", features = []}
