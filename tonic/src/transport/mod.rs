@@ -106,6 +106,8 @@ pub use self::error::Error;
 #[doc(inline)]
 #[cfg(feature = "server")]
 pub use self::server::Server;
+/// Deprecated. Please use [`crate::status::TimeoutExpired`] instead.
+pub use crate::status::TimeoutExpired;
 
 #[cfg(feature = "tls")]
 pub use self::tls::Certificate;
