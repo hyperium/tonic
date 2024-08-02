@@ -33,6 +33,7 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_interval: Option<Duration>,
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
+    pub(crate) http2_max_header_list_size: Option<u32>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
     pub(crate) executor: SharedExec,
@@ -290,6 +291,14 @@ impl Endpoint {
         }
     }
 
+    /// Sets the max header list size. Uses `hyper`'s default otherwise.
+    pub fn http2_max_header_list_size(self, size: u32) -> Self {
+        Endpoint {
+            http2_max_header_list_size: Some(size),
+            ..self
+        }
+    }
+
     /// Sets the executor used to spawn async tasks.
     ///
     /// Uses `tokio::spawn` by default.
@@ -420,6 +429,7 @@ impl From<Uri> for Endpoint {
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
+            http2_max_header_list_size: None,
             connect_timeout: None,
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
