@@ -29,3 +29,12 @@ transport = []
 
 [package.metadata.docs.rs]
 all-features = true
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  # major released
+  "proc_macro2::*",
+
+  # not major released
+  "prost_build::*",
+]

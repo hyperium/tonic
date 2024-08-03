@@ -30,3 +30,20 @@ tracing = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  "tonic::*",
+
+  # major released
+  "bytes::*",
+  "http::*",
+  "http_body::*",
+
+  # not major released
+  "futures_core::stream::Stream",
+  "http_body_util::combinators::box_body::UnsyncBoxBody",
+  "tower_http::cors::Cors",
+  "tower_layer::Layer",
+  "tower_service::Service",
+]

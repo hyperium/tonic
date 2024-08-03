@@ -21,3 +21,12 @@ version = "0.12.1"
 prost = "0.13"
 prost-types = "0.13"
 tonic = { version = "0.12", path = "../tonic", default-features = false }
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  "tonic::*",
+
+  # not major released
+  "prost::*",
+  "prost_types::*",
+]

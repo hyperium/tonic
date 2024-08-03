@@ -112,6 +112,33 @@ tower = {version = "0.4.7", features = ["full"]}
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
 
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  # major released
+  "bytes::*",
+  "tokio::*",
+  "http::*",
+  "http_body::*",
+  "hyper::*",
+  "rustls_pki_types::*",
+
+  # not major released
+  "prost::*",
+  "tracing::*",
+
+  "async_trait::async_trait",
+  "axum_core::body::Body",
+  "axum::routing::Router",
+  "futures_core::stream::Stream",
+  "h2::error::Error",
+  "http_body_util::combinators::box_body::UnsyncBoxBody",
+  "tower::discover::Change",
+  "tower_service::Service",
+  "tower_layer::Layer",
+  "tower_layer::stack::Stack",
+  "tower_layer::identity::Identity",
+]
+
 [[bench]]
 harness = false
 name = "decode"

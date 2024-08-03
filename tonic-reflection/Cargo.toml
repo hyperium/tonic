@@ -34,3 +34,21 @@ tonic = { version = "0.12", path = "../tonic", default-features = false, feature
 
 [dev-dependencies]
 tonic = { version = "0.12", path = "../tonic", default-features = false, features = ["transport"] }
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  "tonic::*",
+
+  # major released
+  "bytes::*",
+  "http::*",
+  "http_body::*",
+
+  # not major released
+  "prost::*",
+  "prost_types::*",
+
+  "futures_core::stream::Stream",
+  "http_body_util::combinators::box_body::UnsyncBoxBody",
+  "tower_service::Service",
+]
