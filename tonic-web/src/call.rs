@@ -520,7 +520,7 @@ mod tests {
     #[test]
     fn decode_trailers() {
         let mut headers = HeaderMap::new();
-        headers.insert("grpc-status", 0.try_into().unwrap());
+        headers.insert("grpc-status", 0.into());
         headers.insert("grpc-message", "this is a message".try_into().unwrap());
 
         let trailers = make_trailers_frame(headers.clone());
