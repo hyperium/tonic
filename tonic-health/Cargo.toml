@@ -29,3 +29,20 @@ tonic = { version = "0.12", path = "../tonic", default-features = false, feature
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
 tokio-stream = "0.1"
 prost-types = "0.13"
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  "tonic::*",
+
+  # major released
+  "bytes::*",
+  "http::*",
+  "http_body::*",
+
+  # not major released
+  "prost::*",
+
+  "futures_core::stream::Stream",
+  "http_body_util::combinators::box_body::UnsyncBoxBody",
+  "tower_service::Service",
+]
