@@ -141,3 +141,11 @@ jobs:
     - name: Run interop tests with Rustls
       run: ./interop/test.sh --use_tls tls_rustls
       shell: bash
+
+  semver:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: obi1kenobi/cargo-semver-checks-action@v2
+      with:
+        feature-group: all-features
