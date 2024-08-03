@@ -395,14 +395,14 @@ mod tests {
                         let response =
                             self.data
                                 .split_to(if count == 0 { partial_len } else { data_len });
-                        Poll::Ready(Some(Ok(response)))
+                        Poll::Ready(Some(Ok(Frame::data(response))))
                     } else {
                         cx.waker().wake_by_ref();
                         Poll::Pending
                     };
                     // make some fake progress
                     self.count += 1;
-                    result.map(|opt| opt.map(|res| res.map(|data| Frame::data(data))))
+                    result
                 } else {
                     Poll::Ready(None)
                 }
