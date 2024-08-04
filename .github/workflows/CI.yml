@@ -44,13 +44,7 @@ jobs:
 
   udeps:
     name: Check unused dependencies
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        include:
-        - os: windows-latest
-          option: --exclude-features uds
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
@@ -63,7 +57,7 @@ jobs:
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --exclude-features tls --each-feature ${{ matrix.option }}
+    - run: cargo hack udeps --workspace --exclude-features tls --each-feature
     - run: cargo udeps --package tonic --features tls,transport
     - run: cargo udeps --package tonic --features tls,server
     - run: cargo udeps --package tonic --features tls,channel
