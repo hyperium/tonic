@@ -35,7 +35,6 @@ allow = [
     "Zlib",
     "Unicode-DFS-2016",
     "MPL-2.0",
-    "BSD-2-Clause",
     "BSD-3-Clause",
 ]
 
