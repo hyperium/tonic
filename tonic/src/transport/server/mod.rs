@@ -595,11 +595,10 @@ impl<L> Server<L> {
                     let req_svc = svc
                         .call(&io)
                         .await
-                        .map_err(super::Error::from_source)?
-                        .map_request(|req: Request<Incoming>| req.map(boxed));
+                        .map_err(super::Error::from_source)?;
 
                     let hyper_io = TokioIo::new(io);
-                    let hyper_svc = TowerToHyperService::new(req_svc);
+                    let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(boxed)));
 
                     serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()));
                 }
