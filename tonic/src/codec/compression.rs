@@ -205,7 +205,7 @@ pub(crate) fn compress(
     out_buf.reserve(capacity);
 
     #[cfg(any(feature = "gzip", feature = "zstd"))]
-    let mut out_writer = bytes::BufMut::writer(out_buf);
+    let mut out_writer = out_buf.writer();
 
     match settings.encoding {
         #[cfg(feature = "gzip")]
@@ -248,7 +248,7 @@ pub(crate) fn decompress(
     out_buf.reserve(capacity);
 
     #[cfg(any(feature = "gzip", feature = "zstd"))]
-    let mut out_writer = bytes::BufMut::writer(out_buf);
+    let mut out_writer = out_buf.writer();
 
     match settings.encoding {
         #[cfg(feature = "gzip")]
