@@ -8,17 +8,15 @@ use tonic::{
         server::{TcpConnectInfo, TlsConnectInfo},
         Identity, Server, ServerTlsConfig,
     },
-    Request, Response, Status,
+    Request, Response, Result,
 };
-
-type EchoResult<T> = Result<Response<T>, Status>;
 
 #[derive(Default)]
 pub struct EchoServer {}
 
 #[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
-    async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
+    async fn unary_echo(&self, request: Request<EchoRequest>) -> Result<Response<EchoResponse>> {
         let conn_info = request
             .extensions()
             .get::<TlsConnectInfo<TcpConnectInfo>>()

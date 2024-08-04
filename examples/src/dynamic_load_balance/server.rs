@@ -4,11 +4,9 @@ pub mod pb {
 
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result};
 
 use pb::{EchoRequest, EchoResponse};
-
-type EchoResult<T> = Result<Response<T>, Status>;
 
 #[derive(Debug)]
 pub struct EchoServer {
@@ -17,7 +15,7 @@ pub struct EchoServer {
 
 #[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
-    async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
+    async fn unary_echo(&self, request: Request<EchoRequest>) -> Result<Response<EchoResponse>> {
         let message = format!("{} (from {})", request.into_inner().message, self.addr);
 
         Ok(Response::new(EchoResponse { message }))

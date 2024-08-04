@@ -4,7 +4,7 @@ use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
 use hyper_util::service::TowerToHyperService;
 use tokio::net::TcpListener;
-use tonic::{service::Routes, Request, Response, Status};
+use tonic::{service::Routes, Request, Response, Result};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -18,10 +18,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         println!("Got a request from {:?}", request.remote_addr());
 
         let reply = hello_world::HelloReply {

@@ -3,7 +3,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tonic::{body::BoxBody, transport::Server, Request, Response, Result};
 use tower::{Layer, Service};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -18,10 +18,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         println!("Got a request from {:?}", request.remote_addr());
 
         let reply = hello_world::HelloReply {
@@ -61,7 +58,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 // An interceptor function.
-fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
+fn intercept(req: Request<()>) -> Result<Request<()>> {
     Ok(req)
 }
 

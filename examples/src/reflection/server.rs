@@ -1,25 +1,23 @@
-use tonic::transport::Server;
-use tonic::{Request, Response, Status};
-
-mod proto {
+mod pb {
     tonic::include_proto!("helloworld");
 
     pub(crate) const FILE_DESCRIPTOR_SET: &[u8] =
         tonic::include_file_descriptor_set!("helloworld_descriptor");
 }
 
+use tonic::{transport::Server, Request, Response, Result};
+
+use pb::{greeter_server::Greeter, HelloReply, HelloRequest};
+
 #[derive(Default)]
 pub struct MyGreeter {}
 
 #[tonic::async_trait]
-impl proto::greeter_server::Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<proto::HelloRequest>,
-    ) -> Result<Response<proto::HelloReply>, Status> {
+impl Greeter for MyGreeter {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         println!("Got a request from {:?}", request.remote_addr());
 
-        let reply = proto::HelloReply {
+        let reply = HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
         Ok(Response::new(reply))
@@ -29,7 +27,7 @@ impl proto::greeter_server::Greeter for MyGreeter {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = tonic_reflection::server::Builder::configure()
-        .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
+        .register_encoded_file_descriptor_set(pb::FILE_DESCRIPTOR_SET)
         .build()
         .unwrap();
 
@@ -38,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Server::builder()
         .add_service(service)
-        .add_service(proto::greeter_server::GreeterServer::new(greeter))
+        .add_service(pb::greeter_server::GreeterServer::new(greeter))
         .serve(addr)
         .await?;
 

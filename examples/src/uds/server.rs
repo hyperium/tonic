@@ -7,7 +7,7 @@ use tokio::net::UnixListener;
 use tokio_stream::wrappers::UnixListenerStream;
 #[cfg(unix)]
 use tonic::transport::server::UdsConnectInfo;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -23,10 +23,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         #[cfg(unix)]
         {
             let conn_info = request.extensions().get::<UdsConnectInfo>().unwrap();

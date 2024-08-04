@@ -5,7 +5,7 @@
 //! The generated code assumes that a module `crate::common` exists which defines
 //! `SmallBufferCodec`, and `SmallBufferCodec` must have a Default implementation.
 
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result};
 
 pub mod common;
 
@@ -22,10 +22,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         println!("Got a request from {:?}", request.remote_addr());
 
         let reply = HelloReply {

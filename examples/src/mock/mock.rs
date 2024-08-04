@@ -1,7 +1,7 @@
 use hyper_util::rt::TokioIo;
 use tonic::{
     transport::{Endpoint, Server, Uri},
-    Request, Response, Status,
+    Request, Response, Result,
 };
 use tower::service_fn;
 
@@ -66,10 +66,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         println!("Got a request: {:?}", request);
 
         let reply = hello_world::HelloReply {

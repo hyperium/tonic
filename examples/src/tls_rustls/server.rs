@@ -14,7 +14,7 @@ use tokio_rustls::{
     rustls::{pki_types::CertificateDer, ServerConfig},
     TlsAcceptor,
 };
-use tonic::{body::boxed, service::Routes, Request, Response, Status};
+use tonic::{body::boxed, service::Routes, Request, Response, Result};
 use tower::ServiceExt;
 use tower_http::ServiceBuilderExt;
 
@@ -93,14 +93,12 @@ struct ConnInfo {
     certificates: Vec<CertificateDer<'static>>,
 }
 
-type EchoResult<T> = Result<Response<T>, Status>;
-
 #[derive(Default)]
 pub struct EchoServer {}
 
 #[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
-    async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
+    async fn unary_echo(&self, request: Request<EchoRequest>) -> Result<Response<EchoResponse>> {
         let conn_info = request.extensions().get::<Arc<ConnInfo>>().unwrap();
         println!(
             "Got a request from: {:?} with certs: {:?}",

@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -15,10 +15,7 @@ pub struct MyGreeter {}
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
     #[tracing::instrument]
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         tracing::info!("received request");
 
         let reply = hello_world::HelloReply {

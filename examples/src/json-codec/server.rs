@@ -4,7 +4,7 @@
 //! in the `examples/build.rs` file. As defined there, the generated code assumes that a module
 //! `crate::common` exists which defines `HelloRequest`, `HelloResponse`, and `JsonCodec`.
 
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result};
 
 pub mod common;
 use common::{HelloRequest, HelloResponse};
@@ -19,10 +19,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloResponse>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloResponse>> {
         println!("Got a request from {:?}", request.remote_addr());
 
         let reply = HelloResponse {

@@ -4,16 +4,14 @@ pub mod pb {
 
 use pb::{EchoRequest, EchoResponse};
 use tonic::transport::{Certificate, Identity, Server, ServerTlsConfig};
-use tonic::{Request, Response, Status};
-
-type EchoResult<T> = Result<Response<T>, Status>;
+use tonic::{Request, Response, Result};
 
 #[derive(Default)]
 pub struct EchoServer {}
 
 #[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
-    async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
+    async fn unary_echo(&self, request: Request<EchoRequest>) -> Result<Response<EchoResponse>> {
         let certs = request
             .peer_certs()
             .expect("Client did not send its certs!");

@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -12,10 +12,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         let extension = request.extensions().get::<MyExtension>().unwrap();
         println!("extension data = {}", extension.some_piece_of_data);
 
@@ -46,7 +43,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// This function will get called on each inbound request, if a `Status`
 /// is returned, it will cancel the request and return that status to the
 /// client.
-fn intercept(mut req: Request<()>) -> Result<Request<()>, Status> {
+fn intercept(mut req: Request<()>) -> Result<Request<()>> {
     println!("Intercepting request: {:?}", req);
 
     // Set an extension that can be retrieved by `say_hello`

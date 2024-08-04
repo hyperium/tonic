@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Code, Request, Response, Status};
+use tonic::{transport::Server, Code, Request, Response, Result, Status};
 use tonic_types::{BadRequest, Help, LocalizedMessage, StatusExt};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -13,10 +13,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         println!("Got a request from {:?}", request.remote_addr());
 
         // Extract request data

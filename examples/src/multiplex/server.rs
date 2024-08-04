@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -39,10 +39,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
@@ -55,10 +52,7 @@ pub struct MyEcho {}
 
 #[tonic::async_trait]
 impl Echo for MyEcho {
-    async fn unary_echo(
-        &self,
-        request: Request<EchoRequest>,
-    ) -> Result<Response<EchoResponse>, Status> {
+    async fn unary_echo(&self, request: Request<EchoRequest>) -> Result<Response<EchoResponse>> {
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
     }

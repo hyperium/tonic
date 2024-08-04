@@ -1,7 +1,7 @@
 use std::future::Future;
 
 use tokio_util::sync::CancellationToken;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Result, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -19,10 +19,7 @@ pub struct MyGreeter {}
 
 #[tonic::async_trait]
 impl Greeter for MyGreeter {
-    async fn say_hello(
-        &self,
-        request: Request<HelloRequest>,
-    ) -> Result<Response<HelloReply>, Status> {
+    async fn say_hello(&self, request: Request<HelloRequest>) -> Result<Response<HelloReply>> {
         let remote_addr = request.remote_addr();
         let request_future = async move {
             println!("Got a request from {:?}", request.remote_addr());
@@ -49,10 +46,10 @@ impl Greeter for MyGreeter {
 async fn with_cancellation_handler<FRequest, FCancellation>(
     request_future: FRequest,
     cancellation_future: FCancellation,
-) -> Result<Response<HelloReply>, Status>
+) -> Result<Response<HelloReply>>
 where
-    FRequest: Future<Output = Result<Response<HelloReply>, Status>> + Send + 'static,
-    FCancellation: Future<Output = Result<Response<HelloReply>, Status>> + Send + 'static,
+    FRequest: Future<Output = Result<Response<HelloReply>>> + Send + 'static,
+    FCancellation: Future<Output = Result<Response<HelloReply>>> + Send + 'static,
 {
     let token = CancellationToken::new();
     // Will call token.cancel() when the future is dropped, such as when the client cancels the request
