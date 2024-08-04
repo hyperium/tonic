@@ -16,6 +16,7 @@ use crate::service::Routes;
 pub use conn::{Connected, TcpConnectInfo};
 use hyper_util::{
     rt::{TokioExecutor, TokioIo, TokioTimer},
+    server::conn::auto::{Builder as ConnectionBuilder, HttpServerConnExec},
     service::TowerToHyperService,
 };
 #[cfg(feature = "tls")]
@@ -65,7 +66,6 @@ use tower::{
     Service, ServiceBuilder, ServiceExt,
 };
 
-type BoxError = crate::Error;
 type BoxService = tower::util::BoxCloneService<Request<BoxBody>, Response<BoxBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
@@ -540,7 +540,7 @@ impl<L> Server<L> {
         };
 
         let server = {
-            let mut builder = hyper_util::server::conn::auto::Builder::new(TokioExecutor::new());
+            let mut builder = ConnectionBuilder::new(TokioExecutor::new());
 
             if http2_only {
                 builder = builder.http2_only();
@@ -623,16 +623,20 @@ impl<L> Server<L> {
 
 // This is moved to its own function as a way to get around
 // https://github.com/rust-lang/rust/issues/102211
-fn serve_connection<IO, S>(
+fn serve_connection<B, IO, S, E>(
     hyper_io: IO,
     hyper_svc: S,
-    builder: ConnectionBuilder,
+    builder: ConnectionBuilder<E>,
     mut watcher: Option<tokio::sync::watch::Receiver<()>>,
 ) where
+    B: http_body::Body + Send + 'static,
+    B::Data: Send,
+    B::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send + Sync,
     IO: hyper::rt::Read + hyper::rt::Write + Unpin + Send + 'static,
-    S: HyperService<Request<Incoming>, Response = Response<BoxBody>> + Clone + Send + 'static,
+    S: HyperService<Request<Incoming>, Response = Response<B>> + Clone + Send + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
+    S::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+    E: HttpServerConnExec<S::Future, B> + Send + Sync + 'static,
 {
     tokio::spawn(async move {
         {
@@ -661,8 +665,6 @@ fn serve_connection<IO, S>(
         trace!("connection closed");
     });
 }
-
-type ConnectionBuilder = hyper_util::server::conn::auto::Builder<TokioExecutor>;
 
 impl<L> Router<L> {
     pub(crate) fn new(server: Server<L>, routes: Routes) -> Self {
