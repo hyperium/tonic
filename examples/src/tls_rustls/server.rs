@@ -2,9 +2,11 @@ pub mod pb {
     tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
-use http_body_util::BodyExt;
 use hyper::server::conn::http2::Builder;
-use hyper_util::rt::{TokioExecutor, TokioIo};
+use hyper_util::{
+    rt::{TokioExecutor, TokioIo},
+    service::TowerToHyperService,
+};
 use pb::{EchoRequest, EchoResponse};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -12,8 +14,8 @@ use tokio_rustls::{
     rustls::{pki_types::CertificateDer, ServerConfig},
     TlsAcceptor,
 };
-use tonic::{body::BoxBody, service::Routes, Request, Response, Status};
-use tower::{BoxError, ServiceExt};
+use tonic::{body::boxed, service::Routes, Request, Response, Status};
+use tower::ServiceExt;
 use tower_http::ServiceBuilderExt;
 
 #[tokio::main]
@@ -75,9 +77,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .add_extension(Arc::new(ConnInfo { addr, certificates }))
                 .service(svc);
 
-            http.serve_connection(TokioIo::new(conn), TowerToHyperService::new(svc))
-                .await
-                .unwrap();
+            http.serve_connection(
+                TokioIo::new(conn),
+                TowerToHyperService::new(svc.map_request(|req: http::Request<_>| req.map(boxed))),
+            )
+            .await
+            .unwrap();
         });
     }
 }
@@ -104,72 +109,5 @@ impl pb::echo_server::Echo for EchoServer {
 
         let message = request.into_inner().message;
         Ok(Response::new(EchoResponse { message }))
-    }
-}
-
-/// An adaptor which converts a [`tower::Service`] to a [`hyper::service::Service`].
-///
-/// The [`hyper::service::Service`] trait is used by hyper to handle incoming requests,
-/// and does not support the `poll_ready` method that is used by tower services.
-///
-/// This is provided here because the equivalent adaptor in hyper-util does not support
-/// tonic::body::BoxBody bodies.
-#[derive(Debug, Clone)]
-struct TowerToHyperService<S> {
-    service: S,
-}
-
-impl<S> TowerToHyperService<S> {
-    /// Create a new `TowerToHyperService` from a tower service.
-    fn new(service: S) -> Self {
-        Self { service }
-    }
-}
-
-impl<S> hyper::service::Service<hyper::Request<hyper::body::Incoming>> for TowerToHyperService<S>
-where
-    S: tower::Service<hyper::Request<BoxBody>> + Clone,
-    S::Error: Into<BoxError> + 'static,
-{
-    type Response = S::Response;
-    type Error = BoxError;
-    type Future = TowerToHyperServiceFuture<S, hyper::Request<BoxBody>>;
-
-    fn call(&self, req: hyper::Request<hyper::body::Incoming>) -> Self::Future {
-        let req = req.map(|incoming| {
-            incoming
-                .map_err(|err| Status::from_error(err.into()))
-                .boxed_unsync()
-        });
-        TowerToHyperServiceFuture {
-            future: self.service.clone().oneshot(req),
-        }
-    }
-}
-
-/// Future returned by [`TowerToHyperService`].
-#[derive(Debug)]
-#[pin_project::pin_project]
-struct TowerToHyperServiceFuture<S, R>
-where
-    S: tower::Service<R>,
-{
-    #[pin]
-    future: tower::util::Oneshot<S, R>,
-}
-
-impl<S, R> std::future::Future for TowerToHyperServiceFuture<S, R>
-where
-    S: tower::Service<R>,
-    S::Error: Into<BoxError> + 'static,
-{
-    type Output = Result<S::Response, BoxError>;
-
-    #[inline]
-    fn poll(
-        self: std::pin::Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Self::Output> {
-        self.project().future.poll(cx).map_err(Into::into)
     }
 }
