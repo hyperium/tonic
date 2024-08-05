@@ -313,7 +313,7 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Default)]
-    struct MockEncoder;
+    struct MockEncoder {}
 
     impl Encoder for MockEncoder {
         type Item = Vec<u8>;
@@ -330,7 +330,7 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Default)]
-    struct MockDecoder;
+    struct MockDecoder {}
 
     impl Decoder for MockDecoder {
         type Item = Vec<u8>;
