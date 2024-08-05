@@ -17,22 +17,24 @@
 //! # Feature Flags
 //!
 //! - `transport`: Enables the fully featured, batteries included client and server
-//!   implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
+//!   implementation based on [`hyper`], [`tower`] and [`tokio`]. This enables `server`
+//!   and `channel` features. Enabled by default.
 //! - `server`: Enables just the full featured server portion of the `transport` feature.
 //! - `channel`: Enables just the full featured channel portion of the `transport` feature.
+//! - `router`: Enables the [`axum`] based service router. Enabled by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //!   for [`tonic-build`]. Enabled by default.
-//! - `tls`: Enables the `rustls` based TLS options for the `transport` feature. Not
+//! - `tls`: Enables the [`rustls`] based TLS options for the `transport` feature. Not
 //!   enabled by default.
-//! - `tls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
-//!   `rustls-native-certs` crate. Not enabled by default. `tls` must be enabled to use
-//!   `tls-roots`.
-//! - `tls-webpki-roots`: Add the standard trust roots from the `webpki-roots` crate to
+//! - `tls-roots`: Adds system trust roots to [`rustls`]-based gRPC clients using the
+//!   [`rustls-native-certs`] crate. Not enabled by default.
+//! - `tls-webpki-roots`: Add the standard trust roots from the [`webpki-roots`] crate to
 //!   `rustls`-based gRPC clients. Not enabled by default.
-//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
-//! - `gzip`: Enables compressing requests, responses, and streams.
-//!   Depends on [flate2]. Not enabled by default.
-//!   Replaces the `compression` flag from earlier versions of `tonic` (<= 0.7).
+//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation. Enabled by default.
+//! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
+//!   Not enabled by default.
+//! - `zstd`: Enables compressing requests, responses, and streams. Depends on [`zstd`].
+//!   Not enabled by default.
 //!
 //! # Structure
 //!
@@ -75,7 +77,10 @@
 //! [`rustls`]: https://docs.rs/rustls
 //! [`client`]: client/index.html
 //! [`transport`]: transport/index.html
-//! [flate2]: https://crates.io/crates/flate2
+//! [`rustls-native-certs`]: https://docs.rs/rustls-native-certs
+//! [`webpki-roots`]: https://docs.rs/webpki-roots
+//! [`flate2`]: https://docs.rs/flate2
+//! [`zstd`]: https://docs.rs/zstd
 
 #![recursion_limit = "256"]
 #![warn(
