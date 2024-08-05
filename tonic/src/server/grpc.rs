@@ -1,6 +1,7 @@
 use crate::codec::compression::{
     CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
 };
+use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
     body::BoxBody,
     codec::{encode_server, Codec, Streaming},
@@ -15,7 +16,7 @@ macro_rules! t {
     ($result:expr) => {
         match $result {
             Ok(value) => value,
-            Err(status) => return status.to_http(),
+            Err(status) => return status.into_http(),
         }
     };
 }
@@ -187,7 +188,7 @@ where
     ) -> Self {
         let mut this = self;
 
-        for &encoding in CompressionEncoding::encodings() {
+        for &encoding in CompressionEncoding::ENCODINGS {
             if accept_encodings.is_enabled(encoding) {
                 this = this.accept_compressed(encoding);
             }
@@ -433,10 +434,9 @@ where
         let (mut parts, body) = response.into_http().into_parts();
 
         // Set the content type
-        parts.headers.insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
-        );
+        parts
+            .headers
+            .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
 
         #[cfg(any(feature = "gzip", feature = "zstd"))]
         if let Some(encoding) = accept_encoding {

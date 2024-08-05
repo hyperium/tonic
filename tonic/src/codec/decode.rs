@@ -2,8 +2,9 @@ use super::compression::{decompress, CompressionEncoding, CompressionSettings};
 use super::{BufferSettings, DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
-use http::StatusCode;
+use http::{HeaderMap, StatusCode};
 use http_body::Body;
+use http_body_util::BodyExt;
 use std::{
     fmt, future,
     pin::Pin,
@@ -27,7 +28,7 @@ struct StreamingInner {
     state: State,
     direction: Direction,
     buf: BytesMut,
-    trailers: Option<MetadataMap>,
+    trailers: Option<HeaderMap>,
     decompress_buf: BytesMut,
     encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
@@ -35,14 +36,14 @@ struct StreamingInner {
 
 impl<T> Unpin for Streaming<T> {}
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 enum State {
     ReadHeader,
     ReadBody {
         compression: Option<CompressionEncoding>,
         len: usize,
     },
-    Error,
+    Error(Option<Status>),
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -121,7 +122,7 @@ impl<T> Streaming<T> {
             decoder: Box::new(decoder),
             inner: StreamingInner {
                 body: body
-                    .map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
+                    .map_frame(|frame| frame.map_data(|mut buf| buf.copy_to_bytes(buf.remaining())))
                     .map_err(|err| Status::map_error(err.into()))
                     .boxed_unsync(),
                 state: State::ReadHeader,
@@ -239,24 +240,41 @@ impl StreamingInner {
     }
 
     // Returns Some(()) if data was found or None if the loop in `poll_next` should break
-    fn poll_data(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
-        let chunk = match ready!(Pin::new(&mut self.body).poll_data(cx)) {
+    fn poll_frame(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
+        let chunk = match ready!(Pin::new(&mut self.body).poll_frame(cx)) {
             Some(Ok(d)) => Some(d),
             Some(Err(status)) => {
                 if self.direction == Direction::Request && status.code() == Code::Cancelled {
                     return Poll::Ready(Ok(None));
                 }
 
-                let _ = std::mem::replace(&mut self.state, State::Error);
+                let _ = std::mem::replace(&mut self.state, State::Error(Some(status.clone())));
                 debug!("decoder inner stream error: {:?}", status);
                 return Poll::Ready(Err(status));
             }
             None => None,
         };
 
-        Poll::Ready(if let Some(data) = chunk {
-            self.buf.put(data);
-            Ok(Some(()))
+        Poll::Ready(if let Some(frame) = chunk {
+            match frame {
+                frame if frame.is_data() => {
+                    self.buf.put(frame.into_data().unwrap());
+                    Ok(Some(()))
+                }
+                frame if frame.is_trailers() => {
+                    match &mut self.trailers {
+                        Some(trailers) => {
+                            trailers.extend(frame.into_trailers().unwrap());
+                        }
+                        None => {
+                            self.trailers = Some(frame.into_trailers().unwrap());
+                        }
+                    }
+
+                    Ok(None)
+                }
+                frame => panic!("unexpected frame: {:?}", frame),
+            }
         } else {
             // FIXME: improve buf usage.
             if self.buf.has_remaining() {
@@ -271,27 +289,16 @@ impl StreamingInner {
         })
     }
 
-    fn poll_response(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Status>> {
+    fn response(&mut self) -> Result<(), Status> {
         if let Direction::Response(status) = self.direction {
-            match ready!(Pin::new(&mut self.body).poll_trailers(cx)) {
-                Ok(trailer) => {
-                    if let Err(e) = crate::status::infer_grpc_status(trailer.as_ref(), status) {
-                        if let Some(e) = e {
-                            return Poll::Ready(Err(e));
-                        } else {
-                            return Poll::Ready(Ok(()));
-                        }
-                    } else {
-                        self.trailers = trailer.map(MetadataMap::from_headers);
-                    }
-                }
-                Err(status) => {
-                    debug!("decoder inner trailers error: {:?}", status);
-                    return Poll::Ready(Err(status));
-                }
+            if let Err(Some(e)) = crate::status::infer_grpc_status(self.trailers.as_ref(), status) {
+                // If the trailers contain a grpc-status, then we should return that as the error
+                // and otherwise stop the stream (by taking the error state)
+                self.trailers.take();
+                return Err(e);
             }
         }
-        Poll::Ready(Ok(()))
+        Ok(())
     }
 }
 
@@ -301,15 +308,15 @@ impl<T> Streaming<T> {
     /// # Return value
     ///
     /// - `Result::Err(val)` means a gRPC error was sent by the sender instead
-    /// of a valid response message. Refer to [`Status::code`] and
-    /// [`Status::message`] to examine possible error causes.
+    ///   of a valid response message. Refer to [`Status::code`] and
+    ///   [`Status::message`] to examine possible error causes.
     ///
     /// - `Result::Ok(None)` means the stream was closed by the sender and no
-    /// more messages will be delivered. Further attempts to call
-    /// [`Streaming::message`] will result in the same return value.
+    ///   more messages will be delivered. Further attempts to call
+    ///   [`Streaming::message`] will result in the same return value.
     ///
     /// - `Result::Ok(Some(val))` means the sender streamed a valid response
-    /// message `val`.
+    ///   message `val`.
     ///
     /// ```rust
     /// # use tonic::{Streaming, Status, codec::Decoder};
@@ -351,7 +358,7 @@ impl<T> Streaming<T> {
         // Shortcut to see if we already pulled the trailers in the stream step
         // we need to do that so that the stream can error on trailing grpc-status
         if let Some(trailers) = self.inner.trailers.take() {
-            return Ok(Some(trailers));
+            return Ok(Some(MetadataMap::from_headers(trailers)));
         }
 
         // To fetch the trailers we must clear the body and drop it.
@@ -360,16 +367,11 @@ impl<T> Streaming<T> {
         // Since we call poll_trailers internally on poll_next we need to
         // check if it got cached again.
         if let Some(trailers) = self.inner.trailers.take() {
-            return Ok(Some(trailers));
+            return Ok(Some(MetadataMap::from_headers(trailers)));
         }
 
-        // Trailers were not caught during poll_next and thus lets poll for
-        // them manually.
-        let map = future::poll_fn(|cx| Pin::new(&mut self.inner.body).poll_trailers(cx))
-            .await
-            .map_err(|e| Status::from_error(Box::new(e)));
-
-        map.map(|x| x.map(MetadataMap::from_headers))
+        // We've polled through all the frames, and still no trailers, return None
+        Ok(None)
     }
 
     fn decode_chunk(&mut self) -> Result<Option<T>, Status> {
@@ -391,24 +393,24 @@ impl<T> Stream for Streaming<T> {
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         loop {
-            if let State::Error = &self.inner.state {
-                return Poll::Ready(None);
+            // When the stream encounters an error yield that error once and then on subsequent
+            // calls to poll_next return Poll::Ready(None) indicating that the stream has been
+            // fully exhausted.
+            if let State::Error(status) = &mut self.inner.state {
+                return Poll::Ready(status.take().map(Err));
             }
 
-            // FIXME: implement the ability to poll trailers when we _know_ that
-            // the consumer of this stream will only poll for the first message.
-            // This means we skip the poll_trailers step.
             if let Some(item) = self.decode_chunk()? {
                 return Poll::Ready(Some(Ok(item)));
             }
 
-            match ready!(self.inner.poll_data(cx))? {
+            match ready!(self.inner.poll_frame(cx))? {
                 Some(()) => (),
                 None => break,
             }
         }
 
-        Poll::Ready(match ready!(self.inner.poll_response(cx)) {
+        Poll::Ready(match self.inner.response() {
             Ok(()) => None,
             Err(err) => Some(Err(err)),
         })

@@ -219,7 +219,7 @@ where
                 let response = status
                     .take()
                     .unwrap()
-                    .to_http()
+                    .into_http()
                     .map(|_| B::default())
                     .map(boxed);
                 Poll::Ready(Ok(response))
@@ -230,13 +230,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    #[allow(unused_imports)]
     use super::*;
-    use http::header::HeaderMap;
-    use std::{
-        pin::Pin,
-        task::{Context, Poll},
-    };
+    use http_body::Frame;
+    use http_body_util::Empty;
     use tower::ServiceExt;
 
     #[derive(Debug, Default)]
@@ -246,18 +242,11 @@ mod tests {
         type Data = Bytes;
         type Error = Status;
 
-        fn poll_data(
+        fn poll_frame(
             self: Pin<&mut Self>,
             _cx: &mut Context<'_>,
-        ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+        ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
             Poll::Ready(None)
-        }
-
-        fn poll_trailers(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-        ) -> Poll<Result<Option<HeaderMap>, Self::Error>> {
-            Poll::Ready(Ok(None))
         }
     }
 
@@ -298,7 +287,7 @@ mod tests {
     #[tokio::test]
     async fn handles_intercepted_status_as_response() {
         let message = "Blocked by the interceptor";
-        let expected = Status::permission_denied(message).to_http();
+        let expected = Status::permission_denied(message).into_http();
 
         let svc = tower::service_fn(|_: http::Request<TestBody>| async {
             Ok::<_, Status>(http::Response::new(TestBody))
@@ -318,17 +307,17 @@ mod tests {
 
     #[tokio::test]
     async fn doesnt_change_http_method() {
-        let svc = tower::service_fn(|request: http::Request<hyper::Body>| async move {
+        let svc = tower::service_fn(|request: http::Request<Empty<()>>| async move {
             assert_eq!(request.method(), http::Method::OPTIONS);
 
-            Ok::<_, hyper::Error>(hyper::Response::new(hyper::Body::empty()))
+            Ok::<_, hyper::Error>(hyper::Response::new(Empty::new()))
         });
 
         let svc = InterceptedService::new(svc, Ok);
 
         let request = http::Request::builder()
             .method(http::Method::OPTIONS)
-            .body(hyper::Body::empty())
+            .body(Empty::new())
             .unwrap();
 
         svc.oneshot(request).await.unwrap();

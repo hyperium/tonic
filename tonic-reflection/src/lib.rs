@@ -10,10 +10,10 @@
     html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-reflection/0.11.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-reflection/0.12.1")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 mod generated {
     #![allow(unreachable_pub)]
@@ -69,5 +69,4 @@ pub mod pb {
 
 /// Implementation of the server component of gRPC Server Reflection.
 #[cfg(feature = "server")]
-#[cfg_attr(docsrs, doc(cfg(feature = "server")))]
 pub mod server;

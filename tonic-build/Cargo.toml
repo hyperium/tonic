@@ -4,7 +4,7 @@ categories = ["network-programming", "asynchronous"]
 description = """
 Codegen module of `tonic` gRPC implementation.
 """
-documentation = "https://docs.rs/tonic-build/0.11.0"
+documentation = "https://docs.rs/tonic-build/0.12.1"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
@@ -12,12 +12,12 @@ license = "MIT"
 name = "tonic-build"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.11.0"
+version = "0.12.1"
 
 [dependencies]
 prettyplease = { version = "0.2" }
 proc-macro2 = "1.0"
-prost-build = { version = "0.12", optional = true }
+prost-build = { version = "0.13", optional = true }
 quote = "1.0"
 syn = "2.0"
 
@@ -29,3 +29,12 @@ transport = []
 
 [package.metadata.docs.rs]
 all-features = true
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  # major released
+  "proc_macro2::*",
+
+  # not major released
+  "prost_build::*",
+]

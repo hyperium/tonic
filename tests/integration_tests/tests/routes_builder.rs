@@ -7,7 +7,7 @@ use integration_tests::pb::{
     test1_client, test1_server, test_client, test_server, Input, Input1, Output, Output1,
 };
 use tonic::codegen::BoxStream;
-use tonic::transport::server::RoutesBuilder;
+use tonic::service::RoutesBuilder;
 use tonic::{
     transport::{Endpoint, Server},
     Request, Response, Status,

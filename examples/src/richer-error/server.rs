@@ -33,7 +33,7 @@ impl Greeter for MyGreeter {
         }
 
         if err_details.has_bad_request_violations() {
-            // Add aditional error details if necessary
+            // Add additional error details if necessary
             err_details
                 .add_help_link("description of link", "https://resource.example.local")
                 .set_localized_message("en-US", "message for the user");

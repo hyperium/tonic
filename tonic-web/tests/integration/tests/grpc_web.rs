@@ -2,21 +2,27 @@ use std::net::SocketAddr;
 
 use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
+use http_body_util::{BodyExt as _, Full};
+use hyper::body::Incoming;
 use hyper::http::{header, StatusCode};
-use hyper::{Body, Client, Method, Request, Uri};
+use hyper::{Method, Request, Uri};
+use hyper_util::client::legacy::Client;
+use hyper_util::rt::TokioExecutor;
 use prost::Message;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
+use tonic::body::BoxBody;
 use tonic::transport::Server;
 
 use integration::pb::{test_server::TestServer, Input, Output};
 use integration::Svc;
+use tonic::Status;
 use tonic_web::GrpcWebLayer;
 
 #[tokio::test]
 async fn binary_request() {
     let server_url = spawn().await;
-    let client = Client::new();
+    let client = Client::builder(TokioExecutor::new()).build_http();
 
     let req = build_request(server_url, "grpc-web", "grpc-web");
     let res = client.request(req).await.unwrap();
@@ -39,7 +45,7 @@ async fn binary_request() {
 #[tokio::test]
 async fn text_request() {
     let server_url = spawn().await;
-    let client = Client::new();
+    let client = Client::builder(TokioExecutor::new()).build_http();
 
     let req = build_request(server_url, "grpc-web-text", "grpc-web-text");
     let res = client.request(req).await.unwrap();
@@ -102,7 +108,7 @@ fn encode_body() -> Bytes {
     buf.split_to(len + 5).freeze()
 }
 
-fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<Body> {
+fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<BoxBody> {
     use header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 
     let request_uri = format!("{}/{}/{}", base_uri, "test.Test", "UnaryCall")
@@ -123,12 +129,14 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
         .header(ORIGIN, "http://example.com")
         .header(ACCEPT, format!("application/{}", accept))
         .uri(request_uri)
-        .body(Body::from(bytes))
+        .body(BoxBody::new(
+            Full::new(bytes).map_err(|err| Status::internal(err.to_string())),
+        ))
         .unwrap()
 }
 
-async fn decode_body(body: Body, content_type: &str) -> (Output, Bytes) {
-    let mut body = hyper::body::to_bytes(body).await.unwrap();
+async fn decode_body(body: Incoming, content_type: &str) -> (Output, Bytes) {
+    let mut body = body.collect().await.unwrap().to_bytes();
 
     if content_type == "application/grpc-web-text+proto" {
         body = integration::util::base64::STANDARD

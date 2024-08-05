@@ -1,8 +1,7 @@
-use crate::metadata::GRPC_TIMEOUT_HEADER;
+use crate::{metadata::GRPC_TIMEOUT_HEADER, TimeoutExpired};
 use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
 use std::{
-    fmt,
     future::Future,
     pin::Pin,
     task::{ready, Context, Poll},
@@ -58,10 +57,7 @@ where
 
         ResponseFuture {
             inner: self.inner.call(req),
-            sleep: timeout_duration
-                .map(tokio::time::sleep)
-                .map(Some)
-                .unwrap_or(None),
+            sleep: timeout_duration.map(tokio::time::sleep),
         }
     }
 }
@@ -149,26 +145,6 @@ fn try_parse_grpc_timeout(
         None => Ok(None),
     }
 }
-
-/// Error returned if a request didn't complete within the configured timeout.
-///
-/// Timeouts can be configured either with [`Endpoint::timeout`], [`Server::timeout`], or by
-/// setting the [`grpc-timeout` metadata value][spec].
-///
-/// [`Endpoint::timeout`]: crate::transport::server::Server::timeout
-/// [`Server::timeout`]: crate::transport::channel::Endpoint::timeout
-/// [spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
-#[derive(Debug)]
-pub struct TimeoutExpired(());
-
-impl fmt::Display for TimeoutExpired {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Timeout expired")
-    }
-}
-
-// std::error::Error only requires a type to impl Debug and Display
-impl std::error::Error for TimeoutExpired {}
 
 #[cfg(test)]
 mod tests {

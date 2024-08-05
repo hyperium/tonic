@@ -1,4 +1,3 @@
-use hyper::server::conn::AddrStream;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
@@ -86,17 +85,6 @@ impl TcpConnectInfo {
     }
 }
 
-impl Connected for AddrStream {
-    type ConnectInfo = TcpConnectInfo;
-
-    fn connect_info(&self) -> Self::ConnectInfo {
-        TcpConnectInfo {
-            local_addr: Some(self.local_addr()),
-            remote_addr: Some(self.remote_addr()),
-        }
-    }
-}
-
 impl Connected for TcpStream {
     type ConnectInfo = TcpConnectInfo;
 
@@ -141,7 +129,6 @@ where
 ///
 /// [ext]: crate::Request::extensions
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 #[derive(Debug, Clone)]
 pub struct TlsConnectInfo<T> {
     inner: T,
@@ -149,7 +136,6 @@ pub struct TlsConnectInfo<T> {
 }
 
 #[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 impl<T> TlsConnectInfo<T> {
     /// Get a reference to the underlying connection info.
     pub fn get_ref(&self) -> &T {

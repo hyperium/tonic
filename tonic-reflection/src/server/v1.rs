@@ -1,4 +1,4 @@
-pub use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
+use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
 
 use crate::pb::v1::server_reflection_request::MessageRequest;
 use crate::pb::v1::server_reflection_response::MessageResponse;
@@ -6,45 +6,18 @@ use crate::pb::v1::{
     ExtensionNumberResponse, FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest,
     ServerReflectionResponse, ServiceResponse,
 };
-use prost::{DecodeError, Message};
+use prost::Message;
 use prost_types::{
     DescriptorProto, EnumDescriptorProto, FieldDescriptorProto, FileDescriptorProto,
     FileDescriptorSet,
 };
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 
-/// Represents an error in the construction of a gRPC Reflection Service.
-#[derive(Debug)]
-pub enum Error {
-    /// An error was encountered decoding a `prost_types::FileDescriptorSet` from a buffer.
-    DecodeError(prost::DecodeError),
-    /// An invalid `prost_types::FileDescriptorProto` was encountered.
-    InvalidFileDescriptorSet(String),
-}
-
-impl From<DecodeError> for Error {
-    fn from(e: DecodeError) -> Self {
-        Error::DecodeError(e)
-    }
-}
-
-impl std::error::Error for Error {}
-
-impl Display for Error {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Error::DecodeError(_) => f.write_str("error decoding FileDescriptorSet from buffer"),
-            Error::InvalidFileDescriptorSet(s) => {
-                write!(f, "invalid FileDescriptorSet - {}", s)
-            }
-        }
-    }
-}
+use crate::server::Error;
 
 /// A builder used to construct a gRPC Reflection Service.
 #[derive(Debug)]
@@ -332,11 +305,8 @@ impl ServerReflection for ReflectionService {
 
         tokio::spawn(async move {
             while let Some(req) = req_rx.next().await {
-                let req = match req {
-                    Ok(req) => req,
-                    Err(_) => {
-                        return;
-                    }
+                let Ok(req) = req else {
+                    return;
                 };
 
                 let resp_msg = match req.message_request.clone() {

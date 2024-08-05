@@ -20,9 +20,6 @@ deny = [
 skip-tree = [
     { name = "windows-sys" },
     { name = "hermit-abi" },
-    { name = "syn" },
-    { name = "bitflags" },
-    { name = "indexmap" },
     { name = "examples" },
 ]
 
@@ -38,7 +35,7 @@ allow = [
     "Zlib",
     "Unicode-DFS-2016",
     "MPL-2.0",
-    "BSD-3-Clause"
+    "BSD-3-Clause",
 ]
 
 [[licenses.clarify]]

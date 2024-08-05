@@ -13,14 +13,14 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-documentation = "https://docs.rs/tonic/0.11.0"
+documentation = "https://docs.rs/tonic/0.12.1"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.11.0"
+version = "0.12.1"
 
 [features]
 codegen = ["dep:async-trait"]
@@ -28,21 +28,29 @@ gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "transport", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
-tls-roots = ["tls-roots-common", "dep:rustls-native-certs"]
-tls-roots-common = ["tls"]
-tls-webpki-roots = ["tls-roots-common", "dep:webpki-roots"]
-transport = [
+tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
+tls-roots = ["tls", "channel", "dep:rustls-native-certs"]
+tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
+router = ["dep:axum", "dep:tower", "tower?/util"]
+server = [
+  "router",
   "dep:async-stream",
-  "dep:axum",
-  "channel",
   "dep:h2",
-  "dep:hyper",
-  "dep:tokio", "tokio?/net", "tokio?/time",
-  "dep:tower",
+  "dep:hyper", "hyper?/server",
+  "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
+  "dep:socket2",
+  "dep:tokio", "tokio?/macros", "tokio?/net", "tokio?/time",
+  "tokio-stream/net",
+  "dep:tower", "tower?/util", "tower?/limit",
+]
+channel = [
+  "dep:hyper", "hyper?/client",
+  "dep:hyper-util", "hyper-util?/client-legacy",
+  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit",
+  "dep:tokio", "tokio?/time",
   "dep:hyper-timeout",
 ]
-channel = []
+transport = ["server", "channel"]
 
 # [[bench]]
 # name = "bench_main"
@@ -51,30 +59,32 @@ channel = []
 [dependencies]
 base64 = "0.22"
 bytes = "1.0"
-http = "0.2"
+http = "1"
 tracing = "0.1"
 
-http-body = "0.4.4"
+http-body = "1"
+http-body-util = "0.1"
 percent-encoding = "2.1"
 pin-project = "1.0.11"
 tower-layer = "0.3"
 tower-service = "0.3"
+tokio-stream = {version = "0.1", default-features = false}
 
 # prost
-prost = {version = "0.12", default-features = false, features = ["std"], optional = true}
+prost = {version = "0.13", default-features = false, features = ["std"], optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
 
 # transport
 async-stream = {version = "0.3", optional = true}
-h2 = {version = "0.3.24", optional = true}
-hyper = {version = "0.14.26", features = ["full"], optional = true}
-hyper-timeout = {version = "0.4", optional = true}
-tokio = {version = "1.0.1", optional = true}
-tokio-stream = "0.1"
-tower = {version = "0.4.7", default-features = false, features = ["balance", "buffer", "discover", "limit", "load", "make", "timeout", "util"], optional = true}
-axum = {version = "0.6.9", default-features = false, optional = true}
+h2 = {version = "0.4", optional = true}
+hyper = {version = "1", features = ["http1", "http2"], optional = true}
+hyper-util = { version = "0.1.4", features = ["tokio"], optional = true }
+socket2 = { version = "0.5", optional = true, features = ["all"] }
+tokio = {version = "1", default-features = false, optional = true}
+tower = {version = "0.4.7", default-features = false, optional = true}
+axum = {version = "0.7", default-features = false, optional = true}
 
 # rustls
 rustls-pemfile = { version = "2.0", optional = true }
@@ -85,6 +95,9 @@ webpki-roots = { version = "0.26", optional = true }
 # compression
 flate2 = {version = "1.0", optional = true}
 zstd = { version = "0.13.0", optional = true }
+
+# channel
+hyper-timeout = {version = "0.5", optional = true}
 
 [dev-dependencies]
 bencher = "0.1.5"
@@ -98,6 +111,33 @@ tower = {version = "0.4.7", features = ["full"]}
 [package.metadata.docs.rs]
 all-features = true
 rustdoc-args = ["--cfg", "docsrs"]
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  # major released
+  "bytes::*",
+  "tokio::*",
+  "http::*",
+  "http_body::*",
+  "hyper::*",
+  "rustls_pki_types::*",
+
+  # not major released
+  "prost::*",
+  "tracing::*",
+
+  "async_trait::async_trait",
+  "axum_core::body::Body",
+  "axum::routing::Router",
+  "futures_core::stream::Stream",
+  "h2::error::Error",
+  "http_body_util::combinators::box_body::UnsyncBoxBody",
+  "tower::discover::Change",
+  "tower_service::Service",
+  "tower_layer::Layer",
+  "tower_layer::stack::Stack",
+  "tower_layer::identity::Identity",
+]
 
 [[bench]]
 harness = false

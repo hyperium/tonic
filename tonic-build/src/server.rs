@@ -111,14 +111,12 @@ pub(crate) fn generate_internal<T: Service>(
             #(#struct_attributes)*
             #[derive(Debug)]
             pub struct #server_service<T: #server_trait> {
-                inner: _Inner<T>,
+                inner: Arc<T>,
                 accept_compression_encodings: EnabledCompressionEncodings,
                 send_compression_encodings: EnabledCompressionEncodings,
                 max_decoding_message_size: Option<usize>,
                 max_encoding_message_size: Option<usize>,
             }
-
-            struct _Inner<T>(Arc<T>);
 
             impl<T: #server_trait> #server_service<T> {
                 pub fn new(inner: T) -> Self {
@@ -126,7 +124,6 @@ pub(crate) fn generate_internal<T: Service>(
                 }
 
                 pub fn from_arc(inner: Arc<T>) -> Self {
-                    let inner = _Inner(inner);
                     Self {
                         inner,
                         accept_compression_encodings: Default::default(),
@@ -151,8 +148,8 @@ pub(crate) fn generate_internal<T: Service>(
             impl<T, B> tonic::codegen::Service<http::Request<B>> for #server_service<T>
                 where
                     T: #server_trait,
-                    B: Body + Send + 'static,
-                    B::Error: Into<StdError> + Send + 'static,
+                    B: Body + std::marker::Send + 'static,
+                    B::Error: Into<StdError> + std::marker::Send + 'static,
             {
                 type Response = http::Response<tonic::body::BoxBody>;
                 type Error = std::convert::Infallible;
@@ -163,16 +160,14 @@ pub(crate) fn generate_internal<T: Service>(
                 }
 
                 fn call(&mut self, req: http::Request<B>) -> Self::Future {
-                    let inner = self.inner.clone();
-
                     match req.uri().path() {
                         #methods
 
                         _ => Box::pin(async move {
                             Ok(http::Response::builder()
                                .status(200)
-                               .header("grpc-status", "12")
-                               .header("content-type", "application/grpc")
+                               .header("grpc-status", tonic::Code::Unimplemented as i32)
+                               .header(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE)
                                .body(empty_body())
                                .unwrap())
                         }),
@@ -190,18 +185,6 @@ pub(crate) fn generate_internal<T: Service>(
                         max_decoding_message_size: self.max_decoding_message_size,
                         max_encoding_message_size: self.max_encoding_message_size,
                     }
-                }
-            }
-
-            impl<T: #server_trait> Clone for _Inner<T> {
-                fn clone(&self) -> Self {
-                    Self(Arc::clone(&self.0))
-                }
-            }
-
-            impl<T: std::fmt::Debug> std::fmt::Debug for _Inner<T> {
-                fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-                   write!(f, "{:?}", self.0)
                 }
             }
 
@@ -238,7 +221,7 @@ fn generate_trait<T: Service>(
     quote! {
         #trait_doc
         #[async_trait]
-        pub trait #server_trait : Send + Sync + 'static {
+        pub trait #server_trait : std::marker::Send + std::marker::Sync + 'static {
             #methods
         }
     }
@@ -329,7 +312,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + std::marker::Send + 'static;
 
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<#req_message>)
@@ -354,7 +337,7 @@ fn generate_trait_methods<T: Service>(
 
                 quote! {
                     #stream_doc
-                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + Send + 'static;
+                    type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + std::marker::Send + 'static;
 
                     #method_doc
                     async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
@@ -496,7 +479,6 @@ fn generate_unary<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
@@ -564,7 +546,6 @@ fn generate_server_streaming<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
@@ -623,7 +604,6 @@ fn generate_client_streaming<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 
@@ -692,7 +672,6 @@ fn generate_streaming<T: Method>(
         let max_encoding_message_size = self.max_encoding_message_size;
         let inner = self.inner.clone();
         let fut = async move {
-            let inner = inner.0;
             let method = #service_ident(inner);
             let codec = #codec_name::default();
 

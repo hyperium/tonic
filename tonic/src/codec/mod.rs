@@ -19,7 +19,6 @@ pub use self::buffer::{DecodeBuf, EncodeBuf};
 pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
 pub use self::decode::Streaming;
 #[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use self::prost::ProstCodec;
 
 /// Unless overridden, this is the buffer size used for encoding requests.

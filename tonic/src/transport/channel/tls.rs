@@ -1,39 +1,27 @@
+use super::service::TlsConnector;
 use crate::transport::{
-    service::TlsConnector,
     tls::{Certificate, Identity},
     Error,
 };
 use http::Uri;
-use std::fmt;
 
 /// Configures TLS settings for endpoints.
-#[derive(Clone, Default)]
+#[derive(Debug, Clone, Default)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
-    cert: Option<Certificate>,
+    certs: Vec<Certificate>,
     identity: Option<Identity>,
     assume_http2: bool,
-}
-
-impl fmt::Debug for ClientTlsConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("ClientTlsConfig")
-            .field("domain", &self.domain)
-            .field("cert", &self.cert)
-            .field("identity", &self.identity)
-            .finish()
-    }
+    #[cfg(feature = "tls-roots")]
+    with_native_roots: bool,
+    #[cfg(feature = "tls-webpki-roots")]
+    with_webpki_roots: bool,
 }
 
 impl ClientTlsConfig {
     /// Creates a new `ClientTlsConfig` using Rustls.
     pub fn new() -> Self {
-        ClientTlsConfig {
-            domain: None,
-            cert: None,
-            identity: None,
-            assume_http2: false,
-        }
+        Self::default()
     }
 
     /// Sets the domain name against which to verify the server's TLS certificate.
@@ -46,10 +34,16 @@ impl ClientTlsConfig {
 
     /// Sets the CA Certificate against which to verify the server's TLS certificate.
     pub fn ca_certificate(self, ca_certificate: Certificate) -> Self {
-        ClientTlsConfig {
-            cert: Some(ca_certificate),
-            ..self
-        }
+        let mut certs = self.certs;
+        certs.push(ca_certificate);
+        ClientTlsConfig { certs, ..self }
+    }
+
+    /// Sets the multiple CA Certificates against which to verify the server's TLS certificate.
+    pub fn ca_certificates(self, ca_certificates: impl IntoIterator<Item = Certificate>) -> Self {
+        let mut certs = self.certs;
+        certs.extend(ca_certificates);
+        ClientTlsConfig { certs, ..self }
     }
 
     /// Sets the client identity to present to the server.
@@ -69,16 +63,38 @@ impl ClientTlsConfig {
         }
     }
 
-    pub(crate) fn tls_connector(&self, uri: Uri) -> Result<TlsConnector, crate::Error> {
+    /// Enables the platform's trusted certs.
+    #[cfg(feature = "tls-roots")]
+    pub fn with_native_roots(self) -> Self {
+        ClientTlsConfig {
+            with_native_roots: true,
+            ..self
+        }
+    }
+
+    /// Enables the webpki roots.
+    #[cfg(feature = "tls-webpki-roots")]
+    pub fn with_webpki_roots(self) -> Self {
+        ClientTlsConfig {
+            with_webpki_roots: true,
+            ..self
+        }
+    }
+
+    pub(crate) fn into_tls_connector(self, uri: &Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
             Some(domain) => domain,
             None => uri.host().ok_or_else(Error::new_invalid_uri)?,
         };
         TlsConnector::new(
-            self.cert.clone(),
-            self.identity.clone(),
+            self.certs,
+            self.identity,
             domain,
             self.assume_http2,
+            #[cfg(feature = "tls-roots")]
+            self.with_native_roots,
+            #[cfg(feature = "tls-webpki-roots")]
+            self.with_webpki_roots,
         )
     }
 }

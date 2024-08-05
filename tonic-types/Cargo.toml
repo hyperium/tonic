@@ -7,7 +7,7 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A collection of useful protobuf types that can be used with `tonic`.
 """
-documentation = "https://docs.rs/tonic-types/0.11.0"
+documentation = "https://docs.rs/tonic-types/0.12.1"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "protobuf"]
@@ -15,9 +15,18 @@ license = "MIT"
 name = "tonic-types"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.11.0"
+version = "0.12.1"
 
 [dependencies]
-prost = "0.12"
-prost-types = "0.12"
-tonic = {version = "0.11", path = "../tonic", default-features = false}
+prost = "0.13"
+prost-types = "0.13"
+tonic = { version = "0.12", path = "../tonic", default-features = false }
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  "tonic::*",
+
+  # not major released
+  "prost::*",
+  "prost_types::*",
+]

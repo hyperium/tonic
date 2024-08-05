@@ -2,9 +2,10 @@ name: CI
 
 on:
   push:
-    branches:
-    - master
+    branches: [ "master" ]
   pull_request: {}
+  merge_group:
+    branches: [ "master" ]
 
 env:
   PROTOC_VERSION: 3.25.1
@@ -26,7 +27,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v1
+    - uses: EmbarkStudios/cargo-deny-action@v2
 
   codegen:
     runs-on: ubuntu-latest
@@ -43,18 +44,12 @@ jobs:
 
   udeps:
     name: Check unused dependencies
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macOS-latest, windows-latest]
-        include:
-        - os: windows-latest
-          option: --exclude-features uds
+    runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2024-04-16
+        toolchain: nightly-2024-08-04
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
     - name: Install protoc
@@ -62,7 +57,10 @@ jobs:
       with:
         tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --each-feature ${{ matrix.option }}
+    - run: cargo hack udeps --workspace --exclude-features tls --each-feature
+    - run: cargo udeps --package tonic --features tls,transport
+    - run: cargo udeps --package tonic --features tls,server
+    - run: cargo udeps --package tonic --features tls,channel
 
   check:
     runs-on: ${{ matrix.os }}
@@ -80,6 +78,8 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     - name: Check features
       run: cargo hack check --workspace --no-private --each-feature --no-dev-deps
+    - name: Check tonic feature powerset
+      run: cargo hack check --package tonic --feature-powerset --depth 2
     - name: Check all targets
       run: cargo check --workspace --all-targets --all-features
 
@@ -92,10 +92,6 @@ jobs:
       with:
         rust-version: "1.70"    # msrv
     - uses: taiki-e/install-action@cargo-no-dev-deps
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
     - uses: Swatinem/rust-cache@v2
     - run: cargo no-dev-deps --no-private check --all-features
     - run: cargo no-dev-deps --no-private doc --no-deps
@@ -139,3 +135,26 @@ jobs:
     - name: Run interop tests with Rustls
       run: ./interop/test.sh --use_tls tls_rustls
       shell: bash
+
+  semver:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: obi1kenobi/cargo-semver-checks-action@v2
+      with:
+        feature-group: all-features
+
+  check-external-types:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: nightly-2024-05-01
+    - name: Install cargo-check-external-types
+      uses: taiki-e/cache-cargo-install-action@v2
+      with:
+        tool: cargo-check-external-types@0.1.12
+    - uses: taiki-e/install-action@cargo-hack
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo hack --no-private check-external-types

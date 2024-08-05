@@ -4,7 +4,7 @@ categories = ["network-programming", "asynchronous"]
 description = """
 grpc-web protocol translation for tonic services.
 """
-documentation = "https://docs.rs/tonic-web/0.11.0"
+documentation = "https://docs.rs/tonic-web/0.12.1"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "grpc-web"]
@@ -12,21 +12,38 @@ license = "MIT"
 name = "tonic-web"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.11.0"
+version = "0.12.1"
 
 [dependencies]
 base64 = "0.22"
 bytes = "1"
 tokio-stream = "0.1"
-http = "0.2"
-http-body = "0.4"
-hyper = {version = "0.14", default-features = false, features = ["stream"]}
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
 pin-project = "1"
-tonic = {version = "0.11", path = "../tonic", default-features = false}
+tonic = { version = "0.12", path = "../tonic", default-features = false }
 tower-service = "0.3"
 tower-layer = "0.3"
-tower-http = { version = "0.4", features = ["cors"] }
+tower-http = { version = "0.5", features = ["cors"] }
 tracing = "0.1"
 
 [dev-dependencies]
-tokio = {version = "1", features = ["macros", "rt"]}
+tokio = { version = "1", features = ["macros", "rt"] }
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+  "tonic::*",
+
+  # major released
+  "bytes::*",
+  "http::*",
+  "http_body::*",
+
+  # not major released
+  "futures_core::stream::Stream",
+  "http_body_util::combinators::box_body::UnsyncBoxBody",
+  "tower_http::cors::Cors",
+  "tower_layer::Layer",
+  "tower_service::Service",
+]

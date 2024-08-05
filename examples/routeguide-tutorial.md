@@ -174,8 +174,8 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.11"
-prost = "0.12"
+tonic = "0.12"
+prost = "0.13"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1"
 
@@ -185,7 +185,7 @@ serde_json = "1.0"
 rand = "0.8"
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 ```
 
 Create a `build.rs` file at the root of your crate:
@@ -498,7 +498,7 @@ async fn route_chat(
         while let Some(note) = stream.next().await {
             let note = note?;
 
-            let location = note.location.clone().unwrap();
+            let location = note.location.unwrap();
 
             let location_notes = notes.entry(location).or_insert(vec![]);
             location_notes.push(note);

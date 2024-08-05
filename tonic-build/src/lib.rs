@@ -4,10 +4,10 @@
 //! # Feature flags
 //!
 //! - `cleanup-markdown`: Enables cleaning up documentation from the generated code. Useful
-//! when documentation of the generated code fails `cargo test --doc` for example.
+//!   when documentation of the generated code fails `cargo test --doc` for example.
 //! - `prost`: Enables usage of prost generator (enabled by default).
 //! - `transport`: Enables generation of `connect` method using `tonic::transport::Channel`
-//! (enabled by default).
+//!   (enabled by default).
 //!
 //! # Required dependencies
 //!
@@ -70,21 +70,19 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.11.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.12.1")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use quote::TokenStreamExt;
 
 /// Prost generator
 #[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 mod prost;
 
 #[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 pub use prost::{compile_protos, configure, Builder};
 
 pub mod manual;
