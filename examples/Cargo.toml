@@ -165,10 +165,6 @@ path = "src/autoreload/server.rs"
 required-features = ["autoreload"]
 
 [[bin]]
-name = "optional-server"
-path = "src/optional/server.rs"
-
-[[bin]]
 name = "compression-server"
 path = "src/compression/server.rs"
 required-features = ["compression"]
