@@ -63,6 +63,11 @@ impl Routes {
         Self { router }.add_service(svc)
     }
 
+    /// Create a new empty builder.
+    pub fn builder() -> RoutesBuilder {
+        RoutesBuilder::default()
+    }
+
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
