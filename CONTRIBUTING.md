@@ -211,7 +211,9 @@ example would explicitly use `Timeout::new`. For example:
 When making changes to `tonic-build` that affects the generated code you will
 need to ensure that each of the sub crates gets updated as well. Each of the sub
 crates like, for example `tonic-health`, generate their gRPC code via `codegen`
-crate.
+crate. This requires `Protocol Buffers Compiler` of which version is same as the
+one used in the GitHub Action (see the
+[environment variable `PROTOC_VERSION`](./.github/workflows/CI.yml)).
 
 ```
 cargo run --package codegen
