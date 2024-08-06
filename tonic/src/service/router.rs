@@ -4,7 +4,6 @@ use crate::{
     server::NamedService,
 };
 use http::{HeaderName, HeaderValue, Request, Response};
-use pin_project::pin_project;
 use std::{
     convert::Infallible,
     fmt,
@@ -124,8 +123,7 @@ impl Service<Request<BoxBody>> for Routes {
     }
 }
 
-#[pin_project]
-pub struct RoutesFuture(#[pin] axum::routing::future::RouteFuture<Infallible>);
+pub struct RoutesFuture(axum::routing::future::RouteFuture<Infallible>);
 
 impl fmt::Debug for RoutesFuture {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -136,8 +134,8 @@ impl fmt::Debug for RoutesFuture {
 impl Future for RoutesFuture {
     type Output = Result<Response<BoxBody>, crate::Error>;
 
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(self.project().0.poll(cx)) {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match ready!(Pin::new(&mut self.as_mut().0).poll(cx)) {
             Ok(res) => Ok(res.map(boxed)).into(),
             Err(err) => match err {},
         }
