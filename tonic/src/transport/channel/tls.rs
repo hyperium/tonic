@@ -12,7 +12,7 @@ pub struct ClientTlsConfig {
     certs: Vec<Certificate>,
     identity: Option<Identity>,
     assume_http2: bool,
-    #[cfg(feature = "tls-roots")]
+    #[cfg(feature = "tls-native-roots")]
     with_native_roots: bool,
     #[cfg(feature = "tls-webpki-roots")]
     with_webpki_roots: bool,
@@ -64,7 +64,7 @@ impl ClientTlsConfig {
     }
 
     /// Enables the platform's trusted certs.
-    #[cfg(feature = "tls-roots")]
+    #[cfg(feature = "tls-native-roots")]
     pub fn with_native_roots(self) -> Self {
         ClientTlsConfig {
             with_native_roots: true,
@@ -91,7 +91,7 @@ impl ClientTlsConfig {
             self.identity,
             domain,
             self.assume_http2,
-            #[cfg(feature = "tls-roots")]
+            #[cfg(feature = "tls-native-roots")]
             self.with_native_roots,
             #[cfg(feature = "tls-webpki-roots")]
             self.with_webpki_roots,
