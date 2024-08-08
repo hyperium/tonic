@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let server = EchoServer::default();
 
-    let svc = Routes::new(pb::echo_server::EchoServer::new(server));
+    let svc = Routes::new(pb::echo_server::EchoServer::new(server)).prepare();
 
     let http = Builder::new(TokioExecutor::new());
 

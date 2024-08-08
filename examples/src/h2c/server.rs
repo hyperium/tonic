@@ -39,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("GreeterServer listening on {}", addr);
 
     let incoming = TcpListener::bind(addr).await?;
-    let svc = Routes::new(GreeterServer::new(greeter));
+    let svc = Routes::new(GreeterServer::new(greeter)).prepare();
 
     let h2c = h2c::H2c { s: svc };
 
