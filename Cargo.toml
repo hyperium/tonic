@@ -28,3 +28,7 @@ members = [
   "tests/default_stubs",
 ]
 resolver = "2"
+
+[patch.crates-io]
+hyper = {git = "https://github.com/ionut-slaveanu/hyper.git" }
+hyper-util = { git = "https://github.com/ionut-slaveanu/hyper-util.git" }

@@ -49,6 +49,14 @@ name = "load-balance-server"
 path = "src/load_balance/server.rs"
 
 [[bin]]
+name = "max-connection-age-client"
+path = "src/max_connection_age/client.rs"
+
+[[bin]]
+name = "max-connection-age-server"
+path = "src/max_connection_age/server.rs"
+
+[[bin]]
 name = "dynamic-load-balance-client"
 path = "src/dynamic_load_balance/client.rs"
 required-features = ["dynamic-load-balance"]

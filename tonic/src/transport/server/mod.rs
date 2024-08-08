@@ -53,18 +53,15 @@ use std::{
     net::SocketAddr,
     pin::{pin, Pin},
     sync::Arc,
-    task::{ready, Context, Poll},
-    time::Duration,
+    task::{ready, Context, Poll}
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_stream::Stream;
-use tower::{
-    layer::util::{Identity, Stack},
-    layer::Layer,
-    limit::concurrency::ConcurrencyLimitLayer,
-    util::{BoxCloneService, Either},
-    Service, ServiceBuilder, ServiceExt,
-};
+use tower::{layer::util::{Identity, Stack}, layer::Layer, limit::concurrency::ConcurrencyLimitLayer, util::{BoxCloneService, Either}, Service, ServiceBuilder, ServiceExt};
+
+use tokio::time::{Duration};
+use hyper_util::server::conn::auto::GracefulShutdownFlags;
+use hyper::server::conn::http2;
 
 type BoxService = tower::util::BoxCloneService<Request<BoxBody>, Response<BoxBody>, crate::Error>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
@@ -98,6 +95,8 @@ pub struct Server<L = Identity> {
     max_frame_size: Option<u32>,
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
+    max_connection_age_ms: Option<u64>,
+    max_connection_age_grace_ms: Option<u64>,
 }
 
 impl Default for Server<Identity> {
@@ -120,6 +119,8 @@ impl Default for Server<Identity> {
             max_frame_size: None,
             accept_http1: false,
             service_builder: Default::default(),
+            max_connection_age_ms: None,
+            max_connection_age_grace_ms: None,
         }
     }
 }
@@ -228,6 +229,30 @@ impl<L> Server<L> {
     pub fn max_concurrent_streams(self, max: impl Into<Option<u32>>) -> Self {
         Server {
             max_concurrent_streams: max.into(),
+            ..self
+        }
+    }
+
+    /// Sets the [`SETTINGS_MAX_CONNECTION_AGE_MS`][spec] option for http and http2
+    /// connections.
+    ///
+    /// Default is no limit (`None`).
+    #[must_use]
+    pub fn max_connection_age_ms(self, max: impl Into<Option<u64>>) -> Self {
+        Server {
+            max_connection_age_ms: max.into(),
+            ..self
+        }
+    }
+
+    /// Sets the [`SETTINGS_MAX_CONNECTION_AGE_GRACE_MS`][spec] option for http and http2
+    /// connections.
+    ///
+    /// Default is no limit (`None`).
+    #[must_use]
+    pub fn max_connection_age_grace_ms(self, max: impl Into<Option<u64>>) -> Self {
+        Server {
+            max_connection_age_grace_ms: max.into(),
             ..self
         }
     }
@@ -484,6 +509,8 @@ impl<L> Server<L> {
             http2_max_pending_accept_reset_streams: self.http2_max_pending_accept_reset_streams,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
+            max_connection_age_ms: self.max_connection_age_ms,
+            max_connection_age_grace_ms: self.max_connection_age_grace_ms,
         }
     }
 
@@ -523,6 +550,8 @@ impl<L> Server<L> {
             .unwrap_or_else(|| Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
         let http2_adaptive_window = self.http2_adaptive_window;
         let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
+        let max_connection_age_ms = self.max_connection_age_ms;
+        let max_connection_age_grace_ms = self.max_connection_age_grace_ms;
 
         let svc = self.service_builder.service(svc);
 
@@ -600,7 +629,7 @@ impl<L> Server<L> {
                     let hyper_io = TokioIo::new(io);
                     let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(boxed)));
 
-                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()));
+                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age_ms, max_connection_age_grace_ms);
                 }
             }
         }
@@ -621,6 +650,18 @@ impl<L> Server<L> {
     }
 }
 
+async fn optinal_sleep_future( sleep_time: Option<u64>) {
+    let _result = match sleep_time {
+        Some(time) => {
+            let sleep=  tokio::time::sleep(std::time::Duration::from_millis(time));
+            sleep.await;
+        },
+        None => {
+            future::pending::<()>().await;
+        },
+    };
+}
+
 // This is moved to its own function as a way to get around
 // https://github.com/rust-lang/rust/issues/102211
 fn serve_connection<B, IO, S, E>(
@@ -628,6 +669,8 @@ fn serve_connection<B, IO, S, E>(
     hyper_svc: S,
     builder: ConnectionBuilder<E>,
     mut watcher: Option<tokio::sync::watch::Receiver<()>>,
+    max_connection_age_ms: Option<u64>,
+    max_connection_age_grace_ms: Option<u64>
 ) where
     B: http_body::Body + Send + 'static,
     B::Data: Send,
@@ -646,6 +689,10 @@ fn serve_connection<B, IO, S, E>(
 
             let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
+            let sleep = optinal_sleep_future(max_connection_age_ms);
+            tokio::pin!(sleep);
+            let mut shutdown_inited = false;
+
             loop {
                 tokio::select! {
                     rv = &mut conn => {
@@ -653,6 +700,16 @@ fn serve_connection<B, IO, S, E>(
                             debug!("failed serving connection: {:#}", err);
                         }
                         break;
+                    },
+                    _ = &mut sleep  => {
+                            if false == shutdown_inited {
+                                conn.as_mut().graceful_shutdown_v2(GracefulShutdownFlags::new(http2::GracefulShutdownFlags::IgnoreHandshaking));
+                                shutdown_inited = true;
+                            } else {
+                                conn.as_mut().graceful_shutdown();
+                            }
+
+                            sleep.set(optinal_sleep_future(max_connection_age_grace_ms))
                     },
                     _ = &mut sig => {
                         conn.as_mut().graceful_shutdown();
