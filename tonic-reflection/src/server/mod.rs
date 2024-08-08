@@ -3,6 +3,8 @@ pub use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflec
 use prost::DecodeError;
 use std::fmt::{Display, Formatter};
 
+mod parser;
+
 mod v1;
 
 pub use v1::Builder;

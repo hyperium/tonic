@@ -7,10 +7,7 @@ use crate::pb::v1::{
     ServerReflectionResponse, ServiceResponse,
 };
 use prost::Message;
-use prost_types::{
-    DescriptorProto, EnumDescriptorProto, FieldDescriptorProto, FileDescriptorProto,
-    FileDescriptorSet,
-};
+use prost_types::{FileDescriptorProto, FileDescriptorSet};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::mpsc;
@@ -28,7 +25,6 @@ pub struct Builder<'b> {
 
     service_names: Vec<String>,
     use_all_service_names: bool,
-    symbols: HashMap<String, Arc<FileDescriptorProto>>,
 }
 
 impl<'b> Builder<'b> {
@@ -41,7 +37,6 @@ impl<'b> Builder<'b> {
 
             service_names: Vec::new(),
             use_all_service_names: true,
-            symbols: HashMap::new(),
         }
     }
 
@@ -86,151 +81,24 @@ impl<'b> Builder<'b> {
             self = self.register_encoded_file_descriptor_set(crate::pb::v1::FILE_DESCRIPTOR_SET);
         }
 
-        for encoded in &self.encoded_file_descriptor_sets {
-            let decoded = FileDescriptorSet::decode(*encoded)?;
-            self.file_descriptor_sets.push(decoded);
-        }
+        let info = crate::server::parser::DescriptorParser::process(
+            self.encoded_file_descriptor_sets,
+            self.file_descriptor_sets,
+        )?;
 
-        let all_fds = self.file_descriptor_sets.clone();
-        let mut files: HashMap<String, Arc<FileDescriptorProto>> = HashMap::new();
+        let service_names = if self.use_all_service_names {
+            &info.service_names
+        } else {
+            &self.service_names
+        };
 
-        for fds in all_fds {
-            for fd in fds.file {
-                let name = match fd.name.clone() {
-                    None => {
-                        return Err(Error::InvalidFileDescriptorSet("missing name".to_string()));
-                    }
-                    Some(n) => n,
-                };
-
-                if files.contains_key(&name) {
-                    continue;
-                }
-
-                let fd = Arc::new(fd);
-                files.insert(name, fd.clone());
-
-                self.process_file(fd)?;
-            }
-        }
-
-        let service_names = self
-            .service_names
-            .iter()
-            .map(|name| ServiceResponse { name: name.clone() })
-            .collect();
-
-        Ok(ServerReflectionServer::new(ReflectionService {
-            state: Arc::new(ReflectionServiceState {
+        Ok(ServerReflectionServer::new(ReflectionService::new(
+            Arc::new(ReflectionServiceState::new(
                 service_names,
-                files,
-                symbols: self.symbols,
-            }),
-        }))
-    }
-
-    fn process_file(&mut self, fd: Arc<FileDescriptorProto>) -> Result<(), Error> {
-        let prefix = &fd.package.clone().unwrap_or_default();
-
-        for msg in &fd.message_type {
-            self.process_message(fd.clone(), prefix, msg)?;
-        }
-
-        for en in &fd.enum_type {
-            self.process_enum(fd.clone(), prefix, en)?;
-        }
-
-        for service in &fd.service {
-            let service_name = extract_name(prefix, "service", service.name.as_ref())?;
-            if self.use_all_service_names {
-                self.service_names.push(service_name.clone());
-            }
-            self.symbols.insert(service_name.clone(), fd.clone());
-
-            for method in &service.method {
-                let method_name = extract_name(&service_name, "method", method.name.as_ref())?;
-                self.symbols.insert(method_name, fd.clone());
-            }
-        }
-
-        Ok(())
-    }
-
-    fn process_message(
-        &mut self,
-        fd: Arc<FileDescriptorProto>,
-        prefix: &str,
-        msg: &DescriptorProto,
-    ) -> Result<(), Error> {
-        let message_name = extract_name(prefix, "message", msg.name.as_ref())?;
-        self.symbols.insert(message_name.clone(), fd.clone());
-
-        for nested in &msg.nested_type {
-            self.process_message(fd.clone(), &message_name, nested)?;
-        }
-
-        for en in &msg.enum_type {
-            self.process_enum(fd.clone(), &message_name, en)?;
-        }
-
-        for field in &msg.field {
-            self.process_field(fd.clone(), &message_name, field)?;
-        }
-
-        for oneof in &msg.oneof_decl {
-            let oneof_name = extract_name(&message_name, "oneof", oneof.name.as_ref())?;
-            self.symbols.insert(oneof_name, fd.clone());
-        }
-
-        Ok(())
-    }
-
-    fn process_enum(
-        &mut self,
-        fd: Arc<FileDescriptorProto>,
-        prefix: &str,
-        en: &EnumDescriptorProto,
-    ) -> Result<(), Error> {
-        let enum_name = extract_name(prefix, "enum", en.name.as_ref())?;
-        self.symbols.insert(enum_name.clone(), fd.clone());
-
-        for value in &en.value {
-            let value_name = extract_name(&enum_name, "enum value", value.name.as_ref())?;
-            self.symbols.insert(value_name, fd.clone());
-        }
-
-        Ok(())
-    }
-
-    fn process_field(
-        &mut self,
-        fd: Arc<FileDescriptorProto>,
-        prefix: &str,
-        field: &FieldDescriptorProto,
-    ) -> Result<(), Error> {
-        let field_name = extract_name(prefix, "field", field.name.as_ref())?;
-        self.symbols.insert(field_name, fd);
-        Ok(())
-    }
-}
-
-fn extract_name(
-    prefix: &str,
-    name_type: &str,
-    maybe_name: Option<&String>,
-) -> Result<String, Error> {
-    match maybe_name {
-        None => Err(Error::InvalidFileDescriptorSet(format!(
-            "missing {} name",
-            name_type
-        ))),
-        Some(name) => {
-            if prefix.is_empty() {
-                Ok(name.to_string())
-            } else {
-                Ok(format!("{}.{}", prefix, name))
-            }
-        }
+                info.files,
+                info.symbols,
+            )),
+        )))
     }
 }
 
@@ -242,6 +110,23 @@ struct ReflectionServiceState {
 }
 
 impl ReflectionServiceState {
+    fn new(
+        service_names: &Vec<String>,
+        files: HashMap<String, Arc<FileDescriptorProto>>,
+        symbols: HashMap<String, Arc<FileDescriptorProto>>,
+    ) -> Self {
+        let service_names = service_names
+            .iter()
+            .map(|name| ServiceResponse { name: name.clone() })
+            .collect();
+
+        ReflectionServiceState {
+            service_names,
+            files,
+            symbols,
+        }
+    }
+
     fn list_services(&self) -> MessageResponse {
         MessageResponse::ListServicesResponse(ListServiceResponse {
             service: self.service_names.clone(),
@@ -288,6 +173,12 @@ impl ReflectionServiceState {
 #[derive(Debug)]
 struct ReflectionService {
     state: Arc<ReflectionServiceState>,
+}
+
+impl ReflectionService {
+    fn new(state: Arc<ReflectionServiceState>) -> Self {
+        ReflectionService { state }
+    }
 }
 
 #[tonic::async_trait]
