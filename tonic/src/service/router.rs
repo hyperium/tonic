@@ -107,6 +107,12 @@ impl Routes {
     }
 }
 
+impl From<axum::Router> for Routes {
+    fn from(router: axum::Router) -> Self {
+        Self { router }
+    }
+}
+
 async fn unimplemented() -> impl axum::response::IntoResponse {
     let status = http::StatusCode::OK;
     let headers = [
