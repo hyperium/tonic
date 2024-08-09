@@ -22,9 +22,13 @@ impl test_server::Test for Svc {
 #[tokio::test]
 async fn connect_returns_err() {
     let res = TestClient::connect("http://thisdoesntexist").await;
-    dbg!(&res);
 
     assert!(res.is_err());
+}
+
+#[tokio::test]
+async fn connect_handles_tls() {
+    TestClient::connect("https://example.com").await.unwrap();
 }
 
 #[tokio::test]
