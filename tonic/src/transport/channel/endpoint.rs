@@ -49,6 +49,24 @@ impl Endpoint {
         D::Error: Into<crate::Error>,
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
+        #[cfg(feature = "tls")]
+        if let Some(tls_config) = me
+            .uri
+            .scheme()
+            .map(|s| s.as_str() == http::uri::Scheme::HTTPS.as_str())
+            .unwrap_or(false)
+            .then(|| {
+                let config = ClientTlsConfig::new();
+                #[cfg(feature = "tls-native-roots")]
+                let config = config.with_native_roots();
+                #[cfg(feature = "tls-webpki-roots")]
+                let config = config.with_webpki_roots();
+                config
+            })
+        {
+            return me.tls_config(tls_config);
+        }
+
         Ok(me)
     }
 
