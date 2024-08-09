@@ -14,7 +14,7 @@ use std::{
 use tower::{Service, ServiceExt};
 
 /// A [`Service`] router.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Clone)]
 pub struct Routes {
     router: axum::Router,
 }
@@ -47,6 +47,15 @@ impl RoutesBuilder {
         self.routes.unwrap_or_default()
     }
 }
+
+impl Default for Routes {
+    fn default() -> Self {
+        Self {
+            router: axum::Router::new().fallback(unimplemented),
+        }
+    }
+}
+
 impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
@@ -59,8 +68,7 @@ impl Routes {
         S::Future: Send + 'static,
         S::Error: Into<crate::Error> + Send,
     {
-        let router = axum::Router::new().fallback(unimplemented);
-        Self { router }.add_service(svc)
+        Self::default().add_service(svc)
     }
 
     /// Create a new empty builder.
