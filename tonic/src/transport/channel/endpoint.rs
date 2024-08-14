@@ -291,7 +291,9 @@ impl Endpoint {
         }
     }
 
-    /// Sets the max header list size. Uses `hyper`'s default otherwise.
+    /// Sets the max size of received header frames.
+    ///
+    /// This will default to whatever the default in hyper is. As of v1.4.1, it is 16kB.
     pub fn http2_max_header_list_size(self, size: u32) -> Self {
         Endpoint {
             http2_max_header_list_size: Some(size),

@@ -95,6 +95,7 @@ pub struct Server<L = Identity> {
     http2_keepalive_timeout: Option<Duration>,
     http2_adaptive_window: Option<bool>,
     http2_max_pending_accept_reset_streams: Option<usize>,
+    http2_max_header_list_size: Option<u32>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
@@ -117,6 +118,7 @@ impl Default for Server<Identity> {
             http2_keepalive_timeout: None,
             http2_adaptive_window: None,
             http2_max_pending_accept_reset_streams: None,
+            http2_max_header_list_size: None,
             max_frame_size: None,
             accept_http1: false,
             service_builder: Default::default(),
@@ -313,6 +315,17 @@ impl<L> Server<L> {
         }
     }
 
+    /// Sets the max size of received header frames.
+    ///
+    /// This will default to whatever the default in hyper is. As of v1.4.1, it is 16kB.
+    #[must_use]
+    pub fn http2_max_header_list_size(self, max: impl Into<Option<u32>>) -> Self {
+        Server {
+            http2_max_header_list_size: max.into(),
+            ..self
+        }
+    }
+
     /// Sets the maximum frame size to use for HTTP2.
     ///
     /// Passing `None` will do nothing.
@@ -482,6 +495,7 @@ impl<L> Server<L> {
             http2_keepalive_timeout: self.http2_keepalive_timeout,
             http2_adaptive_window: self.http2_adaptive_window,
             http2_max_pending_accept_reset_streams: self.http2_max_pending_accept_reset_streams,
+            http2_max_header_list_size: self.http2_max_header_list_size,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
         }
@@ -514,6 +528,7 @@ impl<L> Server<L> {
         let init_stream_window_size = self.init_stream_window_size;
         let max_concurrent_streams = self.max_concurrent_streams;
         let timeout = self.timeout;
+        let max_header_list_size = self.http2_max_header_list_size;
         let max_frame_size = self.max_frame_size;
         let http2_only = !self.accept_http1;
 
@@ -557,6 +572,10 @@ impl<L> Server<L> {
                 .adaptive_window(http2_adaptive_window.unwrap_or_default())
                 .max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
                 .max_frame_size(max_frame_size);
+
+            if let Some(max_header_list_size) = max_header_list_size {
+                builder.http2().max_header_list_size(max_header_list_size);
+            }
 
             builder
         };
