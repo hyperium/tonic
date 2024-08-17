@@ -487,7 +487,7 @@ impl<L> Server<L> {
         }
     }
 
-    pub(crate) async fn serve_with_shutdown<S, I, F, IO, IE, ResBody>(
+    pub(crate) async fn serve_with_shutdown<S, I, F, IO, ResBody>(
         self,
         svc: S,
         incoming: I,
@@ -500,10 +500,9 @@ impl<L> Server<L> {
         <<L as Layer<S>>::Service as Service<Request<BoxBody>>>::Future: Send + 'static,
         <<L as Layer<S>>::Service as Service<Request<BoxBody>>>::Error:
             Into<crate::Error> + Send + 'static,
-        I: Stream<Item = Result<IO, IE>>,
+        I: Stream<Item = Result<IO, std::io::Error>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IO::ConnectInfo: Clone + Send + Sync + 'static,
-        IE: Into<crate::Error>,
         F: Future<Output = ()>,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::Error>,
@@ -733,7 +732,7 @@ impl<L> Router<L> {
         let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
             .map_err(super::Error::from_source)?;
         self.server
-            .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
+            .serve_with_shutdown::<_, _, future::Ready<()>, _, ResBody>(
                 self.routes.prepare(),
                 incoming,
                 None,
@@ -775,15 +774,11 @@ impl<L> Router<L> {
     /// This method discards any provided [`Server`] TCP configuration.
     ///
     /// [`Server`]: struct.Server.html
-    pub async fn serve_with_incoming<I, IO, IE, ResBody>(
-        self,
-        incoming: I,
-    ) -> Result<(), super::Error>
+    pub async fn serve_with_incoming<I, IO, ResBody>(self, incoming: I) -> Result<(), super::Error>
     where
-        I: Stream<Item = Result<IO, IE>>,
+        I: Stream<Item = Result<IO, std::io::Error>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IO::ConnectInfo: Clone + Send + Sync + 'static,
-        IE: Into<crate::Error>,
         L: Layer<Routes>,
         L::Service:
             Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
@@ -794,7 +789,7 @@ impl<L> Router<L> {
         ResBody::Error: Into<crate::Error>,
     {
         self.server
-            .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
+            .serve_with_shutdown::<_, _, future::Ready<()>, _, ResBody>(
                 self.routes.prepare(),
                 incoming,
                 None,
@@ -810,16 +805,15 @@ impl<L> Router<L> {
     /// This method discards any provided [`Server`] TCP configuration.
     ///
     /// [`Server`]: struct.Server.html
-    pub async fn serve_with_incoming_shutdown<I, IO, IE, F, ResBody>(
+    pub async fn serve_with_incoming_shutdown<I, IO, F, ResBody>(
         self,
         incoming: I,
         signal: F,
     ) -> Result<(), super::Error>
     where
-        I: Stream<Item = Result<IO, IE>>,
+        I: Stream<Item = Result<IO, std::io::Error>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IO::ConnectInfo: Clone + Send + Sync + 'static,
-        IE: Into<crate::Error>,
         F: Future<Output = ()>,
         L: Layer<Routes>,
         L::Service:
