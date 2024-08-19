@@ -52,7 +52,7 @@ pub(crate) fn generate_internal<T: Service>(
         generate_doc_comments(service.comment())
     };
 
-    let named = generate_named(&server_service, &server_trait, &service_name);
+    let named = generate_named(&server_service, &service_name);
     let mod_attributes = attributes.for_mod(package);
     let struct_attributes = attributes.for_struct(&service_name);
 
@@ -110,7 +110,7 @@ pub(crate) fn generate_internal<T: Service>(
             #service_doc
             #(#struct_attributes)*
             #[derive(Debug)]
-            pub struct #server_service<T: #server_trait> {
+            pub struct #server_service<T> {
                 inner: Arc<T>,
                 accept_compression_encodings: EnabledCompressionEncodings,
                 send_compression_encodings: EnabledCompressionEncodings,
@@ -118,7 +118,7 @@ pub(crate) fn generate_internal<T: Service>(
                 max_encoding_message_size: Option<usize>,
             }
 
-            impl<T: #server_trait> #server_service<T> {
+            impl<T> #server_service<T> {
                 pub fn new(inner: T) -> Self {
                     Self::from_arc(Arc::new(inner))
                 }
@@ -175,7 +175,7 @@ pub(crate) fn generate_internal<T: Service>(
                 }
             }
 
-            impl<T: #server_trait> Clone for #server_service<T> {
+            impl<T> Clone for #server_service<T> {
                 fn clone(&self) -> Self {
                     let inner = self.inner.clone();
                     Self {
@@ -352,11 +352,7 @@ fn generate_trait_methods<T: Service>(
     stream
 }
 
-fn generate_named(
-    server_service: &syn::Ident,
-    server_trait: &syn::Ident,
-    service_name: &str,
-) -> TokenStream {
+fn generate_named(server_service: &syn::Ident, service_name: &str) -> TokenStream {
     let service_name = syn::LitStr::new(service_name, proc_macro2::Span::call_site());
     let name_doc = generate_doc_comment(" Generated gRPC service name");
 
@@ -364,7 +360,7 @@ fn generate_named(
         #name_doc
         pub const SERVICE_NAME: &'static str = #service_name;
 
-        impl<T: #server_trait> tonic::server::NamedService for #server_service<T> {
+        impl<T> tonic::server::NamedService for #server_service<T> {
             const NAME: &'static str = SERVICE_NAME;
         }
     }
