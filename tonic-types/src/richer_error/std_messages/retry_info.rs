@@ -16,7 +16,7 @@ use super::super::{pb, FromAny, IntoAny};
 /// [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
 #[derive(Clone, Debug)]
 pub struct RetryInfo {
-    /// Informs the amout of time that clients should wait before retrying.
+    /// Informs the amount of time that clients should wait before retrying.
     pub retry_delay: Option<time::Duration>,
 }
 
