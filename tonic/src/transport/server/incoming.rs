@@ -27,12 +27,16 @@ where
         let mut incoming = pin!(incoming);
 
         while let Some(item) = incoming.next().await {
-            if item.is_err() {
-                let e: crate::Error = item.err().unwrap().into();
-                tracing::debug!(message = "Accept loop error.", error = %e);
-                if !e.to_string().contains("os error 53") {
-                    break;
+            if let Err(e) = item {
+                if let Some(e) = Into::<crate::Error>::into(e).downcast_ref::<std::io::Error>() {
+                    tracing::debug!(message = "Accept loop error.", error = %e);
+                    if e.kind() == std::io::ErrorKind::ConnectionAborted {
+                        continue;
+                    }
+                } else {
+                    tracing::debug!(message = "Accept loop error (unknown error).");
                 }
+                break;
             } else {
                 yield item.map(ServerIo::new_io)?
             }
