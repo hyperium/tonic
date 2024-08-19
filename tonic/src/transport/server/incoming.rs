@@ -16,23 +16,26 @@ use tokio_stream::{Stream, StreamExt};
 use tracing::warn;
 
 #[cfg(not(feature = "tls"))]
-pub(crate) fn tcp_incoming<IO>(
-    incoming: impl Stream<Item = Result<IO, std::io::Error>>,
+pub(crate) fn tcp_incoming<IO, IE>(
+    incoming: impl Stream<Item = Result<IO, IE>>,
 ) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
         let mut incoming = pin!(incoming);
 
         while let Some(item) = incoming.next().await {
-            if let Some(e) = item.as_ref().err() {
-                   if e.kind() == std::io::ErrorKind::ConnectionAborted {
-                       tracing::debug!(message = e.to_string(), error = %e);
-                       continue;
-                   }
+            if item.is_err() {
+                let e: crate::Error = item.err().unwrap().into();
+                tracing::debug!(message = "Accept loop error.", error = %e);
+                if !e.to_string().contains("os error 53") {
+                    break;
+                }
+            } else {
+                yield item.map(ServerIo::new_io)?
             }
-            yield item.map(ServerIo::new_io)?
         }
     }
 }
