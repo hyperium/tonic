@@ -2,6 +2,7 @@ use super::service::ServerIo;
 #[cfg(feature = "tls")]
 use super::service::TlsAcceptor;
 use std::{
+    io,
     net::{SocketAddr, TcpListener as StdTcpListener},
     pin::{pin, Pin},
     task::{ready, Context, Poll},
@@ -27,18 +28,18 @@ where
         let mut incoming = pin!(incoming);
 
         while let Some(item) = incoming.next().await {
-            if let Err(e) = item {
-                if let Some(e) = Into::<crate::Error>::into(e).downcast_ref::<std::io::Error>() {
-                    tracing::debug!(message = "Accept loop error.", error = %e);
-                    if e.kind() == std::io::ErrorKind::ConnectionAborted {
-                        continue;
+            yield match item {
+                Ok(_) => item.map(ServerIo::new_io)?,
+                Err(e) => {
+                    let e = e.into();
+                    tracing::debug!(error = %e, "accept loop error");
+                    if let Some(e) = e.downcast_ref::<io::Error>() {
+                        if e.kind() == io::ErrorKind::ConnectionAborted {
+                            continue;
+                        }
                     }
-                } else {
-                    tracing::debug!(message = "Accept loop error (unknown error).");
+                    Err(e)?
                 }
-                break;
-            } else {
-                yield item.map(ServerIo::new_io)?
             }
         }
     }
@@ -77,7 +78,7 @@ where
                 }
 
                 SelectOutput::Err(e) => {
-                    tracing::debug!(message = "Accept loop error.", error = %e);
+                    tracing::debug!(error = %e, "accept loop error");
                 }
 
                 SelectOutput::Done => {
