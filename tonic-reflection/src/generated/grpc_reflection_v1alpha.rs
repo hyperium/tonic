@@ -291,14 +291,14 @@ pub mod server_reflection_server {
         >;
     }
     #[derive(Debug)]
-    pub struct ServerReflectionServer<T: ServerReflection> {
+    pub struct ServerReflectionServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T: ServerReflection> ServerReflectionServer<T> {
+    impl<T> ServerReflectionServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -436,7 +436,7 @@ pub mod server_reflection_server {
             }
         }
     }
-    impl<T: ServerReflection> Clone for ServerReflectionServer<T> {
+    impl<T> Clone for ServerReflectionServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -449,8 +449,8 @@ pub mod server_reflection_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &'static str = "grpc.reflection.v1alpha.ServerReflection";
-    impl<T: ServerReflection> tonic::server::NamedService for ServerReflectionServer<T> {
+    pub const SERVICE_NAME: &str = "grpc.reflection.v1alpha.ServerReflection";
+    impl<T> tonic::server::NamedService for ServerReflectionServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }

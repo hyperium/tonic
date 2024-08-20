@@ -243,14 +243,14 @@ pub mod health_server {
         ) -> std::result::Result<tonic::Response<Self::WatchStream>, tonic::Status>;
     }
     #[derive(Debug)]
-    pub struct HealthServer<T: Health> {
+    pub struct HealthServer<T> {
         inner: Arc<T>,
         accept_compression_encodings: EnabledCompressionEncodings,
         send_compression_encodings: EnabledCompressionEncodings,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     }
-    impl<T: Health> HealthServer<T> {
+    impl<T> HealthServer<T> {
         pub fn new(inner: T) -> Self {
             Self::from_arc(Arc::new(inner))
         }
@@ -427,7 +427,7 @@ pub mod health_server {
             }
         }
     }
-    impl<T: Health> Clone for HealthServer<T> {
+    impl<T> Clone for HealthServer<T> {
         fn clone(&self) -> Self {
             let inner = self.inner.clone();
             Self {
@@ -440,8 +440,8 @@ pub mod health_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &'static str = "grpc.health.v1.Health";
-    impl<T: Health> tonic::server::NamedService for HealthServer<T> {
+    pub const SERVICE_NAME: &str = "grpc.health.v1.Health";
+    impl<T> tonic::server::NamedService for HealthServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
 }
