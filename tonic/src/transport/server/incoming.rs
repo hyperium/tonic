@@ -1,8 +1,9 @@
 use super::service::ServerIo;
 #[cfg(feature = "tls")]
 use super::service::TlsAcceptor;
+#[cfg(not(feature = "tls"))]
+use std::io;
 use std::{
-    io,
     net::{SocketAddr, TcpListener as StdTcpListener},
     pin::{pin, Pin},
     task::{ready, Context, Poll},
