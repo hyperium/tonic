@@ -449,7 +449,7 @@ pub mod server_reflection_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &'static str = "grpc.reflection.v1.ServerReflection";
+    pub const SERVICE_NAME: &str = "grpc.reflection.v1.ServerReflection";
     impl<T> tonic::server::NamedService for ServerReflectionServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }

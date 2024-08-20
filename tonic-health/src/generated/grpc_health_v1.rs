@@ -440,7 +440,7 @@ pub mod health_server {
         }
     }
     /// Generated gRPC service name
-    pub const SERVICE_NAME: &'static str = "grpc.health.v1.Health";
+    pub const SERVICE_NAME: &str = "grpc.health.v1.Health";
     impl<T> tonic::server::NamedService for HealthServer<T> {
         const NAME: &'static str = SERVICE_NAME;
     }
