@@ -358,7 +358,7 @@ fn generate_named(server_service: &syn::Ident, service_name: &str) -> TokenStrea
 
     quote! {
         #name_doc
-        pub const SERVICE_NAME: &'static str = #service_name;
+        pub const SERVICE_NAME: &str = #service_name;
 
         impl<T> tonic::server::NamedService for #server_service<T> {
             const NAME: &'static str = SERVICE_NAME;
