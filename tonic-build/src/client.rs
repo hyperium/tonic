@@ -2,8 +2,8 @@ use std::collections::HashSet;
 
 use super::{Attributes, Method, Service};
 use crate::{
-    format_method_name, format_method_path, format_service_name, generate_doc_comments,
-    naive_snake_case,
+    format_method_name, format_method_path, format_service_name, generate_deprecated,
+    generate_doc_comments, naive_snake_case,
 };
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote};
@@ -175,6 +175,9 @@ fn generate_methods<T: Service>(
     for method in service.methods() {
         if !disable_comments.contains(&format_method_name(service, method, emit_package)) {
             stream.extend(generate_doc_comments(method.comment()));
+        }
+        if method.deprecated() {
+            stream.extend(generate_deprecated());
         }
 
         let method = match (method.client_streaming(), method.server_streaming()) {
