@@ -393,11 +393,15 @@ fn decode_trailers_frame(mut buf: Bytes) -> Result<Option<HeaderMap>, Status> {
     let mut cursor_pos = 0;
 
     for (i, b) in buf.iter().enumerate() {
+        // if we are at a trailer delimiter (\r\n)
         if b == &b'\r' && buf.get(i + 1) == Some(&b'\n') {
+            // read the bytes of the trailer passed so far
             let trailer = temp_buf.copy_to_bytes(i - cursor_pos);
-            cursor_pos = i;
+            // increment cursor beyond the delimiter
+            cursor_pos = i + 2;
             trailers.push(trailer);
             if temp_buf.has_remaining() {
+                // advance buf beyond the delimiters
                 temp_buf.get_u8();
                 temp_buf.get_u8();
             }
@@ -611,5 +615,22 @@ mod tests {
         let out = find_trailers(&buf[..]).unwrap_err();
 
         assert_eq!(out.code(), Code::Internal);
+    }
+
+    #[test]
+    fn decode_multiple_trailers() {
+        let buf = b"\x80\0\0\0\x0fgrpc-status:0\r\ngrpc-message:\r\na:1\r\nb:2\r\n";
+
+        let trailers = decode_trailers_frame(Bytes::copy_from_slice(&buf[..]))
+            .unwrap()
+            .unwrap();
+
+        let mut expected = HeaderMap::new();
+        expected.insert("grpc-status", "0".parse().unwrap());
+        expected.insert("grpc-message", "".parse().unwrap());
+        expected.insert("a", "1".parse().unwrap());
+        expected.insert("b", "2".parse().unwrap());
+
+        assert_eq!(trailers, expected);
     }
 }
