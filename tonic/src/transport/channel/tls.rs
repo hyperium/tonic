@@ -81,6 +81,16 @@ impl ClientTlsConfig {
         }
     }
 
+    /// Activates all TLS roots enabled through `tls-*-roots` feature flags
+    pub fn with_enabled_roots(self) -> Self {
+        let config = ClientTlsConfig::new();
+        #[cfg(feature = "tls-native-roots")]
+        let config = config.with_native_roots();
+        #[cfg(feature = "tls-webpki-roots")]
+        let config = config.with_webpki_roots();
+        config
+    }
+
     pub(crate) fn into_tls_connector(self, uri: &Uri) -> Result<TlsConnector, crate::Error> {
         let domain = match &self.domain {
             Some(domain) => domain,

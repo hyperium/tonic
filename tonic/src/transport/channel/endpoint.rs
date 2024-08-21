@@ -49,6 +49,11 @@ impl Endpoint {
         D::Error: Into<crate::Error>,
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
+        #[cfg(feature = "tls")]
+        if me.uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
+            return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
+        }
+
         Ok(me)
     }
 

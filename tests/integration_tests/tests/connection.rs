@@ -27,6 +27,11 @@ async fn connect_returns_err() {
 }
 
 #[tokio::test]
+async fn connect_handles_tls() {
+    TestClient::connect("https://example.com").await.unwrap();
+}
+
+#[tokio::test]
 async fn connect_returns_err_via_call_after_connected() {
     let (tx, rx) = oneshot::channel();
     let sender = Arc::new(Mutex::new(Some(tx)));
