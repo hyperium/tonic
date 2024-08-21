@@ -1,14 +1,12 @@
-use super::service::ServerIo;
-#[cfg(feature = "tls")]
-use super::service::TlsAcceptor;
-#[cfg(not(feature = "tls"))]
-use std::io;
 use std::{
+    io,
     net::{SocketAddr, TcpListener as StdTcpListener},
+    ops::ControlFlow,
     pin::{pin, Pin},
     task::{ready, Context, Poll},
     time::Duration,
 };
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
     net::{TcpListener, TcpStream},
@@ -16,6 +14,10 @@ use tokio::{
 use tokio_stream::wrappers::TcpListenerStream;
 use tokio_stream::{Stream, StreamExt};
 use tracing::warn;
+
+use super::service::ServerIo;
+#[cfg(feature = "tls")]
+use super::service::TlsAcceptor;
 
 #[cfg(not(feature = "tls"))]
 pub(crate) fn tcp_incoming<IO, IE>(
@@ -31,15 +33,9 @@ where
         while let Some(item) = incoming.next().await {
             yield match item {
                 Ok(_) => item.map(ServerIo::new_io)?,
-                Err(e) => {
-                    let e = e.into();
-                    tracing::debug!(error = %e, "accept loop error");
-                    if let Some(e) = e.downcast_ref::<io::Error>() {
-                        if e.kind() == io::ErrorKind::ConnectionAborted {
-                            continue;
-                        }
-                    }
-                    Err(e)?
+                Err(e) => match handle_accept_error(e) {
+                    ControlFlow::Continue(()) => continue,
+                    ControlFlow::Break(e) => Err(e)?,
                 }
             }
         }
@@ -78,8 +74,9 @@ where
                     yield io;
                 }
 
-                SelectOutput::Err(e) => {
-                    tracing::debug!(error = %e, "accept loop error");
+                SelectOutput::Err(e) => match handle_accept_error(e) {
+                    ControlFlow::Continue(()) => continue,
+                    ControlFlow::Break(e) => Err(e)?,
                 }
 
                 SelectOutput::Done => {
@@ -88,6 +85,18 @@ where
             }
         }
     }
+}
+
+fn handle_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Error> {
+    let e = e.into();
+    tracing::debug!(error = %e, "accept loop error");
+    if let Some(e) = e.downcast_ref::<io::Error>() {
+        if e.kind() == io::ErrorKind::ConnectionAborted {
+            return ControlFlow::Continue(());
+        }
+    }
+
+    ControlFlow::Break(e)
 }
 
 #[cfg(feature = "tls")]
