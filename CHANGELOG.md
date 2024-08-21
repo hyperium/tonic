@@ -1,3 +1,26 @@
+# [0.12.2](https://github.com/hyperium/tonic/compare/v0.12.1...v0.12.2) (2024-08-23)
+
+### Features
+
+* Move TimeoutExpired out of transport (#1826)
+* Move ConnectError type from transport (#1828)
+* **channel:** allow setting max_header_list_size (#1835)
+* **router:** Add RoutesBuilder constructor (#1855)
+* **tls:** Rename tls-roots feature with tls-native-roots (#1860)
+* **router:** Rename Routes::into_router with into_axum_router (#1862)
+* **router:** Implement from axum::Router for Routes (#1863)
+* **channel:** Re-enable TLS based on Cargo features in generated clients (#1866)
+* **server:** allow setting max_header_list_size (#1870)
+* **build:** Expose formatted service name (#1684)
+* **reflection:** add back support for v1alpha reflection protocol (#1888)
+
+### Bug Fixes
+
+* **router:** Add missing unimplemented fallback to RoutesBuilder (#1864)
+* **server:** Prevent server from exiting on ECONNABORTED (#1874)
+* **web:** fix panic in trailer parsing on multiple trailers (#1880)
+* **web:** fix empty trailer parsing causing infinite parser loop (#1883)
+
 # [0.12.1](https://github.com/hyperium/tonic/compare/v0.12.0...v0.12.1) (2024-07-17)
 
 ### Bug Fixes
