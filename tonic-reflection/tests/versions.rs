@@ -65,7 +65,7 @@ async fn make_v1_request(
     let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
     let local_addr = format!("http://{}", listener.local_addr().expect("local address"));
     let jh = tokio::spawn(async move {
-        let service = Builder::configure().build().unwrap();
+        let service = Builder::configure().build_v1().unwrap();
 
         Server::builder()
             .add_service(service)

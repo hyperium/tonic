@@ -76,7 +76,15 @@ impl<'b> Builder<'b> {
     }
 
     /// Build a v1 gRPC Reflection Service to be served via Tonic.
-    pub fn build(mut self) -> Result<v1::ServerReflectionServer<impl v1::ServerReflection>, Error> {
+    #[deprecated(since = "0.12.2", note = "use `build_v1()` instead")]
+    pub fn build(self) -> Result<v1::ServerReflectionServer<impl v1::ServerReflection>, Error> {
+        self.build_v1()
+    }
+
+    /// Build a v1 gRPC Reflection Service to be served via Tonic.
+    pub fn build_v1(
+        mut self,
+    ) -> Result<v1::ServerReflectionServer<impl v1::ServerReflection>, Error> {
         if self.include_reflection_service {
             self = self.register_encoded_file_descriptor_set(crate::pb::v1::FILE_DESCRIPTOR_SET);
         }
