@@ -1,6 +1,6 @@
 //! Example of combining tonic grpc routes with regular axum http routes served
 //! on a single tcp port.
-//! 
+//!
 //! `GreeterServer` is served and also route `/foo` which returns "bar" for
 //! http GET requests.
 //!
