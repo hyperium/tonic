@@ -304,9 +304,10 @@ where
                         }
                     }
                     FindTrailers::IncompleteBuf => continue,
-                    FindTrailers::Done(len) => {
-                        Poll::Ready(Some(Ok(Frame::data(buf.split_to(len).freeze()))))
-                    }
+                    FindTrailers::Done(len) => Poll::Ready(match len {
+                        0 => None,
+                        _ => Some(Ok(Frame::data(buf.split_to(len).freeze()))),
+                    }),
                 };
             }
         }
