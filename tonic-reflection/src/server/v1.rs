@@ -28,7 +28,6 @@ pub struct Builder<'b> {
 
     service_names: Vec<String>,
     use_all_service_names: bool,
-    symbols: HashMap<String, Arc<FileDescriptorProto>>,
 }
 
 impl<'b> Builder<'b> {
@@ -41,7 +40,6 @@ impl<'b> Builder<'b> {
 
             service_names: Vec::new(),
             use_all_service_names: true,
-            symbols: HashMap::new(),
         }
     }
 
@@ -92,7 +90,15 @@ impl<'b> Builder<'b> {
         }
 
         let all_fds = self.file_descriptor_sets.clone();
-        let mut files: HashMap<String, Arc<FileDescriptorProto>> = HashMap::new();
+        let mut state = ReflectionServiceState {
+            service_names: self
+                .service_names
+                .into_iter()
+                .map(|name| ServiceResponse { name })
+                .collect(),
+            files: HashMap::new(),
+            symbols: HashMap::new(),
+        };
 
         for fds in all_fds {
             for fd in fds.file {
@@ -103,33 +109,36 @@ impl<'b> Builder<'b> {
                     Some(n) => n,
                 };
 
-                if files.contains_key(&name) {
+                if state.files.contains_key(&name) {
                     continue;
                 }
 
                 let fd = Arc::new(fd);
-                files.insert(name, fd.clone());
+                state.files.insert(name, fd.clone());
 
-                self.process_file(fd)?;
+                state.process_file(fd, self.use_all_service_names)?;
             }
         }
 
-        let service_names = self
-            .service_names
-            .iter()
-            .map(|name| ServiceResponse { name: name.clone() })
-            .collect();
-
         Ok(ServerReflectionServer::new(ReflectionService {
-            state: Arc::new(ReflectionServiceState {
-                service_names,
-                files,
-                symbols: self.symbols,
-            }),
+            state: Arc::new(state),
         }))
     }
+}
 
-    fn process_file(&mut self, fd: Arc<FileDescriptorProto>) -> Result<(), Error> {
+#[derive(Debug)]
+struct ReflectionServiceState {
+    service_names: Vec<ServiceResponse>,
+    files: HashMap<String, Arc<FileDescriptorProto>>,
+    symbols: HashMap<String, Arc<FileDescriptorProto>>,
+}
+
+impl ReflectionServiceState {
+    fn process_file(
+        &mut self,
+        fd: Arc<FileDescriptorProto>,
+        use_all_service_names: bool,
+    ) -> Result<(), Error> {
         let prefix = &fd.package.clone().unwrap_or_default();
 
         for msg in &fd.message_type {
@@ -142,8 +151,10 @@ impl<'b> Builder<'b> {
 
         for service in &fd.service {
             let service_name = extract_name(prefix, "service", service.name.as_ref())?;
-            if self.use_all_service_names {
-                self.service_names.push(service_name.clone());
+            if use_all_service_names {
+                self.service_names.push(ServiceResponse {
+                    name: service_name.clone(),
+                });
             }
             self.symbols.insert(service_name.clone(), fd.clone());
 
@@ -212,36 +223,7 @@ impl<'b> Builder<'b> {
         self.symbols.insert(field_name, fd);
         Ok(())
     }
-}
 
-fn extract_name(
-    prefix: &str,
-    name_type: &str,
-    maybe_name: Option<&String>,
-) -> Result<String, Error> {
-    match maybe_name {
-        None => Err(Error::InvalidFileDescriptorSet(format!(
-            "missing {} name",
-            name_type
-        ))),
-        Some(name) => {
-            if prefix.is_empty() {
-                Ok(name.to_string())
-            } else {
-                Ok(format!("{}.{}", prefix, name))
-            }
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ReflectionServiceState {
-    service_names: Vec<ServiceResponse>,
-    files: HashMap<String, Arc<FileDescriptorProto>>,
-    symbols: HashMap<String, Arc<FileDescriptorProto>>,
-}
-
-impl ReflectionServiceState {
     fn list_services(&self) -> MessageResponse {
         MessageResponse::ListServicesResponse(ListServiceResponse {
             service: self.service_names.clone(),
@@ -280,6 +262,26 @@ impl ReflectionServiceState {
                         file_descriptor_proto: vec![encoded_fd],
                     },
                 ))
+            }
+        }
+    }
+}
+
+fn extract_name(
+    prefix: &str,
+    name_type: &str,
+    maybe_name: Option<&String>,
+) -> Result<String, Error> {
+    match maybe_name {
+        None => Err(Error::InvalidFileDescriptorSet(format!(
+            "missing {} name",
+            name_type
+        ))),
+        Some(name) => {
+            if prefix.is_empty() {
+                Ok(name.to_string())
+            } else {
+                Ok(format!("{}.{}", prefix, name))
             }
         }
     }
