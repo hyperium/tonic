@@ -145,7 +145,9 @@ pub trait Method {
     /// Get comments about this item.
     fn comment(&self) -> &[Self::Comment];
     /// Method is deprecated.
-    fn deprecated(&self) -> bool;
+    fn deprecated(&self) -> bool {
+        false
+    }
     /// Type name of request and response.
     fn request_response_name(
         &self,
