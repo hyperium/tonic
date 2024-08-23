@@ -84,15 +84,37 @@ impl<'b> Builder<'b> {
             self = self.register_encoded_file_descriptor_set(crate::pb::v1::FILE_DESCRIPTOR_SET);
         }
 
-        for encoded in &self.encoded_file_descriptor_sets {
-            let decoded = FileDescriptorSet::decode(*encoded)?;
-            self.file_descriptor_sets.push(decoded);
+        Ok(ServerReflectionServer::new(ReflectionService {
+            state: Arc::new(ReflectionServiceState::new(
+                self.service_names,
+                self.encoded_file_descriptor_sets,
+                self.file_descriptor_sets,
+                self.use_all_service_names,
+            )?),
+        }))
+    }
+}
+
+#[derive(Debug)]
+struct ReflectionServiceState {
+    service_names: Vec<ServiceResponse>,
+    files: HashMap<String, Arc<FileDescriptorProto>>,
+    symbols: HashMap<String, Arc<FileDescriptorProto>>,
+}
+
+impl ReflectionServiceState {
+    fn new(
+        service_names: Vec<String>,
+        encoded_file_descriptor_sets: Vec<&[u8]>,
+        mut file_descriptor_sets: Vec<FileDescriptorSet>,
+        use_all_service_names: bool,
+    ) -> Result<Self, Error> {
+        for encoded in encoded_file_descriptor_sets {
+            file_descriptor_sets.push(FileDescriptorSet::decode(encoded)?);
         }
 
-        let all_fds = self.file_descriptor_sets.clone();
         let mut state = ReflectionServiceState {
-            service_names: self
-                .service_names
+            service_names: service_names
                 .into_iter()
                 .map(|name| ServiceResponse { name })
                 .collect(),
@@ -100,7 +122,7 @@ impl<'b> Builder<'b> {
             symbols: HashMap::new(),
         };
 
-        for fds in all_fds {
+        for fds in file_descriptor_sets {
             for fd in fds.file {
                 let name = match fd.name.clone() {
                     None => {
@@ -115,25 +137,13 @@ impl<'b> Builder<'b> {
 
                 let fd = Arc::new(fd);
                 state.files.insert(name, fd.clone());
-
-                state.process_file(fd, self.use_all_service_names)?;
+                state.process_file(fd, use_all_service_names)?;
             }
         }
 
-        Ok(ServerReflectionServer::new(ReflectionService {
-            state: Arc::new(state),
-        }))
+        Ok(state)
     }
-}
 
-#[derive(Debug)]
-struct ReflectionServiceState {
-    service_names: Vec<ServiceResponse>,
-    files: HashMap<String, Arc<FileDescriptorProto>>,
-    symbols: HashMap<String, Arc<FileDescriptorProto>>,
-}
-
-impl ReflectionServiceState {
     fn process_file(
         &mut self,
         fd: Arc<FileDescriptorProto>,
