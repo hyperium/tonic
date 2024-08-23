@@ -97,7 +97,7 @@ impl<'b> Builder<'b> {
 
 #[derive(Debug)]
 struct ReflectionServiceState {
-    service_names: Vec<ServiceResponse>,
+    service_names: Vec<String>,
     files: HashMap<String, Arc<FileDescriptorProto>>,
     symbols: HashMap<String, Arc<FileDescriptorProto>>,
 }
@@ -114,10 +114,7 @@ impl ReflectionServiceState {
         }
 
         let mut state = ReflectionServiceState {
-            service_names: service_names
-                .into_iter()
-                .map(|name| ServiceResponse { name })
-                .collect(),
+            service_names,
             files: HashMap::new(),
             symbols: HashMap::new(),
         };
@@ -162,9 +159,7 @@ impl ReflectionServiceState {
         for service in &fd.service {
             let service_name = extract_name(prefix, "service", service.name.as_ref())?;
             if use_all_service_names {
-                self.service_names.push(ServiceResponse {
-                    name: service_name.clone(),
-                });
+                self.service_names.push(service_name.clone());
             }
             self.symbols.insert(service_name.clone(), fd.clone());
 
@@ -234,13 +229,11 @@ impl ReflectionServiceState {
         Ok(())
     }
 
-    fn list_services(&self) -> MessageResponse {
-        MessageResponse::ListServicesResponse(ListServiceResponse {
-            service: self.service_names.clone(),
-        })
+    fn list_services(&self) -> &[String] {
+        &self.service_names
     }
 
-    fn symbol_by_name(&self, symbol: &str) -> Result<MessageResponse, Status> {
+    fn symbol_by_name(&self, symbol: &str) -> Result<Vec<u8>, Status> {
         match self.symbols.get(symbol) {
             None => Err(Status::not_found(format!("symbol '{}' not found", symbol))),
             Some(fd) => {
@@ -249,16 +242,12 @@ impl ReflectionServiceState {
                     return Err(Status::internal("encoding error"));
                 };
 
-                Ok(MessageResponse::FileDescriptorResponse(
-                    FileDescriptorResponse {
-                        file_descriptor_proto: vec![encoded_fd],
-                    },
-                ))
+                Ok(encoded_fd)
             }
         }
     }
 
-    fn file_by_filename(&self, filename: &str) -> Result<MessageResponse, Status> {
+    fn file_by_filename(&self, filename: &str) -> Result<Vec<u8>, Status> {
         match self.files.get(filename) {
             None => Err(Status::not_found(format!("file '{}' not found", filename))),
             Some(fd) => {
@@ -267,11 +256,7 @@ impl ReflectionServiceState {
                     return Err(Status::internal("encoding error"));
                 }
 
-                Ok(MessageResponse::FileDescriptorResponse(
-                    FileDescriptorResponse {
-                        file_descriptor_proto: vec![encoded_fd],
-                    },
-                ))
+                Ok(encoded_fd)
             }
         }
     }
@@ -324,8 +309,18 @@ impl ServerReflection for ReflectionService {
                 let resp_msg = match req.message_request.clone() {
                     None => Err(Status::invalid_argument("invalid MessageRequest")),
                     Some(msg) => match msg {
-                        MessageRequest::FileByFilename(s) => state.file_by_filename(&s),
-                        MessageRequest::FileContainingSymbol(s) => state.symbol_by_name(&s),
+                        MessageRequest::FileByFilename(s) => state.file_by_filename(&s).map(|fd| {
+                            MessageResponse::FileDescriptorResponse(FileDescriptorResponse {
+                                file_descriptor_proto: vec![fd],
+                            })
+                        }),
+                        MessageRequest::FileContainingSymbol(s) => {
+                            state.symbol_by_name(&s).map(|fd| {
+                                MessageResponse::FileDescriptorResponse(FileDescriptorResponse {
+                                    file_descriptor_proto: vec![fd],
+                                })
+                            })
+                        }
                         MessageRequest::FileContainingExtension(_) => {
                             Err(Status::not_found("extensions are not supported"))
                         }
@@ -336,7 +331,15 @@ impl ServerReflection for ReflectionService {
                                 ExtensionNumberResponse::default(),
                             ))
                         }
-                        MessageRequest::ListServices(_) => Ok(state.list_services()),
+                        MessageRequest::ListServices(_) => {
+                            Ok(MessageResponse::ListServicesResponse(ListServiceResponse {
+                                service: state
+                                    .list_services()
+                                    .iter()
+                                    .map(|s| ServiceResponse { name: s.clone() })
+                                    .collect(),
+                            }))
+                        }
                     },
                 };
 
