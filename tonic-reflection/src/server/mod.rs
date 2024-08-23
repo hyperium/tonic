@@ -13,6 +13,8 @@ use tonic::Status;
 pub mod v1;
 /// Deprecated; access these via `v1` instead.
 pub use v1::{ServerReflection, ServerReflectionServer}; // For backwards compatibility
+/// v1alpha interface for the gRPC Reflection Service server.
+pub mod v1alpha;
 
 /// A builder used to construct a gRPC Reflection Service.
 #[derive(Debug)]
@@ -73,7 +75,7 @@ impl<'b> Builder<'b> {
         self
     }
 
-    /// Build a gRPC Reflection Service to be served via Tonic.
+    /// Build a v1 gRPC Reflection Service to be served via Tonic.
     pub fn build(mut self) -> Result<v1::ServerReflectionServer<impl v1::ServerReflection>, Error> {
         if self.include_reflection_service {
             self = self.register_encoded_file_descriptor_set(crate::pb::v1::FILE_DESCRIPTOR_SET);
@@ -81,6 +83,25 @@ impl<'b> Builder<'b> {
 
         Ok(v1::ServerReflectionServer::new(
             v1::ReflectionService::from(ReflectionServiceState::new(
+                self.service_names,
+                self.encoded_file_descriptor_sets,
+                self.file_descriptor_sets,
+                self.use_all_service_names,
+            )?),
+        ))
+    }
+
+    /// Build a v1alpha gRPC Reflection Service to be served via Tonic.
+    pub fn build_v1alpha(
+        mut self,
+    ) -> Result<v1alpha::ServerReflectionServer<impl v1alpha::ServerReflection>, Error> {
+        if self.include_reflection_service {
+            self =
+                self.register_encoded_file_descriptor_set(crate::pb::v1alpha::FILE_DESCRIPTOR_SET);
+        }
+
+        Ok(v1alpha::ServerReflectionServer::new(
+            v1alpha::ReflectionService::from(ReflectionServiceState::new(
                 self.service_names,
                 self.encoded_file_descriptor_sets,
                 self.file_descriptor_sets,
