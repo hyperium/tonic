@@ -1,22 +1,22 @@
-use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
+use std::collections::HashMap;
+use std::sync::Arc;
 
-use crate::pb::v1::server_reflection_request::MessageRequest;
-use crate::pb::v1::server_reflection_response::MessageResponse;
-use crate::pb::v1::{
-    ExtensionNumberResponse, FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest,
-    ServerReflectionResponse, ServiceResponse,
-};
 use prost::Message;
 use prost_types::{
     DescriptorProto, EnumDescriptorProto, FieldDescriptorProto, FileDescriptorProto,
     FileDescriptorSet,
 };
-use std::collections::HashMap;
-use std::sync::Arc;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 
+use crate::pb::v1::server_reflection_request::MessageRequest;
+use crate::pb::v1::server_reflection_response::MessageResponse;
+use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
+use crate::pb::v1::{
+    ExtensionNumberResponse, FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest,
+    ServerReflectionResponse, ServiceResponse,
+};
 use crate::server::Error;
 
 /// A builder used to construct a gRPC Reflection Service.

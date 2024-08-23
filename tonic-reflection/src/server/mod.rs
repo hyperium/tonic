@@ -1,10 +1,10 @@
-pub use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
-
-use prost::DecodeError;
 use std::fmt::{Display, Formatter};
 
-mod v1;
+use prost::DecodeError;
 
+pub use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
+
+mod v1;
 pub use v1::Builder;
 
 /// Represents an error in the construction of a gRPC Reflection Service.
