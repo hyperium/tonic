@@ -100,7 +100,7 @@ async fn make_test_reflection_request(request: ServerReflectionRequest) -> Messa
     let jh = tokio::spawn(async move {
         let service = Builder::configure()
             .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
-            .build()
+            .build_v1()
             .unwrap();
 
         Server::builder()

@@ -5,10 +5,10 @@ use tokio_stream::{wrappers::ReceiverStream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 
 use super::ReflectionServiceState;
-use crate::pb::v1::server_reflection_request::MessageRequest;
-use crate::pb::v1::server_reflection_response::MessageResponse;
-pub use crate::pb::v1::server_reflection_server::{ServerReflection, ServerReflectionServer};
-use crate::pb::v1::{
+use crate::pb::v1alpha::server_reflection_request::MessageRequest;
+use crate::pb::v1alpha::server_reflection_response::MessageResponse;
+pub use crate::pb::v1alpha::server_reflection_server::{ServerReflection, ServerReflectionServer};
+use crate::pb::v1alpha::{
     ExtensionNumberResponse, FileDescriptorResponse, ListServiceResponse, ServerReflectionRequest,
     ServerReflectionResponse, ServiceResponse,
 };
