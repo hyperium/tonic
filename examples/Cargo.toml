@@ -260,6 +260,11 @@ path = "src/codec_buffers/server.rs"
 name = "codec-buffers-client"
 path = "src/codec_buffers/client.rs"
 
+[[bin]]
+name = "axum-share-tcp-port"
+path = "src/axum-share-tcp-port/server.rs"
+required-features = ["axum"]
+
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
@@ -284,7 +289,7 @@ types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types", "cancellation", "h2c"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types", "cancellation", "h2c", "axum"]
 default = ["full"]
 
 [dependencies]
@@ -320,6 +325,7 @@ hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], opti
 rustls-pemfile = { version = "2.0.0", optional = true }
 tower-http = { version = "0.5", optional = true }
 pin-project = { version = "1.0.11", optional = true }
+axum = { version = "0.7", optional = true }
 
 [build-dependencies]
 tonic-build = { path = "../tonic-build", features = ["prost"] }
