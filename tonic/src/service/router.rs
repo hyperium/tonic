@@ -162,6 +162,9 @@ impl Future for RoutesFuture {
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match ready!(Pin::new(&mut self.as_mut().0).poll(cx)) {
             Ok(res) => Ok(res.map(boxed)).into(),
+            // NOTE: This pattern is not needed from Rust 1.82.
+            // See https://github.com/rust-lang/rust/pull/122792.
+            #[allow(unreachable_patterns)]
             Err(err) => match err {},
         }
     }
