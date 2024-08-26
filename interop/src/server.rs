@@ -238,7 +238,7 @@ impl<B: Body + Unpin> Body for MergeTrailers<B> {
     fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<std::prelude::v1::Result<http_body::Frame<Self::Data>, Self::Error>>> {
+    ) -> Poll<Option<std::result::Result<http_body::Frame<Self::Data>, Self::Error>>> {
         let this = self.get_mut();
         let mut frame = ready!(Pin::new(&mut this.inner).poll_frame(cx)?);
         if let Some(frame) = frame.as_mut() {
