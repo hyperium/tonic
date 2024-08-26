@@ -4,6 +4,7 @@ use http::header::{HeaderName, HeaderValue};
 use http_body::Body;
 use std::future::Future;
 use std::pin::Pin;
+use std::result::Result as StdResult;
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use tokio_stream::StreamExt;
@@ -16,11 +17,10 @@ pub use pb::unimplemented_service_server::UnimplementedServiceServer;
 #[derive(Default, Clone)]
 pub struct TestService {}
 
-type Result<T> = std::result::Result<Response<T>, Status>;
+type Result<T> = StdResult<Response<T>, Status>;
 type Streaming<T> = Request<tonic::Streaming<T>>;
-type Stream<T> =
-    Pin<Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'static>>;
+type Stream<T> = Pin<Box<dyn tokio_stream::Stream<Item = StdResult<T, Status>> + Send + 'static>>;
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = StdResult<T, E>> + Send + 'static>>;
 
 #[tonic::async_trait]
 impl pb::test_service_server::TestService for TestService {
@@ -189,7 +189,7 @@ where
     type Error = S::Error;
     type Future = BoxFuture<Self::Response, Self::Error>;
 
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<StdResult<(), Self::Error>> {
         Ok(()).into()
     }
 
@@ -238,7 +238,7 @@ impl<B: Body + Unpin> Body for MergeTrailers<B> {
     fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<std::prelude::v1::Result<http_body::Frame<Self::Data>, Self::Error>>> {
+    ) -> Poll<Option<StdResult<http_body::Frame<Self::Data>, Self::Error>>> {
         let this = self.get_mut();
         let mut frame = ready!(Pin::new(&mut this.inner).poll_frame(cx)?);
         if let Some(frame) = frame.as_mut() {
