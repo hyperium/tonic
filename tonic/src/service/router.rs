@@ -88,7 +88,7 @@ impl Routes {
         S::Error: Into<crate::Error> + Send,
     {
         self.router = self.router.route_service(
-            &format!("/{}/*rest", S::NAME),
+            &S::route_path(),
             svc.map_request(|req: Request<axum::body::Body>| req.map(boxed)),
         );
         self
@@ -167,5 +167,58 @@ impl Future for RoutesFuture {
             #[allow(unreachable_patterns)]
             Err(err) => match err {},
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::body::BoxBody;
+    use crate::server::NamedService;
+    use crate::service::Routes;
+    use std::convert::Infallible;
+    use std::fmt::Debug;
+    use std::future::Future;
+    use std::pin::Pin;
+    use std::task::{Context, Poll};
+
+    #[test]
+    fn allow_route_path_override() {
+        type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
+
+        #[derive(Debug, Clone, Default)]
+        struct Svc;
+
+        impl tower_service::Service<http::Request<BoxBody>> for Svc {
+            type Response = http::Response<BoxBody>;
+            type Error = Infallible;
+            type Future = BoxFuture<Self::Response, Self::Error>;
+
+            fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+                unimplemented!()
+            }
+
+            fn call(&mut self, _: http::Request<BoxBody>) -> Self::Future {
+                unimplemented!()
+            }
+        }
+
+        impl NamedService for Svc {
+            const NAME: &'static str = "test";
+
+            fn route_path() -> String {
+                "/custom-route".to_string()
+            }
+        }
+
+        let svc = Svc::default();
+
+        let routes = Routes::new(svc);
+
+        // note! this is a potentially fragile test as it relies on Debug impl of axum router to
+        // extract the presence of the route under test. Axum provides no way to read the registered
+        // routes directly so this is the best option we've got right now.
+        let route_debug = format!("{:?}", routes);
+
+        assert!(route_debug.contains("/custom-route"))
     }
 }

@@ -23,4 +23,11 @@ pub trait NamedService {
     ///
     /// [here]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#requests
     const NAME: &'static str;
+
+    /// The route path that gets registered with the underlying Axum router. This trait method
+    /// can be overridden by implementors of NamedService in order to customise the http path
+    /// routing to the service.
+    fn route_path() -> String {
+        format!("/{}/*rest", Self::NAME)
+    }
 }
