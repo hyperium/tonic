@@ -300,7 +300,7 @@ tonic-types = { path = "../tonic-types", optional = true }
 async-stream = { version = "0.3", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 tokio-util = { version = "0.7.8", optional = true }
-tower = { version = "0.4", optional = true }
+tower = { version = "0.5", optional = true }
 rand = { version = "0.8", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
@@ -318,7 +318,7 @@ h2 = { version = "0.4", optional = true }
 tokio-rustls = { version = "0.26", optional = true, features = ["ring", "tls12"], default-features = false }
 hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
 rustls-pemfile = { version = "2.0.0", optional = true }
-tower-http = { version = "0.5", optional = true }
+tower-http = { version = "0.6", optional = true }
 pin-project = { version = "1.0.11", optional = true }
 
 [build-dependencies]
