@@ -1,0 +1,14 @@
+syntax = "proto3";
+
+package test;
+
+service Service1 {
+  rpc Deprecated(Request) returns (Response) {
+    option deprecated = true;
+  }
+  rpc NotDeprecated(Request) returns (Response);
+}
+
+message Request {}
+
+message Response {}

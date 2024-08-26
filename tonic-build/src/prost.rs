@@ -156,6 +156,10 @@ impl crate::Method for TonicBuildMethod {
         &self.prost_method.comments.leading[..]
     }
 
+    fn deprecated(&self) -> bool {
+        self.prost_method.options.deprecated.unwrap_or_default()
+    }
+
     fn request_response_name(
         &self,
         proto_path: &str,

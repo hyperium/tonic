@@ -144,6 +144,10 @@ pub trait Method {
     fn server_streaming(&self) -> bool;
     /// Get comments about this item.
     fn comment(&self) -> &[Self::Comment];
+    /// Method is deprecated.
+    fn deprecated(&self) -> bool {
+        false
+    }
     /// Type name of request and response.
     fn request_response_name(
         &self,
@@ -238,6 +242,19 @@ fn generate_attributes<'a>(
                 .attrs
         })
         .collect::<Vec<_>>()
+}
+
+fn generate_deprecated() -> TokenStream {
+    let mut deprecated_stream = TokenStream::new();
+    deprecated_stream.append(Ident::new("deprecated", Span::call_site()));
+
+    let group = Group::new(Delimiter::Bracket, deprecated_stream);
+
+    let mut stream = TokenStream::new();
+    stream.append(Punct::new('#', Spacing::Alone));
+    stream.append(group);
+
+    stream
 }
 
 // Generate a singular line of a doc comment

@@ -26,5 +26,6 @@ members = [
   "tests/service_named_result",
   "tests/use_arc_self",
   "tests/default_stubs",
+  "tests/deprecated_methods",
 ]
 resolver = "2"
