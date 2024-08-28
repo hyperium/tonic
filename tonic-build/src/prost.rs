@@ -42,6 +42,7 @@ pub fn configure() -> Builder {
         use_arc_self: false,
         generate_default_stubs: false,
         compile_settings: CompileSettings::default(),
+        skip_debug: HashSet::default(),
     }
 }
 
@@ -307,6 +308,7 @@ pub struct Builder {
     pub(crate) use_arc_self: bool,
     pub(crate) generate_default_stubs: bool,
     pub(crate) compile_settings: CompileSettings,
+    pub(crate) skip_debug: HashSet<String>,
 
     out_dir: Option<PathBuf>,
 }
@@ -589,6 +591,12 @@ impl Builder {
         self
     }
 
+    /// Skips generating `impl Debug` for types
+    pub fn skip_debug(mut self, path: impl AsRef<str>) -> Self {
+        self.skip_debug.insert(path.as_ref().to_string());
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile(
         self,
@@ -644,6 +652,9 @@ impl Builder {
         }
         if let Some(path) = self.include_file.as_ref() {
             config.include_file(path);
+        }
+        if !self.skip_debug.is_empty() {
+            config.skip_debug(&self.skip_debug);
         }
 
         for arg in self.protoc_args.iter() {
