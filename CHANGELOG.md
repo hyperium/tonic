@@ -1,3 +1,16 @@
+# [0.12.3](https://github.com/hyperium/tonic/compare/v0.12.2...v0.12.3) (2024-08-29)
+
+### Features
+
+* **server:** Added support for grpc max_connection_age (#1865)
+* **build:** Add `#[deprecated]` to deprecated client methods (#1879)
+* **build:** plumb skip_debug through prost Builder and add test (#1900)
+
+### Bug Fixes
+
+* **build:** Revert "fix tonic-build cargo build script outputs (#1821)" which accidentally increases MSRV (#1898)
+* **server:** ignore more error kinds in incoming socket stream (#1885)
+
 # [0.12.2](https://github.com/hyperium/tonic/compare/v0.12.1...v0.12.2) (2024-08-23)
 
 ### Features
