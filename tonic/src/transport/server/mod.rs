@@ -770,8 +770,13 @@ impl<L> Router<L> {
     }
 
     /// Convert this tonic `Router` into an axum `Router` consuming the tonic one.
-    #[deprecated(since = "0.12.2", note = "Use `Routes::into_axum_router` instead.")]
+    #[deprecated(since = "0.12.2", note = "Use `into_axum_router` instead.")]
     pub fn into_router(self) -> axum::Router {
+        self.routes.into_axum_router()
+    }
+
+    /// Convert this tonic `Router` into an axum `Router` consuming the tonic one.
+    pub fn into_axum_router(self) -> axum::Router {
         self.routes.into_axum_router()
     }
 
