@@ -13,7 +13,9 @@ use std::{
 };
 use tokio_stream::{Stream, StreamExt};
 
-pub(crate) fn encode_server<T, U>(
+/// Turns a stream of grpc results (message or error status) into [EncodeBody] which is used by grpc
+/// servers for turning the messages into http frames for sending over the network.
+pub fn encode_server<T, U>(
     encoder: T,
     source: U,
     compression_encoding: Option<CompressionEncoding>,
@@ -35,7 +37,9 @@ where
     EncodeBody::new_server(stream)
 }
 
-pub(crate) fn encode_client<T, U>(
+/// Turns a stream of grpc messages into [EncodeBody] which is used by grpc clients for
+/// turning the messages into http frames for sending over the network.
+pub fn encode_client<T, U>(
     encoder: T,
     source: U,
     compression_encoding: Option<CompressionEncoding>,
@@ -266,9 +270,10 @@ enum Role {
     Server,
 }
 
+/// A specialized implementation of [Body] for encoding [Result<Bytes, Status>].
 #[pin_project]
 #[derive(Debug)]
-pub(crate) struct EncodeBody<S> {
+pub struct EncodeBody<S> {
     #[pin]
     inner: S,
     state: EncodeState,
