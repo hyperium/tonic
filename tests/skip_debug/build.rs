@@ -15,7 +15,7 @@ fn main() {
     let debug_impl = r#"
 impl std::fmt::Debug for Output {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:?}", self)
+        f.debug_struct("Output").finish()
     }
 }
 "#;
