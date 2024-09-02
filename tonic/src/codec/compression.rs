@@ -269,7 +269,7 @@ pub(crate) fn decompress(
 }
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SingleMessageCompressionOverride {
+pub enum SingleMessageCompressionOverride {
     /// Inherit whatever compression is already configured. If the stream is compressed this
     /// message will also be configured.
     ///

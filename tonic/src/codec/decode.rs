@@ -54,7 +54,9 @@ enum Direction {
 }
 
 impl<T> Streaming<T> {
-    pub(crate) fn new_response<B, D>(
+    /// Create a new streaming response in the grpc response format for decoding a response [Body]
+    /// into message of type T
+    pub fn new_response<B, D>(
         decoder: D,
         body: B,
         status_code: StatusCode,
@@ -75,7 +77,8 @@ impl<T> Streaming<T> {
         )
     }
 
-    pub(crate) fn new_empty<B, D>(decoder: D, body: B) -> Self
+    /// Create empty response. For creating responses that have no content (headers + trailers only)
+    pub fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
         B: Body + Send + 'static,
         B::Error: Into<crate::Error>,
@@ -84,7 +87,8 @@ impl<T> Streaming<T> {
         Self::new(decoder, body, Direction::EmptyResponse, None, None)
     }
 
-    #[doc(hidden)]
+    /// Create a new streaming request in the grpc response format for decoding a request [Body]
+    /// into message of type T
     pub fn new_request<B, D>(
         decoder: D,
         body: B,
