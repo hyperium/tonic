@@ -237,7 +237,7 @@ fn generate_unary<T: Service>(
             request: impl tonic::IntoRequest<#request>,
         ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
            self.inner.ready().await.map_err(|e| {
-               tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+               tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
            })?;
            let codec = #codec_name::default();
            let path = http::uri::PathAndQuery::from_static(#path);
@@ -268,7 +268,7 @@ fn generate_server_streaming<T: Service>(
             request: impl tonic::IntoRequest<#request>,
         ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
-                        tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
@@ -299,7 +299,7 @@ fn generate_client_streaming<T: Service>(
             request: impl tonic::IntoStreamingRequest<Message = #request>
         ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
-                        tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
@@ -330,7 +330,7 @@ fn generate_streaming<T: Service>(
             request: impl tonic::IntoStreamingRequest<Message = #request>
         ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
-                        tonic::Status::new(tonic::Code::Unknown, format!("Service was not ready: {}", e.into()))
+                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);

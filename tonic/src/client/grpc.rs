@@ -249,7 +249,7 @@ impl<T> Grpc<T> {
                 status.metadata_mut().merge(parts.clone());
                 status
             })?
-            .ok_or_else(|| Status::new(Code::Internal, "Missing response message."))?;
+            .ok_or_else(|| Status::internal("Missing response message."))?;
 
         if let Some(trailers) = body.trailers().await? {
             parts.merge(trailers);

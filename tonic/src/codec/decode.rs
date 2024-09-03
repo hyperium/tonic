@@ -162,7 +162,7 @@ impl StreamingInner {
                             // An ill-constructed message with its Compressed-Flag bit set but lacking a grpc-encoding
                             // entry different from identity in its metadata MUST fail with INTERNAL status,
                             // its associated description indicating the invalid Compressed-Flag condition.
-                            return Err(Status::new(Code::Internal, "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
+                            return Err(Status::internal( "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
                         }
                     }
                 }
@@ -176,7 +176,7 @@ impl StreamingInner {
                     } else {
                         format!("protocol error: received message with invalid compression flag: {} (valid flags are 0 and 1), while sending request", f)
                     };
-                    return Err(Status::new(Code::Internal, message));
+                    return Err(Status::internal(message));
                 }
             };
 
@@ -185,8 +185,7 @@ impl StreamingInner {
                 .max_message_size
                 .unwrap_or(DEFAULT_MAX_RECV_MESSAGE_SIZE);
             if len > limit {
-                return Err(Status::new(
-                    Code::OutOfRange,
+                return Err(Status::out_of_range(
                     format!(
                         "Error, decoded message length too large: found {} bytes, the limit is: {} bytes",
                         len, limit
@@ -229,7 +228,7 @@ impl StreamingInner {
                     } else {
                         format!("Error decompressing: {}, while sending request", err)
                     };
-                    return Err(Status::new(Code::Internal, message));
+                    return Err(Status::internal(message));
                 }
                 let decompressed_len = self.decompress_buf.len();
                 DecodeBuf::new(&mut self.decompress_buf, decompressed_len)
@@ -283,10 +282,7 @@ impl StreamingInner {
             // FIXME: improve buf usage.
             if self.buf.has_remaining() {
                 trace!("unexpected EOF decoding stream, state: {:?}", self.state);
-                Err(Status::new(
-                    Code::Internal,
-                    "Unexpected EOF decoding stream.".to_string(),
-                ))
+                Err(Status::internal("Unexpected EOF decoding stream."))
             } else {
                 Ok(None)
             }
