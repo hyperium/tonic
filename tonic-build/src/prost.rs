@@ -612,6 +612,39 @@ impl Builder {
         protos: &[impl AsRef<Path>],
         includes: &[impl AsRef<Path>],
     ) -> io::Result<()> {
+        if self.emit_rerun_if_changed {
+            for path in protos.iter() {
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
+
+            for path in includes.iter() {
+                // Cargo will watch the **entire** directory recursively. If we
+                // could figure out which files are imported by our protos we
+                // could specify only those files instead.
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
+        }
+
+        self.setup_config(&mut config);
+        config.compile_protos(protos, includes)
+    }
+
+    /// Execute code generation from a file descriptor set.
+    pub fn compile_fds(self, fds: prost_types::FileDescriptorSet) -> io::Result<()> {
+        self.compile_fds_with_config(Config::new(), fds)
+    }
+
+    /// Execute code generation from a file descriptor set using a custom `prost_build::Config`.
+    pub fn compile_fds_with_config(
+        self,
+        mut config: Config,
+        fds: prost_types::FileDescriptorSet,
+    ) -> io::Result<()> {
+        self.setup_config(&mut config);
+        config.compile_fds(fds)
+    }
+
+    fn setup_config(self, config: &mut Config) {
         if let Some(out_dir) = self.out_dir.as_ref() {
             config.out_dir(out_dir);
         }
@@ -659,22 +692,7 @@ impl Builder {
             config.protoc_arg(arg);
         }
 
-        if self.emit_rerun_if_changed {
-            for path in protos.iter() {
-                println!("cargo:rerun-if-changed={}", path.as_ref().display())
-            }
-
-            for path in includes.iter() {
-                // Cargo will watch the **entire** directory recursively. If we
-                // could figure out which files are imported by our protos we
-                // could specify only those files instead.
-                println!("cargo:rerun-if-changed={}", path.as_ref().display())
-            }
-        }
-
         config.service_generator(self.service_generator());
-
-        config.compile_protos(protos, includes)
     }
 
     /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
