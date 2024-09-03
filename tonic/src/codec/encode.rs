@@ -283,10 +283,7 @@ struct EncodeState {
     is_end_stream: bool,
 }
 
-impl<S> EncodeBody<S>
-where
-    S: Stream<Item = Result<Bytes, Status>>,
-{
+impl<S> EncodeBody<S> {
     fn new_client(inner: S) -> Self {
         Self {
             inner,
