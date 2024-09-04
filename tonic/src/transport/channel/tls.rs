@@ -4,12 +4,14 @@ use crate::transport::{
     Error,
 };
 use http::Uri;
+use tokio_rustls::rustls::pki_types::TrustAnchor;
 
 /// Configures TLS settings for endpoints.
 #[derive(Debug, Clone, Default)]
 pub struct ClientTlsConfig {
     domain: Option<String>,
     certs: Vec<Certificate>,
+    trust_anchors: Vec<TrustAnchor<'static>>,
     identity: Option<Identity>,
     assume_http2: bool,
     #[cfg(feature = "tls-native-roots")]
@@ -44,6 +46,25 @@ impl ClientTlsConfig {
         let mut certs = self.certs;
         certs.extend(ca_certificates);
         ClientTlsConfig { certs, ..self }
+    }
+
+    /// Adds the trust anchor which to verify the server's TLS certificate.
+    pub fn trust_anchor(self, trust_anchor: TrustAnchor<'static>) -> Self {
+        let mut trust_anchors = self.trust_anchors;
+        trust_anchors.push(trust_anchor);
+        ClientTlsConfig {
+            trust_anchors,
+            ..self
+        }
+    }
+
+    /// Adds the multiple trust anchors which to verify the server's TLS certificate.
+    pub fn trust_anchors(
+        mut self,
+        trust_anchors: impl IntoIterator<Item = TrustAnchor<'static>>,
+    ) -> Self {
+        self.trust_anchors.extend(trust_anchors);
+        self
     }
 
     /// Sets the client identity to present to the server.
@@ -98,6 +119,7 @@ impl ClientTlsConfig {
         };
         TlsConnector::new(
             self.certs,
+            self.trust_anchors,
             self.identity,
             domain,
             self.assume_http2,
