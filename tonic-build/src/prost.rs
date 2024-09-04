@@ -58,7 +58,7 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
         .parent()
         .expect("proto file should reside in a directory");
 
-    self::configure().compile(&[proto_path], &[proto_dir])
+    self::configure().compile_protos(&[proto_path], &[proto_dir])
 }
 
 /// Non-path Rust types allowed for request/response types.
@@ -596,17 +596,39 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
+    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos()`")]
     pub fn compile(
         self,
         protos: &[impl AsRef<Path>],
         includes: &[impl AsRef<Path>],
     ) -> io::Result<()> {
-        self.compile_with_config(Config::new(), protos, includes)
+        self.compile_protos(protos, includes)
     }
 
     /// Compile the .proto files and execute code generation using a
     /// custom `prost_build::Config`.
+    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos_with_config()`")]
     pub fn compile_with_config(
+        self,
+        config: Config,
+        protos: &[impl AsRef<Path>],
+        includes: &[impl AsRef<Path>],
+    ) -> io::Result<()> {
+        self.compile_protos_with_config(config, protos, includes)
+    }
+
+    /// Compile the .proto files and execute code generation.
+    pub fn compile_protos(
+        self,
+        protos: &[impl AsRef<Path>],
+        includes: &[impl AsRef<Path>],
+    ) -> io::Result<()> {
+        self.compile_protos_with_config(Config::new(), protos, includes)
+    }
+
+    /// Compile the .proto files and execute code generation using a
+    /// custom `prost_build::Config`.
+    pub fn compile_protos_with_config(
         self,
         mut config: Config,
         protos: &[impl AsRef<Path>],
