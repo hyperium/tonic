@@ -58,9 +58,7 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
         .parent()
         .expect("proto file should reside in a directory");
 
-    self::configure().compile(&[proto_path], &[proto_dir])?;
-
-    Ok(())
+    self::configure().compile(&[proto_path], &[proto_dir])
 }
 
 /// Non-path Rust types allowed for request/response types.
@@ -676,9 +674,7 @@ impl Builder {
 
         config.service_generator(self.service_generator());
 
-        config.compile_protos(protos, includes)?;
-
-        Ok(())
+        config.compile_protos(protos, includes)
     }
 
     /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
