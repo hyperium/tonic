@@ -2497,10 +2497,9 @@ mod tests {
 
     #[test]
     fn test_to_headers_encoding() {
-        use crate::Code;
         use crate::Status;
         let special_char_message = "Beyond ascii \t\n\r🌶️💉💧🐮🍺";
-        let s1 = Status::new(Code::Unknown, special_char_message);
+        let s1 = Status::unknown(special_char_message);
 
         assert_eq!(s1.message(), special_char_message);
 

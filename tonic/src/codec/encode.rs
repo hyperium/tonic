@@ -2,7 +2,7 @@ use super::compression::{
     compress, CompressionEncoding, CompressionSettings, SingleMessageCompressionOverride,
 };
 use super::{BufferSettings, EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
-use crate::{Code, Status};
+use crate::Status;
 use bytes::{BufMut, Bytes, BytesMut};
 use http::HeaderMap;
 use http_body::{Body, Frame};
@@ -241,13 +241,10 @@ fn finish_encoding(
     let len = buf.len() - HEADER_SIZE;
     let limit = max_message_size.unwrap_or(DEFAULT_MAX_SEND_MESSAGE_SIZE);
     if len > limit {
-        return Err(Status::new(
-            Code::OutOfRange,
-            format!(
-                "Error, encoded message length too large: found {} bytes, the limit is: {} bytes",
-                len, limit
-            ),
-        ));
+        return Err(Status::out_of_range(format!(
+            "Error, encoded message length too large: found {} bytes, the limit is: {} bytes",
+            len, limit
+        )));
     }
 
     if len > u32::MAX as usize {
@@ -326,7 +323,7 @@ impl EncodeState {
                 let status = if let Some(status) = self.error.take() {
                     status
                 } else {
-                    Status::new(Code::Ok, "")
+                    Status::ok("")
                 };
                 Some(status.to_header_map())
             }
