@@ -8,7 +8,6 @@ on:
     branches: [ "master" ]
 
 env:
-  PROTOC_VERSION: 3.25.1
   RUSTFLAGS: "-D warnings"
 
 jobs:
@@ -37,7 +36,7 @@ jobs:
     - name: Install protoc
       uses: taiki-e/install-action@v2
       with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
+        tool: protoc@3.25.1
     - uses: Swatinem/rust-cache@v2
     - run: cargo run --package codegen
     - run: git diff --exit-code
@@ -52,10 +51,7 @@ jobs:
         toolchain: nightly-2024-08-04
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
+    - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
     - run: cargo hack udeps --workspace --exclude-features tls --each-feature
     - run: cargo udeps --package tonic --features tls,transport
@@ -71,10 +67,7 @@ jobs:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
+    - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
     - name: Check features
       run: cargo hack check --workspace --no-private --each-feature --no-dev-deps
@@ -106,10 +99,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
+    - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
     - run: cargo test --workspace --all-features
       env:
@@ -124,10 +114,7 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@${{ env.PROTOC_VERSION }}
+    - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh
