@@ -816,7 +816,7 @@ fn main() {
     tonic_build::configure()
         .build_client(false)
         .out_dir("another_crate/src/pb")
-        .compile(&["path/my_proto.proto"], &["path"])
+        .compile_protos(&["path/my_proto.proto"], &["path"])
         .expect("failed to compile protos");
 }
 ```

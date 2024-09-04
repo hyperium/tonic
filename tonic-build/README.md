@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
    tonic_build::configure()
         .build_server(false)
-        .compile(
+        .compile_protos(
             &["proto/helloworld/helloworld.proto"],
             &["proto/helloworld"],
         )?;
@@ -74,7 +74,7 @@ fn main() {
     tonic_build::configure()
         .build_server(false)
         //.out_dir("src/google")  // you can change the generated code's location
-        .compile(
+        .compile_protos(
             &["proto/googleapis/google/pubsub/v1/pubsub.proto"],
             &["proto/googleapis"], // specify the root location to search proto dependencies
         ).unwrap();
