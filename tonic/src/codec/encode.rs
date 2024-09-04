@@ -290,7 +290,7 @@ impl<S> EncodeBody<S>
 where
     S: Stream<Item = Result<Bytes, Status>>,
 {
-    pub(crate) fn new_client(inner: S) -> Self {
+    fn new_client(inner: S) -> Self {
         Self {
             inner,
             state: EncodeState {
@@ -301,7 +301,7 @@ where
         }
     }
 
-    pub(crate) fn new_server(inner: S) -> Self {
+    fn new_server(inner: S) -> Self {
         Self {
             inner,
             state: EncodeState {
