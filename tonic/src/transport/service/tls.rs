@@ -14,6 +14,8 @@ pub(crate) const ALPN_H2: &[u8] = b"h2";
 pub(crate) enum TlsError {
     #[cfg(feature = "channel")]
     H2NotNegotiated,
+    #[cfg(feature = "tls-native-roots")]
+    NativeCertsNotFound,
     CertificateParseError,
     PrivateKeyParseError,
 }
@@ -23,6 +25,8 @@ impl fmt::Display for TlsError {
         match self {
             #[cfg(feature = "channel")]
             TlsError::H2NotNegotiated => write!(f, "HTTP/2 was not negotiated."),
+            #[cfg(feature = "tls-native-roots")]
+            TlsError::NativeCertsNotFound => write!(f, "no native certs found"),
             TlsError::CertificateParseError => write!(f, "Error parsing TLS certificate."),
             TlsError::PrivateKeyParseError => write!(
                 f,

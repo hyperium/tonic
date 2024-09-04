@@ -34,7 +34,15 @@ impl TlsConnector {
 
         #[cfg(feature = "tls-native-roots")]
         if with_native_roots {
-            roots.add_parsable_certificates(rustls_native_certs::load_native_certs()?);
+            let rustls_native_certs::CertificateResult { certs, errors, .. } =
+                rustls_native_certs::load_native_certs();
+            if !errors.is_empty() {
+                tracing::debug!("errors occured when loading native certs: {errors:?}");
+            }
+            if certs.is_empty() {
+                return Err(TlsError::NativeCertsNotFound.into());
+            }
+            roots.add_parsable_certificates(certs);
         }
 
         #[cfg(feature = "tls-webpki-roots")]
