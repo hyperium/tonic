@@ -2,7 +2,7 @@ fn main() {
     let protos = &["proto/test.proto"];
 
     tonic_build::configure()
-        .compile(protos, &["proto"])
+        .compile_protos(protos, &["proto"])
         .unwrap();
 
     protos

@@ -5,7 +5,7 @@ fn main() {
         .skip_debug("test.Output")
         .build_client(true)
         .build_server(true)
-        .compile_with_config(config, &["proto/test.proto"], &["proto"])
+        .compile_protos_with_config(config, &["proto/test.proto"], &["proto"])
         .unwrap();
 
     // Add a dummy impl Debug to the skipped debug implementations to avoid missing impl Debug errors

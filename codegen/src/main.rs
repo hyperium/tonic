@@ -87,7 +87,7 @@ fn codegen(
         .build_server(build_server)
         .out_dir(&tempdir)
         .file_descriptor_set_path(file_descriptor_set_path)
-        .compile(&iface_files, &include_dirs)
+        .compile_protos(&iface_files, &include_dirs)
         .unwrap();
 
     for path in std::fs::read_dir(tempdir.path()).unwrap() {

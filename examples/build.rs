@@ -3,13 +3,13 @@ use std::{env, path::PathBuf};
 fn main() {
     tonic_build::configure()
         .type_attribute("routeguide.Point", "#[derive(Hash)]")
-        .compile(&["proto/routeguide/route_guide.proto"], &["proto"])
+        .compile_protos(&["proto/routeguide/route_guide.proto"], &["proto"])
         .unwrap();
 
     let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
     tonic_build::configure()
         .file_descriptor_set_path(out_dir.join("helloworld_descriptor.bin"))
-        .compile(&["proto/helloworld/helloworld.proto"], &["proto"])
+        .compile_protos(&["proto/helloworld/helloworld.proto"], &["proto"])
         .unwrap();
 
     tonic_build::compile_protos("proto/echo/echo.proto").unwrap();
@@ -21,12 +21,12 @@ fn main() {
         .server_attribute("Echo", "#[derive(PartialEq)]")
         .client_mod_attribute("attrs", "#[cfg(feature = \"client\")]")
         .client_attribute("Echo", "#[derive(PartialEq)]")
-        .compile(&["proto/attrs/attrs.proto"], &["proto"])
+        .compile_protos(&["proto/attrs/attrs.proto"], &["proto"])
         .unwrap();
 
     tonic_build::configure()
         .build_server(false)
-        .compile(
+        .compile_protos(
             &["proto/googleapis/google/pubsub/v1/pubsub.proto"],
             &["proto/googleapis"],
         )
@@ -39,7 +39,7 @@ fn main() {
     tonic_build::configure()
         .out_dir(smallbuff_copy)
         .codec_path("crate::common::SmallBufferCodec")
-        .compile(&["proto/helloworld/helloworld.proto"], &["proto"])
+        .compile_protos(&["proto/helloworld/helloworld.proto"], &["proto"])
         .unwrap();
 }
 
