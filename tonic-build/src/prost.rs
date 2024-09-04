@@ -61,6 +61,11 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
     self::configure().compile_protos(&[proto_path], &[proto_dir])
 }
 
+/// Simple file descriptor set compiling. Use [`configure`] instead if you need more options.
+pub fn compile_fds(fds: prost_types::FileDescriptorSet) -> io::Result<()> {
+    self::configure().compile_fds(fds)
+}
+
 /// Non-path Rust types allowed for request/response types.
 const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
 

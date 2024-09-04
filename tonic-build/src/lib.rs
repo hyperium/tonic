@@ -83,7 +83,7 @@ use quote::TokenStreamExt;
 mod prost;
 
 #[cfg(feature = "prost")]
-pub use prost::{compile_protos, configure, Builder};
+pub use prost::{compile_fds, compile_protos, configure, Builder};
 
 pub mod manual;
 
