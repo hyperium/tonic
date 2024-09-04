@@ -5,7 +5,10 @@ use std::sync::Arc;
 use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
-    rustls::{pki_types::ServerName, ClientConfig, RootCertStore},
+    rustls::{
+        pki_types::{ServerName, TrustAnchor},
+        ClientConfig, RootCertStore,
+    },
     TlsConnector as RustlsConnector,
 };
 
@@ -23,6 +26,7 @@ pub(crate) struct TlsConnector {
 impl TlsConnector {
     pub(crate) fn new(
         ca_certs: Vec<Certificate>,
+        trust_anchors: Vec<TrustAnchor<'static>>,
         identity: Option<Identity>,
         domain: &str,
         assume_http2: bool,
@@ -30,7 +34,7 @@ impl TlsConnector {
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
     ) -> Result<Self, crate::Error> {
         let builder = ClientConfig::builder();
-        let mut roots = RootCertStore::empty();
+        let mut roots = RootCertStore::from_iter(trust_anchors);
 
         #[cfg(feature = "tls-native-roots")]
         if with_native_roots {
