@@ -11,7 +11,7 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tokio_stream::{Stream, StreamExt};
+use tokio_stream::{adapters::Fuse, Stream, StreamExt};
 
 /// Turns a stream of grpc results (message or error status) into [EncodeBody] which is used by grpc
 /// servers for turning the messages into http frames for sending over the network.
@@ -28,7 +28,7 @@ where
 {
     let stream = EncodedBytes::new(
         encoder,
-        source.fuse(),
+        source,
         compression_encoding,
         compression_override,
         max_message_size,
@@ -51,7 +51,7 @@ where
 {
     let stream = EncodedBytes::new(
         encoder,
-        source.fuse().map(Ok),
+        source.map(Ok),
         compression_encoding,
         SingleMessageCompressionOverride::default(),
         max_message_size,
@@ -68,7 +68,7 @@ where
 #[derive(Debug)]
 struct EncodedBytes<T, U> {
     #[pin]
-    source: U,
+    source: Fuse<U>,
     encoder: T,
     compression_encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
@@ -77,8 +77,7 @@ struct EncodedBytes<T, U> {
     error: Option<Status>,
 }
 
-impl<T: Encoder, U> EncodedBytes<T, U> {
-    // `source` should be fused stream.
+impl<T: Encoder, U: Stream> EncodedBytes<T, U> {
     fn new(
         encoder: T,
         source: U,
@@ -103,7 +102,7 @@ impl<T: Encoder, U> EncodedBytes<T, U> {
         };
 
         Self {
-            source,
+            source: source.fuse(),
             encoder,
             compression_encoding,
             max_message_size,
