@@ -610,8 +610,8 @@ impl Builder {
         self.compile_protos(protos, includes)
     }
 
-    /// Compile the .proto files and execute code generation using a
-    /// custom `prost_build::Config`.
+    /// Compile the .proto files and execute code generation using a custom
+    /// `prost_build::Config`. The provided config will be updated with this builder's config.
     #[deprecated(since = "0.12.3", note = "renamed to `compile_protos_with_config()`")]
     pub fn compile_with_config(
         self,
@@ -631,8 +631,8 @@ impl Builder {
         self.compile_protos_with_config(Config::new(), protos, includes)
     }
 
-    /// Compile the .proto files and execute code generation using a
-    /// custom `prost_build::Config`.
+    /// Compile the .proto files and execute code generation using a custom
+    /// `prost_build::Config`. The provided config will be updated with this builder's config.
     pub fn compile_protos_with_config(
         self,
         mut config: Config,
