@@ -66,11 +66,7 @@ where
 ///  * The encoded buffer surpasses YIELD_THRESHOLD.
 #[pin_project(project = EncodedBytesProj)]
 #[derive(Debug)]
-pub(crate) struct EncodedBytes<T, U>
-where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
-{
+pub(crate) struct EncodedBytes<T, U> {
     #[pin]
     source: U,
     encoder: T,
@@ -81,11 +77,7 @@ where
     error: Option<Status>,
 }
 
-impl<T, U> EncodedBytes<T, U>
-where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
-{
+impl<T: Encoder, U> EncodedBytes<T, U> {
     // `source` should be fused stream.
     fn new(
         encoder: T,
