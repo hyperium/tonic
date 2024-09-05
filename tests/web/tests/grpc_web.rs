@@ -14,8 +14,8 @@ use tokio_stream::wrappers::TcpListenerStream;
 use tonic::body::BoxBody;
 use tonic::transport::Server;
 
-use integration::pb::{test_server::TestServer, Input, Output};
-use integration::Svc;
+use test_web::pb::{test_server::TestServer, Input, Output};
+use test_web::Svc;
 use tonic::Status;
 use tonic_web::GrpcWebLayer;
 
@@ -117,7 +117,7 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
 
     let bytes = match content_type {
         "grpc-web" => encode_body(),
-        "grpc-web-text" => integration::util::base64::STANDARD
+        "grpc-web-text" => test_web::util::base64::STANDARD
             .encode(encode_body())
             .into(),
         _ => panic!("invalid content type {}", content_type),
@@ -139,7 +139,7 @@ async fn decode_body(body: Incoming, content_type: &str) -> (Output, Bytes) {
     let mut body = body.collect().await.unwrap().to_bytes();
 
     if content_type == "application/grpc-web-text+proto" {
-        body = integration::util::base64::STANDARD
+        body = test_web::util::base64::STANDARD
             .decode(body)
             .unwrap()
             .into()

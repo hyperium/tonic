@@ -22,7 +22,7 @@ members = [
   "tests/stream_conflict",
   "tests/root-crate-path",
   "tests/compression",
-  "tonic-web/tests/integration",
+  "tests/web",
   "tests/service_named_result",
   "tests/use_arc_self",
   "tests/default_stubs",
