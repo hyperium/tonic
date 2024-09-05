@@ -297,7 +297,7 @@ impl<T> Grpc<T> {
             .map(|s| {
                 encode_client(
                     codec.encoder(),
-                    s,
+                    s.map(Ok),
                     self.config.send_compression_encodings,
                     self.config.max_encoding_message_size,
                 )

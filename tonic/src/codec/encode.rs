@@ -20,14 +20,14 @@ pub fn encode_client<T, U>(
     source: U,
     compression_encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
-) -> EncodeBody<T, impl Stream<Item = Result<T::Item, Status>>>
+) -> EncodeBody<T, U>
 where
     T: Encoder<Error = Status>,
-    U: Stream<Item = T::Item>,
+    U: Stream,
 {
     let stream = EncodedBytes::new(
         encoder,
-        source.map(Ok),
+        source,
         compression_encoding,
         SingleMessageCompressionOverride::default(),
         max_message_size,
