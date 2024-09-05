@@ -16,7 +16,7 @@ use std::io;
 pub use self::buffer::{DecodeBuf, EncodeBuf};
 pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
 pub use self::decode::Streaming;
-pub use self::encode::{encode_client, encode_server, EncodeBody};
+pub use self::encode::{encode_client, EncodeBody};
 #[cfg(feature = "prost")]
 pub use self::prost::ProstCodec;
 

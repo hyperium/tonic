@@ -13,30 +13,6 @@ use std::{
 };
 use tokio_stream::{adapters::Fuse, Stream, StreamExt};
 
-/// Turns a stream of grpc results (message or error status) into [EncodeBody] which is used by grpc
-/// servers for turning the messages into http frames for sending over the network.
-pub fn encode_server<T, U>(
-    encoder: T,
-    source: U,
-    compression_encoding: Option<CompressionEncoding>,
-    compression_override: SingleMessageCompressionOverride,
-    max_message_size: Option<usize>,
-) -> EncodeBody<T, impl Stream<Item = Result<T::Item, Status>>>
-where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
-{
-    let stream = EncodedBytes::new(
-        encoder,
-        source,
-        compression_encoding,
-        compression_override,
-        max_message_size,
-    );
-
-    EncodeBody::new_server(stream)
-}
-
 /// Turns a stream of grpc messages into [EncodeBody] which is used by grpc clients for
 /// turning the messages into http frames for sending over the network.
 pub fn encode_client<T, U>(
@@ -274,7 +250,7 @@ struct EncodeState {
     is_end_stream: bool,
 }
 
-impl<T, U> EncodeBody<T, U> {
+impl<T: Encoder, U: Stream> EncodeBody<T, U> {
     fn new_client(inner: EncodedBytes<T, U>) -> Self {
         Self {
             inner,
@@ -286,9 +262,23 @@ impl<T, U> EncodeBody<T, U> {
         }
     }
 
-    fn new_server(inner: EncodedBytes<T, U>) -> Self {
+    /// Turns a stream of grpc results (message or error status) into [EncodeBody] which is used by grpc
+    /// servers for turning the messages into http frames for sending over the network.
+    pub fn new_server(
+        encoder: T,
+        source: U,
+        compression_encoding: Option<CompressionEncoding>,
+        compression_override: SingleMessageCompressionOverride,
+        max_message_size: Option<usize>,
+    ) -> Self {
         Self {
-            inner,
+            inner: EncodedBytes::new(
+                encoder,
+                source,
+                compression_encoding,
+                compression_override,
+                max_message_size,
+            ),
             state: EncodeState {
                 error: None,
                 role: Role::Server,
