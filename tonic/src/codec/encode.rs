@@ -21,7 +21,7 @@ pub fn encode_server<T, U>(
     compression_encoding: Option<CompressionEncoding>,
     compression_override: SingleMessageCompressionOverride,
     max_message_size: Option<usize>,
-) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
+) -> EncodeBody<T, impl Stream<Item = Result<T::Item, Status>>>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = Result<T::Item, Status>>,
@@ -44,7 +44,7 @@ pub fn encode_client<T, U>(
     source: U,
     compression_encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
-) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
+) -> EncodeBody<T, impl Stream<Item = Result<T::Item, Status>>>
 where
     T: Encoder<Error = Status>,
     U: Stream<Item = T::Item>,
@@ -262,9 +262,9 @@ enum Role {
 /// A specialized implementation of [Body] for encoding [Result<Bytes, Status>].
 #[pin_project]
 #[derive(Debug)]
-pub struct EncodeBody<S> {
+pub struct EncodeBody<T, U> {
     #[pin]
-    inner: S,
+    inner: EncodedBytes<T, U>,
     state: EncodeState,
 }
 
@@ -275,8 +275,8 @@ struct EncodeState {
     is_end_stream: bool,
 }
 
-impl<S> EncodeBody<S> {
-    fn new_client(inner: S) -> Self {
+impl<T, U> EncodeBody<T, U> {
+    fn new_client(inner: EncodedBytes<T, U>) -> Self {
         Self {
             inner,
             state: EncodeState {
@@ -287,7 +287,7 @@ impl<S> EncodeBody<S> {
         }
     }
 
-    fn new_server(inner: S) -> Self {
+    fn new_server(inner: EncodedBytes<T, U>) -> Self {
         Self {
             inner,
             state: EncodeState {
@@ -320,9 +320,10 @@ impl EncodeState {
     }
 }
 
-impl<S> Body for EncodeBody<S>
+impl<T, U> Body for EncodeBody<T, U>
 where
-    S: Stream<Item = Result<Bytes, Status>>,
+    T: Encoder<Error = Status>,
+    U: Stream<Item = Result<T::Item, Status>>,
 {
     type Data = Bytes;
     type Error = Status;
