@@ -150,7 +150,9 @@ fn from_decode_error(error: prost::DecodeError) -> crate::Status {
 #[cfg(test)]
 mod tests {
     use crate::codec::compression::SingleMessageCompressionOverride;
-    use crate::codec::{DecodeBuf, Decoder, EncodeBody, EncodeBuf, Encoder, Streaming, HEADER_SIZE};
+    use crate::codec::{
+        DecodeBuf, Decoder, EncodeBody, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
+    };
     use crate::Status;
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;

@@ -13,28 +13,6 @@ use std::{
 };
 use tokio_stream::{adapters::Fuse, Stream, StreamExt};
 
-/// Turns a stream of grpc messages into [EncodeBody] which is used by grpc clients for
-/// turning the messages into http frames for sending over the network.
-pub fn encode_client<T, U>(
-    encoder: T,
-    source: U,
-    compression_encoding: Option<CompressionEncoding>,
-    max_message_size: Option<usize>,
-) -> EncodeBody<T, U>
-where
-    T: Encoder<Error = Status>,
-    U: Stream,
-{
-    let stream = EncodedBytes::new(
-        encoder,
-        source,
-        compression_encoding,
-        SingleMessageCompressionOverride::default(),
-        max_message_size,
-    );
-    EncodeBody::new_client(stream)
-}
-
 /// Combinator for efficient encoding of messages into reasonably sized buffers.
 /// EncodedBytes encodes ready messages from its delegate stream into a BytesMut,
 /// splitting off and yielding a buffer when either:
@@ -251,9 +229,22 @@ struct EncodeState {
 }
 
 impl<T: Encoder, U: Stream> EncodeBody<T, U> {
-    fn new_client(inner: EncodedBytes<T, U>) -> Self {
+    /// Turns a stream of grpc messages into [EncodeBody] which is used by grpc clients for
+    /// turning the messages into http frames for sending over the network.
+    pub fn new_client(
+        encoder: T,
+        source: U,
+        compression_encoding: Option<CompressionEncoding>,
+        max_message_size: Option<usize>,
+    ) -> Self {
         Self {
-            inner,
+            inner: EncodedBytes::new(
+                encoder,
+                source,
+                compression_encoding,
+                SingleMessageCompressionOverride::default(),
+                max_message_size,
+            ),
             state: EncodeState {
                 error: None,
                 role: Role::Client,

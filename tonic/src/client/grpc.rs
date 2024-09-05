@@ -1,9 +1,10 @@
 use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings};
+use crate::codec::EncodeBody;
 use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
     body::BoxBody,
     client::GrpcService,
-    codec::{encode_client, Codec, Decoder, Streaming},
+    codec::{Codec, Decoder, Streaming},
     request::SanitizeHeaders,
     Code, Request, Response, Status,
 };
@@ -295,7 +296,7 @@ impl<T> Grpc<T> {
     {
         let request = request
             .map(|s| {
-                encode_client(
+                EncodeBody::new_client(
                     codec.encoder(),
                     s.map(Ok),
                     self.config.send_compression_encodings,
