@@ -201,10 +201,7 @@ where
                 }
             },
 
-            Encoding::None => match ready!(self.project().inner.poll_frame(cx)) {
-                Some(res) => Poll::Ready(Some(res.map_err(internal_error))),
-                None => Poll::Ready(None),
-            },
+            Encoding::None => self.project().inner.poll_frame(cx).map_err(internal_error),
         }
     }
 
