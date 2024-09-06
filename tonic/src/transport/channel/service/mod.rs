@@ -11,6 +11,7 @@ mod connection;
 pub(super) use self::connection::Connection;
 
 mod discover;
+pub use self::discover::Change;
 pub(super) use self::discover::DynamicServiceStream;
 
 mod io;
