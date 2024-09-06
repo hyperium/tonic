@@ -22,7 +22,7 @@ use std::{
     future::Future,
     hash::Hash,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 use tokio::sync::mpsc::{channel, Sender};
 
@@ -218,8 +218,9 @@ impl Future for ResponseFuture {
     type Output = Result<Response<BoxBody>, super::Error>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let val = ready!(Pin::new(&mut self.inner).poll(cx)).map_err(super::Error::from_source)?;
-        Ok(val).into()
+        Pin::new(&mut self.inner)
+            .poll(cx)
+            .map_err(super::Error::from_source)
     }
 }
 
