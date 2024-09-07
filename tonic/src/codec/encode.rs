@@ -66,7 +66,7 @@ where
 ///  * The encoded buffer surpasses YIELD_THRESHOLD.
 #[pin_project(project = EncodedBytesProj)]
 #[derive(Debug)]
-pub(crate) struct EncodedBytes<T, U> {
+struct EncodedBytes<T, U> {
     #[pin]
     source: U,
     encoder: T,
