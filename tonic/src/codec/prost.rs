@@ -267,7 +267,7 @@ mod tests {
             frame
                 .into_trailers()
                 .expect("got trailers")
-                .get("grpc-status")
+                .get(Status::GRPC_STATUS)
                 .expect("grpc-status header"),
             "11"
         );
@@ -302,7 +302,7 @@ mod tests {
             frame
                 .into_trailers()
                 .expect("got trailers")
-                .get("grpc-status")
+                .get(Status::GRPC_STATUS)
                 .expect("grpc-status header"),
             "8"
         );

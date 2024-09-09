@@ -109,14 +109,17 @@ mod service;
 
 use http::header::HeaderName;
 use std::time::Duration;
-use tonic::{body::BoxBody, server::NamedService};
+use tonic::{body::BoxBody, server::NamedService, Status};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_layer::Layer;
 use tower_service::Service;
 
 const DEFAULT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
-const DEFAULT_EXPOSED_HEADERS: [&str; 3] =
-    ["grpc-status", "grpc-message", "grpc-status-details-bin"];
+const DEFAULT_EXPOSED_HEADERS: [HeaderName; 3] = [
+    Status::GRPC_STATUS,
+    Status::GRPC_MESSAGE,
+    Status::GRPC_STATUS_DETAILS,
+];
 const DEFAULT_ALLOW_HEADERS: [&str; 4] =
     ["x-grpc-web", "content-type", "x-user-agent", "grpc-timeout"];
 
@@ -136,13 +139,7 @@ where
         .allow_origin(AllowOrigin::mirror_request())
         .allow_credentials(true)
         .max_age(DEFAULT_MAX_AGE)
-        .expose_headers(
-            DEFAULT_EXPOSED_HEADERS
-                .iter()
-                .cloned()
-                .map(HeaderName::from_static)
-                .collect::<Vec<HeaderName>>(),
-        )
+        .expose_headers(DEFAULT_EXPOSED_HEADERS.iter().cloned().collect::<Vec<_>>())
         .allow_headers(
             DEFAULT_ALLOW_HEADERS
                 .iter()
