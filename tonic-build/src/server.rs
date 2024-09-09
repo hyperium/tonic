@@ -164,12 +164,11 @@ pub(crate) fn generate_internal<T: Service>(
                         #methods
 
                         _ => Box::pin(async move {
-                            Ok(http::Response::builder()
-                               .status(200)
-                               .header("grpc-status", tonic::Code::Unimplemented as i32)
-                               .header(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE)
-                               .body(empty_body())
-                               .unwrap())
+                            let mut response = http::Response::new(empty_body());
+                            let headers = response.headers_mut();
+                            headers.insert("grpc-status", (tonic::Code::Unimplemented as i32).into());
+                            headers.insert(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE);
+                            Ok(response)
                         }),
                     }
                 }
