@@ -21,10 +21,6 @@ const ENCODING_SET: &AsciiSet = &CONTROLS
     .add(b'{')
     .add(b'}');
 
-const GRPC_STATUS_HEADER_CODE: HeaderName = HeaderName::from_static("grpc-status");
-const GRPC_STATUS_MESSAGE_HEADER: HeaderName = HeaderName::from_static("grpc-message");
-const GRPC_STATUS_DETAILS_HEADER: HeaderName = HeaderName::from_static("grpc-status-details-bin");
-
 /// A gRPC status describing the result of an RPC call.
 ///
 /// Values can be created using the `new` function or one of the specialized
@@ -442,10 +438,10 @@ impl Status {
 
     /// Extract a `Status` from a hyper `HeaderMap`.
     pub fn from_header_map(header_map: &HeaderMap) -> Option<Status> {
-        header_map.get(GRPC_STATUS_HEADER_CODE).map(|code| {
+        header_map.get(Self::GRPC_STATUS).map(|code| {
             let code = Code::from_bytes(code.as_ref());
             let error_message = header_map
-                .get(GRPC_STATUS_MESSAGE_HEADER)
+                .get(Self::GRPC_MESSAGE)
                 .map(|header| {
                     percent_decode(header.as_bytes())
                         .decode_utf8()
@@ -454,7 +450,7 @@ impl Status {
                 .unwrap_or_else(|| Ok(String::new()));
 
             let details = header_map
-                .get(GRPC_STATUS_DETAILS_HEADER)
+                .get(Self::GRPC_STATUS_DETAILS)
                 .map(|h| {
                     crate::util::base64::STANDARD
                         .decode(h.as_bytes())
@@ -464,9 +460,9 @@ impl Status {
                 .unwrap_or_default();
 
             let mut other_headers = header_map.clone();
-            other_headers.remove(GRPC_STATUS_HEADER_CODE);
-            other_headers.remove(GRPC_STATUS_MESSAGE_HEADER);
-            other_headers.remove(GRPC_STATUS_DETAILS_HEADER);
+            other_headers.remove(Self::GRPC_STATUS);
+            other_headers.remove(Self::GRPC_MESSAGE);
+            other_headers.remove(Self::GRPC_STATUS_DETAILS);
 
             match error_message {
                 Ok(message) => Status {
@@ -525,7 +521,7 @@ impl Status {
     pub fn add_header(&self, header_map: &mut HeaderMap) -> Result<(), Self> {
         header_map.extend(self.metadata.clone().into_sanitized_headers());
 
-        header_map.insert(GRPC_STATUS_HEADER_CODE, self.code.to_header_value());
+        header_map.insert(Self::GRPC_STATUS, self.code.to_header_value());
 
         if !self.message.is_empty() {
             let to_write = Bytes::copy_from_slice(
@@ -533,7 +529,7 @@ impl Status {
             );
 
             header_map.insert(
-                GRPC_STATUS_MESSAGE_HEADER,
+                Self::GRPC_MESSAGE,
                 HeaderValue::from_maybe_shared(to_write).map_err(invalid_header_value_byte)?,
             );
         }
@@ -542,7 +538,7 @@ impl Status {
             let details = crate::util::base64::STANDARD_NO_PAD.encode(&self.details[..]);
 
             header_map.insert(
-                GRPC_STATUS_DETAILS_HEADER,
+                Self::GRPC_STATUS_DETAILS,
                 HeaderValue::from_maybe_shared(details).map_err(invalid_header_value_byte)?,
             );
         }
@@ -591,6 +587,13 @@ impl Status {
         self.add_header(response.headers_mut()).unwrap();
         response
     }
+
+    #[doc(hidden)]
+    pub const GRPC_STATUS: HeaderName = HeaderName::from_static("grpc-status");
+    #[doc(hidden)]
+    pub const GRPC_MESSAGE: HeaderName = HeaderName::from_static("grpc-message");
+    #[doc(hidden)]
+    pub const GRPC_STATUS_DETAILS: HeaderName = HeaderName::from_static("grpc-status-details-bin");
 }
 
 fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
@@ -1005,7 +1008,7 @@ mod tests {
 
         let b64_details = crate::util::base64::STANDARD_NO_PAD.encode(DETAILS);
 
-        assert_eq!(header_map[super::GRPC_STATUS_DETAILS_HEADER], b64_details);
+        assert_eq!(header_map[Status::GRPC_STATUS_DETAILS], b64_details);
 
         let status = Status::from_header_map(&header_map).unwrap();
 
