@@ -96,6 +96,7 @@ fn handle_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Error> 
             io::ErrorKind::ConnectionAborted
                 | io::ErrorKind::Interrupted
                 | io::ErrorKind::InvalidData // Raised if TLS handshake failed
+                | io::ErrorKind::UnexpectedEof // Raised if TLS handshake failed
                 | io::ErrorKind::WouldBlock
         ) {
             return ControlFlow::Continue(());
