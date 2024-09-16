@@ -7,7 +7,7 @@ RPC framework that puts mobile and HTTP/2 first.
 
 [![Crates.io](https://img.shields.io/crates/v/tonic)](https://crates.io/crates/tonic)
 [![Documentation](https://docs.rs/tonic/badge.svg)](https://docs.rs/tonic)
-[![Crates.io](https://img.shields.io/crates/l/tonic)](LICENSE)
+![Crates.io](https://img.shields.io/crates/l/tonic)
 
 
 [Examples] | [Website] | [Docs] | [Chat]
@@ -124,7 +124,8 @@ project.
 
 ## License
 
-This project is licensed under the [MIT license](LICENSE).
+This project is licensed under the [MIT](LICENSE-MIT) and [Apache-2.0](LICENSE-APACHE)
+licenses.
 
 ### Contribution
 
