@@ -1,52 +1,9 @@
+use std::fs::create_dir;
 use std::path::{Path, PathBuf};
 
 fn main() {
-    // tonic-health
     codegen(
-        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("tonic-health"),
-        &["proto/health.proto"],
-        &["proto"],
-        &PathBuf::from("src/generated"),
-        &PathBuf::from("src/generated/grpc_health_v1.bin"),
-        true,
-        true,
-    );
-
-    // tonic-reflection
-    codegen(
-        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("tonic-reflection"),
-        &["proto/reflection_v1.proto"],
-        &["proto"],
-        &PathBuf::from("src/generated"),
-        &PathBuf::from("src/generated/reflection_v1.bin"),
-        true,
-        true,
-    );
-    codegen(
-        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("tonic-reflection"),
-        &["proto/reflection_v1alpha.proto"],
-        &["proto"],
-        &PathBuf::from("src/generated"),
-        &PathBuf::from("src/generated/reflection_v1alpha1.bin"),
-        true,
-        true,
-    );
-
-    // tonic-types
-    codegen(
-        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .unwrap()
-            .join("tonic-types"),
+        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR")),
         &["proto/status.proto", "proto/error_details.proto"],
         &["proto"],
         &PathBuf::from("src/generated"),
@@ -80,6 +37,9 @@ fn codegen(
         .map(|&path| root_dir.join(path))
         .collect();
     let out_dir = root_dir.join(out_dir);
+    if !out_dir.exists() {
+        create_dir(out_dir.clone()).unwrap();
+    }
     let file_descriptor_set_path = root_dir.join(file_descriptor_set_path);
 
     tonic_build::configure()
