@@ -36,3 +36,8 @@ resolver = "2"
 homepage = "https://github.com/hyperium/tonic"
 repository = "https://github.com/hyperium/tonic"
 version = "0.12.2"
+
+[workspace.dependencies]
+prost = "0.13"
+prost-build = "0.13"
+prost-types = "0.13"

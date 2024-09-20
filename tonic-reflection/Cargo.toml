@@ -26,8 +26,8 @@ server = ["prost-types", "dep:tokio", "dep:tokio-stream"]
 default = ["server"]
 
 [dependencies]
-prost = "0.13"
-prost-types = {version = "0.13", optional = true}
+prost = { workspace = true }
+prost-types = { workspace = true, optional = true }
 tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
 tokio-stream = {version = "0.1", features = ["net"], optional = true }
 tonic = { version = "0.12", path = "../tonic", default-features = false, features = ["codegen", "prost"] }

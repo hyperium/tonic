@@ -73,7 +73,7 @@ tower-service = "0.3"
 tokio-stream = {version = "0.1", default-features = false}
 
 # prost
-prost = {version = "0.13", default-features = false, features = ["std"], optional = true}
+prost = { workspace = true, default-features = false, features = ["std"], optional = true }
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
