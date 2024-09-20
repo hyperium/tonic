@@ -94,6 +94,8 @@ fn handle_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Error> 
         if matches!(
             e.kind(),
             io::ErrorKind::ConnectionAborted
+                | io::ErrorKind::ConnectionReset
+                | io::ErrorKind::BrokenPipe
                 | io::ErrorKind::Interrupted
                 | io::ErrorKind::InvalidData // Raised if TLS handshake failed
                 | io::ErrorKind::UnexpectedEof // Raised if TLS handshake failed
