@@ -412,7 +412,7 @@ When releasing a new version of a crate, follow these steps:
    ```
 
 3. Once all the crate versions have been updated its time to update the
-   changelog. Tonic uses conventional changelog and its cli to generate the
+   changelog. Tonic uses `conventional-changelog` and it's cli to generate the
    changelog.
 
    ```
