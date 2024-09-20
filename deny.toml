@@ -37,6 +37,7 @@ allow = [
     "MPL-2.0",
     "BSD-3-Clause",
 ]
+private = {ignore = true}
 
 [[licenses.clarify]]
 name = "ring"

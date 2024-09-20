@@ -4,7 +4,6 @@ edition = "2021"
 license = "MIT"
 name = "examples"
 publish = false
-version = "0.1.0"
 
 [[bin]]
 name = "helloworld-server"
