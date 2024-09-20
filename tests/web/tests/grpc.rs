@@ -9,8 +9,8 @@ use tokio_stream::{self as stream, StreamExt};
 use tonic::transport::{Channel, Error, Server};
 use tonic::{Response, Streaming};
 
-use integration::pb::{test_client::TestClient, test_server::TestServer, Input};
-use integration::Svc;
+use test_web::pb::{test_client::TestClient, test_server::TestServer, Input};
+use test_web::Svc;
 use tonic_web::GrpcWebLayer;
 
 #[tokio::test]
