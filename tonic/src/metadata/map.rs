@@ -1,3 +1,5 @@
+use http::HeaderName;
+
 pub(crate) use self::as_encoding_agnostic_metadata_key::AsEncodingAgnosticMetadataKey;
 pub(crate) use self::as_metadata_key::AsMetadataKey;
 pub(crate) use self::into_metadata_key::IntoMetadataKey;
@@ -200,13 +202,13 @@ pub(crate) const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 impl MetadataMap {
     // Headers reserved by the gRPC protocol.
-    pub(crate) const GRPC_RESERVED_HEADERS: [&'static str; 6] = [
-        "te",
-        "user-agent",
-        "content-type",
-        "grpc-message",
-        "grpc-message-type",
-        "grpc-status",
+    pub(crate) const GRPC_RESERVED_HEADERS: [HeaderName; 6] = [
+        HeaderName::from_static("te"),
+        HeaderName::from_static("user-agent"),
+        HeaderName::from_static("content-type"),
+        HeaderName::from_static("grpc-message"),
+        HeaderName::from_static("grpc-message-type"),
+        HeaderName::from_static("grpc-status"),
     ];
 
     /// Create an empty `MetadataMap`.
@@ -251,7 +253,7 @@ impl MetadataMap {
 
     pub(crate) fn into_sanitized_headers(mut self) -> http::HeaderMap {
         for r in &Self::GRPC_RESERVED_HEADERS {
-            self.headers.remove(*r);
+            self.headers.remove(r);
         }
         self.headers
     }
