@@ -1,22 +1,22 @@
 use crate::codec::compression::{
     CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
 };
+use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
     body::BoxBody,
     codec::{encode_server, Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
-    Code, Request, Status,
+    Request, Status,
 };
-use futures_core::TryStream;
-use futures_util::{future, stream, TryStreamExt};
 use http_body::Body;
-use std::fmt;
+use std::{fmt, pin::pin};
+use tokio_stream::{Stream, StreamExt};
 
 macro_rules! t {
     ($result:expr) => {
         match $result {
             Ok(value) => value,
-            Err(status) => return status.to_http(),
+            Err(status) => return status.into_http(),
         }
     };
 }
@@ -188,7 +188,7 @@ where
     ) -> Self {
         let mut this = self;
 
-        for &encoding in CompressionEncoding::encodings() {
+        for &encoding in CompressionEncoding::ENCODINGS {
             if accept_encodings.is_enabled(encoding) {
                 this = this.accept_compressed(encoding);
             }
@@ -237,20 +237,19 @@ where
         let request = match self.map_request_unary(req).await {
             Ok(r) => r,
             Err(status) => {
-                return self
-                    .map_response::<stream::Once<future::Ready<Result<T::Encode, Status>>>>(
-                        Err(status),
-                        accept_encoding,
-                        SingleMessageCompressionOverride::default(),
-                        self.max_encoding_message_size,
-                    );
+                return self.map_response::<tokio_stream::Once<Result<T::Encode, Status>>>(
+                    Err(status),
+                    accept_encoding,
+                    SingleMessageCompressionOverride::default(),
+                    self.max_encoding_message_size,
+                );
             }
         };
 
         let response = service
             .call(request)
             .await
-            .map(|r| r.map(|m| stream::once(future::ok(m))));
+            .map(|r| r.map(|m| tokio_stream::once(Ok(m))));
 
         let compression_override = compression_override_from_response(&response);
 
@@ -324,7 +323,7 @@ where
         let response = service
             .call(request)
             .await
-            .map(|r| r.map(|m| stream::once(future::ok(m))));
+            .map(|r| r.map(|m| tokio_stream::once(Ok(m))));
 
         let compression_override = compression_override_from_response(&response);
 
@@ -377,19 +376,17 @@ where
 
         let (parts, body) = request.into_parts();
 
-        let stream = Streaming::new_request(
+        let mut stream = pin!(Streaming::new_request(
             self.codec.decoder(),
             body,
             request_compression_encoding,
             self.max_decoding_message_size,
-        );
-
-        futures_util::pin_mut!(stream);
+        ));
 
         let message = stream
             .try_next()
             .await?
-            .ok_or_else(|| Status::new(Code::Internal, "Missing request message."))?;
+            .ok_or_else(|| Status::internal("Missing request message."))?;
 
         let mut req = Request::from_http_parts(parts, message);
 
@@ -430,21 +427,18 @@ where
         max_message_size: Option<usize>,
     ) -> http::Response<BoxBody>
     where
-        B: TryStream<Ok = T::Encode, Error = Status> + Send + 'static,
+        B: Stream<Item = Result<T::Encode, Status>> + Send + 'static,
     {
-        let response = match response {
-            Ok(r) => r,
-            Err(status) => return status.to_http(),
-        };
+        let response = t!(response);
 
         let (mut parts, body) = response.into_http().into_parts();
 
         // Set the content type
-        parts.headers.insert(
-            http::header::CONTENT_TYPE,
-            http::header::HeaderValue::from_static("application/grpc"),
-        );
+        parts
+            .headers
+            .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
 
+        #[cfg(any(feature = "gzip", feature = "zstd"))]
         if let Some(encoding) = accept_encoding {
             // Set the content encoding
             parts.headers.insert(
@@ -455,7 +449,7 @@ where
 
         let body = encode_server(
             self.codec.encoder(),
-            body.into_stream(),
+            body,
             accept_encoding,
             compression_override,
             max_message_size,

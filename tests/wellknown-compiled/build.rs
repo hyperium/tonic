@@ -4,7 +4,7 @@ fn main() {
 
     tonic_build::configure()
         .compile_well_known_types(true)
-        .compile_with_config(
+        .compile_protos_with_config(
             config,
             &["proto/google.proto", "proto/test.proto"],
             &["proto"],

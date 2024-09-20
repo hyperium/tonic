@@ -1,0 +1,16 @@
+[package]
+authors = ["Andrew Yuan <Andrew.Yuan@temporal.io>"]
+edition = "2021"
+license = "MIT"
+name = "skip_debug"
+publish = false
+version = "0.1.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+prost = "0.13"
+tonic = { path = "../../tonic" }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }

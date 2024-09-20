@@ -7,6 +7,7 @@ members = [
   "tonic-reflection",
   "tonic-web", # Non-published crates
   "examples",
+  "codegen",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
@@ -21,7 +22,11 @@ members = [
   "tests/stream_conflict",
   "tests/root-crate-path",
   "tests/compression",
-  "tonic-web/tests/integration",
+  "tests/web",
   "tests/service_named_result",
+  "tests/use_arc_self",
+  "tests/default_stubs",
+  "tests/deprecated_methods",
+  "tests/skip_debug",
 ]
 resolver = "2"

@@ -174,20 +174,18 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.9"
-prost = "0.11"
-futures-core = "0.3"
-futures-util = "0.3"
+tonic = "0.12"
+prost = "0.13"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1"
 
 async-stream = "0.2"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-rand = "0.7"
+rand = "0.8"
 
 [build-dependencies]
-tonic-build = "0.9"
+tonic-build = "0.12"
 ```
 
 Create a `build.rs` file at the root of your crate:
@@ -263,12 +261,11 @@ the package declared in our `.proto` file, not a filename, e.g "routeguide.rs".
 With this in place, we can stub out our service implementation:
 
 ```rust
-use futures_core::Stream;
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status};
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::{wrappers::ReceiverStream, Stream};
 ```
 
 ```rust
@@ -435,7 +432,7 @@ with information about their trip. As you can see, this time the method receives
 
 ```rust
 use std::time::Instant;
-use futures_util::StreamExt;
+use tokio_stream::StreamExt;
 ```
 
 ```rust
@@ -501,7 +498,7 @@ async fn route_chat(
         while let Some(note) = stream.next().await {
             let note = note?;
 
-            let location = note.location.clone().unwrap();
+            let location = note.location.unwrap();
 
             let location_notes = notes.entry(location).or_insert(vec![]);
             location_notes.push(note);
@@ -681,7 +678,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
 As in the simple RPC, we pass a single value request. However, instead of getting a
 single value back, we get a stream of `Features`.
 
-We use the the `message()` method from the `tonic::Streaming` struct to repeatedly read in the
+We use the `message()` method from the `tonic::Streaming` struct to repeatedly read in the
 server's responses to a response protocol buffer object (in this case a `Feature`) until there are
 no more messages left in the stream.
 
@@ -692,7 +689,6 @@ The client-side streaming method `record_route` takes a stream of `Point`s and r
 ```rust
 use rand::rngs::ThreadRng;
 use rand::Rng;
-use futures_util::stream;
 ```
 
 ```rust
@@ -706,7 +702,7 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
     }
 
     println!("Traversing {} points", points.len());
-    let request = Request::new(stream::iter(points));
+    let request = Request::new(tokio_stream::iter(points));
 
     match client.record_route(request).await {
         Ok(response) => println!("SUMMARY: {:?}", response.into_inner()),
@@ -729,7 +725,7 @@ fn random_point(rng: &mut ThreadRng) -> Point {
 ```
 
 We build a vector of a random number of `Point` values (between 2 and 100) and then convert
-it into a `Stream` using the `futures::stream::iter` function. This is a cheap an easy way to get
+it into a `Stream` using the `tokio_stream::iter` function. This is a cheap an easy way to get
 a stream suitable for passing into our service method. The resulting stream is then wrapped in a
 `tonic::Request`.
 
@@ -820,7 +816,7 @@ fn main() {
     tonic_build::configure()
         .build_client(false)
         .out_dir("another_crate/src/pb")
-        .compile(&["path/my_proto.proto"], &["path"])
+        .compile_protos(&["path/my_proto.proto"], &["path"])
         .expect("failed to compile protos");
 }
 ```
@@ -830,4 +826,3 @@ On `cargo run`, this will generate code for the server only, and place the resul
 
 2) Similarly, we could also keep the `.proto` definitions in a separate crate and then use that
 crate as a direct dependency wherever we need it.
-

@@ -1,13 +1,17 @@
 use crate::metadata::{MetadataMap, MetadataValue};
-#[cfg(all(feature = "transport", feature = "tls"))]
+#[cfg(feature = "server")]
+use crate::transport::server::TcpConnectInfo;
+#[cfg(all(feature = "server", feature = "tls"))]
 use crate::transport::server::TlsConnectInfo;
-#[cfg(feature = "transport")]
-use crate::transport::{server::TcpConnectInfo, Certificate};
-use crate::Extensions;
-use futures_core::Stream;
-#[cfg(feature = "transport")]
+use http::Extensions;
+#[cfg(feature = "server")]
+use std::net::SocketAddr;
+#[cfg(all(feature = "server", feature = "tls"))]
 use std::sync::Arc;
-use std::{net::SocketAddr, time::Duration};
+use std::time::Duration;
+#[cfg(all(feature = "server", feature = "tls"))]
+use tokio_rustls::rustls::pki_types::CertificateDer;
+use tokio_stream::Stream;
 
 /// A gRPC request and metadata from an RPC call.
 #[derive(Debug)]
@@ -77,12 +81,11 @@ pub trait IntoRequest<T>: sealed::Sealed {
 /// # }
 /// # let client = Client {};
 /// use tonic::Request;
-/// use futures_util::stream;
 ///
 /// let messages = vec![Point {}, Point {}];
 ///
-/// client.record_route(Request::new(stream::iter(messages.clone())));
-/// client.record_route(stream::iter(messages));
+/// client.record_route(Request::new(tokio_stream::iter(messages.clone())));
+/// client.record_route(tokio_stream::iter(messages));
 /// ```
 pub trait IntoStreamingRequest: sealed::Sealed {
     /// The RPC request stream type
@@ -158,7 +161,7 @@ impl<T> Request<T> {
         Request {
             metadata: MetadataMap::from_headers(parts.headers),
             message,
-            extensions: Extensions::from_http(parts.extensions),
+            extensions: parts.extensions,
         }
     }
 
@@ -184,7 +187,7 @@ impl<T> Request<T> {
             SanitizeHeaders::Yes => self.metadata.into_sanitized_headers(),
             SanitizeHeaders::No => self.metadata.into_headers(),
         };
-        *request.extensions_mut() = self.extensions.into_http();
+        *request.extensions_mut() = self.extensions;
 
         request
     }
@@ -208,33 +211,21 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
+    #[cfg(feature = "server")]
     pub fn local_addr(&self) -> Option<SocketAddr> {
-        #[cfg(feature = "transport")]
-        {
-            #[cfg(feature = "tls")]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.local_addr())
-                    .or_else(|| {
-                        self.extensions()
-                            .get::<TlsConnectInfo<TcpConnectInfo>>()
-                            .and_then(|i| i.get_ref().local_addr())
-                    })
-            }
+        let addr = self
+            .extensions()
+            .get::<TcpConnectInfo>()
+            .and_then(|i| i.local_addr());
 
-            #[cfg(not(feature = "tls"))]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.local_addr())
-            }
-        }
+        #[cfg(feature = "tls")]
+        let addr = addr.or_else(|| {
+            self.extensions()
+                .get::<TlsConnectInfo<TcpConnectInfo>>()
+                .and_then(|i| i.get_ref().local_addr())
+        });
 
-        #[cfg(not(feature = "transport"))]
-        {
-            None
-        }
+        addr
     }
 
     /// Get the remote address of this connection.
@@ -242,33 +233,21 @@ impl<T> Request<T> {
     /// This will return `None` if the `IO` type used
     /// does not implement `Connected` or when using a unix domain socket.
     /// This currently only works on the server side.
+    #[cfg(feature = "server")]
     pub fn remote_addr(&self) -> Option<SocketAddr> {
-        #[cfg(feature = "transport")]
-        {
-            #[cfg(feature = "tls")]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.remote_addr())
-                    .or_else(|| {
-                        self.extensions()
-                            .get::<TlsConnectInfo<TcpConnectInfo>>()
-                            .and_then(|i| i.get_ref().remote_addr())
-                    })
-            }
+        let addr = self
+            .extensions()
+            .get::<TcpConnectInfo>()
+            .and_then(|i| i.remote_addr());
 
-            #[cfg(not(feature = "tls"))]
-            {
-                self.extensions()
-                    .get::<TcpConnectInfo>()
-                    .and_then(|i| i.remote_addr())
-            }
-        }
+        #[cfg(feature = "tls")]
+        let addr = addr.or_else(|| {
+            self.extensions()
+                .get::<TlsConnectInfo<TcpConnectInfo>>()
+                .and_then(|i| i.get_ref().remote_addr())
+        });
 
-        #[cfg(not(feature = "transport"))]
-        {
-            None
-        }
+        addr
     }
 
     /// Get the peer certificates of the connected client.
@@ -277,20 +256,11 @@ impl<T> Request<T> {
     /// and is mostly used for mTLS. This currently only returns
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
-    #[cfg(feature = "transport")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
-    pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
-        #[cfg(feature = "tls")]
-        {
-            self.extensions()
-                .get::<TlsConnectInfo<TcpConnectInfo>>()
-                .and_then(|i| i.peer_certs())
-        }
-
-        #[cfg(not(feature = "tls"))]
-        {
-            None
-        }
+    #[cfg(all(feature = "server", feature = "tls"))]
+    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
+        self.extensions()
+            .get::<TlsConnectInfo<TcpConnectInfo>>()
+            .and_then(|i| i.peer_certs())
     }
 
     /// Set the max duration the request is allowed to take.
@@ -340,6 +310,7 @@ impl<T> Request<T> {
     /// ```no_run
     /// use tonic::{Request, service::interceptor};
     ///
+    /// #[derive(Clone)] // Extensions must be Clone
     /// struct MyExtension {
     ///     some_piece_of_data: String,
     /// }
@@ -467,7 +438,8 @@ pub(crate) enum SanitizeHeaders {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::MetadataValue;
+    use crate::metadata::{MetadataKey, MetadataValue};
+
     use http::Uri;
 
     #[test]
@@ -475,8 +447,10 @@ mod tests {
         let mut r = Request::new(1);
 
         for header in &MetadataMap::GRPC_RESERVED_HEADERS {
-            r.metadata_mut()
-                .insert(*header, MetadataValue::from_static("invalid"));
+            r.metadata_mut().insert(
+                MetadataKey::unchecked_from_header_name(header.clone()),
+                MetadataValue::from_static("invalid"),
+            );
         }
 
         let http_request = r.into_http(

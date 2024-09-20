@@ -2,7 +2,6 @@
 
 use self::util::*;
 use crate::util::mock_io_channel;
-use futures::{Stream, StreamExt};
 use std::{
     pin::Pin,
     sync::{
@@ -11,6 +10,7 @@ use std::{
     },
 };
 use tokio::net::TcpListener;
+use tokio_stream::{Stream, StreamExt};
 use tonic::{
     transport::{Channel, Endpoint, Server, Uri},
     Request, Response, Status, Streaming,
@@ -67,7 +67,7 @@ impl test_server::Test for Svc {
         _req: Request<()>,
     ) -> Result<Response<Self::CompressOutputServerStreamStream>, Status> {
         let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
-        let stream = futures::stream::repeat(SomeData { data })
+        let stream = tokio_stream::iter(std::iter::repeat(SomeData { data }))
             .take(2)
             .map(Ok::<_, Status>);
         Ok(self.prepare_response(Response::new(Box::pin(stream))))
@@ -113,7 +113,7 @@ impl test_server::Test for Svc {
         }
 
         let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
-        let stream = futures::stream::repeat(SomeData { data })
+        let stream = tokio_stream::iter(std::iter::repeat(SomeData { data }))
             .take(2)
             .map(Ok::<_, Status>);
         Ok(self.prepare_response(Response::new(Box::pin(stream))))

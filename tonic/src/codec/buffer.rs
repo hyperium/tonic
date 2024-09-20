@@ -98,6 +98,11 @@ unsafe impl BufMut for EncodeBuf<'_> {
     fn put_slice(&mut self, src: &[u8]) {
         self.buf.put_slice(src)
     }
+
+    #[inline]
+    fn put_bytes(&mut self, val: u8, cnt: usize) {
+        self.buf.put_bytes(val, cnt);
+    }
 }
 
 #[cfg(test)]

@@ -1,61 +1,70 @@
-use super::{Connected, Server};
-use crate::transport::service::ServerIo;
-use futures_core::Stream;
-use futures_util::stream::TryStreamExt;
-use hyper::server::{
-    accept::Accept,
-    conn::{AddrIncoming, AddrStream},
-};
 use std::{
-    net::SocketAddr,
-    pin::Pin,
-    task::{Context, Poll},
+    io,
+    net::{SocketAddr, TcpListener as StdTcpListener},
+    ops::ControlFlow,
+    pin::{pin, Pin},
+    task::{ready, Context, Poll},
     time::Duration,
 };
+
 use tokio::{
     io::{AsyncRead, AsyncWrite},
-    net::TcpListener,
+    net::{TcpListener, TcpStream},
 };
+use tokio_stream::wrappers::TcpListenerStream;
+use tokio_stream::{Stream, StreamExt};
+use tracing::warn;
+
+use super::service::ServerIo;
+#[cfg(feature = "tls")]
+use super::service::TlsAcceptor;
 
 #[cfg(not(feature = "tls"))]
-pub(crate) fn tcp_incoming<IO, IE, L>(
+pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
-    _server: Server<L>,
 ) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
 where
-    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
-    IE: Into<crate::Error>,
-{
-    incoming.err_into().map_ok(ServerIo::new_io)
-}
-
-#[cfg(feature = "tls")]
-pub(crate) fn tcp_incoming<IO, IE, L>(
-    incoming: impl Stream<Item = Result<IO, IE>>,
-    server: Server<L>,
-) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
-where
-    IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     IE: Into<crate::Error>,
 {
     async_stream::try_stream! {
-        futures_util::pin_mut!(incoming);
+        let mut incoming = pin!(incoming);
 
-        #[cfg(feature = "tls")]
-        let mut tasks = futures_util::stream::futures_unordered::FuturesUnordered::new();
+        while let Some(item) = incoming.next().await {
+            yield match item {
+                Ok(_) => item.map(ServerIo::new_io)?,
+                Err(e) => match handle_accept_error(e) {
+                    ControlFlow::Continue(()) => continue,
+                    ControlFlow::Break(e) => Err(e)?,
+                }
+            }
+        }
+    }
+}
+
+#[cfg(feature = "tls")]
+pub(crate) fn tcp_incoming<IO, IE>(
+    incoming: impl Stream<Item = Result<IO, IE>>,
+    tls: Option<TlsAcceptor>,
+) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
+where
+    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    IE: Into<crate::Error>,
+{
+    async_stream::try_stream! {
+        let mut incoming = pin!(incoming);
+
+        let mut tasks = tokio::task::JoinSet::new();
 
         loop {
             match select(&mut incoming, &mut tasks).await {
                 SelectOutput::Incoming(stream) => {
-                    if let Some(tls) = &server.tls {
+                    if let Some(tls) = &tls {
                         let tls = tls.clone();
-
-                        let accept = tokio::spawn(async move {
+                        tasks.spawn(async move {
                             let io = tls.accept(stream).await?;
                             Ok(ServerIo::new_tls_io(io))
                         });
-
-                        tasks.push(accept);
                     } else {
                         yield ServerIo::new_io(stream);
                     }
@@ -65,8 +74,9 @@ where
                     yield io;
                 }
 
-                SelectOutput::Err(e) => {
-                    tracing::debug!(message = "Accept loop error.", error = %e);
+                SelectOutput::Err(e) => match handle_accept_error(e) {
+                    ControlFlow::Continue(()) => continue,
+                    ControlFlow::Break(e) => Err(e)?,
                 }
 
                 SelectOutput::Done => {
@@ -77,18 +87,33 @@ where
     }
 }
 
+fn handle_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Error> {
+    let e = e.into();
+    tracing::debug!(error = %e, "accept loop error");
+    if let Some(e) = e.downcast_ref::<io::Error>() {
+        if matches!(
+            e.kind(),
+            io::ErrorKind::ConnectionAborted
+                | io::ErrorKind::Interrupted
+                | io::ErrorKind::InvalidData // Raised if TLS handshake failed
+                | io::ErrorKind::UnexpectedEof // Raised if TLS handshake failed
+                | io::ErrorKind::WouldBlock
+        ) {
+            return ControlFlow::Continue(());
+        }
+    }
+
+    ControlFlow::Break(e)
+}
+
 #[cfg(feature = "tls")]
-async fn select<IO, IE>(
+async fn select<IO: 'static, IE>(
     incoming: &mut (impl Stream<Item = Result<IO, IE>> + Unpin),
-    tasks: &mut futures_util::stream::futures_unordered::FuturesUnordered<
-        tokio::task::JoinHandle<Result<ServerIo<IO>, crate::Error>>,
-    >,
+    tasks: &mut tokio::task::JoinSet<Result<ServerIo<IO>, crate::Error>>,
 ) -> SelectOutput<IO>
 where
     IE: Into<crate::Error>,
 {
-    use futures_util::StreamExt;
-
     if tasks.is_empty() {
         return match incoming.try_next().await {
             Ok(Some(stream)) => SelectOutput::Incoming(stream),
@@ -106,8 +131,8 @@ where
             }
         }
 
-        accept = tasks.next() => {
-            match accept.expect("FuturesUnordered stream should never end") {
+        accept = tasks.join_next() => {
+            match accept.expect("JoinSet should never end") {
                 Ok(Ok(io)) => SelectOutput::Io(io),
                 Ok(Err(e)) => SelectOutput::Err(e),
                 Err(e) => SelectOutput::Err(e.into()),
@@ -130,7 +155,9 @@ enum SelectOutput<A> {
 /// of `AsyncRead + AsyncWrite` that communicate with clients that connect to a socket address.
 #[derive(Debug)]
 pub struct TcpIncoming {
-    inner: AddrIncoming,
+    inner: TcpListenerStream,
+    nodelay: bool,
+    keepalive: Option<Duration>,
 }
 
 impl TcpIncoming {
@@ -142,13 +169,13 @@ impl TcpIncoming {
     /// ```no_run
     /// # use tower_service::Service;
     /// # use http::{request::Request, response::Response};
-    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Body, Server, server::TcpIncoming}};
+    /// # use tonic::{body::BoxBody, server::NamedService, transport::{Server, server::TcpIncoming}};
     /// # use core::convert::Infallible;
     /// # use std::error::Error;
     /// # fn main() { }  // Cannot have type parameters, hence instead define:
     /// # fn run<S>(some_service: S) -> Result<(), Box<dyn Error + Send + Sync>>
     /// # where
-    /// #   S: Service<Request<Body>, Response = Response<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+    /// #   S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
     /// #   S::Future: Send + 'static,
     /// # {
     /// // Find a free port
@@ -170,10 +197,15 @@ impl TcpIncoming {
         nodelay: bool,
         keepalive: Option<Duration>,
     ) -> Result<Self, crate::Error> {
-        let mut inner = AddrIncoming::bind(&addr)?;
-        inner.set_nodelay(nodelay);
-        inner.set_keepalive(keepalive);
-        Ok(TcpIncoming { inner })
+        let std_listener = StdTcpListener::bind(addr)?;
+        std_listener.set_nonblocking(true)?;
+
+        let inner = TcpListenerStream::new(TcpListener::from_std(std_listener)?);
+        Ok(Self {
+            inner,
+            nodelay,
+            keepalive,
+        })
     }
 
     /// Creates a new `TcpIncoming` from an existing `tokio::net::TcpListener`.
@@ -182,18 +214,43 @@ impl TcpIncoming {
         nodelay: bool,
         keepalive: Option<Duration>,
     ) -> Result<Self, crate::Error> {
-        let mut inner = AddrIncoming::from_listener(listener)?;
-        inner.set_nodelay(nodelay);
-        inner.set_keepalive(keepalive);
-        Ok(TcpIncoming { inner })
+        Ok(Self {
+            inner: TcpListenerStream::new(listener),
+            nodelay,
+            keepalive,
+        })
     }
 }
 
 impl Stream for TcpIncoming {
-    type Item = Result<AddrStream, std::io::Error>;
+    type Item = Result<TcpStream, std::io::Error>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.inner).poll_accept(cx)
+        match ready!(Pin::new(&mut self.inner).poll_next(cx)) {
+            Some(Ok(stream)) => {
+                set_accepted_socket_options(&stream, self.nodelay, self.keepalive);
+                Some(Ok(stream)).into()
+            }
+            other => Poll::Ready(other),
+        }
+    }
+}
+
+// Consistent with hyper-0.14, this function does not return an error.
+fn set_accepted_socket_options(stream: &TcpStream, nodelay: bool, keepalive: Option<Duration>) {
+    if nodelay {
+        if let Err(e) = stream.set_nodelay(true) {
+            warn!("error trying to set TCP nodelay: {}", e);
+        }
+    }
+
+    if let Some(timeout) = keepalive {
+        let sock_ref = socket2::SockRef::from(&stream);
+        let sock_keepalive = socket2::TcpKeepalive::new().with_time(timeout);
+
+        if let Err(e) = sock_ref.set_tcp_keepalive(&sock_keepalive) {
+            warn!("error trying to set TCP keepalive: {}", e);
+        }
     }
 }
 

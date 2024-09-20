@@ -1,0 +1,11 @@
+[package]
+name = "codegen"
+authors = ["Lucio Franco <luciofranco14@gmail.com>"]
+license = "MIT"
+edition = "2021"
+publish = false
+version = "0.1.0"
+
+[dependencies]
+tempfile = "3.8.0"
+tonic-build = {path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"]}

@@ -1,6 +1,7 @@
-use futures_util::FutureExt;
-use hyper::{Body, Request as HyperRequest, Response as HyperResponse};
-use integration_tests::pb::{test_client, test_server, Input, Output};
+use integration_tests::{
+    pb::{test_client, test_server, Input, Output},
+    BoxFuture,
+};
 use std::{
     task::{Context, Poll},
     time::Duration,
@@ -8,11 +9,13 @@ use std::{
 use tokio::sync::oneshot;
 use tonic::{
     body::BoxBody,
-    transport::{Endpoint, NamedService, Server},
+    server::NamedService,
+    transport::{Endpoint, Server},
     Request, Response, Status,
 };
 use tower_service::Service;
 
+#[derive(Clone)]
 struct ExtensionValue(i32);
 
 #[tokio::test]
@@ -39,7 +42,7 @@ async fn setting_extension_from_interceptor() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1323".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1323".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -83,7 +86,7 @@ async fn setting_extension_from_tower() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1324".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1324".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -109,9 +112,9 @@ struct InterceptedService<S> {
     inner: S,
 }
 
-impl<S> Service<HyperRequest<Body>> for InterceptedService<S>
+impl<S> Service<http::Request<BoxBody>> for InterceptedService<S>
 where
-    S: Service<HyperRequest<Body>, Response = HyperResponse<BoxBody>>
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>
         + NamedService
         + Clone
         + Send
@@ -120,13 +123,13 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = futures::future::BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, mut req: HyperRequest<Body>) -> Self::Future {
+    fn call(&mut self, mut req: http::Request<BoxBody>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 

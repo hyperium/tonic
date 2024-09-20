@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `RequestInfo` standard error message described
@@ -40,10 +42,7 @@ impl RequestInfo {
 
 impl IntoAny for RequestInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::RequestInfo {
-            request_id: self.request_id,
-            serving_data: self.serving_data,
-        };
+        let detail_data: pb::RequestInfo = self.into();
 
         Any {
             type_url: RequestInfo::TYPE_URL.to_string(),
@@ -53,16 +52,36 @@ impl IntoAny for RequestInfo {
 }
 
 impl FromAny for RequestInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for RequestInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let req_info = pb::RequestInfo::decode(buf)?;
 
-        let req_info = RequestInfo {
+        Ok(req_info.into())
+    }
+}
+
+impl From<pb::RequestInfo> for RequestInfo {
+    fn from(req_info: pb::RequestInfo) -> Self {
+        RequestInfo {
             request_id: req_info.request_id,
             serving_data: req_info.serving_data,
-        };
+        }
+    }
+}
 
-        Ok(req_info)
+impl From<RequestInfo> for pb::RequestInfo {
+    fn from(req_info: RequestInfo) -> Self {
+        pb::RequestInfo {
+            request_id: req_info.request_id,
+            serving_data: req_info.serving_data,
+        }
     }
 }
 

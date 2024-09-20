@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `violations` field of the [`PreconditionFailure`] struct.
@@ -32,6 +34,26 @@ impl PreconditionViolation {
             r#type: r#type.into(),
             subject: subject.into(),
             description: description.into(),
+        }
+    }
+}
+
+impl From<pb::precondition_failure::Violation> for PreconditionViolation {
+    fn from(value: pb::precondition_failure::Violation) -> Self {
+        PreconditionViolation {
+            r#type: value.r#type,
+            subject: value.subject,
+            description: value.description,
+        }
+    }
+}
+
+impl From<PreconditionViolation> for pb::precondition_failure::Violation {
+    fn from(value: PreconditionViolation) -> Self {
+        pb::precondition_failure::Violation {
+            r#type: value.r#type,
+            subject: value.subject,
+            description: value.description,
         }
     }
 }
@@ -99,17 +121,7 @@ impl PreconditionFailure {
 
 impl IntoAny for PreconditionFailure {
     fn into_any(self) -> Any {
-        let detail_data = pb::PreconditionFailure {
-            violations: self
-                .violations
-                .into_iter()
-                .map(|v| pb::precondition_failure::Violation {
-                    r#type: v.r#type,
-                    subject: v.subject,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        let detail_data: pb::PreconditionFailure = self.into();
 
         Any {
             type_url: PreconditionFailure::TYPE_URL.to_string(),
@@ -119,23 +131,34 @@ impl IntoAny for PreconditionFailure {
 }
 
 impl FromAny for PreconditionFailure {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for PreconditionFailure {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let precondition_failure = pb::PreconditionFailure::decode(buf)?;
 
-        let precondition_failure = PreconditionFailure {
-            violations: precondition_failure
-                .violations
-                .into_iter()
-                .map(|v| PreconditionViolation {
-                    r#type: v.r#type,
-                    subject: v.subject,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        Ok(precondition_failure.into())
+    }
+}
 
-        Ok(precondition_failure)
+impl From<pb::PreconditionFailure> for PreconditionFailure {
+    fn from(value: pb::PreconditionFailure) -> Self {
+        PreconditionFailure {
+            violations: value.violations.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<PreconditionFailure> for pb::PreconditionFailure {
+    fn from(value: PreconditionFailure) -> Self {
+        pb::PreconditionFailure {
+            violations: value.violations.into_iter().map(Into::into).collect(),
+        }
     }
 }
 

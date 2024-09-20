@@ -33,7 +33,7 @@ impl Greeter for MyGreeter {
         }
 
         if !bad_request.is_empty() {
-            // Add aditional error details if necessary
+            // Add additional error details if necessary
             let help = Help::with_link("description of link", "https://resource.example.local");
 
             let localized_message = LocalizedMessage::new("en-US", "message for the user");

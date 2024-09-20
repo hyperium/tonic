@@ -6,6 +6,6 @@ fn main() {
         .disable_comments("test.Service1.Rpc1")
         .build_client(true)
         .build_server(true)
-        .compile_with_config(config, &["proto/test.proto"], &["proto"])
+        .compile_protos_with_config(config, &["proto/test.proto"], &["proto"])
         .unwrap();
 }

@@ -74,12 +74,12 @@
 //! ## Limitations
 //!
 //! * `tonic_web` is designed to work with grpc-web-compliant clients only. It is not expected to
-//! handle arbitrary HTTP/x.x requests or bespoke protocols.
+//!   handle arbitrary HTTP/x.x requests or bespoke protocols.
 //! * Similarly, the cors support implemented  by this crate will *only* handle grpc-web and
-//! grpc-web preflight requests.
+//!   grpc-web preflight requests.
 //! * Currently, grpc-web clients can only perform `unary` and `server-streaming` calls. These
-//! are the only requests this crate is designed to handle. Support for client and bi-directional
-//! streaming will be officially supported when clients do.
+//!   are the only requests this crate is designed to handle. Support for client and bi-directional
+//!   streaming will be officially supported when clients do.
 //! * There is no support for web socket transports.
 //!
 //!
@@ -94,13 +94,16 @@
     rust_2018_idioms,
     unreachable_pub
 )]
-#![doc(html_root_url = "https://docs.rs/tonic-web/0.9.1")]
+#![doc(html_root_url = "https://docs.rs/tonic-web/0.12.2")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
+pub use call::GrpcWebCall;
+pub use client::{GrpcWebClientLayer, GrpcWebClientService};
 pub use layer::GrpcWebLayer;
 pub use service::{GrpcWebService, ResponseFuture};
 
 mod call;
+mod client;
 mod layer;
 mod service;
 
@@ -124,7 +127,7 @@ type BoxError = Box<dyn std::error::Error + Send + Sync>;
 /// You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
 pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
@@ -156,9 +159,9 @@ where
 #[derive(Debug, Clone)]
 pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
 
-impl<S> Service<http::Request<hyper::Body>> for CorsGrpcWeb<S>
+impl<S> Service<http::Request<BoxBody>> for CorsGrpcWeb<S>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<BoxError> + Send,
@@ -166,7 +169,7 @@ where
     type Response = S::Response;
     type Error = S::Error;
     type Future =
-        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<hyper::Body>>>::Future;
+        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<BoxBody>>>::Future;
 
     fn poll_ready(
         &mut self,
@@ -175,7 +178,7 @@ where
         self.0.poll_ready(cx)
     }
 
-    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
+    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
         self.0.call(req)
     }
 }
