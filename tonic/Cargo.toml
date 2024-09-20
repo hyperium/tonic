@@ -15,6 +15,7 @@ A gRPC over HTTP/2 implementation focused on high performance, interoperability,
 """
 documentation = "https://docs.rs/tonic/0.12.2"
 edition = "2021"
+exclude = ["/benches-disabled"]
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
