@@ -30,3 +30,9 @@ members = [
   "tests/skip_debug",
 ]
 resolver = "2"
+
+# Shared metadata
+[workspace.package]
+homepage = "https://github.com/hyperium/tonic"
+repository = "https://github.com/hyperium/tonic"
+version = "0.12.2"
