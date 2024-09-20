@@ -11,11 +11,16 @@ documentation = "https://docs.rs/tonic-types/0.12.2"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "protobuf"]
-license = "MIT"
+license = "MIT AND Apache-2.0"
 name = "tonic-types"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
 version = "0.12.2"
+exclude = ["src/generated"]
+
+[build-dependencies]
+tempfile = "3.8.0"
+tonic-build = {path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"]}
 
 [dependencies]
 prost = "0.13"

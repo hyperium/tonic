@@ -8,15 +8,20 @@ documentation = "https://docs.rs/tonic-health/0.12.2"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "healthcheck"]
-license = "MIT"
+license = "MIT AND Apache-2.0"
 name = "tonic-health"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
 version = "0.12.2"
+exclude = ["src/generated"]
 
 [features]
 default = ["transport"]
 transport = []
+
+[build-dependencies]
+tempfile = "3.8.0"
+tonic-build = {path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"]}
 
 [dependencies]
 async-stream = "0.3"
