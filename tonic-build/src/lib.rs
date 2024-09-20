@@ -81,6 +81,10 @@ use quote::TokenStreamExt;
 /// Prost generator
 #[cfg(feature = "prost")]
 mod prost;
+#[cfg(feature = "prost")]
+pub use prost_build::Config;
+#[cfg(feature = "prost")]
+pub use prost_types::FileDescriptorSet;
 
 #[cfg(feature = "prost")]
 pub use prost::{compile_fds, compile_protos, configure, Builder};
