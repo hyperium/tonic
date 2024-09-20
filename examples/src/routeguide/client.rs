@@ -1,7 +1,6 @@
 use std::error::Error;
 use std::time::Duration;
 
-use futures::stream;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use tokio::time;
@@ -49,7 +48,7 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
     }
 
     println!("Traversing {} points", points.len());
-    let request = Request::new(stream::iter(points));
+    let request = Request::new(tokio_stream::iter(points));
 
     match client.record_route(request).await {
         Ok(response) => println!("SUMMARY: {:?}", response.into_inner()),

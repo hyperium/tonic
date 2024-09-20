@@ -1,13 +1,13 @@
 //! `tonic-build` compiles `proto` files via `prost` and generates service stubs
-//! and proto definitiones for use with `tonic`.
+//! and proto definitions for use with `tonic`.
 //!
 //! # Feature flags
 //!
 //! - `cleanup-markdown`: Enables cleaning up documentation from the generated code. Useful
-//! when documentation of the generated code fails `cargo test --doc` for example.
+//!   when documentation of the generated code fails `cargo test --doc` for example.
 //! - `prost`: Enables usage of prost generator (enabled by default).
 //! - `transport`: Enables generation of `connect` method using `tonic::transport::Channel`
-//! (enabled by default).
+//!   (enabled by default).
 //!
 //! # Required dependencies
 //!
@@ -36,7 +36,7 @@
 //! fn main() -> Result<(), Box<dyn std::error::Error>> {
 //!    tonic_build::configure()
 //!         .build_server(false)
-//!         .compile(
+//!         .compile_protos(
 //!             &["proto/helloworld/helloworld.proto"],
 //!             &["proto/helloworld"],
 //!         )?;
@@ -70,22 +70,24 @@
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
 #![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.9.1")]
+#![doc(html_root_url = "https://docs.rs/tonic-build/0.12.2")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use quote::TokenStreamExt;
 
 /// Prost generator
 #[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
 mod prost;
+#[cfg(feature = "prost")]
+pub use prost_build::Config;
+#[cfg(feature = "prost")]
+pub use prost_types::FileDescriptorSet;
 
 #[cfg(feature = "prost")]
-#[cfg_attr(docsrs, doc(cfg(feature = "prost")))]
-pub use prost::{compile_protos, configure, Builder};
+pub use prost::{compile_fds, compile_protos, configure, Builder};
 
 pub mod manual;
 
@@ -96,6 +98,8 @@ pub mod server;
 
 mod code_gen;
 pub use code_gen::CodeGenBuilder;
+
+mod compile_settings;
 
 /// Service generation trait.
 ///
@@ -144,6 +148,10 @@ pub trait Method {
     fn server_streaming(&self) -> bool;
     /// Get comments about this item.
     fn comment(&self) -> &[Self::Comment];
+    /// Method is deprecated.
+    fn deprecated(&self) -> bool {
+        false
+    }
     /// Type name of request and response.
     fn request_response_name(
         &self,
@@ -238,6 +246,19 @@ fn generate_attributes<'a>(
                 .attrs
         })
         .collect::<Vec<_>>()
+}
+
+fn generate_deprecated() -> TokenStream {
+    let mut deprecated_stream = TokenStream::new();
+    deprecated_stream.append(Ident::new("deprecated", Span::call_site()));
+
+    let group = Group::new(Delimiter::Bracket, deprecated_stream);
+
+    let mut stream = TokenStream::new();
+    stream.append(Punct::new('#', Spacing::Alone));
+    stream.append(group);
+
+    stream
 }
 
 // Generate a singular line of a doc comment

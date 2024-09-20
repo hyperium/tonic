@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `LocalizedMessage` standard error message
@@ -41,10 +43,7 @@ impl LocalizedMessage {
 
 impl IntoAny for LocalizedMessage {
     fn into_any(self) -> Any {
-        let detail_data = pb::LocalizedMessage {
-            locale: self.locale,
-            message: self.message,
-        };
+        let detail_data: pb::LocalizedMessage = self.into();
 
         Any {
             type_url: LocalizedMessage::TYPE_URL.to_string(),
@@ -54,16 +53,36 @@ impl IntoAny for LocalizedMessage {
 }
 
 impl FromAny for LocalizedMessage {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for LocalizedMessage {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let loc_message = pb::LocalizedMessage::decode(buf)?;
 
-        let loc_message = LocalizedMessage {
+        Ok(loc_message.into())
+    }
+}
+
+impl From<pb::LocalizedMessage> for LocalizedMessage {
+    fn from(loc_message: pb::LocalizedMessage) -> Self {
+        LocalizedMessage {
             locale: loc_message.locale,
             message: loc_message.message,
-        };
+        }
+    }
+}
 
-        Ok(loc_message)
+impl From<LocalizedMessage> for pb::LocalizedMessage {
+    fn from(loc_message: LocalizedMessage) -> Self {
+        pb::LocalizedMessage {
+            locale: loc_message.locale,
+            message: loc_message.message,
+        }
     }
 }
 

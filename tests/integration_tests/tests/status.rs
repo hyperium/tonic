@@ -1,6 +1,6 @@
 use bytes::Bytes;
-use futures_util::FutureExt;
 use http::Uri;
+use hyper_util::rt::TokioIo;
 use integration_tests::mock::MockStream;
 use integration_tests::pb::{
     test_client, test_server, test_stream_client, test_stream_server, Input, InputStream, Output,
@@ -35,7 +35,7 @@ async fn status_with_details() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1337".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1337".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -89,7 +89,7 @@ async fn status_with_metadata() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -125,12 +125,13 @@ async fn status_with_metadata() {
     jh.await.unwrap();
 }
 
-type Stream<T> =
-    std::pin::Pin<Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+type Stream<T> = std::pin::Pin<
+    Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>,
+>;
 
 #[tokio::test]
 async fn status_from_server_stream() {
-    trace_init();
+    integration_tests::trace_init();
 
     struct Svc;
 
@@ -142,7 +143,7 @@ async fn status_from_server_stream() {
             &self,
             _: Request<InputStream>,
         ) -> Result<Response<Self::StreamCallStream>, Status> {
-            let s = futures::stream::iter(vec![
+            let s = tokio_stream::iter(vec![
                 Err::<OutputStream, _>(Status::unavailable("foo")),
                 Err::<OutputStream, _>(Status::unavailable("bar")),
             ]);
@@ -178,12 +179,12 @@ async fn status_from_server_stream() {
 
 #[tokio::test]
 async fn status_from_server_stream_with_source() {
-    trace_init();
+    integration_tests::trace_init();
 
     let channel = Endpoint::try_from("http://[::]:50051")
         .unwrap()
         .connect_with_connector_lazy(tower::service_fn(move |_: Uri| async move {
-            Err::<MockStream, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
+            Err::<TokioIo<MockStream>, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
         }));
 
     let mut client = test_stream_client::TestStreamClient::new(channel);
@@ -194,8 +195,51 @@ async fn status_from_server_stream_with_source() {
     source.downcast_ref::<tonic::transport::Error>().unwrap();
 }
 
-fn trace_init() {
-    let _ = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
-        .try_init();
+#[tokio::test]
+async fn message_and_then_status_from_server_stream() {
+    integration_tests::trace_init();
+
+    struct Svc;
+
+    #[tonic::async_trait]
+    impl test_stream_server::TestStream for Svc {
+        type StreamCallStream = Stream<OutputStream>;
+
+        async fn stream_call(
+            &self,
+            _: Request<InputStream>,
+        ) -> Result<Response<Self::StreamCallStream>, Status> {
+            let s = tokio_stream::iter(vec![
+                Ok(OutputStream {}),
+                Err::<OutputStream, _>(Status::unavailable("foo")),
+            ]);
+            Ok(Response::new(Box::pin(s) as Self::StreamCallStream))
+        }
+    }
+
+    let svc = test_stream_server::TestStreamServer::new(Svc);
+
+    tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve("127.0.0.1:1340".parse().unwrap())
+            .await
+            .unwrap();
+    });
+
+    tokio::time::sleep(Duration::from_millis(100)).await;
+
+    let mut client = test_stream_client::TestStreamClient::connect("http://127.0.0.1:1340")
+        .await
+        .unwrap();
+
+    let mut stream = client
+        .stream_call(InputStream {})
+        .await
+        .unwrap()
+        .into_inner();
+
+    assert_eq!(stream.message().await.unwrap(), Some(OutputStream {}));
+    assert_eq!(stream.message().await.unwrap_err().message(), "foo");
+    assert_eq!(stream.message().await.unwrap(), None);
 }

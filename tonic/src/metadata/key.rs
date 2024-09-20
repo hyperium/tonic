@@ -24,7 +24,7 @@ pub struct MetadataKey<VE: ValueEncoding> {
 }
 
 /// A possible error when converting a `MetadataKey` from another type.
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct InvalidMetadataKey {
     _priv: (),
 }
@@ -180,7 +180,7 @@ impl<VE: ValueEncoding> fmt::Display for MetadataKey<VE> {
 impl InvalidMetadataKey {
     #[doc(hidden)]
     pub fn new() -> InvalidMetadataKey {
-        InvalidMetadataKey { _priv: () }
+        Self::default()
     }
 }
 
@@ -272,12 +272,6 @@ impl<'a, VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &'a str {
 impl fmt::Display for InvalidMetadataKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str("invalid gRPC metadata key name")
-    }
-}
-
-impl Default for InvalidMetadataKey {
-    fn default() -> Self {
-        Self::new()
     }
 }
 

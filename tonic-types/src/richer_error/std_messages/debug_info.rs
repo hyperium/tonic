@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `DebugInfo` standard error message described in
@@ -37,10 +39,7 @@ impl DebugInfo {
 
 impl IntoAny for DebugInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::DebugInfo {
-            stack_entries: self.stack_entries,
-            detail: self.detail,
-        };
+        let detail_data: pb::DebugInfo = self.into();
 
         Any {
             type_url: DebugInfo::TYPE_URL.to_string(),
@@ -50,16 +49,36 @@ impl IntoAny for DebugInfo {
 }
 
 impl FromAny for DebugInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for DebugInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let debug_info = pb::DebugInfo::decode(buf)?;
 
-        let debug_info = DebugInfo {
+        Ok(debug_info.into())
+    }
+}
+
+impl From<pb::DebugInfo> for DebugInfo {
+    fn from(debug_info: pb::DebugInfo) -> Self {
+        DebugInfo {
             stack_entries: debug_info.stack_entries,
             detail: debug_info.detail,
-        };
+        }
+    }
+}
 
-        Ok(debug_info)
+impl From<DebugInfo> for pb::DebugInfo {
+    fn from(debug_info: DebugInfo) -> Self {
+        pb::DebugInfo {
+            stack_entries: debug_info.stack_entries,
+            detail: debug_info.detail,
+        }
     }
 }
 

@@ -10,7 +10,6 @@ use std::sync::Arc;
 ///
 /// [ext]: crate::Request::extensions
 /// [Connected]: crate::transport::server::Connected
-#[cfg_attr(docsrs, doc(cfg(unix)))]
 #[derive(Clone, Debug)]
 pub struct UdsConnectInfo {
     /// Peer address. This will be "unnamed" for client unix sockets.

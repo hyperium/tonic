@@ -51,7 +51,7 @@ impl Greeter for MyGreeter {
 }
 
 #[derive(Default)]
-pub struct MyEcho;
+pub struct MyEcho {}
 
 #[tonic::async_trait]
 impl Echo for MyEcho {

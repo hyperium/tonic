@@ -1,4 +1,4 @@
-use crate::code_gen::CodeGenBuilder;
+use crate::{code_gen::CodeGenBuilder, compile_settings::CompileSettings};
 
 use super::Attributes;
 use proc_macro2::TokenStream;
@@ -28,6 +28,8 @@ pub fn configure() -> Builder {
         enum_attributes: Vec::new(),
         type_attributes: Vec::new(),
         boxed: Vec::new(),
+        btree_map: None,
+        bytes: None,
         server_attributes: Attributes::default(),
         client_attributes: Attributes::default(),
         proto_path: "super".to_string(),
@@ -37,6 +39,10 @@ pub fn configure() -> Builder {
         include_file: None,
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
         disable_comments: HashSet::default(),
+        use_arc_self: false,
+        generate_default_stubs: false,
+        compile_settings: CompileSettings::default(),
+        skip_debug: HashSet::default(),
     }
 }
 
@@ -52,66 +58,110 @@ pub fn compile_protos(proto: impl AsRef<Path>) -> io::Result<()> {
         .parent()
         .expect("proto file should reside in a directory");
 
-    self::configure().compile(&[proto_path], &[proto_dir])?;
-
-    Ok(())
+    self::configure().compile_protos(&[proto_path], &[proto_dir])
 }
 
-const PROST_CODEC_PATH: &str = "tonic::codec::ProstCodec";
+/// Simple file descriptor set compiling. Use [`configure`] instead if you need more options.
+pub fn compile_fds(fds: prost_types::FileDescriptorSet) -> io::Result<()> {
+    self::configure().compile_fds(fds)
+}
 
 /// Non-path Rust types allowed for request/response types.
 const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
 
-impl crate::Service for Service {
-    type Method = Method;
-    type Comment = String;
+/// Newtype wrapper for prost to add tonic-specific extensions
+struct TonicBuildService {
+    prost_service: Service,
+    methods: Vec<TonicBuildMethod>,
+}
 
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn package(&self) -> &str {
-        &self.package
-    }
-
-    fn identifier(&self) -> &str {
-        &self.proto_name
-    }
-
-    fn comment(&self) -> &[Self::Comment] {
-        &self.comments.leading[..]
-    }
-
-    fn methods(&self) -> &[Self::Method] {
-        &self.methods[..]
+impl TonicBuildService {
+    fn new(prost_service: Service, settings: CompileSettings) -> Self {
+        Self {
+            // CompileSettings are currently only consumed method-by-method but if you need them in the Service, here's your spot.
+            // The tonic_build::Service trait specifies that methods are borrowed, so they have to reified up front.
+            methods: prost_service
+                .methods
+                .iter()
+                .map(|prost_method| TonicBuildMethod {
+                    prost_method: prost_method.clone(),
+                    settings: settings.clone(),
+                })
+                .collect(),
+            prost_service,
+        }
     }
 }
 
-impl crate::Method for Method {
+/// Newtype wrapper for prost to add tonic-specific extensions
+struct TonicBuildMethod {
+    prost_method: Method,
+    settings: CompileSettings,
+}
+
+impl crate::Service for TonicBuildService {
+    type Method = TonicBuildMethod;
     type Comment = String;
 
     fn name(&self) -> &str {
-        &self.name
+        &self.prost_service.name
+    }
+
+    fn package(&self) -> &str {
+        &self.prost_service.package
     }
 
     fn identifier(&self) -> &str {
-        &self.proto_name
-    }
-
-    fn codec_path(&self) -> &str {
-        PROST_CODEC_PATH
-    }
-
-    fn client_streaming(&self) -> bool {
-        self.client_streaming
-    }
-
-    fn server_streaming(&self) -> bool {
-        self.server_streaming
+        &self.prost_service.proto_name
     }
 
     fn comment(&self) -> &[Self::Comment] {
-        &self.comments.leading[..]
+        &self.prost_service.comments.leading[..]
+    }
+
+    fn methods(&self) -> &[Self::Method] {
+        &self.methods
+    }
+}
+
+impl crate::Method for TonicBuildMethod {
+    type Comment = String;
+
+    fn name(&self) -> &str {
+        &self.prost_method.name
+    }
+
+    fn identifier(&self) -> &str {
+        &self.prost_method.proto_name
+    }
+
+    /// For code generation, you can override the codec.
+    ///
+    /// You should set the codec path to an import path that has a free
+    /// function like `fn default()`. The default value is tonic::codec::ProstCodec,
+    /// which returns a default-configured ProstCodec. You may wish to configure
+    /// the codec, e.g., with a buffer configuration.
+    ///
+    /// Though ProstCodec implements Default, it is currently only required that
+    /// the function match the Default trait's function spec.
+    fn codec_path(&self) -> &str {
+        &self.settings.codec_path
+    }
+
+    fn client_streaming(&self) -> bool {
+        self.prost_method.client_streaming
+    }
+
+    fn server_streaming(&self) -> bool {
+        self.prost_method.server_streaming
+    }
+
+    fn comment(&self) -> &[Self::Comment] {
+        &self.prost_method.comments.leading[..]
+    }
+
+    fn deprecated(&self) -> bool {
+        self.prost_method.options.deprecated.unwrap_or_default()
     }
 
     fn request_response_name(
@@ -136,8 +186,14 @@ impl crate::Method for Method {
             }
         };
 
-        let request = convert_type(&self.input_proto_type, &self.input_type);
-        let response = convert_type(&self.output_proto_type, &self.output_type);
+        let request = convert_type(
+            &self.prost_method.input_proto_type,
+            &self.prost_method.input_type,
+        );
+        let response = convert_type(
+            &self.prost_method.output_proto_type,
+            &self.prost_method.output_type,
+        );
         (request, response)
     }
 }
@@ -170,7 +226,12 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .compile_well_known_types(self.builder.compile_well_known_types)
                 .attributes(self.builder.server_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
-                .generate_server(&service, &self.builder.proto_path);
+                .use_arc_self(self.builder.use_arc_self)
+                .generate_default_stubs(self.builder.generate_default_stubs)
+                .generate_server(
+                    &TonicBuildService::new(service.clone(), self.builder.compile_settings.clone()),
+                    &self.builder.proto_path,
+                );
 
             self.servers.extend(server);
         }
@@ -182,7 +243,10 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .attributes(self.builder.client_attributes.clone())
                 .disable_comments(self.builder.disable_comments.clone())
                 .build_transport(self.builder.build_transport)
-                .generate_client(&service, &self.builder.proto_path);
+                .generate_client(
+                    &TonicBuildService::new(service, self.builder.compile_settings.clone()),
+                    &self.builder.proto_path,
+                );
 
             self.clients.extend(client);
         }
@@ -233,6 +297,8 @@ pub struct Builder {
     pub(crate) message_attributes: Vec<(String, String)>,
     pub(crate) enum_attributes: Vec<(String, String)>,
     pub(crate) boxed: Vec<String>,
+    pub(crate) btree_map: Option<Vec<String>>,
+    pub(crate) bytes: Option<Vec<String>>,
     pub(crate) server_attributes: Attributes,
     pub(crate) client_attributes: Attributes,
     pub(crate) proto_path: String,
@@ -242,6 +308,10 @@ pub struct Builder {
     pub(crate) include_file: Option<PathBuf>,
     pub(crate) emit_rerun_if_changed: bool,
     pub(crate) disable_comments: HashSet<String>,
+    pub(crate) use_arc_self: bool,
+    pub(crate) generate_default_stubs: bool,
+    pub(crate) compile_settings: CompileSettings,
+    pub(crate) skip_debug: HashSet<String>,
 
     out_dir: Option<PathBuf>,
 }
@@ -352,6 +422,46 @@ impl Builder {
         self
     }
 
+    /// Configure the code generator to generate Rust `BTreeMap` fields for Protobuf `map` type
+    /// fields.
+    ///
+    /// Passed directly to `prost_build::Config.btree_map`.
+    ///
+    /// Note: previous configured paths for `btree_map` will be cleared.
+    pub fn btree_map<I, S>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.btree_map = Some(
+            paths
+                .into_iter()
+                .map(|path| path.as_ref().to_string())
+                .collect(),
+        );
+        self
+    }
+
+    /// Configure the code generator to generate Rust `bytes::Bytes` fields for Protobuf `bytes`
+    /// type fields.
+    ///
+    /// Passed directly to `prost_build::Config.bytes`.
+    ///
+    /// Note: previous configured paths for `bytes` will be cleared.
+    pub fn bytes<I, S>(mut self, paths: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.bytes = Some(
+            paths
+                .into_iter()
+                .map(|path| path.as_ref().to_string())
+                .collect(),
+        );
+        self
+    }
+
     /// Add additional attribute to matched server `mod`s. Matches on the package name.
     pub fn server_mod_attribute<P: AsRef<str>, A: AsRef<str>>(
         mut self,
@@ -411,6 +521,12 @@ impl Builder {
         self
     }
 
+    /// Emit `Arc<Self>` receiver type in server traits instead of `&self`.
+    pub fn use_arc_self(mut self, enable: bool) -> Self {
+        self.use_arc_self = enable;
+        self
+    }
+
     /// Emits GRPC endpoints with no attached package. Effectively ignores protofile package declaration from grpc context.
     ///
     /// This effectively sets prost's exported package to an empty string.
@@ -450,37 +566,115 @@ impl Builder {
     /// should be enabled automatically when run from a build script. However,
     /// the method of detection is not completely reliable since the `CARGO`
     /// environment variable can have been set by anything else. If writing the
-    /// instructions to `stdout` is undesireable, you can disable this setting
+    /// instructions to `stdout` is undesirable, you can disable this setting
     /// explicitly.
     pub fn emit_rerun_if_changed(mut self, enable: bool) -> Self {
         self.emit_rerun_if_changed = enable;
         self
     }
 
+    /// Enable or disable directing service generation to providing a default implementation for service methods.
+    /// When this is false all gRPC methods must be explicitly implemented.
+    /// When this is true any unimplemented service methods will return 'unimplemented' gRPC error code.
+    /// When this is true all streaming server request RPC types explicitly use tonic::codegen::BoxStream type.
+    ///
+    /// This defaults to `false`.
+    pub fn generate_default_stubs(mut self, enable: bool) -> Self {
+        self.generate_default_stubs = enable;
+        self
+    }
+
+    /// Override the default codec.
+    ///
+    /// If set, writes `{codec_path}::default()` in generated code wherever a codec is created.
+    ///
+    /// This defaults to `"tonic::codec::ProstCodec"`
+    pub fn codec_path(mut self, codec_path: impl Into<String>) -> Self {
+        self.compile_settings.codec_path = codec_path.into();
+        self
+    }
+
+    /// Skips generating `impl Debug` for types
+    pub fn skip_debug(mut self, path: impl AsRef<str>) -> Self {
+        self.skip_debug.insert(path.as_ref().to_string());
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
+    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos()`")]
     pub fn compile(
         self,
         protos: &[impl AsRef<Path>],
         includes: &[impl AsRef<Path>],
     ) -> io::Result<()> {
-        self.compile_with_config(Config::new(), protos, includes)
+        self.compile_protos(protos, includes)
     }
 
-    /// Compile the .proto files and execute code generation using a
-    /// custom `prost_build::Config`.
+    /// Compile the .proto files and execute code generation using a custom
+    /// `prost_build::Config`. The provided config will be updated with this builder's config.
+    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos_with_config()`")]
     pub fn compile_with_config(
+        self,
+        config: Config,
+        protos: &[impl AsRef<Path>],
+        includes: &[impl AsRef<Path>],
+    ) -> io::Result<()> {
+        self.compile_protos_with_config(config, protos, includes)
+    }
+
+    /// Compile the .proto files and execute code generation.
+    pub fn compile_protos(
+        self,
+        protos: &[impl AsRef<Path>],
+        includes: &[impl AsRef<Path>],
+    ) -> io::Result<()> {
+        self.compile_protos_with_config(Config::new(), protos, includes)
+    }
+
+    /// Compile the .proto files and execute code generation using a custom
+    /// `prost_build::Config`. The provided config will be updated with this builder's config.
+    pub fn compile_protos_with_config(
         self,
         mut config: Config,
         protos: &[impl AsRef<Path>],
         includes: &[impl AsRef<Path>],
     ) -> io::Result<()> {
-        let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
-            out_dir.clone()
-        } else {
-            PathBuf::from(std::env::var("OUT_DIR").unwrap())
-        };
+        if self.emit_rerun_if_changed {
+            for path in protos.iter() {
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
 
-        config.out_dir(out_dir);
+            for path in includes.iter() {
+                // Cargo will watch the **entire** directory recursively. If we
+                // could figure out which files are imported by our protos we
+                // could specify only those files instead.
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
+        }
+
+        self.setup_config(&mut config);
+        config.compile_protos(protos, includes)
+    }
+
+    /// Execute code generation from a file descriptor set.
+    pub fn compile_fds(self, fds: prost_types::FileDescriptorSet) -> io::Result<()> {
+        self.compile_fds_with_config(Config::new(), fds)
+    }
+
+    /// Execute code generation from a file descriptor set using a custom `prost_build::Config`.
+    pub fn compile_fds_with_config(
+        self,
+        mut config: Config,
+        fds: prost_types::FileDescriptorSet,
+    ) -> io::Result<()> {
+        self.setup_config(&mut config);
+        config.compile_fds(fds)
+    }
+
+    fn setup_config(self, config: &mut Config) {
+        if let Some(out_dir) = self.out_dir.as_ref() {
+            config.out_dir(out_dir);
+        }
         if let Some(path) = self.file_descriptor_set_path.as_ref() {
             config.file_descriptor_set_path(path);
         }
@@ -505,35 +699,27 @@ impl Builder {
         for prost_path in self.boxed.iter() {
             config.boxed(prost_path);
         }
+        if let Some(ref paths) = self.btree_map {
+            config.btree_map(paths);
+        }
+        if let Some(ref paths) = self.bytes {
+            config.bytes(paths);
+        }
         if self.compile_well_known_types {
             config.compile_well_known_types();
         }
         if let Some(path) = self.include_file.as_ref() {
             config.include_file(path);
         }
+        if !self.skip_debug.is_empty() {
+            config.skip_debug(&self.skip_debug);
+        }
 
         for arg in self.protoc_args.iter() {
             config.protoc_arg(arg);
         }
 
-        if self.emit_rerun_if_changed {
-            for path in protos.iter() {
-                println!("cargo:rerun-if-changed={}", path.as_ref().display())
-            }
-
-            for path in includes.iter() {
-                // Cargo will watch the **entire** directory recursively. If we
-                // could figure out which files are imported by our protos we
-                // could specify only those files instead.
-                println!("cargo:rerun-if-changed={}", path.as_ref().display())
-            }
-        }
-
         config.service_generator(self.service_generator());
-
-        config.compile_protos(protos, includes)?;
-
-        Ok(())
     }
 
     /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s

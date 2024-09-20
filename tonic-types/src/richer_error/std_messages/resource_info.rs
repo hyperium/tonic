@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `ResourceInfo` standard error message described
@@ -53,12 +55,7 @@ impl ResourceInfo {
 
 impl IntoAny for ResourceInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::ResourceInfo {
-            resource_type: self.resource_type,
-            resource_name: self.resource_name,
-            owner: self.owner,
-            description: self.description,
-        };
+        let detail_data: pb::ResourceInfo = self.into();
 
         Any {
             type_url: ResourceInfo::TYPE_URL.to_string(),
@@ -68,18 +65,40 @@ impl IntoAny for ResourceInfo {
 }
 
 impl FromAny for ResourceInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for ResourceInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let res_info = pb::ResourceInfo::decode(buf)?;
 
-        let res_info = ResourceInfo {
+        Ok(res_info.into())
+    }
+}
+
+impl From<pb::ResourceInfo> for ResourceInfo {
+    fn from(res_info: pb::ResourceInfo) -> Self {
+        ResourceInfo {
             resource_type: res_info.resource_type,
             resource_name: res_info.resource_name,
             owner: res_info.owner,
             description: res_info.description,
-        };
+        }
+    }
+}
 
-        Ok(res_info)
+impl From<ResourceInfo> for pb::ResourceInfo {
+    fn from(res_info: ResourceInfo) -> Self {
+        pb::ResourceInfo {
+            resource_type: res_info.resource_type,
+            resource_name: res_info.resource_name,
+            owner: res_info.owner,
+            description: res_info.description,
+        }
     }
 }
 

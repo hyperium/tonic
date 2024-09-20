@@ -1,6 +1,6 @@
-use super::{Codec, DecodeBuf, Decoder, Encoder};
+use super::{BufferSettings, Codec, DecodeBuf, Decoder, Encoder};
 use crate::codec::EncodeBuf;
-use crate::{Code, Status};
+use crate::Status;
 use prost::Message;
 use std::marker::PhantomData;
 
@@ -10,9 +10,41 @@ pub struct ProstCodec<T, U> {
     _pd: PhantomData<(T, U)>,
 }
 
+impl<T, U> ProstCodec<T, U> {
+    /// Configure a ProstCodec with encoder/decoder buffer settings. This is used to control
+    /// how memory is allocated and grows per RPC.
+    pub fn new() -> Self {
+        Self { _pd: PhantomData }
+    }
+}
+
 impl<T, U> Default for ProstCodec<T, U> {
     fn default() -> Self {
-        Self { _pd: PhantomData }
+        Self::new()
+    }
+}
+
+impl<T, U> ProstCodec<T, U>
+where
+    T: Message + Send + 'static,
+    U: Message + Default + Send + 'static,
+{
+    /// A tool for building custom codecs based on prost encoding and decoding.
+    /// See the codec_buffers example for one possible way to use this.
+    pub fn raw_encoder(buffer_settings: BufferSettings) -> <Self as Codec>::Encoder {
+        ProstEncoder {
+            _pd: PhantomData,
+            buffer_settings,
+        }
+    }
+
+    /// A tool for building custom codecs based on prost encoding and decoding.
+    /// See the codec_buffers example for one possible way to use this.
+    pub fn raw_decoder(buffer_settings: BufferSettings) -> <Self as Codec>::Decoder {
+        ProstDecoder {
+            _pd: PhantomData,
+            buffer_settings,
+        }
     }
 }
 
@@ -28,17 +60,36 @@ where
     type Decoder = ProstDecoder<U>;
 
     fn encoder(&mut self) -> Self::Encoder {
-        ProstEncoder(PhantomData)
+        ProstEncoder {
+            _pd: PhantomData,
+            buffer_settings: BufferSettings::default(),
+        }
     }
 
     fn decoder(&mut self) -> Self::Decoder {
-        ProstDecoder(PhantomData)
+        ProstDecoder {
+            _pd: PhantomData,
+            buffer_settings: BufferSettings::default(),
+        }
     }
 }
 
 /// A [`Encoder`] that knows how to encode `T`.
 #[derive(Debug, Clone, Default)]
-pub struct ProstEncoder<T>(PhantomData<T>);
+pub struct ProstEncoder<T> {
+    _pd: PhantomData<T>,
+    buffer_settings: BufferSettings,
+}
+
+impl<T> ProstEncoder<T> {
+    /// Get a new encoder with explicit buffer settings
+    pub fn new(buffer_settings: BufferSettings) -> Self {
+        Self {
+            _pd: PhantomData,
+            buffer_settings,
+        }
+    }
+}
 
 impl<T: Message> Encoder for ProstEncoder<T> {
     type Item = T;
@@ -50,11 +101,28 @@ impl<T: Message> Encoder for ProstEncoder<T> {
 
         Ok(())
     }
+
+    fn buffer_settings(&self) -> BufferSettings {
+        self.buffer_settings
+    }
 }
 
 /// A [`Decoder`] that knows how to decode `U`.
 #[derive(Debug, Clone, Default)]
-pub struct ProstDecoder<U>(PhantomData<U>);
+pub struct ProstDecoder<U> {
+    _pd: PhantomData<U>,
+    buffer_settings: BufferSettings,
+}
+
+impl<U> ProstDecoder<U> {
+    /// Get a new decoder with explicit buffer settings
+    pub fn new(buffer_settings: BufferSettings) -> Self {
+        Self {
+            _pd: PhantomData,
+            buffer_settings,
+        }
+    }
+}
 
 impl<U: Message + Default> Decoder for ProstDecoder<U> {
     type Item = U;
@@ -67,12 +135,16 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
 
         Ok(item)
     }
+
+    fn buffer_settings(&self) -> BufferSettings {
+        self.buffer_settings
+    }
 }
 
 fn from_decode_error(error: prost::DecodeError) -> crate::Status {
     // Map Protobuf parse errors to an INTERNAL status code, as per
     // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
-    Status::new(Code::Internal, error.to_string())
+    Status::internal(error.to_string())
 }
 
 #[cfg(test)]
@@ -81,9 +153,11 @@ mod tests {
     use crate::codec::{
         encode_server, DecodeBuf, Decoder, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
     };
-    use crate::{Code, Status};
+    use crate::Status;
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
+    use http_body_util::BodyExt as _;
+    use std::pin::pin;
 
     const LEN: usize = 10000;
     // The maximum uncompressed size in bytes for a message. Set to 2MB.
@@ -135,14 +209,11 @@ mod tests {
 
         let actual = stream.message().await.unwrap_err();
 
-        let expected = Status::new(
-            Code::OutOfRange,
-            format!(
-                "Error, message length too large: found {} bytes, the limit is: {} bytes",
-                msg.len(),
-                MAX_MESSAGE_SIZE
-            ),
-        );
+        let expected = Status::out_of_range(format!(
+            "Error, decoded message length too large: found {} bytes, the limit is: {} bytes",
+            msg.len(),
+            MAX_MESSAGE_SIZE
+        ));
 
         assert_eq!(actual.code(), expected.code());
         assert_eq!(actual.message(), expected.message());
@@ -155,19 +226,17 @@ mod tests {
         let msg = Vec::from(&[0u8; 1024][..]);
 
         let messages = std::iter::repeat_with(move || Ok::<_, Status>(msg.clone())).take(10000);
-        let source = futures_util::stream::iter(messages);
+        let source = tokio_stream::iter(messages);
 
-        let body = encode_server(
+        let mut body = pin!(encode_server(
             encoder,
             source,
             None,
             SingleMessageCompressionOverride::default(),
             None,
-        );
+        ));
 
-        futures_util::pin_mut!(body);
-
-        while let Some(r) = body.data().await {
+        while let Some(r) = body.frame().await {
             r.unwrap();
         }
     }
@@ -179,24 +248,25 @@ mod tests {
         let msg = vec![0u8; MAX_MESSAGE_SIZE + 1];
 
         let messages = std::iter::once(Ok::<_, Status>(msg));
-        let source = futures_util::stream::iter(messages);
+        let source = tokio_stream::iter(messages);
 
-        let body = encode_server(
+        let mut body = pin!(encode_server(
             encoder,
             source,
             None,
             SingleMessageCompressionOverride::default(),
             Some(MAX_MESSAGE_SIZE),
-        );
+        ));
 
-        futures_util::pin_mut!(body);
-
-        assert!(body.data().await.is_none());
+        let frame = body
+            .frame()
+            .await
+            .expect("at least one frame")
+            .expect("no error polling frame");
         assert_eq!(
-            body.trailers()
-                .await
-                .expect("no error polling trailers")
-                .expect("some trailers")
+            frame
+                .into_trailers()
+                .expect("got trailers")
                 .get("grpc-status")
                 .expect("grpc-status header"),
             "11"
@@ -213,24 +283,25 @@ mod tests {
         let msg = vec![0u8; u32::MAX as usize + 1];
 
         let messages = std::iter::once(Ok::<_, Status>(msg));
-        let source = futures_util::stream::iter(messages);
+        let source = tokio_stream::iter(messages);
 
-        let body = encode_server(
+        let mut body = pin!(encode_server(
             encoder,
             source,
             None,
             SingleMessageCompressionOverride::default(),
             Some(usize::MAX),
-        );
+        ));
 
-        futures_util::pin_mut!(body);
-
-        assert!(body.data().await.is_none());
+        let frame = body
+            .frame()
+            .await
+            .expect("at least one frame")
+            .expect("no error polling frame");
         assert_eq!(
-            body.trailers()
-                .await
-                .expect("no error polling trailers")
-                .expect("some trailers")
+            frame
+                .into_trailers()
+                .expect("got trailers")
                 .get("grpc-status")
                 .expect("grpc-status header"),
             "8"
@@ -239,7 +310,7 @@ mod tests {
     }
 
     #[derive(Debug, Clone, Default)]
-    struct MockEncoder;
+    struct MockEncoder {}
 
     impl Encoder for MockEncoder {
         type Item = Vec<u8>;
@@ -249,10 +320,14 @@ mod tests {
             buf.put(&item[..]);
             Ok(())
         }
+
+        fn buffer_settings(&self) -> crate::codec::BufferSettings {
+            Default::default()
+        }
     }
 
     #[derive(Debug, Clone, Default)]
-    struct MockDecoder;
+    struct MockDecoder {}
 
     impl Decoder for MockDecoder {
         type Item = Vec<u8>;
@@ -263,12 +338,16 @@ mod tests {
             buf.advance(LEN);
             Ok(Some(out))
         }
+
+        fn buffer_settings(&self) -> crate::codec::BufferSettings {
+            Default::default()
+        }
     }
 
     mod body {
         use crate::Status;
         use bytes::Bytes;
-        use http_body::Body;
+        use http_body::{Body, Frame};
         use std::{
             pin::Pin,
             task::{Context, Poll},
@@ -299,10 +378,10 @@ mod tests {
             type Data = Bytes;
             type Error = Status;
 
-            fn poll_data(
+            fn poll_frame(
                 mut self: Pin<&mut Self>,
                 cx: &mut Context<'_>,
-            ) -> Poll<Option<Result<Self::Data, Self::Error>>> {
+            ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
                 // every other call to poll_data returns data
                 let should_send = self.count % 2 == 0;
                 let data_len = self.data.len();
@@ -313,7 +392,7 @@ mod tests {
                         let response =
                             self.data
                                 .split_to(if count == 0 { partial_len } else { data_len });
-                        Poll::Ready(Some(Ok(response)))
+                        Poll::Ready(Some(Ok(Frame::data(response))))
                     } else {
                         cx.waker().wake_by_ref();
                         Poll::Pending
@@ -324,15 +403,6 @@ mod tests {
                 } else {
                     Poll::Ready(None)
                 }
-            }
-
-            #[allow(clippy::drop_ref)]
-            fn poll_trailers(
-                self: Pin<&mut Self>,
-                cx: &mut Context<'_>,
-            ) -> Poll<Result<Option<http::HeaderMap>, Self::Error>> {
-                drop(cx);
-                Poll::Ready(Ok(None))
             }
         }
     }

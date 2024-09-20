@@ -210,18 +210,12 @@ example would explicitly use `Timeout::new`. For example:
 
 When making changes to `tonic-build` that affects the generated code you will
 need to ensure that each of the sub crates gets updated as well. Each of the sub
-crates like, for example `tonic-health`, generate their gRPC code via a
-`bootstrap.rs` test.
-
-The bootstrap tests work by generating the code and then checking git if there
-is any uncommitted generated code (there is a difference between the proto files
-and the committed generated code). At this point the test will fail telling you
-to commit the new code. When the new code is committed, running the test suite
-again will cause it to pass as the generated code doesn't create a diff for git
-and thus its up to date.
+crates like, for example `tonic-health`, generate their gRPC code via `codegen`
+crate. This requires `Protocol Buffers Compiler` of which version is same as the
+one used in the GitHub Action (see [`codegen` job](./.github/workflows/CI.yml)).
 
 ```
-cargo test --all
+cargo run --package codegen
 ```
 
 ### Commits

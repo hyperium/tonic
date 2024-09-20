@@ -1,54 +1,80 @@
-use super::encode::BUFFER_SIZE;
 use crate::{metadata::MetadataValue, Status};
-use bytes::{Buf, BytesMut};
+use bytes::{Buf, BufMut, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};
 use std::fmt;
+#[cfg(feature = "zstd")]
+use zstd::stream::read::{Decoder, Encoder};
 
 pub(crate) const ENCODING_HEADER: &str = "grpc-encoding";
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
 
 /// Struct used to configure which encodings are enabled on a server or channel.
+///
+/// Represents an ordered list of compression encodings that are enabled.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct EnabledCompressionEncodings {
-    #[cfg(feature = "gzip")]
-    pub(crate) gzip: bool,
+    inner: [Option<CompressionEncoding>; 2],
 }
 
 impl EnabledCompressionEncodings {
-    /// Check if a [`CompressionEncoding`] is enabled.
-    pub fn is_enabled(&self, encoding: CompressionEncoding) -> bool {
-        match encoding {
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => self.gzip,
+    /// Enable a [`CompressionEncoding`].
+    ///
+    /// Adds the new encoding to the end of the encoding list.
+    pub fn enable(&mut self, encoding: CompressionEncoding) {
+        for e in self.inner.iter_mut() {
+            match e {
+                Some(e) if *e == encoding => return,
+                None => {
+                    *e = Some(encoding);
+                    return;
+                }
+                _ => continue,
+            }
         }
     }
 
-    /// Enable a [`CompressionEncoding`].
-    pub fn enable(&mut self, encoding: CompressionEncoding) {
-        match encoding {
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => self.gzip = true,
-        }
+    /// Remove the last [`CompressionEncoding`].
+    pub fn pop(&mut self) -> Option<CompressionEncoding> {
+        self.inner
+            .iter_mut()
+            .rev()
+            .find(|entry| entry.is_some())?
+            .take()
     }
 
     pub(crate) fn into_accept_encoding_header_value(self) -> Option<http::HeaderValue> {
-        if self.is_gzip_enabled() {
-            Some(http::HeaderValue::from_static("gzip,identity"))
-        } else {
-            None
+        let mut value = BytesMut::new();
+        for encoding in self.inner.into_iter().flatten() {
+            value.put_slice(encoding.as_str().as_bytes());
+            value.put_u8(b',');
         }
+
+        if value.is_empty() {
+            return None;
+        }
+
+        value.put_slice(b"identity");
+        Some(http::HeaderValue::from_maybe_shared(value).unwrap())
     }
 
-    #[cfg(feature = "gzip")]
-    const fn is_gzip_enabled(&self) -> bool {
-        self.gzip
+    /// Check if a [`CompressionEncoding`] is enabled.
+    pub fn is_enabled(&self, encoding: CompressionEncoding) -> bool {
+        self.inner.contains(&Some(encoding))
     }
 
-    #[cfg(not(feature = "gzip"))]
-    const fn is_gzip_enabled(&self) -> bool {
-        false
+    /// Check if any [`CompressionEncoding`]s are enabled.
+    pub fn is_empty(&self) -> bool {
+        self.inner.iter().all(|e| e.is_none())
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct CompressionSettings {
+    pub(crate) encoding: CompressionEncoding,
+    /// buffer_growth_interval controls memory growth for internal buffers to balance resizing cost against memory waste.
+    /// The default buffer growth interval is 8 kilobytes.
+    pub(crate) buffer_growth_interval: usize,
 }
 
 /// The compression encodings Tonic supports.
@@ -57,17 +83,26 @@ impl EnabledCompressionEncodings {
 pub enum CompressionEncoding {
     #[allow(missing_docs)]
     #[cfg(feature = "gzip")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "gzip")))]
     Gzip,
+    #[allow(missing_docs)]
+    #[cfg(feature = "zstd")]
+    Zstd,
 }
 
 impl CompressionEncoding {
+    pub(crate) const ENCODINGS: &'static [CompressionEncoding] = &[
+        #[cfg(feature = "gzip")]
+        CompressionEncoding::Gzip,
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd,
+    ];
+
     /// Based on the `grpc-accept-encoding` header, pick an encoding to use.
     pub(crate) fn from_accept_encoding_header(
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
     ) -> Option<Self> {
-        if !enabled_encodings.is_gzip_enabled() {
+        if enabled_encodings.is_empty() {
             return None;
         }
 
@@ -77,6 +112,8 @@ impl CompressionEncoding {
         split_by_comma(header_value_str).find_map(|value| match value {
             #[cfg(feature = "gzip")]
             "gzip" => Some(CompressionEncoding::Gzip),
+            #[cfg(feature = "zstd")]
+            "zstd" => Some(CompressionEncoding::Zstd),
             _ => None,
         })
     }
@@ -86,28 +123,34 @@ impl CompressionEncoding {
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
     ) -> Result<Option<Self>, Status> {
-        let header_value = if let Some(value) = map.get(ENCODING_HEADER) {
-            value
-        } else {
+        let Some(header_value) = map.get(ENCODING_HEADER) else {
             return Ok(None);
         };
 
-        let header_value_str = if let Ok(value) = header_value.to_str() {
-            value
-        } else {
-            return Ok(None);
-        };
-
-        match header_value_str {
+        match header_value.as_bytes() {
             #[cfg(feature = "gzip")]
-            "gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
+            b"gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
                 Ok(Some(CompressionEncoding::Gzip))
             }
-            "identity" => Ok(None),
+            #[cfg(feature = "zstd")]
+            b"zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
+                Ok(Some(CompressionEncoding::Zstd))
+            }
+            b"identity" => Ok(None),
             other => {
+                // NOTE: Workaround for lifetime limitation. Resolved at Rust 1.79.
+                // https://blog.rust-lang.org/2024/06/13/Rust-1.79.0.html#extending-automatic-temporary-lifetime-extension
+                let other_debug_string;
+
                 let mut status = Status::unimplemented(format!(
                     "Content is compressed with `{}` which isn't supported",
-                    other
+                    match std::str::from_utf8(other) {
+                        Ok(s) => s,
+                        Err(_) => {
+                            other_debug_string = format!("{other:?}");
+                            &other_debug_string
+                        }
+                    }
                 ));
 
                 let header_value = enabled_encodings
@@ -123,47 +166,48 @@ impl CompressionEncoding {
         }
     }
 
-    pub(crate) fn into_header_value(self) -> http::HeaderValue {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => http::HeaderValue::from_static("gzip"),
+            CompressionEncoding::Gzip => "gzip",
+            #[cfg(feature = "zstd")]
+            CompressionEncoding::Zstd => "zstd",
         }
     }
 
-    pub(crate) fn encodings() -> &'static [Self] {
-        &[
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip,
-        ]
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
+    pub(crate) fn into_header_value(self) -> http::HeaderValue {
+        http::HeaderValue::from_static(self.as_str())
     }
 }
 
 impl fmt::Display for CompressionEncoding {
-    #[allow(unused_variables)]
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
-            #[cfg(feature = "gzip")]
-            CompressionEncoding::Gzip => write!(f, "gzip"),
-        }
+        f.write_str(self.as_str())
     }
 }
 
 fn split_by_comma(s: &str) -> impl Iterator<Item = &str> {
-    s.trim().split(',').map(|s| s.trim())
+    s.split(',').map(|s| s.trim())
 }
 
 /// Compress `len` bytes from `decompressed_buf` into `out_buf`.
+/// buffer_size_increment is a hint to control the growth of out_buf versus the cost of resizing it.
 #[allow(unused_variables, unreachable_code)]
 pub(crate) fn compress(
-    encoding: CompressionEncoding,
+    settings: CompressionSettings,
     decompressed_buf: &mut BytesMut,
     out_buf: &mut BytesMut,
     len: usize,
 ) -> Result<(), std::io::Error> {
-    let capacity = ((len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
+    let buffer_growth_interval = settings.buffer_growth_interval;
+    let capacity = ((len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
-    match encoding {
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
+    let mut out_writer = out_buf.writer();
+
+    match settings.encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
             let mut gzip_encoder = GzEncoder::new(
@@ -171,9 +215,16 @@ pub(crate) fn compress(
                 // FIXME: support customizing the compression level
                 flate2::Compression::new(6),
             );
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut gzip_encoder, &mut out_writer)?;
+        }
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd => {
+            let mut zstd_encoder = Encoder::new(
+                &decompressed_buf[0..len],
+                // FIXME: support customizing the compression level
+                zstd::DEFAULT_COMPRESSION_LEVEL,
+            )?;
+            std::io::copy(&mut zstd_encoder, &mut out_writer)?;
         }
     }
 
@@ -185,22 +236,30 @@ pub(crate) fn compress(
 /// Decompress `len` bytes from `compressed_buf` into `out_buf`.
 #[allow(unused_variables, unreachable_code)]
 pub(crate) fn decompress(
-    encoding: CompressionEncoding,
+    settings: CompressionSettings,
     compressed_buf: &mut BytesMut,
     out_buf: &mut BytesMut,
     len: usize,
 ) -> Result<(), std::io::Error> {
+    let buffer_growth_interval = settings.buffer_growth_interval;
     let estimate_decompressed_len = len * 2;
-    let capacity = ((estimate_decompressed_len / BUFFER_SIZE) + 1) * BUFFER_SIZE;
+    let capacity =
+        ((estimate_decompressed_len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
-    match encoding {
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
+    let mut out_writer = out_buf.writer();
+
+    match settings.encoding {
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip => {
             let mut gzip_decoder = GzDecoder::new(&compressed_buf[0..len]);
-            let mut out_writer = bytes::BufMut::writer(out_buf);
-
             std::io::copy(&mut gzip_decoder, &mut out_writer)?;
+        }
+        #[cfg(feature = "zstd")]
+        CompressionEncoding::Zstd => {
+            let mut zstd_decoder = Decoder::new(&compressed_buf[0..len])?;
+            std::io::copy(&mut zstd_decoder, &mut out_writer)?;
         }
     }
 
@@ -209,19 +268,92 @@ pub(crate) fn decompress(
     Ok(())
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum SingleMessageCompressionOverride {
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum SingleMessageCompressionOverride {
     /// Inherit whatever compression is already configured. If the stream is compressed this
     /// message will also be configured.
     ///
     /// This is the default.
+    #[default]
     Inherit,
     /// Don't compress this message, even if compression is enabled on the stream.
     Disable,
 }
 
-impl Default for SingleMessageCompressionOverride {
-    fn default() -> Self {
-        Self::Inherit
+#[cfg(test)]
+mod tests {
+    use http::HeaderValue;
+
+    use super::*;
+
+    #[test]
+    fn convert_none_into_header_value() {
+        let encodings = EnabledCompressionEncodings::default();
+
+        assert!(encodings.into_accept_encoding_header_value().is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "gzip")]
+    fn convert_gzip_into_header_value() {
+        const GZIP: HeaderValue = HeaderValue::from_static("gzip,identity");
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [Some(CompressionEncoding::Gzip), None],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), GZIP);
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [None, Some(CompressionEncoding::Gzip)],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), GZIP);
+    }
+
+    #[test]
+    #[cfg(feature = "zstd")]
+    fn convert_zstd_into_header_value() {
+        const ZSTD: HeaderValue = HeaderValue::from_static("zstd,identity");
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [Some(CompressionEncoding::Zstd), None],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), ZSTD);
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [None, Some(CompressionEncoding::Zstd)],
+        };
+
+        assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), ZSTD);
+    }
+
+    #[test]
+    #[cfg(all(feature = "gzip", feature = "zstd"))]
+    fn convert_gzip_and_zstd_into_header_value() {
+        let encodings = EnabledCompressionEncodings {
+            inner: [
+                Some(CompressionEncoding::Gzip),
+                Some(CompressionEncoding::Zstd),
+            ],
+        };
+
+        assert_eq!(
+            encodings.into_accept_encoding_header_value().unwrap(),
+            HeaderValue::from_static("gzip,zstd,identity"),
+        );
+
+        let encodings = EnabledCompressionEncodings {
+            inner: [
+                Some(CompressionEncoding::Zstd),
+                Some(CompressionEncoding::Gzip),
+            ],
+        };
+
+        assert_eq!(
+            encodings.into_accept_encoding_header_value().unwrap(),
+            HeaderValue::from_static("zstd,gzip,identity"),
+        );
     }
 }

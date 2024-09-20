@@ -1,4 +1,3 @@
-use futures_util::FutureExt;
 use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -28,6 +27,11 @@ async fn connect_returns_err() {
 }
 
 #[tokio::test]
+async fn connect_handles_tls() {
+    TestClient::connect("https://example.com").await.unwrap();
+}
+
+#[tokio::test]
 async fn connect_returns_err_via_call_after_connected() {
     let (tx, rx) = oneshot::channel();
     let sender = Arc::new(Mutex::new(Some(tx)));
@@ -36,7 +40,7 @@ async fn connect_returns_err_via_call_after_connected() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -75,7 +79,7 @@ async fn connect_lazy_reconnects_after_first_failure() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });

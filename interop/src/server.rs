@@ -1,26 +1,26 @@
 use crate::pb::{self, *};
 use async_stream::try_stream;
-use futures_util::{stream, StreamExt, TryStreamExt};
-use http::header::{HeaderMap, HeaderName, HeaderValue};
+use http::header::{HeaderName, HeaderValue};
 use http_body::Body;
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::result::Result as StdResult;
+use std::task::{ready, Context, Poll};
 use std::time::Duration;
-use tonic::{body::BoxBody, transport::NamedService, Code, Request, Response, Status};
+use tokio_stream::StreamExt;
+use tonic::{body::BoxBody, server::NamedService, Code, Request, Response, Status};
 use tower::Service;
 
 pub use pb::test_service_server::TestServiceServer;
 pub use pb::unimplemented_service_server::UnimplementedServiceServer;
 
 #[derive(Default, Clone)]
-pub struct TestService;
+pub struct TestService {}
 
-type Result<T> = std::result::Result<Response<T>, Status>;
+type Result<T> = StdResult<Response<T>, Status>;
 type Streaming<T> = Request<tonic::Streaming<T>>;
-type Stream<T> =
-    Pin<Box<dyn futures_core::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = std::result::Result<T, E>> + Send + 'static>>;
+type Stream<T> = Pin<Box<dyn tokio_stream::Stream<Item = StdResult<T, Status>> + Send + 'static>>;
+type BoxFuture<T, E> = Pin<Box<dyn Future<Output = StdResult<T, E>> + Send + 'static>>;
 
 #[tonic::async_trait]
 impl pb::test_service_server::TestService for TestService {
@@ -115,7 +115,7 @@ impl pb::test_service_server::TestService for TestService {
                 return Err(status);
             }
 
-            let single_message = stream::iter(vec![Ok(first_msg)]);
+            let single_message = tokio_stream::once(Ok(first_msg));
             let mut stream = single_message.chain(stream);
 
             let stream = try_stream! {
@@ -136,7 +136,7 @@ impl pb::test_service_server::TestService for TestService {
 
             Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
         } else {
-            let stream = stream::empty();
+            let stream = tokio_stream::empty();
             Ok(Response::new(Box::pin(stream) as Self::FullDuplexCallStream))
         }
     }
@@ -156,7 +156,7 @@ impl pb::test_service_server::TestService for TestService {
 }
 
 #[derive(Default)]
-pub struct UnimplementedService;
+pub struct UnimplementedService {}
 
 #[tonic::async_trait]
 impl pb::unimplemented_service_server::UnimplementedService for UnimplementedService {
@@ -180,29 +180,26 @@ impl<S> EchoHeadersSvc<S> {
     }
 }
 
-impl<S> Service<http::Request<hyper::Body>> for EchoHeadersSvc<S>
+impl<S> Service<http::Request<BoxBody>> for EchoHeadersSvc<S>
 where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>> + Send,
+    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>> + Send,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
     type Future = BoxFuture<Self::Response, Self::Error>;
 
-    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<std::result::Result<(), Self::Error>> {
+    fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<StdResult<(), Self::Error>> {
         Ok(()).into()
     }
 
-    fn call(&mut self, req: http::Request<hyper::Body>) -> Self::Future {
-        let echo_header = req
-            .headers()
-            .get("x-grpc-test-echo-initial")
-            .map(Clone::clone);
+    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
+        let echo_header = req.headers().get("x-grpc-test-echo-initial").cloned();
 
         let echo_trailer = req
             .headers()
             .get("x-grpc-test-echo-trailing-bin")
-            .map(Clone::clone)
+            .cloned()
             .map(|v| (HeaderName::from_static("x-grpc-test-echo-trailing-bin"), v));
 
         let call = self.inner.call(req);
@@ -238,25 +235,19 @@ impl<B: Body + Unpin> Body for MergeTrailers<B> {
     type Data = B::Data;
     type Error = B::Error;
 
-    fn poll_data(
-        mut self: Pin<&mut Self>,
+    fn poll_frame(
+        self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<std::result::Result<Self::Data, Self::Error>>> {
-        Pin::new(&mut self.inner).poll_data(cx)
-    }
-
-    fn poll_trailers(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<std::result::Result<Option<HeaderMap>, Self::Error>> {
-        Pin::new(&mut self.inner).poll_trailers(cx).map_ok(|h| {
-            h.map(|mut headers| {
-                if let Some((key, value)) = &self.trailer {
-                    headers.insert(key.clone(), value.clone());
+    ) -> Poll<Option<StdResult<http_body::Frame<Self::Data>, Self::Error>>> {
+        let this = self.get_mut();
+        let mut frame = ready!(Pin::new(&mut this.inner).poll_frame(cx)?);
+        if let Some(frame) = frame.as_mut() {
+            if let Some(trailers) = frame.trailers_mut() {
+                if let Some((key, value)) = &this.trailer {
+                    trailers.insert(key.clone(), value.clone());
                 }
-
-                headers
-            })
-        })
+            }
+        }
+        Poll::Ready(frame.map(Ok))
     }
 }

@@ -1,12 +1,10 @@
-use crate::metadata::GRPC_TIMEOUT_HEADER;
-use crate::util::{OptionPin, OptionPinProj};
+use crate::{metadata::GRPC_TIMEOUT_HEADER, TimeoutExpired};
 use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
 use std::{
-    fmt,
     future::Future,
     pin::Pin,
-    task::{Context, Poll},
+    task::{ready, Context, Poll},
     time::Duration,
 };
 use tokio::time::Sleep;
@@ -59,10 +57,7 @@ where
 
         ResponseFuture {
             inner: self.inner.call(req),
-            sleep: timeout_duration
-                .map(tokio::time::sleep)
-                .map(OptionPin::Some)
-                .unwrap_or(OptionPin::None),
+            sleep: timeout_duration.map(tokio::time::sleep),
         }
     }
 }
@@ -72,7 +67,7 @@ pub(crate) struct ResponseFuture<F> {
     #[pin]
     inner: F,
     #[pin]
-    sleep: OptionPin<Sleep>,
+    sleep: Option<Sleep>,
 }
 
 impl<F, Res, E> Future for ResponseFuture<F>
@@ -89,8 +84,8 @@ where
             return Poll::Ready(result.map_err(Into::into));
         }
 
-        if let OptionPinProj::Some(sleep) = this.sleep.project() {
-            futures_util::ready!(sleep.poll(cx));
+        if let Some(sleep) = this.sleep.as_pin_mut() {
+            ready!(sleep.poll(cx));
             return Poll::Ready(Err(TimeoutExpired(()).into()));
         }
 
@@ -150,26 +145,6 @@ fn try_parse_grpc_timeout(
         None => Ok(None),
     }
 }
-
-/// Error returned if a request didn't complete within the configured timeout.
-///
-/// Timeouts can be configured either with [`Endpoint::timeout`], [`Server::timeout`], or by
-/// setting the [`grpc-timeout` metadata value][spec].
-///
-/// [`Endpoint::timeout`]: crate::transport::server::Server::timeout
-/// [`Server::timeout`]: crate::transport::channel::Endpoint::timeout
-/// [spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
-#[derive(Debug)]
-pub struct TimeoutExpired(());
-
-impl fmt::Display for TimeoutExpired {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Timeout expired")
-    }
-}
-
-// std::error::Error only requires a type to impl Debug and Display
-impl std::error::Error for TimeoutExpired {}
 
 #[cfg(test)]
 mod tests {

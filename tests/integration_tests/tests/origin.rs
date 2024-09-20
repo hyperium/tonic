@@ -1,7 +1,6 @@
-use futures::future::BoxFuture;
-use futures_util::FutureExt;
 use integration_tests::pb::test_client;
 use integration_tests::pb::{test_server, Input, Output};
+use integration_tests::BoxFuture;
 use std::task::Context;
 use std::task::Poll;
 use std::time::Duration;
@@ -36,7 +35,7 @@ async fn writes_origin_header() {
         Server::builder()
             .layer(OriginLayer {})
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1442".parse().unwrap(), rx.map(drop))
+            .serve_with_shutdown("127.0.0.1:1442".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });
@@ -77,9 +76,9 @@ struct OriginService<S> {
     inner: S,
 }
 
-impl<T> Service<Request<tonic::transport::Body>> for OriginService<T>
+impl<T> Service<Request<tonic::body::BoxBody>> for OriginService<T>
 where
-    T: Service<Request<tonic::transport::Body>>,
+    T: Service<Request<tonic::body::BoxBody>>,
     T::Future: Send + 'static,
     T::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
 {
@@ -91,7 +90,7 @@ where
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<tonic::transport::Body>) -> Self::Future {
+    fn call(&mut self, req: Request<tonic::body::BoxBody>) -> Self::Future {
         assert_eq!(req.uri().host(), Some("docs.rs"));
         let fut = self.inner.call(req);
 
