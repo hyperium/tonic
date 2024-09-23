@@ -1,4 +1,11 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::{BufWriter, Write as _},
+    path::{Path, PathBuf},
+};
+
+use protox::prost::{bytes::BytesMut, Message as _};
+use tonic_build::FileDescriptorSet;
 
 fn main() {
     // tonic-health
@@ -82,12 +89,15 @@ fn codegen(
     let out_dir = root_dir.join(out_dir);
     let file_descriptor_set_path = root_dir.join(file_descriptor_set_path);
 
+    let fds = protox::compile(&iface_files, &include_dirs).unwrap();
+
+    write_fds(&fds, &file_descriptor_set_path);
+
     tonic_build::configure()
         .build_client(build_client)
         .build_server(build_server)
         .out_dir(&tempdir)
-        .file_descriptor_set_path(file_descriptor_set_path)
-        .compile_protos(&iface_files, &include_dirs)
+        .compile_fds(fds)
         .unwrap();
 
     for path in std::fs::read_dir(tempdir.path()).unwrap() {
@@ -104,4 +114,11 @@ fn codegen(
         );
         std::fs::copy(&path, &to).unwrap();
     }
+}
+
+fn write_fds(fds: &FileDescriptorSet, path: &Path) {
+    let mut writer = BufWriter::new(File::create(path).unwrap());
+    let mut buf = BytesMut::with_capacity(fds.encoded_len());
+    fds.encode(&mut buf).unwrap();
+    writer.write_all(&buf).unwrap();
 }

@@ -46,10 +46,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
-    - name: Install protoc
-      uses: taiki-e/install-action@v2
-      with:
-        tool: protoc@3.25.1
     - uses: Swatinem/rust-cache@v2
     - run: cargo run --package codegen
     - run: git diff --exit-code
