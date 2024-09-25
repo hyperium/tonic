@@ -47,7 +47,7 @@ server = [
 channel = [
   "dep:hyper", "hyper?/client",
   "dep:hyper-util", "hyper-util?/client-legacy",
-  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit",
+  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit", "tower?/util",
   "dep:tokio", "tokio?/time",
   "dep:hyper-timeout",
 ]
