@@ -8,14 +8,14 @@ description = """
 Server Reflection module of `tonic` gRPC implementation.
 """
 edition = "2021"
-homepage = "https://github.com/hyperium/tonic"
+homepage = { workspace = true }
 documentation = "https://docs.rs/tonic-reflection/0.12.2"
 keywords = ["rpc", "grpc", "async", "reflection"]
-license = "MIT"
+license = "MIT AND Apache-2.0"
 name = "tonic-reflection"
 readme = "README.md"
-repository = "https://github.com/hyperium/tonic"
-version = "0.12.2"
+repository = { workspace = true }
+version = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true
@@ -26,8 +26,8 @@ server = ["prost-types", "dep:tokio", "dep:tokio-stream"]
 default = ["server"]
 
 [dependencies]
-prost = "0.13"
-prost-types = {version = "0.13", optional = true}
+prost = { workspace = true }
+prost-types = { workspace = true, optional = true }
 tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
 tokio-stream = {version = "0.1", features = ["net"], optional = true }
 tonic = { version = "0.12", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
