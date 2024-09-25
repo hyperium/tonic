@@ -7,6 +7,9 @@ publish = false
 version = "0.1.0"
 
 [dependencies]
-tempfile = "3.8.0"
 protox = "0.7"
+prettyplease = "0.2"
+quote = "1"
+syn = "2"
+tempfile = "3.8.0"
 tonic-build = {path = "../tonic-build", default-features = false, features = ["prost", "cleanup-markdown"]}

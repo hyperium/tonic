@@ -26,12 +26,14 @@ mod generated {
     #[rustfmt::skip]
     pub mod grpc_reflection_v1;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET_V1ALPHA: &[u8] =
-        include_bytes!("generated/reflection_v1alpha1.bin");
+    #[rustfmt::skip]
+    pub mod reflection_v1_fds;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET_V1: &[u8] = include_bytes!("generated/reflection_v1.bin");
+    #[rustfmt::skip]
+    pub mod reflection_v1alpha1_fds;
+
+    pub use reflection_v1_fds::FILE_DESCRIPTOR_SET as FILE_DESCRIPTOR_SET_V1;
+    pub use reflection_v1alpha1_fds::FILE_DESCRIPTOR_SET as FILE_DESCRIPTOR_SET_V1ALPHA;
 
     #[cfg(test)]
     mod tests {

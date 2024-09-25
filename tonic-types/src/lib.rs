@@ -158,9 +158,10 @@ mod generated {
     #![allow(rustdoc::invalid_html_tags)]
     #[rustfmt::skip]
     pub mod google_rpc;
+    #[rustfmt::skip]
+    pub mod types_fds;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/types.bin");
+    pub use types_fds::FILE_DESCRIPTOR_SET;
 
     #[cfg(test)]
     mod tests {
