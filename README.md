@@ -57,8 +57,7 @@ For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust
 ### Tutorials
 
 - The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, perfect for first time users!
-- The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its
-features.
+- The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its features.
 
 ## Getting Help
 
