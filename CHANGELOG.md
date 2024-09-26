@@ -10,6 +10,7 @@
 
 * **build:** Revert "fix tonic-build cargo build script outputs (#1821)" which accidentally increases MSRV (#1898)
 * **server:** ignore more error kinds in incoming socket stream (#1885)
+* **transport**: do not shutdown server on broken connections (#1948)
 
 # [0.12.2](https://github.com/hyperium/tonic/compare/v0.12.1...v0.12.2) (2024-08-23)
 
