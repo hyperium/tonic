@@ -49,7 +49,10 @@ For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust
 
 ### Dependencies
 
-In order to build `tonic` >= 0.8.0, you need the `protoc` Protocol Buffers compiler, along with Protocol Buffers resource files.
+`tonic-build` uses `protoc` [Protocol Buffers compiler] in some APIs which compile Protocol Buffers resource files such as [`tonic_build::compile_protos()`].
+
+[Protocol Buffers compiler]: https://protobuf.dev/downloads/
+[`tonic_build::compile_protos()`]: https://docs.rs/tonic-build/latest/tonic_build/fn.compile_protos.html
 
 ### Tutorials
 
