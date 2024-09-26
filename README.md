@@ -47,11 +47,6 @@ For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust
 
 `tonic`'s MSRV is `1.71.1`.
 
-```bash
-$ rustup update
-$ cargo build
-```
-
 ### Dependencies
 
 In order to build `tonic` >= 0.8.0, you need the `protoc` Protocol Buffers compiler, along with Protocol Buffers resource files.
