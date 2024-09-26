@@ -11,53 +11,7 @@ use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tokio_stream::{Stream, StreamExt};
-
-/// Turns a stream of grpc results (message or error status) into [EncodeBody] which is used by grpc
-/// servers for turning the messages into http frames for sending over the network.
-pub fn encode_server<T, U>(
-    encoder: T,
-    source: U,
-    compression_encoding: Option<CompressionEncoding>,
-    compression_override: SingleMessageCompressionOverride,
-    max_message_size: Option<usize>,
-) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
-where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
-{
-    let stream = EncodedBytes::new(
-        encoder,
-        source.fuse(),
-        compression_encoding,
-        compression_override,
-        max_message_size,
-    );
-
-    EncodeBody::new_server(stream)
-}
-
-/// Turns a stream of grpc messages into [EncodeBody] which is used by grpc clients for
-/// turning the messages into http frames for sending over the network.
-pub fn encode_client<T, U>(
-    encoder: T,
-    source: U,
-    compression_encoding: Option<CompressionEncoding>,
-    max_message_size: Option<usize>,
-) -> EncodeBody<impl Stream<Item = Result<Bytes, Status>>>
-where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = T::Item>,
-{
-    let stream = EncodedBytes::new(
-        encoder,
-        source.fuse().map(Ok),
-        compression_encoding,
-        SingleMessageCompressionOverride::default(),
-        max_message_size,
-    );
-    EncodeBody::new_client(stream)
-}
+use tokio_stream::{adapters::Fuse, Stream, StreamExt};
 
 /// Combinator for efficient encoding of messages into reasonably sized buffers.
 /// EncodedBytes encodes ready messages from its delegate stream into a BytesMut,
@@ -66,13 +20,9 @@ where
 ///  * The encoded buffer surpasses YIELD_THRESHOLD.
 #[pin_project(project = EncodedBytesProj)]
 #[derive(Debug)]
-pub(crate) struct EncodedBytes<T, U>
-where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
-{
+struct EncodedBytes<T, U> {
     #[pin]
-    source: U,
+    source: Fuse<U>,
     encoder: T,
     compression_encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
@@ -81,12 +31,7 @@ where
     error: Option<Status>,
 }
 
-impl<T, U> EncodedBytes<T, U>
-where
-    T: Encoder<Error = Status>,
-    U: Stream<Item = Result<T::Item, Status>>,
-{
-    // `source` should be fused stream.
+impl<T: Encoder, U: Stream> EncodedBytes<T, U> {
     fn new(
         encoder: T,
         source: U,
@@ -111,7 +56,7 @@ where
         };
 
         Self {
-            source,
+            source: source.fuse(),
             encoder,
             compression_encoding,
             max_message_size,
@@ -270,9 +215,9 @@ enum Role {
 /// A specialized implementation of [Body] for encoding [Result<Bytes, Status>].
 #[pin_project]
 #[derive(Debug)]
-pub struct EncodeBody<S> {
+pub struct EncodeBody<T, U> {
     #[pin]
-    inner: S,
+    inner: EncodedBytes<T, U>,
     state: EncodeState,
 }
 
@@ -283,10 +228,23 @@ struct EncodeState {
     is_end_stream: bool,
 }
 
-impl<S> EncodeBody<S> {
-    fn new_client(inner: S) -> Self {
+impl<T: Encoder, U: Stream> EncodeBody<T, U> {
+    /// Turns a stream of grpc messages into [EncodeBody] which is used by grpc clients for
+    /// turning the messages into http frames for sending over the network.
+    pub fn new_client(
+        encoder: T,
+        source: U,
+        compression_encoding: Option<CompressionEncoding>,
+        max_message_size: Option<usize>,
+    ) -> Self {
         Self {
-            inner,
+            inner: EncodedBytes::new(
+                encoder,
+                source,
+                compression_encoding,
+                SingleMessageCompressionOverride::default(),
+                max_message_size,
+            ),
             state: EncodeState {
                 error: None,
                 role: Role::Client,
@@ -295,9 +253,23 @@ impl<S> EncodeBody<S> {
         }
     }
 
-    fn new_server(inner: S) -> Self {
+    /// Turns a stream of grpc results (message or error status) into [EncodeBody] which is used by grpc
+    /// servers for turning the messages into http frames for sending over the network.
+    pub fn new_server(
+        encoder: T,
+        source: U,
+        compression_encoding: Option<CompressionEncoding>,
+        compression_override: SingleMessageCompressionOverride,
+        max_message_size: Option<usize>,
+    ) -> Self {
         Self {
-            inner,
+            inner: EncodedBytes::new(
+                encoder,
+                source,
+                compression_encoding,
+                compression_override,
+                max_message_size,
+            ),
             state: EncodeState {
                 error: None,
                 role: Role::Server,
@@ -328,9 +300,10 @@ impl EncodeState {
     }
 }
 
-impl<S> Body for EncodeBody<S>
+impl<T, U> Body for EncodeBody<T, U>
 where
-    S: Stream<Item = Result<Bytes, Status>>,
+    T: Encoder<Error = Status>,
+    U: Stream<Item = Result<T::Item, Status>>,
 {
     type Data = Bytes;
     type Error = Status;

@@ -1,10 +1,11 @@
 use crate::codec::compression::{
     CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
 };
+use crate::codec::EncodeBody;
 use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
     body::BoxBody,
-    codec::{encode_server, Codec, Streaming},
+    codec::{Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
     Request, Status,
 };
@@ -447,7 +448,7 @@ where
             );
         }
 
-        let body = encode_server(
+        let body = EncodeBody::new_server(
             self.codec.encoder(),
             body,
             accept_encoding,
