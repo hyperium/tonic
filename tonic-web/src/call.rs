@@ -522,8 +522,11 @@ mod tests {
     #[test]
     fn decode_trailers() {
         let mut headers = HeaderMap::new();
-        headers.insert("grpc-status", 0.into());
-        headers.insert("grpc-message", "this is a message".try_into().unwrap());
+        headers.insert(Status::GRPC_STATUS, 0.into());
+        headers.insert(
+            Status::GRPC_MESSAGE,
+            "this is a message".try_into().unwrap(),
+        );
 
         let trailers = make_trailers_frame(headers.clone());
 
@@ -566,7 +569,7 @@ mod tests {
         let trailers = decode_trailers_frame(Bytes::copy_from_slice(&buf[81..]))
             .unwrap()
             .unwrap();
-        let status = trailers.get("grpc-status").unwrap();
+        let status = trailers.get(Status::GRPC_STATUS).unwrap();
         assert_eq!(status.to_str().unwrap(), "0")
     }
 
@@ -624,8 +627,8 @@ mod tests {
             .unwrap();
 
         let mut expected = HeaderMap::new();
-        expected.insert("grpc-status", "0".parse().unwrap());
-        expected.insert("grpc-message", "".parse().unwrap());
+        expected.insert(Status::GRPC_STATUS, "0".parse().unwrap());
+        expected.insert(Status::GRPC_MESSAGE, "".parse().unwrap());
         expected.insert("a", "1".parse().unwrap());
         expected.insert("b", "2".parse().unwrap());
 

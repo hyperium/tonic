@@ -425,7 +425,7 @@ pub mod server_reflection_server {
                         let headers = response.headers_mut();
                         headers
                             .insert(
-                                "grpc-status",
+                                tonic::Status::GRPC_STATUS,
                                 (tonic::Code::Unimplemented as i32).into(),
                             );
                         headers

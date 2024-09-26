@@ -2,8 +2,9 @@ use crate::{
     body::{boxed, BoxBody},
     metadata::GRPC_CONTENT_TYPE,
     server::NamedService,
+    Status,
 };
-use http::{HeaderName, HeaderValue, Request, Response};
+use http::{HeaderValue, Request, Response};
 use std::{
     convert::Infallible,
     fmt,
@@ -124,10 +125,7 @@ impl From<axum::Router> for Routes {
 async fn unimplemented() -> impl axum::response::IntoResponse {
     let status = http::StatusCode::OK;
     let headers = [
-        (
-            HeaderName::from_static("grpc-status"),
-            HeaderValue::from_static("12"),
-        ),
+        (Status::GRPC_STATUS, HeaderValue::from_static("12")),
         (http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE),
     ];
     (status, headers)
