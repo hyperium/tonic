@@ -116,6 +116,22 @@ impl Routes {
     }
 }
 
+impl From<Routes> for RoutesBuilder {
+    fn from(routes: Routes) -> Self {
+        Self {
+            routes: Some(routes),
+        }
+    }
+}
+
+impl From<axum::Router> for RoutesBuilder {
+    fn from(router: axum::Router) -> Self {
+        Self {
+            routes: Some(router.into()),
+        }
+    }
+}
+
 impl From<axum::Router> for Routes {
     fn from(router: axum::Router) -> Self {
         Self { router }
