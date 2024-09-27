@@ -28,9 +28,10 @@ mod generated {
     #![allow(missing_docs)]
     #[rustfmt::skip]
     pub mod grpc_health_v1;
+    #[rustfmt::skip]
+    pub mod grpc_health_v1_fds;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/grpc_health_v1.bin");
+    pub use grpc_health_v1_fds::FILE_DESCRIPTOR_SET;
 
     #[cfg(test)]
     mod tests {
