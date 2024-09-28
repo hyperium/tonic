@@ -139,7 +139,7 @@ where
         .allow_origin(AllowOrigin::mirror_request())
         .allow_credentials(true)
         .max_age(DEFAULT_MAX_AGE)
-        .expose_headers(DEFAULT_EXPOSED_HEADERS.iter().cloned().collect::<Vec<_>>())
+        .expose_headers(DEFAULT_EXPOSED_HEADERS)
         .allow_headers(
             DEFAULT_ALLOW_HEADERS
                 .iter()
