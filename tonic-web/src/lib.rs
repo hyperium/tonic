@@ -120,8 +120,12 @@ const DEFAULT_EXPOSED_HEADERS: [HeaderName; 3] = [
     Status::GRPC_MESSAGE,
     Status::GRPC_STATUS_DETAILS,
 ];
-const DEFAULT_ALLOW_HEADERS: [&str; 4] =
-    ["x-grpc-web", "content-type", "x-user-agent", "grpc-timeout"];
+const DEFAULT_ALLOW_HEADERS: [HeaderName; 4] = [
+    HeaderName::from_static("x-grpc-web"),
+    http::header::CONTENT_TYPE,
+    HeaderName::from_static("x-user-agent"),
+    HeaderName::from_static("grpc-timeout"),
+];
 
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
@@ -140,13 +144,7 @@ where
         .allow_credentials(true)
         .max_age(DEFAULT_MAX_AGE)
         .expose_headers(DEFAULT_EXPOSED_HEADERS)
-        .allow_headers(
-            DEFAULT_ALLOW_HEADERS
-                .iter()
-                .cloned()
-                .map(HeaderName::from_static)
-                .collect::<Vec<HeaderName>>(),
-        );
+        .allow_headers(DEFAULT_ALLOW_HEADERS);
 
     tower_layer::layer_fn(|s| CorsGrpcWeb(cors.layer(s))).layer(GrpcWebService::new(service))
 }
