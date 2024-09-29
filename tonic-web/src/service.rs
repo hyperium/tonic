@@ -49,7 +49,7 @@ impl<S> GrpcWebService<S> {
 
 impl<S> GrpcWebService<S>
 where
-    S: Service<Request<BoxBody>, Response = Response<BoxBody>> + Send + 'static,
+    S: Service<Request<BoxBody>, Response = Response<BoxBody>>,
 {
     fn response(&self, status: StatusCode) -> ResponseFuture<S::Future> {
         ResponseFuture {
@@ -67,9 +67,8 @@ where
 
 impl<S> Service<Request<BoxBody>> for GrpcWebService<S>
 where
-    S: Service<Request<BoxBody>, Response = Response<BoxBody>> + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
+    S: Service<Request<BoxBody>, Response = Response<BoxBody>>,
+    S::Error: Into<BoxError>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -160,8 +159,8 @@ enum Case<F> {
 
 impl<F, E> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<BoxBody>, E>> + Send + 'static,
-    E: Into<BoxError> + Send,
+    F: Future<Output = Result<Response<BoxBody>, E>>,
+    E: Into<BoxError>,
 {
     type Output = Result<Response<BoxBody>, E>;
 
