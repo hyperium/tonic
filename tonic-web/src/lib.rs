@@ -127,8 +127,6 @@ const DEFAULT_ALLOW_HEADERS: [HeaderName; 4] = [
     HeaderName::from_static("grpc-timeout"),
 ];
 
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
-
 /// Enable a tonic service to handle grpc-web requests with the default configuration.
 ///
 /// You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
@@ -137,7 +135,6 @@ where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
 {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
@@ -159,7 +156,6 @@ where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
     S: Clone + Send + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
 {
     type Response = S::Response;
     type Error = S::Error;

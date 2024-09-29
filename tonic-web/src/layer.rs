@@ -1,4 +1,4 @@
-use super::{BoxBody, BoxError, GrpcWebService};
+use super::{BoxBody, GrpcWebService};
 
 use tower_layer::Layer;
 use tower_service::Service;
@@ -21,7 +21,6 @@ where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
     S: Send + 'static,
     S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
 {
     type Service = GrpcWebService<S>;
 
