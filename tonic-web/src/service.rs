@@ -15,7 +15,6 @@ use tracing::{debug, trace};
 
 use crate::call::content_types::is_grpc_web;
 use crate::call::{Encoding, GrpcWebCall};
-use crate::BoxError;
 
 /// Service implementing the grpc-web protocol.
 #[derive(Debug, Clone)]
@@ -68,7 +67,6 @@ where
 impl<S> Service<Request<BoxBody>> for GrpcWebService<S>
 where
     S: Service<Request<BoxBody>, Response = Response<BoxBody>>,
-    S::Error: Into<BoxError>,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -160,7 +158,6 @@ enum Case<F> {
 impl<F, E> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<Response<BoxBody>, E>>,
-    E: Into<BoxError>,
 {
     type Output = Result<Response<BoxBody>, E>;
 
