@@ -19,8 +19,6 @@ impl GrpcWebLayer {
 impl<S> Layer<S> for GrpcWebLayer
 where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
-    S: Send + 'static,
-    S::Future: Send + 'static,
 {
     type Service = GrpcWebService<S>;
 
