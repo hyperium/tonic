@@ -42,7 +42,7 @@ may be a good resource as it shows examples of many of the gRPC features.
 
 ### Dependencies
 
-`tonic-build` uses `protoc` [Protocol Buffers compiler] in some APIs which compile Protocol Buffers resource files such as [`tonic_build::compile_protos()`].
+[`tonic-build`] uses `protoc` [Protocol Buffers compiler] in some APIs which compile Protocol Buffers resource files such as [`tonic_build::compile_protos()`].
 
 [Protocol Buffers compiler]: https://protobuf.dev/downloads/
 [`tonic_build::compile_protos()`]: https://docs.rs/tonic-build/latest/tonic_build/fn.compile_protos.html
@@ -63,14 +63,14 @@ question. If that doesn't work, try opening an [issue] with the question.
 
 ## Project Layout
 
-- [`tonic`](./tonic): Generic gRPC and HTTP/2 client/server implementation.
-- [`tonic-build`](./tonic-build): [`prost`] based service codegen.
-- [`tonic-types`](./tonic-types): [`prost`] based grpc utility types including support for gRPC Well Known Types.
-- [`tonic-health`](./tonic-health): Implementation of the standard [gRPC health checking service][healthcheck].
+- [`tonic`]: Generic gRPC and HTTP/2 client/server implementation.
+- [`tonic-build`]: [`prost`] based service codegen.
+- [`tonic-types`]: [`prost`] based grpc utility types including support for gRPC Well Known Types.
+- [`tonic-health`]: Implementation of the standard [gRPC health checking service][healthcheck].
   Also serves as an example of both unary and response streaming.
-- [`tonic-reflection`](./tonic-reflection): A tonic based gRPC reflection implementation.
-- [`examples`](./examples): Example gRPC implementations showing off tls, load balancing and bi-directional streaming.
-- [`interop`](./interop): Interop tests implementation.
+- [`tonic-reflection`]: A tonic based gRPC reflection implementation.
+- [`examples`]: Example gRPC implementations showing off tls, load balancing and bi-directional streaming.
+- [`interop`]: Interop tests implementation.
 
 ## Contributing
 
@@ -92,13 +92,18 @@ terms or conditions.
 
 
 [gRPC]: https://grpc.io
-[`tonic`]: https://github.com/hyperium/tonic
+[`tonic`]: ./tonic
+[`tonic-build`]: ./tonic-build
+[`tonic-types`]: ./tonic-types
+[`tonic-health`]: ./tonic-health
+[`tonic-reflection`]: ./tonic-reflection
+[`examples`]: ./examples
+[`interop`]: ./interop
 [`tokio`]: https://github.com/tokio-rs/tokio
 [`hyper`]: https://github.com/hyperium/hyper
 [`prost`]: https://github.com/tokio-rs/prost
 [`protobuf`]: https://protobuf.dev/
 [`rustls`]: https://github.com/rustls/rustls
-[`examples`]: https://github.com/hyperium/tonic/tree/master/examples
 [`interop`]: https://github.com/hyperium/tonic/tree/master/interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/examples
 [Website]: https://github.com/hyperium/tonic
