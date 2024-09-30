@@ -133,8 +133,6 @@ const DEFAULT_ALLOW_HEADERS: [HeaderName; 4] = [
 pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
 where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
-    S: Clone + Send + 'static,
-    S::Future: Send + 'static,
 {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
@@ -154,8 +152,6 @@ pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
 impl<S> Service<http::Request<BoxBody>> for CorsGrpcWeb<S>
 where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
-    S: Clone + Send + 'static,
-    S::Future: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
