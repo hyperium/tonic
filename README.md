@@ -36,9 +36,6 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 Examples can be found in [`examples`] and for more complex scenarios [`interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
-If you're using [rust-analyzer] we recommend you set `"rust-analyzer.cargo.buildScripts.enable": true` to correctly load
-the generated code.
-
 ### Rust Version
 
 `tonic`'s MSRV is `1.71.1`.
@@ -111,4 +108,3 @@ terms or conditions.
 [routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
 [helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
 [healthcheck]: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-[rust-analyzer]: https://rust-analyzer.github.io
