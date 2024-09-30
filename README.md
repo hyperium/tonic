@@ -107,4 +107,4 @@ terms or conditions.
 [Chat]: https://discord.gg/6yGkFeN
 [routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
 [helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
-[healthcheck]: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
+[healthcheck]: https://grpc.io/docs/guides/health-checking/
