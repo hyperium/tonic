@@ -10,7 +10,7 @@ RPC framework that puts mobile and HTTP/2 first.
 [![Crates.io](https://img.shields.io/crates/l/tonic)](LICENSE)
 
 
-[Examples] | [Website] | [Docs] | [Chat]
+[Examples] | [Website] | [Docs] | [Chat][discord]
 
 ## Overview
 
@@ -56,10 +56,9 @@ may be a good resource as it shows examples of many of the gRPC features.
 
 First, see if the answer to your question can be found in the API documentation.
 If the answer is not there, there is an active community in
-the [Tonic Discord channel][chat]. We would be happy to try to answer your
+the [Tonic Discord channel][discord]. We would be happy to try to answer your
 question. If that doesn't work, try opening an [issue] with the question.
 
-[chat]: https://discord.gg/6yGkFeN
 [issue]: https://github.com/hyperium/tonic/issues/new/choose
 
 ## Project Layout
@@ -104,7 +103,7 @@ terms or conditions.
 [Examples]: https://github.com/hyperium/tonic/tree/master/examples
 [Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
-[Chat]: https://discord.gg/6yGkFeN
+[discord]: https://discord.gg/6yGkFeN
 [routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
 [helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
 [healthcheck]: https://grpc.io/docs/guides/health-checking/
