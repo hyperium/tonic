@@ -97,7 +97,7 @@ terms or conditions.
 [`tokio`]: https://github.com/tokio-rs/tokio
 [`hyper`]: https://github.com/hyperium/hyper
 [`prost`]: https://github.com/tokio-rs/prost
-[`protobuf`]: https://developers.google.com/protocol-buffers
+[`protobuf`]: https://protobuf.dev/
 [`rustls`]: https://github.com/rustls/rustls
 [`examples`]: https://github.com/hyperium/tonic/tree/master/examples
 [`interop`]: https://github.com/hyperium/tonic/tree/master/interop
