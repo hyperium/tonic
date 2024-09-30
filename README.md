@@ -60,7 +60,7 @@ the [Tonic Discord channel][chat]. We would be happy to try to answer your
 question. If that doesn't work, try opening an [issue] with the question.
 
 [chat]: https://discord.gg/6yGkFeN
-[issue]: https://github.com/hyperium/tonic/issues/new
+[issue]: https://github.com/hyperium/tonic/issues/new/choose
 
 ## Project Layout
 
