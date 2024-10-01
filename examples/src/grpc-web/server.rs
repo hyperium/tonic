@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{service::LayerExt as _, transport::Server, Request, Response, Status};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
@@ -32,14 +32,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "127.0.0.1:3000".parse().unwrap();
 
     let greeter = MyGreeter::default();
-    let greeter = GreeterServer::new(greeter);
+    let greeter = tower::ServiceBuilder::new()
+        .layer(tower_http::cors::CorsLayer::new())
+        .layer(tonic_web::GrpcWebLayer::new())
+        .into_inner()
+        .named_layer(GreeterServer::new(greeter));
 
     println!("GreeterServer listening on {}", addr);
 
     Server::builder()
         // GrpcWeb is over http1 so we must enable it.
         .accept_http1(true)
-        .add_service(tonic_web::enable(greeter))
+        .add_service(greeter)
         .serve(addr)
         .await?;
 
