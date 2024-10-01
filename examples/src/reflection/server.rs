@@ -1,4 +1,4 @@
-use tonic::transport::Server;
+use tonic::transport::{RequestExt, Server};
 use tonic::{Request, Response, Status};
 
 mod proto {

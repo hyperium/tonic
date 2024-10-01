@@ -6,7 +6,7 @@ use pb::{EchoRequest, EchoResponse};
 use tonic::{
     transport::{
         server::{TcpConnectInfo, TlsConnectInfo},
-        Identity, Server, ServerTlsConfig,
+        Identity, RequestExt, Server, ServerTlsConfig,
     },
     Request, Response, Status,
 };

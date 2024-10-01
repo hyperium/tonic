@@ -1,4 +1,7 @@
-use tonic::{transport::Server, Code, Request, Response, Status};
+use tonic::{
+    transport::{server::RequestExt, Server},
+    Code, Request, Response, Status,
+};
 use tonic_types::{ErrorDetails, StatusExt};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
