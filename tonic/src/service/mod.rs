@@ -1,11 +1,13 @@
 //! Utilities for using Tower services with Tonic.
 
 pub mod interceptor;
+pub(crate) mod layered;
 #[cfg(feature = "router")]
 pub(crate) mod router;
 
 #[doc(inline)]
 pub use self::interceptor::{interceptor, Interceptor};
+pub use self::layered::{LayerExt, Layered};
 #[doc(inline)]
 #[cfg(feature = "router")]
 pub use self::router::{Routes, RoutesBuilder};
