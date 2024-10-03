@@ -2,9 +2,9 @@ use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
 #[cfg(feature = "tls")]
-use std::sync::Arc;
+use rustls_pki_types::CertificateDer;
 #[cfg(feature = "tls")]
-use tokio_rustls::rustls::pki_types::CertificateDer;
+use std::sync::Arc;
 #[cfg(feature = "tls")]
 use tokio_rustls::server::TlsStream;
 

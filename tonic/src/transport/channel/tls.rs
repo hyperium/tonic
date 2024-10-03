@@ -4,7 +4,7 @@ use crate::transport::{
     Error,
 };
 use http::Uri;
-use tokio_rustls::rustls::pki_types::TrustAnchor;
+use rustls_pki_types::TrustAnchor;
 
 /// Configures TLS settings for endpoints.
 #[derive(Debug, Clone, Default)]
