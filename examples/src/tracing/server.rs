@@ -21,7 +21,7 @@ impl Greeter for MyGreeter {
     ) -> Result<Response<HelloReply>, Status> {
         tracing::info!("received request");
 
-        let reply = hello_world::HelloReply {
+        let reply = HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
         };
 

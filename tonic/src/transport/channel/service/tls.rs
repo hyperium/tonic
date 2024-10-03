@@ -2,12 +2,10 @@ use std::fmt;
 use std::sync::Arc;
 
 use hyper_util::rt::TokioIo;
+use rustls_pki_types::{ServerName, TrustAnchor};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
-    rustls::{
-        pki_types::{ServerName, TrustAnchor},
-        ClientConfig, RootCertStore,
-    },
+    rustls::{ClientConfig, RootCertStore},
     TlsConnector as RustlsConnector,
 };
 
