@@ -32,6 +32,7 @@ impl TlsConnector {
         assume_http2: bool,
         #[cfg(feature = "tls-native-roots")] with_native_roots: bool,
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
+        #[cfg(feature = "tls-platform-verifier")] with_platform_verifier: bool,
     ) -> Result<Self, crate::BoxError> {
         let builder = ClientConfig::builder();
         let mut roots = RootCertStore::from_iter(trust_anchors);
@@ -58,7 +59,20 @@ impl TlsConnector {
             add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
         }
 
+        #[cfg(feature = "tls-platform-verifier")]
+        let builder = if with_platform_verifier {
+            builder
+                .dangerous()
+                .with_custom_certificate_verifier(Arc::new(
+                    rustls_platform_verifier::Verifier::new_with_extra_roots(roots.roots),
+                ))
+        } else {
+            builder.with_root_certificates(roots)
+        };
+
+        #[cfg(not(feature = "tls-platform-verifier"))]
         let builder = builder.with_root_certificates(roots);
+
         let mut config = match identity {
             Some(identity) => {
                 let (client_cert, client_key) = load_identity(identity)?;
