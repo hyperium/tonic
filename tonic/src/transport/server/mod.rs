@@ -403,6 +403,7 @@ impl<L> Server<L> {
             + NamedService
             + Clone
             + Send
+            + Sync
             + 'static,
         S::Future: Send + 'static,
         L: Clone,
@@ -424,6 +425,7 @@ impl<L> Server<L> {
             + NamedService
             + Clone
             + Send
+            + Sync
             + 'static,
         S::Future: Send + 'static,
         L: Clone,
@@ -742,6 +744,7 @@ impl<L> Router<L> {
             + NamedService
             + Clone
             + Send
+            + Sync
             + 'static,
         S::Future: Send + 'static,
     {
@@ -761,6 +764,7 @@ impl<L> Router<L> {
             + NamedService
             + Clone
             + Send
+            + Sync
             + 'static,
         S::Future: Send + 'static,
     {
