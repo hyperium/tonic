@@ -30,7 +30,12 @@ impl RoutesBuilder {
     /// Add a new service.
     pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
@@ -57,7 +62,12 @@ impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
@@ -72,12 +82,17 @@ impl Routes {
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         self.router = self.router.route_service(
-            &format!("/{}/*rest", S::NAME),
+            &format!("/{}/{{*rest}}", S::NAME),
             svc.map_request(|req: Request<axum::body::Body>| req.map(boxed)),
         );
         self
