@@ -32,6 +32,7 @@ tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "toki
 tls-roots = ["tls-native-roots"] # Deprecated. Please use `tls-native-roots` instead.
 tls-native-roots = ["tls", "channel", "dep:rustls-native-certs"]
 tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
+tls-platform-verifier = ["tls", "channel", "dep:rustls-platform-verifier"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
   "router",
@@ -90,6 +91,7 @@ axum = {version = "0.7", default-features = false, optional = true}
 # rustls
 rustls-pemfile = { version = "2.0", optional = true }
 rustls-native-certs = { version = "0.8", optional = true }
+rustls-platform-verifier = { version = "0.3", optional = true }
 tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12", "ring"], optional = true }
 webpki-roots = { version = "0.26", optional = true }
 
