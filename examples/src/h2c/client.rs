@@ -39,7 +39,7 @@ mod h2c {
         client::legacy::{connect::HttpConnector, Client},
         rt::TokioExecutor,
     };
-    use tonic::body::{empty_body, BoxBody};
+    use tonic::body::BoxBody;
     use tower::Service;
 
     pub struct H2cChannel {
@@ -65,7 +65,7 @@ mod h2c {
                 let h2c_req = hyper::Request::builder()
                     .uri(origin)
                     .header(http::header::UPGRADE, "h2c")
-                    .body(empty_body())
+                    .body(BoxBody::default())
                     .unwrap();
 
                 let res = client.request(h2c_req).await.unwrap();

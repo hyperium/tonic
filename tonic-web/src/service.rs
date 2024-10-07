@@ -6,10 +6,7 @@ use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode
 use http_body_util::BodyExt;
 use pin_project::pin_project;
 use tonic::metadata::GRPC_CONTENT_TYPE;
-use tonic::{
-    body::{empty_body, BoxBody},
-    server::NamedService,
-};
+use tonic::{body::BoxBody, server::NamedService};
 use tower_service::Service;
 use tracing::{debug, trace};
 
@@ -56,7 +53,7 @@ where
                 res: Some(
                     Response::builder()
                         .status(status)
-                        .body(empty_body())
+                        .body(BoxBody::default())
                         .unwrap(),
                 ),
             },
@@ -250,7 +247,7 @@ mod tests {
         }
 
         fn call(&mut self, _: Request<BoxBody>) -> Self::Future {
-            Box::pin(async { Ok(Response::new(empty_body())) })
+            Box::pin(async { Ok(Response::new(BoxBody::default())) })
         }
     }
 
@@ -267,7 +264,7 @@ mod tests {
                 .method(Method::POST)
                 .header(CONTENT_TYPE, GRPC_WEB)
                 .header(ORIGIN, "http://example.com")
-                .body(empty_body())
+                .body(BoxBody::default())
                 .unwrap()
         }
 
@@ -349,7 +346,7 @@ mod tests {
                 .header(ORIGIN, "http://example.com")
                 .header(ACCESS_CONTROL_REQUEST_HEADERS, "x-grpc-web")
                 .header(ACCESS_CONTROL_REQUEST_METHOD, "POST")
-                .body(empty_body())
+                .body(BoxBody::default())
                 .unwrap()
         }
 
@@ -369,7 +366,7 @@ mod tests {
             Request::builder()
                 .version(Version::HTTP_2)
                 .header(CONTENT_TYPE, GRPC_CONTENT_TYPE)
-                .body(empty_body())
+                .body(BoxBody::default())
                 .unwrap()
         }
 
@@ -389,7 +386,7 @@ mod tests {
 
             let req = Request::builder()
                 .header(CONTENT_TYPE, GRPC_CONTENT_TYPE)
-                .body(empty_body())
+                .body(BoxBody::default())
                 .unwrap();
 
             let res = svc.call(req).await.unwrap();
@@ -420,7 +417,7 @@ mod tests {
         fn request() -> Request<BoxBody> {
             Request::builder()
                 .header(CONTENT_TYPE, "application/text")
-                .body(empty_body())
+                .body(BoxBody::default())
                 .unwrap()
         }
 

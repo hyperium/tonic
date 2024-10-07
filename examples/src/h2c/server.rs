@@ -69,7 +69,7 @@ mod h2c {
     use http::{Request, Response};
     use hyper::body::Incoming;
     use hyper_util::{rt::TokioExecutor, service::TowerToHyperService};
-    use tonic::body::{empty_body, BoxBody};
+    use tonic::body::BoxBody;
     use tower::{Service, ServiceExt};
 
     #[derive(Clone)]
@@ -114,7 +114,7 @@ mod h2c {
                         .unwrap();
                 });
 
-                let mut res = hyper::Response::new(empty_body());
+                let mut res = hyper::Response::new(BoxBody::default());
                 *res.status_mut() = http::StatusCode::SWITCHING_PROTOCOLS;
                 res.headers_mut().insert(
                     hyper::header::UPGRADE,

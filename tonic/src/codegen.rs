@@ -20,4 +20,5 @@ pub type BoxFuture<T, E> = self::Pin<Box<dyn self::Future<Output = Result<T, E>>
 pub type BoxStream<T> =
     self::Pin<Box<dyn tokio_stream::Stream<Item = Result<T, crate::Status>> + Send + 'static>>;
 
+#[allow(deprecated)]
 pub use crate::body::empty_body;

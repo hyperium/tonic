@@ -580,7 +580,7 @@ impl Status {
 
     /// Build an `http::Response` from the given `Status`.
     pub fn into_http(self) -> http::Response<BoxBody> {
-        let mut response = http::Response::new(crate::body::empty_body());
+        let mut response = http::Response::new(BoxBody::default());
         response
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
