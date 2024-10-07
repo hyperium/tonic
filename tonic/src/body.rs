@@ -16,7 +16,5 @@ where
 
 /// Create an empty `BoxBody`
 pub fn empty_body() -> BoxBody {
-    http_body_util::Empty::new()
-        .map_err(|err| match err {})
-        .boxed_unsync()
+    BoxBody::default()
 }
