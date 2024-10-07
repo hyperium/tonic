@@ -231,6 +231,7 @@ mod tests {
     use http::header::{
         ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, CONTENT_TYPE, ORIGIN,
     };
+    use tower_layer::Layer as _;
 
     type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 
@@ -255,6 +256,17 @@ mod tests {
         const NAME: &'static str = "test";
     }
 
+    fn enable<S>(service: S) -> tower_http::cors::Cors<GrpcWebService<S>>
+    where
+        S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
+    {
+        tower_layer::Stack::new(
+            crate::GrpcWebLayer::new(),
+            tower_http::cors::CorsLayer::new(),
+        )
+        .layer(service)
+    }
+
     mod grpc_web {
         use super::*;
         use tower_layer::Layer;
@@ -270,7 +282,7 @@ mod tests {
 
         #[tokio::test]
         async fn default_cors_config() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::OK);
@@ -286,7 +298,7 @@ mod tests {
 
         #[tokio::test]
         async fn without_origin() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             let mut req = request();
             req.headers_mut().remove(ORIGIN);
@@ -298,7 +310,7 @@ mod tests {
 
         #[tokio::test]
         async fn only_post_and_options_allowed() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             for method in &[
                 Method::GET,
@@ -323,7 +335,7 @@ mod tests {
 
         #[tokio::test]
         async fn grpc_web_content_types() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             for ct in &[GRPC_WEB_TEXT, GRPC_WEB_PROTO, GRPC_WEB_TEXT_PROTO, GRPC_WEB] {
                 let mut req = request();
@@ -352,7 +364,7 @@ mod tests {
 
         #[tokio::test]
         async fn valid_grpc_web_preflight() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::OK);
@@ -372,7 +384,7 @@ mod tests {
 
         #[tokio::test]
         async fn h2_is_ok() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             let req = request();
             let res = svc.call(req).await.unwrap();
@@ -382,7 +394,7 @@ mod tests {
 
         #[tokio::test]
         async fn h1_is_err() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             let req = Request::builder()
                 .header(CONTENT_TYPE, GRPC_CONTENT_TYPE)
@@ -395,7 +407,7 @@ mod tests {
 
         #[tokio::test]
         async fn content_type_variants() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             for variant in &["grpc", "grpc+proto", "grpc+thrift", "grpc+foo"] {
                 let mut req = request();
@@ -423,7 +435,7 @@ mod tests {
 
         #[tokio::test]
         async fn h1_is_err() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::BAD_REQUEST)
@@ -431,7 +443,7 @@ mod tests {
 
         #[tokio::test]
         async fn h2_is_ok() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let mut req = request();
             *req.version_mut() = Version::HTTP_2;
 
