@@ -111,6 +111,11 @@ impl Routes {
     pub fn into_axum_router(self) -> axum::Router {
         self.router
     }
+
+    /// Get a mutable reference to the [`axum::Router`].
+    pub fn axum_router_mut(&mut self) -> &mut axum::Router {
+        &mut self.router
+    }
 }
 
 impl From<Routes> for RoutesBuilder {
