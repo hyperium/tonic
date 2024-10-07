@@ -15,6 +15,7 @@ where
 }
 
 /// Create an empty `BoxBody`
+#[deprecated(since = "0.12.4", note = "use `BoxBody::default()` instead")]
 pub fn empty_body() -> BoxBody {
     BoxBody::default()
 }
