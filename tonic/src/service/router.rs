@@ -36,7 +36,6 @@ impl RoutesBuilder {
             + Send
             + 'static,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
         let routes = self.routes.take().unwrap_or_default();
         self.routes.replace(routes.add_service(svc));
@@ -67,7 +66,6 @@ impl Routes {
             + Send
             + 'static,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
         Self::default().add_service(svc)
     }
@@ -86,7 +84,6 @@ impl Routes {
             + Send
             + 'static,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
         self.router = self.router.route_service(
             &format!("/{}/*rest", S::NAME),
