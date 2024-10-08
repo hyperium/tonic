@@ -216,12 +216,7 @@ where
                 .poll(cx)
                 .map(|result| result.map(|res| res.map(boxed))),
             KindProj::Status(status) => {
-                let response = status
-                    .take()
-                    .unwrap()
-                    .into_http()
-                    .map(|_| B::default())
-                    .map(boxed);
+                let response = status.take().unwrap().into_http();
                 Poll::Ready(Ok(response))
             }
         }
@@ -287,7 +282,7 @@ mod tests {
     #[tokio::test]
     async fn handles_intercepted_status_as_response() {
         let message = "Blocked by the interceptor";
-        let expected = Status::permission_denied(message).into_http();
+        let expected = Status::permission_denied(message).into_http::<BoxBody>();
 
         let svc = tower::service_fn(|_: http::Request<TestBody>| async {
             Ok::<_, Status>(http::Response::new(TestBody))
