@@ -2,11 +2,7 @@
 //!
 //! See [`Interceptor`] for more details.
 
-use crate::{
-    body::{boxed, BoxBody},
-    request::SanitizeHeaders,
-    Status,
-};
+use crate::{request::SanitizeHeaders, Status};
 use bytes::Bytes;
 use pin_project::pin_project;
 use std::{
@@ -128,7 +124,7 @@ where
     ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     ResBody::Error: Into<crate::Error>,
 {
-    type Response = http::Response<BoxBody>;
+    type Response = http::Response<ResBody>;
     type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
@@ -208,13 +204,11 @@ where
     B: Default + http_body::Body<Data = Bytes> + Send + 'static,
     B::Error: Into<crate::Error>,
 {
-    type Output = Result<http::Response<BoxBody>, E>;
+    type Output = Result<http::Response<B>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().kind.project() {
-            KindProj::Future(future) => future
-                .poll(cx)
-                .map(|result| result.map(|res| res.map(boxed))),
+            KindProj::Future(future) => future.poll(cx),
             KindProj::Status(status) => {
                 let response = status.take().unwrap().into_http();
                 Poll::Ready(Ok(response))
@@ -225,10 +219,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use http_body::Frame;
     use http_body_util::Empty;
     use tower::ServiceExt;
+
+    use super::*;
+    use crate::body::BoxBody;
 
     #[derive(Debug, Default)]
     struct TestBody;
