@@ -173,6 +173,10 @@ impl<L> Server<L> {
     /// builder.concurrency_limit_per_connection(32);
     /// ```
     #[must_use]
+    #[deprecated(
+        since = "0.12.4",
+        note = "Use `layer()` with a layer which provide concurrency limit feature such as `tower::limit::ConcurrencyLimitLayer` used in this config."
+    )]
     pub fn concurrency_limit_per_connection(self, limit: usize) -> Self {
         Server {
             concurrency_limit: Some(limit),
