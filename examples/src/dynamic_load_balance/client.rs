@@ -3,15 +3,14 @@ pub mod pb {
 }
 
 use pb::{echo_client::EchoClient, EchoRequest};
+use tonic::transport::channel::Change;
 use tonic::transport::Channel;
-
 use tonic::transport::Endpoint;
 
 use std::sync::Arc;
 
 use std::sync::atomic::{AtomicBool, Ordering::SeqCst};
 use tokio::time::timeout;
-use tower::discover::Change;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
