@@ -4,7 +4,8 @@
 //! # Feature flags
 //!
 //! - `cleanup-markdown`: Enables cleaning up documentation from the generated code. Useful
-//!   when documentation of the generated code fails `cargo test --doc` for example.
+//!   when documentation of the generated code fails `cargo test --doc` for example. The
+//!   `prost` feature must be enabled to use this feature.
 //! - `prost`: Enables usage of prost generator (enabled by default).
 //! - `transport`: Enables generation of `connect` method using `tonic::transport::Channel`
 //!   (enabled by default).
