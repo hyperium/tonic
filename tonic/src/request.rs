@@ -4,13 +4,13 @@ use crate::transport::server::TcpConnectInfo;
 #[cfg(all(feature = "server", feature = "tls"))]
 use crate::transport::server::TlsConnectInfo;
 use http::Extensions;
+#[cfg(all(feature = "server", feature = "tls"))]
+use rustls_pki_types::CertificateDer;
 #[cfg(feature = "server")]
 use std::net::SocketAddr;
 #[cfg(all(feature = "server", feature = "tls"))]
 use std::sync::Arc;
 use std::time::Duration;
-#[cfg(all(feature = "server", feature = "tls"))]
-use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_stream::Stream;
 
 /// A gRPC request and metadata from an RPC call.

@@ -113,7 +113,7 @@ pub use crate::status::TimeoutExpired;
 pub use self::tls::Certificate;
 pub use hyper::{body::Body, Uri};
 #[cfg(feature = "tls")]
-pub use tokio_rustls::rustls::pki_types::CertificateDer;
+pub use rustls_pki_types::CertificateDer;
 
 #[cfg(all(feature = "channel", feature = "tls"))]
 pub use self::channel::ClientTlsConfig;
