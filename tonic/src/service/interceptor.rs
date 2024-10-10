@@ -3,7 +3,6 @@
 //! See [`Interceptor`] for more details.
 
 use crate::{request::SanitizeHeaders, Status};
-use bytes::Bytes;
 use pin_project::pin_project;
 use std::{
     fmt,
@@ -117,12 +116,9 @@ where
 
 impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
 where
-    ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
-    F: Interceptor,
     S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-    S::Error: Into<crate::Error>,
-    ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    ResBody::Error: Into<crate::Error>,
+    F: Interceptor,
+    ResBody: Default,
 {
     type Response = http::Response<ResBody>;
     type Error = S::Error;
@@ -200,9 +196,7 @@ enum Kind<F> {
 impl<F, E, B> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<http::Response<B>, E>>,
-    E: Into<crate::Error>,
-    B: Default + http_body::Body<Data = Bytes> + Send + 'static,
-    B::Error: Into<crate::Error>,
+    B: Default,
 {
     type Output = Result<http::Response<B>, E>;
 
@@ -219,31 +213,12 @@ where
 
 #[cfg(test)]
 mod tests {
-    use http_body::Frame;
-    use http_body_util::Empty;
-    use tower::ServiceExt;
-
     use super::*;
-    use crate::body::BoxBody;
-
-    #[derive(Debug, Default)]
-    struct TestBody;
-
-    impl http_body::Body for TestBody {
-        type Data = Bytes;
-        type Error = Status;
-
-        fn poll_frame(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-        ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-            Poll::Ready(None)
-        }
-    }
+    use tower::ServiceExt;
 
     #[tokio::test]
     async fn doesnt_remove_headers_from_requests() {
-        let svc = tower::service_fn(|request: http::Request<TestBody>| async move {
+        let svc = tower::service_fn(|request: http::Request<()>| async move {
             assert_eq!(
                 request
                     .headers()
@@ -252,7 +227,7 @@ mod tests {
                 "test-tonic"
             );
 
-            Ok::<_, Status>(http::Response::new(TestBody))
+            Ok::<_, Status>(http::Response::new(()))
         });
 
         let svc = InterceptedService::new(svc, |request: crate::Request<()>| {
@@ -269,7 +244,7 @@ mod tests {
 
         let request = http::Request::builder()
             .header("user-agent", "test-tonic")
-            .body(TestBody)
+            .body(())
             .unwrap();
 
         svc.oneshot(request).await.unwrap();
@@ -278,17 +253,17 @@ mod tests {
     #[tokio::test]
     async fn handles_intercepted_status_as_response() {
         let message = "Blocked by the interceptor";
-        let expected = Status::permission_denied(message).into_http::<BoxBody>();
+        let expected = Status::permission_denied(message).into_http::<()>();
 
-        let svc = tower::service_fn(|_: http::Request<TestBody>| async {
-            Ok::<_, Status>(http::Response::new(TestBody))
+        let svc = tower::service_fn(|_: http::Request<()>| async {
+            Ok::<_, Status>(http::Response::new(()))
         });
 
         let svc = InterceptedService::new(svc, |_: crate::Request<()>| {
             Err(Status::permission_denied(message))
         });
 
-        let request = http::Request::builder().body(TestBody).unwrap();
+        let request = http::Request::builder().body(()).unwrap();
         let response = svc.oneshot(request).await.unwrap();
 
         assert_eq!(expected.status(), response.status());
@@ -298,17 +273,17 @@ mod tests {
 
     #[tokio::test]
     async fn doesnt_change_http_method() {
-        let svc = tower::service_fn(|request: http::Request<Empty<()>>| async move {
+        let svc = tower::service_fn(|request: http::Request<()>| async move {
             assert_eq!(request.method(), http::Method::OPTIONS);
 
-            Ok::<_, hyper::Error>(hyper::Response::new(Empty::new()))
+            Ok::<_, hyper::Error>(hyper::Response::new(()))
         });
 
         let svc = InterceptedService::new(svc, Ok);
 
         let request = http::Request::builder()
             .method(http::Method::OPTIONS)
-            .body(Empty::new())
+            .body(())
             .unwrap();
 
         svc.oneshot(request).await.unwrap();
