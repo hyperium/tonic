@@ -33,7 +33,7 @@ where
         while let Some(item) = incoming.next().await {
             yield match item {
                 Ok(_) => item.map(ServerIo::new_io)?,
-                Err(e) => match handle_accept_error(e) {
+                Err(e) => match handle_tcp_accept_error(e) {
                     ControlFlow::Continue(()) => continue,
                     ControlFlow::Break(e) => Err(e)?,
                 }
@@ -74,9 +74,14 @@ where
                     yield io;
                 }
 
-                SelectOutput::Err(e) => match handle_accept_error(e) {
+                SelectOutput::TcpAcceptErr(e) => match handle_tcp_accept_error(e) {
                     ControlFlow::Continue(()) => continue,
                     ControlFlow::Break(e) => Err(e)?,
+                }
+
+                SelectOutput::TlsAcceptErr(e) => {
+                    tracing::debug!(error = %e, "tls accept error");
+                    continue;
                 }
 
                 SelectOutput::Done => {
@@ -87,7 +92,7 @@ where
     }
 }
 
-fn handle_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Error> {
+fn handle_tcp_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Error> {
     let e = e.into();
     tracing::debug!(error = %e, "accept loop error");
     if let Some(e) = e.downcast_ref::<io::Error>() {
@@ -121,7 +126,7 @@ where
         return match incoming.try_next().await {
             Ok(Some(stream)) => SelectOutput::Incoming(stream),
             Ok(None) => SelectOutput::Done,
-            Err(e) => SelectOutput::Err(e.into()),
+            Err(e) => SelectOutput::TcpAcceptErr(e.into()),
         };
     }
 
@@ -130,15 +135,15 @@ where
             match stream {
                 Ok(Some(stream)) => SelectOutput::Incoming(stream),
                 Ok(None) => SelectOutput::Done,
-                Err(e) => SelectOutput::Err(e.into()),
+                Err(e) => SelectOutput::TcpAcceptErr(e.into()),
             }
         }
 
         accept = tasks.join_next() => {
             match accept.expect("JoinSet should never end") {
                 Ok(Ok(io)) => SelectOutput::Io(io),
-                Ok(Err(e)) => SelectOutput::Err(e),
-                Err(e) => SelectOutput::Err(e.into()),
+                Ok(Err(e)) => SelectOutput::TlsAcceptErr(e),
+                Err(e) => SelectOutput::TlsAcceptErr(e.into()),
             }
         }
     }
@@ -148,7 +153,8 @@ where
 enum SelectOutput<A> {
     Incoming(A),
     Io(ServerIo<A>),
-    Err(crate::Error),
+    TcpAcceptErr(crate::Error),
+    TlsAcceptErr(crate::Error),
     Done,
 }
 
