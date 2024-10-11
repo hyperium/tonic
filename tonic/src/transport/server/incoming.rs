@@ -74,12 +74,12 @@ where
                     yield io;
                 }
 
-                SelectOutput::TcpAcceptErr(e) => match handle_tcp_accept_error(e) {
+                SelectOutput::TcpErr(e) => match handle_tcp_accept_error(e) {
                     ControlFlow::Continue(()) => continue,
                     ControlFlow::Break(e) => Err(e)?,
                 }
 
-                SelectOutput::TlsAcceptErr(e) => {
+                SelectOutput::TlsErr(e) => {
                     tracing::debug!(error = %e, "tls accept error");
                     continue;
                 }
@@ -102,8 +102,6 @@ fn handle_tcp_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Err
                 | io::ErrorKind::ConnectionReset
                 | io::ErrorKind::BrokenPipe
                 | io::ErrorKind::Interrupted
-                | io::ErrorKind::InvalidData // Raised if TLS handshake failed
-                | io::ErrorKind::UnexpectedEof // Raised if TLS handshake failed
                 | io::ErrorKind::WouldBlock
                 | io::ErrorKind::TimedOut
         ) {
@@ -126,7 +124,7 @@ where
         return match incoming.try_next().await {
             Ok(Some(stream)) => SelectOutput::Incoming(stream),
             Ok(None) => SelectOutput::Done,
-            Err(e) => SelectOutput::TcpAcceptErr(e.into()),
+            Err(e) => SelectOutput::TcpErr(e.into()),
         };
     }
 
@@ -135,15 +133,15 @@ where
             match stream {
                 Ok(Some(stream)) => SelectOutput::Incoming(stream),
                 Ok(None) => SelectOutput::Done,
-                Err(e) => SelectOutput::TcpAcceptErr(e.into()),
+                Err(e) => SelectOutput::TcpErr(e.into()),
             }
         }
 
         accept = tasks.join_next() => {
             match accept.expect("JoinSet should never end") {
                 Ok(Ok(io)) => SelectOutput::Io(io),
-                Ok(Err(e)) => SelectOutput::TlsAcceptErr(e),
-                Err(e) => SelectOutput::TlsAcceptErr(e.into()),
+                Ok(Err(e)) => SelectOutput::TlsErr(e),
+                Err(e) => SelectOutput::TlsErr(e.into()),
             }
         }
     }
@@ -153,8 +151,8 @@ where
 enum SelectOutput<A> {
     Incoming(A),
     Io(ServerIo<A>),
-    TcpAcceptErr(crate::Error),
-    TlsAcceptErr(crate::Error),
+    TcpErr(crate::Error),
+    TlsErr(crate::Error),
     Done,
 }
 
