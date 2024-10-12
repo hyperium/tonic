@@ -30,11 +30,8 @@ impl RoutesBuilder {
     /// Add a new service.
     pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         let routes = self.routes.take().unwrap_or_default();
@@ -60,11 +57,8 @@ impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         Self::default().add_service(svc)
@@ -78,11 +72,8 @@ impl Routes {
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         self.router = self.router.route_service(
