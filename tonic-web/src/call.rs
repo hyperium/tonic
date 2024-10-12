@@ -1,4 +1,4 @@
-use std::error::Error;
+use std::fmt;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
@@ -162,7 +162,7 @@ impl<B> GrpcWebCall<B>
 where
     B: Body,
     B::Data: Buf,
-    B::Error: Error,
+    B::Error: fmt::Display,
 {
     // Poll body for data, decoding (e.g. via Base64 if necessary) and returning frames
     // to the caller. If the caller is a client, it should look for trailers before
@@ -250,7 +250,7 @@ where
 impl<B> Body for GrpcWebCall<B>
 where
     B: Body,
-    B::Error: Error,
+    B::Error: fmt::Display,
 {
     type Data = Bytes;
     type Error = Status;
@@ -339,7 +339,7 @@ where
 impl<B> Stream for GrpcWebCall<B>
 where
     B: Body,
-    B::Error: Error,
+    B::Error: fmt::Display,
 {
     type Item = Result<Frame<Bytes>, Status>;
 
