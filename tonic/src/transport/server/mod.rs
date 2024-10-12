@@ -895,6 +895,7 @@ impl<L> Router<L> {
     }
 
     /// Create a tower service out of a router.
+    #[deprecated(since = "0.12.4", note = "compose the layers and the `Routes`")]
     pub fn into_service<ResBody>(self) -> L::Service
     where
         L: Layer<Routes>,
