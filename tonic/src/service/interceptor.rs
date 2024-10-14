@@ -73,7 +73,7 @@ pub struct InterceptorLayer<I> {
 
 impl<S, I> Layer<S> for InterceptorLayer<I>
 where
-    I: Interceptor + Clone,
+    I: Clone,
 {
     type Service = InterceptedService<S, I>;
 
@@ -94,10 +94,7 @@ pub struct InterceptedService<S, I> {
 impl<S, I> InterceptedService<S, I> {
     /// Create a new `InterceptedService` that wraps `S` and intercepts each request with the
     /// function `F`.
-    pub fn new(service: S, interceptor: I) -> Self
-    where
-        I: Interceptor,
-    {
+    pub fn new(service: S, interceptor: I) -> Self {
         Self {
             inner: service,
             interceptor,
