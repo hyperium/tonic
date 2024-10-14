@@ -140,7 +140,11 @@ async fn unimplemented() -> impl axum::response::IntoResponse {
     (status, headers)
 }
 
-impl Service<Request<BoxBody>> for Routes {
+impl<B> Service<Request<B>> for Routes
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::Error>,
+{
     type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = RoutesFuture;
@@ -150,8 +154,8 @@ impl Service<Request<BoxBody>> for Routes {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
-        RoutesFuture(self.router.call(req))
+    fn call(&mut self, req: Request<B>) -> Self::Future {
+        RoutesFuture(self.router.call(req.map(axum::body::Body::new)))
     }
 }
 
