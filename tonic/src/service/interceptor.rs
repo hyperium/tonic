@@ -55,11 +55,11 @@ where
 /// Create a new interceptor layer.
 ///
 /// See [`Interceptor`] for more details.
-pub fn interceptor<F>(f: F) -> InterceptorLayer<F>
+pub fn interceptor<I>(interceptor: I) -> InterceptorLayer<I>
 where
-    F: Interceptor,
+    I: Interceptor,
 {
-    InterceptorLayer { f }
+    InterceptorLayer { interceptor }
 }
 
 /// A gRPC interceptor that can be used as a [`Layer`],
@@ -67,18 +67,18 @@ where
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Debug, Clone, Copy)]
-pub struct InterceptorLayer<F> {
-    f: F,
+pub struct InterceptorLayer<I> {
+    interceptor: I,
 }
 
-impl<S, F> Layer<S> for InterceptorLayer<F>
+impl<S, I> Layer<S> for InterceptorLayer<I>
 where
-    F: Interceptor + Clone,
+    I: Interceptor + Clone,
 {
-    type Service = InterceptedService<S, F>;
+    type Service = InterceptedService<S, I>;
 
     fn layer(&self, service: S) -> Self::Service {
-        InterceptedService::new(service, self.f.clone())
+        InterceptedService::new(service, self.interceptor.clone())
     }
 }
 
@@ -86,38 +86,41 @@ where
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Clone, Copy)]
-pub struct InterceptedService<S, F> {
+pub struct InterceptedService<S, I> {
     inner: S,
-    f: F,
+    interceptor: I,
 }
 
-impl<S, F> InterceptedService<S, F> {
+impl<S, I> InterceptedService<S, I> {
     /// Create a new `InterceptedService` that wraps `S` and intercepts each request with the
     /// function `F`.
-    pub fn new(service: S, f: F) -> Self
+    pub fn new(service: S, interceptor: I) -> Self
     where
-        F: Interceptor,
+        I: Interceptor,
     {
-        Self { inner: service, f }
+        Self {
+            inner: service,
+            interceptor,
+        }
     }
 }
 
-impl<S, F> fmt::Debug for InterceptedService<S, F>
+impl<S, I> fmt::Debug for InterceptedService<S, I>
 where
     S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InterceptedService")
             .field("inner", &self.inner)
-            .field("f", &format_args!("{}", std::any::type_name::<F>()))
+            .field("f", &format_args!("{}", std::any::type_name::<I>()))
             .finish()
     }
 }
 
-impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
+impl<S, I, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, I>
 where
     S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-    F: Interceptor,
+    I: Interceptor,
     ResBody: Default,
 {
     type Response = http::Response<ResBody>;
@@ -142,7 +145,7 @@ where
         let (metadata, extensions, msg) = req.into_parts();
 
         match self
-            .f
+            .interceptor
             .call(crate::Request::from_parts(metadata, extensions, ()))
         {
             Ok(req) => {
@@ -157,7 +160,7 @@ where
 }
 
 // required to use `InterceptedService` with `Router`
-impl<S, F> crate::server::NamedService for InterceptedService<S, F>
+impl<S, I> crate::server::NamedService for InterceptedService<S, I>
 where
     S: crate::server::NamedService,
 {
