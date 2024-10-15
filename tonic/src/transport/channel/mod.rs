@@ -41,7 +41,7 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 
 type ChannelFuture = BoxFuture<
     'static,
-    Result<http::Response<BoxBody>, Box<(dyn std::error::Error + Send + Sync + 'static)>>,
+    Result<Response<BoxBody>, Box<(dyn std::error::Error + Send + Sync + 'static)>>,
 >;
 
 /// A default batteries included `transport` channel.

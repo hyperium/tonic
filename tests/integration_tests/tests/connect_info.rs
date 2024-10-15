@@ -63,7 +63,6 @@ pub mod unix {
         transport::{server::UdsConnectInfo, Endpoint, Server, Uri},
         Request, Response, Status,
     };
-    use tower::service_fn;
 
     use integration_tests::pb::{test_client, test_server, Input, Output};
 
