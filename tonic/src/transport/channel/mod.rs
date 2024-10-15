@@ -160,7 +160,6 @@ impl Channel {
         let executor = endpoint.executor.clone();
 
         let svc = Connection::lazy(connector, endpoint);
-        // let (svc, worker) = Buffer::pair(Either::Right(svc), buffer_size);
         let (svc, worker) = Buffer::pair(svc, buffer_size);
         executor.execute(worker);
 
