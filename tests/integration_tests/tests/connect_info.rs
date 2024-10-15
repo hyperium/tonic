@@ -109,7 +109,7 @@ pub mod unix {
         let path = unix_socket_path.clone();
         let channel = Endpoint::try_from("http://[::]:50051")
             .unwrap()
-            .connect_with_connector(service_fn(move |_: Uri| {
+            .connect_with_connector(tower::service_fn(move |_: Uri| {
                 let path = path.clone();
                 async move { Ok::<_, io::Error>(TokioIo::new(UnixStream::connect(path).await?)) }
             }))

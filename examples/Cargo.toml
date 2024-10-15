@@ -263,11 +263,27 @@ path = "src/codec_buffers/client.rs"
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls"]
-routeguide = ["dep:async-stream", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
+routeguide = [
+    "dep:async-stream",
+    "tokio-stream",
+    "dep:rand",
+    "dep:serde",
+    "dep:serde_json",
+]
 reflection = ["dep:tonic-reflection"]
 autoreload = ["tokio-stream/net", "dep:listenfd"]
 health = ["dep:tonic-health"]
-grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:hyper-util", "dep:tracing-subscriber", "dep:tower", "dep:tower-http", "tower-http?/cors"]
+grpc-web = [
+    "dep:tonic-web",
+    "dep:bytes",
+    "dep:http",
+    "dep:hyper",
+    "dep:hyper-util",
+    "dep:tracing-subscriber",
+    "dep:tower",
+    "dep:tower-http",
+    "tower-http?/cors",
+]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
 uds = ["tokio-stream/net", "dep:tower", "dep:hyper", "dep:hyper-util"]
 streaming = ["tokio-stream", "dep:h2"]
@@ -276,7 +292,19 @@ tower = ["dep:tower", "tower?/timeout", "dep:http"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
 tls = ["tonic/tls"]
-tls-rustls = ["dep:http", "dep:hyper", "dep:hyper-util", "dep:hyper-rustls", "dep:tower", "tower-http/util", "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls", "dep:pin-project", "dep:http-body-util"]
+tls-rustls = [
+    "dep:http",
+    "dep:hyper",
+    "dep:hyper-util",
+    "dep:hyper-rustls",
+    "dep:tower",
+    "tower-http/util",
+    "tower-http/add-extension",
+    "dep:rustls-pemfile",
+    "dep:tokio-rustls",
+    "dep:pin-project",
+    "dep:http-body-util",
+]
 dynamic-load-balance = ["dep:tower"]
 timeout = ["tokio/time", "dep:tower", "tower?/timeout"]
 tls-client-auth = ["tonic/tls"]
@@ -284,7 +312,29 @@ types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types", "cancellation", "h2c"]
+full = [
+    "gcp",
+    "routeguide",
+    "reflection",
+    "autoreload",
+    "health",
+    "grpc-web",
+    "tracing",
+    "uds",
+    "streaming",
+    "mock",
+    "tower",
+    "json-codec",
+    "compression",
+    "tls",
+    "tls-rustls",
+    "dynamic-load-balance",
+    "timeout",
+    "tls-client-auth",
+    "types",
+    "cancellation",
+    "h2c",
+]
 default = ["full"]
 
 [dependencies]
@@ -300,12 +350,15 @@ tonic-types = { path = "../tonic-types", optional = true }
 async-stream = { version = "0.3", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 tokio-util = { version = "0.7.8", optional = true }
-tower = { version = "0.4", optional = true }
+tower = { version = "0.5.1", optional = true }
 rand = { version = "0.8", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tracing = { version = "0.1.16", optional = true }
-tracing-subscriber = { version = "0.3", features = ["tracing-log", "fmt"], optional = true }
+tracing-subscriber = { version = "0.3", features = [
+    "tracing-log",
+    "fmt",
+], optional = true }
 prost-types = { version = "0.13", optional = true }
 http = { version = "1", optional = true }
 http-body = { version = "1", optional = true }
@@ -315,10 +368,17 @@ hyper-util = { version = "0.1.4", optional = true }
 listenfd = { version = "1.0", optional = true }
 bytes = { version = "1", optional = true }
 h2 = { version = "0.4", optional = true }
-tokio-rustls = { version = "0.26", optional = true, features = ["ring", "tls12"], default-features = false }
-hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
+tokio-rustls = { version = "0.26", optional = true, features = [
+    "ring",
+    "tls12",
+], default-features = false }
+hyper-rustls = { version = "0.27.0", features = [
+    "http2",
+    "ring",
+    "tls12",
+], optional = true, default-features = false }
 rustls-pemfile = { version = "2.0.0", optional = true }
-tower-http = { version = "0.5", optional = true }
+tower-http = { version = "0.6.1", optional = true }
 pin-project = { version = "1.0.11", optional = true }
 
 [build-dependencies]

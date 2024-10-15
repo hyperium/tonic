@@ -31,14 +31,18 @@ use tower::balance::p2c::Balance;
 use tower::{
     buffer::{self, Buffer},
     discover::{Change, Discover},
-    util::{BoxService, Either},
+    util::BoxService,
     Service,
 };
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<BoxBody>, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
+
+type ChannelFuture = BoxFuture<
+    'static,
+    Result<http::Response<BoxBody>, Box<(dyn std::error::Error + Send + Sync + 'static)>>,
+>;
 
 /// A default batteries included `transport` channel.
 ///
@@ -65,14 +69,14 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 /// cloning the `Channel` type is cheap and encouraged.
 #[derive(Clone)]
 pub struct Channel {
-    svc: Buffer<Svc, Request<BoxBody>>,
+    svc: Buffer<Request<BoxBody>, ChannelFuture>,
 }
 
 /// A future that resolves to an HTTP response.
 ///
 /// This is returned by the `Service::call` on [`Channel`].
 pub struct ResponseFuture {
-    inner: buffer::future::ResponseFuture<<Svc as Service<Request<BoxBody>>>::Future>,
+    inner: buffer::future::ResponseFuture<ChannelFuture>,
 }
 
 impl Channel {
@@ -156,7 +160,8 @@ impl Channel {
         let executor = endpoint.executor.clone();
 
         let svc = Connection::lazy(connector, endpoint);
-        let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
+        // let (svc, worker) = Buffer::pair(Either::Right(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(svc, buffer_size);
         executor.execute(worker);
 
         Channel { svc }
@@ -175,7 +180,7 @@ impl Channel {
         let svc = Connection::connect(connector, endpoint)
             .await
             .map_err(super::Error::from_source)?;
-        let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(svc, buffer_size);
         executor.execute(worker);
 
         Ok(Channel { svc })
@@ -191,7 +196,7 @@ impl Channel {
         let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
-        let (svc, worker) = Buffer::pair(Either::B(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(svc, buffer_size);
         executor.execute(Box::pin(worker));
 
         Channel { svc }

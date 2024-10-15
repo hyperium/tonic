@@ -11,20 +11,25 @@ version = "0.1.0"
 [dependencies]
 bytes = "1.0"
 prost = "0.13"
-tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net", "sync"]}
-tonic = {path = "../../tonic"}
-tracing-subscriber = {version = "0.3"}
+tokio = { version = "1.0", features = [
+    "macros",
+    "rt-multi-thread",
+    "net",
+    "sync",
+] }
+tonic = { path = "../../tonic" }
+tracing-subscriber = { version = "0.3" }
 
 [dev-dependencies]
 async-stream = "0.3"
 http = "1"
 http-body = "1"
 hyper-util = "0.1"
-tokio-stream = {version = "0.1.5", features = ["net"]}
-tower = {version = "0.4", features = []}
+tokio-stream = { version = "0.1.5", features = ["net"] }
+tower = { version = "0.5.1", features = [] }
 tower-http = { version = "0.5", features = ["set-header", "trace"] }
 tower-service = "0.3"
 tracing = "0.1"
 
 [build-dependencies]
-tonic-build = {path = "../../tonic-build"}
+tonic-build = { path = "../../tonic-build" }
