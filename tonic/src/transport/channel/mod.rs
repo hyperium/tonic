@@ -39,10 +39,7 @@ type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
-type ChannelFuture = BoxFuture<
-    'static,
-    Result<Response<BoxBody>, Box<(dyn std::error::Error + Send + Sync + 'static)>>,
->;
+type ChannelFuture = BoxFuture<'static, Result<Response<BoxBody>, crate::Error>>;
 
 /// A default batteries included `transport` channel.
 ///
