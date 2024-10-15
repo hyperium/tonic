@@ -30,13 +30,9 @@ impl RoutesBuilder {
     /// Add a new service.
     pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
         let routes = self.routes.take().unwrap_or_default();
         self.routes.replace(routes.add_service(svc));
@@ -61,13 +57,9 @@ impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
         Self::default().add_service(svc)
     }
@@ -80,13 +72,9 @@ impl Routes {
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
-        S::Error: Into<crate::Error> + Send,
     {
         self.router = self.router.route_service(
             &format!("/{}/*rest", S::NAME),
@@ -113,6 +101,11 @@ impl Routes {
     /// Convert this `Routes` into an [`axum::Router`].
     pub fn into_axum_router(self) -> axum::Router {
         self.router
+    }
+
+    /// Get a mutable reference to the [`axum::Router`].
+    pub fn axum_router_mut(&mut self) -> &mut axum::Router {
+        &mut self.router
     }
 }
 
@@ -147,7 +140,11 @@ async fn unimplemented() -> impl axum::response::IntoResponse {
     (status, headers)
 }
 
-impl Service<Request<BoxBody>> for Routes {
+impl<B> Service<Request<B>> for Routes
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::Error>,
+{
     type Response = Response<BoxBody>;
     type Error = crate::Error;
     type Future = RoutesFuture;
@@ -157,8 +154,8 @@ impl Service<Request<BoxBody>> for Routes {
         Poll::Ready(Ok(()))
     }
 
-    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
-        RoutesFuture(self.router.call(req))
+    fn call(&mut self, req: Request<B>) -> Self::Future {
+        RoutesFuture(self.router.call(req.map(axum::body::Body::new)))
     }
 }
 

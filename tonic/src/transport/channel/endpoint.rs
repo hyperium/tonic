@@ -415,6 +415,25 @@ impl Endpoint {
     pub fn uri(&self) -> &Uri {
         &self.uri
     }
+
+    /// Get the value of `TCP_NODELAY` option for accepted connections.
+    pub fn get_tcp_nodelay(&self) -> bool {
+        self.tcp_nodelay
+    }
+
+    /// Get the connect timeout.
+    pub fn get_connect_timeout(&self) -> Option<Duration> {
+        self.connect_timeout
+    }
+
+    /// Get whether TCP keepalive messages are enabled on accepted connections.
+    ///
+    /// If `None` is specified, keepalive is disabled, otherwise the duration
+    /// specified will be the time to remain idle before sending TCP keepalive
+    /// probes.
+    pub fn get_tcp_keepalive(&self) -> Option<Duration> {
+        self.tcp_keepalive
+    }
 }
 
 impl From<Uri> for Endpoint {

@@ -1,9 +1,6 @@
-use bytes::Bytes;
 use http::header::CONTENT_TYPE;
 use http::{Request, Response, Version};
-use http_body::Body;
 use pin_project::pin_project;
-use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
@@ -53,9 +50,6 @@ impl<S> GrpcWebClientService<S> {
 impl<S, B1, B2> Service<Request<B1>> for GrpcWebClientService<S>
 where
     S: Service<Request<GrpcWebCall<B1>>, Response = Response<B2>>,
-    B1: Body,
-    B2: Body<Data = Bytes>,
-    B2::Error: Error,
 {
     type Response = Response<GrpcWebCall<B2>>;
     type Error = S::Error;
@@ -94,7 +88,6 @@ pub struct ResponseFuture<F> {
 
 impl<F, B, E> Future for ResponseFuture<F>
 where
-    B: Body<Data = Bytes>,
     F: Future<Output = Result<Response<B>, E>>,
 {
     type Output = Result<Response<GrpcWebCall<B>>, E>;

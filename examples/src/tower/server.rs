@@ -3,7 +3,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Status};
 use tower::{Layer, Service};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -83,13 +83,11 @@ struct MyMiddleware<S> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-impl<S> Service<hyper::Request<BoxBody>> for MyMiddleware<S>
+impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for MyMiddleware<S>
 where
-    S: Service<hyper::Request<BoxBody>, Response = hyper::Response<BoxBody>>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    ReqBody: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -99,7 +97,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: hyper::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
         // See: https://docs.rs/tower/latest/tower/trait.Service.html#be-careful-when-cloning-inner-services
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);

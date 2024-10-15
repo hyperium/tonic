@@ -130,6 +130,10 @@ const DEFAULT_ALLOW_HEADERS: [HeaderName; 4] = [
 /// Enable a tonic service to handle grpc-web requests with the default configuration.
 ///
 /// You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
+#[deprecated(
+    since = "0.12.4",
+    note = "compose the `GrpcWebLayer` with the cors layer of your choice"
+)]
 pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
 where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,

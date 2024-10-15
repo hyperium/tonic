@@ -1,5 +1,5 @@
 use crate::metadata::MetadataMap;
-use crate::{body::BoxBody, metadata::GRPC_CONTENT_TYPE};
+use crate::metadata::GRPC_CONTENT_TYPE;
 use base64::Engine as _;
 use bytes::Bytes;
 use http::{
@@ -579,8 +579,8 @@ impl Status {
     }
 
     /// Build an `http::Response` from the given `Status`.
-    pub fn into_http(self) -> http::Response<BoxBody> {
-        let mut response = http::Response::new(crate::body::empty_body());
+    pub fn into_http<B: Default>(self) -> http::Response<B> {
+        let mut response = http::Response::new(B::default());
         response
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);

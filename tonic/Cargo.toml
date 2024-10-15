@@ -129,6 +129,7 @@ allowed_external_types = [
 
   "async_trait::async_trait",
   "axum_core::body::Body",
+  "axum_core::response::into_response::IntoResponse",
   "axum::routing::Router",
   "futures_core::stream::Stream",
   "h2::error::Error",
