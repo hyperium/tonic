@@ -55,6 +55,7 @@ where
 /// Create a new interceptor layer.
 ///
 /// See [`Interceptor`] for more details.
+#[deprecated(since = "0.12.4", note = "use `InterceptorLayer::new()` instead")]
 pub fn interceptor<I>(interceptor: I) -> InterceptorLayer<I>
 where
     I: Interceptor,
@@ -69,6 +70,15 @@ where
 #[derive(Debug, Clone, Copy)]
 pub struct InterceptorLayer<I> {
     interceptor: I,
+}
+
+impl<I> InterceptorLayer<I> {
+    /// Create a new interceptor layer.
+    ///
+    /// See [`Interceptor`] for more details.
+    pub fn new(interceptor: I) -> Self {
+        Self { interceptor }
+    }
 }
 
 impl<S, I> Layer<S> for InterceptorLayer<I>
