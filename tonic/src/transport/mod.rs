@@ -117,7 +117,7 @@ pub use tokio_rustls::rustls::pki_types::CertificateDer;
 
 #[cfg(all(feature = "channel", feature = "tls"))]
 pub use self::channel::ClientTlsConfig;
-#[cfg(all(feature = "server", feature = "tls"))]
+#[cfg(all(feature = "server", any(feature = "tls", feature = "tls-aws-lc")))]
 pub use self::server::ServerTlsConfig;
 #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 pub use self::tls::Identity;
