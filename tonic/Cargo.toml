@@ -36,11 +36,6 @@ tls = [
   "tokio?/macros",
   "tokio-rustls/ring",
 ]
-tls-roots = [
-  "tls-native-roots",
-] # Deprecated. Please use `tls-native-roots` instead.
-tls-native-roots = ["tls", "channel", "dep:rustls-native-certs"]
-tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
 tls-aws-lc = [
   "dep:rustls-pemfile",
   "dep:tokio-rustls",
@@ -49,6 +44,11 @@ tls-aws-lc = [
   "tokio?/macros",
   "tokio-rustls/aws-lc-rs",
 ]
+tls-roots = [
+  "tls-native-roots",
+] # Deprecated. Please use `tls-native-roots` instead.
+tls-native-roots = ["channel", "dep:rustls-native-certs"]
+tls-webpki-roots = ["channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
   "router",
