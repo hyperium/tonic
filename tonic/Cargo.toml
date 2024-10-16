@@ -26,7 +26,7 @@ version = "0.12.3"
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
-default = ["transport", "codegen", "prost", "tls-ring"]
+default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
 tls = [
   "dep:rustls-pemfile",
@@ -40,8 +40,8 @@ tls-roots = [
 ] # Deprecated. Please use `tls-native-roots` instead.
 tls-native-roots = ["tls", "channel", "dep:rustls-native-certs"]
 tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
-tls-ring = ["tls", "tokio-rustls?/ring"]
-tls-aws-lc = ["tls", "tokio-rustls?/aws-lc-rs"]
+tls-ring = ["tls", "tokio-rustls/ring"]
+tls-aws-lc = ["tls", "tokio-rustls/aws-lc-rs"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
   "router",
