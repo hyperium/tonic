@@ -91,14 +91,14 @@ tower = {version = "0.4.7", default-features = false, optional = true}
 axum = {version = "0.7", default-features = false, optional = true}
 
 # rustls
-rustls-pemfile = {version = "2.0", optional = true}
-rustls-native-certs = {version = "0.8", optional = true}
-tokio-rustls = {version = "0.26", default-features = false, features = ["logging", "tls12"], optional = true}
-webpki-roots = {version = "0.26", optional = true}
+rustls-pemfile = { version = "2.0", optional = true }
+rustls-native-certs = { version = "0.8", optional = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12"], optional = true }
+webpki-roots = { version = "0.26", optional = true }
 
 # compression
 flate2 = {version = "1.0", optional = true}
-zstd = {version = "0.13.0", optional = true}
+zstd = { version = "0.13.0", optional = true }
 
 # channel
 hyper-timeout = {version = "0.5", optional = true}
