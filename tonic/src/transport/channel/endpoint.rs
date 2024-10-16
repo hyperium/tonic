@@ -1,8 +1,8 @@
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 use super::service::TlsConnector;
 use super::service::{self, Executor, SharedExec};
 use super::Channel;
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 use super::ClientTlsConfig;
 use crate::transport::Error;
 use bytes::Bytes;
@@ -23,7 +23,7 @@ pub struct Endpoint {
     pub(crate) timeout: Option<Duration>,
     pub(crate) concurrency_limit: Option<usize>,
     pub(crate) rate_limit: Option<(u64, Duration)>,
-    #[cfg(feature = "tls")]
+    #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
     pub(crate) tls: Option<TlsConnector>,
     pub(crate) buffer_size: Option<usize>,
     pub(crate) init_stream_window_size: Option<u32>,
@@ -49,7 +49,7 @@ impl Endpoint {
         D::Error: Into<crate::Error>,
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
-        #[cfg(feature = "tls")]
+        #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
         if me.uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
             return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
         }
@@ -244,7 +244,7 @@ impl Endpoint {
     }
 
     /// Configures TLS for the endpoint.
-    #[cfg(feature = "tls")]
+    #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
     pub fn tls_config(self, tls_config: ClientTlsConfig) -> Result<Self, Error> {
         Ok(Endpoint {
             tls: Some(
@@ -320,7 +320,7 @@ impl Endpoint {
     pub(crate) fn connector<C>(&self, c: C) -> service::Connector<C> {
         service::Connector::new(
             c,
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             self.tls.clone(),
         )
     }
@@ -445,7 +445,7 @@ impl From<Uri> for Endpoint {
             concurrency_limit: None,
             rate_limit: None,
             timeout: None,
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             tls: None,
             buffer_size: None,
             init_stream_window_size: None,

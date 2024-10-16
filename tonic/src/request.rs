@@ -218,7 +218,7 @@ impl<T> Request<T> {
             .get::<TcpConnectInfo>()
             .and_then(|i| i.local_addr());
 
-        #[cfg(feature = "tls")]
+        #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
         let addr = addr.or_else(|| {
             self.extensions()
                 .get::<TlsConnectInfo<TcpConnectInfo>>()
@@ -240,7 +240,7 @@ impl<T> Request<T> {
             .get::<TcpConnectInfo>()
             .and_then(|i| i.remote_addr());
 
-        #[cfg(feature = "tls")]
+        #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
         let addr = addr.or_else(|| {
             self.extensions()
                 .get::<TlsConnectInfo<TcpConnectInfo>>()

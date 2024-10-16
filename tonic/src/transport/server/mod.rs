@@ -3,7 +3,7 @@
 mod conn;
 mod incoming;
 mod service;
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 mod tls;
 #[cfg(unix)]
 mod unix;
@@ -19,13 +19,13 @@ use hyper_util::{
     server::conn::auto::{Builder as ConnectionBuilder, HttpServerConnExec},
     service::TowerToHyperService,
 };
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 pub use tls::ServerTlsConfig;
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 pub use conn::TlsConnectInfo;
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 use self::service::TlsAcceptor;
 
 #[cfg(unix)]
@@ -33,7 +33,7 @@ pub use unix::UdsConnectInfo;
 
 pub use incoming::TcpIncoming;
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 use crate::transport::Error;
 
 use self::service::{RecoverError, ServerIo};
@@ -86,7 +86,7 @@ pub struct Server<L = Identity> {
     trace_interceptor: Option<TraceInterceptor>,
     concurrency_limit: Option<usize>,
     timeout: Option<Duration>,
-    #[cfg(feature = "tls")]
+    #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
     tls: Option<TlsAcceptor>,
     init_stream_window_size: Option<u32>,
     init_connection_window_size: Option<u32>,
@@ -110,7 +110,7 @@ impl Default for Server<Identity> {
             trace_interceptor: None,
             concurrency_limit: None,
             timeout: None,
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             tls: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
@@ -154,7 +154,7 @@ impl Server {
 
 impl<L> Server<L> {
     /// Configure TLS for this server.
-    #[cfg(feature = "tls")]
+    #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
     pub fn tls_config(self, tls_config: ServerTlsConfig) -> Result<Self, Error> {
         Ok(Server {
             tls: Some(tls_config.tls_acceptor().map_err(Error::from_source)?),
@@ -509,7 +509,7 @@ impl<L> Server<L> {
             trace_interceptor: self.trace_interceptor,
             concurrency_limit: self.concurrency_limit,
             timeout: self.timeout,
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             tls: self.tls,
             init_stream_window_size: self.init_stream_window_size,
             init_connection_window_size: self.init_connection_window_size,
@@ -570,7 +570,7 @@ impl<L> Server<L> {
 
         let incoming = incoming::tcp_incoming(
             incoming,
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             self.tls,
         );
         let mut svc = MakeSvc {
@@ -1041,7 +1041,7 @@ where
                         request.extensions_mut().insert(inner.clone());
                     }
                     tower::util::Either::B(inner) => {
-                        #[cfg(feature = "tls")]
+                        #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
                         {
                             request.extensions_mut().insert(inner.clone());
                             request.extensions_mut().insert(inner.get_ref().clone());

@@ -16,7 +16,7 @@ use tokio_stream::{Stream, StreamExt};
 use tracing::warn;
 
 use super::service::ServerIo;
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 use super::service::TlsAcceptor;
 
 #[cfg(not(feature = "tls"))]
@@ -42,7 +42,7 @@ where
     }
 }
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
     tls: Option<TlsAcceptor>,
@@ -112,7 +112,7 @@ fn handle_tcp_accept_error(e: impl Into<crate::Error>) -> ControlFlow<crate::Err
     ControlFlow::Break(e)
 }
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 async fn select<IO: 'static, IE>(
     incoming: &mut (impl Stream<Item = Result<IO, IE>> + Unpin),
     tasks: &mut tokio::task::JoinSet<Result<ServerIo<IO>, crate::Error>>,
@@ -147,7 +147,7 @@ where
     }
 }
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 enum SelectOutput<A> {
     Incoming(A),
     Io(ServerIo<A>),

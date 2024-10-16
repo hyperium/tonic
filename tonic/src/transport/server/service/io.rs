@@ -4,18 +4,18 @@ use std::io::IoSlice;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 use tokio_rustls::server::TlsStream;
 
 pub(crate) enum ServerIo<IO> {
     Io(IO),
-    #[cfg(feature = "tls")]
+    #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
     TlsIo(Box<TlsStream<IO>>),
 }
 
 use tower::util::Either;
 
-#[cfg(feature = "tls")]
+#[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 type ServerIoConnectInfo<IO> =
     Either<<IO as Connected>::ConnectInfo, <TlsStream<IO> as Connected>::ConnectInfo>;
 
@@ -27,7 +27,7 @@ impl<IO> ServerIo<IO> {
         Self::Io(io)
     }
 
-    #[cfg(feature = "tls")]
+    #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
     pub(in crate::transport) fn new_tls_io(io: TlsStream<IO>) -> Self {
         Self::TlsIo(Box::new(io))
     }
@@ -38,7 +38,7 @@ impl<IO> ServerIo<IO> {
     {
         match self {
             Self::Io(io) => Either::A(io.connect_info()),
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             Self::TlsIo(io) => Either::B(io.connect_info()),
         }
     }
@@ -55,7 +55,7 @@ where
     ) -> Poll<io::Result<()>> {
         match &mut *self {
             Self::Io(io) => Pin::new(io).poll_read(cx, buf),
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             Self::TlsIo(io) => Pin::new(io).poll_read(cx, buf),
         }
     }
@@ -72,7 +72,7 @@ where
     ) -> Poll<io::Result<usize>> {
         match &mut *self {
             Self::Io(io) => Pin::new(io).poll_write(cx, buf),
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             Self::TlsIo(io) => Pin::new(io).poll_write(cx, buf),
         }
     }
@@ -80,7 +80,7 @@ where
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match &mut *self {
             Self::Io(io) => Pin::new(io).poll_flush(cx),
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             Self::TlsIo(io) => Pin::new(io).poll_flush(cx),
         }
     }
@@ -88,7 +88,7 @@ where
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         match &mut *self {
             Self::Io(io) => Pin::new(io).poll_shutdown(cx),
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             Self::TlsIo(io) => Pin::new(io).poll_shutdown(cx),
         }
     }
@@ -100,7 +100,7 @@ where
     ) -> Poll<Result<usize, io::Error>> {
         match &mut *self {
             Self::Io(io) => Pin::new(io).poll_write_vectored(cx, bufs),
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             Self::TlsIo(io) => Pin::new(io).poll_write_vectored(cx, bufs),
         }
     }
@@ -108,7 +108,7 @@ where
     fn is_write_vectored(&self) -> bool {
         match self {
             Self::Io(io) => io.is_write_vectored(),
-            #[cfg(feature = "tls")]
+            #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
             Self::TlsIo(io) => io.is_write_vectored(),
         }
     }
