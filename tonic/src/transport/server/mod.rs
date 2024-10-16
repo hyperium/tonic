@@ -1047,7 +1047,7 @@ where
                             request.extensions_mut().insert(inner.get_ref().clone());
                         }
 
-                        #[cfg(not(feature = "tls"))]
+                        #[cfg(all(not(feature = "tls"), not(feature = "tls-aws-lc")))]
                         {
                             // just a type check to make sure we didn't forget to
                             // insert this into the extensions

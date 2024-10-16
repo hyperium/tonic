@@ -19,7 +19,7 @@ use tower::util::Either;
 type ServerIoConnectInfo<IO> =
     Either<<IO as Connected>::ConnectInfo, <TlsStream<IO> as Connected>::ConnectInfo>;
 
-#[cfg(not(feature = "tls"))]
+#[cfg(all(not(feature = "tls"), not(feature = "tls-aws-lc")))]
 type ServerIoConnectInfo<IO> = Either<<IO as Connected>::ConnectInfo, ()>;
 
 impl<IO> ServerIo<IO> {

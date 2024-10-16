@@ -19,7 +19,7 @@ use super::service::ServerIo;
 #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
 use super::service::TlsAcceptor;
 
-#[cfg(not(feature = "tls"))]
+#[cfg(all(not(feature = "tls"), not(feature = "tls-aws-lc")))]
 pub(crate) fn tcp_incoming<IO, IE>(
     incoming: impl Stream<Item = Result<IO, IE>>,
 ) -> impl Stream<Item = Result<ServerIo<IO>, crate::Error>>
