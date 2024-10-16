@@ -1,15 +1,15 @@
 use crate::metadata::{MetadataMap, MetadataValue};
 #[cfg(feature = "server")]
 use crate::transport::server::TcpConnectInfo;
-#[cfg(all(feature = "server", any(feature = "tls", feature = "tls-aws-lc")))]
+#[cfg(all(feature = "server", feature = "tls-any"))]
 use crate::transport::server::TlsConnectInfo;
 use http::Extensions;
 #[cfg(feature = "server")]
 use std::net::SocketAddr;
-#[cfg(all(feature = "server", any(feature = "tls", feature = "tls-aws-lc")))]
+#[cfg(all(feature = "server", feature = "tls-any"))]
 use std::sync::Arc;
 use std::time::Duration;
-#[cfg(all(feature = "server", any(feature = "tls", feature = "tls-aws-lc")))]
+#[cfg(all(feature = "server", feature = "tls-any"))]
 use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_stream::Stream;
 
@@ -218,7 +218,7 @@ impl<T> Request<T> {
             .get::<TcpConnectInfo>()
             .and_then(|i| i.local_addr());
 
-        #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
+        #[cfg(feature = "tls-any")]
         let addr = addr.or_else(|| {
             self.extensions()
                 .get::<TlsConnectInfo<TcpConnectInfo>>()
@@ -240,7 +240,7 @@ impl<T> Request<T> {
             .get::<TcpConnectInfo>()
             .and_then(|i| i.remote_addr());
 
-        #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
+        #[cfg(feature = "tls-any")]
         let addr = addr.or_else(|| {
             self.extensions()
                 .get::<TlsConnectInfo<TcpConnectInfo>>()
@@ -256,7 +256,7 @@ impl<T> Request<T> {
     /// and is mostly used for mTLS. This currently only returns
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
-    #[cfg(all(feature = "server", any(feature = "tls", feature = "tls-aws-lc")))]
+    #[cfg(all(feature = "server", feature = "tls-any"))]
     pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
         self.extensions()
             .get::<TlsConnectInfo<TcpConnectInfo>>()
