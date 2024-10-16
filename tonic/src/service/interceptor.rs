@@ -55,6 +55,7 @@ where
 /// Create a new interceptor layer.
 ///
 /// See [`Interceptor`] for more details.
+#[deprecated(since = "0.12.4", note = "use `InterceptorLayer::new()` instead")]
 pub fn interceptor<I>(interceptor: I) -> InterceptorLayer<I>
 where
     I: Interceptor,
@@ -71,9 +72,18 @@ pub struct InterceptorLayer<I> {
     interceptor: I,
 }
 
+impl<I> InterceptorLayer<I> {
+    /// Create a new interceptor layer.
+    ///
+    /// See [`Interceptor`] for more details.
+    pub fn new(interceptor: I) -> Self {
+        Self { interceptor }
+    }
+}
+
 impl<S, I> Layer<S> for InterceptorLayer<I>
 where
-    I: Interceptor + Clone,
+    I: Clone,
 {
     type Service = InterceptedService<S, I>;
 
@@ -94,10 +104,7 @@ pub struct InterceptedService<S, I> {
 impl<S, I> InterceptedService<S, I> {
     /// Create a new `InterceptedService` that wraps `S` and intercepts each request with the
     /// function `F`.
-    pub fn new(service: S, interceptor: I) -> Self
-    where
-        I: Interceptor,
-    {
+    pub fn new(service: S, interceptor: I) -> Self {
         Self {
             inner: service,
             interceptor,
