@@ -84,8 +84,8 @@ async-trait = {version = "0.1.13", optional = true}
 async-stream = {version = "0.3", optional = true}
 h2 = {version = "0.4", optional = true}
 hyper = {version = "1", features = ["http1", "http2"], optional = true}
-hyper-util = {version = "0.1.4", features = ["tokio"], optional = true}
-socket2 = {version = "0.5", optional = true, features = ["all"]}
+hyper-util = { version = "0.1.4", features = ["tokio"], optional = true }
+socket2 = { version = "0.5", optional = true, features = ["all"] }
 tokio = {version = "1", default-features = false, optional = true}
 tower = {version = "0.4.7", default-features = false, optional = true}
 axum = {version = "0.7", default-features = false, optional = true}
