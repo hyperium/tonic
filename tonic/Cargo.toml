@@ -28,25 +28,9 @@ gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = [
-  "dep:rustls-pemfile",
-  "dep:tokio-rustls",
-  "dep:tokio",
-  "tokio?/rt",
-  "tokio?/macros",
-  "tokio-rustls/ring",
-]
-tls-aws-lc = [
-  "dep:rustls-pemfile",
-  "dep:tokio-rustls",
-  "dep:tokio",
-  "tokio?/rt",
-  "tokio?/macros",
-  "tokio-rustls/aws-lc-rs",
-]
-tls-roots = [
-  "tls-native-roots",
-] # Deprecated. Please use `tls-native-roots` instead.
+tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros", "tokio-rustls/ring"]
+tls-aws-lc = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros", "tokio-rustls/aws-lc-rs"]
+tls-roots = ["tls-native-roots"] # Deprecated. Please use `tls-native-roots` instead.
 tls-native-roots = ["channel", "dep:rustls-native-certs"]
 tls-webpki-roots = ["channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
@@ -54,34 +38,18 @@ server = [
   "router",
   "dep:async-stream",
   "dep:h2",
-  "dep:hyper",
-  "hyper?/server",
-  "dep:hyper-util",
-  "hyper-util?/service",
-  "hyper-util?/server-auto",
+  "dep:hyper", "hyper?/server",
+  "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
   "dep:socket2",
-  "dep:tokio",
-  "tokio?/macros",
-  "tokio?/net",
-  "tokio?/time",
+  "dep:tokio", "tokio?/macros", "tokio?/net", "tokio?/time",
   "tokio-stream/net",
-  "dep:tower",
-  "tower?/util",
-  "tower?/limit",
+  "dep:tower", "tower?/util", "tower?/limit",
 ]
 channel = [
-  "dep:hyper",
-  "hyper?/client",
-  "dep:hyper-util",
-  "hyper-util?/client-legacy",
-  "dep:tower",
-  "tower?/balance",
-  "tower?/buffer",
-  "tower?/discover",
-  "tower?/limit",
-  "tower?/util",
-  "dep:tokio",
-  "tokio?/time",
+  "dep:hyper", "hyper?/client",
+  "dep:hyper-util", "hyper-util?/client-legacy",
+  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit", "tower?/util",
+  "dep:tokio", "tokio?/time",
   "dep:hyper-timeout",
 ]
 transport = ["server", "channel"]

@@ -21,10 +21,7 @@ pub(crate) struct Connector<C> {
 }
 
 impl<C> Connector<C> {
-    pub(crate) fn new(
-        inner: C,
-        #[cfg(any(feature = "tls", feature = "tls-aws-lc"))] tls: Option<TlsConnector>,
-    ) -> Self {
+    pub(crate) fn new(inner: C, #[cfg(any(feature = "tls", feature = "tls-aws-lc"))] tls: Option<TlsConnector>) -> Self {
         Self {
             inner,
             #[cfg(any(feature = "tls", feature = "tls-aws-lc"))]
