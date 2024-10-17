@@ -900,13 +900,6 @@ impl<L> Router<L> {
     pub fn into_service<ResBody>(self) -> L::Service
     where
         L: Layer<Routes>,
-        L::Service:
-            Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Error:
-            Into<crate::Error> + Send,
-        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
-        ResBody::Error: Into<crate::Error>,
     {
         self.server.service_builder.service(self.routes.prepare())
     }
