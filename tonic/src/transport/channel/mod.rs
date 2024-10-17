@@ -64,14 +64,14 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 /// cloning the `Channel` type is cheap and encouraged.
 #[derive(Clone)]
 pub struct Channel {
-    svc: Buffer<Request<BoxBody>, BoxFuture<'static, Result<Response<BoxBody>, crate::Error>>>,
+    svc: Buffer<Request<BoxBody>, BoxFuture<'static, Result<Response<BoxBody>, crate::BoxError>>>,
 }
 
 /// A future that resolves to an HTTP response.
 ///
 /// This is returned by the `Service::call` on [`Channel`].
 pub struct ResponseFuture {
-    inner: BufferResponseFuture<BoxFuture<'static, Result<Response<BoxBody>, crate::Error>>>,
+    inner: BufferResponseFuture<BoxFuture<'static, Result<Response<BoxBody>, crate::BoxError>>>,
 }
 
 impl Channel {
@@ -147,7 +147,7 @@ impl Channel {
     pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Self
     where
         C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::Error> + Send,
+        C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
         C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
@@ -165,7 +165,7 @@ impl Channel {
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::Error> + Send,
+        C::Error: Into<crate::BoxError> + Send,
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
@@ -184,7 +184,7 @@ impl Channel {
     pub(crate) fn balance<D, E>(discover: D, buffer_size: usize, executor: E) -> Self
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
-        D::Error: Into<crate::Error>,
+        D::Error: Into<crate::BoxError>,
         D::Key: Hash + Send + Clone,
         E: Executor<BoxFuture<'static, ()>> + Send + Sync + 'static,
     {

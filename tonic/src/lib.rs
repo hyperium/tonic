@@ -128,7 +128,7 @@ pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, ConnectError, Status, TimeoutExpired};
 
-pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
+pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 #[doc(hidden)]
 #[cfg(feature = "codegen")]

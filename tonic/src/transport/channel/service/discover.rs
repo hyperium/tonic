@@ -24,7 +24,7 @@ impl<K: Hash + Eq + Clone> DynamicServiceStream<K> {
 }
 
 impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
-    type Item = DiscoverResult<K, Connection, crate::Error>;
+    type Item = DiscoverResult<K, Connection, crate::BoxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let c = &mut self.changes;
