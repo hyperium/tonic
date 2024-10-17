@@ -96,7 +96,7 @@ pub mod server;
 
 mod error;
 mod service;
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 mod tls;
 
 #[doc(inline)]
@@ -109,15 +109,15 @@ pub use self::server::Server;
 /// Deprecated. Please use [`crate::status::TimeoutExpired`] instead.
 pub use crate::status::TimeoutExpired;
 
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 pub use self::tls::Certificate;
 pub use hyper::{body::Body, Uri};
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
 
-#[cfg(all(feature = "channel", feature = "tls-any"))]
+#[cfg(all(feature = "channel", feature = "_tls-any"))]
 pub use self::channel::ClientTlsConfig;
-#[cfg(all(feature = "server", feature = "tls-any"))]
+#[cfg(all(feature = "server", feature = "_tls-any"))]
 pub use self::server::ServerTlsConfig;
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 pub use self::tls::Identity;

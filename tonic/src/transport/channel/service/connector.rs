@@ -1,30 +1,30 @@
 use super::BoxedIo;
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 use super::TlsConnector;
 use crate::transport::channel::BoxFuture;
 use crate::ConnectError;
 use http::Uri;
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 use std::fmt;
 use std::task::{Context, Poll};
 
 use hyper::rt;
 
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 use hyper_util::rt::TokioIo;
 use tower_service::Service;
 
 pub(crate) struct Connector<C> {
     inner: C,
-    #[cfg(feature = "tls-any")]
+    #[cfg(feature = "_tls-any")]
     tls: Option<TlsConnector>,
 }
 
 impl<C> Connector<C> {
-    pub(crate) fn new(inner: C, #[cfg(feature = "tls-any")] tls: Option<TlsConnector>) -> Self {
+    pub(crate) fn new(inner: C, #[cfg(feature = "_tls-any")] tls: Option<TlsConnector>) -> Self {
         Self {
             inner,
-            #[cfg(feature = "tls-any")]
+            #[cfg(feature = "_tls-any")]
             tls,
         }
     }
@@ -48,10 +48,10 @@ where
     }
 
     fn call(&mut self, uri: Uri) -> Self::Future {
-        #[cfg(feature = "tls-any")]
+        #[cfg(feature = "_tls-any")]
         let tls = self.tls.clone();
 
-        #[cfg(feature = "tls-any")]
+        #[cfg(feature = "_tls-any")]
         let is_https = uri.scheme_str() == Some("https");
         let connect = self.inner.call(uri);
 
@@ -59,7 +59,7 @@ where
             async {
                 let io = connect.await?;
 
-                #[cfg(feature = "tls-any")]
+                #[cfg(feature = "_tls-any")]
                 if is_https {
                     return if let Some(tls) = tls {
                         let io = tls.connect(TokioIo::new(io)).await?;
@@ -78,11 +78,11 @@ where
 }
 
 /// Error returned when trying to connect to an HTTPS endpoint without TLS enabled.
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 #[derive(Debug)]
 pub(crate) struct HttpsUriWithoutTlsSupport(());
 
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 impl fmt::Display for HttpsUriWithoutTlsSupport {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Connecting to HTTPS without TLS enabled")
@@ -90,5 +90,5 @@ impl fmt::Display for HttpsUriWithoutTlsSupport {
 }
 
 // std::error::Error only requires a type to impl Debug and Display
-#[cfg(feature = "tls-any")]
+#[cfg(feature = "_tls-any")]
 impl std::error::Error for HttpsUriWithoutTlsSupport {}
