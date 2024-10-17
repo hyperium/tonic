@@ -108,7 +108,14 @@ mod layer;
 mod service;
 
 use http::header::HeaderName;
-use std::time::Duration;
+use pin_project::pin_project;
+use std::{
+    fmt,
+    future::Future,
+    pin::Pin,
+    task::{Context, Poll},
+    time::Duration,
+};
 use tonic::{body::BoxBody, server::NamedService, Status};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_layer::Layer;
@@ -159,18 +166,37 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<BoxBody>>>::Future;
+    type Future = CorsGrpcWebResponseFuture<S::Future>;
 
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.0.poll_ready(cx)
     }
 
     fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
-        self.0.call(req)
+        CorsGrpcWebResponseFuture(self.0.call(req))
+    }
+}
+
+/// Response Future for the [`CorsGrpcWeb`].
+#[pin_project]
+pub struct CorsGrpcWebResponseFuture<F>(
+    #[pin] tower_http::cors::ResponseFuture<service::ResponseFuture<F>>,
+);
+
+impl<F, E> Future for CorsGrpcWebResponseFuture<F>
+where
+    F: Future<Output = Result<http::Response<BoxBody>, E>>,
+{
+    type Output = Result<http::Response<BoxBody>, E>;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project().0.poll(cx)
+    }
+}
+
+impl<F> fmt::Debug for CorsGrpcWebResponseFuture<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("CorsGrpcWebResponseFuture").finish()
     }
 }
 

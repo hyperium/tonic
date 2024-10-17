@@ -43,7 +43,6 @@ allowed_external_types = [
   # not major released
   "futures_core::stream::Stream",
   "http_body_util::combinators::box_body::UnsyncBoxBody",
-  "tower_http::cors::Cors",
   "tower_layer::Layer",
   "tower_service::Service",
 ]
