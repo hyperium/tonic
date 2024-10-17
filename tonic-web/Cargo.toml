@@ -20,7 +20,6 @@ bytes = "1"
 tokio-stream = "0.1"
 http = "1"
 http-body = "1"
-http-body-util = "0.1"
 pin-project = "1"
 tonic = { version = "0.13.0", path = "../tonic", default-features = false }
 tower-service = "0.3"
@@ -42,7 +41,6 @@ allowed_external_types = [
 
   # not major released
   "futures_core::stream::Stream",
-  "http_body_util::combinators::box_body::UnsyncBoxBody",
   "tower_layer::Layer",
   "tower_service::Service",
 ]

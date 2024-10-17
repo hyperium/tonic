@@ -136,7 +136,6 @@ allowed_external_types = [
   "axum::routing::Router",
   "futures_core::stream::Stream",
   "h2::error::Error",
-  "http_body_util::combinators::box_body::UnsyncBoxBody",
   "tower_service::Service",
   "tower_layer::Layer",
   "tower_layer::stack::Stack",
