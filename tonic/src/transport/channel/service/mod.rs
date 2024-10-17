@@ -22,7 +22,7 @@ pub(crate) use self::connector::Connector;
 mod executor;
 pub(super) use self::executor::{Executor, SharedExec};
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "tls-any")]
 mod tls;
-#[cfg(feature = "tls")]
+#[cfg(feature = "tls-any")]
 pub(super) use self::tls::TlsConnector;
