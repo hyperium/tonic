@@ -109,7 +109,7 @@ mod service;
 
 use http::header::HeaderName;
 use std::time::Duration;
-use tonic::{body::BoxBody, server::NamedService, Status};
+use tonic::{body::Body, server::NamedService, Status};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_layer::Layer;
 use tower_service::Service;
@@ -136,7 +136,7 @@ const DEFAULT_ALLOW_HEADERS: [HeaderName; 4] = [
 )]
 pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
 where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<Body>, Response = http::Response<Body>>,
 {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
@@ -153,14 +153,14 @@ where
 #[derive(Debug, Clone)]
 pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
 
-impl<S> Service<http::Request<BoxBody>> for CorsGrpcWeb<S>
+impl<S> Service<http::Request<Body>> for CorsGrpcWeb<S>
 where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<Body>, Response = http::Response<Body>>,
 {
     type Response = S::Response;
     type Error = S::Error;
     type Future =
-        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<BoxBody>>>::Future;
+        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<Body>>>::Future;
 
     fn poll_ready(
         &mut self,
@@ -169,7 +169,7 @@ where
         self.0.poll_ready(cx)
     }
 
-    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<Body>) -> Self::Future {
         self.0.call(req)
     }
 }
