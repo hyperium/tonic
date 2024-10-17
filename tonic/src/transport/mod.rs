@@ -21,7 +21,6 @@
 //! # #[cfg(feature = "rustls")]
 //! # use tonic::transport::{Channel, Certificate, ClientTlsConfig};
 //! # use std::time::Duration;
-//! # use tonic::body::BoxBody;
 //! # use tonic::client::GrpcService;;
 //! # use http::Request;
 //! # #[cfg(feature = "rustls")]
@@ -49,20 +48,20 @@
 //! # use std::convert::Infallible;
 //! # #[cfg(feature = "rustls")]
 //! # use tonic::transport::{Server, Identity, ServerTlsConfig};
-//! # use tonic::body::BoxBody;
+//! # use tonic::body::Body;
 //! # use tower::Service;
 //! # #[cfg(feature = "rustls")]
 //! # async fn do_thing() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[derive(Clone)]
 //! # pub struct Svc;
-//! # impl Service<hyper::Request<BoxBody>> for Svc {
-//! #   type Response = hyper::Response<BoxBody>;
+//! # impl Service<hyper::Request<Body>> for Svc {
+//! #   type Response = hyper::Response<Body>;
 //! #   type Error = Infallible;
 //! #   type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
 //! #   fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
 //! #       Ok(()).into()
 //! #  }
-//! #   fn call(&mut self, _req: hyper::Request<BoxBody>) -> Self::Future {
+//! #   fn call(&mut self, _req: hyper::Request<Body>) -> Self::Future {
 //! #       unimplemented!()
 //! #   }
 //! # }
