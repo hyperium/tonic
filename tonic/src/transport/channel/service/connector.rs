@@ -35,7 +35,7 @@ where
     C: Service<Uri>,
     C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     C::Future: Send + 'static,
-    crate::Error: From<C::Error> + Send + 'static,
+    crate::BoxError: From<C::Error> + Send + 'static,
 {
     type Response = BoxedIo;
     type Error = ConnectError;
@@ -69,7 +69,7 @@ where
                     };
                 }
 
-                Ok::<_, crate::Error>(BoxedIo::new(io))
+                Ok::<_, crate::BoxError>(BoxedIo::new(io))
             }
             .await
             .map_err(ConnectError)

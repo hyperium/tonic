@@ -55,7 +55,7 @@ pub(crate) fn load_identity(
 pub(crate) fn add_certs_from_pem(
     mut certs: &mut dyn std::io::BufRead,
     roots: &mut RootCertStore,
-) -> Result<(), crate::Error> {
+) -> Result<(), crate::BoxError> {
     for cert in rustls_pemfile::certs(&mut certs).collect::<Result<Vec<_>, _>>()? {
         roots
             .add(cert)

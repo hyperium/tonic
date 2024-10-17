@@ -143,10 +143,10 @@ async fn unimplemented() -> impl axum::response::IntoResponse {
 impl<B> Service<Request<B>> for Routes
 where
     B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    B::Error: Into<crate::Error>,
+    B::Error: Into<crate::BoxError>,
 {
     type Response = Response<BoxBody>;
-    type Error = crate::Error;
+    type Error = crate::BoxError;
     type Future = RoutesFuture;
 
     #[inline]
@@ -168,7 +168,7 @@ impl fmt::Debug for RoutesFuture {
 }
 
 impl Future for RoutesFuture {
-    type Output = Result<Response<BoxBody>, crate::Error>;
+    type Output = Result<Response<BoxBody>, crate::BoxError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match ready!(Pin::new(&mut self.as_mut().0).poll(cx)) {
