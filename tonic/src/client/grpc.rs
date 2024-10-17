@@ -2,7 +2,7 @@ use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings
 use crate::codec::EncodeBody;
 use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
-    body::BoxBody,
+    body::Body,
     client::GrpcService,
     codec::{Codec, Decoder, Streaming},
     request::SanitizeHeaders,
@@ -12,7 +12,7 @@ use http::{
     header::{HeaderValue, CONTENT_TYPE, TE},
     uri::{PathAndQuery, Uri},
 };
-use http_body::Body;
+use http_body::Body as HttpBody;
 use std::{fmt, future, pin::pin};
 use tokio_stream::{Stream, StreamExt};
 
@@ -198,7 +198,7 @@ impl<T> Grpc<T> {
     /// accept one more request.
     pub async fn ready(&mut self) -> Result<(), T::Error>
     where
-        T: GrpcService<BoxBody>,
+        T: GrpcService<Body>,
     {
         future::poll_fn(|cx| self.inner.poll_ready(cx)).await
     }
@@ -211,9 +211,9 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<M2>, Status>
     where
-        T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
+        T: GrpcService<Body>,
+        T::ResponseBody: HttpBody + Send + 'static,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::BoxError>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -230,9 +230,9 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<M2>, Status>
     where
-        T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
+        T: GrpcService<Body>,
+        T::ResponseBody: HttpBody + Send + 'static,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::BoxError>,
         S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -267,9 +267,9 @@ impl<T> Grpc<T> {
         codec: C,
     ) -> Result<Response<Streaming<M2>>, Status>
     where
-        T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
+        T: GrpcService<Body>,
+        T::ResponseBody: HttpBody + Send + 'static,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::BoxError>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -286,9 +286,9 @@ impl<T> Grpc<T> {
         mut codec: C,
     ) -> Result<Response<Streaming<M2>>, Status>
     where
-        T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
+        T: GrpcService<Body>,
+        T::ResponseBody: HttpBody + Send + 'static,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::BoxError>,
         S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -303,7 +303,7 @@ impl<T> Grpc<T> {
                     self.config.max_encoding_message_size,
                 )
             })
-            .map(BoxBody::new);
+            .map(Body::new);
 
         let request = self.config.prepare_request(request, path);
 
@@ -326,9 +326,9 @@ impl<T> Grpc<T> {
         response: http::Response<T::ResponseBody>,
     ) -> Result<Response<Streaming<M2>>, Status>
     where
-        T: GrpcService<BoxBody>,
-        T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
+        T: GrpcService<Body>,
+        T::ResponseBody: HttpBody + Send + 'static,
+        <T::ResponseBody as HttpBody>::Error: Into<crate::BoxError>,
     {
         let encoding = CompressionEncoding::from_encoding_header(
             response.headers(),
@@ -369,11 +369,7 @@ impl<T> Grpc<T> {
 }
 
 impl GrpcConfig {
-    fn prepare_request(
-        &self,
-        request: Request<BoxBody>,
-        path: PathAndQuery,
-    ) -> http::Request<BoxBody> {
+    fn prepare_request(&self, request: Request<Body>, path: PathAndQuery) -> http::Request<Body> {
         let mut parts = self.origin.clone().into_parts();
 
         match &parts.path_and_query {

@@ -11,7 +11,7 @@ use hyper_util::rt::TokioExecutor;
 use prost::Message;
 use tokio::net::TcpListener;
 use tokio_stream::wrappers::TcpListenerStream;
-use tonic::body::BoxBody;
+use tonic::body::Body;
 use tonic::transport::Server;
 
 use test_web::pb::{test_server::TestServer, Input, Output};
@@ -108,7 +108,7 @@ fn encode_body() -> Bytes {
     buf.split_to(len + 5).freeze()
 }
 
-fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<BoxBody> {
+fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<Body> {
     use header::{ACCEPT, CONTENT_TYPE, ORIGIN};
 
     let request_uri = format!("{}/{}/{}", base_uri, "test.Test", "UnaryCall")
@@ -129,7 +129,7 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
         .header(ORIGIN, "http://example.com")
         .header(ACCEPT, format!("application/{}", accept))
         .uri(request_uri)
-        .body(BoxBody::new(
+        .body(Body::new(
             Full::new(bytes).map_err(|err| Status::internal(err.to_string())),
         ))
         .unwrap()
