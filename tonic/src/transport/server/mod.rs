@@ -1030,10 +1030,10 @@ where
             .layer(BoxCloneService::layer())
             .map_request(move |mut request: Request<BoxBody>| {
                 match &conn_info {
-                    tower::util::Either::A(inner) => {
+                    tower::util::Either::Left(inner) => {
                         request.extensions_mut().insert(inner.clone());
                     }
-                    tower::util::Either::B(inner) => {
+                    tower::util::Either::Right(inner) => {
                         #[cfg(feature = "tls")]
                         {
                             request.extensions_mut().insert(inner.clone());
