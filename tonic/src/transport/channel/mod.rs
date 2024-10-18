@@ -16,7 +16,6 @@ use http::{
     uri::{InvalidUri, Uri},
     Request, Response,
 };
-use hyper_util::client::legacy::connect::Connection as HyperConnection;
 use std::{
     fmt,
     future::Future,
@@ -144,12 +143,15 @@ impl Channel {
         (Self::balance(list, DEFAULT_BUFFER_SIZE, executor), tx)
     }
 
-    pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Self
+    /// Create a new [`Channel`] using a custom connector to the provided [Endpoint].
+    ///
+    /// This is a lower level API, prefer to use [`Endpoint::connect_lazy`] if you are not using a custom connector.
+    pub fn new<C>(connector: C, endpoint: Endpoint) -> Self
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
-        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
@@ -162,12 +164,15 @@ impl Channel {
         Channel { svc }
     }
 
-    pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
+    /// Connect to the provided [`Endpoint`] using the provided connector, and return a new [`Channel`].
+    ///
+    /// This is a lower level API, prefer to use [`Endpoint::connect`] if you are not using a custom connector.
+    pub async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
         C::Future: Unpin + Send,
-        C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
