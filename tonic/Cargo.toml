@@ -33,8 +33,8 @@ _tls-any = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", 
 tls-ring = ["_tls-any", "tokio-rustls/ring"]
 tls-aws-lc = ["_tls-any", "tokio-rustls/aws-lc-rs"]
 tls-roots = ["tls-native-roots"] # Deprecated. Please use `tls-native-roots` instead.
-tls-native-roots = ["channel", "dep:rustls-native-certs"]
-tls-webpki-roots = ["channel", "dep:webpki-roots"]
+tls-native-roots = ["_tls-any", "channel", "dep:rustls-native-certs"]
+tls-webpki-roots = ["_tls-any","channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
   "router",

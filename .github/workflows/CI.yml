@@ -62,7 +62,7 @@ jobs:
     - uses: taiki-e/install-action@cargo-udeps
     - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --exclude-features tls-ring,tls-aws-lc --each-feature
+    - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring --each-feature
     - run: cargo udeps --package tonic --features tls-ring,transport
     - run: cargo udeps --package tonic --features tls-ring,server
     - run: cargo udeps --package tonic --features tls-ring,channel
