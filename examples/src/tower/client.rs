@@ -68,9 +68,7 @@ mod service {
         }
 
         fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
-            // This is necessary because tonic internally uses `tower::buffer::Buffer`.
-            // See https://github.com/tower-rs/tower/issues/547#issuecomment-767629149
-            // for details on why this is necessary
+            // See: https://docs.rs/tower/latest/tower/trait.Service.html#be-careful-when-cloning-inner-services
             let clone = self.inner.clone();
             let mut inner = std::mem::replace(&mut self.inner, clone);
 
