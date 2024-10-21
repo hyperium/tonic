@@ -1,4 +1,3 @@
-use crate::Error;
 use pin_project::pin_project;
 use std::fmt;
 use std::{
@@ -13,12 +12,12 @@ use tracing::trace;
 pub(crate) struct Reconnect<M, Target>
 where
     M: Service<Target>,
-    M::Error: Into<Error>,
+    M::Error: Into<crate::BoxError>,
 {
     mk_service: M,
     state: State<M::Future, M::Response>,
     target: Target,
-    error: Option<crate::Error>,
+    error: Option<crate::BoxError>,
     has_been_connected: bool,
     is_lazy: bool,
 }
@@ -33,7 +32,7 @@ enum State<F, S> {
 impl<M, Target> Reconnect<M, Target>
 where
     M: Service<Target>,
-    M::Error: Into<Error>,
+    M::Error: Into<crate::BoxError>,
 {
     pub(crate) fn new(mk_service: M, target: Target, is_lazy: bool) -> Self {
         Reconnect {
@@ -52,12 +51,12 @@ where
     M: Service<Target, Response = S>,
     S: Service<Request>,
     M::Future: Unpin,
-    Error: From<M::Error> + From<S::Error>,
+    crate::BoxError: From<M::Error> + From<S::Error>,
     Target: Clone,
-    <M as tower_service::Service<Target>>::Error: Into<crate::Error>,
+    <M as tower_service::Service<Target>>::Error: Into<crate::BoxError>,
 {
     type Response = S::Response;
-    type Error = Error;
+    type Error = crate::BoxError;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -160,7 +159,7 @@ where
     M::Future: fmt::Debug,
     M::Response: fmt::Debug,
     Target: fmt::Debug,
-    <M as tower_service::Service<Target>>::Error: Into<Error>,
+    <M as tower_service::Service<Target>>::Error: Into<crate::BoxError>,
 {
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("Reconnect")
@@ -183,7 +182,7 @@ pub(crate) struct ResponseFuture<F> {
 #[derive(Debug)]
 enum Inner<F> {
     Future(#[pin] F),
-    Error(Option<crate::Error>),
+    Error(Option<crate::BoxError>),
 }
 
 impl<F> ResponseFuture<F> {
@@ -193,7 +192,7 @@ impl<F> ResponseFuture<F> {
         }
     }
 
-    pub(crate) fn error(error: crate::Error) -> Self {
+    pub(crate) fn error(error: crate::BoxError) -> Self {
         ResponseFuture {
             inner: Inner::Error(Some(error)),
         }
@@ -203,9 +202,9 @@ impl<F> ResponseFuture<F> {
 impl<F, T, E> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<T, E>>,
-    E: Into<Error>,
+    E: Into<crate::BoxError>,
 {
-    type Output = Result<T, Error>;
+    type Output = Result<T, crate::BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         //self.project().inner.poll(cx).map_err(Into::into)

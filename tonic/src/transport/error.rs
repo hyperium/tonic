@@ -33,7 +33,7 @@ impl Error {
         self
     }
 
-    pub(crate) fn from_source(source: impl Into<crate::Error>) -> Self {
+    pub(crate) fn from_source(source: impl Into<crate::BoxError>) -> Self {
         Error::new(Kind::Transport).with(source)
     }
 

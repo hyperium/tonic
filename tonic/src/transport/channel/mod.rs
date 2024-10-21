@@ -29,14 +29,13 @@ use tokio::sync::mpsc::{channel, Sender};
 use hyper::rt;
 use tower::balance::p2c::Balance;
 use tower::{
-    buffer::{self, Buffer},
+    buffer::{future::ResponseFuture as BufferResponseFuture, Buffer},
     discover::{Change, Discover},
-    util::{BoxService, Either},
+    util::BoxService,
     Service,
 };
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-type Svc = Either<Connection, BoxService<Request<BoxBody>, Response<BoxBody>, crate::Error>>;
 
 const DEFAULT_BUFFER_SIZE: usize = 1024;
 
@@ -65,14 +64,14 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 /// cloning the `Channel` type is cheap and encouraged.
 #[derive(Clone)]
 pub struct Channel {
-    svc: Buffer<Svc, Request<BoxBody>>,
+    svc: Buffer<Request<BoxBody>, BoxFuture<'static, Result<Response<BoxBody>, crate::BoxError>>>,
 }
 
 /// A future that resolves to an HTTP response.
 ///
 /// This is returned by the `Service::call` on [`Channel`].
 pub struct ResponseFuture {
-    inner: buffer::future::ResponseFuture<<Svc as Service<Request<BoxBody>>>::Future>,
+    inner: BufferResponseFuture<BoxFuture<'static, Result<Response<BoxBody>, crate::BoxError>>>,
 }
 
 impl Channel {
@@ -148,7 +147,7 @@ impl Channel {
     pub(crate) fn new<C>(connector: C, endpoint: Endpoint) -> Self
     where
         C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::Error> + Send,
+        C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
         C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
@@ -156,7 +155,8 @@ impl Channel {
         let executor = endpoint.executor.clone();
 
         let svc = Connection::lazy(connector, endpoint);
-        let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(svc, buffer_size);
+
         executor.execute(worker);
 
         Channel { svc }
@@ -165,7 +165,7 @@ impl Channel {
     pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::Error> + Send,
+        C::Error: Into<crate::BoxError> + Send,
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + HyperConnection + Unpin + Send + 'static,
     {
@@ -175,7 +175,7 @@ impl Channel {
         let svc = Connection::connect(connector, endpoint)
             .await
             .map_err(super::Error::from_source)?;
-        let (svc, worker) = Buffer::pair(Either::A(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(svc, buffer_size);
         executor.execute(worker);
 
         Ok(Channel { svc })
@@ -184,14 +184,14 @@ impl Channel {
     pub(crate) fn balance<D, E>(discover: D, buffer_size: usize, executor: E) -> Self
     where
         D: Discover<Service = Connection> + Unpin + Send + 'static,
-        D::Error: Into<crate::Error>,
+        D::Error: Into<crate::BoxError>,
         D::Key: Hash + Send + Clone,
         E: Executor<BoxFuture<'static, ()>> + Send + Sync + 'static,
     {
         let svc = Balance::new(discover);
 
         let svc = BoxService::new(svc);
-        let (svc, worker) = Buffer::pair(Either::B(svc), buffer_size);
+        let (svc, worker) = Buffer::pair(svc, buffer_size);
         executor.execute(Box::pin(worker));
 
         Channel { svc }

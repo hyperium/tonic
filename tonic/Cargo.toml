@@ -87,7 +87,7 @@ hyper = {version = "1", features = ["http1", "http2"], optional = true}
 hyper-util = { version = "0.1.4", features = ["tokio"], optional = true }
 socket2 = { version = "0.5", optional = true, features = ["all"] }
 tokio = {version = "1", default-features = false, optional = true}
-tower = {version = "0.4.7", default-features = false, optional = true}
+tower = {version = "0.5", default-features = false, optional = true}
 axum = {version = "0.7", default-features = false, optional = true}
 
 # rustls
@@ -110,7 +110,7 @@ quickcheck_macros = "1.0"
 rand = "0.8"
 static_assertions = "1.0"
 tokio = {version = "1.0", features = ["rt", "macros"]}
-tower = {version = "0.4.7", features = ["full"]}
+tower = {version = "0.5", features = ["full"]}
 
 [package.metadata.docs.rs]
 all-features = true

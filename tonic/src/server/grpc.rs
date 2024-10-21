@@ -228,7 +228,7 @@ where
     where
         S: UnaryService<T::Decode, Response = T::Encode>,
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error> + Send,
+        B::Error: Into<crate::BoxError> + Send,
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
@@ -272,7 +272,7 @@ where
         S: ServerStreamingService<T::Decode, Response = T::Encode>,
         S::ResponseStream: Send + 'static,
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error> + Send,
+        B::Error: Into<crate::BoxError> + Send,
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
@@ -312,7 +312,7 @@ where
     where
         S: ClientStreamingService<T::Decode, Response = T::Encode>,
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error> + Send + 'static,
+        B::Error: Into<crate::BoxError> + Send + 'static,
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
@@ -346,7 +346,7 @@ where
         S: StreamingService<T::Decode, Response = T::Encode> + Send,
         S::ResponseStream: Send + 'static,
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error> + Send,
+        B::Error: Into<crate::BoxError> + Send,
     {
         let accept_encoding = CompressionEncoding::from_accept_encoding_header(
             req.headers(),
@@ -371,7 +371,7 @@ where
     ) -> Result<Request<T::Decode>, Status>
     where
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error> + Send,
+        B::Error: Into<crate::BoxError> + Send,
     {
         let request_compression_encoding = self.request_encoding_if_supported(&request)?;
 
@@ -404,7 +404,7 @@ where
     ) -> Result<Request<Streaming<T::Decode>>, Status>
     where
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error> + Send,
+        B::Error: Into<crate::BoxError> + Send,
     {
         let encoding = self.request_encoding_if_supported(&request)?;
 
