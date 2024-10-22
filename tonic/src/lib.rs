@@ -26,7 +26,7 @@
 //!   for [`tonic-build`]. Enabled by default.
 //! - `tls`: Deprecated. An alias to `tls-ring`
 //! - `tls-ring`: Enables the [`rustls`] based TLS options for the `transport` feature using
-//!   the [`ring`] libcrypto provider. Not enabled by default.
+//!   the ring libcrypto provider. Not enabled by default.
 //! - `tls-aws-lc`: Enables the [`rustls`] based TLS options for the `transport` feature using
 //!   the [`aws-lc-rs`] libcrypto provider. Not enabled by default.
 //! - `tls-roots`: Deprecated. An alias to `tls-native-roots` feature.
