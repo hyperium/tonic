@@ -153,23 +153,27 @@ where
 #[derive(Debug, Clone)]
 pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
 
-impl<S> Service<http::Request<BoxBody>> for CorsGrpcWeb<S>
+impl<S, B> Service<http::Request<B>> for CorsGrpcWeb<S>
 where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<BoxError> + std::fmt::Display,
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future =
-        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<BoxBody>>>::Future;
+    type Future = <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<B>>>::Future;
 
     fn poll_ready(
         &mut self,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx)
+        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<B>>>::poll_ready(
+            &mut self.0,
+            cx,
+        )
     }
 
-    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<B>) -> Self::Future {
         self.0.call(req)
     }
 }
@@ -180,6 +184,8 @@ where
 {
     const NAME: &'static str = S::NAME;
 }
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) mod util {
     pub(crate) mod base64 {
