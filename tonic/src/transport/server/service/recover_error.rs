@@ -25,10 +25,10 @@ impl<S> RecoverError<S> {
 impl<S, R, ResBody> Service<R> for RecoverError<S>
 where
     S: Service<R, Response = Response<ResBody>>,
-    S::Error: Into<crate::Error>,
+    S::Error: Into<crate::BoxError>,
 {
     type Response = Response<MaybeEmptyBody<ResBody>>;
-    type Error = crate::Error;
+    type Error = crate::BoxError;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -51,12 +51,12 @@ pub(crate) struct ResponseFuture<F> {
 impl<F, E, ResBody> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<Response<ResBody>, E>>,
-    E: Into<crate::Error>,
+    E: Into<crate::BoxError>,
 {
-    type Output = Result<Response<MaybeEmptyBody<ResBody>>, crate::Error>;
+    type Output = Result<Response<MaybeEmptyBody<ResBody>>, crate::BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let result: Result<Response<_>, crate::Error> =
+        let result: Result<Response<_>, crate::BoxError> =
             ready!(self.project().inner.poll(cx)).map_err(Into::into);
 
         match result {

@@ -65,7 +65,7 @@ impl<T> Streaming<T> {
     ) -> Self
     where
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error>,
+        B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         Self::new(
@@ -81,7 +81,7 @@ impl<T> Streaming<T> {
     pub fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error>,
+        B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         Self::new(decoder, body, Direction::EmptyResponse, None, None)
@@ -97,7 +97,7 @@ impl<T> Streaming<T> {
     ) -> Self
     where
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error>,
+        B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         Self::new(
@@ -118,7 +118,7 @@ impl<T> Streaming<T> {
     ) -> Self
     where
         B: Body + Send + 'static,
-        B::Error: Into<crate::Error>,
+        B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
         let buffer_size = decoder.buffer_settings().buffer_size;

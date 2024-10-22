@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let channel = ServiceBuilder::new()
         // Interceptors can be also be applied as middleware
-        .layer(tonic::service::interceptor(intercept))
+        .layer(tonic::service::InterceptorLayer::new(intercept))
         .layer_fn(AuthSvc::new)
         .service(channel);
 

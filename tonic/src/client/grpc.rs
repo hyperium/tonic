@@ -213,7 +213,7 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::Error>,
+        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -232,7 +232,7 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::Error>,
+        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
         S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -269,7 +269,7 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::Error>,
+        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -288,7 +288,7 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::Error>,
+        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
         S: Stream<Item = M1> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
@@ -328,7 +328,7 @@ impl<T> Grpc<T> {
     where
         T: GrpcService<BoxBody>,
         T::ResponseBody: Body + Send + 'static,
-        <T::ResponseBody as Body>::Error: Into<crate::Error>,
+        <T::ResponseBody as Body>::Error: Into<crate::BoxError>,
     {
         let encoding = CompressionEncoding::from_encoding_header(
             response.headers(),

@@ -14,7 +14,7 @@ pub trait GrpcService<ReqBody> {
     /// Responses body given by the service.
     type ResponseBody: Body;
     /// Errors produced by the service.
-    type Error: Into<crate::Error>;
+    type Error: Into<crate::BoxError>;
     /// The future response value.
     type Future: Future<Output = Result<http::Response<Self::ResponseBody>, Self::Error>>;
 
@@ -32,9 +32,9 @@ pub trait GrpcService<ReqBody> {
 impl<T, ReqBody, ResBody> GrpcService<ReqBody> for T
 where
     T: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-    T::Error: Into<crate::Error>,
+    T::Error: Into<crate::BoxError>,
     ResBody: Body,
-    <ResBody as Body>::Error: Into<crate::Error>,
+    <ResBody as Body>::Error: Into<crate::BoxError>,
 {
     type ResponseBody = ResBody;
     type Error = T::Error;

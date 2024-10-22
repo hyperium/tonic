@@ -46,7 +46,7 @@ impl Endpoint {
     pub fn new<D>(dst: D) -> Result<Self, Error>
     where
         D: TryInto<Self>,
-        D::Error: Into<crate::Error>,
+        D::Error: Into<crate::BoxError>,
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
         #[cfg(feature = "tls")]
@@ -366,7 +366,7 @@ impl Endpoint {
         C: Service<Uri> + Send + 'static,
         C::Response: rt::Read + rt::Write + Send + Unpin,
         C::Future: Send,
-        crate::Error: From<C::Error> + Send,
+        crate::BoxError: From<C::Error> + Send,
     {
         let connector = self.connector(connector);
 
@@ -391,7 +391,7 @@ impl Endpoint {
         C: Service<Uri> + Send + 'static,
         C::Response: rt::Read + rt::Write + Send + Unpin,
         C::Future: Send,
-        crate::Error: From<C::Error> + Send,
+        crate::BoxError: From<C::Error> + Send,
     {
         let connector = self.connector(connector);
         if let Some(connect_timeout) = self.connect_timeout {

@@ -9,13 +9,13 @@ Server Reflection module of `tonic` gRPC implementation.
 """
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
-documentation = "https://docs.rs/tonic-reflection/0.12.3"
+documentation = "https://docs.rs/tonic-reflection/0.13.0"
 keywords = ["rpc", "grpc", "async", "reflection"]
 license = "MIT"
 name = "tonic-reflection"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.12.3"
+version = "0.13.0"
 
 [package.metadata.docs.rs]
 all-features = true
@@ -30,10 +30,10 @@ prost = "0.13"
 prost-types = {version = "0.13", optional = true}
 tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
 tokio-stream = {version = "0.1", features = ["net"], optional = true }
-tonic = { version = "0.12", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
+tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
 
 [dev-dependencies]
-tonic = { version = "0.12", path = "../tonic", default-features = false, features = ["transport"] }
+tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["transport"] }
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [

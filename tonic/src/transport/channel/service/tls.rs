@@ -32,7 +32,7 @@ impl TlsConnector {
         assume_http2: bool,
         #[cfg(feature = "tls-native-roots")] with_native_roots: bool,
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
-    ) -> Result<Self, crate::Error> {
+    ) -> Result<Self, crate::BoxError> {
         let builder = ClientConfig::builder();
         let mut roots = RootCertStore::from_iter(trust_anchors);
 
@@ -75,7 +75,7 @@ impl TlsConnector {
         })
     }
 
-    pub(crate) async fn connect<I>(&self, io: I) -> Result<BoxedIo, crate::Error>
+    pub(crate) async fn connect<I>(&self, io: I) -> Result<BoxedIo, crate::BoxError>
     where
         I: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {

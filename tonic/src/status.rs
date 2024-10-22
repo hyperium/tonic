@@ -883,10 +883,10 @@ impl From<Code> for i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Error;
+    use crate::BoxError;
 
     #[derive(Debug)]
-    struct Nested(Error);
+    struct Nested(BoxError);
 
     impl fmt::Display for Nested {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -911,7 +911,7 @@ mod tests {
 
     #[test]
     fn from_error_unknown() {
-        let orig: Error = "peek-a-boo".into();
+        let orig: BoxError = "peek-a-boo".into();
         let found = Status::from_error(orig);
 
         assert_eq!(found.code(), Code::Unknown);

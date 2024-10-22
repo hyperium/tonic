@@ -204,7 +204,7 @@ impl<'a, VE: ValueEncoding> PartialEq<&'a MetadataKey<VE>> for MetadataKey<VE> {
     }
 }
 
-impl<'a, VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &'a MetadataKey<VE> {
+impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &MetadataKey<VE> {
     #[inline]
     fn eq(&self, other: &MetadataKey<VE>) -> bool {
         *other == *self
@@ -260,7 +260,7 @@ impl<'a, VE: ValueEncoding> PartialEq<&'a str> for MetadataKey<VE> {
     }
 }
 
-impl<'a, VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &'a str {
+impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &str {
     /// Performs a case-insensitive comparison of the string against the header
     /// name
     #[inline]

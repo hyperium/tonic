@@ -37,9 +37,9 @@ impl<IO> ServerIo<IO> {
         IO: Connected,
     {
         match self {
-            Self::Io(io) => Either::A(io.connect_info()),
+            Self::Io(io) => Either::Left(io.connect_info()),
             #[cfg(feature = "tls")]
-            Self::TlsIo(io) => Either::B(io.connect_info()),
+            Self::TlsIo(io) => Either::Right(io.connect_info()),
         }
     }
 }

@@ -56,7 +56,7 @@ impl ServerTlsConfig {
         }
     }
 
-    pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::Error> {
+    pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::BoxError> {
         TlsAcceptor::new(
             self.identity.clone().unwrap(),
             self.client_ca_root.clone(),

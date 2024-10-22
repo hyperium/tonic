@@ -1274,7 +1274,7 @@ impl<'a> Iterator for IterMut<'a> {
 
 // ===== impl ValueDrain =====
 
-impl<'a, VE: ValueEncoding> Iterator for ValueDrain<'a, VE> {
+impl<VE: ValueEncoding> Iterator for ValueDrain<'_, VE> {
     type Item = MetadataValue<VE>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1308,7 +1308,7 @@ impl<'a> Iterator for Keys<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Keys<'a> {}
+impl ExactSizeIterator for Keys<'_> {}
 
 // ===== impl Values ====
 
@@ -1967,7 +1967,7 @@ impl<'a, VE: ValueEncoding> GetAll<'a, VE> {
     }
 }
 
-impl<'a, VE: ValueEncoding> PartialEq for GetAll<'a, VE> {
+impl<VE: ValueEncoding> PartialEq for GetAll<'_, VE> {
     fn eq(&self, other: &Self) -> bool {
         self.inner.iter().eq(other.inner.iter())
     }
@@ -2051,7 +2051,7 @@ mod into_metadata_key {
 
     impl<VE: ValueEncoding> IntoMetadataKey<VE> for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn insert(
@@ -2070,7 +2070,7 @@ mod into_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> IntoMetadataKey<VE> for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {}
 
     impl<VE: ValueEncoding> Sealed<VE> for &'static str {
         #[doc(hidden)]
@@ -2180,7 +2180,7 @@ mod as_metadata_key {
 
     impl<VE: ValueEncoding> AsMetadataKey<VE> for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2221,9 +2221,9 @@ mod as_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a str {
+    impl<VE: ValueEncoding> Sealed<VE> for &str {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2283,7 +2283,7 @@ mod as_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a str {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &str {}
 
     impl<VE: ValueEncoding> Sealed<VE> for String {
         #[doc(hidden)]
@@ -2346,7 +2346,7 @@ mod as_metadata_key {
 
     impl<VE: ValueEncoding> AsMetadataKey<VE> for String {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a String {
+    impl<VE: ValueEncoding> Sealed<VE> for &String {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2405,7 +2405,7 @@ mod as_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a String {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &String {}
 }
 
 mod as_encoding_agnostic_metadata_key {
@@ -2442,7 +2442,7 @@ mod as_encoding_agnostic_metadata_key {
 
     impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2450,9 +2450,9 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &MetadataKey<VE> {}
 
-    impl<'a> Sealed for &'a str {
+    impl Sealed for &str {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2460,7 +2460,7 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a> AsEncodingAgnosticMetadataKey for &'a str {}
+    impl AsEncodingAgnosticMetadataKey for &str {}
 
     impl Sealed for String {
         #[doc(hidden)]
@@ -2472,7 +2472,7 @@ mod as_encoding_agnostic_metadata_key {
 
     impl AsEncodingAgnosticMetadataKey for String {}
 
-    impl<'a> Sealed for &'a String {
+    impl Sealed for &String {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2480,7 +2480,7 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a> AsEncodingAgnosticMetadataKey for &'a String {}
+    impl AsEncodingAgnosticMetadataKey for &String {}
 }
 
 #[cfg(test)]
