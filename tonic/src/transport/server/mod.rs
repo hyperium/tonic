@@ -64,7 +64,7 @@ use tower::{
     layer::util::{Identity, Stack},
     layer::Layer,
     limit::concurrency::ConcurrencyLimitLayer,
-    util::{BoxCloneService, Either},
+    util::BoxCloneService,
     Service, ServiceBuilder, ServiceExt,
 };
 
@@ -136,10 +136,6 @@ impl Default for Server<Identity> {
 pub struct Router<L = Identity> {
     server: Server<L>,
     routes: Routes,
-}
-
-impl<S: NamedService, T> NamedService for Either<S, T> {
-    const NAME: &'static str = S::NAME;
 }
 
 impl Server {
