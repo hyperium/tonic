@@ -58,7 +58,16 @@ impl TlsConnector {
             add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
         }
 
+        #[cfg(feature = "tls-platform-verifier")]
+        let builder = builder
+            .dangerous()
+            .with_custom_certificate_verifier(Arc::new(
+                rustls_platform_verifier::Verifier::new_with_extra_roots(roots.roots),
+            ));
+
+        #[cfg(not(feature = "tls-platform-verifier"))]
         let builder = builder.with_root_certificates(roots);
+
         let mut config = match identity {
             Some(identity) => {
                 let (client_cert, client_key) = load_identity(identity)?;
