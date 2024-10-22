@@ -1,4 +1,4 @@
-use std::{fmt, io::Cursor, sync::Arc};
+use std::{fmt, sync::Arc};
 
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
@@ -8,7 +8,7 @@ use tokio_rustls::{
 };
 
 use crate::transport::{
-    service::tls::{add_certs_from_pem, load_identity, ALPN_H2},
+    service::tls::{convert_certificate_to_pki_types, convert_identity_to_pki_types, ALPN_H2},
     Certificate, Identity,
 };
 
@@ -29,7 +29,7 @@ impl TlsAcceptor {
             None => builder.with_no_client_auth(),
             Some(cert) => {
                 let mut roots = RootCertStore::empty();
-                add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
+                roots.add_parsable_certificates(convert_certificate_to_pki_types(&cert)?);
                 let verifier = if client_auth_optional {
                     WebPkiClientVerifier::builder(roots.into()).allow_unauthenticated()
                 } else {
@@ -40,7 +40,7 @@ impl TlsAcceptor {
             }
         };
 
-        let (cert, key) = load_identity(identity)?;
+        let (cert, key) = convert_identity_to_pki_types(&identity)?;
         let mut config = builder.with_single_cert(cert, key)?;
 
         config.alpn_protocols.push(ALPN_H2.into());

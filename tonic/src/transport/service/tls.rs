@@ -1,11 +1,8 @@
 use std::{fmt, io::Cursor};
 
-use tokio_rustls::rustls::{
-    pki_types::{CertificateDer, PrivateKeyDer},
-    RootCertStore,
-};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
 
-use crate::transport::Identity;
+use crate::transport::{Certificate, Identity};
 
 /// h2 alpn in plain format for rustls.
 pub(crate) const ALPN_H2: &[u8] = b"h2";
@@ -38,29 +35,20 @@ impl fmt::Display for TlsError {
 
 impl std::error::Error for TlsError {}
 
-pub(crate) fn load_identity(
-    identity: Identity,
-) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
-    let cert = rustls_pemfile::certs(&mut Cursor::new(identity.cert))
+pub(crate) fn convert_certificate_to_pki_types(
+    certificate: &Certificate,
+) -> Result<Vec<CertificateDer<'static>>, TlsError> {
+    rustls_pemfile::certs(&mut Cursor::new(certificate))
         .collect::<Result<Vec<_>, _>>()
-        .map_err(|_| TlsError::CertificateParseError)?;
-
-    let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(identity.key)) else {
-        return Err(TlsError::PrivateKeyParseError);
-    };
-
-    Ok((cert, key))
+        .map_err(|_| TlsError::CertificateParseError)
 }
 
-pub(crate) fn add_certs_from_pem(
-    mut certs: &mut dyn std::io::BufRead,
-    roots: &mut RootCertStore,
-) -> Result<(), crate::BoxError> {
-    for cert in rustls_pemfile::certs(&mut certs).collect::<Result<Vec<_>, _>>()? {
-        roots
-            .add(cert)
-            .map_err(|_| TlsError::CertificateParseError)?;
-    }
-
-    Ok(())
+pub(crate) fn convert_identity_to_pki_types(
+    identity: &Identity,
+) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
+    let cert = convert_certificate_to_pki_types(&identity.cert)?;
+    let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(&identity.key)) else {
+        return Err(TlsError::PrivateKeyParseError);
+    };
+    Ok((cert, key))
 }
