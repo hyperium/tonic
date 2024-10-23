@@ -2,11 +2,11 @@
 
 mod endpoint;
 pub(crate) mod service;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 mod tls;
 
 pub use endpoint::Endpoint;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 pub use tls::ClientTlsConfig;
 
 use self::service::{Connection, DynamicServiceStream, Executor, SharedExec};
