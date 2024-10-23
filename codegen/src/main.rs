@@ -78,19 +78,12 @@ fn codegen(
         .tempdir()
         .unwrap();
 
-    let iface_files: Vec<PathBuf> = iface_files
-        .iter()
-        .map(|&path| root_dir.join(path))
-        .collect();
-
-    let include_dirs: Vec<PathBuf> = include_dirs
-        .iter()
-        .map(|&path| root_dir.join(path))
-        .collect();
+    let iface_files = iface_files.iter().map(|&path| root_dir.join(path));
+    let include_dirs = include_dirs.iter().map(|&path| root_dir.join(path));
     let out_dir = root_dir.join(out_dir);
     let file_descriptor_set_path = root_dir.join(file_descriptor_set_path);
 
-    let fds = protox::compile(&iface_files, &include_dirs).unwrap();
+    let fds = protox::compile(iface_files, include_dirs).unwrap();
 
     write_fds(&fds, &file_descriptor_set_path);
 
