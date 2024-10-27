@@ -38,7 +38,7 @@ enum RequestKind<'a> {
 }
 
 impl<S> GrpcWebService<S> {
-    pub(crate) fn new(inner: S) -> Self {
+    pub fn new(inner: S) -> Self {
         GrpcWebService { inner }
     }
 }
