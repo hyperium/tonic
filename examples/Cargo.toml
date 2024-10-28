@@ -99,16 +99,6 @@ path = "src/tower/client.rs"
 required-features = ["tower"]
 
 [[bin]]
-name = "timeout-server"
-path = "src/timeout/server.rs"
-required-features = ["timeout"]
-
-[[bin]]
-name = "timeout-client"
-path = "src/timeout/client.rs"
-required-features = ["timeout"]
-
-[[bin]]
 name = "multiplex-server"
 path = "src/multiplex/server.rs"
 
@@ -278,13 +268,12 @@ compression = ["tonic/gzip"]
 tls = ["tonic/tls"]
 tls-rustls = ["dep:http", "dep:hyper", "dep:hyper-util", "dep:hyper-rustls", "dep:tower", "tower-http/util", "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls", "dep:pin-project", "dep:http-body-util"]
 dynamic-load-balance = ["dep:tower"]
-timeout = ["tokio/time", "dep:tower", "tower?/timeout"]
 tls-client-auth = ["tonic/tls"]
 types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types", "cancellation", "h2c"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "tls-client-auth", "types", "cancellation", "h2c"]
 default = ["full"]
 
 [dependencies]
