@@ -94,7 +94,7 @@ impl<B> MaybeEmptyBody<B> {
 
 impl<B> http_body::Body for MaybeEmptyBody<B>
 where
-    B: http_body::Body + Send,
+    B: http_body::Body,
 {
     type Data = B::Data;
     type Error = B::Error;
