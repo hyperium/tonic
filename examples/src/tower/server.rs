@@ -1,7 +1,6 @@
 use std::{
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
 };
 use tonic::{transport::Server, Request, Response, Status};
 use tower::{Layer, Service};
@@ -42,8 +41,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // The stack of middleware that our service will be wrapped in
     let layer = tower::ServiceBuilder::new()
-        // Apply middleware from tower
-        .timeout(Duration::from_secs(30))
         // Apply our own middleware
         .layer(MyMiddlewareLayer::default())
         // Interceptors can be also be applied as middleware
