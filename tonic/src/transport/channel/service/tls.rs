@@ -5,6 +5,7 @@ use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_rustls::{
     rustls::{
+        crypto,
         pki_types::{ServerName, TrustAnchor},
         ClientConfig, RootCertStore,
     },
@@ -34,7 +35,18 @@ impl TlsConnector {
         #[cfg(feature = "tls-native-roots")] with_native_roots: bool,
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
     ) -> Result<Self, crate::BoxError> {
-        let builder = ClientConfig::builder();
+        let crypto_provider = match crypto::CryptoProvider::get_default() {
+            Some(default) => default.clone(),
+            None => Arc::new(crypto::ring::default_provider()),
+        };
+
+        let builder = ClientConfig::builder_with_provider(crypto_provider)
+            .with_safe_default_protocol_versions()
+            .inspect_err(|e| {
+                tracing::debug!(
+                    "rustls crypto provider does not support default tls protocol versions: {e:?}"
+                );
+            })?;
         let mut roots = RootCertStore::from_iter(trust_anchors);
 
         #[cfg(feature = "tls-native-roots")]
