@@ -42,11 +42,7 @@ impl TlsConnector {
 
         let builder = ClientConfig::builder_with_provider(crypto_provider)
             .with_safe_default_protocol_versions()
-            .inspect_err(|e| {
-                tracing::debug!(
-                    "rustls crypto provider does not support default tls protocol versions: {e:?}"
-                );
-            })?;
+            .unwrap();
         let mut roots = RootCertStore::from_iter(trust_anchors);
 
         #[cfg(feature = "tls-native-roots")]
