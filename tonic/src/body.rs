@@ -11,7 +11,14 @@ where
     B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     B::Error: Into<crate::BoxError>,
 {
-    body.map_err(crate::Status::map_error).boxed_unsync()
+    let mut body = Some(body);
+    if let Some(body) = <dyn std::any::Any>::downcast_mut::<Option<BoxBody>>(&mut body) {
+        body.take().unwrap()
+    } else {
+        body.unwrap()
+            .map_err(crate::Status::map_error)
+            .boxed_unsync()
+    }
 }
 
 /// Create an empty `BoxBody`

@@ -543,7 +543,6 @@ impl<L> Server<L> {
             Into<crate::BoxError> + Send + 'static,
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
-        IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::BoxError>,
         F: Future<Output = ()>,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
@@ -844,7 +843,6 @@ impl<L> Router<L> {
     where
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
-        IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::BoxError>,
         L: Layer<Routes>,
         L::Service:
@@ -880,7 +878,6 @@ impl<L> Router<L> {
     where
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
-        IO::ConnectInfo: Clone + Send + Sync + 'static,
         IE: Into<crate::BoxError>,
         F: Future<Output = ()>,
         L: Layer<Routes>,
