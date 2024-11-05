@@ -2,6 +2,15 @@
 
 Compiles proto files via prost and generates service stubs and proto definitions for use with tonic.
 
+# Feature flags
+
+- `cleanup-markdown`: Enables cleaning up documentation from the generated code. Useful
+  when documentation of the generated code fails `cargo test --doc` for example. The
+  `prost` feature must be enabled to use this feature.
+- `prost`: Enables usage of prost generator (enabled by default).
+- `transport`: Enables generation of `connect` method using `tonic::transport::Channel`
+   (enabled by default).
+
 ## Features
 
 Required dependencies
@@ -15,11 +24,12 @@ prost = "<prost-version>"
 tonic-build = "<tonic-version>"
 ```
 
-## Examples
+## Getting Started
 
-### Simple
+`tonic-build` works by being included as a [`build.rs` file](https://doc.rust-lang.org/cargo/reference/build-scripts.html) at the root of the binary/library.
 
-In `build.rs`:
+You can rely on the defaults via
+
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::compile_protos("proto/service.proto")?;
@@ -27,7 +37,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-### Configuration
+Or configure the generated code deeper via
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -40,20 +50,37 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
    Ok(())
 }
 ```
-See [more examples here](https://github.com/hyperium/tonic/tree/master/examples)
+
+For further details how to use the generated client/server, see the [examples here](https://github.com/hyperium/tonic/tree/master/examples) or the Google APIs example below.
+
+
+## NixOS related hints
+
+On NixOS, it is better to specify the location of `PROTOC` and `PROTOC_INCLUDE` explicitly.
+
+```bash
+$ export PROTOBUF_LOCATION=$(nix-env -q protobuf --out-path --no-name)
+$ export PROTOC=$PROTOBUF_LOCATION/bin/protoc
+$ export PROTOC_INCLUDE=$PROTOBUF_LOCATION/include
+$ cargo build
+```
+
+The reason being that if `prost_build::compile_protos` fails to generate the resultant package,
+the failure is not obvious until the `include!(concat!(env!("OUT_DIR"), "/resultant.rs"));`
+fails with `No such file or directory` error.
 
 ### Google APIs example
 A good way to use Google API is probably using git submodules.
 
 So suppose in our `proto` folder we do:
-```
+```bash
 git submodule add https://github.com/googleapis/googleapis
 
 git submodule update --remote
 ```
 
 And a bunch of Google proto files in structure will be like this:
-```
+```raw
 ├── googleapis
 │   └── google
 │       ├── api
@@ -68,7 +95,8 @@ And a bunch of Google proto files in structure will be like this:
 │               └── schema.proto
 ```
 
-Then we can generate Rust code via this setup in our `build.rs`
+Then we can generate Rust code via this setup in our `build.rs`:
+
 ```rust
 fn main() {
     tonic_build::configure()
