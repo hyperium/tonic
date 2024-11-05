@@ -1,5 +1,6 @@
 [graph]
 all-features = true
+exclude = ["examples"]
 
 [bans]
 multiple-versions = "deny"
@@ -17,10 +18,12 @@ deny = [
     # term is not fully maintained, and termcolor is replacing it
     { crate = "term" },
 ]
+skip = [
+    { crate = "sync_wrapper@0.1.2", reason = "tower depends on it" }
+]
 skip-tree = [
     { crate = "windows-sys" },
     { crate = "hermit-abi" },
-    { crate = "examples" },
 ]
 
 [licenses]
