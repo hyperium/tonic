@@ -5,22 +5,22 @@ all-features = true
 multiple-versions = "deny"
 deny = [
     # color-backtrace is nice but brings in too many dependencies and that are often outdated, so not worth it for us.
-    { name = "color-backtrace" },
+    { crate = "color-backtrace" },
 
     # dirs crate has a lot of dependencies and there are better alternatives
-    { name = "dirs" },
-    { name = "dirs-sys" },
+    { crate = "dirs" },
+    { crate = "dirs-sys" },
 
     # deprecated
-    { name = "quickersort" },
+    { crate = "quickersort" },
 
     # term is not fully maintained, and termcolor is replacing it
-    { name = "term" },
+    { crate = "term" },
 ]
 skip-tree = [
-    { name = "windows-sys" },
-    { name = "hermit-abi" },
-    { name = "examples" },
+    { crate = "windows-sys" },
+    { crate = "hermit-abi" },
+    { crate = "examples" },
 ]
 
 [licenses]
@@ -39,7 +39,7 @@ allow = [
 ]
 
 [[licenses.clarify]]
-name = "ring"
+crate = "ring"
 # SPDX considers OpenSSL to encompass both the OpenSSL and SSLeay licenses
 # https://spdx.org/licenses/OpenSSL.html
 # ISC - Both BoringSSL and ring use this for their new files
