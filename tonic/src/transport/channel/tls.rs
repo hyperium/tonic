@@ -18,6 +18,8 @@ pub struct ClientTlsConfig {
     with_native_roots: bool,
     #[cfg(feature = "tls-webpki-roots")]
     with_webpki_roots: bool,
+    #[cfg(feature = "tls-platform-verifier")]
+    with_platform_verifier: bool,
 }
 
 impl ClientTlsConfig {
@@ -102,6 +104,15 @@ impl ClientTlsConfig {
         }
     }
 
+    /// Enables the platform verifier.
+    #[cfg(feature = "tls-platform-verifier")]
+    pub fn with_platform_verifier(self) -> Self {
+        ClientTlsConfig {
+            with_platform_verifier: true,
+            ..self
+        }
+    }
+
     /// Activates all TLS roots enabled through `tls-*-roots` feature flags
     pub fn with_enabled_roots(self) -> Self {
         let config = ClientTlsConfig::new();
@@ -127,6 +138,8 @@ impl ClientTlsConfig {
             self.with_native_roots,
             #[cfg(feature = "tls-webpki-roots")]
             self.with_webpki_roots,
+            #[cfg(feature = "tls-platform-verifier")]
+            self.with_platform_verifier,
         )
     }
 }
