@@ -1,6 +1,6 @@
 use std::{fmt, io::Cursor};
 
-use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer};
+use tokio_rustls::rustls::pki_types::{pem::PemObject as _, CertificateDer, PrivateKeyDer};
 
 use crate::transport::{Certificate, Identity};
 
@@ -38,7 +38,7 @@ impl std::error::Error for TlsError {}
 pub(crate) fn convert_certificate_to_pki_types(
     certificate: &Certificate,
 ) -> Result<Vec<CertificateDer<'static>>, TlsError> {
-    rustls_pemfile::certs(&mut Cursor::new(certificate))
+    CertificateDer::pem_reader_iter(&mut Cursor::new(certificate))
         .collect::<Result<Vec<_>, _>>()
         .map_err(|_| TlsError::CertificateParseError)
 }
@@ -47,8 +47,7 @@ pub(crate) fn convert_identity_to_pki_types(
     identity: &Identity,
 ) -> Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>), TlsError> {
     let cert = convert_certificate_to_pki_types(&identity.cert)?;
-    let Ok(Some(key)) = rustls_pemfile::private_key(&mut Cursor::new(&identity.key)) else {
-        return Err(TlsError::PrivateKeyParseError);
-    };
+    let key = PrivateKeyDer::from_pem_reader(&mut Cursor::new(&identity.key))
+        .map_err(|_| TlsError::PrivateKeyParseError)?;
     Ok((cert, key))
 }

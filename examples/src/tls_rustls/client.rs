@@ -8,7 +8,10 @@ pub mod pb {
 use hyper::Uri;
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 use pb::{echo_client::EchoClient, EchoRequest};
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
+use tokio_rustls::rustls::{
+    pki_types::{pem::PemObject as _, CertificateDer},
+    {ClientConfig, RootCertStore},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -18,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut roots = RootCertStore::empty();
 
     let mut buf = std::io::BufReader::new(&fd);
-    let certs = rustls_pemfile::certs(&mut buf).collect::<Result<Vec<_>, _>>()?;
+    let certs = CertificateDer::pem_reader_iter(&mut buf).collect::<Result<Vec<_>, _>>()?;
     roots.add_parsable_certificates(certs.into_iter());
 
     let tls = ClientConfig::builder()
