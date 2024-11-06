@@ -11,7 +11,10 @@ use pb::{EchoRequest, EchoResponse};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::{
-    rustls::{pki_types::CertificateDer, ServerConfig},
+    rustls::{
+        pki_types::{pem::PemObject as _, CertificateDer, PrivateKeyDer},
+        ServerConfig,
+    },
     TlsAcceptor,
 };
 use tonic::{body::boxed, service::Routes, Request, Response, Status};
@@ -24,12 +27,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let certs = {
         let fd = std::fs::File::open(data_dir.join("tls/server.pem"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        rustls_pemfile::certs(&mut buf).collect::<Result<Vec<_>, _>>()?
+        CertificateDer::pem_reader_iter(&mut buf).collect::<Result<Vec<_>, _>>()?
     };
     let key = {
         let fd = std::fs::File::open(data_dir.join("tls/server.key"))?;
         let mut buf = std::io::BufReader::new(&fd);
-        rustls_pemfile::private_key(&mut buf)?.unwrap()
+        PrivateKeyDer::from_pem_reader(&mut buf)?
     };
 
     let mut tls = ServerConfig::builder()
