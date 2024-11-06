@@ -28,10 +28,13 @@ gzip = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
+_tls-any = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"] # Internal. Please choose one of `tls-ring` or `tls-aws-lc`
+tls = ["tls-ring"] # Deprecated. Please use `tls-ring` or `tls-aws-lc` instead.
+tls-ring = ["_tls-any", "tokio-rustls/ring"]
+tls-aws-lc = ["_tls-any", "tokio-rustls/aws-lc-rs"]
 tls-roots = ["tls-native-roots"] # Deprecated. Please use `tls-native-roots` instead.
-tls-native-roots = ["tls", "channel", "dep:rustls-native-certs"]
-tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
+tls-native-roots = ["_tls-any", "channel", "dep:rustls-native-certs"]
+tls-webpki-roots = ["_tls-any","channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
   "router",
@@ -90,7 +93,7 @@ axum = {version = "0.7", default-features = false, optional = true}
 # rustls
 rustls-pemfile = { version = "2.0", optional = true }
 rustls-native-certs = { version = "0.8", optional = true }
-tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12", "ring"], optional = true }
+tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12"], optional = true }
 webpki-roots = { version = "0.26", optional = true }
 
 # compression

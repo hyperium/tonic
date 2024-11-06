@@ -28,6 +28,9 @@ async fn connect_returns_err() {
 
 #[tokio::test]
 async fn connect_handles_tls() {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .unwrap();
     TestClient::connect("https://example.com").await.unwrap();
 }
 

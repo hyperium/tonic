@@ -1,11 +1,11 @@
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 use std::sync::Arc;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 use tokio_rustls::rustls::pki_types::CertificateDer;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 use tokio_rustls::server::TlsStream;
 
 /// Trait that connected IO resources implement and use to produce info about the connection.
@@ -102,7 +102,7 @@ impl Connected for tokio::io::DuplexStream {
     fn connect_info(&self) -> Self::ConnectInfo {}
 }
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 impl<T> Connected for TlsStream<T>
 where
     T: Connected,
@@ -128,14 +128,14 @@ where
 /// See [`Connected`] for more details.
 ///
 /// [ext]: crate::Request::extensions
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 #[derive(Debug, Clone)]
 pub struct TlsConnectInfo<T> {
     inner: T,
     certs: Option<Arc<Vec<CertificateDer<'static>>>>,
 }
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 impl<T> TlsConnectInfo<T> {
     /// Get a reference to the underlying connection info.
     pub fn get_ref(&self) -> &T {

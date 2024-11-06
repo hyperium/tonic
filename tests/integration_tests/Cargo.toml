@@ -20,6 +20,7 @@ async-stream = "0.3"
 http = "1"
 http-body = "1"
 hyper-util = "0.1"
+rustls = {version = "0.23", features = ["ring"]}
 tokio-stream = {version = "0.1.5", features = ["net"]}
 tower = "0.5"
 tower-http = { version = "0.6", features = ["set-header", "trace"] }
