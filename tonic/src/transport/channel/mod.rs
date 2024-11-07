@@ -5,6 +5,7 @@ pub(crate) mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;
 
+pub use self::service::Change;
 pub use endpoint::Endpoint;
 #[cfg(feature = "_tls-any")]
 pub use tls::ClientTlsConfig;
@@ -29,7 +30,7 @@ use hyper::rt;
 use tower::balance::p2c::Balance;
 use tower::{
     buffer::{future::ResponseFuture as BufferResponseFuture, Buffer},
-    discover::{Change, Discover},
+    discover::Discover,
     util::BoxService,
     Service,
 };
