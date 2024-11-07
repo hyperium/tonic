@@ -36,7 +36,7 @@ impl TlsConnector {
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
     ) -> Result<Self, crate::BoxError> {
         let crypto_provider = match crypto::CryptoProvider::get_default() {
-            Some(default) => default.clone(),
+            Some(provider) => provider.clone(),
             None => Arc::new(crypto::ring::default_provider()),
         };
 
