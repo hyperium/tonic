@@ -1,3 +1,4 @@
+use core::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
@@ -61,9 +62,11 @@ where
     }
 }
 
-impl<S> Service<Request<BoxBody>> for GrpcWebService<S>
+impl<S, B> Service<Request<B>> for GrpcWebService<S>
 where
     S: Service<Request<BoxBody>, Response = Response<BoxBody>>,
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::BoxError> + fmt::Display,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -73,7 +76,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: Request<B>) -> Self::Future {
         match RequestKind::new(req.headers(), req.method(), req.version()) {
             // A valid grpc-web request, regardless of HTTP version.
             //
@@ -113,7 +116,7 @@ where
                 debug!(kind = "other h2", content_type = ?req.headers().get(header::CONTENT_TYPE));
                 ResponseFuture {
                     case: Case::Other {
-                        future: self.inner.call(req),
+                        future: self.inner.call(req.map(tonic::body::boxed)),
                     },
                 }
             }
@@ -194,7 +197,11 @@ impl<'a> RequestKind<'a> {
 // Mutating request headers to conform to a gRPC request is not really
 // necessary for us at this point. We could remove most of these except
 // maybe for inserting `header::TE`, which tonic should check?
-fn coerce_request(mut req: Request<BoxBody>, encoding: Encoding) -> Request<BoxBody> {
+fn coerce_request<B>(mut req: Request<B>, encoding: Encoding) -> Request<BoxBody>
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::BoxError> + fmt::Display,
+{
     req.headers_mut().remove(header::CONTENT_LENGTH);
 
     req.headers_mut()
@@ -211,7 +218,11 @@ fn coerce_request(mut req: Request<BoxBody>, encoding: Encoding) -> Request<BoxB
     req.map(|b| GrpcWebCall::request(b, encoding).boxed_unsync())
 }
 
-fn coerce_response(res: Response<BoxBody>, encoding: Encoding) -> Response<BoxBody> {
+fn coerce_response<B>(res: Response<B>, encoding: Encoding) -> Response<BoxBody>
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::BoxError> + fmt::Display,
+{
     let mut res = res
         .map(|b| GrpcWebCall::response(b, encoding))
         .map(BoxBody::new);

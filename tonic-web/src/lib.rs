@@ -141,9 +141,9 @@ const DEFAULT_ALLOW_HEADERS: [HeaderName; 4] = [
     since = "0.12.4",
     note = "compose the `GrpcWebLayer` with the cors layer of your choice"
 )]
-pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
+pub fn enable<S, B>(service: S) -> CorsGrpcWeb<S>
 where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
+    S: Service<B>,
 {
     let cors = CorsLayer::new()
         .allow_origin(AllowOrigin::mirror_request())
@@ -160,19 +160,24 @@ where
 #[derive(Debug, Clone)]
 pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
 
-impl<S> Service<http::Request<BoxBody>> for CorsGrpcWeb<S>
+impl<S, B> Service<http::Request<B>> for CorsGrpcWeb<S>
 where
     S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<BoxError> + std::fmt::Display,
 {
     type Response = S::Response;
     type Error = S::Error;
     type Future = CorsGrpcWebResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx)
+        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<B>>>::poll_ready(
+            &mut self.0,
+            cx,
+        )
     }
 
-    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<B>) -> Self::Future {
         CorsGrpcWebResponseFuture(self.0.call(req))
     }
 }
@@ -206,6 +211,8 @@ where
 {
     const NAME: &'static str = S::NAME;
 }
+
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) mod util {
     pub(crate) mod base64 {
