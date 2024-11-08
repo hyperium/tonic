@@ -61,8 +61,6 @@ impl ServerTlsConfig {
     /// Sets whether the server's cipher preferences are followed instead of the client's.
     /// It prevents attacks such as POODLE
     ///
-    /// This option has effect only if CA certificate is set.
-    ///
     /// # Default
     /// By default, this option is set to `false`.
     pub fn ignore_client_order(self, ignore_client_order: bool) -> Self {
