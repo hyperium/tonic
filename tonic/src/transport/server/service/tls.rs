@@ -22,6 +22,7 @@ impl TlsAcceptor {
         identity: Identity,
         client_ca_root: Option<Certificate>,
         client_auth_optional: bool,
+        ignore_client_order: bool,
     ) -> Result<Self, crate::BoxError> {
         let builder = ServerConfig::builder();
 
@@ -42,6 +43,7 @@ impl TlsAcceptor {
 
         let (cert, key) = convert_identity_to_pki_types(&identity)?;
         let mut config = builder.with_single_cert(cert, key)?;
+        config.ignore_client_order = ignore_client_order;
 
         config.alpn_protocols.push(ALPN_H2.into());
         Ok(Self {
