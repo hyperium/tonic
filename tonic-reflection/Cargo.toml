@@ -49,6 +49,5 @@ allowed_external_types = [
   "prost_types::*",
 
   "futures_core::stream::Stream",
-  "http_body_util::combinators::box_body::UnsyncBoxBody",
   "tower_service::Service",
 ]

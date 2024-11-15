@@ -116,7 +116,7 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tonic::{body::BoxBody, server::NamedService, Status};
+use tonic::{body::Body, server::NamedService, Status};
 use tower_http::cors::{AllowOrigin, CorsLayer};
 use tower_layer::Layer;
 use tower_service::Service;
@@ -162,7 +162,7 @@ pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
 
 impl<S, B> Service<http::Request<B>> for CorsGrpcWeb<S>
 where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
+    S: Service<http::Request<Body>, Response = http::Response<Body>>,
     B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     B::Error: Into<BoxError> + std::fmt::Display,
 {
@@ -190,9 +190,9 @@ pub struct CorsGrpcWebResponseFuture<F>(
 
 impl<F, E> Future for CorsGrpcWebResponseFuture<F>
 where
-    F: Future<Output = Result<http::Response<BoxBody>, E>>,
+    F: Future<Output = Result<http::Response<Body>, E>>,
 {
-    type Output = Result<http::Response<BoxBody>, E>;
+    type Output = Result<http::Response<Body>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.project().0.poll(cx)
