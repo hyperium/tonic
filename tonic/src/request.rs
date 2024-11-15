@@ -308,20 +308,20 @@ impl<T> Request<T> {
     /// Extensions can be set in interceptors:
     ///
     /// ```no_run
-    /// use tonic::{Request, service::interceptor};
+    /// use tonic::{Request, Status};
     ///
     /// #[derive(Clone)] // Extensions must be Clone
     /// struct MyExtension {
     ///     some_piece_of_data: String,
     /// }
     ///
-    /// interceptor(|mut request: Request<()>| {
+    /// fn intercept(mut request: Request<()>) -> Result<Request<()>, Status> {
     ///     request.extensions_mut().insert(MyExtension {
     ///         some_piece_of_data: "foo".to_string(),
     ///     });
     ///
     ///     Ok(request)
-    /// });
+    /// }
     /// ```
     ///
     /// And picked up by RPCs:
