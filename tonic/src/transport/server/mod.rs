@@ -2,6 +2,7 @@
 
 mod conn;
 mod incoming;
+mod io_stream;
 mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;
@@ -562,7 +563,7 @@ impl<L> Server<L> {
 
         let svc = self.service_builder.service(svc);
 
-        let incoming = incoming::tcp_incoming(
+        let incoming = io_stream::tcp_incoming(
             incoming,
             #[cfg(feature = "_tls-any")]
             self.tls,
