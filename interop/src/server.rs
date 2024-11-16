@@ -1,14 +1,14 @@
 use crate::pb::{self, *};
 use async_stream::try_stream;
 use http::header::{HeaderName, HeaderValue};
-use http_body::Body;
+use http_body::Body as HttpBody;
 use std::future::Future;
 use std::pin::Pin;
 use std::result::Result as StdResult;
 use std::task::{ready, Context, Poll};
 use std::time::Duration;
 use tokio_stream::StreamExt;
-use tonic::{body::BoxBody, server::NamedService, Code, Request, Response, Status};
+use tonic::{body::Body, server::NamedService, Code, Request, Response, Status};
 use tower::Service;
 
 pub use pb::test_service_server::TestServiceServer;
@@ -180,9 +180,9 @@ impl<S> EchoHeadersSvc<S> {
     }
 }
 
-impl<S> Service<http::Request<BoxBody>> for EchoHeadersSvc<S>
+impl<S> Service<http::Request<Body>> for EchoHeadersSvc<S>
 where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>> + Send,
+    S: Service<http::Request<Body>, Response = http::Response<Body>> + Send,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
@@ -193,7 +193,7 @@ where
         Ok(()).into()
     }
 
-    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: http::Request<Body>) -> Self::Future {
         let echo_header = req.headers().get("x-grpc-test-echo-initial").cloned();
 
         let echo_trailer = req
@@ -212,7 +212,7 @@ where
                     .insert("x-grpc-test-echo-initial", echo_header);
                 Ok(res
                     .map(|b| MergeTrailers::new(b, echo_trailer))
-                    .map(BoxBody::new))
+                    .map(Body::new))
             } else {
                 Ok(res)
             }
@@ -231,7 +231,7 @@ impl<B> MergeTrailers<B> {
     }
 }
 
-impl<B: Body + Unpin> Body for MergeTrailers<B> {
+impl<B: HttpBody + Unpin> HttpBody for MergeTrailers<B> {
     type Data = B::Data;
     type Error = B::Error;
 

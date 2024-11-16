@@ -2,6 +2,7 @@
 
 mod conn;
 mod incoming;
+mod io_stream;
 mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;
@@ -38,7 +39,7 @@ use crate::transport::Error;
 
 use self::service::{RecoverError, ServerIo};
 use super::service::GrpcTimeout;
-use crate::body::{boxed, BoxBody};
+use crate::body::Body;
 use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
@@ -68,8 +69,7 @@ use tower::{
     Service, ServiceBuilder, ServiceExt,
 };
 
-type BoxService =
-    tower::util::BoxCloneService<Request<BoxBody>, Response<BoxBody>, crate::BoxError>;
+type BoxService = tower::util::BoxCloneService<Request<Body>, Response<Body>, crate::BoxError>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
 const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
@@ -395,7 +395,7 @@ impl<L> Server<L> {
     /// route around different services.
     pub fn add_service<S>(&mut self, svc: S) -> Router<L>
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -416,7 +416,7 @@ impl<L> Server<L> {
     /// As a result, one cannot use this to toggle between two identically named implementations.
     pub fn add_optional_service<S>(&mut self, svc: Option<S>) -> Router<L>
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -532,10 +532,9 @@ impl<L> Server<L> {
     ) -> Result<(), super::Error>
     where
         L: Layer<S>,
-        L::Service:
-            Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<S>>::Service as Service<Request<BoxBody>>>::Future: Send + 'static,
-        <<L as Layer<S>>::Service as Service<Request<BoxBody>>>::Error:
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send + 'static,
         I: Stream<Item = Result<IO, IE>>,
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
@@ -564,7 +563,7 @@ impl<L> Server<L> {
 
         let svc = self.service_builder.service(svc);
 
-        let incoming = incoming::tcp_incoming(
+        let incoming = io_stream::tcp_incoming(
             incoming,
             #[cfg(feature = "_tls-any")]
             self.tls,
@@ -640,7 +639,7 @@ impl<L> Server<L> {
                         .map_err(super::Error::from_source)?;
 
                     let hyper_io = TokioIo::new(io);
-                    let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(boxed)));
+                    let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(Body::new)));
 
                     serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age);
                 }
@@ -733,7 +732,7 @@ impl<L> Router<L> {
     /// Add a new service to this router.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -752,7 +751,7 @@ impl<L> Router<L> {
     #[allow(clippy::type_complexity)]
     pub fn add_optional_service<S>(mut self, svc: Option<S>) -> Self
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>, Error = Infallible>
+        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
             + NamedService
             + Clone
             + Send
@@ -779,10 +778,9 @@ impl<L> Router<L> {
     pub async fn serve<ResBody>(self, addr: SocketAddr) -> Result<(), super::Error>
     where
         L: Layer<Routes> + Clone,
-        L::Service:
-            Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Error:
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
@@ -811,10 +809,9 @@ impl<L> Router<L> {
     ) -> Result<(), super::Error>
     where
         L: Layer<Routes>,
-        L::Service:
-            Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Error:
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
@@ -841,10 +838,10 @@ impl<L> Router<L> {
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::BoxError>,
         L: Layer<Routes>,
-        L::Service:
-            Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Error:
+
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
@@ -877,10 +874,9 @@ impl<L> Router<L> {
         IE: Into<crate::BoxError>,
         F: Future<Output = ()>,
         L: Layer<Routes>,
-        L::Service:
-            Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Future: Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<BoxBody>>>::Error:
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
@@ -912,14 +908,14 @@ struct Svc<S> {
     trace_interceptor: Option<TraceInterceptor>,
 }
 
-impl<S, ResBody> Service<Request<BoxBody>> for Svc<S>
+impl<S, ResBody> Service<Request<Body>> for Svc<S>
 where
-    S: Service<Request<BoxBody>, Response = Response<ResBody>>,
+    S: Service<Request<Body>, Response = Response<ResBody>>,
     S::Error: Into<crate::BoxError>,
     ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::BoxError>,
 {
-    type Response = Response<BoxBody>;
+    type Response = Response<Body>;
     type Error = crate::BoxError;
     type Future = SvcFuture<S::Future>;
 
@@ -927,7 +923,7 @@ where
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, mut req: Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, mut req: Request<Body>) -> Self::Future {
         let span = if let Some(trace_interceptor) = &self.trace_interceptor {
             let (parts, body) = req.into_parts();
             let bodyless_request = Request::from_parts(parts, ());
@@ -963,14 +959,14 @@ where
     ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::BoxError>,
 {
-    type Output = Result<Response<BoxBody>, crate::BoxError>;
+    type Output = Result<Response<Body>, crate::BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
         let _guard = this.span.enter();
 
         let response: Response<ResBody> = ready!(this.inner.poll(cx)).map_err(Into::into)?;
-        let response = response.map(|body| boxed(body.map_err(Into::into)));
+        let response = response.map(|body| Body::new(body.map_err(Into::into)));
         Poll::Ready(Ok(response))
     }
 }
@@ -993,7 +989,7 @@ struct MakeSvc<S, IO> {
 impl<S, ResBody, IO> Service<&ServerIo<IO>> for MakeSvc<S, IO>
 where
     IO: Connected,
-    S: Service<Request<BoxBody>, Response = Response<ResBody>> + Clone + Send + 'static,
+    S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::BoxError> + Send,
     ResBody: http_body::Body<Data = Bytes> + Send + 'static,
@@ -1023,7 +1019,7 @@ where
 
         let svc = ServiceBuilder::new()
             .layer(BoxCloneService::layer())
-            .map_request(move |mut request: Request<BoxBody>| {
+            .map_request(move |mut request: Request<Body>| {
                 match &conn_info {
                     tower::util::Either::Left(inner) => {
                         request.extensions_mut().insert(inner.clone());

@@ -39,14 +39,14 @@ mod h2c {
         client::legacy::{connect::HttpConnector, Client},
         rt::TokioExecutor,
     };
-    use tonic::body::BoxBody;
+    use tonic::body::Body;
     use tower::Service;
 
     pub struct H2cChannel {
-        pub client: Client<HttpConnector, BoxBody>,
+        pub client: Client<HttpConnector, Body>,
     }
 
-    impl Service<http::Request<BoxBody>> for H2cChannel {
+    impl Service<http::Request<Body>> for H2cChannel {
         type Response = http::Response<Incoming>;
         type Error = hyper::Error;
         type Future =
@@ -56,7 +56,7 @@ mod h2c {
             Poll::Ready(Ok(()))
         }
 
-        fn call(&mut self, request: http::Request<BoxBody>) -> Self::Future {
+        fn call(&mut self, request: http::Request<Body>) -> Self::Future {
             let client = self.client.clone();
 
             Box::pin(async move {
@@ -65,7 +65,7 @@ mod h2c {
                 let h2c_req = hyper::Request::builder()
                     .uri(origin)
                     .header(http::header::UPGRADE, "h2c")
-                    .body(BoxBody::default())
+                    .body(Body::default())
                     .unwrap();
 
                 let res = client.request(h2c_req).await.unwrap();

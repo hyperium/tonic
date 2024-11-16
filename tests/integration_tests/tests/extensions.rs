@@ -8,7 +8,7 @@ use std::{
 };
 use tokio::sync::oneshot;
 use tonic::{
-    body::BoxBody,
+    body::Body,
     server::NamedService,
     transport::{Endpoint, Server},
     Request, Response, Status,
@@ -112,9 +112,9 @@ struct InterceptedService<S> {
     inner: S,
 }
 
-impl<S> Service<http::Request<BoxBody>> for InterceptedService<S>
+impl<S> Service<http::Request<Body>> for InterceptedService<S>
 where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>
+    S: Service<http::Request<Body>, Response = http::Response<Body>>
         + NamedService
         + Clone
         + Send
@@ -129,7 +129,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, mut req: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, mut req: http::Request<Body>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 

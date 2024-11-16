@@ -1,9 +1,9 @@
 use super::compression::{decompress, CompressionEncoding, CompressionSettings};
 use super::{BufferSettings, DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
-use crate::{body::BoxBody, metadata::MetadataMap, Code, Status};
+use crate::{body::Body, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
 use http::{HeaderMap, StatusCode};
-use http_body::Body;
+use http_body::Body as HttpBody;
 use http_body_util::BodyExt;
 use std::{
     fmt, future,
@@ -24,7 +24,7 @@ pub struct Streaming<T> {
 }
 
 struct StreamingInner {
-    body: BoxBody,
+    body: Body,
     state: State,
     direction: Direction,
     buf: BytesMut,
@@ -64,7 +64,7 @@ impl<T> Streaming<T> {
         max_message_size: Option<usize>,
     ) -> Self
     where
-        B: Body + Send + 'static,
+        B: HttpBody + Send + 'static,
         B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
@@ -80,7 +80,7 @@ impl<T> Streaming<T> {
     /// Create empty response. For creating responses that have no content (headers + trailers only)
     pub fn new_empty<B, D>(decoder: D, body: B) -> Self
     where
-        B: Body + Send + 'static,
+        B: HttpBody + Send + 'static,
         B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
@@ -96,7 +96,7 @@ impl<T> Streaming<T> {
         max_message_size: Option<usize>,
     ) -> Self
     where
-        B: Body + Send + 'static,
+        B: HttpBody + Send + 'static,
         B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
@@ -117,7 +117,7 @@ impl<T> Streaming<T> {
         max_message_size: Option<usize>,
     ) -> Self
     where
-        B: Body + Send + 'static,
+        B: HttpBody + Send + 'static,
         B::Error: Into<crate::BoxError>,
         D: Decoder<Item = T, Error = Status> + Send + 'static,
     {
@@ -125,10 +125,12 @@ impl<T> Streaming<T> {
         Self {
             decoder: Box::new(decoder),
             inner: StreamingInner {
-                body: body
-                    .map_frame(|frame| frame.map_data(|mut buf| buf.copy_to_bytes(buf.remaining())))
-                    .map_err(|err| Status::map_error(err.into()))
-                    .boxed_unsync(),
+                body: Body::new(
+                    body.map_frame(|frame| {
+                        frame.map_data(|mut buf| buf.copy_to_bytes(buf.remaining()))
+                    })
+                    .map_err(|err| Status::map_error(err.into())),
+                ),
                 state: State::ReadHeader,
                 direction,
                 buf: BytesMut::with_capacity(buffer_size),
