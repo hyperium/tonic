@@ -429,7 +429,9 @@ fn decode_trailers_frame(mut buf: Bytes) -> Result<Option<HeaderMap>, Status> {
         let value = value
             .split(|b| b == &b'\r')
             .next()
-            .ok_or_else(|| Status::internal("trailers was not escaped"))?;
+            .ok_or_else(|| Status::internal("trailers was not escaped"))?
+            .strip_prefix(&[b' '])
+            .unwrap_or(value);
 
         let header_key = HeaderName::try_from(key)
             .map_err(|e| Status::internal(format!("Unable to parse HeaderName: {}", e)))?;
@@ -642,6 +644,21 @@ mod tests {
         expected.insert(Status::GRPC_MESSAGE, "".parse().unwrap());
         expected.insert("a", "1".parse().unwrap());
         expected.insert("b", "2".parse().unwrap());
+
+        assert_eq!(trailers, expected);
+    }
+
+    #[test]
+    fn decode_trailers_with_space_after_colon() {
+        let buf = b"\x80\0\0\0\x0fgrpc-status: 0\r\ngrpc-message: \r\n";
+
+        let trailers = decode_trailers_frame(Bytes::copy_from_slice(&buf[..]))
+            .unwrap()
+            .unwrap();
+
+        let mut expected = HeaderMap::new();
+        expected.insert(Status::GRPC_STATUS, "0".parse().unwrap());
+        expected.insert(Status::GRPC_MESSAGE, "".parse().unwrap());
 
         assert_eq!(trailers, expected);
     }
