@@ -778,8 +778,10 @@ impl<L> Router<L> {
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
     {
-        let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
-            .map_err(super::Error::from_source)?;
+        let incoming = TcpIncoming::bind(addr)
+            .map_err(super::Error::from_source)?
+            .with_nodelay(Some(self.server.tcp_nodelay))
+            .with_keepalive(self.server.tcp_keepalive);
         self.server
             .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
                 self.routes.prepare(),
@@ -809,8 +811,10 @@ impl<L> Router<L> {
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
     {
-        let incoming = TcpIncoming::new(addr, self.server.tcp_nodelay, self.server.tcp_keepalive)
-            .map_err(super::Error::from_source)?;
+        let incoming = TcpIncoming::bind(addr)
+            .map_err(super::Error::from_source)?
+            .with_nodelay(Some(self.server.tcp_nodelay))
+            .with_keepalive(self.server.tcp_keepalive);
         self.server
             .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
             .await
