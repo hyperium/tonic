@@ -36,7 +36,6 @@ tls-webpki-roots = ["_tls-any","channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
   "router",
-  "dep:async-stream",
   "dep:h2",
   "dep:hyper", "hyper?/server",
   "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
@@ -79,7 +78,6 @@ prost = {version = "0.13", default-features = false, features = ["std"], optiona
 async-trait = {version = "0.1.13", optional = true}
 
 # transport
-async-stream = {version = "0.3", optional = true}
 h2 = {version = "0.4", optional = true}
 hyper = {version = "1", features = ["http1", "http2"], optional = true}
 hyper-util = { version = "0.1.4", features = ["tokio"], optional = true }

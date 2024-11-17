@@ -1,81 +1,116 @@
-use std::{io, ops::ControlFlow, pin::pin};
+#[cfg(feature = "_tls-any")]
+use std::future::Future;
+use std::{
+    io,
+    ops::ControlFlow,
+    pin::{pin, Pin},
+    task::{ready, Context, Poll},
+};
 
+use pin_project::pin_project;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio_stream::{Stream, StreamExt as _};
+#[cfg(feature = "_tls-any")]
+use tokio::task::JoinSet;
+use tokio_stream::Stream;
+#[cfg(feature = "_tls-any")]
+use tokio_stream::StreamExt as _;
 
 use super::service::ServerIo;
 #[cfg(feature = "_tls-any")]
 use super::service::TlsAcceptor;
 
-#[cfg(not(feature = "_tls-any"))]
-pub(crate) fn tcp_incoming<IO, IE>(
-    incoming: impl Stream<Item = Result<IO, IE>>,
-) -> impl Stream<Item = Result<ServerIo<IO>, crate::BoxError>>
+#[pin_project]
+pub(crate) struct ServerIoStream<S, IO, IE>
 where
-    IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-    IE: Into<crate::BoxError>,
+    S: Stream<Item = Result<IO, IE>>,
 {
-    async_stream::try_stream! {
-        let mut incoming = pin!(incoming);
+    #[pin]
+    inner: S,
+    #[cfg(feature = "_tls-any")]
+    tls: Option<TlsAcceptor>,
+    #[cfg(feature = "_tls-any")]
+    tasks: JoinSet<Result<ServerIo<IO>, crate::BoxError>>,
+}
 
-        while let Some(item) = incoming.next().await {
-            yield match item {
-                Ok(_) => item.map(ServerIo::new_io)?,
-                Err(e) => match handle_tcp_accept_error(e) {
-                    ControlFlow::Continue(()) => continue,
-                    ControlFlow::Break(e) => Err(e)?,
-                }
-            }
+impl<S, IO, IE> ServerIoStream<S, IO, IE>
+where
+    S: Stream<Item = Result<IO, IE>>,
+{
+    pub(crate) fn new(incoming: S, #[cfg(feature = "_tls-any")] tls: Option<TlsAcceptor>) -> Self {
+        Self {
+            inner: incoming,
+            #[cfg(feature = "_tls-any")]
+            tls,
+            #[cfg(feature = "_tls-any")]
+            tasks: JoinSet::new(),
         }
     }
 }
 
-#[cfg(feature = "_tls-any")]
-pub(crate) fn tcp_incoming<IO, IE>(
-    incoming: impl Stream<Item = Result<IO, IE>>,
-    tls: Option<TlsAcceptor>,
-) -> impl Stream<Item = Result<ServerIo<IO>, crate::BoxError>>
+impl<S, IO, IE> Stream for ServerIoStream<S, IO, IE>
 where
+    S: Stream<Item = Result<IO, IE>>,
     IO: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     IE: Into<crate::BoxError>,
 {
-    async_stream::try_stream! {
-        let mut incoming = pin!(incoming);
+    type Item = Result<ServerIo<IO>, crate::BoxError>;
 
-        let mut tasks = tokio::task::JoinSet::new();
-
-        loop {
-            match select(&mut incoming, &mut tasks).await {
-                SelectOutput::Incoming(stream) => {
-                    if let Some(tls) = &tls {
-                        let tls = tls.clone();
-                        tasks.spawn(async move {
-                            let io = tls.accept(stream).await?;
-                            Ok(ServerIo::new_tls_io(io))
-                        });
-                    } else {
-                        yield ServerIo::new_io(stream);
-                    }
+    #[cfg(not(feature = "_tls-any"))]
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        match ready!(self.as_mut().project().inner.as_mut().poll_next(cx)) {
+            Some(Ok(io)) => Poll::Ready(Some(Ok(ServerIo::new_io(io)))),
+            Some(Err(e)) => match handle_tcp_accept_error(e) {
+                ControlFlow::Continue(()) => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
                 }
+                ControlFlow::Break(e) => Poll::Ready(Some(Err(e))),
+            },
+            None => Poll::Ready(None),
+        }
+    }
 
-                SelectOutput::Io(io) => {
-                    yield io;
-                }
+    #[cfg(feature = "_tls-any")]
+    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let mut projected = self.as_mut().project();
 
-                SelectOutput::TcpErr(e) => match handle_tcp_accept_error(e) {
-                    ControlFlow::Continue(()) => continue,
-                    ControlFlow::Break(e) => Err(e)?,
-                }
+        let tls = projected.tls;
+        let tasks = projected.tasks;
 
-                SelectOutput::TlsErr(e) => {
-                    tracing::debug!(error = %e, "tls accept error");
-                    continue;
-                }
+        let select_output = ready!(pin!(select(&mut projected.inner, tasks)).poll(cx));
 
-                SelectOutput::Done => {
-                    break;
+        match select_output {
+            SelectOutput::Incoming(stream) => {
+                if let Some(tls) = tls {
+                    let tls = tls.clone();
+                    tasks.spawn(async move {
+                        let io = tls.accept(stream).await?;
+                        Ok(ServerIo::new_tls_io(io))
+                    });
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                } else {
+                    Poll::Ready(Some(Ok(ServerIo::new_io(stream))))
                 }
             }
+
+            SelectOutput::Io(io) => Poll::Ready(Some(Ok(io))),
+
+            SelectOutput::TcpErr(e) => match handle_tcp_accept_error(e) {
+                ControlFlow::Continue(()) => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                ControlFlow::Break(e) => Poll::Ready(Some(Err(e))),
+            },
+
+            SelectOutput::TlsErr(e) => {
+                tracing::debug!(error = %e, "tls accept error");
+                cx.waker().wake_by_ref();
+                Poll::Pending
+            }
+
+            SelectOutput::Done => Poll::Ready(None),
         }
     }
 }
@@ -103,7 +138,7 @@ fn handle_tcp_accept_error(e: impl Into<crate::BoxError>) -> ControlFlow<crate::
 #[cfg(feature = "_tls-any")]
 async fn select<IO: 'static, IE>(
     incoming: &mut (impl Stream<Item = Result<IO, IE>> + Unpin),
-    tasks: &mut tokio::task::JoinSet<Result<ServerIo<IO>, crate::BoxError>>,
+    tasks: &mut JoinSet<Result<ServerIo<IO>, crate::BoxError>>,
 ) -> SelectOutput<IO>
 where
     IE: Into<crate::BoxError>,
