@@ -101,21 +101,33 @@ impl CompressionEncoding {
     pub(crate) fn from_accept_encoding_header(
         map: &http::HeaderMap,
         enabled_encodings: EnabledCompressionEncodings,
+        auto_encoding: bool,
     ) -> Option<Self> {
-        if enabled_encodings.is_empty() {
+        if enabled_encodings.is_empty() && !auto_encoding {
             return None;
         }
 
         let header_value = map.get(ACCEPT_ENCODING_HEADER)?;
         let header_value_str = header_value.to_str().ok()?;
 
-        split_by_comma(header_value_str).find_map(|value| match value {
+        let encoding = split_by_comma(header_value_str).find_map(|value| match value {
             #[cfg(feature = "gzip")]
             "gzip" => Some(CompressionEncoding::Gzip),
             #[cfg(feature = "zstd")]
             "zstd" => Some(CompressionEncoding::Zstd),
-            _ => None,
-        })
+            _ => return None,
+        });
+
+        if auto_encoding {
+            return encoding;
+        } else {
+            if let Some(encoding) = encoding {
+                if enabled_encodings.is_enabled(encoding) {
+                    return Some(encoding);
+                }
+            }
+        }
+        None
     }
 
     /// Get the value of `grpc-encoding` header. Returns an error if the encoding isn't supported.
