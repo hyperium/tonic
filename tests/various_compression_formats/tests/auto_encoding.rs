@@ -195,3 +195,78 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
 
     Ok(())
 }
+
+#[tokio::test]
+async fn test_auto_encoding_behavior() -> Result<(), Box<dyn Error + Send + Sync>> {
+    let port = "50052"; // Используем другой порт, чтобы избежать конфликтов
+    let address = format!("http://[::1]:{}", port);
+
+    // Создаем канал для остановки сервера
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+
+    // Запускаем сервер с auto_encoding
+    let server_handle = tokio::spawn(async move {
+        let srv = ServerTest::default();
+        println!("Starting server on port {} with auto_encoding", port);
+
+        Server::builder()
+            .add_service(
+                ProtoServiceServer::new(srv)
+                    .accept_compressed(CompressionEncoding::Gzip)
+                    .accept_compressed(CompressionEncoding::Zstd)
+                    .auto_encoding(),
+            )
+            .serve_with_shutdown(
+                format!("[::1]:{}", port)
+                    .parse()
+                    .expect("Failed to parse address"),
+                async {
+                    shutdown_rx.await.ok();
+                },
+            )
+            .await
+            .expect("Server crashed");
+    });
+
+    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+
+    // Клиент 5: запрашивает Gzip
+    let client5_address = address.clone();
+    let client5 = async {
+        let mut client =
+            ClientWrapper::new(&client5_address, Some(CompressionEncoding::Gzip), None).await?;
+        let response = client.send_request("Client 5".to_string()).await?;
+
+        // Проверяем, что заголовок grpc-encoding установлен на gzip
+        let grpc_encoding = response
+            .metadata()
+            .get("grpc-encoding")
+            .expect("Missing 'grpc-encoding' header");
+        assert_eq!(grpc_encoding, "gzip");
+        Ok::<(), Box<dyn Error + Send + Sync>>(())
+    };
+
+    // Клиент 6: запрашивает Zstd
+    let client6_address = address.clone();
+    let client6 = async {
+        let mut client =
+            ClientWrapper::new(&client6_address, Some(CompressionEncoding::Zstd), None).await?;
+        let response = client.send_request("Client 6".to_string()).await?;
+
+        // Проверяем, что заголовок grpc-encoding установлен на zstd
+        let grpc_encoding = response
+            .metadata()
+            .get("grpc-encoding")
+            .expect("Missing 'grpc-encoding' header");
+        assert_eq!(grpc_encoding, "zstd");
+        Ok::<(), Box<dyn Error + Send + Sync>>(())
+    };
+
+    tokio::try_join!(client5, client6)?;
+
+    // Останавливаем сервер
+    shutdown_tx.send(()).unwrap();
+    server_handle.await?;
+
+    Ok(())
+}
