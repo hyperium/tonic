@@ -115,18 +115,17 @@ impl CompressionEncoding {
             "gzip" => Some(CompressionEncoding::Gzip),
             #[cfg(feature = "zstd")]
             "zstd" => Some(CompressionEncoding::Zstd),
-            _ => return None,
+            _ => None,
         });
 
         if auto_encoding {
             return encoding;
-        } else {
-            if let Some(encoding) = encoding {
-                if enabled_encodings.is_enabled(encoding) {
-                    return Some(encoding);
-                }
+        } else if let Some(encoding) = encoding {
+            if enabled_encodings.is_enabled(encoding) {
+                return Some(encoding);
             }
         }
+
         None
     }
 
