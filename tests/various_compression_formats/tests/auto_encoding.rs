@@ -62,7 +62,6 @@ impl ClientWrapper {
 
         println!("Client received response: {:?}", response);
 
-        // Output response headers
         println!("Client response headers: {:?}", response.metadata());
 
         Ok(response)
@@ -74,10 +73,8 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
     let port = "50051";
     let address = format!("http://[::1]:{}", port);
 
-    // Создаем канал для остановки сервера
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
-    // Запускаем сервер
     let server_handle = tokio::spawn(async move {
         let srv = ServerTest::default();
         println!("Starting server on port {}", port);
@@ -98,14 +95,14 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Клиент 1: запрашивает gzip
+    // Client 1: Requests Gzip
     let client1_address = address.clone();
     let client1 = async {
         let mut client =
             ClientWrapper::new(&client1_address, Some(CompressionEncoding::Gzip), None).await?;
         let response = client.send_request("Client 1".to_string()).await?;
 
-        // Проверяем, что заголовок grpc-encoding отсутствует
+        // Checking that the rpc-encoding header is missing
         assert!(
             !response.metadata().contains_key("grpc-encoding"),
             "Expected no 'grpc-encoding' header"
@@ -113,13 +110,13 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
         Ok::<(), Box<dyn Error + Send + Sync>>(())
     };
 
-    // Клиент 2: не запрашивает сжатие
+    // Client 2: does not request compression
     let client2_address = address.clone();
     let client2 = async {
         let mut client = ClientWrapper::new(&client2_address, None, None).await?;
         let response = client.send_request("Client 2".to_string()).await?;
 
-        // Проверяем, что заголовок grpc-encoding отсутствует
+        // Checking that the rpc-encoding header is missing
         assert!(
             !response.metadata().contains_key("grpc-encoding"),
             "Expected no 'grpc-encoding' header"
@@ -129,11 +126,10 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
 
     tokio::try_join!(client1, client2)?;
 
-    // Останавливаем сервер
     shutdown_tx.send(()).unwrap();
     server_handle.await?;
 
-    // Запускаем второй сервер с send_compressed(CompressionEncoding::Zstd)
+    // Starting the second server with send_compressed(CompressionEncoding::Zstd)
     let (shutdown_tx2, shutdown_rx2) = oneshot::channel::<()>();
 
     let server_handle2 = tokio::spawn(async move {
@@ -156,14 +152,14 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Клиент 3: запрашивает Zstd
+    // Client 3: Requests Zstd
     let client3_address = address.clone();
     let client3 = async {
         let mut client =
             ClientWrapper::new(&client3_address, Some(CompressionEncoding::Zstd), None).await?;
         let response = client.send_request("Client 3".to_string()).await?;
 
-        // Проверяем, что заголовок grpc-encoding установлен
+        // Check that the rpc-encoding header is set
         let grpc_encoding = response
             .metadata()
             .get("grpc-encoding")
@@ -172,14 +168,14 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
         Ok::<(), Box<dyn Error + Send + Sync>>(())
     };
 
-    // Клиент 4: запрашивает Gzip, который не поддерживается сервером
+    // Client 4: Requests Gzip, which is not supported by the server
     let client4_address = address.clone();
     let client4 = async {
         let mut client =
             ClientWrapper::new(&client4_address, Some(CompressionEncoding::Gzip), None).await?;
         let response = client.send_request("Client 4".to_string()).await?;
 
-        // Поскольку сервер не поддерживает Gzip, заголовок grpc-encoding должен отсутствовать
+        // Since the server does not support Gzip, the grpc-encoding header should be omitted
         assert!(
             !response.metadata().contains_key("grpc-encoding"),
             "Expected no 'grpc-encoding' header"
@@ -189,7 +185,6 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
 
     tokio::try_join!(client3, client4)?;
 
-    // Останавливаем сервер
     shutdown_tx2.send(()).unwrap();
     server_handle2.await?;
 
@@ -198,13 +193,12 @@ async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>>
 
 #[tokio::test]
 async fn test_auto_encoding_behavior() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let port = "50052"; // Используем другой порт, чтобы избежать конфликтов
+    let port = "50052";
     let address = format!("http://[::1]:{}", port);
 
-    // Создаем канал для остановки сервера
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
 
-    // Запускаем сервер с auto_encoding
+    // Starting the server with auto_encoding
     let server_handle = tokio::spawn(async move {
         let srv = ServerTest::default();
         println!("Starting server on port {} with auto_encoding", port);
@@ -230,14 +224,14 @@ async fn test_auto_encoding_behavior() -> Result<(), Box<dyn Error + Send + Sync
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Клиент 5: запрашивает Gzip
+    // Client 5: Requests Gzip
     let client5_address = address.clone();
     let client5 = async {
         let mut client =
             ClientWrapper::new(&client5_address, Some(CompressionEncoding::Gzip), None).await?;
         let response = client.send_request("Client 5".to_string()).await?;
 
-        // Проверяем, что заголовок grpc-encoding установлен на gzip
+        // Check that the grpc-encoding header is set to gzip
         let grpc_encoding = response
             .metadata()
             .get("grpc-encoding")
@@ -246,14 +240,14 @@ async fn test_auto_encoding_behavior() -> Result<(), Box<dyn Error + Send + Sync
         Ok::<(), Box<dyn Error + Send + Sync>>(())
     };
 
-    // Клиент 6: запрашивает Zstd
+    // Client 6: Requests Zstd
     let client6_address = address.clone();
     let client6 = async {
         let mut client =
             ClientWrapper::new(&client6_address, Some(CompressionEncoding::Zstd), None).await?;
         let response = client.send_request("Client 6".to_string()).await?;
 
-        // Проверяем, что заголовок grpc-encoding установлен на zstd
+         // Check that the rpc-encoding header is set to zstd
         let grpc_encoding = response
             .metadata()
             .get("grpc-encoding")
@@ -264,7 +258,6 @@ async fn test_auto_encoding_behavior() -> Result<(), Box<dyn Error + Send + Sync
 
     tokio::try_join!(client5, client6)?;
 
-    // Останавливаем сервер
     shutdown_tx.send(()).unwrap();
     server_handle.await?;
 
