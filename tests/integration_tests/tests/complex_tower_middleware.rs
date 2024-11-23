@@ -26,7 +26,7 @@ async fn complex_tower_layers_work() {
     Server::builder()
         .layer(MyServiceLayer::new())
         .add_service(svc)
-        .serve("127.0.0.1:1322".parse().unwrap())
+        .serve("127.0.0.1:0".parse().unwrap())
         .await
         .unwrap();
 }

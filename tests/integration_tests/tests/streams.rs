@@ -31,7 +31,7 @@ async fn status_from_server_stream_with_source() {
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_shutdown("127.0.0.1:0".parse().unwrap(), async { drop(rx.await) })
             .await
             .unwrap();
     });

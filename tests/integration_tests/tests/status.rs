@@ -8,10 +8,12 @@ use integration_tests::pb::{
 };
 use std::error::Error;
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::metadata::{MetadataMap, MetadataValue};
-use tonic::transport::Endpoint;
-use tonic::{transport::Server, Code, Request, Response, Status};
+use tonic::{
+    transport::{server::TcpIncoming, Endpoint, Server},
+    Code, Request, Response, Status,
+};
 
 #[tokio::test]
 async fn status_with_details() {
@@ -32,17 +34,21 @@ async fn status_with_details() {
 
     let (tx, rx) = oneshot::channel::<()>();
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1337".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut channel = test_client::TestClient::connect("http://127.0.0.1:1337")
+    let mut channel = test_client::TestClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 
@@ -86,17 +92,21 @@ async fn status_with_metadata() {
 
     let (tx, rx) = oneshot::channel::<()>();
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut channel = test_client::TestClient::connect("http://127.0.0.1:1338")
+    let mut channel = test_client::TestClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 
@@ -153,17 +163,21 @@ async fn status_from_server_stream() {
 
     let svc = test_stream_server::TestStreamServer::new(Svc);
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve("127.0.0.1:1339".parse().unwrap())
+            .serve_with_incoming(incoming)
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut client = test_stream_client::TestStreamClient::connect("http://127.0.0.1:1339")
+    let mut client = test_stream_client::TestStreamClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 
@@ -219,17 +233,21 @@ async fn message_and_then_status_from_server_stream() {
 
     let svc = test_stream_server::TestStreamServer::new(Svc);
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve("127.0.0.1:1340".parse().unwrap())
+            .serve_with_incoming(incoming)
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut client = test_stream_client::TestStreamClient::connect("http://127.0.0.1:1340")
+    let mut client = test_stream_client::TestStreamClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 

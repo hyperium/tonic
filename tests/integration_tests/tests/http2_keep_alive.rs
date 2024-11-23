@@ -1,9 +1,9 @@
 use std::time::Duration;
 
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 
 use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
-use tonic::transport::{Channel, Server};
+use tonic::transport::{server::TcpIncoming, Channel, Server};
 use tonic::{Request, Response, Status};
 
 struct Svc;
@@ -19,18 +19,23 @@ impl test_server::Test for Svc {
 async fn http2_keepalive_does_not_cause_panics() {
     let svc = test_server::TestServer::new(Svc {});
     let (tx, rx) = oneshot::channel::<()>();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .http2_keepalive_interval(Some(Duration::from_secs(10)))
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:5432".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut client = TestClient::connect("http://127.0.0.1:5432").await.unwrap();
+    let mut client = TestClient::connect(format!("http://{addr}")).await.unwrap();
 
     let res = client.unary_call(Request::new(Input {})).await;
 
@@ -44,18 +49,24 @@ async fn http2_keepalive_does_not_cause_panics() {
 async fn http2_keepalive_does_not_cause_panics_on_client_side() {
     let svc = test_server::TestServer::new(Svc {});
     let (tx, rx) = oneshot::channel::<()>();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .http2_keepalive_interval(Some(Duration::from_secs(5)))
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:5431".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let channel = Channel::from_static("http://127.0.0.1:5431")
+    let channel = Channel::from_shared(format!("http://{addr}"))
+        .unwrap()
         .http2_keep_alive_interval(Duration::from_secs(5))
         .connect()
         .await
