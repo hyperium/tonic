@@ -1,9 +1,9 @@
 use http::{header::HeaderName, HeaderValue};
 use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::TcpIncoming, Endpoint, Server},
     Request, Response, Status,
 };
 use tower::ServiceBuilder;
@@ -26,16 +26,22 @@ async fn connect_supports_standard_tower_layers() {
     let (tx, rx) = oneshot::channel();
     let svc = test_server::TestServer::new(Svc);
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     // Start the server now, second call should succeed
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1340".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1340").connect_lazy();
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
+        .connect_lazy();
 
     // prior to https://github.com/hyperium/tonic/pull/974
     // this would not compile. (specifically the `TraceLayer`)

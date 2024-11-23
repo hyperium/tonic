@@ -4,10 +4,10 @@ use integration_tests::BoxFuture;
 use std::task::Context;
 use std::task::Poll;
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::codegen::http::Request;
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::TcpIncoming, Endpoint, Server},
     Response, Status,
 };
 use tower::Layer;
@@ -31,18 +31,23 @@ async fn writes_origin_header() {
 
     let (tx, rx) = oneshot::channel::<()>();
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .layer(OriginLayer {})
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1442".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1442")
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
         .origin("https://docs.rs".parse().expect("valid uri"))
         .connect()
         .await
