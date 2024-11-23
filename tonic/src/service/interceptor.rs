@@ -52,19 +52,7 @@ where
     }
 }
 
-/// Create a new interceptor layer.
-///
-/// See [`Interceptor`] for more details.
-#[deprecated(since = "0.12.4", note = "use `InterceptorLayer::new()` instead")]
-pub fn interceptor<I>(interceptor: I) -> InterceptorLayer<I>
-where
-    I: Interceptor,
-{
-    InterceptorLayer { interceptor }
-}
-
 /// A gRPC interceptor that can be used as a [`Layer`],
-/// created by calling [`interceptor`].
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Debug, Clone, Copy)]
