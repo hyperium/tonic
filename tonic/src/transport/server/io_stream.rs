@@ -19,6 +19,9 @@ use super::service::ServerIo;
 #[cfg(feature = "_tls-any")]
 use super::service::TlsAcceptor;
 
+#[cfg(feature = "_tls-any")]
+struct State<IO>(TlsAcceptor, JoinSet<Result<ServerIo<IO>, crate::BoxError>>);
+
 #[pin_project]
 pub(crate) struct ServerIoStream<S, IO, IE>
 where
@@ -27,9 +30,7 @@ where
     #[pin]
     inner: S,
     #[cfg(feature = "_tls-any")]
-    tls: Option<TlsAcceptor>,
-    #[cfg(feature = "_tls-any")]
-    tasks: JoinSet<Result<ServerIo<IO>, crate::BoxError>>,
+    state: Option<State<IO>>,
 }
 
 impl<S, IO, IE> ServerIoStream<S, IO, IE>
@@ -40,9 +41,27 @@ where
         Self {
             inner: incoming,
             #[cfg(feature = "_tls-any")]
-            tls,
-            #[cfg(feature = "_tls-any")]
-            tasks: JoinSet::new(),
+            state: tls.map(|tls| State(tls, JoinSet::new())),
+        }
+    }
+
+    fn poll_next_without_tls(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<ServerIo<IO>, crate::BoxError>>>
+    where
+        IE: Into<crate::BoxError>,
+    {
+        match ready!(self.as_mut().project().inner.as_mut().poll_next(cx)) {
+            Some(Ok(io)) => Poll::Ready(Some(Ok(ServerIo::new_io(io)))),
+            Some(Err(e)) => match handle_tcp_accept_error(e) {
+                ControlFlow::Continue(()) => {
+                    cx.waker().wake_by_ref();
+                    Poll::Pending
+                }
+                ControlFlow::Break(e) => Poll::Ready(Some(Err(e))),
+            },
+            None => Poll::Ready(None),
         }
     }
 }
@@ -56,42 +75,29 @@ where
     type Item = Result<ServerIo<IO>, crate::BoxError>;
 
     #[cfg(not(feature = "_tls-any"))]
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        match ready!(self.as_mut().project().inner.as_mut().poll_next(cx)) {
-            Some(Ok(io)) => Poll::Ready(Some(Ok(ServerIo::new_io(io)))),
-            Some(Err(e)) => match handle_tcp_accept_error(e) {
-                ControlFlow::Continue(()) => {
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                }
-                ControlFlow::Break(e) => Poll::Ready(Some(Err(e))),
-            },
-            None => Poll::Ready(None),
-        }
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.poll_next_without_tls(cx)
     }
 
     #[cfg(feature = "_tls-any")]
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let mut projected = self.as_mut().project();
 
-        let tls = projected.tls;
-        let tasks = projected.tasks;
+        let Some(State(tls, tasks)) = projected.state else {
+            return self.poll_next_without_tls(cx);
+        };
 
         let select_output = ready!(pin!(select(&mut projected.inner, tasks)).poll(cx));
 
         match select_output {
             SelectOutput::Incoming(stream) => {
-                if let Some(tls) = tls {
-                    let tls = tls.clone();
-                    tasks.spawn(async move {
-                        let io = tls.accept(stream).await?;
-                        Ok(ServerIo::new_tls_io(io))
-                    });
-                    cx.waker().wake_by_ref();
-                    Poll::Pending
-                } else {
-                    Poll::Ready(Some(Ok(ServerIo::new_io(stream))))
-                }
+                let tls = tls.clone();
+                tasks.spawn(async move {
+                    let io = tls.accept(stream).await?;
+                    Ok(ServerIo::new_tls_io(io))
+                });
+                cx.waker().wake_by_ref();
+                Poll::Pending
             }
 
             SelectOutput::Io(io) => Poll::Ready(Some(Ok(io))),
