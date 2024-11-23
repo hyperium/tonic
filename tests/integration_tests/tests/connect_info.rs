@@ -1,8 +1,11 @@
 use integration_tests::pb::{test_client, test_server, Input, Output};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::{
-    transport::{server::TcpConnectInfo, Endpoint, Server},
+    transport::{
+        server::{TcpConnectInfo, TcpIncoming},
+        Endpoint, Server,
+    },
     Request, Response, Status,
 };
 
@@ -25,17 +28,22 @@ async fn getting_connect_info() {
 
     let (tx, rx) = oneshot::channel::<()>();
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1400".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1400")
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
         .connect()
         .await
         .unwrap();

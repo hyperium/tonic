@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tokio_stream::StreamExt;
 
 use integration_tests::pb::{
@@ -8,6 +8,7 @@ use integration_tests::pb::{
 };
 use tonic::codegen::BoxStream;
 use tonic::service::RoutesBuilder;
+use tonic::transport::server::TcpIncoming;
 use tonic::{
     transport::{Endpoint, Server},
     Request, Response, Status,
@@ -56,17 +57,22 @@ async fn multiple_service_using_routes_builder() {
     let mut routes_builder = RoutesBuilder::default();
     routes_builder.add_service(svc1).add_service(svc2);
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_routes(routes_builder.routes())
-            .serve_with_shutdown("127.0.0.1:1400".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1400")
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
         .connect()
         .await
         .unwrap();
