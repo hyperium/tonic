@@ -748,7 +748,6 @@ impl<L> Router<L> {
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
     /// As a result, one cannot use this to toggle between two identically named implementations.
-    #[allow(clippy::type_complexity)]
     pub fn add_optional_service<S>(mut self, svc: Option<S>) -> Self
     where
         S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
