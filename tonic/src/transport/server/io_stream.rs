@@ -108,23 +108,20 @@ async fn select<IO: 'static, IE>(
 where
     IE: Into<crate::BoxError>,
 {
-    if tasks.is_empty() {
-        return match incoming.try_next().await {
+    let incoming_stream_future = async {
+        match incoming.try_next().await {
             Ok(Some(stream)) => SelectOutput::Incoming(stream),
             Ok(None) => SelectOutput::Done,
             Err(e) => SelectOutput::TcpErr(e.into()),
-        };
+        }
+    };
+
+    if tasks.is_empty() {
+        return incoming_stream_future.await;
     }
 
     tokio::select! {
-        stream = incoming.try_next() => {
-            match stream {
-                Ok(Some(stream)) => SelectOutput::Incoming(stream),
-                Ok(None) => SelectOutput::Done,
-                Err(e) => SelectOutput::TcpErr(e.into()),
-            }
-        }
-
+        stream = incoming_stream_future => stream,
         accept = tasks.join_next() => {
             match accept.expect("JoinSet should never end") {
                 Ok(Ok(io)) => SelectOutput::Io(io),

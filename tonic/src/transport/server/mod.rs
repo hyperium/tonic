@@ -466,7 +466,7 @@ impl<L> Server<L> {
     /// # use tower_service::Service;
     /// use tower::ServiceBuilder;
     /// use std::time::Duration;
-    /// use tonic::{Request, Status, service::interceptor};
+    /// use tonic::{Request, Status, service::InterceptorLayer};
     ///
     /// fn auth_interceptor(request: Request<()>) -> Result<Request<()>, Status> {
     ///     if valid_credentials(&request) {
@@ -488,8 +488,8 @@ impl<L> Server<L> {
     /// let layer = ServiceBuilder::new()
     ///     .load_shed()
     ///     .timeout(Duration::from_secs(30))
-    ///     .layer(interceptor(auth_interceptor))
-    ///     .layer(interceptor(some_other_interceptor))
+    ///     .layer(InterceptorLayer::new(auth_interceptor))
+    ///     .layer(InterceptorLayer::new(some_other_interceptor))
     ///     .into_inner();
     ///
     /// Server::builder().layer(layer);
@@ -764,12 +764,6 @@ impl<L> Router<L> {
         self
     }
 
-    /// Convert this tonic `Router` into an axum `Router` consuming the tonic one.
-    #[deprecated(since = "0.12.2", note = "Use `Routes::into_axum_router` instead.")]
-    pub fn into_router(self) -> axum::Router {
-        self.routes.into_axum_router()
-    }
-
     /// Consume this [`Server`] creating a future that will execute the server
     /// on [tokio]'s default executor.
     ///
@@ -884,15 +878,6 @@ impl<L> Router<L> {
         self.server
             .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
             .await
-    }
-
-    /// Create a tower service out of a router.
-    #[deprecated(since = "0.12.4", note = "compose the layers and the `Routes`")]
-    pub fn into_service<ResBody>(self) -> L::Service
-    where
-        L: Layer<Routes>,
-    {
-        self.server.service_builder.service(self.routes.prepare())
     }
 }
 
