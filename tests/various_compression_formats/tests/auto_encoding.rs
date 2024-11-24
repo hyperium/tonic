@@ -1,7 +1,10 @@
 use std::error::Error;
+
+use tokio::net::TcpListener;
 use tokio::sync::oneshot;
+
 use tonic::codegen::CompressionEncoding;
-use tonic::transport::{Channel, Server};
+use tonic::transport::{server::TcpIncoming, Channel, Server};
 use tonic::{Request, Response, Status};
 
 use various_compression_formats::proto_box::{
@@ -9,6 +12,8 @@ use various_compression_formats::proto_box::{
     proto_service_server::{ProtoService, ProtoServiceServer},
     Input, Output,
 };
+
+const LOCALHOST: &str = "127.0.0.1:0";
 
 #[derive(Default)]
 pub struct ServerTest;
@@ -18,11 +23,9 @@ impl ProtoService for ServerTest {
     async fn rpc(&self, request: Request<Input>) -> Result<Response<Output>, Status> {
         println!("Server received request: {:?}", request);
 
-        let response = Output {
+        Ok(Response::new(Output {
             data: format!("Received: {}", request.into_inner().data),
-        };
-
-        Ok(Response::new(response))
+        }))
     }
 }
 
@@ -34,17 +37,12 @@ impl ClientWrapper {
     async fn new(
         address: &str,
         accept: Option<CompressionEncoding>,
-        send: Option<CompressionEncoding>,
     ) -> Result<Self, Box<dyn Error + Send + Sync>> {
         let channel = Channel::from_shared(address.to_string())?.connect().await?;
         let mut client = ProtoServiceClient::new(channel);
 
         if let Some(encoding) = accept {
             client = client.accept_compressed(encoding);
-        }
-
-        if let Some(encoding) = send {
-            client = client.send_compressed(encoding);
         }
 
         Ok(Self { client })
@@ -60,206 +58,149 @@ impl ClientWrapper {
 
         let response = self.client.rpc(request).await?;
 
-        println!("Client received response: {:?}", response);
-
         println!("Client response headers: {:?}", response.metadata());
 
         Ok(response)
     }
 }
 
+async fn start_server(
+    listener: TcpListener,
+    send: Option<CompressionEncoding>,
+    auto: bool,
+) -> oneshot::Sender<()> {
+    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
+    let srv = ServerTest::default();
+    let mut service = ProtoServiceServer::new(srv);
+
+    if let Some(encoding) = send {
+        service = service.send_compressed(encoding);
+    }
+
+    if auto {
+        service = service.auto_encoding();
+    }
+
+    let server = Server::builder()
+        .add_service(service)
+        .serve_with_incoming_shutdown(
+            TcpIncoming::from_listener(listener, true, None).unwrap(),
+            async {
+                shutdown_rx.await.ok();
+            },
+        );
+
+    tokio::spawn(async move {
+        server.await.expect("Server crashed");
+    });
+
+    shutdown_tx
+}
+
+async fn run_client_test(
+    address: &str,
+    client_accept: Option<CompressionEncoding>,
+    expected_encoding: Option<&str>,
+    data: &str,
+) -> Result<(), Box<dyn Error + Send + Sync>> {
+    let mut client = ClientWrapper::new(address, client_accept).await?;
+    let response = client.send_request(data.to_string()).await?;
+
+    match expected_encoding {
+        Some(encoding) => {
+            let grpc_encoding = response
+                .metadata()
+                .get("grpc-encoding")
+                .expect("Missing 'grpc-encoding' header");
+            assert_eq!(grpc_encoding, encoding);
+        }
+        None => {
+            assert!(
+                !response.metadata().contains_key("grpc-encoding"),
+                "Expected no 'grpc-encoding' header"
+            );
+        }
+    }
+
+    Ok(())
+}
+
 #[tokio::test]
 async fn test_compression_behavior() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let port = "50051";
-    let address = format!("http://[::1]:{}", port);
+    let listener = TcpListener::bind(LOCALHOST).await?;
+    let address = format!("http://{}", listener.local_addr().unwrap());
 
-    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-
-    let server_handle = tokio::spawn(async move {
-        let srv = ServerTest::default();
-        println!("Starting server on port {}", port);
-
-        Server::builder()
-            .add_service(ProtoServiceServer::new(srv))
-            .serve_with_shutdown(
-                format!("[::1]:{}", port)
-                    .parse()
-                    .expect("Failed to parse address"),
-                async {
-                    shutdown_rx.await.ok();
-                },
-            )
-            .await
-            .expect("Server crashed");
-    });
+    // The server is not specified to send data with any compression
+    let shutdown_tx = start_server(listener, None, false).await;
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Client 1: Requests Gzip
-    let client1_address = address.clone();
-    let client1 = async {
-        let mut client =
-            ClientWrapper::new(&client1_address, Some(CompressionEncoding::Gzip), None).await?;
-        let response = client.send_request("Client 1".to_string()).await?;
-
-        // Checking that the rpc-encoding header is missing
-        assert!(
-            !response.metadata().contains_key("grpc-encoding"),
-            "Expected no 'grpc-encoding' header"
-        );
-        Ok::<(), Box<dyn Error + Send + Sync>>(())
-    };
-
-    // Client 2: does not request compression
-    let client2_address = address.clone();
-    let client2 = async {
-        let mut client = ClientWrapper::new(&client2_address, None, None).await?;
-        let response = client.send_request("Client 2".to_string()).await?;
-
-        // Checking that the rpc-encoding header is missing
-        assert!(
-            !response.metadata().contains_key("grpc-encoding"),
-            "Expected no 'grpc-encoding' header"
-        );
-        Ok::<(), Box<dyn Error + Send + Sync>>(())
-    };
-
-    tokio::try_join!(client1, client2)?;
+    tokio::try_join!(
+        // Client 1 can only accept gzip encoding or uncompressed,
+        // so all data must be returned uncompressed
+        run_client_test(&address, Some(CompressionEncoding::Gzip), None, "Client 1"),
+        // Client 2 can only accept non-compressed data,
+        // so all data must be returned uncompressed
+        run_client_test(&address, None, None, "Client 2")
+    )?;
 
     shutdown_tx.send(()).unwrap();
-    server_handle.await?;
 
-    // Starting the second server with send_compressed(CompressionEncoding::Zstd)
-    let (shutdown_tx2, shutdown_rx2) = oneshot::channel::<()>();
+    let listener = TcpListener::bind(LOCALHOST).await?;
+    let address = format!("http://{}", listener.local_addr().unwrap());
 
-    let server_handle2 = tokio::spawn(async move {
-        let srv = ServerTest::default();
-        println!("Starting server on port {} with Zstd compression", port);
-
-        Server::builder()
-            .add_service(ProtoServiceServer::new(srv).send_compressed(CompressionEncoding::Zstd))
-            .serve_with_shutdown(
-                format!("[::1]:{}", port)
-                    .parse()
-                    .expect("Failed to parse address"),
-                async {
-                    shutdown_rx2.await.ok();
-                },
-            )
-            .await
-            .expect("Server crashed");
-    });
+    // The server is specified to send data with zstd compression
+    let shutdown_tx = start_server(listener, Some(CompressionEncoding::Zstd), false).await;
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Client 3: Requests Zstd
-    let client3_address = address.clone();
-    let client3 = async {
-        let mut client =
-            ClientWrapper::new(&client3_address, Some(CompressionEncoding::Zstd), None).await?;
-        let response = client.send_request("Client 3".to_string()).await?;
+    tokio::try_join!(
+        // Client 3 can only accept zstd encoding or uncompressed,
+        // so all data must be returned compressed with zstd
+        run_client_test(
+            &address,
+            Some(CompressionEncoding::Zstd),
+            Some("zstd"),
+            "Client 3"
+        ),
+        // Client 4 can only accept Gzip encoding or uncompressed,
+        // so all data must be returned uncompressed
+        run_client_test(&address, Some(CompressionEncoding::Gzip), None, "Client 4")
+    )?;
 
-        // Check that the rpc-encoding header is set
-        let grpc_encoding = response
-            .metadata()
-            .get("grpc-encoding")
-            .expect("Missing 'grpc-encoding' header");
-        assert_eq!(grpc_encoding, "zstd");
-        Ok::<(), Box<dyn Error + Send + Sync>>(())
-    };
-
-    // Client 4: Requests Gzip, which is not supported by the server
-    let client4_address = address.clone();
-    let client4 = async {
-        let mut client =
-            ClientWrapper::new(&client4_address, Some(CompressionEncoding::Gzip), None).await?;
-        let response = client.send_request("Client 4".to_string()).await?;
-
-        // Since the server does not support Gzip, the grpc-encoding header should be omitted
-        assert!(
-            !response.metadata().contains_key("grpc-encoding"),
-            "Expected no 'grpc-encoding' header"
-        );
-        Ok::<(), Box<dyn Error + Send + Sync>>(())
-    };
-
-    tokio::try_join!(client3, client4)?;
-
-    shutdown_tx2.send(()).unwrap();
-    server_handle2.await?;
+    shutdown_tx.send(()).unwrap();
 
     Ok(())
 }
 
 #[tokio::test]
 async fn test_auto_encoding_behavior() -> Result<(), Box<dyn Error + Send + Sync>> {
-    let port = "50052";
-    let address = format!("http://[::1]:{}", port);
+    let listener = TcpListener::bind(LOCALHOST).await?;
+    let address = format!("http://{}", listener.local_addr().unwrap());
 
-    let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
-
-    // Starting the server with auto_encoding
-    let server_handle = tokio::spawn(async move {
-        let srv = ServerTest::default();
-        println!("Starting server on port {} with auto_encoding", port);
-
-        Server::builder()
-            .add_service(
-                ProtoServiceServer::new(srv)
-                    .accept_compressed(CompressionEncoding::Gzip)
-                    .accept_compressed(CompressionEncoding::Zstd)
-                    .auto_encoding(),
-            )
-            .serve_with_shutdown(
-                format!("[::1]:{}", port)
-                    .parse()
-                    .expect("Failed to parse address"),
-                async {
-                    shutdown_rx.await.ok();
-                },
-            )
-            .await
-            .expect("Server crashed");
-    });
+    // The server returns in the compression format that the client prefers
+    let shutdown_tx = start_server(listener, Some(CompressionEncoding::Gzip), true).await;
 
     tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-    // Client 5: Requests Gzip
-    let client5_address = address.clone();
-    let client5 = async {
-        let mut client =
-            ClientWrapper::new(&client5_address, Some(CompressionEncoding::Gzip), None).await?;
-        let response = client.send_request("Client 5".to_string()).await?;
-
-        // Check that the grpc-encoding header is set to gzip
-        let grpc_encoding = response
-            .metadata()
-            .get("grpc-encoding")
-            .expect("Missing 'grpc-encoding' header");
-        assert_eq!(grpc_encoding, "gzip");
-        Ok::<(), Box<dyn Error + Send + Sync>>(())
-    };
-
-    // Client 6: Requests Zstd
-    let client6_address = address.clone();
-    let client6 = async {
-        let mut client =
-            ClientWrapper::new(&client6_address, Some(CompressionEncoding::Zstd), None).await?;
-        let response = client.send_request("Client 6".to_string()).await?;
-
-         // Check that the rpc-encoding header is set to zstd
-        let grpc_encoding = response
-            .metadata()
-            .get("grpc-encoding")
-            .expect("Missing 'grpc-encoding' header");
-        assert_eq!(grpc_encoding, "zstd");
-        Ok::<(), Box<dyn Error + Send + Sync>>(())
-    };
-
-    tokio::try_join!(client5, client6)?;
+    tokio::try_join!(
+        // Client 5 can accept gzip encoding or uncompressed, so all data must be returned compressed with gzip
+        run_client_test(
+            &address,
+            Some(CompressionEncoding::Gzip),
+            Some("gzip"),
+            "Client 5"
+        ),
+        // Client 6 can accept zstd encoding or uncompressed, so all data must be returned compressed with zstd
+        run_client_test(
+            &address,
+            Some(CompressionEncoding::Zstd),
+            Some("zstd"),
+            "Client 6"
+        )
+    )?;
 
     shutdown_tx.send(()).unwrap();
-    server_handle.await?;
 
     Ok(())
 }
