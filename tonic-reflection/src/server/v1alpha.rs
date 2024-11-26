@@ -1,7 +1,8 @@
-use std::sync::Arc;
+use std::{fmt, sync::Arc};
 
+use pin_project::pin_project;
 use tokio::sync::mpsc;
-use tokio_stream::{wrappers::ReceiverStream, StreamExt};
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
 
 use super::ReflectionServiceState;
@@ -13,14 +14,15 @@ use crate::pb::v1alpha::{
     ServerReflectionResponse, ServiceResponse,
 };
 
+/// An implementation for `ServerReflection`.
 #[derive(Debug)]
-pub(super) struct ReflectionService {
+pub struct ReflectionService {
     state: Arc<ReflectionServiceState>,
 }
 
 #[tonic::async_trait]
 impl ServerReflection for ReflectionService {
-    type ServerReflectionInfoStream = ReceiverStream<Result<ServerReflectionResponse, Status>>;
+    type ServerReflectionInfoStream = ServerReflectionInfoStream;
 
     async fn server_reflection_info(
         &self,
@@ -91,7 +93,9 @@ impl ServerReflection for ReflectionService {
             }
         });
 
-        Ok(Response::new(ReceiverStream::new(resp_rx)))
+        Ok(Response::new(ServerReflectionInfoStream(
+            ReceiverStream::new(resp_rx),
+        )))
     }
 }
 
@@ -100,5 +104,32 @@ impl From<ReflectionServiceState> for ReflectionService {
         Self {
             state: Arc::new(state),
         }
+    }
+}
+
+/// A response stream.
+#[pin_project]
+pub struct ServerReflectionInfoStream(
+    #[pin] ReceiverStream<Result<ServerReflectionResponse, Status>>,
+);
+
+impl Stream for ServerReflectionInfoStream {
+    type Item = Result<ServerReflectionResponse, Status>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        self.project().0.poll_next(cx)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.0.size_hint()
+    }
+}
+
+impl fmt::Debug for ServerReflectionInfoStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_tuple("ServerReflectionInfoStream").finish()
     }
 }
