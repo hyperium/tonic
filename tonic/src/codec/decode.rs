@@ -246,8 +246,8 @@ impl StreamingInner {
 
     // Returns Some(()) if data was found or None if the loop in `poll_next` should break
     fn poll_frame(&mut self, cx: &mut Context<'_>) -> Poll<Result<Option<()>, Status>> {
-        let chunk = match ready!(Pin::new(&mut self.body).poll_frame(cx)) {
-            Some(Ok(d)) => Some(d),
+        let frame = match ready!(Pin::new(&mut self.body).poll_frame(cx)) {
+            Some(Ok(frame)) => frame,
             Some(Err(status)) => {
                 if self.direction == Direction::Request && status.code() == Code::Cancelled {
                     return Poll::Ready(Ok(None));
@@ -257,37 +257,30 @@ impl StreamingInner {
                 debug!("decoder inner stream error: {:?}", status);
                 return Poll::Ready(Err(status));
             }
-            None => None,
+            None => {
+                // FIXME: improve buf usage.
+                return Poll::Ready(if self.buf.has_remaining() {
+                    trace!("unexpected EOF decoding stream, state: {:?}", self.state);
+                    Err(Status::internal("Unexpected EOF decoding stream."))
+                } else {
+                    Ok(None)
+                });
+            }
         };
 
-        Poll::Ready(if let Some(frame) = chunk {
-            match frame {
-                frame if frame.is_data() => {
-                    self.buf.put(frame.into_data().unwrap());
-                    Ok(Some(()))
-                }
-                frame if frame.is_trailers() => {
-                    match &mut self.trailers {
-                        Some(trailers) => {
-                            trailers.extend(frame.into_trailers().unwrap());
-                        }
-                        None => {
-                            self.trailers = Some(frame.into_trailers().unwrap());
-                        }
-                    }
-
-                    Ok(None)
-                }
-                frame => panic!("unexpected frame: {:?}", frame),
-            }
-        } else {
-            // FIXME: improve buf usage.
-            if self.buf.has_remaining() {
-                trace!("unexpected EOF decoding stream, state: {:?}", self.state);
-                Err(Status::internal("Unexpected EOF decoding stream."))
+        Poll::Ready(if frame.is_data() {
+            self.buf.put(frame.into_data().unwrap());
+            Ok(Some(()))
+        } else if frame.is_trailers() {
+            if let Some(trailers) = &mut self.trailers {
+                trailers.extend(frame.into_trailers().unwrap());
             } else {
-                Ok(None)
+                self.trailers = Some(frame.into_trailers().unwrap());
             }
+
+            Ok(None)
+        } else {
+            panic!("unexpected frame: {:?}", frame);
         })
     }
 
