@@ -25,7 +25,7 @@ async fn interceptor_retrieves_grpc_method() {
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
     // Start the server now, second call should succeed
     let jh = tokio::spawn(async move {
