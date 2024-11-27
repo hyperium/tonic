@@ -443,32 +443,25 @@ impl<T: Clone> Clone for Grpc<T> {
 
 impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut f = f.debug_struct("Grpc");
-
-        f.field("inner", &self.inner);
-
-        f.field("origin", &self.config.origin);
-
-        f.field(
-            "compression_encoding",
-            &self.config.send_compression_encodings,
-        );
-
-        f.field(
-            "accept_compression_encodings",
-            &self.config.accept_compression_encodings,
-        );
-
-        f.field(
-            "max_decoding_message_size",
-            &self.config.max_decoding_message_size,
-        );
-
-        f.field(
-            "max_encoding_message_size",
-            &self.config.max_encoding_message_size,
-        );
-
-        f.finish()
+        f.debug_struct("Grpc")
+            .field("inner", &self.inner)
+            .field("origin", &self.config.origin)
+            .field(
+                "compression_encoding",
+                &self.config.send_compression_encodings,
+            )
+            .field(
+                "accept_compression_encodings",
+                &self.config.accept_compression_encodings,
+            )
+            .field(
+                "max_decoding_message_size",
+                &self.config.max_decoding_message_size,
+            )
+            .field(
+                "max_encoding_message_size",
+                &self.config.max_encoding_message_size,
+            )
+            .finish()
     }
 }
