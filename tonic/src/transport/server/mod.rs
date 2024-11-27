@@ -395,11 +395,8 @@ impl<L> Server<L> {
     /// route around different services.
     pub fn add_service<S>(&mut self, svc: S) -> Router<L>
     where
-        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
         L: Clone,
     {
@@ -416,11 +413,8 @@ impl<L> Server<L> {
     /// As a result, one cannot use this to toggle between two identically named implementations.
     pub fn add_optional_service<S>(&mut self, svc: Option<S>) -> Router<L>
     where
-        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
         L: Clone,
     {
@@ -732,11 +726,8 @@ impl<L> Router<L> {
     /// Add a new service to this router.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         self.routes = self.routes.add_service(svc);
@@ -750,11 +741,8 @@ impl<L> Router<L> {
     /// As a result, one cannot use this to toggle between two identically named implementations.
     pub fn add_optional_service<S>(mut self, svc: Option<S>) -> Self
     where
-        S: Service<Request<Body>, Response = Response<Body>, Error = Infallible>
-            + NamedService
-            + Clone
-            + Send
-            + 'static,
+        S: Service<Request<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         if let Some(svc) = svc {
