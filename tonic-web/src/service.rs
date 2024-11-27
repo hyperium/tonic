@@ -130,7 +130,6 @@ where
 }
 
 /// Response future for the [`GrpcWebService`].
-#[allow(missing_debug_implementations)]
 #[pin_project]
 #[must_use = "futures do nothing unless polled"]
 pub struct ResponseFuture<F> {
@@ -177,6 +176,12 @@ where
 
 impl<S: NamedService> NamedService for GrpcWebService<S> {
     const NAME: &'static str = S::NAME;
+}
+
+impl<F> fmt::Debug for ResponseFuture<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResponseFuture").finish()
+    }
 }
 
 impl<'a> RequestKind<'a> {
