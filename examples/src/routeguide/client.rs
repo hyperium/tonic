@@ -32,7 +32,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         .into_inner();
 
     while let Some(feature) = stream.message().await? {
-        println!("NOTE = {:?}", feature);
+        println!("FEATURE = {:?}", feature);
     }
 
     Ok(())

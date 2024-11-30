@@ -29,10 +29,8 @@ zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
 _tls-any = ["dep:rustls-pki-types", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"] # Internal. Please choose one of `tls-ring` or `tls-aws-lc`
-tls = ["tls-ring"] # Deprecated. Please use `tls-ring` or `tls-aws-lc` instead.
 tls-ring = ["_tls-any", "tokio-rustls/ring"]
 tls-aws-lc = ["_tls-any", "tokio-rustls/aws-lc-rs"]
-tls-roots = ["tls-native-roots"] # Deprecated. Please use `tls-native-roots` instead.
 tls-native-roots = ["_tls-any", "channel", "dep:rustls-native-certs"]
 tls-webpki-roots = ["_tls-any","channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
@@ -136,7 +134,6 @@ allowed_external_types = [
   "axum::routing::Router",
   "futures_core::stream::Stream",
   "h2::error::Error",
-  "http_body_util::combinators::box_body::UnsyncBoxBody",
   "tower_service::Service",
   "tower_layer::Layer",
   "tower_layer::stack::Stack",

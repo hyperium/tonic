@@ -601,28 +601,6 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos()`")]
-    pub fn compile(
-        self,
-        protos: &[impl AsRef<Path>],
-        includes: &[impl AsRef<Path>],
-    ) -> io::Result<()> {
-        self.compile_protos(protos, includes)
-    }
-
-    /// Compile the .proto files and execute code generation using a custom
-    /// `prost_build::Config`. The provided config will be updated with this builder's config.
-    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos_with_config()`")]
-    pub fn compile_with_config(
-        self,
-        config: Config,
-        protos: &[impl AsRef<Path>],
-        includes: &[impl AsRef<Path>],
-    ) -> io::Result<()> {
-        self.compile_protos_with_config(config, protos, includes)
-    }
-
-    /// Compile the .proto files and execute code generation.
     pub fn compile_protos(
         self,
         protos: &[impl AsRef<Path>],

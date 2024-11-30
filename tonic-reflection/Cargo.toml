@@ -26,6 +26,7 @@ server = ["prost-types", "dep:tokio", "dep:tokio-stream"]
 default = ["server"]
 
 [dependencies]
+pin-project = "1"
 prost = "0.13"
 prost-types = {version = "0.13", optional = true}
 tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
@@ -49,6 +50,5 @@ allowed_external_types = [
   "prost_types::*",
 
   "futures_core::stream::Stream",
-  "http_body_util::combinators::box_body::UnsyncBoxBody",
   "tower_service::Service",
 ]

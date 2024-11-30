@@ -1,9 +1,9 @@
 use integration_tests::pb::{test_client::TestClient, test_server, Input, Output};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::TcpIncoming, Endpoint, Server},
     Code, Request, Response, Status,
 };
 
@@ -40,17 +40,21 @@ async fn connect_returns_err_via_call_after_connected() {
     let sender = Arc::new(Mutex::new(Some(tx)));
     let svc = test_server::TestServer::new(Svc(sender));
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1338".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let mut client = TestClient::connect("http://127.0.0.1:1338").await.unwrap();
+    let mut client = TestClient::connect(format!("http://{addr}")).await.unwrap();
 
     // First call should pass, then shutdown the server
     client.unary_call(Request::new(Input {})).await.unwrap();
@@ -71,21 +75,32 @@ async fn connect_lazy_reconnects_after_first_failure() {
     let sender = Arc::new(Mutex::new(Some(tx)));
     let svc = test_server::TestServer::new(Svc(sender));
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1339").connect_lazy();
+    {
+        let channel = Endpoint::from_static("http://127.0.0.1:0").connect_lazy();
+        let mut client = TestClient::new(channel);
 
-    let mut client = TestClient::new(channel);
+        // First call should fail, the server is not running
+        client.unary_call(Request::new(Input {})).await.unwrap_err();
+    }
 
-    // First call should fail, the server is not running
-    client.unary_call(Request::new(Input {})).await.unwrap_err();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
     // Start the server now, second call should succeed
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1339".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
+
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
+        .connect_lazy();
+
+    let mut client = TestClient::new(channel);
 
     tokio::time::sleep(Duration::from_millis(100)).await;
     client.unary_call(Request::new(Input {})).await.unwrap();

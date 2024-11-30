@@ -112,10 +112,13 @@ jobs:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@cargo-hack
+    - uses: taiki-e/install-action@cargo-nextest
     - uses: Swatinem/rust-cache@v2
-    - run: cargo test --workspace --all-features
+    - run: cargo nextest run --workspace --all-features
       env:
         QUICKCHECK_TESTS: 1000  # run a lot of quickcheck iterations
+    - run: cargo hack --no-private test --doc --all-features
 
   interop:
     name: Interop Tests

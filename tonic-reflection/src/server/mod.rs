@@ -11,8 +11,6 @@ use tonic::Status;
 
 /// v1 interface for the gRPC Reflection Service server.
 pub mod v1;
-/// Deprecated; access these via `v1` instead.
-pub use v1::{ServerReflection, ServerReflectionServer}; // For backwards compatibility
 /// v1alpha interface for the gRPC Reflection Service server.
 pub mod v1alpha;
 
@@ -73,12 +71,6 @@ impl<'b> Builder<'b> {
         self.use_all_service_names = false;
         self.service_names.push(name.into());
         self
-    }
-
-    /// Build a v1 gRPC Reflection Service to be served via Tonic.
-    #[deprecated(since = "0.12.2", note = "use `build_v1()` instead")]
-    pub fn build(self) -> Result<v1::ServerReflectionServer<impl v1::ServerReflection>, Error> {
-        self.build_v1()
     }
 
     /// Build a v1 gRPC Reflection Service to be served via Tonic.

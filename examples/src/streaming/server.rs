@@ -28,10 +28,7 @@ fn match_for_io_error(err_status: &Status) -> Option<&std::io::Error> {
             }
         }
 
-        err = match err.source() {
-            Some(err) => err,
-            None => return None,
-        };
+        err = err.source()?;
     }
 }
 

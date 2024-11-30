@@ -174,7 +174,7 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.13"
+tonic = "*"
 prost = "0.13"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1"
@@ -185,7 +185,7 @@ serde_json = "1.0"
 rand = "0.8"
 
 [build-dependencies]
-tonic-build = "0.13"
+tonic-build = "*"
 ```
 
 Create a `build.rs` file at the root of your crate:
@@ -401,7 +401,7 @@ async fn list_features(
     &self,
     request: Request<Rectangle>,
 ) -> Result<Response<Self::ListFeaturesStream>, Status> {
-    let (mut tx, rx) = mpsc::channel(4);
+    let (tx, rx) = mpsc::channel(4);
     let features = self.features.clone();
 
     tokio::spawn(async move {
@@ -668,7 +668,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         .into_inner();
 
     while let Some(feature) = stream.message().await? {
-        println!("NOTE = {:?}", feature);
+        println!("FEATURE = {:?}", feature);
     }
 
     Ok(())

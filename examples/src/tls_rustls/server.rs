@@ -17,7 +17,7 @@ use tokio_rustls::{
     },
     TlsAcceptor,
 };
-use tonic::{body::boxed, service::Routes, Request, Response, Status};
+use tonic::{body::Body, service::Routes, Request, Response, Status};
 use tower::ServiceExt;
 use tower_http::ServiceBuilderExt;
 
@@ -82,7 +82,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             http.serve_connection(
                 TokioIo::new(conn),
-                TowerToHyperService::new(svc.map_request(|req: http::Request<_>| req.map(boxed))),
+                TowerToHyperService::new(
+                    svc.map_request(|req: http::Request<_>| req.map(Body::new)),
+                ),
             )
             .await
             .unwrap();

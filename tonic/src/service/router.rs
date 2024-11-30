@@ -1,9 +1,4 @@
-use crate::{
-    body::{boxed, BoxBody},
-    metadata::GRPC_CONTENT_TYPE,
-    server::NamedService,
-    Status,
-};
+use crate::{body::Body, metadata::GRPC_CONTENT_TYPE, server::NamedService, Status};
 use http::{HeaderValue, Request, Response};
 use std::{
     convert::Infallible,
@@ -30,7 +25,7 @@ impl RoutesBuilder {
     /// Add a new service.
     pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
@@ -57,7 +52,7 @@ impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
@@ -72,13 +67,13 @@ impl Routes {
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         self.router = self.router.route_service(
             &format!("/{}/*rest", S::NAME),
-            svc.map_request(|req: Request<axum::body::Body>| req.map(boxed)),
+            svc.map_request(|req: Request<axum::body::Body>| req.map(Body::new)),
         );
         self
     }
@@ -90,12 +85,6 @@ impl Routes {
         Self {
             router: self.router.with_state(()),
         }
-    }
-
-    /// Convert this `Routes` into an [`axum::Router`].
-    #[deprecated(since = "0.12.2", note = "Use `Routes::into_axum_router` instead.")]
-    pub fn into_router(self) -> axum::Router {
-        self.into_axum_router()
     }
 
     /// Convert this `Routes` into an [`axum::Router`].
@@ -145,7 +134,7 @@ where
     B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     B::Error: Into<crate::BoxError>,
 {
-    type Response = Response<BoxBody>;
+    type Response = Response<Body>;
     type Error = crate::BoxError;
     type Future = RoutesFuture;
 
@@ -168,11 +157,11 @@ impl fmt::Debug for RoutesFuture {
 }
 
 impl Future for RoutesFuture {
-    type Output = Result<Response<BoxBody>, crate::BoxError>;
+    type Output = Result<Response<Body>, crate::BoxError>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match ready!(Pin::new(&mut self.as_mut().0).poll(cx)) {
-            Ok(res) => Ok(res.map(boxed)).into(),
+            Ok(res) => Ok(res.map(Body::new)).into(),
             // NOTE: This pattern is not needed from Rust 1.82.
             // See https://github.com/rust-lang/rust/pull/122792.
             #[allow(unreachable_patterns)]
