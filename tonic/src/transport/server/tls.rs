@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, time::Duration};
 
 use super::service::TlsAcceptor;
 use crate::transport::tls::{Certificate, Identity};
@@ -9,6 +9,7 @@ pub struct ServerTlsConfig {
     identity: Option<Identity>,
     client_ca_root: Option<Certificate>,
     client_auth_optional: bool,
+    timeout: Option<Duration>,
 }
 
 impl fmt::Debug for ServerTlsConfig {
@@ -24,6 +25,7 @@ impl ServerTlsConfig {
             identity: None,
             client_ca_root: None,
             client_auth_optional: false,
+            timeout: None,
         }
     }
 
@@ -56,11 +58,20 @@ impl ServerTlsConfig {
         }
     }
 
+    /// Sets the timeout for the TLS handshake.
+    pub fn timeout(self, timeout: Duration) -> Self {
+        ServerTlsConfig {
+            timeout: Some(timeout),
+            ..self
+        }
+    }
+
     pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::BoxError> {
         TlsAcceptor::new(
             self.identity.clone().unwrap(),
             self.client_ca_root.clone(),
             self.client_auth_optional,
+            self.timeout,
         )
     }
 }
