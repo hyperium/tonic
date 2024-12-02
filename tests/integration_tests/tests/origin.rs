@@ -33,7 +33,7 @@ async fn writes_origin_header() {
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
     let jh = tokio::spawn(async move {
         Server::builder()

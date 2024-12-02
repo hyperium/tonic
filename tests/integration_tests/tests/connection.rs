@@ -42,7 +42,7 @@ async fn connect_returns_err_via_call_after_connected() {
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
     let jh = tokio::spawn(async move {
         Server::builder()
@@ -85,7 +85,7 @@ async fn connect_lazy_reconnects_after_first_failure() {
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let incoming = TcpIncoming::from_listener(listener, true, None).unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
 
     // Start the server now, second call should succeed
     let jh = tokio::spawn(async move {

@@ -401,7 +401,7 @@ async fn list_features(
     &self,
     request: Request<Rectangle>,
 ) -> Result<Response<Self::ListFeaturesStream>, Status> {
-    let (mut tx, rx) = mpsc::channel(4);
+    let (tx, rx) = mpsc::channel(4);
     let features = self.features.clone();
 
     tokio::spawn(async move {
@@ -668,7 +668,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         .into_inner();
 
     while let Some(feature) = stream.message().await? {
-        println!("NOTE = {:?}", feature);
+        println!("FEATURE = {:?}", feature);
     }
 
     Ok(())

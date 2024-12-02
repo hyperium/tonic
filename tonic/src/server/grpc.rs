@@ -507,21 +507,17 @@ where
 
 impl<T: fmt::Debug> fmt::Debug for Grpc<T> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut f = f.debug_struct("Grpc");
-
-        f.field("codec", &self.codec);
-
-        f.field(
-            "accept_compression_encodings",
-            &self.accept_compression_encodings,
-        );
-
-        f.field(
-            "send_compression_encodings",
-            &self.send_compression_encodings,
-        );
-
-        f.finish()
+        f.debug_struct("Grpc")
+            .field("codec", &self.codec)
+            .field(
+                "accept_compression_encodings",
+                &self.accept_compression_encodings,
+            )
+            .field(
+                "send_compression_encodings",
+                &self.send_compression_encodings,
+            )
+            .finish()
     }
 }
 
