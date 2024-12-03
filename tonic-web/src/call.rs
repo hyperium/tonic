@@ -541,9 +541,7 @@ mod tests {
 
         let trailers = make_trailers_frame(headers.clone());
 
-        let buf = Bytes::from(trailers);
-
-        let map = decode_trailers_frame(buf).unwrap().unwrap();
+        let map = decode_trailers_frame(trailers).unwrap().unwrap();
 
         assert_eq!(headers, map);
     }

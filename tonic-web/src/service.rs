@@ -43,24 +43,6 @@ impl<S> GrpcWebService<S> {
     }
 }
 
-impl<S> GrpcWebService<S>
-where
-    S: Service<Request<Body>, Response = Response<Body>>,
-{
-    fn response(&self, status: StatusCode) -> ResponseFuture<S::Future> {
-        ResponseFuture {
-            case: Case::ImmediateResponse {
-                res: Some(
-                    Response::builder()
-                        .status(status)
-                        .body(Body::default())
-                        .unwrap(),
-                ),
-            },
-        }
-    }
-}
-
 impl<S, B> Service<Request<B>> for GrpcWebService<S>
 where
     S: Service<Request<Body>, Response = Response<Body>>,
@@ -106,7 +88,10 @@ where
             // This is not a valid grpc-web request, return HTTP 405.
             RequestKind::GrpcWeb { .. } => {
                 debug!(kind = "simple", error="method not allowed", method = ?req.method());
-                self.response(StatusCode::METHOD_NOT_ALLOWED)
+
+                ResponseFuture {
+                    case: Case::immediate(StatusCode::METHOD_NOT_ALLOWED),
+                }
             }
 
             // All http/2 requests that are not grpc-web are passed through to the inner service,
@@ -123,7 +108,10 @@ where
             // Return HTTP 400 for all other requests.
             RequestKind::Other(_) => {
                 debug!(kind = "other h1", content_type = ?req.headers().get(header::CONTENT_TYPE));
-                self.response(StatusCode::BAD_REQUEST)
+
+                ResponseFuture {
+                    case: Case::immediate(StatusCode::BAD_REQUEST),
+                }
             }
         }
     }
@@ -149,8 +137,19 @@ enum Case<F> {
         future: F,
     },
     ImmediateResponse {
-        res: Option<Response<Body>>,
+        res: Option<http::response::Parts>,
     },
+}
+
+impl<F> Case<F> {
+    fn immediate(status: StatusCode) -> Self {
+        let (res, ()) = Response::builder()
+            .status(status)
+            .body(())
+            .unwrap()
+            .into_parts();
+        Self::ImmediateResponse { res: Some(res) }
+    }
 }
 
 impl<F, E> Future for ResponseFuture<F>
@@ -169,7 +168,10 @@ where
                 Poll::Ready(Ok(coerce_response(res, *accept)))
             }
             CaseProj::Other { future } => future.poll(cx),
-            CaseProj::ImmediateResponse { res } => Poll::Ready(Ok(res.take().unwrap())),
+            CaseProj::ImmediateResponse { res } => {
+                let res = Response::from_parts(res.take().unwrap(), Body::empty());
+                Poll::Ready(Ok(res))
+            }
         }
     }
 }
