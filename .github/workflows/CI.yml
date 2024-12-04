@@ -26,7 +26,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v2
+    - uses: hecrj/setup-rust-action@v2
+    - uses: taiki-e/install-action@cargo-deny
+    - run: cargo deny check
 
   clippy:
     runs-on: ubuntu-latest
