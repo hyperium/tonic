@@ -21,8 +21,7 @@ jobs:
         components: rustfmt
     - run: cargo fmt --all --check
 
-  deny-check:
-    name: cargo-deny check
+  deny:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -51,7 +50,6 @@ jobs:
     - run: git diff --exit-code
 
   udeps:
-    name: Check unused dependencies
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -89,7 +87,6 @@ jobs:
       run: cargo check --workspace --all-targets --all-features
 
   msrv:
-    name: Check MSRV
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -146,7 +143,7 @@ jobs:
       with:
         feature-group: all-features
 
-  check-external-types:
+  external-types:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
