@@ -438,51 +438,46 @@ impl Status {
 
     /// Extract a `Status` from a hyper `HeaderMap`.
     pub fn from_header_map(header_map: &HeaderMap) -> Option<Status> {
-        header_map.get(Self::GRPC_STATUS).map(|code| {
-            let code = Code::from_bytes(code.as_ref());
-            let error_message = header_map
-                .get(Self::GRPC_MESSAGE)
-                .map(|header| {
-                    percent_decode(header.as_bytes())
-                        .decode_utf8()
-                        .map(|cow| cow.to_string())
-                })
-                .unwrap_or_else(|| Ok(String::new()));
+        let code = Code::from_bytes(header_map.get(Self::GRPC_STATUS)?.as_ref());
 
-            let details = header_map
-                .get(Self::GRPC_STATUS_DETAILS)
-                .map(|h| {
-                    crate::util::base64::STANDARD
-                        .decode(h.as_bytes())
-                        .expect("Invalid status header, expected base64 encoded value")
-                })
-                .map(Bytes::from)
-                .unwrap_or_default();
+        let error_message = match header_map.get(Self::GRPC_MESSAGE) {
+            Some(header) => percent_decode(header.as_bytes())
+                .decode_utf8()
+                .map(|cow| cow.to_string()),
+            None => Ok(String::new()),
+        };
 
-            let mut other_headers = header_map.clone();
-            other_headers.remove(Self::GRPC_STATUS);
-            other_headers.remove(Self::GRPC_MESSAGE);
-            other_headers.remove(Self::GRPC_STATUS_DETAILS);
+        let details = match header_map.get(Self::GRPC_STATUS_DETAILS) {
+            Some(header) => crate::util::base64::STANDARD
+                .decode(header.as_bytes())
+                .expect("Invalid status header, expected base64 encoded value")
+                .into(),
+            None => Bytes::new(),
+        };
 
-            match error_message {
-                Ok(message) => Status {
-                    code,
-                    message,
-                    details,
-                    metadata: MetadataMap::from_headers(other_headers),
-                    source: None,
-                },
-                Err(err) => {
-                    warn!("Error deserializing status message header: {}", err);
-                    Status {
-                        code: Code::Unknown,
-                        message: format!("Error deserializing status message header: {}", err),
-                        details,
-                        metadata: MetadataMap::from_headers(other_headers),
-                        source: None,
-                    }
-                }
+        let other_headers = {
+            let mut header_map = header_map.clone();
+            header_map.remove(Self::GRPC_STATUS);
+            header_map.remove(Self::GRPC_MESSAGE);
+            header_map.remove(Self::GRPC_STATUS_DETAILS);
+            header_map
+        };
+
+        let (code, message) = match error_message {
+            Ok(message) => (code, message),
+            Err(e) => {
+                let error_message = format!("Error deserializing status message header: {e}");
+                warn!(error_message);
+                (Code::Unknown, error_message)
             }
+        };
+
+        Some(Status {
+            code,
+            message,
+            details,
+            metadata: MetadataMap::from_headers(other_headers),
+            source: None,
         })
     }
 
