@@ -21,12 +21,13 @@ jobs:
         components: rustfmt
     - run: cargo fmt --all --check
 
-  deny-check:
-    name: cargo-deny check
+  deny:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v2
+    - uses: hecrj/setup-rust-action@v2
+    - uses: taiki-e/install-action@cargo-deny
+    - run: cargo deny check
 
   clippy:
     runs-on: ubuntu-latest
@@ -38,8 +39,6 @@ jobs:
     - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
     - run: cargo clippy --workspace --all-features --all-targets
-      env:
-        RUSTFLAGS: "-A warnings"
 
   codegen:
     runs-on: ubuntu-latest
@@ -51,7 +50,6 @@ jobs:
     - run: git diff --exit-code
 
   udeps:
-    name: Check unused dependencies
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -89,7 +87,6 @@ jobs:
       run: cargo check --workspace --all-targets --all-features
 
   msrv:
-    name: Check MSRV
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -146,7 +143,7 @@ jobs:
       with:
         feature-group: all-features
 
-  check-external-types:
+  external-types:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
