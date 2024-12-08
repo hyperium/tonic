@@ -1,3 +1,4 @@
+use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::Status;
 use http::Response;
 use http_body::Frame;
@@ -67,6 +68,8 @@ where
             Err(err) => match Status::try_from_error(err) {
                 Ok(status) => {
                     let mut res = Response::new(MaybeEmptyBody::empty());
+                    res.headers_mut()
+                        .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
                     status.add_header(res.headers_mut()).unwrap();
                     Poll::Ready(Ok(res))
                 }
