@@ -4,6 +4,7 @@ use crate::transport::{
     Error,
 };
 use http::Uri;
+use std::time::Duration;
 use tokio_rustls::rustls::pki_types::TrustAnchor;
 
 /// Configures TLS settings for endpoints.
@@ -18,6 +19,7 @@ pub struct ClientTlsConfig {
     with_native_roots: bool,
     #[cfg(feature = "tls-webpki-roots")]
     with_webpki_roots: bool,
+    timeout: Option<Duration>,
 }
 
 impl ClientTlsConfig {
@@ -112,6 +114,14 @@ impl ClientTlsConfig {
         config
     }
 
+    /// Sets the timeout for the TLS handshake.
+    pub fn timeout(self, timeout: Duration) -> Self {
+        ClientTlsConfig {
+            timeout: Some(timeout),
+            ..self
+        }
+    }
+
     pub(crate) fn into_tls_connector(self, uri: &Uri) -> Result<TlsConnector, crate::BoxError> {
         let domain = match &self.domain {
             Some(domain) => domain,
@@ -127,6 +137,7 @@ impl ClientTlsConfig {
             self.with_native_roots,
             #[cfg(feature = "tls-webpki-roots")]
             self.with_webpki_roots,
+            self.timeout,
         )
     }
 }
