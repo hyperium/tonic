@@ -557,7 +557,7 @@ impl<L> Server<L> {
 
         let svc = self.service_builder.service(svc);
 
-        let incoming = io_stream::tcp_incoming(
+        let incoming = io_stream::ServerIoStream::new(
             incoming,
             #[cfg(feature = "_tls-any")]
             self.tls,
