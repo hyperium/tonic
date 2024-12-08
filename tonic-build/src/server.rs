@@ -70,6 +70,13 @@ pub(crate) fn generate_internal<T: Service>(
             self.send_compression_encodings.enable(encoding);
             self
         }
+
+        /// Automatically determine the encoding to use based on the request headers.
+        #[must_use]
+        pub fn auto_encoding(mut self) -> Self {
+        self.auto_encoding = true;
+        self
+    }
     };
 
     let configure_max_message_size_methods = quote! {
@@ -117,6 +124,7 @@ pub(crate) fn generate_internal<T: Service>(
                 send_compression_encodings: EnabledCompressionEncodings,
                 max_decoding_message_size: Option<usize>,
                 max_encoding_message_size: Option<usize>,
+                auto_encoding: bool,
             }
 
             impl<T> #server_service<T> {
@@ -131,6 +139,7 @@ pub(crate) fn generate_internal<T: Service>(
                         send_compression_encodings: Default::default(),
                         max_decoding_message_size: None,
                         max_encoding_message_size: None,
+                        auto_encoding: false,
                     }
                 }
 
@@ -184,6 +193,7 @@ pub(crate) fn generate_internal<T: Service>(
                         send_compression_encodings: self.send_compression_encodings,
                         max_decoding_message_size: self.max_decoding_message_size,
                         max_encoding_message_size: self.max_encoding_message_size,
+                        auto_encoding: self.auto_encoding,
                     }
                 }
             }
@@ -473,6 +483,7 @@ fn generate_unary<T: Method>(
         let send_compression_encodings = self.send_compression_encodings;
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
+        let auto_encoding = self.auto_encoding;
         let inner = self.inner.clone();
         let fut = async move {
             let method = #service_ident(inner);
@@ -481,6 +492,10 @@ fn generate_unary<T: Method>(
             let mut grpc = tonic::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
+
+            if auto_encoding {
+                grpc = grpc.auto_encoding();
+            }
 
             let res = grpc.unary(method, req).await;
             Ok(res)
@@ -540,6 +555,7 @@ fn generate_server_streaming<T: Method>(
         let send_compression_encodings = self.send_compression_encodings;
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
+        let auto_encoding = self.auto_encoding;
         let inner = self.inner.clone();
         let fut = async move {
             let method = #service_ident(inner);
@@ -548,6 +564,10 @@ fn generate_server_streaming<T: Method>(
             let mut grpc = tonic::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
+
+             if auto_encoding {
+                grpc = grpc.auto_encoding();
+            }
 
             let res = grpc.server_streaming(method, req).await;
             Ok(res)
@@ -598,6 +618,7 @@ fn generate_client_streaming<T: Method>(
         let send_compression_encodings = self.send_compression_encodings;
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
+        let auto_encoding = self.auto_encoding;
         let inner = self.inner.clone();
         let fut = async move {
             let method = #service_ident(inner);
@@ -606,6 +627,10 @@ fn generate_client_streaming<T: Method>(
             let mut grpc = tonic::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
+
+            if auto_encoding {
+                grpc = grpc.auto_encoding();
+            }
 
             let res = grpc.client_streaming(method, req).await;
             Ok(res)
@@ -666,7 +691,9 @@ fn generate_streaming<T: Method>(
         let send_compression_encodings = self.send_compression_encodings;
         let max_decoding_message_size = self.max_decoding_message_size;
         let max_encoding_message_size = self.max_encoding_message_size;
+        let auto_encoding = self.auto_encoding;
         let inner = self.inner.clone();
+
         let fut = async move {
             let method = #service_ident(inner);
             let codec = #codec_name::default();
@@ -674,6 +701,10 @@ fn generate_streaming<T: Method>(
             let mut grpc = tonic::server::Grpc::new(codec)
                 .apply_compression_config(accept_compression_encodings, send_compression_encodings)
                 .apply_max_message_size_config(max_decoding_message_size, max_encoding_message_size);
+
+            if auto_encoding {
+                grpc = grpc.auto_encoding();
+            }
 
             let res = grpc.streaming(method, req).await;
             Ok(res)
