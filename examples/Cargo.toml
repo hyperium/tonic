@@ -11,6 +11,10 @@ name = "helloworld-server"
 path = "src/helloworld/server.rs"
 
 [[bin]]
+name = "multiple-protos"
+path = "src/multiple_protos/server.rs"
+
+[[bin]]
 name = "helloworld-client"
 path = "src/helloworld/client.rs"
 
