@@ -19,14 +19,20 @@ use tower_service::Service;
 /// The per-connection tower service type allowing for clients to supply
 /// tower layers per connection.
 pub type ConnectionService<C> = Reconnect<MakeSendRequestService<C>, Uri>;
-
+/*
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::BoxError> + Send,
+        C::Future: Send,
+*/
 /// Channel builder.
 ///
 /// This struct is used to build and configure HTTP/2 channels.
 #[derive(Clone)]
 pub struct Endpoint<L = Identity, C = HttpConnector>
 where
-    C: Service<Uri> + Send,
+    C: Service<Uri> + Send + 'static,
+    C::Error: Into<crate::BoxError> + Send,
+    C::Future: Send,
     L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
 {
     pub(crate) uri: Uri,
