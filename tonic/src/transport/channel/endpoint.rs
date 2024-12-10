@@ -33,6 +33,7 @@ where
     C: Service<Uri> + Send + 'static,
     C::Error: Into<crate::BoxError> + Send,
     C::Future: Send,
+    C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
 {
     pub(crate) uri: Uri,
@@ -55,14 +56,21 @@ where
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
     pub(crate) executor: SharedExec,
-    pub(crate) connection_layer: Option<L<ConnectionService<C>>>,
+    pub(crate) connection_layer: Option<L>,
+    pub(crate) phantom: std::marker::PhantomData<C>,
 }
 
-impl<C> Endpoint<C> {
+impl<L, C> Endpoint<L, C> where
+    C: Service<Uri> + Clone + Send + 'static,
+    C::Error: Into<crate::BoxError> + Send,
+    C::Future: Send,
+    C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+    L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
+{
     // FIXME: determine if we want to expose this or not. This is really
     // just used in codegen for a shortcut.
     #[doc(hidden)]
-    pub fn new<D>(dst: D) -> Result<Self, Error>
+    pub fn new<D>(dst: D) -> Result<Endpoint<Identity, HttpConnector>, Error>
     where
         D: TryInto<Self>,
         D::Error: Into<crate::BoxError>,
@@ -86,7 +94,7 @@ impl<C> Endpoint<C> {
     /// # use tonic::transport::Endpoint;
     /// Endpoint::from_static("https://example.com");
     /// ```
-    pub fn from_static(s: &'static str) -> Self {
+    pub fn from_static(s: &'static str) -> Endpoint<Identity, HttpConnector> {
         let uri = Uri::from_static(s);
         Self::from(uri)
     }
@@ -264,7 +272,7 @@ impl<C> Endpoint<C> {
 
     /// Configures TLS for the endpoint.
     #[cfg(feature = "_tls-any")]
-    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Result<Self, Error> {
+    pub fn tls_config(self, tls_config: ClientTlsConfig) -> Result<Endpoint<L, C>, Error> {
         Ok(Endpoint {
             tls: Some(
                 tls_config
@@ -455,7 +463,7 @@ impl<C> Endpoint<C> {
     }
 }
 
-impl From<Uri> for Endpoint {
+impl From<Uri> for Endpoint<Identity, HttpConnector> {
     fn from(uri: Uri) -> Self {
         Self {
             uri,
@@ -478,6 +486,8 @@ impl From<Uri> for Endpoint {
             connect_timeout: None,
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
+            connection_layer: None,
+            phantom: std::marker::PhantomData,
         }
     }
 }
