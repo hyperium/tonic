@@ -5,10 +5,11 @@ mod user_agent;
 use self::user_agent::UserAgent;
 
 mod reconnect;
-use self::reconnect::Reconnect;
+pub use self::reconnect::Reconnect;
 
 mod connection;
 pub(super) use self::connection::Connection;
+pub use self::connection::MakeSendRequestService;
 
 mod discover;
 pub use self::discover::Change;

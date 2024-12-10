@@ -155,7 +155,7 @@ impl tower::Service<Request<Body>> for SendRequest {
     }
 }
 
-struct MakeSendRequestService<C> {
+pub struct MakeSendRequestService<C> {
     connector: C,
     executor: SharedExec,
     settings: Builder<SharedExec>,

@@ -9,7 +9,7 @@ use tower::make::MakeService;
 use tower_service::Service;
 use tracing::trace;
 
-pub(crate) struct Reconnect<M, Target>
+pub struct Reconnect<M, Target>
 where
     M: Service<Target>,
     M::Error: Into<crate::BoxError>,
