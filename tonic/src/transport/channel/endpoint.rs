@@ -11,21 +11,24 @@ use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
 use hyper::rt;
 use hyper_util::client::legacy::connect::HttpConnector;
+use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
 use tower::Layer;
 use tower_layer::Identity;
-use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
 use tower_service::Service;
 
-
 /// The per-connection tower service type allowing for clients to supply
-/// tower layers per connection. 
+/// tower layers per connection.
 pub type ConnectionService<C> = Reconnect<MakeSendRequestService<C>, Uri>;
 
 /// Channel builder.
 ///
 /// This struct is used to build and configure HTTP/2 channels.
 #[derive(Clone)]
-pub struct Endpoint<L = Identity, C = HttpConnector> where L: Layer<ConnectionService<C>> {
+pub struct Endpoint<L = Identity, C = HttpConnector>
+where
+    C: Service<Uri> + Send,
+    L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
+{
     pub(crate) uri: Uri,
     pub(crate) origin: Option<Uri>,
     pub(crate) user_agent: Option<HeaderValue>,
