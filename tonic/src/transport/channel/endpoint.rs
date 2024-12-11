@@ -19,22 +19,22 @@ use tower_service::Service;
 /// The per-connection tower service type allowing for clients to supply
 /// tower layers per connection.
 pub type ConnectionService<C> = Reconnect<MakeSendRequestService<C>, Uri>;
-/*
-        C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::BoxError> + Send,
-        C::Future: Send,
-*/
+
 /// Channel builder.
 ///
 /// This struct is used to build and configure HTTP/2 channels.
 #[derive(Clone)]
-pub struct Endpoint<L = Identity, C = HttpConnector>
+pub struct Endpoint<L = Identity, W = service::Connector<HttpConnector>, C = HttpConnector>
 where
     C: Service<Uri> + Send + 'static,
-    C::Error: Into<crate::BoxError> + Send,
+    C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
     C::Future: Send,
     C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
-    L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
+    W: Service<Uri> + Send + 'static,
+    W::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+    W::Future: Send,
+    W::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+    L: Layer<ConnectionService<W>, Service = ConnectionService<W>> + Clone + Send + 'static,
 {
     pub(crate) uri: Uri,
     pub(crate) origin: Option<Uri>,
@@ -58,22 +58,18 @@ where
     pub(crate) executor: SharedExec,
     pub(crate) connection_layer: Option<L>,
     pub(crate) phantom: std::marker::PhantomData<C>,
+    pub(crate) phantom_w: std::marker::PhantomData<W>,
 }
 
-impl<L, C> Endpoint<L, C> where
-    C: Service<Uri> + Clone + Send + 'static,
-    C::Error: Into<crate::BoxError> + Send,
-    C::Future: Send,
-    C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
-    L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
-{
+impl Endpoint {
+
     // FIXME: determine if we want to expose this or not. This is really
     // just used in codegen for a shortcut.
     #[doc(hidden)]
-    pub fn new<D>(dst: D) -> Result<Endpoint<Identity, HttpConnector>, Error>
+    pub fn new<D>(dst: D) -> Result<Self, Error>
     where
         D: TryInto<Self>,
-        D::Error: Into<crate::BoxError>,
+        D::Error: Into<Box<dyn std::error::Error + Send + Sync>>,
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
         #[cfg(feature = "_tls-any")]
@@ -94,7 +90,7 @@ impl<L, C> Endpoint<L, C> where
     /// # use tonic::transport::Endpoint;
     /// Endpoint::from_static("https://example.com");
     /// ```
-    pub fn from_static(s: &'static str) -> Endpoint<Identity, HttpConnector> {
+    pub fn from_static(s: &'static str) -> Self {
         let uri = Uri::from_static(s);
         Self::from(uri)
     }
@@ -109,6 +105,17 @@ impl<L, C> Endpoint<L, C> where
         let uri = Uri::from_maybe_shared(s.into()).map_err(|e| Error::new_invalid_uri().with(e))?;
         Ok(Self::from(uri))
     }
+
+}
+
+impl<L, C> Endpoint<L, C> where
+    C: Service<Uri> + Clone + Send + 'static,
+    C::Error: Into<Box<dyn std::error::Error + Send + Sync>> + Send,
+    crate::BoxError: From<C::Error> + Send,
+    C::Future: Unpin + Send,
+    C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+    L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
+{
 
     /// Set a custom user-agent header.
     ///
@@ -344,7 +351,7 @@ impl<L, C> Endpoint<L, C> where
         self
     }
 
-    pub(crate) fn connector<C>(&self, c: C) -> service::Connector<C> {
+    pub(crate) fn connector<CONN>(&self, c: CONN) -> service::Connector<CONN> {
         service::Connector::new(
             c,
             #[cfg(feature = "_tls-any")]
@@ -388,13 +395,8 @@ impl<L, C> Endpoint<L, C> where
     /// uses a Unix socket transport.
     ///
     /// The [`connect_timeout`](Endpoint::connect_timeout) will still be applied.
-    pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
-    where
-        C: Service<Uri> + Send + 'static,
-        C::Response: rt::Read + rt::Write + Send + Unpin,
-        C::Future: Send,
-        crate::BoxError: From<C::Error> + Send,
-    {
+    pub async fn connect_with_connector(&self, connector: C) -> Result<Channel, Error>
+    { 
         let connector = self.connector(connector);
 
         if let Some(connect_timeout) = self.connect_timeout {
@@ -413,12 +415,7 @@ impl<L, C> Endpoint<L, C> where
     ///
     /// See the `uds` example for an example on how to use this function to build channel that
     /// uses a Unix socket transport.
-    pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
-    where
-        C: Service<Uri> + Send + 'static,
-        C::Response: rt::Read + rt::Write + Send + Unpin,
-        C::Future: Send,
-        crate::BoxError: From<C::Error> + Send,
+    pub fn connect_with_connector_lazy(&self, connector: C) -> Channel
     {
         let connector = self.connector(connector);
         if let Some(connect_timeout) = self.connect_timeout {
@@ -463,7 +460,7 @@ impl<L, C> Endpoint<L, C> where
     }
 }
 
-impl From<Uri> for Endpoint<Identity, HttpConnector> {
+impl From<Uri> for Endpoint {
     fn from(uri: Uri) -> Self {
         Self {
             uri,

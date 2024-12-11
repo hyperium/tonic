@@ -1,7 +1,7 @@
 use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
 use crate::{
     body::Body,
-    transport::{channel::BoxFuture, service::GrpcTimeout, Endpoint},
+    transport::{channel::{endpoint::ConnectionService, BoxFuture}, service::GrpcTimeout, Endpoint},
 };
 use http::{Request, Response, Uri};
 use hyper::rt;
@@ -25,12 +25,13 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool) -> Self
+    fn new<L, C>(connector: C, endpoint: Endpoint<L, C>, is_lazy: bool) -> Self
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+        L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
     {
         let mut settings: Builder<SharedExec> = Builder::new(endpoint.executor.clone())
             .initial_stream_window_size(endpoint.init_stream_window_size)
@@ -65,6 +66,7 @@ impl Connection {
             .layer_fn(|s| GrpcTimeout::new(s, endpoint.timeout))
             .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
             .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
+            .option_layer(endpoint.connection_layer)
             .into_inner();
 
         let make_service =
@@ -77,25 +79,27 @@ impl Connection {
         }
     }
 
-    pub(crate) async fn connect<C>(
+    pub(crate) async fn connect<L, C>(
         connector: C,
-        endpoint: Endpoint,
+        endpoint: Endpoint<L, C>,
     ) -> Result<Self, crate::BoxError>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+        L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
     {
         Self::new(connector, endpoint, false).ready_oneshot().await
     }
 
-    pub(crate) fn lazy<C>(connector: C, endpoint: Endpoint) -> Self
+    pub(crate) fn lazy<C, L>(connector: C, endpoint: Endpoint<L, C>) -> Self
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+        L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
     {
         Self::new(connector, endpoint, true)
     }

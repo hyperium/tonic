@@ -6,6 +6,7 @@ pub(crate) mod service;
 mod tls;
 
 pub use self::service::Change;
+use endpoint::ConnectionService;
 pub use endpoint::Endpoint;
 #[cfg(feature = "_tls-any")]
 pub use tls::ClientTlsConfig;
@@ -27,7 +28,7 @@ use std::{
 use tokio::sync::mpsc::{channel, Sender};
 
 use hyper::rt;
-use tower::balance::p2c::Balance;
+use tower::{balance::p2c::Balance, Layer};
 use tower::{
     buffer::{future::ResponseFuture as BufferResponseFuture, Buffer},
     discover::Discover,
@@ -147,12 +148,13 @@ impl Channel {
     /// Create a new [`Channel`] using a custom connector to the provided [Endpoint].
     ///
     /// This is a lower level API, prefer to use [`Endpoint::connect_lazy`] if you are not using a custom connector.
-    pub fn new<C>(connector: C, endpoint: Endpoint) -> Self
+    pub fn new<L, C>(connector: C, endpoint: Endpoint<L, C>) -> Self
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+        L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();
@@ -168,12 +170,13 @@ impl Channel {
     /// Connect to the provided [`Endpoint`] using the provided connector, and return a new [`Channel`].
     ///
     /// This is a lower level API, prefer to use [`Endpoint::connect`] if you are not using a custom connector.
-    pub async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, super::Error>
+    pub async fn connect<L, C>(connector: C, endpoint: Endpoint<L, C>) -> Result<Self, super::Error>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+        L: Layer<ConnectionService<C>, Service = ConnectionService<C>> + Clone + Send + 'static,
     {
         let buffer_size = endpoint.buffer_size.unwrap_or(DEFAULT_BUFFER_SIZE);
         let executor = endpoint.executor.clone();

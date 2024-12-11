@@ -14,6 +14,7 @@ use hyper::rt;
 use hyper_util::rt::TokioIo;
 use tower_service::Service;
 
+#[derive(Clone)]
 pub(crate) struct Connector<C> {
     inner: C,
     #[cfg(feature = "_tls-any")]
