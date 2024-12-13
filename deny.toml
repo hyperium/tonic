@@ -20,7 +20,6 @@ deny = [
 ]
 skip = [
     { crate = "itertools@0.12.1", reason = "aws-lc-sys depends on bindgen which depends on it" },
-    { crate = "sync_wrapper@0.1.2", reason = "tower depends on it" }
 ]
 skip-tree = [
     { crate = "windows-sys" },
