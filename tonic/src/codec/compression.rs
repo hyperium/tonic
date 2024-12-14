@@ -282,6 +282,7 @@ pub enum SingleMessageCompressionOverride {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(feature = "gzip", feature = "zstd"))]
     use http::HeaderValue;
 
     use super::*;
