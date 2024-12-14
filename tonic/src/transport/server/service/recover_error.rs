@@ -66,8 +66,8 @@ where
             }
             Err(err) => match Status::try_from_error(err) {
                 Ok(status) => {
-                    let mut res = Response::new(MaybeEmptyBody::empty());
-                    status.add_header(res.headers_mut()).unwrap();
+                    let (parts, ()) = status.into_http::<()>().into_parts();
+                    let res = Response::from_parts(parts, MaybeEmptyBody::empty());
                     Poll::Ready(Ok(res))
                 }
                 Err(err) => Poll::Ready(Err(err)),
