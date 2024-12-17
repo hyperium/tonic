@@ -61,7 +61,7 @@ impl TlsConnector {
             let rustls_native_certs::CertificateResult { certs, errors, .. } =
                 rustls_native_certs::load_native_certs();
             if !errors.is_empty() {
-                tracing::debug!("errors occured when loading native certs: {errors:?}");
+                tracing::debug!("errors occurred when loading native certs: {errors:?}");
             }
             if certs.is_empty() {
                 return Err(TlsError::NativeCertsNotFound.into());
