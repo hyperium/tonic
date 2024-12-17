@@ -20,6 +20,7 @@ deny = [
 ]
 skip = [
     { crate = "itertools@0.12.1", reason = "aws-lc-sys depends on bindgen which depends on it" },
+    { crate = "unicode-width@0.1.14", reason = "protox depends on miette wich depends on it" },
 ]
 skip-tree = [
     { crate = "windows-sys" },
