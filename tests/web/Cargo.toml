@@ -2,8 +2,6 @@
 authors = ["Juan Alvarez <j@yabit.io>"]
 edition = "2021"
 name = "test_web"
-publish = false
-version = "0.1.0"
 license = "MIT"
 
 [dependencies]
