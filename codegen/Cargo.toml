@@ -3,8 +3,6 @@ name = "codegen"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 license = "MIT"
 edition = "2021"
-publish = false
-version = "0.1.0"
 
 [dependencies]
 protox = "0.7"
