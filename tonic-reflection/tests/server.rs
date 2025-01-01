@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use prost::Message;
 use std::net::SocketAddr;
 use tokio::sync::oneshot;
