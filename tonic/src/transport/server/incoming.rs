@@ -36,7 +36,7 @@ impl TcpIncoming {
     /// # fn main() { }  // Cannot have type parameters, hence instead define:
     /// # fn run<S>(some_service: S) -> Result<(), Box<dyn Error + Send + Sync>>
     /// # where
-    /// #   S: Service<Request<Body>, Response = Response<Body>, Error = Infallible> + NamedService + Clone + Send + 'static,
+    /// #   S: Service<Request<Body>, Response = Response<Body>, Error = Infallible> + NamedService + Clone + Send + Sync + 'static,
     /// #   S::Future: Send + 'static,
     /// # {
     /// // Find a free port
