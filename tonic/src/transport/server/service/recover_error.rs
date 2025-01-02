@@ -1,13 +1,14 @@
-use crate::Status;
-use http::Response;
-use http_body::Frame;
-use pin_project::pin_project;
 use std::{
     future::Future,
     pin::Pin,
     task::{ready, Context, Poll},
 };
-use tower::Service;
+
+use http::Response;
+use pin_project::pin_project;
+use tower_service::Service;
+
+use crate::Status;
 
 /// Middleware that attempts to recover from service errors by turning them into a response built
 /// from the `Status`.
@@ -22,12 +23,12 @@ impl<S> RecoverError<S> {
     }
 }
 
-impl<S, R, ResBody> Service<R> for RecoverError<S>
+impl<S, Req, ResBody> Service<Req> for RecoverError<S>
 where
-    S: Service<R, Response = Response<ResBody>>,
+    S: Service<Req, Response = Response<ResBody>>,
     S::Error: Into<crate::BoxError>,
 {
-    type Response = Response<MaybeEmptyBody<ResBody>>;
+    type Response = Response<ResponseBody<ResBody>>;
     type Error = crate::BoxError;
     type Future = ResponseFuture<S::Future>;
 
@@ -35,7 +36,7 @@ where
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: R) -> Self::Future {
+    fn call(&mut self, req: Req) -> Self::Future {
         ResponseFuture {
             inner: self.inner.call(req),
         }
@@ -53,21 +54,18 @@ where
     F: Future<Output = Result<Response<ResBody>, E>>,
     E: Into<crate::BoxError>,
 {
-    type Output = Result<Response<MaybeEmptyBody<ResBody>>, crate::BoxError>;
+    type Output = Result<Response<ResponseBody<ResBody>>, crate::BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let result: Result<Response<_>, crate::BoxError> =
-            ready!(self.project().inner.poll(cx)).map_err(Into::into);
-
-        match result {
+        match ready!(self.project().inner.poll(cx)) {
             Ok(response) => {
-                let response = response.map(MaybeEmptyBody::full);
+                let response = response.map(ResponseBody::full);
                 Poll::Ready(Ok(response))
             }
-            Err(err) => match Status::try_from_error(err) {
+            Err(err) => match Status::try_from_error(err.into()) {
                 Ok(status) => {
-                    let mut res = Response::new(MaybeEmptyBody::empty());
-                    status.add_header(res.headers_mut()).unwrap();
+                    let (parts, ()) = status.into_http::<()>().into_parts();
+                    let res = Response::from_parts(parts, ResponseBody::empty());
                     Poll::Ready(Ok(res))
                 }
                 Err(err) => Poll::Ready(Err(err)),
@@ -77,22 +75,22 @@ where
 }
 
 #[pin_project]
-pub(crate) struct MaybeEmptyBody<B> {
+pub(crate) struct ResponseBody<B> {
     #[pin]
     inner: Option<B>,
 }
 
-impl<B> MaybeEmptyBody<B> {
+impl<B> ResponseBody<B> {
     fn full(inner: B) -> Self {
         Self { inner: Some(inner) }
     }
 
-    fn empty() -> Self {
+    const fn empty() -> Self {
         Self { inner: None }
     }
 }
 
-impl<B> http_body::Body for MaybeEmptyBody<B>
+impl<B> http_body::Body for ResponseBody<B>
 where
     B: http_body::Body,
 {
@@ -102,7 +100,7 @@ where
     fn poll_frame(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-    ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
         match self.project().inner.as_pin_mut() {
             Some(b) => b.poll_frame(cx),
             None => Poll::Ready(None),

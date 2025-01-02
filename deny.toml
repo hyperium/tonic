@@ -20,7 +20,7 @@ deny = [
 ]
 skip = [
     { crate = "itertools@0.12.1", reason = "aws-lc-sys depends on bindgen which depends on it" },
-    { crate = "sync_wrapper@0.1.2", reason = "tower depends on it" }
+    { crate = "unicode-width@0.1.14", reason = "protox depends on miette wich depends on it" },
 ]
 skip-tree = [
     { crate = "windows-sys" },
@@ -36,7 +36,6 @@ allow = [
     "ISC",
     "MIT",
     "OpenSSL",
-    "Zlib",
     "Unicode-3.0",
     "MPL-2.0",
     "BSD-3-Clause",

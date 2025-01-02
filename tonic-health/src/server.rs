@@ -3,8 +3,9 @@
 use crate::pb::health_server::{Health, HealthServer};
 use crate::pb::{HealthCheckRequest, HealthCheckResponse};
 use crate::ServingStatus;
+use pin_project::pin_project;
 use std::collections::HashMap;
-use std::pin::Pin;
+use std::fmt;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 use tokio_stream::Stream;
@@ -125,42 +126,67 @@ impl Health for HealthService {
         request: Request<HealthCheckRequest>,
     ) -> Result<Response<HealthCheckResponse>, Status> {
         let service_name = request.get_ref().service.as_str();
-        let status = self.service_health(service_name).await;
+        let Some(status) = self.service_health(service_name).await else {
+            return Err(Status::not_found("service not registered"));
+        };
 
-        match status {
-            None => Err(Status::not_found("service not registered")),
-            Some(status) => Ok(Response::new(HealthCheckResponse {
-                status: crate::pb::health_check_response::ServingStatus::from(status) as i32,
-            })),
-        }
+        Ok(Response::new(HealthCheckResponse::new(status)))
     }
 
-    type WatchStream =
-        Pin<Box<dyn Stream<Item = Result<HealthCheckResponse, Status>> + Send + 'static>>;
+    type WatchStream = WatchStream;
 
     async fn watch(
         &self,
         request: Request<HealthCheckRequest>,
     ) -> Result<Response<Self::WatchStream>, Status> {
         let service_name = request.get_ref().service.as_str();
-        let mut status_rx = match self.statuses.read().await.get(service_name) {
+        let status_rx = match self.statuses.read().await.get(service_name) {
+            Some((_tx, rx)) => rx.clone(),
             None => return Err(Status::not_found("service not registered")),
-            Some(pair) => pair.1.clone(),
         };
 
-        let output = async_stream::try_stream! {
-            // yield the current value
-            let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
-            yield HealthCheckResponse { status };
+        Ok(Response::new(WatchStream::new(status_rx)))
+    }
+}
 
-            #[allow(clippy::redundant_pattern_matching)]
-            while let Ok(_) = status_rx.changed().await {
-                let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
-                yield HealthCheckResponse { status };
-            }
-        };
+/// A watch stream for the health service.
+#[pin_project]
+pub struct WatchStream {
+    #[pin]
+    inner: tokio_stream::wrappers::WatchStream<ServingStatus>,
+}
 
-        Ok(Response::new(Box::pin(output) as Self::WatchStream))
+impl WatchStream {
+    fn new(status_rx: watch::Receiver<ServingStatus>) -> Self {
+        let inner = tokio_stream::wrappers::WatchStream::new(status_rx);
+        Self { inner }
+    }
+}
+
+impl Stream for WatchStream {
+    type Item = Result<HealthCheckResponse, Status>;
+
+    fn poll_next(
+        self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        self.project()
+            .inner
+            .poll_next(cx)
+            .map(|opt| opt.map(|status| Ok(HealthCheckResponse::new(status))))
+    }
+}
+
+impl fmt::Debug for WatchStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WatchStream").finish()
+    }
+}
+
+impl HealthCheckResponse {
+    fn new(status: ServingStatus) -> Self {
+        let status = crate::pb::health_check_response::ServingStatus::from(status) as i32;
+        Self { status }
     }
 }
 

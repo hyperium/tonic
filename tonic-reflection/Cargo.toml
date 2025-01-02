@@ -36,6 +36,9 @@ tonic = { version = "0.13.0", path = "../tonic", default-features = false, featu
 [dev-dependencies]
 tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["transport"] }
 
+[lints]
+workspace = true
+
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
   "tonic::*",

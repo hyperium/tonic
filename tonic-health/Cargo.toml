@@ -19,16 +19,19 @@ default = ["transport"]
 transport = []
 
 [dependencies]
-async-stream = "0.3"
+pin-project = "1"
 prost = "0.13"
 tokio = {version = "1.0", features = ["sync"]}
-tokio-stream = "0.1"
+tokio-stream = {version = "0.1", features = ["sync"]}
 tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
 
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
 tokio-stream = "0.1"
 prost-types = "0.13.0"
+
+[lints]
+workspace = true
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [

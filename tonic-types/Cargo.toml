@@ -22,6 +22,9 @@ prost = "0.13"
 prost-types = "0.13"
 tonic = { version = "0.13.0", path = "../tonic", default-features = false }
 
+[lints]
+workspace = true
+
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
   "tonic::*",

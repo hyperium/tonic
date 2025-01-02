@@ -28,6 +28,9 @@ prost = ["prost-build", "dep:prost-types"]
 cleanup-markdown = ["prost-build?/cleanup-markdown"]
 transport = []
 
+[lints]
+workspace = true
+
 [package.metadata.docs.rs]
 all-features = true
 

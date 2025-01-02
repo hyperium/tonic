@@ -183,40 +183,36 @@ where
 
     #[doc(hidden)]
     pub fn apply_compression_config(
-        self,
+        mut self,
         accept_encodings: EnabledCompressionEncodings,
         send_encodings: EnabledCompressionEncodings,
     ) -> Self {
-        let mut this = self;
-
         for &encoding in CompressionEncoding::ENCODINGS {
             if accept_encodings.is_enabled(encoding) {
-                this = this.accept_compressed(encoding);
+                self = self.accept_compressed(encoding);
             }
             if send_encodings.is_enabled(encoding) {
-                this = this.send_compressed(encoding);
+                self = self.send_compressed(encoding);
             }
         }
 
-        this
+        self
     }
 
     #[doc(hidden)]
     pub fn apply_max_message_size_config(
-        self,
+        mut self,
         max_decoding_message_size: Option<usize>,
         max_encoding_message_size: Option<usize>,
     ) -> Self {
-        let mut this = self;
-
         if let Some(limit) = max_decoding_message_size {
-            this = this.max_decoding_message_size(limit);
+            self = self.max_decoding_message_size(limit);
         }
         if let Some(limit) = max_encoding_message_size {
-            this = this.max_encoding_message_size(limit);
+            self = self.max_encoding_message_size(limit);
         }
 
-        this
+        self
     }
 
     /// Handle a single unary gRPC request.

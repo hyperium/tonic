@@ -241,12 +241,11 @@ impl<B: HttpBody + Unpin> HttpBody for MergeTrailers<B> {
     ) -> Poll<Option<StdResult<http_body::Frame<Self::Data>, Self::Error>>> {
         let this = self.get_mut();
         let mut frame = ready!(Pin::new(&mut this.inner).poll_frame(cx)?);
-        if let Some(frame) = frame.as_mut() {
-            if let Some(trailers) = frame.trailers_mut() {
-                if let Some((key, value)) = &this.trailer {
-                    trailers.insert(key.clone(), value.clone());
-                }
-            }
+        if let (Some(trailers), Some((key, value))) = (
+            frame.as_mut().and_then(|frame| frame.trailers_mut()),
+            &this.trailer,
+        ) {
+            trailers.insert(key.clone(), value.clone());
         }
         Poll::Ready(frame.map(Ok))
     }

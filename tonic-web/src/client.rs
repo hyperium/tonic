@@ -78,7 +78,7 @@ where
     }
 }
 
-/// Response future for the [`GrpcWebService`].
+/// Response future for the [`GrpcWebService`](crate::GrpcWebService).
 #[pin_project]
 #[must_use = "futures do nothing unless polled"]
 pub struct ResponseFuture<F> {

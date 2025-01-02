@@ -30,3 +30,12 @@ members = [
   "tests/skip_debug",
 ]
 resolver = "2"
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+rust_2018_idioms = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"
