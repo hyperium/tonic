@@ -1,0 +1,13 @@
+[package]
+name = "various_compression_formats"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+prost = "0.13"
+tonic = { path = "../../tonic", features = ["gzip","zstd"]}
+tokio = { version = "1.36.2", features = ["macros", "rt-multi-thread"] }
+
+[build-dependencies]
+tonic-build = { path = "../../tonic-build" }
