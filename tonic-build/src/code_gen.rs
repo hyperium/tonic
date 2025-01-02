@@ -14,6 +14,7 @@ pub struct CodeGenBuilder {
     disable_comments: HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    use_generic_streaming_requests: bool,
 }
 
 impl CodeGenBuilder {
@@ -46,7 +47,7 @@ impl CodeGenBuilder {
         self
     }
 
-    /// Enable compiling well knonw types, this will force codegen to not
+    /// Enable compiling well known types, this will force codegen to not
     /// use the well known types from `prost-types`.
     pub fn compile_well_known_types(&mut self, enable: bool) -> &mut Self {
         self.compile_well_known_types = enable;
@@ -68,6 +69,19 @@ impl CodeGenBuilder {
     /// Enable or disable returning automatic unimplemented gRPC error code for generated traits.
     pub fn generate_default_stubs(&mut self, generate_default_stubs: bool) -> &mut Self {
         self.generate_default_stubs = generate_default_stubs;
+        self
+    }
+
+    /// Enable or disable using `impl IntoStreamingRequest` instead of `Request<Streaming<Message>>`
+    /// as the parameter type for generated trait methods of client-streaming functions.
+    ///
+    /// This allows calling those trait methods with any object that implements `Stream<Item = Result<Message, Status>>`,
+    /// which can be helpful for testing request handler logic.
+    pub fn use_generic_streaming_requests(
+        &mut self,
+        use_generic_streaming_requests: bool,
+    ) -> &mut Self {
+        self.use_generic_streaming_requests = use_generic_streaming_requests;
         self
     }
 
@@ -101,6 +115,7 @@ impl CodeGenBuilder {
             &self.disable_comments,
             self.use_arc_self,
             self.generate_default_stubs,
+            self.use_generic_streaming_requests,
         )
     }
 }
@@ -115,6 +130,7 @@ impl Default for CodeGenBuilder {
             disable_comments: HashSet::default(),
             use_arc_self: false,
             generate_default_stubs: false,
+            use_generic_streaming_requests: false,
         }
     }
 }
