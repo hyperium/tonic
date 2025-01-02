@@ -2500,7 +2500,7 @@ mod tests {
     #[test]
     fn test_to_headers_encoding() {
         use crate::Status;
-        let special_char_message = "Beyond ascii \t\n\r🌶️💉💧🐮🍺";
+        let special_char_message = "Beyond 100% ascii \t\n\r🌶️💉💧🐮🍺";
         let s1 = Status::unknown(special_char_message);
 
         assert_eq!(s1.message(), special_char_message);
@@ -2509,6 +2509,17 @@ mod tests {
         let s2 = Status::from_header_map(&s1_map).unwrap();
 
         assert_eq!(s1.message(), s2.message());
+
+        assert!(
+            s1_map
+                .get("grpc-message")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("Beyond%20100%25%20ascii"),
+            "Percent sign or other character isn't encoded as desired: {:?}",
+            s1_map.get("grpc-message")
+        );
     }
 
     #[test]
