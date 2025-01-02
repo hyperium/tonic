@@ -30,6 +30,9 @@ tracing = "0.1"
 tokio = { version = "1", features = ["macros", "rt"] }
 tower-http = { version = "0.6", features = ["cors"] }
 
+[lints]
+workspace = true
+
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
   "tonic::*",
