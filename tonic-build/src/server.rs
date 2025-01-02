@@ -19,6 +19,7 @@ pub(crate) fn generate_internal<T: Service>(
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    use_generic_streaming_requests: bool,
 ) -> TokenStream {
     let methods = generate_methods(
         service,
@@ -41,6 +42,7 @@ pub(crate) fn generate_internal<T: Service>(
         disable_comments,
         use_arc_self,
         generate_default_stubs,
+        use_generic_streaming_requests,
     );
     let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
@@ -203,6 +205,7 @@ fn generate_trait<T: Service>(
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    use_generic_streaming_requests: bool,
 ) -> TokenStream {
     let methods = generate_trait_methods(
         service,
@@ -212,6 +215,7 @@ fn generate_trait<T: Service>(
         disable_comments,
         use_arc_self,
         generate_default_stubs,
+        use_generic_streaming_requests,
     );
     let trait_doc = generate_doc_comment(format!(
         " Generated trait containing gRPC methods that should be implemented for use with {}Server.",
@@ -227,6 +231,7 @@ fn generate_trait<T: Service>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_trait_methods<T: Service>(
     service: &T,
     emit_package: bool,
@@ -235,6 +240,7 @@ fn generate_trait_methods<T: Service>(
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    use_generic_streaming_requests: bool,
 ) -> TokenStream {
     let mut stream = TokenStream::new();
 
@@ -257,10 +263,20 @@ fn generate_trait_methods<T: Service>(
             quote!(&self)
         };
 
-        let req_param_type = if method.client_streaming() {
-            quote!(tonic::Request<tonic::Streaming<#req_message>>)
-        } else {
-            quote!(tonic::Request<#req_message>)
+        let result = |ok| quote!(std::result::Result<#ok, tonic::Status>);
+        let response_result = |message| result(quote!(tonic::Response<#message>));
+
+        let req_param_type = {
+            let inner_ty = if !method.client_streaming() {
+                req_message
+            } else if !use_generic_streaming_requests {
+                quote!(tonic::Streaming<#req_message>)
+            } else {
+                let message_ty = result(req_message);
+                quote!(impl tokio_stream::Stream<Item = #message_ty> + std::marker::Send + std::marker::Unpin)
+            };
+
+            quote!(tonic::Request<#inner_ty>)
         };
 
         let partial_sig = quote! {
@@ -277,9 +293,6 @@ fn generate_trait_methods<T: Service>(
         } else {
             quote!(;)
         };
-
-        let result = |ok| quote!(std::result::Result<#ok, tonic::Status>);
-        let response_result = |message| result(quote!(tonic::Response<#message>));
 
         let method = if !method.server_streaming() {
             let return_ty = response_result(res_message);

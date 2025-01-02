@@ -14,6 +14,7 @@ pub struct CodeGenBuilder {
     disable_comments: HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    use_generic_streaming_requests: bool,
 }
 
 impl CodeGenBuilder {
@@ -71,6 +72,19 @@ impl CodeGenBuilder {
         self
     }
 
+    /// Enable or disable using `Request<impl Stream>` instead of `Request<Streaming<Message>>`
+    /// as the parameter type for generated trait methods of client-streaming functions.
+    ///
+    /// This allows calling those trait methods with a `Request` containing any object that implements
+    /// `Stream<Item = Result<Message, Status>>`, which can be helpful for testing request handler logic.
+    pub fn use_generic_streaming_requests(
+        &mut self,
+        use_generic_streaming_requests: bool,
+    ) -> &mut Self {
+        self.use_generic_streaming_requests = use_generic_streaming_requests;
+        self
+    }
+
     /// Generate client code based on `Service`.
     ///
     /// This takes some `Service` and will generate a `TokenStream` that contains
@@ -101,6 +115,7 @@ impl CodeGenBuilder {
             &self.disable_comments,
             self.use_arc_self,
             self.generate_default_stubs,
+            self.use_generic_streaming_requests,
         )
     }
 }
@@ -115,6 +130,7 @@ impl Default for CodeGenBuilder {
             disable_comments: HashSet::default(),
             use_arc_self: false,
             generate_default_stubs: false,
+            use_generic_streaming_requests: false,
         }
     }
 }

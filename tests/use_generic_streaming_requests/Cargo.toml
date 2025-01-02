@@ -1,0 +1,17 @@
+[package]
+authors = ["Yotam Ofek <yotam.ofek@gmail.com>"]
+edition = "2021"
+license = "MIT"
+name = "use_generic_streaming_requests"
+
+[dependencies]
+tokio-stream = "0.1"
+prost = "0.13"
+tonic = {path = "../../tonic"}
+tokio = {version = "1.0", features = ["macros"]}
+
+[build-dependencies]
+tonic-build = {path = "../../tonic-build" }
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]

@@ -41,6 +41,7 @@ pub fn configure() -> Builder {
         disable_comments: HashSet::default(),
         use_arc_self: false,
         generate_default_stubs: false,
+        use_generic_streaming_requests: false,
         compile_settings: CompileSettings::default(),
         skip_debug: HashSet::default(),
     }
@@ -228,6 +229,7 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
                 .disable_comments(self.builder.disable_comments.clone())
                 .use_arc_self(self.builder.use_arc_self)
                 .generate_default_stubs(self.builder.generate_default_stubs)
+                .use_generic_streaming_requests(self.builder.use_generic_streaming_requests)
                 .generate_server(
                     &TonicBuildService::new(service.clone(), self.builder.compile_settings.clone()),
                     &self.builder.proto_path,
@@ -310,6 +312,7 @@ pub struct Builder {
     pub(crate) disable_comments: HashSet<String>,
     pub(crate) use_arc_self: bool,
     pub(crate) generate_default_stubs: bool,
+    pub(crate) use_generic_streaming_requests: bool,
     pub(crate) compile_settings: CompileSettings,
     pub(crate) skip_debug: HashSet<String>,
 
@@ -581,6 +584,18 @@ impl Builder {
     /// This defaults to `false`.
     pub fn generate_default_stubs(mut self, enable: bool) -> Self {
         self.generate_default_stubs = enable;
+        self
+    }
+
+    /// Enable or disable using `Request<impl Stream>` instead of `Request<Streaming<Message>>`
+    /// as the parameter type for generated trait methods of client-streaming functions.
+    ///
+    /// This allows calling those trait methods with a `Request` containing any object that implements
+    /// `Stream<Item = Result<Message, Status>>`, which can be helpful for testing request handler logic.
+    ///
+    /// This defaults to `false`.
+    pub fn use_generic_streaming_requests(mut self, use_generic_streaming_requests: bool) -> Self {
+        self.use_generic_streaming_requests = use_generic_streaming_requests;
         self
     }
 

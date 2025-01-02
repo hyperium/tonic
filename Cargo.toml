@@ -25,6 +25,7 @@ members = [
   "tests/web",
   "tests/service_named_result",
   "tests/use_arc_self",
+  "tests/use_generic_streaming_requests",
   "tests/default_stubs",
   "tests/deprecated_methods",
   "tests/skip_debug",
