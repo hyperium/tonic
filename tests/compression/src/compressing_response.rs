@@ -5,6 +5,7 @@ util::parametrized_tests! {
     client_enabled_server_enabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -36,6 +37,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
             let expected = match self.encoding {
                 CompressionEncoding::Gzip => "gzip",
                 CompressionEncoding::Zstd => "zstd",
+                CompressionEncoding::Deflate => "deflate",
                 _ => panic!("unexpected encoding {:?}", self.encoding),
             };
             assert_eq!(
@@ -85,6 +87,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Deflate => "deflate",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
 
@@ -100,6 +103,7 @@ util::parametrized_tests! {
     client_enabled_server_disabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -175,7 +179,8 @@ async fn client_enabled_server_disabled_multi_encoding() {
 
     let mut client = test_client::TestClient::new(mock_io_channel(client).await)
         .accept_compressed(CompressionEncoding::Gzip)
-        .accept_compressed(CompressionEncoding::Zstd);
+        .accept_compressed(CompressionEncoding::Zstd)
+        .accept_compressed(CompressionEncoding::Deflate);
 
     let res = client.compress_output_unary(()).await.unwrap();
 
@@ -189,6 +194,7 @@ util::parametrized_tests! {
     client_disabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -259,6 +265,7 @@ util::parametrized_tests! {
     server_replying_with_unsupported_encoding,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -302,6 +309,7 @@ util::parametrized_tests! {
     disabling_compression_on_single_response,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -344,6 +352,7 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Deflate => "deflate",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
@@ -356,6 +365,7 @@ util::parametrized_tests! {
     disabling_compression_on_response_but_keeping_compression_on_stream,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -400,6 +410,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Deflate => "deflate",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
@@ -425,6 +436,7 @@ util::parametrized_tests! {
     disabling_compression_on_response_from_client_stream,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -469,6 +481,7 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Deflate => "deflate",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);

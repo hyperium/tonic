@@ -6,6 +6,7 @@ util::parametrized_tests! {
     client_enabled_server_enabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -31,6 +32,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
             let expected = match self.encoding {
                 CompressionEncoding::Gzip => "gzip",
                 CompressionEncoding::Zstd => "zstd",
+                CompressionEncoding::Deflate => "deflate",
                 _ => panic!("unexpected encoding {:?}", self.encoding),
             };
             assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);
@@ -77,6 +79,7 @@ util::parametrized_tests! {
     client_disabled_server_enabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -127,6 +130,7 @@ util::parametrized_tests! {
     client_enabled_server_disabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -156,6 +160,7 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Deflate => "deflate",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(
@@ -171,6 +176,7 @@ util::parametrized_tests! {
     compressing_response_from_client_stream,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
 }
 
 #[allow(dead_code)]
@@ -211,6 +217,7 @@ async fn compressing_response_from_client_stream(encoding: CompressionEncoding) 
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Deflate => "deflate",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
