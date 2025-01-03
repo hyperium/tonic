@@ -35,6 +35,8 @@
 //! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation. Enabled by default.
 //! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
 //!   Not enabled by default.
+//! - `deflate`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
+//!   Not enabled by default.
 //! - `zstd`: Enables compressing requests, responses, and streams. Depends on [`zstd`].
 //!   Not enabled by default.
 //!
