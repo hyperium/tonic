@@ -435,7 +435,7 @@ where
             .headers
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
 
-        #[cfg(any(feature = "gzip", feature = "zstd"))]
+        #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
         if let Some(encoding) = accept_encoding {
             // Set the content encoding
             parts.headers.insert(
