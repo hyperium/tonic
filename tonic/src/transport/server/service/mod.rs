@@ -1,5 +1,5 @@
 mod io;
-pub(crate) use self::io::ServerIo;
+pub(crate) use self::io::{ConnectInfoLayer, ServerIo};
 
 mod recover_error;
 pub(crate) use self::recover_error::RecoverError;
