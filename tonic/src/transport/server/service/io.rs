@@ -6,6 +6,73 @@ use std::task::{Context, Poll};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 #[cfg(feature = "_tls-any")]
 use tokio_rustls::server::TlsStream;
+use tower_layer::Layer;
+use tower_service::Service;
+
+#[derive(Debug, Clone)]
+pub(crate) struct ConnectInfoLayer<T> {
+    connect_info: T,
+}
+
+impl<T> ConnectInfoLayer<T> {
+    pub(crate) fn new(connect_info: T) -> Self {
+        Self { connect_info }
+    }
+}
+
+impl<S, T> Layer<S> for ConnectInfoLayer<T>
+where
+    T: Clone,
+{
+    type Service = ConnectInfo<S, T>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        ConnectInfo::new(inner, self.connect_info.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ConnectInfo<S, T> {
+    inner: S,
+    connect_info: T,
+}
+
+impl<S, T> ConnectInfo<S, T> {
+    fn new(inner: S, connect_info: T) -> Self {
+        Self {
+            inner,
+            connect_info,
+        }
+    }
+}
+
+impl<S, IO, ReqBody> Service<http::Request<ReqBody>> for ConnectInfo<S, ServerIoConnectInfo<IO>>
+where
+    S: Service<http::Request<ReqBody>>,
+    IO: Connected,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = S::Future;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, mut req: http::Request<ReqBody>) -> Self::Future {
+        match self.connect_info.clone() {
+            ServerIoConnectInfo::Io(inner) => {
+                req.extensions_mut().insert(inner);
+            }
+            #[cfg(feature = "_tls-any")]
+            ServerIoConnectInfo::TlsIo(inner) => {
+                req.extensions_mut().insert(inner.get_ref().clone());
+                req.extensions_mut().insert(inner);
+            }
+        }
+        self.inner.call(req)
+    }
+}
 
 pub(crate) enum ServerIo<IO> {
     Io(IO),
@@ -13,14 +80,21 @@ pub(crate) enum ServerIo<IO> {
     TlsIo(Box<TlsStream<IO>>),
 }
 
-use tower::util::Either;
+pub(crate) enum ServerIoConnectInfo<IO: Connected> {
+    Io(<IO as Connected>::ConnectInfo),
+    #[cfg(feature = "_tls-any")]
+    TlsIo(<TlsStream<IO> as Connected>::ConnectInfo),
+}
 
-#[cfg(feature = "_tls-any")]
-type ServerIoConnectInfo<IO> =
-    Either<<IO as Connected>::ConnectInfo, <TlsStream<IO> as Connected>::ConnectInfo>;
-
-#[cfg(not(feature = "_tls-any"))]
-type ServerIoConnectInfo<IO> = Either<<IO as Connected>::ConnectInfo, ()>;
+impl<IO: Connected> Clone for ServerIoConnectInfo<IO> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Io(io) => Self::Io(io.clone()),
+            #[cfg(feature = "_tls-any")]
+            Self::TlsIo(io) => Self::TlsIo(io.clone()),
+        }
+    }
+}
 
 impl<IO> ServerIo<IO> {
     pub(in crate::transport) fn new_io(io: IO) -> Self {
@@ -37,9 +111,9 @@ impl<IO> ServerIo<IO> {
         IO: Connected,
     {
         match self {
-            Self::Io(io) => Either::Left(io.connect_info()),
+            Self::Io(io) => ServerIoConnectInfo::Io(io.connect_info()),
             #[cfg(feature = "_tls-any")]
-            Self::TlsIo(io) => Either::Right(io.connect_info()),
+            Self::TlsIo(io) => ServerIoConnectInfo::TlsIo(io.connect_info()),
         }
     }
 }
