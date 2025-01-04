@@ -9,6 +9,7 @@ mod tls;
 #[cfg(unix)]
 mod unix;
 
+use service::ConnectInfoLayer;
 use tokio_stream::StreamExt as _;
 use tracing::{debug, trace};
 
@@ -984,7 +985,7 @@ struct MakeSvc<S, IO> {
 
 impl<S, ResBody, IO> Service<&ServerIo<IO>> for MakeSvc<S, IO>
 where
-    IO: Connected,
+    IO: Connected + 'static,
     S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
     S::Error: Into<crate::BoxError> + Send,
@@ -1015,29 +1016,7 @@ where
 
         let svc = ServiceBuilder::new()
             .layer(BoxCloneService::layer())
-            .map_request(move |mut request: Request<Body>| {
-                match &conn_info {
-                    tower::util::Either::Left(inner) => {
-                        request.extensions_mut().insert(inner.clone());
-                    }
-                    tower::util::Either::Right(inner) => {
-                        #[cfg(feature = "_tls-any")]
-                        {
-                            request.extensions_mut().insert(inner.clone());
-                            request.extensions_mut().insert(inner.get_ref().clone());
-                        }
-
-                        #[cfg(not(feature = "_tls-any"))]
-                        {
-                            // just a type check to make sure we didn't forget to
-                            // insert this into the extensions
-                            let _: &() = inner;
-                        }
-                    }
-                }
-
-                request
-            })
+            .layer(ConnectInfoLayer::new(conn_info.clone()))
             .service(Svc {
                 inner: svc,
                 trace_interceptor,
