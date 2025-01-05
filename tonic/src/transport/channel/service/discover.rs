@@ -32,15 +32,13 @@ impl<K: Hash + Eq + Clone> Stream for DynamicServiceStream<K> {
     type Item = Result<TowerChange<K, Connection>, crate::BoxError>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        let c = &mut self.changes;
-        match Pin::new(&mut *c).poll_recv(cx) {
+        match Pin::new(&mut self.changes).poll_recv(cx) {
             Poll::Pending | Poll::Ready(None) => Poll::Pending,
             Poll::Ready(Some(change)) => match change {
                 Change::Insert(k, endpoint) => {
                     let http = endpoint.http_connector();
                     let connection = Connection::lazy(endpoint.connector(http), endpoint);
-                    let change = Ok(TowerChange::Insert(k, connection));
-                    Poll::Ready(Some(change))
+                    Poll::Ready(Some(Ok(TowerChange::Insert(k, connection))))
                 }
                 Change::Remove(k) => Poll::Ready(Some(Ok(TowerChange::Remove(k)))),
             },
