@@ -161,6 +161,7 @@ impl AssertRightEncoding {
         let expected = match self.encoding {
             CompressionEncoding::Gzip => "gzip",
             CompressionEncoding::Zstd => "zstd",
+            CompressionEncoding::Deflate => "deflate",
             _ => panic!("unexpected encoding {:?}", self.encoding),
         };
         assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);
