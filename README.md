@@ -33,6 +33,9 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 
 ## Getting Started
 
+- The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, perfect for first time users!
+- The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its features.
+
 Examples can be found in [`examples`] and for more complex scenarios [`interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
@@ -46,11 +49,6 @@ may be a good resource as it shows examples of many of the gRPC features.
 
 [Protocol Buffers compiler]: https://protobuf.dev/downloads/
 [`tonic_build::compile_protos()`]: https://docs.rs/tonic-build/latest/tonic_build/fn.compile_protos.html
-
-### Tutorials
-
-- The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, perfect for first time users!
-- The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its features.
 
 ## Getting Help
 

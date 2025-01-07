@@ -325,14 +325,18 @@ impl Endpoint {
         )
     }
 
-    /// Create a channel from this config.
-    pub async fn connect(&self) -> Result<Channel, Error> {
+    pub(crate) fn http_connector(&self) -> HttpConnector {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
         http.set_connect_timeout(self.connect_timeout);
+        http
+    }
 
+    /// Create a channel from this config.
+    pub async fn connect(&self) -> Result<Channel, Error> {
+        let http = self.http_connector();
         let connector = self.connector(http);
 
         Channel::connect(connector, self.clone()).await
@@ -343,12 +347,7 @@ impl Endpoint {
     /// The channel returned by this method does not attempt to connect to the endpoint until first
     /// use.
     pub fn connect_lazy(&self) -> Channel {
-        let mut http = HttpConnector::new();
-        http.enforce_http(false);
-        http.set_nodelay(self.tcp_nodelay);
-        http.set_keepalive(self.tcp_keepalive);
-        http.set_connect_timeout(self.connect_timeout);
-
+        let http = self.http_connector();
         let connector = self.connector(http);
 
         Channel::new(connector, self.clone())

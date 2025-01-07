@@ -17,14 +17,6 @@ be returned to gRPC clients. Moreover, the trait also adds methods to
 [`tonic::Status`] that can be used by a tonic client to extract error details,
 and handle them with ease.
 
-## Getting Started
-
-```toml
-[dependencies]
-tonic = <tonic-version>
-tonic-types = <tonic-types-version>
-```
-
 ## Examples
 
 The examples bellow cover a basic use case of the [gRPC Richer Error Model].
