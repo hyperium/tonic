@@ -3,13 +3,6 @@
 Enables tonic servers to handle requests from `grpc-web` clients directly,
 without the need of an external proxy.
 
-## Getting Started
-
-```toml
-[dependencies]
-tonic-web = "<tonic-web-version>"
-```
-
 ## Enabling tonic services
 
 The easiest way to get started, is to call the function with your tonic service

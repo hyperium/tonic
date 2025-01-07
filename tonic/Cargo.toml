@@ -25,6 +25,7 @@ version = "0.13.0"
 [features]
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
+deflate = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["transport", "codegen", "prost"]
 prost = ["dep:prost"]
