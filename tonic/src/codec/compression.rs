@@ -361,7 +361,7 @@ mod tests {
 
     #[test]
     #[cfg(all(feature = "gzip", feature = "deflate", feature = "zstd"))]
-    fn convert_gzip_and_zstd_into_header_value() {
+    fn convert_compression_encodings_into_header_value() {
         let encodings = EnabledCompressionEncodings {
             inner: [
                 Some(CompressionEncoding::Gzip),
