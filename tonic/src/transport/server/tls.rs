@@ -9,6 +9,7 @@ pub struct ServerTlsConfig {
     identity: Option<Identity>,
     client_ca_root: Option<Certificate>,
     client_auth_optional: bool,
+    ignore_client_order: bool,
 }
 
 impl fmt::Debug for ServerTlsConfig {
@@ -24,6 +25,7 @@ impl ServerTlsConfig {
             identity: None,
             client_ca_root: None,
             client_auth_optional: false,
+            ignore_client_order: false,
         }
     }
 
@@ -56,11 +58,23 @@ impl ServerTlsConfig {
         }
     }
 
+    /// Sets whether the server's cipher preferences are followed instead of the client's.
+    ///
+    /// # Default
+    /// By default, this option is set to `false`.
+    pub fn ignore_client_order(self, ignore_client_order: bool) -> Self {
+        ServerTlsConfig {
+            ignore_client_order,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::BoxError> {
         TlsAcceptor::new(
             self.identity.clone().unwrap(),
             self.client_ca_root.clone(),
             self.client_auth_optional,
+            self.ignore_client_order,
         )
     }
 }
