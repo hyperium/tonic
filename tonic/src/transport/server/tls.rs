@@ -59,7 +59,6 @@ impl ServerTlsConfig {
     }
 
     /// Sets whether the server's cipher preferences are followed instead of the client's.
-    /// It prevents attacks such as POODLE
     ///
     /// # Default
     /// By default, this option is set to `false`.
