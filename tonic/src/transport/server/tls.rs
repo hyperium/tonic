@@ -21,12 +21,7 @@ impl fmt::Debug for ServerTlsConfig {
 impl ServerTlsConfig {
     /// Creates a new `ServerTlsConfig`.
     pub fn new() -> Self {
-        ServerTlsConfig {
-            identity: None,
-            client_ca_root: None,
-            client_auth_optional: false,
-            ignore_client_order: false,
-        }
+        ServerTlsConfig::default()
     }
 
     /// Sets the [`Identity`] of the server.
