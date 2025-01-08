@@ -19,8 +19,8 @@ pub(crate) struct TlsAcceptor {
 
 impl TlsAcceptor {
     pub(crate) fn new(
-        identity: Identity,
-        client_ca_root: Option<Certificate>,
+        identity: &Identity,
+        client_ca_root: Option<&Certificate>,
         client_auth_optional: bool,
         ignore_client_order: bool,
     ) -> Result<Self, crate::BoxError> {
@@ -30,7 +30,7 @@ impl TlsAcceptor {
             None => builder.with_no_client_auth(),
             Some(cert) => {
                 let mut roots = RootCertStore::empty();
-                roots.add_parsable_certificates(convert_certificate_to_pki_types(&cert)?);
+                roots.add_parsable_certificates(convert_certificate_to_pki_types(cert)?);
                 let verifier = if client_auth_optional {
                     WebPkiClientVerifier::builder(roots.into()).allow_unauthenticated()
                 } else {
@@ -41,7 +41,7 @@ impl TlsAcceptor {
             }
         };
 
-        let (cert, key) = convert_identity_to_pki_types(&identity)?;
+        let (cert, key) = convert_identity_to_pki_types(identity)?;
         let mut config = builder.with_single_cert(cert, key)?;
         config.ignore_client_order = ignore_client_order;
 
