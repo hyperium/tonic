@@ -3,7 +3,6 @@
 use crate::pb::health_server::{Health, HealthServer};
 use crate::pb::{HealthCheckRequest, HealthCheckResponse};
 use crate::ServingStatus;
-use pin_project::pin_project;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
@@ -150,9 +149,7 @@ impl Health for HealthService {
 }
 
 /// A watch stream for the health service.
-#[pin_project]
 pub struct WatchStream {
-    #[pin]
     inner: tokio_stream::wrappers::WatchStream<ServingStatus>,
 }
 
@@ -167,11 +164,10 @@ impl Stream for WatchStream {
     type Item = Result<HealthCheckResponse, Status>;
 
     fn poll_next(
-        self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        self.project()
-            .inner
+        std::pin::Pin::new(&mut self.inner)
             .poll_next(cx)
             .map(|opt| opt.map(|status| Ok(HealthCheckResponse::new(status))))
     }

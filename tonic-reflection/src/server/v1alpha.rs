@@ -1,6 +1,5 @@
 use std::{fmt, sync::Arc};
 
-use pin_project::pin_project;
 use tokio::sync::mpsc;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::{Request, Response, Status, Streaming};
@@ -108,19 +107,16 @@ impl From<ReflectionServiceState> for ReflectionService {
 }
 
 /// A response stream.
-#[pin_project]
-pub struct ServerReflectionInfoStream(
-    #[pin] ReceiverStream<Result<ServerReflectionResponse, Status>>,
-);
+pub struct ServerReflectionInfoStream(ReceiverStream<Result<ServerReflectionResponse, Status>>);
 
 impl Stream for ServerReflectionInfoStream {
     type Item = Result<ServerReflectionResponse, Status>;
 
     fn poll_next(
-        self: std::pin::Pin<&mut Self>,
+        mut self: std::pin::Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
     ) -> std::task::Poll<Option<Self::Item>> {
-        self.project().0.poll_next(cx)
+        std::pin::Pin::new(&mut self.0).poll_next(cx)
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {

@@ -26,14 +26,14 @@ server = ["prost-types", "dep:tokio", "dep:tokio-stream"]
 default = ["server"]
 
 [dependencies]
-pin-project = "1"
 prost = "0.13"
 prost-types = {version = "0.13", optional = true}
 tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
-tokio-stream = {version = "0.1", features = ["net"], optional = true }
+tokio-stream = {version = "0.1", default-features = false, optional = true }
 tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
 
 [dev-dependencies]
+tokio-stream = {version = "0.1", default-features = false, features = ["net"]}
 tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["transport"] }
 
 [lints]

@@ -19,15 +19,13 @@ default = ["transport"]
 transport = []
 
 [dependencies]
-pin-project = "1"
 prost = "0.13"
 tokio = {version = "1.0", features = ["sync"]}
-tokio-stream = {version = "0.1", features = ["sync"]}
+tokio-stream = {version = "0.1", default-features = false, features = ["sync"]}
 tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
 
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
-tokio-stream = "0.1"
 prost-types = "0.13.0"
 
 [lints]
