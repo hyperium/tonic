@@ -14,10 +14,6 @@ readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
 version = "0.13.0"
 
-[features]
-default = ["transport"]
-transport = []
-
 [dependencies]
 prost = "0.13"
 tokio = {version = "1.0", features = ["sync"]}

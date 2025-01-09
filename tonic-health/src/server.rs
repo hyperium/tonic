@@ -8,9 +8,7 @@ use std::fmt;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 use tokio_stream::Stream;
-#[cfg(feature = "transport")]
-use tonic::server::NamedService;
-use tonic::{Request, Response, Status};
+use tonic::{server::NamedService, Request, Response, Status};
 
 /// Creates a `HealthReporter` and a linked `HealthServer` pair. Together,
 /// these types can be used to serve the gRPC Health Checking service.
@@ -50,7 +48,6 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `Serving`. This notifies any watchers
     /// if there is a change in status.
-    #[cfg(feature = "transport")]
     pub async fn set_serving<S>(&mut self)
     where
         S: NamedService,
@@ -62,7 +59,6 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `NotServing`. This notifies any watchers
     /// if there is a change in status.
-    #[cfg(feature = "transport")]
     pub async fn set_not_serving<S>(&mut self)
     where
         S: NamedService,
