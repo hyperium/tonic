@@ -19,7 +19,6 @@ default = ["transport"]
 transport = []
 
 [dependencies]
-pin-project = "1"
 prost = "0.13"
 tokio = {version = "1.0", features = ["sync"]}
 tokio-stream = {version = "0.1", features = ["sync"]}
