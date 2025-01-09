@@ -17,7 +17,7 @@ version = "0.13.0"
 [dependencies]
 base64 = "0.22"
 bytes = "1"
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", default-features = false }
 http = "1"
 http-body = "1"
 pin-project = "1"
