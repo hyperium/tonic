@@ -166,10 +166,7 @@ async fn response_stream_limit() {
                 if let Some(client) = client {
                     Ok(TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))
@@ -335,10 +332,7 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
                 if let Some(client) = client {
                     Ok(TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))

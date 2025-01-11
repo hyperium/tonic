@@ -198,7 +198,7 @@ async fn status_from_server_stream_with_source() {
     let channel = Endpoint::try_from("http://[::]:50051")
         .unwrap()
         .connect_with_connector_lazy(tower::service_fn(move |_: Uri| async move {
-            Err::<TokioIo<MockStream>, _>(std::io::Error::new(std::io::ErrorKind::Other, "WTF"))
+            Err::<TokioIo<MockStream>, _>(std::io::Error::other("WTF"))
         }));
 
     let mut client = test_stream_client::TestStreamClient::new(channel);
