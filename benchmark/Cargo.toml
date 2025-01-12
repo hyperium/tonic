@@ -1,0 +1,21 @@
+[package]
+name = "benchmark"
+version = "0.1.0"
+edition = "2021"
+publish = false
+license = "MIT/Apache-2.0"
+
+[dependencies]
+clap = { version = "4.5.21", features = ["derive"] }
+num_cpus = "1.16.0"
+prost = "0.13"
+tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
+tokio-stream = "0.1"
+tonic = {path = "../tonic", features = ["tls-ring"]}
+tower = "0.5"
+async-stream = "0.2"
+nix = { version = "0.29.0", features = ["resource"] }
+tokio-util = "0.7.13"
+
+[build-dependencies]
+tonic-build = {path = "../tonic-build", features = ["prost"]}
