@@ -1,0 +1,23 @@
+{
+  "setup": {
+    "server_targets": ["http://localhost:50051"],
+    "client_type": "SYNC_CLIENT",
+    "outstanding_rpcs_per_channel": 1,
+    "client_channels": 1,
+    "rpc_type": "UNARY",
+    "load_params": {
+      "closed_loop": {}
+    },
+    "payload_config": {
+      "simple_params": {
+        "req_size": 100,
+        "resp_size": 100
+      }
+    },
+    "histogram_params": {
+      "resolution": 1,
+      "max_possible": 10000000000
+    },
+    "median_latency_collection_interval_millis": 0
+  }
+}
