@@ -96,7 +96,7 @@ jobs:
     - uses: taiki-e/install-action@cargo-no-dev-deps
     - uses: Swatinem/rust-cache@v2
     - run: cargo no-dev-deps --no-private check --all-features
-    - run: cargo no-dev-deps --no-private doc --no-deps
+    - run: cargo no-dev-deps --no-private doc --no-deps --all-features
       env:
         RUSTDOCFLAGS: "-D warnings"
 
