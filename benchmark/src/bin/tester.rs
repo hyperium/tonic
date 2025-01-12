@@ -1,3 +1,4 @@
+#![cfg(unix)]
 use std::error::Error;
 
 use benchmark::worker::{
@@ -71,7 +72,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .core_count(CoreRequest::default())
         .await?
         .into_inner();
-    assert_eq!(core_count.cores > 0, true);
+    assert!(core_count.cores > 0);
 
     println!("Running server stream.");
     run_server_stream(&mut client).await?;
@@ -80,3 +81,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     client.quit_worker(Void::default()).await?;
     Ok(())
 }
+
+#[cfg(not(unix))]
+fn main() {}

@@ -47,10 +47,7 @@ impl BenchmarkServer {
                 ServerTlsConfig::new()
             };
             server_builder = server_builder.tls_config(tls_config).map_err(|err| {
-                Status::invalid_argument(format!(
-                    "failed to create TLS config: {}",
-                    err.to_string()
-                ))
+                Status::invalid_argument(format!("failed to create TLS config: {}", err))
             })?;
         };
 
@@ -88,10 +85,7 @@ impl BenchmarkServer {
         Ok(BenchmarkServer {
             last_reset_time: std::time::Instant::now(),
             last_rusage: getrusage(UsageWho::RUSAGE_SELF).map_err(|err| {
-                Status::internal(format!(
-                    "failed to query system resource usage: {}",
-                    err.to_string()
-                ))
+                Status::internal(format!("failed to query system resource usage: {}", err))
             })?,
             cancellation_token,
             port,
@@ -102,10 +96,7 @@ impl BenchmarkServer {
         let now = std::time::Instant::now();
         let wall_time_elapsed = now.duration_since(self.last_reset_time);
         let latest_rusage = getrusage(UsageWho::RUSAGE_SELF).map_err(|err| {
-            Status::internal(format!(
-                "failed to query system resource usage: {}",
-                err.to_string()
-            ))
+            Status::internal(format!("failed to query system resource usage: {}", err))
         })?;
         let user_time = latest_rusage.user_time() - self.last_rusage.user_time();
         let system_time = latest_rusage.system_time() - self.last_rusage.system_time();
@@ -115,12 +106,12 @@ impl BenchmarkServer {
             self.last_reset_time = now;
         }
 
-        return Ok(ServerStats {
+        Ok(ServerStats {
             time_elapsed: wall_time_elapsed.as_nanos() as f64 / 1e9,
             time_user: user_time.num_nanoseconds() as f64 / 1e9,
             time_system: system_time.num_nanoseconds() as f64 / 1e9,
             ..Default::default()
-        });
+        })
     }
 }
 

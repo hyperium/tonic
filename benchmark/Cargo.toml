@@ -5,6 +5,7 @@ edition = "2021"
 publish = false
 license = "MIT/Apache-2.0"
 
+# The resource usage functions work only on linux.
 [[bin]]
 name = "worker"
 path = "src/bin/worker.rs"
@@ -21,7 +22,7 @@ tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
 tonic = {path = "../tonic", features = ["tls-ring"]}
 tower = "0.5"
-async-stream = "0.2"
+async-stream = "0.3"
 nix = { version = "0.29.0", features = ["resource"] }
 tokio-util = "0.7.13"
 

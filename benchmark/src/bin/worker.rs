@@ -1,4 +1,5 @@
 #![recursion_limit = "1024"]
+#![cfg(unix)]
 
 use std::{pin::Pin, time::Duration};
 
@@ -47,7 +48,7 @@ impl WorkerService for DriverService {
                 match  argtype {
                     server_args::Argtype::Setup(server_config) => {
                         println!("Server creation requested.");
-                        if let Some(mut server) = benchmark_server.take() {
+                        if benchmark_server.take().is_some() {
                             println!("server setup received when server already exists, shutting down the existing server");
                         }
                         match BenchmarkServer::start(server_config) {
@@ -151,3 +152,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     runtime.block_on(run_worker())?;
     Ok(())
 }
+
+#[cfg(not(unix))]
+fn main() {}
