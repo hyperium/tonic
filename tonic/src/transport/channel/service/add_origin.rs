@@ -53,7 +53,7 @@ where
         head.uri = {
             // Split the request URI into parts.
             let mut uri: http::uri::Parts = head.uri.into();
-            // Update the URI parts, setting hte scheme and authority
+            // Update the URI parts, setting the scheme and authority
             uri.scheme = self.scheme.clone();
             uri.authority = self.authority.clone();
 
