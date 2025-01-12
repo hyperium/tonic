@@ -14,9 +14,6 @@ use tonic::{transport::Server, Response, Status};
 
 #[derive(Parser, Debug)]
 struct Args {
-    /// Port to start load servers on, if not specified by the server config
-    #[arg(long = "server_port")]
-    server_port: Option<u16>,
     /// Port to expose grpc.testing.WorkerService, Used by driver to initiate work.
     #[arg(long = "driver_port")]
     driver_port: u16,
@@ -109,7 +106,7 @@ impl WorkerService for DriverService {
     ) -> std::result::Result<Response<Void>, Status> {
         match self.shutdown_channel.send(()).await {
             Ok(()) => Ok(Response::new(Void {})),
-            Err(err) => Err(Status::internal(format!("failed to stop server: {}", err))),
+            Err(err) => Err(Status::internal(format!("failed to stop worker: {}", err))),
         }
     }
 }

@@ -5,6 +5,14 @@ edition = "2021"
 publish = false
 license = "MIT/Apache-2.0"
 
+[[bin]]
+name = "worker"
+path = "src/bin/worker.rs"
+
+[[bin]]
+name = "tester"
+path = "src/bin/tester.rs"
+
 [dependencies]
 clap = { version = "4.5.21", features = ["derive"] }
 num_cpus = "1.16.0"

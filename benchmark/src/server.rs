@@ -119,10 +119,7 @@ impl BenchmarkServer {
             time_elapsed: wall_time_elapsed.as_nanos() as f64 / 1e9,
             time_user: user_time.num_nanoseconds() as f64 / 1e9,
             time_system: system_time.num_nanoseconds() as f64 / 1e9,
-            // The following fields are not set by Java and Go.
-            idle_cpu_time: 0,
-            cq_poll_count: 0,
-            total_cpu_time: 0,
+            ..Default::default()
         });
     }
 }
@@ -141,11 +138,7 @@ impl crate::protobuf_benchmark_service::benchmark_service_server::BenchmarkServi
                 r#type: PayloadType::Compressable as i32,
                 body: vec![0; request.into_inner().response_size as usize],
             }),
-            username: String::new(),
-            oauth_scope: String::new(),
-            server_id: String::new(),
-            grpclb_route_type: 0,
-            hostname: String::new(),
+            ..Default::default()
         }))
     }
 
@@ -166,11 +159,7 @@ impl crate::protobuf_benchmark_service::benchmark_service_server::BenchmarkServi
                         r#type: PayloadType::Compressable as i32,
                         body: vec![0; request.response_size as usize],
                     }),
-                    username: String::new(),
-                    oauth_scope: String::new(),
-                    server_id: String::new(),
-                    grpclb_route_type: 0,
-                    hostname: String::new(),
+                    ..Default::default()
                 };
             }
         };
