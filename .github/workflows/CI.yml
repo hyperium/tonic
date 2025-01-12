@@ -135,6 +135,18 @@ jobs:
       run: ./interop/test.sh --use_tls tls_rustls
       shell: bash
 
+  benchmark:
+    name: Benchmark Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: hecrj/setup-rust-action@v2
+    - uses: taiki-e/install-action@protoc
+    - uses: Swatinem/rust-cache@v2
+    - name: Run smoke test
+      run: ./benchmark/test.sh
+      shell: bash
+
   semver:
     runs-on: ubuntu-latest
     steps:

@@ -28,6 +28,6 @@ members = [
   "tests/default_stubs",
   "tests/deprecated_methods",
   "tests/skip_debug",
-  "benchmark",
+  "benchmark", # Tests
 ]
 resolver = "2"
