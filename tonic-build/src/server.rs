@@ -268,43 +268,49 @@ fn generate_trait_methods<T: Service>(
             async fn #name(#self_param, request: #req_param_type)
         };
 
-        let body_or_semicolon = if generate_default_stubs {
-            quote! {
-                {
-                    Err(tonic::Status::unimplemented("Not yet implemented"))
-                }
+        let default_body = quote! {
+            {
+                Err(tonic::Status::unimplemented("Not yet implemented"))
             }
-        } else {
-            quote!(;)
         };
 
         let result = |ok| quote!(std::result::Result<#ok, tonic::Status>);
         let response_result = |message| result(quote!(tonic::Response<#message>));
 
-        let method = if !method.server_streaming() {
-            let return_ty = response_result(res_message);
-            quote! {
-                #partial_sig -> #return_ty #body_or_semicolon
+        let method = match (method.server_streaming(), generate_default_stubs) {
+            (false, true) => {
+                let return_ty = response_result(res_message);
+                quote! {
+                    #partial_sig -> #return_ty #default_body
+                }
             }
-        } else if generate_default_stubs {
-            let return_ty = response_result(quote!(BoxStream<#res_message>));
-            quote! {
-                #partial_sig -> #return_ty #body_or_semicolon
+            (false, false) => {
+                let return_ty = response_result(res_message);
+                quote! {
+                    #partial_sig -> #return_ty;
+                }
             }
-        } else {
-            let stream = quote::format_ident!("{}Stream", method.identifier());
-            let stream_doc = generate_doc_comment(format!(
-                " Server streaming response type for the {} method.",
-                method.identifier()
-            ));
-            let stream_item_ty = result(res_message);
-            let stream_ty = quote!(tonic::codegen::tokio_stream::Stream<Item = #stream_item_ty> + std::marker::Send + 'static);
-            let return_ty = response_result(quote!(Self::#stream));
-            quote! {
-                #stream_doc
-                type #stream: #stream_ty;
+            (true, true) => {
+                let return_ty = response_result(quote!(BoxStream<#res_message>));
+                quote! {
+                    #partial_sig -> #return_ty #default_body
+                }
+            }
+            (true, false) => {
+                let stream = quote::format_ident!("{}Stream", method.identifier());
+                let stream_doc = generate_doc_comment(format!(
+                    " Server streaming response type for the {} method.",
+                    method.identifier()
+                ));
+                let stream_item_ty = result(res_message);
+                let stream_ty = quote!(tonic::codegen::tokio_stream::Stream<Item = #stream_item_ty> + std::marker::Send + 'static);
+                let return_ty = response_result(quote!(Self::#stream));
+                quote! {
+                    #stream_doc
+                    type #stream: #stream_ty;
 
-                #partial_sig -> #return_ty #body_or_semicolon
+                    #partial_sig -> #return_ty;
+                }
             }
         };
 
