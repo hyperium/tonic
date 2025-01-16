@@ -36,8 +36,8 @@ pub struct Endpoint {
     pub(crate) http2_max_header_list_size: Option<u32>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
-    pub(crate) executor: SharedExec,
     pub(crate) local_address: Option<IpAddr>,
+    pub(crate) executor: SharedExec,
 }
 
 impl Endpoint {
@@ -326,19 +326,12 @@ impl Endpoint {
         )
     }
 
-    /// Set the local address
+    /// Set the local address.
     ///
-    /// This sets  the IP address the client will use. By default we let hyper select the IP address.
-    /// ```
-    /// # use std::net::IpAddr;
-    /// # use std::str::FromStr;
-    /// # use tonic::transport::Endpoint;
-    /// # let mut builder = Endpoint::from_static("https://example.com");
-    /// # builder.local_address(IpAddr::from_str("127.0.0.1").expect("Unable to parse IP address"));
-    /// ```
-    pub fn local_address(self, addr: IpAddr) -> Self {
+    /// This sets the IP address the client will use. By default we let hyper select the IP address.
+    pub fn local_address(self, addr: Option<IpAddr>) -> Self {
         Endpoint {
-            local_address: Some(addr),
+            local_address: addr,
             ..self
         }
     }
