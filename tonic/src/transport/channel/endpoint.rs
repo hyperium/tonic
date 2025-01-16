@@ -9,7 +9,7 @@ use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
 use hyper::rt;
 use hyper_util::client::legacy::connect::HttpConnector;
-use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
+use std::{fmt, future::Future, net::IpAddr, pin::Pin, str::FromStr, time::Duration};
 use tower_service::Service;
 
 /// Channel builder.
@@ -36,6 +36,7 @@ pub struct Endpoint {
     pub(crate) http2_max_header_list_size: Option<u32>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
+    pub(crate) local_address: Option<IpAddr>,
     pub(crate) executor: SharedExec,
 }
 
@@ -325,12 +326,23 @@ impl Endpoint {
         )
     }
 
+    /// Set the local address.
+    ///
+    /// This sets the IP address the client will use. By default we let hyper select the IP address.
+    pub fn local_address(self, addr: Option<IpAddr>) -> Self {
+        Endpoint {
+            local_address: addr,
+            ..self
+        }
+    }
+
     pub(crate) fn http_connector(&self) -> service::Connector<HttpConnector> {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
         http.set_connect_timeout(self.connect_timeout);
+        http.set_local_address(self.local_address);
         self.connector(http)
     }
 
@@ -452,6 +464,7 @@ impl From<Uri> for Endpoint {
             connect_timeout: None,
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
+            local_address: None,
         }
     }
 }
