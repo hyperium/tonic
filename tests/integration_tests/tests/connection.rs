@@ -31,7 +31,7 @@ async fn connect_handles_tls() {
     rustls::crypto::ring::default_provider()
         .install_default()
         .unwrap();
-    TestClient::connect("https://example.com").await.unwrap();
+    TestClient::connect("https://github.com").await.unwrap();
 }
 
 #[tokio::test]
