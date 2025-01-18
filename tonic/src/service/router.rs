@@ -1,5 +1,5 @@
-use crate::{body::Body, metadata::GRPC_CONTENT_TYPE, server::NamedService, Status};
-use http::{HeaderValue, Request, Response};
+use crate::{body::Body, server::NamedService, Status};
+use http::{Request, Response};
 use std::{
     convert::Infallible,
     fmt,
@@ -135,13 +135,9 @@ impl From<axum::Router> for Routes {
     }
 }
 
-async fn unimplemented() -> impl axum::response::IntoResponse {
-    let status = http::StatusCode::OK;
-    let headers = [
-        (Status::GRPC_STATUS, HeaderValue::from_static("12")),
-        (http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE),
-    ];
-    (status, headers)
+async fn unimplemented() -> Response<Body> {
+    let (parts, ()) = Status::unimplemented("").into_http::<()>().into_parts();
+    Response::from_parts(parts, Body::empty())
 }
 
 impl<B> Service<Request<B>> for Routes
