@@ -21,7 +21,7 @@ impl test_server::Test for Svc {
 
 #[tokio::test]
 async fn connect_returns_err() {
-    let res = TestClient::connect("http://thisdoesntexist").await;
+    let res = TestClient::connect("http://thisdoesntexist.test").await;
 
     assert!(res.is_err());
 }
