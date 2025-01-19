@@ -537,7 +537,7 @@ impl<L> Server<L> {
     where
         L: Layer<S>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<S>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send + 'static,
         I: Stream<Item = Result<IO, IE>>,
@@ -780,7 +780,7 @@ impl<L> Router<L> {
     where
         L: Layer<Routes> + Clone,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
@@ -813,7 +813,7 @@ impl<L> Router<L> {
     where
         L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
@@ -845,7 +845,7 @@ impl<L> Router<L> {
         L: Layer<Routes>,
 
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
@@ -880,7 +880,7 @@ impl<L> Router<L> {
         F: Future<Output = ()>,
         L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
@@ -986,7 +986,7 @@ impl<S, ResBody, IO> Service<&ServerIo<IO>> for MakeSvc<S, IO>
 where
     IO: Connected + 'static,
     S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-    S::Future: Send + 'static,
+    S::Future: Send,
     S::Error: Into<crate::BoxError> + Send,
     ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::BoxError>,
