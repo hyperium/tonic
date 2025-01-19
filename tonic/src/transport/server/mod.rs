@@ -12,7 +12,11 @@ mod unix;
 use tokio_stream::StreamExt as _;
 use tracing::{debug, trace};
 
-use crate::service::Routes;
+#[cfg(feature = "router")]
+use crate::{server::NamedService, service::Routes};
+
+#[cfg(feature = "router")]
+use std::convert::Infallible;
 
 pub use conn::{Connected, TcpConnectInfo};
 use hyper_util::{
@@ -40,7 +44,6 @@ use crate::transport::Error;
 use self::service::{ConnectInfoLayer, RecoverError, ServerIo};
 use super::service::GrpcTimeout;
 use crate::body::Body;
-use crate::server::NamedService;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
@@ -48,7 +51,6 @@ use hyper::{body::Incoming, service::Service as HyperService};
 use pin_project::pin_project;
 use std::future::pending;
 use std::{
-    convert::Infallible,
     fmt,
     future::{self, poll_fn, Future},
     marker::PhantomData,
@@ -132,6 +134,7 @@ impl Default for Server<Identity> {
 }
 
 /// A stack based [`Service`] router.
+#[cfg(feature = "router")]
 #[derive(Debug)]
 pub struct Router<L = Identity> {
     server: Server<L>,
@@ -393,6 +396,7 @@ impl<L> Server<L> {
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services.
+    #[cfg(feature = "router")]
     pub fn add_service<S>(&mut self, svc: S) -> Router<L>
     where
         S: Service<Request<Body>, Error = Infallible>
@@ -416,6 +420,7 @@ impl<L> Server<L> {
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
     /// As a result, one cannot use this to toggle between two identically named implementations.
+    #[cfg(feature = "router")]
     pub fn add_optional_service<S>(&mut self, svc: Option<S>) -> Router<L>
     where
         S: Service<Request<Body>, Error = Infallible>
@@ -436,6 +441,7 @@ impl<L> Server<L> {
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services that were already added to the provided `routes`.
+    #[cfg(feature = "router")]
     pub fn add_routes(&mut self, routes: Routes) -> Router<L>
     where
         L: Clone,
@@ -815,12 +821,14 @@ async fn sleep_or_pending(wait_for: Option<Duration>) {
     };
 }
 
+#[cfg(feature = "router")]
 impl<L> Router<L> {
     pub(crate) fn new(server: Server<L>, routes: Routes) -> Self {
         Self { server, routes }
     }
 }
 
+#[cfg(feature = "router")]
 impl<L> Router<L> {
     /// Add a new service to this router.
     pub fn add_service<S>(mut self, svc: S) -> Self
