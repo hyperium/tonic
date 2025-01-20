@@ -27,7 +27,7 @@ codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 deflate = ["dep:flate2"]
 zstd = ["dep:zstd"]
-default = ["transport", "codegen", "prost"]
+default = ["router", "transport", "codegen", "prost"]
 prost = ["dep:prost"]
 _tls-any = ["dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"] # Internal. Please choose one of `tls-ring` or `tls-aws-lc`
 tls-ring = ["_tls-any", "tokio-rustls/ring"]
@@ -36,7 +36,6 @@ tls-native-roots = ["_tls-any", "channel", "dep:rustls-native-certs"]
 tls-webpki-roots = ["_tls-any","channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
-  "router",
   "dep:h2",
   "dep:hyper", "hyper?/server",
   "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
