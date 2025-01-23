@@ -41,9 +41,10 @@ pub use incoming::TcpIncoming;
 #[cfg(feature = "_tls-any")]
 use crate::transport::Error;
 
-use self::service::{ConnectInfoLayer, RecoverError, ServerIo};
+use self::service::{ConnectInfoLayer, ServerIo};
 use super::service::GrpcTimeout;
 use crate::body::Body;
+use crate::service::RecoverErrorLayer;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
@@ -1087,7 +1088,7 @@ where
         let trace_interceptor = self.trace_interceptor.clone();
 
         let svc = ServiceBuilder::new()
-            .layer_fn(RecoverError::new)
+            .layer(RecoverErrorLayer::new())
             .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
             .layer_fn(|s| GrpcTimeout::new(s, timeout))
             .service(svc);
