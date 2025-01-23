@@ -430,7 +430,7 @@ fn decode_trailers_frame(mut buf: Bytes) -> Result<Option<HeaderMap>, Status> {
             .split(|b| b == &b'\r')
             .next()
             .ok_or_else(|| Status::internal("trailers was not escaped"))?
-            .strip_prefix(&[b' '])
+            .strip_prefix(b" ")
             .unwrap_or(value);
 
         let header_key = HeaderName::try_from(key)
