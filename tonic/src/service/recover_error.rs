@@ -1,4 +1,7 @@
+//! Middleware which recovers from error.
+
 use std::{
+    fmt,
     future::Future,
     pin::Pin,
     task::{ready, Context, Poll},
@@ -6,19 +9,42 @@ use std::{
 
 use http::Response;
 use pin_project::pin_project;
+use tower_layer::Layer;
 use tower_service::Service;
 
 use crate::Status;
 
+/// Layer which applies the [`RecoverError`] middleware.
+#[derive(Debug, Default, Clone)]
+pub struct RecoverErrorLayer {
+    _priv: (),
+}
+
+impl RecoverErrorLayer {
+    /// Create a new `RecoverErrorLayer`.
+    pub fn new() -> Self {
+        Self { _priv: () }
+    }
+}
+
+impl<S> Layer<S> for RecoverErrorLayer {
+    type Service = RecoverError<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        RecoverError::new(inner)
+    }
+}
+
 /// Middleware that attempts to recover from service errors by turning them into a response built
 /// from the `Status`.
 #[derive(Debug, Clone)]
-pub(crate) struct RecoverError<S> {
+pub struct RecoverError<S> {
     inner: S,
 }
 
 impl<S> RecoverError<S> {
-    pub(crate) fn new(inner: S) -> Self {
+    /// Create a new `RecoverError` middleware.
+    pub fn new(inner: S) -> Self {
         Self { inner }
     }
 }
@@ -43,10 +69,17 @@ where
     }
 }
 
+/// Response future for [`RecoverError`].
 #[pin_project]
-pub(crate) struct ResponseFuture<F> {
+pub struct ResponseFuture<F> {
     #[pin]
     inner: F,
+}
+
+impl<F> fmt::Debug for ResponseFuture<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResponseFuture").finish()
+    }
 }
 
 impl<F, E, ResBody> Future for ResponseFuture<F>
@@ -74,10 +107,17 @@ where
     }
 }
 
+/// Response body for [`RecoverError`].
 #[pin_project]
-pub(crate) struct ResponseBody<B> {
+pub struct ResponseBody<B> {
     #[pin]
     inner: Option<B>,
+}
+
+impl<B> fmt::Debug for ResponseBody<B> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResponseBody").finish()
+    }
 }
 
 impl<B> ResponseBody<B> {
