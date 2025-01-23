@@ -91,8 +91,16 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
+    - name: Resolve MSRV aware dependencies
+      run: cargo update
+      env:
+        CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+    - name: Get MSRV from manifest file
+      id: msrv
+      run: echo "version=$(yq '.workspace.package.rust-version' Cargo.toml)" >> $GITHUB_OUTPUT
+    - uses: hecrj/setup-rust-action@v2
       with:
-        rust-version: "1.75"    # msrv
+        rust-version: ${{ steps.msrv.outputs.version }}
     - uses: taiki-e/install-action@cargo-no-dev-deps
     - uses: Swatinem/rust-cache@v2
     - run: cargo no-dev-deps --no-private check --all-features
