@@ -38,6 +38,18 @@ pub struct MetadataMap {
     headers: http::HeaderMap,
 }
 
+impl AsRef<http::HeaderMap> for MetadataMap {
+    fn as_ref(&self) -> &http::HeaderMap {
+        &self.headers
+    }
+}
+
+impl AsMut<http::HeaderMap> for MetadataMap {
+    fn as_mut(&mut self) -> &mut http::HeaderMap {
+        &mut self.headers
+    }
+}
+
 /// `MetadataMap` entry iterator.
 ///
 /// Yields `KeyAndValueRef` values. The same header name may be yielded
