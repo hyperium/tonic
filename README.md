@@ -81,6 +81,7 @@ project.
 ## License
 
 This project is licensed under the [MIT license](LICENSE-MIT).
+This project redistributes contents which are licensed under the [Apache License Version 2.0](APACHE-2.0).
 
 ### Contribution
 
