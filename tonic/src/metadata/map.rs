@@ -1,3 +1,5 @@
+use http::HeaderName;
+
 pub(crate) use self::as_encoding_agnostic_metadata_key::AsEncodingAgnosticMetadataKey;
 pub(crate) use self::as_metadata_key::AsMetadataKey;
 pub(crate) use self::into_metadata_key::IntoMetadataKey;
@@ -34,6 +36,18 @@ use std::marker::PhantomData;
 #[derive(Clone, Debug, Default)]
 pub struct MetadataMap {
     headers: http::HeaderMap,
+}
+
+impl AsRef<http::HeaderMap> for MetadataMap {
+    fn as_ref(&self) -> &http::HeaderMap {
+        &self.headers
+    }
+}
+
+impl AsMut<http::HeaderMap> for MetadataMap {
+    fn as_mut(&mut self) -> &mut http::HeaderMap {
+        &mut self.headers
+    }
 }
 
 /// `MetadataMap` entry iterator.
@@ -200,13 +214,13 @@ pub(crate) const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 impl MetadataMap {
     // Headers reserved by the gRPC protocol.
-    pub(crate) const GRPC_RESERVED_HEADERS: [&'static str; 6] = [
-        "te",
-        "user-agent",
-        "content-type",
-        "grpc-message",
-        "grpc-message-type",
-        "grpc-status",
+    pub(crate) const GRPC_RESERVED_HEADERS: [HeaderName; 6] = [
+        HeaderName::from_static("te"),
+        HeaderName::from_static("user-agent"),
+        HeaderName::from_static("content-type"),
+        HeaderName::from_static("grpc-message"),
+        HeaderName::from_static("grpc-message-type"),
+        HeaderName::from_static("grpc-status"),
     ];
 
     /// Create an empty `MetadataMap`.
@@ -251,7 +265,7 @@ impl MetadataMap {
 
     pub(crate) fn into_sanitized_headers(mut self) -> http::HeaderMap {
         for r in &Self::GRPC_RESERVED_HEADERS {
-            self.headers.remove(*r);
+            self.headers.remove(r);
         }
         self.headers
     }
@@ -958,7 +972,7 @@ impl MetadataMap {
     /// use `insert_bin`.
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Ascii>.
+    /// converted to a `MetadataKey<Ascii>`.
     ///
     /// If the map did not previously have this key present, then `None` is
     /// returned.
@@ -1008,7 +1022,7 @@ impl MetadataMap {
     /// Like insert, but for Binary keys (for example "trace-proto-bin").
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Binary>.
+    /// converted to a `MetadataKey<Binary>`.
     ///
     /// # Examples
     ///
@@ -1050,7 +1064,7 @@ impl MetadataMap {
     /// use `append_bin`.
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Ascii>.
+    /// converted to a `MetadataKey<Ascii>`.
     ///
     /// If the map did not previously have this key present, then `false` is
     /// returned.
@@ -1099,7 +1113,7 @@ impl MetadataMap {
     /// Like append, but for binary keys (for example "trace-proto-bin").
     ///
     /// This method panics when the given key is a string and it cannot be
-    /// converted to a MetadataKey<Binary>.
+    /// converted to a `MetadataKey<Binary>`.
     ///
     /// # Examples
     ///
@@ -1272,7 +1286,7 @@ impl<'a> Iterator for IterMut<'a> {
 
 // ===== impl ValueDrain =====
 
-impl<'a, VE: ValueEncoding> Iterator for ValueDrain<'a, VE> {
+impl<VE: ValueEncoding> Iterator for ValueDrain<'_, VE> {
     type Item = MetadataValue<VE>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1306,7 +1320,7 @@ impl<'a> Iterator for Keys<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Keys<'a> {}
+impl ExactSizeIterator for Keys<'_> {}
 
 // ===== impl Values ====
 
@@ -1362,7 +1376,7 @@ where
         match self.inner {
             Some(ref mut inner) => inner
                 .next()
-                .map(&MetadataValue::unchecked_from_header_value_ref),
+                .map(MetadataValue::unchecked_from_header_value_ref),
             None => None,
         }
     }
@@ -1383,7 +1397,7 @@ where
         match self.inner {
             Some(ref mut inner) => inner
                 .next_back()
-                .map(&MetadataValue::unchecked_from_header_value_ref),
+                .map(MetadataValue::unchecked_from_header_value_ref),
             None => None,
         }
     }
@@ -1400,7 +1414,7 @@ where
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
             .next()
-            .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+            .map(MetadataValue::unchecked_from_mut_header_value_ref)
     }
 }
 
@@ -1411,7 +1425,7 @@ where
     fn next_back(&mut self) -> Option<Self::Item> {
         self.inner
             .next_back()
-            .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+            .map(MetadataValue::unchecked_from_mut_header_value_ref)
     }
 }
 
@@ -1965,7 +1979,7 @@ impl<'a, VE: ValueEncoding> GetAll<'a, VE> {
     }
 }
 
-impl<'a, VE: ValueEncoding> PartialEq for GetAll<'a, VE> {
+impl<VE: ValueEncoding> PartialEq for GetAll<'_, VE> {
     fn eq(&self, other: &Self) -> bool {
         self.inner.iter().eq(other.inner.iter())
     }
@@ -1992,7 +2006,7 @@ impl<'a, 'b: 'a, VE: ValueEncoding> IntoIterator for &'b GetAll<'a, VE> {
 
     fn into_iter(self) -> ValueIter<'a, VE> {
         ValueIter {
-            inner: (&self.inner).as_ref().map(|inner| inner.into_iter()),
+            inner: self.inner.as_ref().map(|inner| inner.into_iter()),
             phantom: PhantomData,
         }
     }
@@ -2037,7 +2051,7 @@ mod into_metadata_key {
         ) -> Option<MetadataValue<VE>> {
             map.headers
                 .insert(self.inner, val.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
 
         #[doc(hidden)]
@@ -2049,7 +2063,7 @@ mod into_metadata_key {
 
     impl<VE: ValueEncoding> IntoMetadataKey<VE> for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn insert(
@@ -2059,7 +2073,7 @@ mod into_metadata_key {
         ) -> Option<MetadataValue<VE>> {
             map.headers
                 .insert(&self.inner, val.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
         #[doc(hidden)]
         #[inline]
@@ -2068,7 +2082,7 @@ mod into_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> IntoMetadataKey<VE> for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {}
 
     impl<VE: ValueEncoding> Sealed<VE> for &'static str {
         #[doc(hidden)]
@@ -2083,7 +2097,7 @@ mod into_metadata_key {
 
             map.headers
                 .insert(key.inner, val.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
         #[doc(hidden)]
         #[inline]
@@ -2141,7 +2155,7 @@ mod as_metadata_key {
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
             map.headers
                 .get(self.inner)
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2149,7 +2163,7 @@ mod as_metadata_key {
         fn get_mut(self, map: &mut MetadataMap) -> Option<&mut MetadataValue<VE>> {
             map.headers
                 .get_mut(self.inner)
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2172,19 +2186,19 @@ mod as_metadata_key {
         fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
             map.headers
                 .remove(self.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
     impl<VE: ValueEncoding> AsMetadataKey<VE> for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
             map.headers
                 .get(&self.inner)
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2192,7 +2206,7 @@ mod as_metadata_key {
         fn get_mut(self, map: &mut MetadataMap) -> Option<&mut MetadataValue<VE>> {
             map.headers
                 .get_mut(&self.inner)
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2215,13 +2229,13 @@ mod as_metadata_key {
         fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
             map.headers
                 .remove(&self.inner)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a str {
+    impl<VE: ValueEncoding> Sealed<VE> for &str {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2230,7 +2244,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get(self)
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2241,7 +2255,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get_mut(self)
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2277,11 +2291,11 @@ mod as_metadata_key {
             }
             map.headers
                 .remove(self)
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a str {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &str {}
 
     impl<VE: ValueEncoding> Sealed<VE> for String {
         #[doc(hidden)]
@@ -2292,7 +2306,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2303,7 +2317,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get_mut(self.as_str())
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2338,13 +2352,13 @@ mod as_metadata_key {
             }
             map.headers
                 .remove(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
     impl<VE: ValueEncoding> AsMetadataKey<VE> for String {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a String {
+    impl<VE: ValueEncoding> Sealed<VE> for &String {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2353,7 +2367,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value_ref)
+                .map(MetadataValue::unchecked_from_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2364,7 +2378,7 @@ mod as_metadata_key {
             }
             map.headers
                 .get_mut(self.as_str())
-                .map(&MetadataValue::unchecked_from_mut_header_value_ref)
+                .map(MetadataValue::unchecked_from_mut_header_value_ref)
         }
 
         #[doc(hidden)]
@@ -2399,11 +2413,11 @@ mod as_metadata_key {
             }
             map.headers
                 .remove(self.as_str())
-                .map(&MetadataValue::unchecked_from_header_value)
+                .map(MetadataValue::unchecked_from_header_value)
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a String {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &String {}
 }
 
 mod as_encoding_agnostic_metadata_key {
@@ -2440,7 +2454,7 @@ mod as_encoding_agnostic_metadata_key {
 
     impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2448,9 +2462,9 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &MetadataKey<VE> {}
 
-    impl<'a> Sealed for &'a str {
+    impl Sealed for &str {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2458,7 +2472,7 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a> AsEncodingAgnosticMetadataKey for &'a str {}
+    impl AsEncodingAgnosticMetadataKey for &str {}
 
     impl Sealed for String {
         #[doc(hidden)]
@@ -2470,7 +2484,7 @@ mod as_encoding_agnostic_metadata_key {
 
     impl AsEncodingAgnosticMetadataKey for String {}
 
-    impl<'a> Sealed for &'a String {
+    impl Sealed for &String {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2478,7 +2492,7 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a> AsEncodingAgnosticMetadataKey for &'a String {}
+    impl AsEncodingAgnosticMetadataKey for &String {}
 }
 
 #[cfg(test)]
@@ -2497,10 +2511,9 @@ mod tests {
 
     #[test]
     fn test_to_headers_encoding() {
-        use crate::Code;
         use crate::Status;
-        let special_char_message = "Beyond ascii \t\n\r🌶️💉💧🐮🍺";
-        let s1 = Status::new(Code::Unknown, special_char_message);
+        let special_char_message = "Beyond 100% ascii \t\n\r🌶️💉💧🐮🍺";
+        let s1 = Status::unknown(special_char_message);
 
         assert_eq!(s1.message(), special_char_message);
 
@@ -2508,6 +2521,17 @@ mod tests {
         let s2 = Status::from_header_map(&s1_map).unwrap();
 
         assert_eq!(s1.message(), s2.message());
+
+        assert!(
+            s1_map
+                .get("grpc-message")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("Beyond%20100%25%20ascii"),
+            "Percent sign or other character isn't encoded as desired: {:?}",
+            s1_map.get("grpc-message")
+        );
     }
 
     #[test]
@@ -2520,7 +2544,7 @@ mod tests {
 
         let mut found_x_word = false;
         for key_and_value in map.iter() {
-            if let KeyAndValueRef::Ascii(ref key, ref _value) = key_and_value {
+            if let KeyAndValueRef::Ascii(key, _value) = key_and_value {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
@@ -2540,7 +2564,7 @@ mod tests {
 
         let mut found_x_word_bin = false;
         for key_and_value in map.iter() {
-            if let KeyAndValueRef::Binary(ref key, ref _value) = key_and_value {
+            if let KeyAndValueRef::Binary(key, _value) = key_and_value {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {
@@ -2561,7 +2585,7 @@ mod tests {
 
         let mut found_x_word = false;
         for key_and_value in map.iter_mut() {
-            if let KeyAndMutValueRef::Ascii(ref key, ref _value) = key_and_value {
+            if let KeyAndMutValueRef::Ascii(key, _value) = key_and_value {
                 if key.as_str() == "x-word" {
                     found_x_word = true;
                 } else {
@@ -2581,7 +2605,7 @@ mod tests {
 
         let mut found_x_word_bin = false;
         for key_and_value in map.iter_mut() {
-            if let KeyAndMutValueRef::Binary(ref key, ref _value) = key_and_value {
+            if let KeyAndMutValueRef::Binary(key, _value) = key_and_value {
                 if key.as_str() == "x-word-bin" {
                     found_x_word_bin = true;
                 } else {

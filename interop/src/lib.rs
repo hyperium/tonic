@@ -12,12 +12,7 @@ pub mod pb {
 use std::{default, fmt, iter};
 
 pub fn trace_init() {
-    let sub = tracing_subscriber::FmtSubscriber::builder()
-        .with_env_filter(tracing_subscriber::filter::EnvFilter::from_default_env())
-        .finish();
-
-    let _ = tracing::subscriber::set_global_default(sub);
-    let _ = tracing_log::LogTracer::init();
+    tracing_subscriber::fmt::init();
 }
 
 pub fn client_payload(size: usize) -> pb::Payload {
@@ -113,7 +108,7 @@ impl fmt::Display for TestAssertion {
 macro_rules! test_assert {
     ($description:expr, $assertion:expr) => {
         if $assertion {
-            crate::TestAssertion::Passed {
+            $crate::TestAssertion::Passed {
                 description: $description,
             }
         } else {
@@ -126,11 +121,11 @@ macro_rules! test_assert {
     };
     ($description:expr, $assertion:expr, $why:expr) => {
         if $assertion {
-            crate::TestAssertion::Passed {
+            $crate::TestAssertion::Passed {
                 description: $description,
             }
         } else {
-            crate::TestAssertion::Failed {
+            $crate::TestAssertion::Failed {
                 description: $description,
                 expression: stringify!($assertion),
                 why: Some($why),

@@ -1,9 +1,8 @@
-use futures_util::FutureExt;
 use integration_tests::pb::{test_client, test_server, Input, Output};
 use std::time::Duration;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::{
-    transport::{Endpoint, Server},
+    transport::{server::TcpIncoming, Endpoint, Server},
     Request, Response, Status,
 };
 
@@ -25,17 +24,22 @@ async fn writes_user_agent_header() {
 
     let (tx, rx) = oneshot::channel::<()>();
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1322".parse().unwrap(), rx.map(drop))
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1322")
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
         .user_agent("my-client")
         .expect("valid user agent")
         .connect()

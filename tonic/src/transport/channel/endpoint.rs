@@ -1,22 +1,16 @@
-use super::super::service;
+#[cfg(feature = "_tls-any")]
+use super::service::TlsConnector;
+use super::service::{self, Executor, SharedExec};
 use super::Channel;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 use super::ClientTlsConfig;
-#[cfg(feature = "tls")]
-use crate::transport::service::TlsConnector;
-use crate::transport::{service::SharedExec, Error, Executor};
+use crate::transport::Error;
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
-use std::{
-    convert::{TryFrom, TryInto},
-    fmt,
-    future::Future,
-    pin::Pin,
-    str::FromStr,
-    time::Duration,
-};
-use tower::make::MakeConnection;
-// use crate::transport::E
+use hyper::rt;
+use hyper_util::client::legacy::connect::HttpConnector;
+use std::{fmt, future::Future, net::IpAddr, pin::Pin, str::FromStr, time::Duration};
+use tower_service::Service;
 
 /// Channel builder.
 ///
@@ -29,7 +23,7 @@ pub struct Endpoint {
     pub(crate) timeout: Option<Duration>,
     pub(crate) concurrency_limit: Option<usize>,
     pub(crate) rate_limit: Option<(u64, Duration)>,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "_tls-any")]
     pub(crate) tls: Option<TlsConnector>,
     pub(crate) buffer_size: Option<usize>,
     pub(crate) init_stream_window_size: Option<u32>,
@@ -39,8 +33,10 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_interval: Option<Duration>,
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
+    pub(crate) http2_max_header_list_size: Option<u32>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
+    pub(crate) local_address: Option<IpAddr>,
     pub(crate) executor: SharedExec,
 }
 
@@ -51,9 +47,14 @@ impl Endpoint {
     pub fn new<D>(dst: D) -> Result<Self, Error>
     where
         D: TryInto<Self>,
-        D::Error: Into<crate::Error>,
+        D::Error: Into<crate::BoxError>,
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
+        #[cfg(feature = "_tls-any")]
+        if me.uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
+            return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
+        }
+
         Ok(me)
     }
 
@@ -215,7 +216,7 @@ impl Endpoint {
     ///
     /// Default is 65,535
     ///
-    /// [spec]: https://http2.github.io/http2-spec/#SETTINGS_INITIAL_WINDOW_SIZE
+    /// [spec]: https://httpwg.org/specs/rfc9113.html#InitialWindowSize
     pub fn initial_stream_window_size(self, sz: impl Into<Option<u32>>) -> Self {
         Endpoint {
             init_stream_window_size: sz.into(),
@@ -233,14 +234,23 @@ impl Endpoint {
         }
     }
 
+    /// Sets the tower service default internal buffer size
+    ///
+    /// Default is 1024
+    pub fn buffer_size(self, sz: impl Into<Option<usize>>) -> Self {
+        Endpoint {
+            buffer_size: sz.into(),
+            ..self
+        }
+    }
+
     /// Configures TLS for the endpoint.
-    #[cfg(feature = "tls")]
-    #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+    #[cfg(feature = "_tls-any")]
     pub fn tls_config(self, tls_config: ClientTlsConfig) -> Result<Self, Error> {
         Ok(Endpoint {
             tls: Some(
                 tls_config
-                    .tls_connector(self.uri.clone())
+                    .into_tls_connector(&self.uri)
                     .map_err(Error::from_source)?,
             ),
             ..self
@@ -287,6 +297,16 @@ impl Endpoint {
         }
     }
 
+    /// Sets the max size of received header frames.
+    ///
+    /// This will default to whatever the default in hyper is. As of v1.4.1, it is 16 KiB.
+    pub fn http2_max_header_list_size(self, size: u32) -> Self {
+        Endpoint {
+            http2_max_header_list_size: Some(size),
+            ..self
+        }
+    }
+
     /// Sets the executor used to spawn async tasks.
     ///
     /// Uses `tokio::spawn` by default.
@@ -298,26 +318,37 @@ impl Endpoint {
         self
     }
 
-    /// Create a channel from this config.
-    pub async fn connect(&self) -> Result<Channel, Error> {
-        let mut http = hyper::client::connect::HttpConnector::new();
+    pub(crate) fn connector<C>(&self, c: C) -> service::Connector<C> {
+        service::Connector::new(
+            c,
+            #[cfg(feature = "_tls-any")]
+            self.tls.clone(),
+        )
+    }
+
+    /// Set the local address.
+    ///
+    /// This sets the IP address the client will use. By default we let hyper select the IP address.
+    pub fn local_address(self, addr: Option<IpAddr>) -> Self {
+        Endpoint {
+            local_address: addr,
+            ..self
+        }
+    }
+
+    pub(crate) fn http_connector(&self) -> service::Connector<HttpConnector> {
+        let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_connect_timeout(self.connect_timeout);
+        http.set_local_address(self.local_address);
+        self.connector(http)
+    }
 
-        #[cfg(feature = "tls")]
-        let connector = service::connector(http, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(http);
-
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::connect(connector, self.clone()).await
-        } else {
-            Channel::connect(connector, self.clone()).await
-        }
+    /// Create a channel from this config.
+    pub async fn connect(&self) -> Result<Channel, Error> {
+        Channel::connect(self.http_connector(), self.clone()).await
     }
 
     /// Create a channel from this config.
@@ -325,24 +356,7 @@ impl Endpoint {
     /// The channel returned by this method does not attempt to connect to the endpoint until first
     /// use.
     pub fn connect_lazy(&self) -> Channel {
-        let mut http = hyper::client::connect::HttpConnector::new();
-        http.enforce_http(false);
-        http.set_nodelay(self.tcp_nodelay);
-        http.set_keepalive(self.tcp_keepalive);
-
-        #[cfg(feature = "tls")]
-        let connector = service::connector(http, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(http);
-
-        if let Some(connect_timeout) = self.connect_timeout {
-            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
-            connector.set_connect_timeout(Some(connect_timeout));
-            Channel::new(connector, self.clone())
-        } else {
-            Channel::new(connector, self.clone())
-        }
+        Channel::new(self.http_connector(), self.clone())
     }
 
     /// Connect with a custom connector.
@@ -354,16 +368,12 @@ impl Endpoint {
     /// The [`connect_timeout`](Endpoint::connect_timeout) will still be applied.
     pub async fn connect_with_connector<C>(&self, connector: C) -> Result<Channel, Error>
     where
-        C: MakeConnection<Uri> + Send + 'static,
-        C::Connection: Unpin + Send + 'static,
-        C::Future: Send + 'static,
-        crate::Error: From<C::Error> + Send + 'static,
+        C: Service<Uri> + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin,
+        C::Future: Send,
+        crate::BoxError: From<C::Error> + Send,
     {
-        #[cfg(feature = "tls")]
-        let connector = service::connector(connector, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(connector);
+        let connector = self.connector(connector);
 
         if let Some(connect_timeout) = self.connect_timeout {
             let mut connector = hyper_timeout::TimeoutConnector::new(connector);
@@ -383,18 +393,19 @@ impl Endpoint {
     /// uses a Unix socket transport.
     pub fn connect_with_connector_lazy<C>(&self, connector: C) -> Channel
     where
-        C: MakeConnection<Uri> + Send + 'static,
-        C::Connection: Unpin + Send + 'static,
-        C::Future: Send + 'static,
-        crate::Error: From<C::Error> + Send + 'static,
+        C: Service<Uri> + Send + 'static,
+        C::Response: rt::Read + rt::Write + Send + Unpin,
+        C::Future: Send,
+        crate::BoxError: From<C::Error> + Send,
     {
-        #[cfg(feature = "tls")]
-        let connector = service::connector(connector, self.tls.clone());
-
-        #[cfg(not(feature = "tls"))]
-        let connector = service::connector(connector);
-
-        Channel::new(connector, self.clone())
+        let connector = self.connector(connector);
+        if let Some(connect_timeout) = self.connect_timeout {
+            let mut connector = hyper_timeout::TimeoutConnector::new(connector);
+            connector.set_connect_timeout(Some(connect_timeout));
+            Channel::new(connector, self.clone())
+        } else {
+            Channel::new(connector, self.clone())
+        }
     }
 
     /// Get the endpoint uri.
@@ -409,6 +420,25 @@ impl Endpoint {
     pub fn uri(&self) -> &Uri {
         &self.uri
     }
+
+    /// Get the value of `TCP_NODELAY` option for accepted connections.
+    pub fn get_tcp_nodelay(&self) -> bool {
+        self.tcp_nodelay
+    }
+
+    /// Get the connect timeout.
+    pub fn get_connect_timeout(&self) -> Option<Duration> {
+        self.connect_timeout
+    }
+
+    /// Get whether TCP keepalive messages are enabled on accepted connections.
+    ///
+    /// If `None` is specified, keepalive is disabled, otherwise the duration
+    /// specified will be the time to remain idle before sending TCP keepalive
+    /// probes.
+    pub fn get_tcp_keepalive(&self) -> Option<Duration> {
+        self.tcp_keepalive
+    }
 }
 
 impl From<Uri> for Endpoint {
@@ -420,7 +450,7 @@ impl From<Uri> for Endpoint {
             concurrency_limit: None,
             rate_limit: None,
             timeout: None,
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "_tls-any")]
             tls: None,
             buffer_size: None,
             init_stream_window_size: None,
@@ -430,9 +460,11 @@ impl From<Uri> for Endpoint {
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
+            http2_max_header_list_size: None,
             connect_timeout: None,
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
+            local_address: None,
         }
     }
 }

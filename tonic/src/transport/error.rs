@@ -1,8 +1,3 @@
-// TODO: remove this when we use errors throughout,
-// there are some that are only used under the TLS feature
-// these probably should be scoped to a `TLSError` enum.
-#![allow(dead_code)]
-
 use std::{error::Error as StdError, fmt};
 
 type Source = Box<dyn StdError + Send + Sync + 'static>;
@@ -20,7 +15,9 @@ struct ErrorImpl {
 #[derive(Debug)]
 pub(crate) enum Kind {
     Transport,
+    #[cfg(feature = "channel")]
     InvalidUri,
+    #[cfg(feature = "channel")]
     InvalidUserAgent,
 }
 
@@ -36,14 +33,16 @@ impl Error {
         self
     }
 
-    pub(crate) fn from_source(source: impl Into<crate::Error>) -> Self {
+    pub(crate) fn from_source(source: impl Into<crate::BoxError>) -> Self {
         Error::new(Kind::Transport).with(source)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_uri() -> Self {
         Error::new(Kind::InvalidUri)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_user_agent() -> Self {
         Error::new(Kind::InvalidUserAgent)
     }
@@ -51,7 +50,9 @@ impl Error {
     fn description(&self) -> &str {
         match &self.inner.kind {
             Kind::Transport => "transport error",
+            #[cfg(feature = "channel")]
             Kind::InvalidUri => "invalid URI",
+            #[cfg(feature = "channel")]
             Kind::InvalidUserAgent => "user agent is not a valid header value",
         }
     }

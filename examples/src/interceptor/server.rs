@@ -57,6 +57,7 @@ fn intercept(mut req: Request<()>) -> Result<Request<()>, Status> {
     Ok(req)
 }
 
+#[derive(Clone)]
 struct MyExtension {
     some_piece_of_data: String,
 }

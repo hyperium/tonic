@@ -30,7 +30,7 @@ impl proto::greeter_server::Greeter for MyGreeter {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let service = tonic_reflection::server::Builder::configure()
         .register_encoded_file_descriptor_set(proto::FILE_DESCRIPTOR_SET)
-        .build()
+        .build_v1()
         .unwrap();
 
     let addr = "[::1]:50052".parse().unwrap();

@@ -5,17 +5,9 @@
 //! with a [tower] service that performs the translation between protocols and handles `cors`
 //! requests.
 //!
-//! ## Getting Started
-//!
-//! ```toml
-//! [dependencies]
-//! tonic_web = "0.1"
-//! ```
-//!
 //! ## Enabling tonic services
 //!
-//! The easiest way to get started, is to call the [`enable`] function with your tonic service
-//! and allow the tonic server to accept HTTP/1.1 requests:
+//! You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
 //!
 //! ```ignore
 //! #[tokio::main]
@@ -25,16 +17,15 @@
 //!
 //!     Server::builder()
 //!        .accept_http1(true)
-//!        .add_service(tonic_web::enable(greeter))
+//!        // This will apply the gRPC-Web translation layer
+//!        .layer(GrpcWebLayer::new())
+//!        .add_service(greeter)
 //!        .serve(addr)
 //!        .await?;
 //!
 //!    Ok(())
 //! }
-//!
 //! ```
-//! This will apply a default configuration that works well with grpc-web clients out of the box.
-//! See the [`Config`] documentation for details.
 //!
 //! Alternatively, if you have a tls enabled server, you could skip setting `accept_http1` to `true`.
 //! This works because the browser will handle `ALPN`.
@@ -52,7 +43,8 @@
 //!     // No need to enable HTTP/1
 //!     Server::builder()
 //!        .tls_config(ServerTlsConfig::new().identity(identity))?
-//!        .add_service(tonic_web::enable(greeter))
+//!        .layer(GrpcWebLayer::new())
+//!        .add_service(greeter)
 //!        .serve(addr)
 //!        .await?;
 //!
@@ -63,12 +55,12 @@
 //! ## Limitations
 //!
 //! * `tonic_web` is designed to work with grpc-web-compliant clients only. It is not expected to
-//! handle arbitrary HTTP/x.x requests or bespoke protocols.
+//!   handle arbitrary HTTP/x.x requests or bespoke protocols.
 //! * Similarly, the cors support implemented  by this crate will *only* handle grpc-web and
-//! grpc-web preflight requests.
+//!   grpc-web preflight requests.
 //! * Currently, grpc-web clients can only perform `unary` and `server-streaming` calls. These
-//! are the only requests this crate is designed to handle. Support for client and bi-directional
-//! streaming will be officially supported when clients do.
+//!   are the only requests this crate is designed to handle. Support for client and bi-directional
+//!   streaming will be officially supported when clients do.
 //! * There is no support for web socket transports.
 //!
 //!
@@ -76,60 +68,36 @@
 //! [`tonic_web`]: https://github.com/hyperium/tonic
 //! [grpc-web]: https://github.com/grpc/grpc-web
 //! [tower]: https://github.com/tower-rs/tower
-//! [`enable`]: crate::enable()
-//! [`Config`]: crate::Config
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
-#![doc(html_root_url = "https://docs.rs/tonic-web/0.4.0")]
+#![doc(html_root_url = "https://docs.rs/tonic-web/0.13.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
-pub use config::Config;
+pub use call::GrpcWebCall;
+pub use client::{GrpcWebClientLayer, GrpcWebClientService};
+pub use layer::GrpcWebLayer;
+pub use service::{GrpcWebService, ResponseFuture};
 
 mod call;
-mod config;
-mod cors;
+mod client;
+mod layer;
 mod service;
 
-use crate::service::GrpcWeb;
-use std::future::Future;
-use std::pin::Pin;
-use tonic::body::BoxBody;
-use tonic::transport::NamedService;
-use tower_service::Service;
-
-/// enable a tonic service to handle grpc-web requests with the default configuration.
-///
-/// Shortcut for `tonic_web::config().enable(service)`
-pub fn enable<S>(service: S) -> GrpcWeb<S>
-where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
-    S: NamedService + Clone + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
-{
-    config().enable(service)
-}
-
-/// returns a default [`Config`] instance for configuring services.
-///
-/// ## Example
-///
-/// ```
-/// let config = tonic_web::config()
-///      .allow_origins(vec!["http://foo.com"])
-///      .allow_credentials(false)
-///      .expose_headers(vec!["x-request-id"]);
-///
-/// // let greeter = config.enable(Greeter);
-/// // let route_guide = config.enable(RouteGuide);
-/// ```
-pub fn config() -> Config {
-    Config::default()
-}
-
 type BoxError = Box<dyn std::error::Error + Send + Sync>;
-type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
+
+pub(crate) mod util {
+    pub(crate) mod base64 {
+        use base64::{
+            alphabet,
+            engine::{
+                general_purpose::{GeneralPurpose, GeneralPurposeConfig},
+                DecodePaddingMode,
+            },
+        };
+
+        pub(crate) const STANDARD: GeneralPurpose = GeneralPurpose::new(
+            &alphabet::STANDARD,
+            GeneralPurposeConfig::new()
+                .with_encode_padding(true)
+                .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+        );
+    }
+}

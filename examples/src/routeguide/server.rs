@@ -3,9 +3,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Instant;
 
-use futures::{Stream, StreamExt};
 use tokio::sync::mpsc;
-use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
 use tonic::transport::Server;
 use tonic::{Request, Response, Status};
 
@@ -117,7 +116,7 @@ impl RouteGuide for RouteGuideService {
             while let Some(note) = stream.next().await {
                 let note = note?;
 
-                let location = note.location.clone().unwrap();
+                let location = note.location.unwrap();
 
                 let location_notes = notes.entry(location).or_insert(vec![]);
                 location_notes.push(note);

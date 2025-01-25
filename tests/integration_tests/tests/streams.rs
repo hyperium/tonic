@@ -1,9 +1,10 @@
-use futures::FutureExt;
 use integration_tests::pb::{test_stream_server, InputStream, OutputStream};
+use tokio::sync::oneshot;
 use tonic::{transport::Server, Request, Response, Status};
 
-type Stream<T> =
-    std::pin::Pin<Box<dyn futures::Stream<Item = std::result::Result<T, Status>> + Send + 'static>>;
+type Stream<T> = std::pin::Pin<
+    Box<dyn tokio_stream::Stream<Item = std::result::Result<T, Status>> + Send + 'static>,
+>;
 
 #[tokio::test]
 async fn status_from_server_stream_with_source() {
@@ -17,7 +18,7 @@ async fn status_from_server_stream_with_source() {
             &self,
             _: Request<InputStream>,
         ) -> Result<Response<Self::StreamCallStream>, Status> {
-            let s = Unsync(0 as *mut ());
+            let s = Unsync(std::ptr::null_mut::<()>());
 
             Ok(Response::new(Box::pin(s) as Self::StreamCallStream))
         }
@@ -25,17 +26,27 @@ async fn status_from_server_stream_with_source() {
 
     let svc = test_stream_server::TestStreamServer::new(Svc);
 
-    Server::builder()
-        .add_service(svc)
-        .serve("127.0.0.1:1339".parse().unwrap())
-        .now_or_never();
+    let (tx, rx) = oneshot::channel::<()>();
+
+    let jh = tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve_with_shutdown("127.0.0.1:0".parse().unwrap(), async { drop(rx.await) })
+            .await
+            .unwrap();
+    });
+
+    tx.send(()).unwrap();
+
+    jh.await.unwrap();
 }
 
+#[allow(dead_code)]
 struct Unsync(*mut ());
 
 unsafe impl Send for Unsync {}
 
-impl futures::Stream for Unsync {
+impl tokio_stream::Stream for Unsync {
     type Item = Result<OutputStream, Status>;
 
     fn poll_next(

@@ -28,7 +28,8 @@
 //! }
 //! ```
 
-use super::{client, server, Attributes};
+use crate::code_gen::CodeGenBuilder;
+
 use proc_macro2::TokenStream;
 use quote::ToTokens;
 use std::{
@@ -172,6 +173,8 @@ pub struct Method {
     client_streaming: bool,
     /// Identifies if server streams multiple server messages.
     server_streaming: bool,
+    /// Identifies if the method is deprecated.
+    deprecated: bool,
     /// The path to the codec to use for this method
     codec_path: String,
 }
@@ -208,6 +211,10 @@ impl crate::Method for Method {
 
     fn comment(&self) -> &[Self::Comment] {
         &self.comments
+    }
+
+    fn deprecated(&self) -> bool {
+        self.deprecated
     }
 
     fn request_response_name(
@@ -261,6 +268,8 @@ pub struct MethodBuilder {
     client_streaming: bool,
     /// Identifies if server streams multiple server messages.
     server_streaming: bool,
+    /// Identifies if the method is deprecated.
+    deprecated: bool,
     /// The path to the codec to use for this method
     codec_path: Option<String>,
 }
@@ -337,6 +346,7 @@ impl MethodBuilder {
             output_type: self.output_type.unwrap(),
             client_streaming: self.client_streaming,
             server_streaming: self.server_streaming,
+            deprecated: self.deprecated,
             codec_path: self.codec_path.unwrap(),
         }
     }
@@ -351,24 +361,21 @@ struct ServiceGenerator {
 impl ServiceGenerator {
     fn generate(&mut self, service: &Service) {
         if self.builder.build_server {
-            let server = server::generate(
-                service,
-                true,  // emit_package,
-                "",    // proto_path, -- not used
-                false, // compile_well_known_types -- not used
-                &Attributes::default(),
-            );
+            let server = CodeGenBuilder::new()
+                .emit_package(true)
+                .compile_well_known_types(false)
+                .generate_server(service, "");
+
             self.servers.extend(server);
         }
 
         if self.builder.build_client {
-            let client = client::generate(
-                service,
-                true,  // emit_package,
-                "",    // proto_path, -- not used
-                false, // compile_well_known_types, -- not used
-                &Attributes::default(),
-            );
+            let client = CodeGenBuilder::new()
+                .emit_package(true)
+                .compile_well_known_types(false)
+                .build_transport(self.builder.build_transport)
+                .generate_client(service, "");
+
             self.clients.extend(client);
         }
     }
@@ -409,6 +416,7 @@ impl ServiceGenerator {
 pub struct Builder {
     build_server: bool,
     build_client: bool,
+    build_transport: bool,
 
     out_dir: Option<PathBuf>,
 }
@@ -418,6 +426,7 @@ impl Default for Builder {
         Self {
             build_server: true,
             build_client: true,
+            build_transport: true,
             out_dir: None,
         }
     }
@@ -442,6 +451,15 @@ impl Builder {
     /// Defaults to enabling server code generation.
     pub fn build_server(mut self, enable: bool) -> Self {
         self.build_server = enable;
+        self
+    }
+
+    /// Enable or disable generated clients and servers to have built-in tonic
+    /// transport features.
+    ///
+    /// When the `transport` feature is disabled this does nothing.
+    pub fn build_transport(mut self, enable: bool) -> Self {
+        self.build_transport = enable;
         self
     }
 

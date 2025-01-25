@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use hyper_util::rt::TokioIo;
 use tonic::{
     transport::{Endpoint, Server, Uri},
     Request, Response, Status,
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tokio::spawn(async move {
         Server::builder()
             .add_service(GreeterServer::new(greeter))
-            .serve_with_incoming(futures::stream::iter(vec![Ok::<_, std::io::Error>(server)]))
+            .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
             .await
     });
 
@@ -37,12 +37,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             async move {
                 if let Some(client) = client {
-                    Ok(client)
+                    Ok(TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))

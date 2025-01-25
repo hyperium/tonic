@@ -1,0 +1,15 @@
+[package]
+authors = ["bouzuya <m@bouzuya.net>"]
+edition = "2021"
+license = "MIT"
+name = "disable-comments"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+prost = "0.13"
+tonic = { path = "../../tonic" }
+
+[build-dependencies]
+prost-build = "0.13"
+tonic-build = { path = "../../tonic-build" }

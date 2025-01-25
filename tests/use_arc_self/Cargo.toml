@@ -1,0 +1,16 @@
+[package]
+authors = ["Aurimas Blažulionis <aurimas@chorus.one>"]
+edition = "2021"
+license = "MIT"
+name = "use_arc_self"
+
+[dependencies]
+tokio-stream = "0.1"
+prost = "0.13"
+tonic = {path = "../../tonic", features = ["gzip"]}
+
+[build-dependencies]
+tonic-build = {path = "../../tonic-build" }
+
+[package.metadata.cargo-machete]
+ignored = ["prost"]

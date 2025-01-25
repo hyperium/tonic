@@ -1,15 +1,13 @@
 [package]
 authors = ["Ben Sully <ben@bsull.io>"]
-edition = "2018"
+edition = "2021"
 name = "stream_conflict"
-publish = false
-version = "0.1.0"
 license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.11"
+prost = "0.13"
 tonic = { path = "../../tonic" }
 
 [build-dependencies]

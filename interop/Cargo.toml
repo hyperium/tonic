@@ -1,10 +1,8 @@
 [package]
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2018"
+edition = "2021"
 license = "MIT"
 name = "interop"
-publish = false
-version = "0.1.0"
 
 [[bin]]
 name = "client"
@@ -16,23 +14,19 @@ path = "src/bin/server.rs"
 
 [dependencies]
 async-stream = "0.3"
-bytes = "1.0"
-clap = {version = "3.2.1", features = ["derive"]}
-console = "0.14"
-futures-core = "0.3"
-futures-util = "0.3"
-http = "0.2"
-http-body = "0.4.2"
-hyper = "0.14"
-prost = "0.11"
-prost-derive = "0.11"
-tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros", "fs"]}
+strum = {version = "0.26", features = ["derive"]}
+pico-args = {version = "0.5", features = ["eq-separator"]}
+console = "0.15"
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+hyper = "1"
+prost = "0.13"
+tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
-tonic = {path = "../tonic", features = ["tls"]}
-tower = {version = "0.4"}
-tracing = "0.1"
-tracing-log = "0.1"
-tracing-subscriber = {version = "0.3", features = ["env-filter"]}
+tonic = {path = "../tonic", features = ["tls-ring"]}
+tower = "0.5"
+tracing-subscriber = {version = "0.3"}
 
 [build-dependencies]
 tonic-build = {path = "../tonic-build", features = ["prost"]}

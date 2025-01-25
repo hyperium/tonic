@@ -3,7 +3,7 @@ pub mod hello_world {
 }
 
 pub mod echo {
-    tonic::include_proto!("grpc.examples.echo");
+    tonic::include_proto!("grpc.examples.unaryecho");
 }
 
 use echo::{echo_client::EchoClient, EchoRequest};
