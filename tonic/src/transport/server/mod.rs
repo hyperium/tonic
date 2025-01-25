@@ -12,7 +12,11 @@ mod unix;
 use tokio_stream::StreamExt as _;
 use tracing::{debug, trace};
 
-use crate::service::Routes;
+#[cfg(feature = "router")]
+use crate::{server::NamedService, service::Routes};
+
+#[cfg(feature = "router")]
+use std::convert::Infallible;
 
 pub use conn::{Connected, TcpConnectInfo};
 use hyper_util::{
@@ -37,10 +41,10 @@ pub use incoming::TcpIncoming;
 #[cfg(feature = "_tls-any")]
 use crate::transport::Error;
 
-use self::service::{ConnectInfoLayer, RecoverError, ServerIo};
+use self::service::{ConnectInfoLayer, ServerIo};
 use super::service::GrpcTimeout;
 use crate::body::Body;
-use crate::server::NamedService;
+use crate::service::RecoverErrorLayer;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
@@ -48,7 +52,6 @@ use hyper::{body::Incoming, service::Service as HyperService};
 use pin_project::pin_project;
 use std::future::pending;
 use std::{
-    convert::Infallible,
     fmt,
     future::{self, poll_fn, Future},
     marker::PhantomData,
@@ -132,6 +135,7 @@ impl Default for Server<Identity> {
 }
 
 /// A stack based [`Service`] router.
+#[cfg(feature = "router")]
 #[derive(Debug)]
 pub struct Router<L = Identity> {
     server: Server<L>,
@@ -393,6 +397,7 @@ impl<L> Server<L> {
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services.
+    #[cfg(feature = "router")]
     pub fn add_service<S>(&mut self, svc: S) -> Router<L>
     where
         S: Service<Request<Body>, Error = Infallible>
@@ -416,6 +421,7 @@ impl<L> Server<L> {
     /// # Note
     /// Even when the argument given is `None` this will capture *all* requests to this service name.
     /// As a result, one cannot use this to toggle between two identically named implementations.
+    #[cfg(feature = "router")]
     pub fn add_optional_service<S>(&mut self, svc: Option<S>) -> Router<L>
     where
         S: Service<Request<Body>, Error = Infallible>
@@ -436,6 +442,7 @@ impl<L> Server<L> {
     ///
     /// This will clone the `Server` builder and create a router that will
     /// route around different services that were already added to the provided `routes`.
+    #[cfg(feature = "router")]
     pub fn add_routes(&mut self, routes: Routes) -> Router<L>
     where
         L: Clone,
@@ -528,7 +535,96 @@ impl<L> Server<L> {
         }
     }
 
-    pub(crate) async fn serve_with_shutdown<S, I, F, IO, IE, ResBody>(
+    fn bind_incoming(&self, addr: SocketAddr) -> Result<TcpIncoming, super::Error> {
+        Ok(TcpIncoming::bind(addr)
+            .map_err(super::Error::from_source)?
+            .with_nodelay(Some(self.tcp_nodelay))
+            .with_keepalive(self.tcp_keepalive))
+    }
+
+    /// Serve the service.
+    pub async fn serve<S, ResBody>(self, addr: SocketAddr, svc: S) -> Result<(), super::Error>
+    where
+        L: Layer<S>,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error:
+            Into<crate::BoxError> + Send + 'static,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<crate::BoxError>,
+    {
+        let incoming = self.bind_incoming(addr)?;
+        self.serve_with_incoming(svc, incoming).await
+    }
+
+    /// Serve the service with the shutdown signal.
+    pub async fn serve_with_shutdown<S, F, ResBody>(
+        self,
+        addr: SocketAddr,
+        svc: S,
+        signal: F,
+    ) -> Result<(), super::Error>
+    where
+        L: Layer<S>,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error:
+            Into<crate::BoxError> + Send + 'static,
+        F: Future<Output = ()>,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<crate::BoxError>,
+    {
+        let incoming = self.bind_incoming(addr)?;
+        self.serve_with_incoming_shutdown(svc, incoming, signal)
+            .await
+    }
+
+    /// Serve the service on the provided incoming stream.
+    pub async fn serve_with_incoming<S, I, IO, IE, ResBody>(
+        self,
+        svc: S,
+        incoming: I,
+    ) -> Result<(), super::Error>
+    where
+        L: Layer<S>,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error:
+            Into<crate::BoxError> + Send + 'static,
+        I: Stream<Item = Result<IO, IE>>,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+        IE: Into<crate::BoxError>,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<crate::BoxError>,
+    {
+        self.serve_internal(svc, incoming, Option::<future::Ready<()>>::None)
+            .await
+    }
+
+    /// Serve the service with the signal on the provided incoming stream.
+    pub async fn serve_with_incoming_shutdown<S, I, F, IO, IE, ResBody>(
+        self,
+        svc: S,
+        incoming: I,
+        signal: F,
+    ) -> Result<(), super::Error>
+    where
+        L: Layer<S>,
+        L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Error:
+            Into<crate::BoxError> + Send + 'static,
+        I: Stream<Item = Result<IO, IE>>,
+        IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
+        IE: Into<crate::BoxError>,
+        F: Future<Output = ()>,
+        ResBody: http_body::Body<Data = Bytes> + Send + 'static,
+        ResBody::Error: Into<crate::BoxError>,
+    {
+        self.serve_internal(svc, incoming, Some(signal)).await
+    }
+
+    async fn serve_internal<S, I, F, IO, IE, ResBody>(
         self,
         svc: S,
         incoming: I,
@@ -537,7 +633,7 @@ impl<L> Server<L> {
     where
         L: Layer<S>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<S>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<S>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send + 'static,
         I: Stream<Item = Result<IO, IE>>,
@@ -726,12 +822,14 @@ async fn sleep_or_pending(wait_for: Option<Duration>) {
     };
 }
 
+#[cfg(feature = "router")]
 impl<L> Router<L> {
     pub(crate) fn new(server: Server<L>, routes: Routes) -> Self {
         Self { server, routes }
     }
 }
 
+#[cfg(feature = "router")]
 impl<L> Router<L> {
     /// Add a new service to this router.
     pub fn add_service<S>(mut self, svc: S) -> Self
@@ -780,23 +878,13 @@ impl<L> Router<L> {
     where
         L: Layer<Routes> + Clone,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
     {
-        let incoming = TcpIncoming::bind(addr)
-            .map_err(super::Error::from_source)?
-            .with_nodelay(Some(self.server.tcp_nodelay))
-            .with_keepalive(self.server.tcp_keepalive);
-        self.server
-            .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
-                self.routes.prepare(),
-                incoming,
-                None,
-            )
-            .await
+        self.server.serve(addr, self.routes.prepare()).await
     }
 
     /// Consume this [`Server`] creating a future that will execute the server
@@ -813,18 +901,14 @@ impl<L> Router<L> {
     where
         L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
     {
-        let incoming = TcpIncoming::bind(addr)
-            .map_err(super::Error::from_source)?
-            .with_nodelay(Some(self.server.tcp_nodelay))
-            .with_keepalive(self.server.tcp_keepalive);
         self.server
-            .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
+            .serve_with_shutdown(addr, self.routes.prepare(), signal)
             .await
     }
 
@@ -845,18 +929,14 @@ impl<L> Router<L> {
         L: Layer<Routes>,
 
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
     {
         self.server
-            .serve_with_shutdown::<_, _, future::Ready<()>, _, _, ResBody>(
-                self.routes.prepare(),
-                incoming,
-                None,
-            )
+            .serve_with_incoming(self.routes.prepare(), incoming)
             .await
     }
 
@@ -880,14 +960,14 @@ impl<L> Router<L> {
         F: Future<Output = ()>,
         L: Layer<Routes>,
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send + 'static,
+        <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:
             Into<crate::BoxError> + Send,
         ResBody: http_body::Body<Data = Bytes> + Send + 'static,
         ResBody::Error: Into<crate::BoxError>,
     {
         self.server
-            .serve_with_shutdown(self.routes.prepare(), incoming, Some(signal))
+            .serve_with_incoming_shutdown(self.routes.prepare(), incoming, signal)
             .await
     }
 }
@@ -986,7 +1066,7 @@ impl<S, ResBody, IO> Service<&ServerIo<IO>> for MakeSvc<S, IO>
 where
     IO: Connected + 'static,
     S: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
-    S::Future: Send + 'static,
+    S::Future: Send,
     S::Error: Into<crate::BoxError> + Send,
     ResBody: http_body::Body<Data = Bytes> + Send + 'static,
     ResBody::Error: Into<crate::BoxError>,
@@ -1008,7 +1088,7 @@ where
         let trace_interceptor = self.trace_interceptor.clone();
 
         let svc = ServiceBuilder::new()
-            .layer_fn(RecoverError::new)
+            .layer(RecoverErrorLayer::new())
             .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
             .layer_fn(|s| GrpcTimeout::new(s, timeout))
             .service(svc);

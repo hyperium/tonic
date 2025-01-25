@@ -82,9 +82,8 @@ mod h2c {
     impl<S> Service<Request<Incoming>> for H2c<S>
     where
         S: Service<Request<Body>, Response = Response<Body>> + Clone + Send + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<BoxError> + Sync + Send + 'static,
-        S::Response: Send + 'static,
+        S::Future: Send,
+        S::Error: Into<BoxError> + 'static,
     {
         type Response = hyper::Response<Body>;
         type Error = hyper::Error;
