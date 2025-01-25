@@ -16,3 +16,8 @@ pub use axum::{body::Body as AxumBody, Router as AxumRouter};
 
 pub mod recover_error;
 pub use self::recover_error::{RecoverError, RecoverErrorLayer};
+
+#[cfg(feature = "timeout")]
+pub mod grpc_timeout;
+#[cfg(feature = "timeout")]
+pub use self::grpc_timeout::{GrpcTimeout, GrpcTimeoutLayer};

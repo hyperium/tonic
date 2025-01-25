@@ -1,23 +1,50 @@
+//! Middleware which implements gRPC timeout.
+
 use crate::{metadata::GRPC_TIMEOUT_HEADER, TimeoutExpired};
 use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
 use std::{
+    fmt,
     future::Future,
     pin::Pin,
     task::{ready, Context, Poll},
     time::Duration,
 };
 use tokio::time::Sleep;
+use tower_layer::Layer;
 use tower_service::Service;
 
+/// Layer which applies the [`GrpcTimeout`] middleware.
 #[derive(Debug, Clone)]
-pub(crate) struct GrpcTimeout<S> {
+pub struct GrpcTimeoutLayer {
+    server_timeout: Option<Duration>,
+}
+
+impl<S> Layer<S> for GrpcTimeoutLayer {
+    type Service = GrpcTimeout<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        GrpcTimeout::new(inner, self.server_timeout)
+    }
+}
+
+impl GrpcTimeoutLayer {
+    /// Create a new `GrpcTimeoutLayer`.
+    pub fn new(server_timeout: Option<Duration>) -> Self {
+        Self { server_timeout }
+    }
+}
+
+/// Middleware which implements gRPC timeout.
+#[derive(Debug, Clone)]
+pub struct GrpcTimeout<S> {
     inner: S,
     server_timeout: Option<Duration>,
 }
 
 impl<S> GrpcTimeout<S> {
-    pub(crate) fn new(inner: S, server_timeout: Option<Duration>) -> Self {
+    /// Create a new [`GrpcTimeout`] middleware.
+    pub fn new(inner: S, server_timeout: Option<Duration>) -> Self {
         Self {
             inner,
             server_timeout,
@@ -62,12 +89,19 @@ where
     }
 }
 
+/// Response future for [`GrpcTimeout`].
 #[pin_project]
-pub(crate) struct ResponseFuture<F> {
+pub struct ResponseFuture<F> {
     #[pin]
     inner: F,
     #[pin]
     sleep: Option<Sleep>,
+}
+
+impl<F> fmt::Debug for ResponseFuture<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResponseFuture").finish()
+    }
 }
 
 impl<F, Res, E> Future for ResponseFuture<F>

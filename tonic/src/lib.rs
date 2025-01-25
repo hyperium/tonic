@@ -22,6 +22,8 @@
 //! - `server`: Enables just the full featured server portion of the `transport` feature.
 //! - `channel`: Enables just the full featured channel portion of the `transport` feature.
 //! - `router`: Enables the [`axum`] based service router. Enabled by default.
+//! - `timeout`: Enables timeout related feature including `GrpcTimeout` middleware. Enabled
+//!   by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //!   for [`tonic-build`]. Enabled by default.
 //! - `tls-ring`: Enables the [`rustls`] based TLS options for the `transport` feature using

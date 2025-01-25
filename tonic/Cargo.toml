@@ -35,20 +35,22 @@ tls-aws-lc = ["_tls-any", "tokio-rustls/aws-lc-rs"]
 tls-native-roots = ["_tls-any", "channel", "dep:rustls-native-certs"]
 tls-webpki-roots = ["_tls-any","channel", "dep:webpki-roots"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
+timeout = ["dep:tokio", "tokio?/time"]
 server = [
+  "timeout",
   "dep:h2",
   "dep:hyper", "hyper?/server",
   "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
   "dep:socket2",
-  "dep:tokio", "tokio?/macros", "tokio?/net", "tokio?/time",
+  "dep:tokio", "tokio?/macros", "tokio?/net",
   "tokio-stream/net",
   "dep:tower", "tower?/util", "tower?/limit",
 ]
 channel = [
+  "timeout",
   "dep:hyper", "hyper?/client",
   "dep:hyper-util", "hyper-util?/client-legacy",
   "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit", "tower?/util",
-  "dep:tokio", "tokio?/time",
   "dep:hyper-timeout",
 ]
 transport = ["server", "channel"]
