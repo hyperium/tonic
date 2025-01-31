@@ -127,6 +127,12 @@ impl<T> Response<T> {
     }
 }
 
+impl<T> From<T> for Response<T> {
+    fn from(inner: T) -> Self {
+        Response::new(inner)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
