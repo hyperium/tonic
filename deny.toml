@@ -19,6 +19,8 @@ deny = [
     { crate = "term" },
 ]
 skip = [
+    { crate = "getrandom@0.2.15", reason = "quickcheck depends on rand which depends on it" },
+    { crate = "wasi@0.11.0+wasi-snapshot-preview1", reason = "quickcheck depends on rand which depends on it" },
     { crate = "itertools@0.12.1", reason = "aws-lc-sys depends on bindgen which depends on it" },
     { crate = "unicode-width@0.1.14", reason = "protox depends on miette wich depends on it" },
 ]
