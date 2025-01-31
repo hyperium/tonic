@@ -693,8 +693,8 @@ use rand::Rng;
 
 ```rust
 async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
-    let mut rng = rand::thread_rng();
-    let point_count: i32 = rng.gen_range(2..100);
+    let mut rng = rand::rng();
+    let point_count: i32 = rng.random_range(2..100);
 
     let mut points = vec![];
     for _ in 0..=point_count {
@@ -715,8 +715,8 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 
 ```rust
 fn random_point(rng: &mut ThreadRng) -> Point {
-    let latitude = (rng.gen_range(0..180) - 90) * 10_000_000;
-    let longitude = (rng.gen_range(0..360) - 180) * 10_000_000;
+    let latitude = (rng.random_range(0..180) - 90) * 10_000_000;
+    let longitude = (rng.random_range(0..360) - 180) * 10_000_000;
     Point {
         latitude,
         longitude,
