@@ -18,14 +18,14 @@ pub fn trace_init() {
 pub fn client_payload(size: usize) -> pb::Payload {
     pb::Payload {
         r#type: default::Default::default(),
-        body: iter::repeat(0u8).take(size).collect(),
+        body: iter::repeat_n(0u8, size).collect(),
     }
 }
 
 pub fn server_payload(size: usize) -> pb::Payload {
     pb::Payload {
         r#type: default::Default::default(),
-        body: iter::repeat(0u8).take(size).collect(),
+        body: iter::repeat_n(0u8, size).collect(),
     }
 }
 
