@@ -28,6 +28,7 @@ pub(crate) struct TlsConnector {
 }
 
 impl TlsConnector {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         ca_certs: Vec<Certificate>,
         trust_anchors: Vec<TrustAnchor<'static>>,
