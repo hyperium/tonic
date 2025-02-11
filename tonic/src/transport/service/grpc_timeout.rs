@@ -80,8 +80,8 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
 
-        if let Poll::Ready(result) = this.inner.poll(cx) {
-            return Poll::Ready(result.map_err(Into::into));
+        if let ready @ Poll::Ready(_) = this.inner.poll(cx) {
+            return ready.map_err(Into::into);
         }
 
         if let Some(sleep) = this.sleep.as_pin_mut() {
