@@ -141,6 +141,13 @@ pub(crate) fn generate_internal<T: Service>(
                     InterceptedService::new(Self::new(inner), interceptor)
                 }
 
+                pub fn apply_interceptor<F>(service: Self, interceptor: F) -> InterceptedService<Self, F>
+                where
+                    F: tonic::service::Interceptor,
+                {
+                    InterceptedService::new(service, interceptor)
+                }
+                
                 #configure_compression_methods
 
                 #configure_max_message_size_methods
