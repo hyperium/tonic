@@ -1,8 +1,9 @@
 use std::fmt;
-use std::sync::Arc;
+use std::{sync::Arc, time::Duration};
 
 use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::time;
 use tokio_rustls::{
     rustls::{
         crypto,
@@ -23,9 +24,11 @@ pub(crate) struct TlsConnector {
     config: Arc<ClientConfig>,
     domain: Arc<ServerName<'static>>,
     assume_http2: bool,
+    timeout: Option<Duration>,
 }
 
 impl TlsConnector {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         ca_certs: Vec<Certificate>,
         trust_anchors: Vec<TrustAnchor<'static>>,
@@ -34,6 +37,7 @@ impl TlsConnector {
         assume_http2: bool,
         #[cfg(feature = "tls-native-roots")] with_native_roots: bool,
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
+        timeout: Option<Duration>,
     ) -> Result<Self, crate::BoxError> {
         fn with_provider(
             provider: Arc<crypto::CryptoProvider>,
@@ -92,6 +96,7 @@ impl TlsConnector {
             config: Arc::new(config),
             domain: Arc::new(ServerName::try_from(domain)?.to_owned()),
             assume_http2,
+            timeout,
         })
     }
 
@@ -99,9 +104,14 @@ impl TlsConnector {
     where
         I: AsyncRead + AsyncWrite + Send + Unpin + 'static,
     {
-        let io = RustlsConnector::from(self.config.clone())
-            .connect(self.domain.as_ref().to_owned(), io)
-            .await?;
+        let conn_fut =
+            RustlsConnector::from(self.config.clone()).connect(self.domain.as_ref().to_owned(), io);
+        let io = match self.timeout {
+            Some(timeout) => time::timeout(timeout, conn_fut)
+                .await
+                .map_err(|_| TlsError::HandshakeTimeout)?,
+            None => conn_fut.await,
+        }?;
 
         // Generally we require ALPN to be negotiated, but if the user has
         // explicitly set `assume_http2` to true, we'll allow it to be missing.
