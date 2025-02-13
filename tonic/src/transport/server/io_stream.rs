@@ -52,7 +52,7 @@ where
     where
         IE: Into<crate::BoxError>,
     {
-        match ready!(self.as_mut().project().inner.as_mut().poll_next(cx)) {
+        match ready!(self.as_mut().project().inner.poll_next(cx)) {
             Some(Ok(io)) => Poll::Ready(Some(Ok(ServerIo::new_io(io)))),
             Some(Err(e)) => match handle_tcp_accept_error(e) {
                 ControlFlow::Continue(()) => {
