@@ -399,9 +399,8 @@ impl<T> Stream for Streaming<T> {
                 return Poll::Ready(Some(Ok(item)));
             }
 
-            match ready!(self.inner.poll_frame(cx))? {
-                Some(()) => (),
-                None => break,
+            if ready!(self.inner.poll_frame(cx))?.is_none() {
+                break;
             }
         }
 
