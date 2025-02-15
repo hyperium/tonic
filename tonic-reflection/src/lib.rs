@@ -3,7 +3,6 @@
 #![doc(
     html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic-reflection/0.13.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
