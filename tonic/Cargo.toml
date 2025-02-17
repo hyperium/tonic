@@ -30,7 +30,7 @@ deflate = ["dep:flate2"]
 zstd = ["dep:zstd"]
 default = ["router", "transport", "codegen", "prost"]
 prost = ["dep:prost"]
-_tls-any = ["dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"] # Internal. Please choose one of `tls-ring` or `tls-aws-lc`
+_tls-any = ["dep:rustls-pki-types", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"] # Internal. Please choose one of `tls-ring` or `tls-aws-lc`
 tls-ring = ["_tls-any", "tokio-rustls/ring"]
 tls-aws-lc = ["_tls-any", "tokio-rustls/aws-lc-rs"]
 tls-native-roots = ["_tls-any", "channel", "dep:rustls-native-certs"]
@@ -89,6 +89,7 @@ axum = {version = "0.8", default-features = false, optional = true}
 
 # rustls
 rustls-native-certs = { version = "0.8", optional = true }
+rustls-pki-types = { version = "1.11", optional = true }
 tokio-rustls = { version = "0.26.1", default-features = false, features = ["logging", "tls12"], optional = true }
 webpki-roots = { version = "0.26", optional = true }
 

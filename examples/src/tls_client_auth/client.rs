@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let server_root_ca_cert = Certificate::from_pem(server_root_ca_cert);
     let client_cert = std::fs::read_to_string(data_dir.join("tls/client1.pem"))?;
     let client_key = std::fs::read_to_string(data_dir.join("tls/client1.key"))?;
-    let client_identity = Identity::from_pem(client_cert, client_key);
+    let client_identity = Identity::from_pem(client_cert, client_key, None);
 
     let tls = ClientTlsConfig::new()
         .domain_name("localhost")

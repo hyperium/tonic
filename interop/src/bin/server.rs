@@ -29,7 +29,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
     if matches.use_tls {
         let cert = std::fs::read_to_string("interop/data/server1.pem")?;
         let key = std::fs::read_to_string("interop/data/server1.key")?;
-        let identity = Identity::from_pem(cert, key);
+        let identity = Identity::from_pem(cert, key, None);
 
         builder = builder.tls_config(ServerTlsConfig::new().identity(identity))?;
     }

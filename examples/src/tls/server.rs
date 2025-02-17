@@ -40,7 +40,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let cert = std::fs::read_to_string(data_dir.join("tls/server.pem"))?;
     let key = std::fs::read_to_string(data_dir.join("tls/server.key"))?;
 
-    let identity = Identity::from_pem(cert, key);
+    let identity = Identity::from_pem(cert, key, None);
 
     let addr = "[::1]:50051".parse().unwrap();
     let server = EchoServer::default();
