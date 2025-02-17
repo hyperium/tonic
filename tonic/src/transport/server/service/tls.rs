@@ -31,10 +31,14 @@ impl TlsAcceptor {
             Some(cert) => {
                 let mut roots = RootCertStore::empty();
                 roots.add_parsable_certificates(convert_certificate_to_pki_types(cert)?);
+                let mut _builder = WebPkiClientVerifier::builder(roots.into());
+                if let Some(crls) = &identity.crls {
+                    _builder = _builder.with_crls(crls.clone());
+                }
                 let verifier = if client_auth_optional {
-                    WebPkiClientVerifier::builder(roots.into()).allow_unauthenticated()
+                    _builder.allow_unauthenticated()
                 } else {
-                    WebPkiClientVerifier::builder(roots.into())
+                    _builder
                 }
                 .build()?;
                 builder.with_client_cert_verifier(verifier)
