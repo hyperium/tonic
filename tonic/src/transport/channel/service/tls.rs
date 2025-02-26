@@ -26,12 +26,14 @@ pub(crate) struct TlsConnector {
 }
 
 impl TlsConnector {
+    #[allow(clippy::too_many_arguments)]
     pub(crate) fn new(
         ca_certs: Vec<Certificate>,
         trust_anchors: Vec<TrustAnchor<'static>>,
         identity: Option<Identity>,
         domain: &str,
         assume_http2: bool,
+        use_key_log: bool,
         #[cfg(feature = "tls-native-roots")] with_native_roots: bool,
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
     ) -> Result<Self, crate::BoxError> {
@@ -86,6 +88,10 @@ impl TlsConnector {
             }
             None => builder.with_no_client_auth(),
         };
+
+        if use_key_log {
+            config.key_log = Arc::new(tokio_rustls::rustls::KeyLogFile::new());
+        }
 
         config.alpn_protocols.push(ALPN_H2.into());
         Ok(Self {
