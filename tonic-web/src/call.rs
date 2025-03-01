@@ -177,9 +177,9 @@ where
                     return Poll::Ready(Some(Ok(Frame::data(bytes))));
                 }
 
-                let mut this = self.as_mut().project();
+                let this = self.as_mut().project();
 
-                match ready!(this.inner.as_mut().poll_frame(cx)) {
+                match ready!(this.inner.poll_frame(cx)) {
                     Some(Ok(frame)) if frame.is_data() => this
                         .buf
                         .put(frame.into_data().unwrap_or_else(|_| unreachable!())),
@@ -217,9 +217,9 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Bytes>, Status>>> {
-        let mut this = self.as_mut().project();
+        let this = self.as_mut().project();
 
-        match ready!(this.inner.as_mut().poll_frame(cx)) {
+        match ready!(this.inner.poll_frame(cx)) {
             Some(Ok(frame)) if frame.is_data() => {
                 let mut data = frame.into_data().unwrap_or_else(|_| unreachable!());
                 let mut res = data.copy_to_bytes(data.remaining());
