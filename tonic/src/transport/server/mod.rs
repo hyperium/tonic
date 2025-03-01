@@ -42,9 +42,8 @@ pub use incoming::TcpIncoming;
 use crate::transport::Error;
 
 use self::service::{ConnectInfoLayer, ServerIo};
-use super::service::GrpcTimeout;
 use crate::body::Body;
-use crate::service::RecoverErrorLayer;
+use crate::service::{GrpcTimeoutLayer, RecoverErrorLayer};
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
@@ -1090,7 +1089,7 @@ where
         let svc = ServiceBuilder::new()
             .layer(RecoverErrorLayer::new())
             .option_layer(concurrency_limit.map(ConcurrencyLimitLayer::new))
-            .layer_fn(|s| GrpcTimeout::new(s, timeout))
+            .layer(GrpcTimeoutLayer::new(timeout))
             .service(svc);
 
         let svc = ServiceBuilder::new()
