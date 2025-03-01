@@ -33,10 +33,6 @@ CRATES=( \
 )
 
 for CRATE in "${CRATES[@]}"; do
-  # Update html_root_url attributes.
-  sed -i -E "s~html_root_url = \"https://docs\.rs/${TONIC_CRATE_MATCHER}/$VERSION_MATCHER\"~html_root_url = \"https://docs.rs/\1/${VERSION}\"~" \
-    "$DIR/$CRATE/src/lib.rs"
-
   # Update documentation url in Cargo.toml
   sed -i -E "s~documentation = \"https://docs\.rs/$CRATE/$VERSION_MATCHER\"~documentation = \"https://docs.rs/${CRATE}/${VERSION}\"~" \
     "$DIR/$CRATE/Cargo.toml"
