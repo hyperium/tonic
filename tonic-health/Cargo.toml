@@ -4,7 +4,6 @@ categories = ["network-programming", "asynchronous"]
 description = """
 Health Checking module of `tonic` gRPC implementation.
 """
-documentation = "https://docs.rs/tonic-health/0.13.0"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "healthcheck"]
