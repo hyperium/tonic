@@ -10,7 +10,7 @@ pub use endpoint::Endpoint;
 #[cfg(feature = "_tls-any")]
 pub use tls::ClientTlsConfig;
 
-use self::service::{Connection, DynamicServiceStream, Executor, SharedExec};
+use self::service::{Connection, DynamicServiceStream, Executor, MapDiscover, SharedExec};
 use crate::body::Body;
 use bytes::Bytes;
 use http::{
@@ -187,14 +187,22 @@ impl Channel {
         Ok(Channel { svc })
     }
 
-    pub(crate) fn balance<D, E>(discover: D, buffer_size: usize, executor: E) -> Self
+    /// Create a balanced [`Channel`] using a custom [`Discover`] implementation.
+    ///
+    /// This is a lower level API, prefer to use [`Channel::balance_list`] or
+    /// [`Channel::balance_channel`] if you are not using a custom connector.
+    pub fn balance<D, C, E>(discover: D, buffer_size: usize, executor: E) -> Self
     where
-        D: Discover<Service = Connection> + Unpin + Send + 'static,
+        D: Discover<Service = (C, Endpoint)> + Unpin + Send + 'static,
         D::Error: Into<crate::BoxError>,
         D::Key: Hash + Send + Clone,
+        C: Service<Uri> + Send + 'static,
+        C::Response: hyper::rt::Read + hyper::rt::Write + Unpin + Send,
+        C::Error: Into<crate::BoxError> + Send,
+        C::Future: Send,
         E: Executor<BoxFuture<'static, ()>> + Send + Sync + 'static,
     {
-        let svc = Balance::new(discover);
+        let svc = Balance::new(MapDiscover::new(discover));
 
         let svc = BoxService::new(svc);
         let (svc, worker) = Buffer::pair(svc, buffer_size);
