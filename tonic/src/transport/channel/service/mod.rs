@@ -12,7 +12,7 @@ pub(super) use self::connection::Connection;
 
 mod discover;
 pub use self::discover::Change;
-pub(super) use self::discover::DynamicServiceStream;
+pub(super) use self::discover::{DynamicServiceStream, MapDiscover};
 
 mod io;
 use self::io::BoxedIo;
