@@ -1,3 +1,4 @@
+use rustls_pki_types::CertificateRevocationListDer;
 /// Represents a X509 certificate.
 #[derive(Debug, Clone)]
 pub struct Certificate {
@@ -9,6 +10,7 @@ pub struct Certificate {
 pub struct Identity {
     pub(crate) cert: Certificate,
     pub(crate) key: Vec<u8>,
+    pub(crate) crls: Option<Vec<CertificateRevocationListDer<'static>>>,
 }
 
 impl Certificate {
@@ -52,9 +54,9 @@ impl Identity {
     /// Parse a PEM encoded certificate and private key.
     ///
     /// The provided cert must contain at least one PEM encoded certificate.
-    pub fn from_pem(cert: impl AsRef<[u8]>, key: impl AsRef<[u8]>) -> Self {
+    pub fn from_pem(cert: impl AsRef<[u8]>, key: impl AsRef<[u8]>, crls: Option<Vec<CertificateRevocationListDer<'static>>>) -> Self {
         let cert = Certificate::from_pem(cert);
         let key = key.as_ref().into();
-        Self { cert, key }
+        Self { cert, crls, key }
     }
 }
