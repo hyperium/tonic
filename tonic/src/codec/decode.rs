@@ -400,14 +400,12 @@ impl<T> Stream for Streaming<T> {
             }
 
             if ready!(self.inner.poll_frame(cx))?.is_none() {
-                break;
+                match self.inner.response() {
+                    Ok(()) => return Poll::Ready(None),
+                    Err(err) => self.inner.state = State::Error(Some(err)),
+                }
             }
         }
-
-        Poll::Ready(match self.inner.response() {
-            Ok(()) => None,
-            Err(err) => Some(Err(err)),
-        })
     }
 }
 
