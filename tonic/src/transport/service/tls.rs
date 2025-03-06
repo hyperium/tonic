@@ -7,13 +7,19 @@ use crate::transport::{Certificate, Identity};
 /// h2 alpn in plain format for rustls.
 pub(crate) const ALPN_H2: &[u8] = b"h2";
 
+/// Errors that can occur when configuring TLS.
 #[derive(Debug)]
-pub(crate) enum TlsError {
+#[non_exhaustive]
+pub enum TlsError {
+    /// HTTP/2 protocol was not negotiated during the TLS handshake.
     #[cfg(feature = "channel")]
     H2NotNegotiated,
+    /// No native root certificates were found on the system.
     #[cfg(feature = "tls-native-roots")]
     NativeCertsNotFound,
+    /// Failed to parse the provided TLS certificate.
     CertificateParseError,
+    /// Failed to parse the provided private key. Only RSA and PKCS8-encoded keys are supported.
     PrivateKeyParseError,
 }
 

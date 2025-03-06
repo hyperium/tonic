@@ -97,6 +97,8 @@ mod error;
 mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;
+#[cfg(feature = "_tls-any")]
+pub use service::TlsError;
 
 #[doc(inline)]
 #[cfg(feature = "channel")]
