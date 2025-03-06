@@ -1,5 +1,8 @@
 use pin_project::pin_project;
 use std::fmt;
+use std::sync::atomic::AtomicBool;
+use std::sync::Arc;
+use std::task::ready;
 use std::{
     future::Future,
     pin::Pin,
@@ -8,6 +11,30 @@ use std::{
 use tower::make::MakeService;
 use tower_service::Service;
 use tracing::trace;
+
+use crate::body::Body;
+
+/// Allows request responses to require a reconnect based on returned values
+#[derive(Debug, Clone)]
+pub(crate) struct ReconnectNotify(Arc<AtomicBool>);
+
+impl ReconnectNotify {
+    fn new() -> Self {
+        Self(Arc::new(AtomicBool::new(false)))
+    }
+
+    fn reconnect(&self) {
+        self.0.store(true, std::sync::atomic::Ordering::Release)
+    }
+
+    fn reset(&self) {
+        self.0.store(false, std::sync::atomic::Ordering::Release)
+    }
+
+    fn needs_reconnect(&self) -> bool {
+        self.0.load(std::sync::atomic::Ordering::Acquire)
+    }
+}
 
 pub(crate) struct Reconnect<M, Target>
 where
@@ -18,6 +45,7 @@ where
     state: State<M::Future, M::Response>,
     target: Target,
     error: Option<crate::BoxError>,
+    needs_reconnect: ReconnectNotify,
     has_been_connected: bool,
     is_lazy: bool,
 }
@@ -40,28 +68,28 @@ where
             state: State::Idle,
             target,
             error: None,
+            needs_reconnect: ReconnectNotify::new(),
             has_been_connected: false,
             is_lazy,
         }
     }
 }
 
-impl<M, Target, S, Request> Service<Request> for Reconnect<M, Target>
+impl<M, Target, S, Request, E> Service<Request> for Reconnect<M, Target>
 where
     M: Service<Target, Response = S>,
     S: Service<Request>,
     M::Future: Unpin,
-    crate::BoxError: From<M::Error> + From<S::Error>,
+    S::Future: Future<Output = Result<http::Response<Body>, E>>,
+    crate::BoxError: From<M::Error> + From<S::Error> + From<E>,
     Target: Clone,
     <M as tower_service::Service<Target>>::Error: Into<crate::BoxError>,
 {
-    type Response = S::Response;
+    type Response = http::Response<Body>;
     type Error = crate::BoxError;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let mut state;
-
         if self.error.is_some() {
             return Poll::Ready(Ok(()));
         }
@@ -86,7 +114,8 @@ where
                     trace!("poll_ready; connecting");
                     match Pin::new(f).poll(cx) {
                         Poll::Ready(Ok(service)) => {
-                            state = State::Connected(service);
+                            self.needs_reconnect.reset();
+                            self.state = State::Connected(service);
                         }
                         Poll::Pending => {
                             trace!("poll_ready; not ready");
@@ -95,7 +124,7 @@ where
                         Poll::Ready(Err(e)) => {
                             trace!("poll_ready; error");
 
-                            state = State::Idle;
+                            self.state = State::Idle;
 
                             if !(self.has_been_connected || self.is_lazy) {
                                 return Poll::Ready(Err(e.into()));
@@ -112,6 +141,11 @@ where
                     trace!("poll_ready; connected");
 
                     self.has_been_connected = true;
+                    if self.needs_reconnect.needs_reconnect() {
+                        trace!("poll_ready: needs_reconnect");
+                        self.state = State::Idle;
+                        continue;
+                    }
 
                     match inner.poll_ready(cx) {
                         Poll::Ready(Ok(())) => {
@@ -124,16 +158,13 @@ where
                         }
                         Poll::Ready(Err(_)) => {
                             trace!("poll_ready; error");
-                            state = State::Idle;
+                            self.state = State::Idle;
                         }
                     }
                 }
             }
-
-            self.state = state;
         }
 
-        self.state = state;
         Poll::Ready(Ok(()))
     }
 
@@ -149,7 +180,7 @@ where
         };
 
         let fut = service.call(request);
-        ResponseFuture::new(fut)
+        ResponseFuture::new(fut, self.needs_reconnect.clone())
     }
 }
 
@@ -176,6 +207,7 @@ where
 pub(crate) struct ResponseFuture<F> {
     #[pin]
     inner: Inner<F>,
+    reconnect: ReconnectNotify,
 }
 
 #[pin_project(project = InnerProj)]
@@ -186,31 +218,42 @@ enum Inner<F> {
 }
 
 impl<F> ResponseFuture<F> {
-    pub(crate) fn new(inner: F) -> Self {
+    pub(crate) fn new(inner: F, reconnect: ReconnectNotify) -> Self {
         ResponseFuture {
             inner: Inner::Future(inner),
+            reconnect,
         }
     }
 
     pub(crate) fn error(error: crate::BoxError) -> Self {
         ResponseFuture {
             inner: Inner::Error(Some(error)),
+            reconnect: ReconnectNotify::new(),
         }
     }
 }
 
-impl<F, T, E> Future for ResponseFuture<F>
+impl<F, E> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<T, E>>,
+    F: Future<Output = Result<http::Response<Body>, E>>,
     E: Into<crate::BoxError>,
 {
-    type Output = Result<T, crate::BoxError>;
+    type Output = Result<http::Response<Body>, crate::BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        //self.project().inner.poll(cx).map_err(Into::into)
         let me = self.project();
         match me.inner.project() {
-            InnerProj::Future(fut) => fut.poll(cx).map_err(Into::into),
+            InnerProj::Future(fut) => match ready!(fut.poll(cx)) {
+                Ok(res) => {
+                    // Server errors map to `Status::UNAVAILABLE` and are unrecoverable
+                    if res.status().is_server_error() {
+                        trace!("Reconnect: scheduled reconnect");
+                        me.reconnect.reconnect();
+                    }
+                    Poll::Ready(Ok(res))
+                }
+                Err(err) => Poll::Ready(Err(err.into())),
+            },
             InnerProj::Error(e) => {
                 let e = e.take().expect("Polled after ready.");
                 Poll::Ready(Err(e))
