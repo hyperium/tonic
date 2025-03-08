@@ -788,8 +788,7 @@ fn serve_connection<B, IO, S, E>(
 
             let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
-            let sleep = sleep_or_pending(max_connection_age);
-            tokio::pin!(sleep);
+            let mut sleep = pin!(sleep_or_pending(max_connection_age));
 
             loop {
                 tokio::select! {
