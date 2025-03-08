@@ -2,6 +2,11 @@
 all-features = true
 exclude = ["examples"]
 
+[advisories]
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "paste crate is unmaintained. aws-lc-rs, aws-lc-sys and compression test depend on it." },
+]
+
 [bans]
 multiple-versions = "deny"
 deny = [
