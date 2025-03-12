@@ -57,7 +57,7 @@ impl Connection {
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| {
-                let origin = endpoint.origin.as_ref().unwrap_or(&endpoint.uri).clone();
+                let origin = endpoint.origin.as_ref().unwrap_or(endpoint.uri()).clone();
 
                 AddOrigin::new(s, origin)
             })
@@ -70,7 +70,7 @@ impl Connection {
         let make_service =
             MakeSendRequestService::new(connector, endpoint.executor.clone(), settings);
 
-        let conn = Reconnect::new(make_service, endpoint.uri.clone(), is_lazy);
+        let conn = Reconnect::new(make_service, endpoint.uri().clone(), is_lazy);
 
         Self {
             inner: BoxService::new(stack.layer(conn)),
