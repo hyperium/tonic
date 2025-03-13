@@ -163,9 +163,9 @@ where
     type Output = Result<Response<A>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.project();
+        let this = self.project();
 
-        match this.case.as_mut().project() {
+        match this.case.project() {
             CaseProj::GrpcWeb { future, accept } => {
                 let res = ready!(future.poll(cx))?;
 

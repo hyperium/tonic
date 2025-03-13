@@ -23,6 +23,7 @@ impl TlsAcceptor {
         client_ca_root: Option<&Certificate>,
         client_auth_optional: bool,
         ignore_client_order: bool,
+        use_key_log: bool,
     ) -> Result<Self, crate::BoxError> {
         let builder = ServerConfig::builder();
 
@@ -44,6 +45,10 @@ impl TlsAcceptor {
         let (cert, key) = convert_identity_to_pki_types(identity)?;
         let mut config = builder.with_single_cert(cert, key)?;
         config.ignore_client_order = ignore_client_order;
+
+        if use_key_log {
+            config.key_log = Arc::new(tokio_rustls::rustls::KeyLogFile::new());
+        }
 
         config.alpn_protocols.push(ALPN_H2.into());
         Ok(Self {

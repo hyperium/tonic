@@ -18,6 +18,7 @@ pub struct ClientTlsConfig {
     with_native_roots: bool,
     #[cfg(feature = "tls-webpki-roots")]
     with_webpki_roots: bool,
+    use_key_log: bool,
 }
 
 impl ClientTlsConfig {
@@ -84,6 +85,14 @@ impl ClientTlsConfig {
         }
     }
 
+    /// Use key log as specified by the `SSLKEYLOGFILE` environment variable.
+    pub fn use_key_log(self) -> Self {
+        ClientTlsConfig {
+            use_key_log: true,
+            ..self
+        }
+    }
+
     /// Enables the platform's trusted certs.
     #[cfg(feature = "tls-native-roots")]
     pub fn with_native_roots(self) -> Self {
@@ -123,6 +132,7 @@ impl ClientTlsConfig {
             self.identity,
             domain,
             self.assume_http2,
+            self.use_key_log,
             #[cfg(feature = "tls-native-roots")]
             self.with_native_roots,
             #[cfg(feature = "tls-webpki-roots")]
