@@ -2,6 +2,11 @@
 all-features = true
 exclude = ["examples"]
 
+[advisories]
+ignore = [
+  { id = "RUSTSEC-2024-0436", reason = "paste crate is unmaintained. aws-lc-rs, aws-lc-sys and compression test depend on it." },
+]
+
 [bans]
 multiple-versions = "deny"
 deny = [
@@ -23,6 +28,8 @@ skip = [
     { crate = "wasi@0.11.0+wasi-snapshot-preview1", reason = "quickcheck depends on rand which depends on it" },
     { crate = "itertools@0.12.1", reason = "aws-lc-sys depends on bindgen which depends on it" },
     { crate = "unicode-width@0.1.14", reason = "protox depends on miette wich depends on it" },
+    { crate = "rustix@0.38.44", reason = "aws-lc-sys depends on bindgen which depends on it" },
+    { crate = "linux-raw-sys@0.4.15", reason = "rustix 0.38.44 depends on it" },
 ]
 skip-tree = [
     { crate = "windows-sys" },
