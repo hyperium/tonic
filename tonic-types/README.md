@@ -19,7 +19,7 @@ and handle them with ease.
 
 ## Examples
 
-The examples bellow cover a basic use case of the [gRPC Richer Error Model].
+The examples below cover a basic use case of the [gRPC Richer Error Model].
 More complete server and client implementations are provided in the
 **Richer Error example**, located in the main repo [examples] directory.
 
