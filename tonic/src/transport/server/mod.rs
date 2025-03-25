@@ -50,7 +50,6 @@ use http::{Request, Response};
 use http_body_util::BodyExt;
 use hyper::{body::Incoming, service::Service as HyperService};
 use pin_project::pin_project;
-use std::future::pending;
 use std::{
     fmt,
     future::{self, poll_fn, Future},
@@ -62,7 +61,6 @@ use std::{
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::time::sleep;
 use tokio_stream::Stream;
 use tower::{
     layer::util::{Identity, Stack},
@@ -75,7 +73,7 @@ use tower::{
 type BoxService = tower::util::BoxCloneService<Request<Body>, Response<Body>, crate::BoxError>;
 type TraceInterceptor = Arc<dyn Fn(&http::Request<()>) -> tracing::Span + Send + Sync + 'static>;
 
-const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS: u64 = 20;
+const DEFAULT_HTTP2_KEEPALIVE_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// A default batteries included `transport` server.
 ///
@@ -98,7 +96,7 @@ pub struct Server<L = Identity> {
     tcp_keepalive: Option<Duration>,
     tcp_nodelay: bool,
     http2_keepalive_interval: Option<Duration>,
-    http2_keepalive_timeout: Option<Duration>,
+    http2_keepalive_timeout: Duration,
     http2_adaptive_window: Option<bool>,
     http2_max_pending_accept_reset_streams: Option<usize>,
     http2_max_header_list_size: Option<u32>,
@@ -122,7 +120,7 @@ impl Default for Server<Identity> {
             tcp_keepalive: None,
             tcp_nodelay: false,
             http2_keepalive_interval: None,
-            http2_keepalive_timeout: None,
+            http2_keepalive_timeout: DEFAULT_HTTP2_KEEPALIVE_TIMEOUT,
             http2_adaptive_window: None,
             http2_max_pending_accept_reset_streams: None,
             http2_max_header_list_size: None,
@@ -285,11 +283,11 @@ impl<L> Server<L> {
     /// Default is 20 seconds.
     ///
     #[must_use]
-    pub fn http2_keepalive_timeout(self, http2_keepalive_timeout: Option<Duration>) -> Self {
-        Server {
-            http2_keepalive_timeout,
-            ..self
+    pub fn http2_keepalive_timeout(mut self, http2_keepalive_timeout: Option<Duration>) -> Self {
+        if let Some(timeout) = http2_keepalive_timeout {
+            self.http2_keepalive_timeout = timeout;
         }
+        self
     }
 
     /// Sets whether to use an adaptive flow control. Defaults to false.
@@ -654,9 +652,7 @@ impl<L> Server<L> {
         let http2_only = !self.accept_http1;
 
         let http2_keepalive_interval = self.http2_keepalive_interval;
-        let http2_keepalive_timeout = self
-            .http2_keepalive_timeout
-            .unwrap_or_else(|| Duration::new(DEFAULT_HTTP2_KEEPALIVE_TIMEOUT_SECS, 0));
+        let http2_keepalive_timeout = self.http2_keepalive_timeout;
         let http2_adaptive_window = self.http2_adaptive_window;
         let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
         let max_connection_age = self.max_connection_age;
@@ -788,8 +784,7 @@ fn serve_connection<B, IO, S, E>(
 
             let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
-            let sleep = sleep_or_pending(max_connection_age);
-            tokio::pin!(sleep);
+            let mut sleep = pin!(sleep_or_pending(max_connection_age));
 
             loop {
                 tokio::select! {
@@ -817,8 +812,8 @@ fn serve_connection<B, IO, S, E>(
 
 async fn sleep_or_pending(wait_for: Option<Duration>) {
     match wait_for {
-        Some(wait) => sleep(wait).await,
-        None => pending().await,
+        Some(wait) => tokio::time::sleep(wait).await,
+        None => future::pending().await,
     };
 }
 
