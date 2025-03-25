@@ -7,7 +7,6 @@ use std::env;
 use std::fs;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
-use tokio::net::UnixListener;
 use tonic::transport::Channel;
 use tonic::transport::Server;
 
@@ -93,6 +92,7 @@ async fn test_default_stubs_tcp() {
 }
 
 #[tokio::test()]
+#[cfg(not(target_os = "windows"))]
 async fn test_default_stubs_uds() {
     let addrs = run_services_in_background_uds().await;
     let client = test_client::TestClient::connect(addrs.0).await.unwrap();
@@ -132,8 +132,10 @@ async fn run_services_in_background() -> (SocketAddr, SocketAddr) {
     (addr, addr_default_stubs)
 }
 
-#[cfg(test)]
+#[cfg(all(test, not(target_os = "windows")))]
 async fn run_services_in_background_uds() -> (String, String) {
+    use tokio::net::UnixListener;
+
     let svc = test_server::TestServer::new(Svc {});
     let svc_default_stubs = test_default_server::TestDefaultServer::new(Svc {});
 
