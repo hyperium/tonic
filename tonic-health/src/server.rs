@@ -48,7 +48,7 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `Serving`. This notifies any watchers
     /// if there is a change in status.
-    pub async fn set_serving<S>(&mut self)
+    pub async fn set_serving<S>(&self)
     where
         S: NamedService,
     {
@@ -59,7 +59,7 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `NotServing`. This notifies any watchers
     /// if there is a change in status.
-    pub async fn set_not_serving<S>(&mut self)
+    pub async fn set_not_serving<S>(&self)
     where
         S: NamedService,
     {
@@ -70,7 +70,7 @@ impl HealthReporter {
 
     /// Sets the status of the service with `service_name` to `status`. This notifies any watchers
     /// if there is a change in status.
-    pub async fn set_service_status<S>(&mut self, service_name: S, status: ServingStatus)
+    pub async fn set_service_status<S>(&self, service_name: S, status: ServingStatus)
     where
         S: AsRef<str>,
     {
@@ -220,7 +220,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_service_check() {
-        let (mut reporter, service) = make_test_service().await;
+        let (reporter, service) = make_test_service().await;
 
         // Overall server health
         let resp = service
