@@ -155,7 +155,7 @@ where
     }
 
     fn call(&mut self, req: Request<B>) -> Self::Future {
-        RoutesFuture(self.router.call(req.map(axum::body::Body::new)))
+        RoutesFuture(self.router.call(req))
     }
 }
 
