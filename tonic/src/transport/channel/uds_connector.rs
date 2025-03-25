@@ -4,10 +4,31 @@ use std::task::{Context, Poll};
 
 use http::Uri;
 use hyper_util::rt::TokioIo;
-use tokio::net::UnixStream;
+
 use tower::Service;
 
 use crate::status::ConnectError;
+
+#[cfg(not(target_os = "windows"))]
+use tokio::net::UnixStream;
+
+#[cfg(not(target_os = "windows"))]
+async fn connect_uds(uds_path: String) -> Result<UnixStream, ConnectError> {
+    UnixStream::connect(uds_path)
+        .await
+        .map_err(|err| ConnectError(From::from(err)))
+}
+
+// Dummy type that will allow us to compile and match trait bounds
+// but is never used.
+#[cfg(target_os = "windows")]
+#[allow(dead_code)]
+type UnixStream = tokio::io::DuplexStream;
+
+#[cfg(target_os = "windows")]
+async fn connect_uds(uds_path: String) -> Result<UnixStream, ConnectError> {
+    ConnectError("uds connections are not allowed on windows".into())
+}
 
 pub(crate) struct UdsConnector {
     uds_filepath: String,
@@ -33,9 +54,7 @@ impl Service<Uri> for UdsConnector {
     fn call(&mut self, _: Uri) -> Self::Future {
         let uds_path = self.uds_filepath.clone();
         let fut = async move {
-            let stream = UnixStream::connect(uds_path)
-                .await
-                .map_err(|err| ConnectError(From::from(err)))?;
+            let stream = connect_uds(uds_path).await?;
             Ok(TokioIo::new(stream))
         };
         UdsConnecting {
