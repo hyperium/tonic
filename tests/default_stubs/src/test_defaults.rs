@@ -139,9 +139,9 @@ async fn run_services_in_background_uds() -> (String, String) {
     let svc = test_server::TestServer::new(Svc {});
     let svc_default_stubs = test_default_server::TestDefaultServer::new(Svc {});
 
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let suffix: String = (0..8)
-        .map(|_| rng.sample(rand::distributions::Alphanumeric) as char)
+        .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
         .collect();
     let tmpdir = fs::canonicalize(env::temp_dir())
         .unwrap()
