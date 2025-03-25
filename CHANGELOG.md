@@ -1,3 +1,7 @@
+# NOTE: ths changelog is no longer used and from version `v0.13.0` onward we
+will be using github releases and the changes can be found
+[here](https://github.com/hyperium/tonic/releases).
+
 # [0.12.3](https://github.com/hyperium/tonic/compare/v0.12.2...v0.12.3) (2024-08-29)
 
 ### Features
