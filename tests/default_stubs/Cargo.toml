@@ -8,6 +8,7 @@ name = "default_stubs"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
 tokio-stream = {version = "0.1", features = ["net"]}
 prost = "0.13"
+rand = "0.8"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]
