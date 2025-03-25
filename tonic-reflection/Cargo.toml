@@ -19,7 +19,6 @@ rust-version = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 server = ["dep:prost-types", "dep:tokio", "dep:tokio-stream"]
