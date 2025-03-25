@@ -26,7 +26,7 @@ async fn connect_uds(uds_path: String) -> Result<UnixStream, ConnectError> {
 type UnixStream = tokio::io::DuplexStream;
 
 #[cfg(target_os = "windows")]
-async fn connect_uds(uds_path: String) -> Result<UnixStream, ConnectError> {
+async fn connect_uds(_uds_path: String) -> Result<UnixStream, ConnectError> {
     Err(ConnectError(
         "uds connections are not allowed on windows".into(),
     ))
