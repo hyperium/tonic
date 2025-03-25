@@ -50,7 +50,6 @@ use http::{Request, Response};
 use http_body_util::BodyExt;
 use hyper::{body::Incoming, service::Service as HyperService};
 use pin_project::pin_project;
-use std::future::pending;
 use std::{
     fmt,
     future::{self, poll_fn, Future},
@@ -62,7 +61,6 @@ use std::{
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::time::sleep;
 use tokio_stream::Stream;
 use tower::{
     layer::util::{Identity, Stack},
@@ -816,8 +814,8 @@ fn serve_connection<B, IO, S, E>(
 
 async fn sleep_or_pending(wait_for: Option<Duration>) {
     match wait_for {
-        Some(wait) => sleep(wait).await,
-        None => pending().await,
+        Some(wait) => tokio::time::sleep(wait).await,
+        None => future::pending().await,
     };
 }
 
