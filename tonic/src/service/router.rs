@@ -151,7 +151,7 @@ where
 
     #[inline]
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Service::<Request<B>>::poll_ready(&mut self.router, cx).map_err(|e| match e {})
+        Service::<Request<B>>::poll_ready(&mut self.router, cx)
     }
 
     fn call(&mut self, req: Request<B>) -> Self::Future {
