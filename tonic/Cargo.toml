@@ -103,7 +103,6 @@ hyper-timeout = {version = "0.5", optional = true}
 bencher = "0.1.5"
 quickcheck = "1.0"
 quickcheck_macros = "1.0"
-rand = "0.8"
 static_assertions = "1.0"
 tokio = {version = "1.0", features = ["rt", "macros"]}
 tower = {version = "0.5", features = ["load-shed", "timeout"]}
