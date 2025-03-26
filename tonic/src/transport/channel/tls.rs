@@ -23,8 +23,8 @@ pub struct ClientTlsConfig {
 }
 
 #[derive(Clone)]
-struct ModdifyConfigFn(
-    std::sync::Arc<dyn Fn(&mut tokio_rustls::rustls::ClientConfig) + Send + Sync>,
+pub(crate) struct ModdifyConfigFn(
+   pub std::sync::Arc<dyn Fn(&mut tokio_rustls::rustls::ClientConfig) + Send + Sync>,
 );
 
 impl std::fmt::Debug for ModdifyConfigFn {
@@ -157,7 +157,7 @@ impl ClientTlsConfig {
             domain,
             self.assume_http2,
             self.use_key_log,
-            self.modify_config.map(|f| f.0),
+            self.modify_config,
             #[cfg(feature = "tls-native-roots")]
             self.with_native_roots,
             #[cfg(feature = "tls-webpki-roots")]
