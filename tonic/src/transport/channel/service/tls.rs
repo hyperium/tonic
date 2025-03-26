@@ -13,10 +13,13 @@ use tokio_rustls::{
 };
 
 use super::io::BoxedIo;
-use crate::transport::{channel::tls::ModdifyConfigFn, service::tls::{
-    convert_certificate_to_pki_types, convert_identity_to_pki_types, TlsError, ALPN_H2,
-}};
 use crate::transport::tls::{Certificate, Identity};
+use crate::transport::{
+    channel::tls::ModdifyConfigFn,
+    service::tls::{
+        convert_certificate_to_pki_types, convert_identity_to_pki_types, TlsError, ALPN_H2,
+    },
+};
 
 #[derive(Clone)]
 pub(crate) struct TlsConnector {
