@@ -13,12 +13,22 @@ pub struct ClientTlsConfig {
     certs: Vec<Certificate>,
     trust_anchors: Vec<TrustAnchor<'static>>,
     identity: Option<Identity>,
+    modify_config: Option<ModdifyConfigFn>,
     assume_http2: bool,
     #[cfg(feature = "tls-native-roots")]
     with_native_roots: bool,
     #[cfg(feature = "tls-webpki-roots")]
     with_webpki_roots: bool,
     use_key_log: bool,
+}
+
+#[derive(Clone)]
+struct ModdifyConfigFn(std::sync::Arc<dyn Fn(&mut tokio_rustls::rustls::ClientConfig) + Send + Sync>);
+
+impl std::fmt::Debug for ModdifyConfigFn {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ModdifyConfigFn").finish()
+    }
 }
 
 impl ClientTlsConfig {
@@ -121,6 +131,18 @@ impl ClientTlsConfig {
         config
     }
 
+    /// Adds a function to modify the `ClientConfig` before it is used.
+    pub fn modify_config<F>(self, f: F) -> Self
+    where
+        F: Fn(&mut tokio_rustls::rustls::ClientConfig) + Send + Sync + 'static,
+    {
+        let modify_config = ModdifyConfigFn(std::sync::Arc::new(f));
+        ClientTlsConfig {
+            modify_config: Some(modify_config),
+            ..self
+        }
+    }
+
     pub(crate) fn into_tls_connector(self, uri: &Uri) -> Result<TlsConnector, crate::BoxError> {
         let domain = match &self.domain {
             Some(domain) => domain,
@@ -137,6 +159,7 @@ impl ClientTlsConfig {
             self.with_native_roots,
             #[cfg(feature = "tls-webpki-roots")]
             self.with_webpki_roots,
+            self.modify_config.map(|f| f.0),
         )
     }
 }

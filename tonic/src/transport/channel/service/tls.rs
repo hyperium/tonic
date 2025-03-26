@@ -34,6 +34,7 @@ impl TlsConnector {
         domain: &str,
         assume_http2: bool,
         use_key_log: bool,
+        modify_config: Option<Arc<dyn Fn(&mut ClientConfig) + Send + Sync>>,
         #[cfg(feature = "tls-native-roots")] with_native_roots: bool,
         #[cfg(feature = "tls-webpki-roots")] with_webpki_roots: bool,
     ) -> Result<Self, crate::BoxError> {
@@ -94,6 +95,11 @@ impl TlsConnector {
         }
 
         config.alpn_protocols.push(ALPN_H2.into());
+
+        if let Some(modify_config) = modify_config {
+            modify_config(&mut config);
+        }
+
         Ok(Self {
             config: Arc::new(config),
             domain: Arc::new(ServerName::try_from(domain)?.to_owned()),
