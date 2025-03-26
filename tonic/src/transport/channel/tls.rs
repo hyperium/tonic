@@ -24,7 +24,7 @@ pub struct ClientTlsConfig {
 
 #[derive(Clone)]
 pub(crate) struct ModdifyConfigFn(
-    pub std::sync::Arc<dyn Fn(&mut tokio_rustls::rustls::ClientConfig) + Send + Sync>,
+    pub(crate) std::sync::Arc<dyn Fn(&mut tokio_rustls::rustls::ClientConfig) + Send + Sync>,
 );
 
 impl std::fmt::Debug for ModdifyConfigFn {
