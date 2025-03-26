@@ -155,11 +155,11 @@ impl ClientTlsConfig {
             domain,
             self.assume_http2,
             self.use_key_log,
+            self.modify_config.map(|f| f.0),
             #[cfg(feature = "tls-native-roots")]
             self.with_native_roots,
             #[cfg(feature = "tls-webpki-roots")]
             self.with_webpki_roots,
-            self.modify_config.map(|f| f.0),
         )
     }
 }
