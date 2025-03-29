@@ -118,8 +118,13 @@ path = "src/tracing/server.rs"
 required-features = ["tracing"]
 
 [[bin]]
-name = "uds-client"
-path = "src/uds/client.rs"
+name = "uds-client-standard"
+path = "src/uds/client_standard.rs"
+required-features = ["uds"]
+
+[[bin]]
+name = "uds-client-with-connector"
+path = "src/uds/client_with_connector.rs"
 required-features = ["uds"]
 
 [[bin]]

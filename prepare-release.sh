@@ -33,10 +33,6 @@ CRATES=( \
 )
 
 for CRATE in "${CRATES[@]}"; do
-  # Update documentation url in Cargo.toml
-  sed -i -E "s~documentation = \"https://docs\.rs/$CRATE/$VERSION_MATCHER\"~documentation = \"https://docs.rs/${CRATE}/${VERSION}\"~" \
-    "$DIR/$CRATE/Cargo.toml"
-
   # Update Cargo.toml version fields.
   sed -i -E "s/^version = \"${VERSION_MATCHER}\"$/version = \"${VERSION}\"/" \
     "$DIR/$CRATE/Cargo.toml"
