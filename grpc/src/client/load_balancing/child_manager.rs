@@ -231,7 +231,7 @@ impl<'a> WrappedController<'a> {
     }
 }
 
-impl<'a> ChannelController for WrappedController<'a> {
+impl ChannelController for WrappedController {
     fn new_subchannel(&mut self, address: &Address) -> Subchannel {
         let subchannel = self.channel_controller.new_subchannel(address);
         self.created_subchannels.push(subchannel.clone());
