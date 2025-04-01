@@ -132,7 +132,7 @@ pub struct LbConfig {
     config: Box<dyn Any>,
 }
 
-impl<'a> LbConfig {
+impl LbConfig {
     /// Create a new LbConfig wrapper containing the provided config.
     pub fn new(config: Box<dyn Any>) -> Self {
         LbConfig { config }

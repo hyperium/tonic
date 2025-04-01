@@ -131,7 +131,7 @@ impl<T: PartialEq + Hash + Eq + Send> LbPolicy for ChildManager<T> {
         for (subchannel, child_idx) in old_subchannel_child_map {
             old_child_subchannels_map
                 .entry(child_idx)
-                .or_insert_with(|| vec![])
+                .or_default()
                 .push(subchannel);
         }
 
