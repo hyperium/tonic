@@ -581,6 +581,7 @@ impl Status {
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
         self.add_header(response.headers_mut()).unwrap();
+        response.extensions_mut().insert(self);
         response
     }
 
