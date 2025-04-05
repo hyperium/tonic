@@ -43,13 +43,15 @@ impl<S> GrpcWebService<S> {
     }
 }
 
-impl<S, B> Service<Request<B>> for GrpcWebService<S>
+impl<S, ReqBody, ResBody> Service<Request<ReqBody>> for GrpcWebService<S>
 where
-    S: Service<Request<Body>, Response = Response<Body>>,
-    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    B::Error: Into<crate::BoxError> + fmt::Display,
+    S: Service<Request<Body>, Response = Response<ResBody>>,
+    ReqBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    ReqBody::Error: Into<crate::BoxError> + fmt::Display,
+    ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    ResBody::Error: Into<crate::BoxError> + fmt::Display,
 {
-    type Response = S::Response;
+    type Response = Response<Body>;
     type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
@@ -57,7 +59,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<B>) -> Self::Future {
+    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         match RequestKind::new(req.headers(), req.method(), req.version()) {
             // A valid grpc-web request, regardless of HTTP version.
             //
@@ -152,9 +154,11 @@ impl<F> Case<F> {
     }
 }
 
-impl<F, E> Future for ResponseFuture<F>
+impl<F, B, E> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<Body>, E>>,
+    F: Future<Output = Result<Response<B>, E>>,
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::BoxError> + fmt::Display,
 {
     type Output = Result<Response<Body>, E>;
 
@@ -167,7 +171,7 @@ where
 
                 Poll::Ready(Ok(coerce_response(res, *accept)))
             }
-            CaseProj::Other { future } => future.poll(cx),
+            CaseProj::Other { future } => future.poll(cx).map_ok(|res| res.map(Body::new)),
             CaseProj::ImmediateResponse { res } => {
                 let res = Response::from_parts(res.take().unwrap(), Body::empty());
                 Poll::Ready(Ok(res))
@@ -255,16 +259,16 @@ mod tests {
     #[derive(Debug, Clone)]
     struct Svc;
 
-    impl tower_service::Service<Request<Body>> for Svc {
+    impl<B> tower_service::Service<Request<B>> for Svc {
         type Response = Response<Body>;
-        type Error = String;
+        type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
 
         fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
 
-        fn call(&mut self, _: Request<Body>) -> Self::Future {
+        fn call(&mut self, _: Request<B>) -> Self::Future {
             Box::pin(async { Ok(Response::new(Body::default())) })
         }
     }
@@ -308,6 +312,17 @@ mod tests {
         #[tokio::test]
         async fn web_layer() {
             let mut svc = crate::GrpcWebLayer::new().layer(Svc);
+            let res = svc.call(request()).await.unwrap();
+
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
+        async fn web_layer_with_axum() {
+            let mut svc = axum::routing::Router::new()
+                .route("/", axum::routing::post_service(Svc))
+                .layer(crate::GrpcWebLayer::new());
+
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::OK);

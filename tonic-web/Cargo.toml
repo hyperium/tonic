@@ -29,6 +29,7 @@ tracing = "0.1"
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
 tower-http = { version = "0.6", features = ["cors"] }
+axum = { version = "0.8", default-features = false }
 
 [lints]
 workspace = true
