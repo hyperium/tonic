@@ -171,10 +171,7 @@ where
 
                 Poll::Ready(Ok(coerce_response(res, *accept)))
             }
-            CaseProj::Other { future } => {
-                let res = ready!(future.poll(cx))?;
-                Poll::Ready(Ok(res.map(Body::new)))
-            }
+            CaseProj::Other { future } => future.poll(cx).map_ok(|res| res.map(Body::new)),
             CaseProj::ImmediateResponse { res } => {
                 let res = Response::from_parts(res.take().unwrap(), Body::empty());
                 Poll::Ready(Ok(res))
