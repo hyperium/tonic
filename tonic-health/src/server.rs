@@ -98,6 +98,12 @@ impl HealthReporter {
     }
 }
 
+impl Default for HealthReporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A service providing implementations of gRPC health checking protocol.
 #[derive(Debug)]
 pub struct HealthService {
