@@ -62,7 +62,7 @@ impl Endpoint {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
         #[cfg(feature = "_tls-any")]
         if let EndpointType::Uri(uri) = &me.uri {
-            if uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
+            if me.tls.is_none() && uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
                 return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
             }
         }
