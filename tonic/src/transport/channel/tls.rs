@@ -113,11 +113,13 @@ impl ClientTlsConfig {
 
     /// Activates all TLS roots enabled through `tls-*-roots` feature flags
     pub fn with_enabled_roots(self) -> Self {
-        let config = ClientTlsConfig::new();
+        let config = self;
+
         #[cfg(feature = "tls-native-roots")]
         let config = config.with_native_roots();
         #[cfg(feature = "tls-webpki-roots")]
         let config = config.with_webpki_roots();
+
         config
     }
 
