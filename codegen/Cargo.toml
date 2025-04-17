@@ -5,7 +5,7 @@ license = "MIT"
 edition = "2021"
 
 [dependencies]
-protox = "0.7"
+protox = "0.8"
 prettyplease = "0.2"
 quote = "1"
 syn = "2"
