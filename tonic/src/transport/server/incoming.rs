@@ -70,6 +70,11 @@ impl TcpIncoming {
         let keepalive = keepalive.map(|t| TcpKeepalive::new().with_time(t));
         Self { keepalive, ..self }
     }
+
+    /// Returns the local address that this tcp incoming is bound to.
+    pub fn local_addr(&self) -> std::io::Result<SocketAddr> {
+        self.inner.as_ref().local_addr()
+    }
 }
 
 impl From<TcpListener> for TcpIncoming {
