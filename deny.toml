@@ -24,6 +24,8 @@ deny = [
     { crate = "term" },
 ]
 skip = [
+    { crate = "thiserror@1.0.69", reason = "protox depends on miette which depends on it" },
+    { crate = "thiserror-impl@1.0.69", reason = "thiserror@1.0.69 depends on it" },
     { crate = "getrandom@0.2.15", reason = "quickcheck depends on rand which depends on it" },
     { crate = "wasi@0.11.0+wasi-snapshot-preview1", reason = "quickcheck depends on rand which depends on it" },
     { crate = "itertools@0.12.1", reason = "aws-lc-sys depends on bindgen which depends on it" },
