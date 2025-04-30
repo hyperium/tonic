@@ -32,7 +32,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let scheme = if matches.use_tls { "https" } else { "http" };
 
     #[allow(unused_mut)]
-    let mut endpoint = Endpoint::try_from(format!("{}://localhost:10000", scheme))?
+    let mut endpoint = Endpoint::try_from(format!("{scheme}://localhost:10000"))?
         .timeout(Duration::from_secs(5))
         .concurrency_limit(30);
 
@@ -54,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut failures = Vec::new();
 
     for test_case in test_cases {
-        println!("{:?}:", test_case);
+        println!("{test_case:?}:");
         let mut test_results = Vec::new();
 
         match test_case {
@@ -87,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         for result in test_results {
-            println!("  {}", result);
+            println!("  {result}");
 
             if result.is_failed() {
                 failures.push(result);

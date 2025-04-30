@@ -46,7 +46,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                     .unwrap()
                     .to_str()
                     .unwrap(),
-                format!("{},identity", expected)
+                format!("{expected},identity")
             );
             self.service.call(req)
         }
@@ -88,7 +88,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
 
     for _ in 0..3 {
@@ -353,7 +353,7 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
@@ -411,7 +411,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
@@ -482,7 +482,7 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
     let bytes_sent = response_bytes_counter.load(SeqCst);

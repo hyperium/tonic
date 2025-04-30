@@ -161,14 +161,11 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(
         status.message(),
-        format!(
-            "Content is compressed with `{}` which isn't supported",
-            expected
-        )
+        format!("Content is compressed with `{expected}` which isn't supported")
     );
 }
 
@@ -218,7 +215,7 @@ async fn compressing_response_from_client_stream(encoding: CompressionEncoding) 
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
     let bytes_sent = response_bytes_counter.load(SeqCst);

@@ -47,7 +47,7 @@ fn main() -> Result<()> {
 
     let response = client.say_hello(request)?;
 
-    println!("RESPONSE={:?}", response);
+    println!("RESPONSE={response:?}");
 
     Ok(())
 }

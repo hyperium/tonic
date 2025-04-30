@@ -27,36 +27,36 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("Added first endpoint");
         let change = Change::Insert("1", e1);
         let res = rx.send(change).await;
-        println!("{:?}", res);
+        println!("{res:?}");
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         println!("Added second endpoint");
         let change = Change::Insert("2", e2);
         let res = rx.send(change).await;
-        println!("{:?}", res);
+        println!("{res:?}");
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         println!("Removed first endpoint");
         let change = Change::Remove("1");
         let res = rx.send(change).await;
-        println!("{:?}", res);
+        println!("{res:?}");
 
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         println!("Removed second endpoint");
         let change = Change::Remove("2");
         let res = rx.send(change).await;
-        println!("{:?}", res);
+        println!("{res:?}");
 
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         println!("Added third endpoint");
         let e3 = Endpoint::from_static("http://[::1]:50051");
         let change = Change::Insert("3", e3);
         let res = rx.send(change).await;
-        println!("{:?}", res);
+        println!("{res:?}");
 
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         println!("Removed third endpoint");
         let change = Change::Remove("3");
         let res = rx.send(change).await;
-        println!("{:?}", res);
+        println!("{res:?}");
         demo_done.swap(true, SeqCst);
     });
 
@@ -68,7 +68,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let rx = client.unary_echo(request);
         if let Ok(resp) = timeout(tokio::time::Duration::from_secs(10), rx).await {
-            println!("RESPONSE={:?}", resp);
+            println!("RESPONSE={resp:?}");
         } else {
             println!("did not receive value within 10 secs");
         }

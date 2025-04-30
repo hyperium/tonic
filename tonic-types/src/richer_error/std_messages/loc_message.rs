@@ -95,7 +95,7 @@ mod tests {
     fn gen_localized_message() {
         let loc_message = LocalizedMessage::new("en-US", "message for the user");
 
-        let formatted = format!("{:?}", loc_message);
+        let formatted = format!("{loc_message:?}");
 
         let expected_filled =
             "LocalizedMessage { locale: \"en-US\", message: \"message for the user\" }";
@@ -107,7 +107,7 @@ mod tests {
 
         let gen_any = loc_message.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.LocalizedMessage\", value: [10, 5, 101, 110, 45, 85, 83, 18, 20, 109, 101, 115, 115, 97, 103, 101, 32, 102, 111, 114, 32, 116, 104, 101, 32, 117, 115, 101, 114] }";
@@ -118,11 +118,11 @@ mod tests {
         );
 
         let br_details = match LocalizedMessage::from_any(gen_any) {
-            Err(error) => panic!("Error generating LocalizedMessage from Any: {:?}", error),
+            Err(error) => panic!("Error generating LocalizedMessage from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = greeter_client.say_hello(request).await?;
 
-    println!("GREETER RESPONSE={:?}", response);
+    println!("GREETER RESPONSE={response:?}");
 
     let request = tonic::Request::new(EchoRequest {
         message: "hello".into(),
@@ -33,7 +33,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = echo_client.unary_echo(request).await?;
 
-    println!("ECHO RESPONSE={:?}", response);
+    println!("ECHO RESPONSE={response:?}");
 
     Ok(())
 }
