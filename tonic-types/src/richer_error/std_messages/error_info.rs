@@ -3,9 +3,9 @@ use std::collections::HashMap;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
-use crate::richer_error::FromAnyRef;
+use crate::pb;
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::*;
 
 /// Used to encode/decode the `ErrorInfo` standard error message described in
 /// [error_details.proto]. Describes the cause of the error with structured
@@ -64,13 +64,6 @@ impl IntoAny for ErrorInfo {
     }
 }
 
-impl FromAny for ErrorInfo {
-    #[inline]
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        FromAnyRef::from_any_ref(&any)
-    }
-}
-
 impl FromAnyRef for ErrorInfo {
     fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
@@ -102,10 +95,7 @@ impl From<ErrorInfo> for pb::ErrorInfo {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::HashMap;
-
-    use super::super::super::{FromAny, IntoAny};
-    use super::ErrorInfo;
+    use super::*;
 
     #[test]
     fn gen_error_info() {
@@ -135,7 +125,7 @@ mod tests {
             "Any from filled ErrorInfo differs from expected result"
         );
 
-        let br_details = match ErrorInfo::from_any(gen_any) {
+        let br_details = match ErrorInfo::from_any_ref(&gen_any) {
             Err(error) => panic!("Error generating ErrorInfo from Any: {:?}", error),
             Ok(from_any) => from_any,
         };
