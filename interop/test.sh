@@ -47,7 +47,7 @@ TLS_CRT="interop/data/server1.pem"
 TLS_KEY="interop/data/server1.key"
 
 # run the test server
-./"${SERVER}" ${ARG} --tls_cert_file $TLS_CRT --tls_key_file $TLS_KEY &
+./"${SERVER}" "${ARG}" --tls_cert_file $TLS_CRT --tls_key_file $TLS_KEY &
 SERVER_PID=$!
 echo ":; started grpc-go test server."
 
@@ -57,12 +57,12 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client --test_case="${JOINED_TEST_CASES}" ${ARG}
+./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
-echo ":; killing test server"; kill ${SERVER_PID};
+echo ":; killing test server"; kill "${SERVER_PID}";
 
 # run the test server
-./target/debug/server ${ARG} &
+./target/debug/server "${ARG}" &
 SERVER_PID=$!
 echo ":; started tonic test server."
 
@@ -72,7 +72,7 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client --test_case="${JOINED_TEST_CASES}" ${ARG}
+./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
 TLS_ARGS=""
 
@@ -81,5 +81,5 @@ if [ -n "${ARG}" ]; then
 fi
 
 for CASE in "${TEST_CASES[@]}"; do
-  interop/bin/client_${OS}_amd64${EXT} --test_case="${CASE}" ${TLS_ARGS}
+  interop/bin/client_${OS}_amd64${EXT} --test_case="${CASE}" "${TLS_ARGS}"
 done
