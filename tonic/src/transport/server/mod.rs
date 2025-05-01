@@ -52,7 +52,7 @@ use hyper::{body::Incoming, service::Service as HyperService};
 use pin_project::pin_project;
 use std::{
     fmt,
-    future::{self, poll_fn, Future},
+    future::{self, Future},
     marker::PhantomData,
     net::SocketAddr,
     pin::{pin, Pin},
@@ -724,10 +724,6 @@ impl<L> Server<L> {
                     };
 
                     trace!("connection accepted");
-
-                    poll_fn(|cx| svc.poll_ready(cx))
-                        .await
-                        .map_err(super::Error::from_source)?;
 
                     let req_svc = svc
                         .call(&io)

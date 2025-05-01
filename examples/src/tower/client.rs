@@ -27,14 +27,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = client.say_hello(request).await?;
 
-    println!("RESPONSE={:?}", response);
+    println!("RESPONSE={response:?}");
 
     Ok(())
 }
 
 // An interceptor function.
 fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
-    println!("received {:?}", req);
+    println!("received {req:?}");
     Ok(req)
 }
 

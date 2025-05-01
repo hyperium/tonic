@@ -147,7 +147,7 @@ mod tests {
     #[test]
     fn gen_quota_failure() {
         let mut quota_failure = QuotaFailure::new(Vec::new());
-        let formatted = format!("{:?}", quota_failure);
+        let formatted = format!("{quota_failure:?}");
 
         let expected = "QuotaFailure { violations: [] }";
 
@@ -165,7 +165,7 @@ mod tests {
             .add_violation("clientip:<ip address>", "description a")
             .add_violation("project:<project id>", "description b");
 
-        let formatted = format!("{:?}", quota_failure);
+        let formatted = format!("{quota_failure:?}");
 
         let expected_filled = "QuotaFailure { violations: [QuotaViolation { subject: \"clientip:<ip address>\", description: \"description a\" }, QuotaViolation { subject: \"project:<project id>\", description: \"description b\" }] }";
 
@@ -181,7 +181,7 @@ mod tests {
 
         let gen_any = quota_failure.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected = "Any { type_url: \"type.googleapis.com/google.rpc.QuotaFailure\", value: [10, 38, 10, 21, 99, 108, 105, 101, 110, 116, 105, 112, 58, 60, 105, 112, 32, 97, 100, 100, 114, 101, 115, 115, 62, 18, 13, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 32, 97, 10, 37, 10, 20, 112, 114, 111, 106, 101, 99, 116, 58, 60, 112, 114, 111, 106, 101, 99, 116, 32, 105, 100, 62, 18, 13, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 32, 98] }";
 
@@ -191,11 +191,11 @@ mod tests {
         );
 
         let br_details = match QuotaFailure::from_any(gen_any) {
-            Err(error) => panic!("Error generating QuotaFailure from Any: {:?}", error),
+            Err(error) => panic!("Error generating QuotaFailure from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),
