@@ -1,6 +1,7 @@
 pub mod gen {
     pub mod google {
         pub mod protobuf {
+            #![allow(clippy::doc_overindented_list_items)]
             tonic::include_proto!("google.protobuf");
         }
     }

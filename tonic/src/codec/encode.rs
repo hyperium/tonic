@@ -154,7 +154,7 @@ where
 
         encoder
             .encode(item, &mut EncodeBuf::new(uncompression_buf))
-            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+            .map_err(|err| Status::internal(format!("Error encoding: {err}")))?;
 
         let uncompressed_len = uncompression_buf.len();
 
@@ -167,11 +167,11 @@ where
             buf,
             uncompressed_len,
         )
-        .map_err(|err| Status::internal(format!("Error compressing: {}", err)))?;
+        .map_err(|err| Status::internal(format!("Error compressing: {err}")))?;
     } else {
         encoder
             .encode(item, &mut EncodeBuf::new(buf))
-            .map_err(|err| Status::internal(format!("Error encoding: {}", err)))?;
+            .map_err(|err| Status::internal(format!("Error encoding: {err}")))?;
     }
 
     // now that we know length, we can write the header
@@ -187,8 +187,7 @@ fn finish_encoding(
     let limit = max_message_size.unwrap_or(DEFAULT_MAX_SEND_MESSAGE_SIZE);
     if len > limit {
         return Err(Status::out_of_range(format!(
-            "Error, encoded message length too large: found {} bytes, the limit is: {} bytes",
-            len, limit
+            "Error, encoded message length too large: found {len} bytes, the limit is: {limit} bytes"
         )));
     }
 

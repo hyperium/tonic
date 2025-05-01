@@ -30,7 +30,7 @@ impl Greeter for MyGreeter {
         #[cfg(unix)]
         {
             let conn_info = request.extensions().get::<UdsConnectInfo>().unwrap();
-            println!("Got a request {:?} with info {:?}", request, conn_info);
+            println!("Got a request {request:?} with info {conn_info:?}");
         }
 
         let reply = hello_world::HelloReply {

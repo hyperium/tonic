@@ -172,7 +172,7 @@ impl crate::Method for TonicBuildMethod {
         let convert_type = |proto_type: &str, rust_type: &str| -> TokenStream {
             if (is_google_type(proto_type) && !compile_well_known_types)
                 || rust_type.starts_with("::")
-                || NON_PATH_TYPE_ALLOWLIST.iter().any(|ty| *ty == rust_type)
+                || NON_PATH_TYPE_ALLOWLIST.contains(&rust_type)
             {
                 rust_type.parse::<TokenStream>().unwrap()
             } else if rust_type.starts_with("crate::") {
@@ -180,7 +180,7 @@ impl crate::Method for TonicBuildMethod {
                     .unwrap()
                     .to_token_stream()
             } else {
-                syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, rust_type))
+                syn::parse_str::<syn::Path>(&format!("{proto_path}::{rust_type}"))
                     .unwrap()
                     .to_token_stream()
             }

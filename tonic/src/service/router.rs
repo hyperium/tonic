@@ -5,7 +5,7 @@ use std::{
     fmt,
     future::Future,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 use tower::{Service, ServiceExt};
 
@@ -146,16 +146,16 @@ where
     B::Error: Into<crate::BoxError>,
 {
     type Response = Response<Body>;
-    type Error = crate::BoxError;
+    type Error = Infallible;
     type Future = RoutesFuture;
 
     #[inline]
-    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Service::<Request<B>>::poll_ready(&mut self.router, cx)
     }
 
     fn call(&mut self, req: Request<B>) -> Self::Future {
-        RoutesFuture(self.router.call(req.map(axum::body::Body::new)))
+        RoutesFuture(self.router.call(req))
     }
 }
 
@@ -168,15 +168,11 @@ impl fmt::Debug for RoutesFuture {
 }
 
 impl Future for RoutesFuture {
-    type Output = Result<Response<Body>, crate::BoxError>;
+    type Output = Result<Response<Body>, Infallible>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(Pin::new(&mut self.as_mut().0).poll(cx)) {
-            Ok(res) => Ok(res.map(Body::new)).into(),
-            // NOTE: This pattern is not needed from Rust 1.82.
-            // See https://github.com/rust-lang/rust/pull/122792.
-            #[allow(unreachable_patterns)]
-            Err(err) => match err {},
-        }
+        Pin::new(&mut self.as_mut().0)
+            .poll(cx)
+            .map_ok(|res| res.map(Body::new))
     }
 }

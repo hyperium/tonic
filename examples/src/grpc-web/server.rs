@@ -38,7 +38,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .into_inner()
         .named_layer(GreeterServer::new(greeter));
 
-    println!("GreeterServer listening on {}", addr);
+    println!("GreeterServer listening on {addr}");
 
     Server::builder()
         // GrpcWeb is over http1 so we must enable it.

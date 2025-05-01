@@ -126,7 +126,7 @@ mod tests {
     fn gen_retry_info() {
         let retry_info = RetryInfo::new(Some(Duration::from_secs(u64::MAX)));
 
-        let formatted = format!("{:?}", retry_info);
+        let formatted = format!("{retry_info:?}");
 
         let expected_filled = "RetryInfo { retry_delay: Some(315576000000.999999999s) }";
 
@@ -142,7 +142,7 @@ mod tests {
 
         let gen_any = retry_info.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.RetryInfo\", value: [10, 13, 8, 128, 188, 174, 206, 151, 9, 16, 255, 147, 235, 220, 3] }";
@@ -153,11 +153,11 @@ mod tests {
         );
 
         let br_details = match RetryInfo::from_any(gen_any) {
-            Err(error) => panic!("Error generating RetryInfo from Any: {:?}", error),
+            Err(error) => panic!("Error generating RetryInfo from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

@@ -53,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let (conn, addr) = match listener.accept().await {
             Ok(incoming) => incoming,
             Err(e) => {
-                eprintln!("Error accepting connection: {}", e);
+                eprintln!("Error accepting connection: {e}");
                 continue;
             }
         };

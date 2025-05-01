@@ -120,14 +120,14 @@ fn build_request(base_uri: String, content_type: &str, accept: &str) -> Request<
         "grpc-web-text" => test_web::util::base64::STANDARD
             .encode(encode_body())
             .into(),
-        _ => panic!("invalid content type {}", content_type),
+        _ => panic!("invalid content type {content_type}"),
     };
 
     Request::builder()
         .method(Method::POST)
-        .header(CONTENT_TYPE, format!("application/{}", content_type))
+        .header(CONTENT_TYPE, format!("application/{content_type}"))
         .header(ORIGIN, "http://example.com")
-        .header(ACCEPT, format!("application/{}", accept))
+        .header(ACCEPT, format!("application/{accept}"))
         .uri(request_uri)
         .body(Body::new(
             Full::new(bytes).map_err(|err| Status::internal(err.to_string())),

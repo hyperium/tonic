@@ -1,6 +1,7 @@
 [package]
 name = "service_named_result"
 edition = "2021"
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 

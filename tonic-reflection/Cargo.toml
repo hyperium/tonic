@@ -9,7 +9,6 @@ Server Reflection module of `tonic` gRPC implementation.
 """
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
-documentation = "https://docs.rs/tonic-reflection/0.13.0"
 keywords = ["rpc", "grpc", "async", "reflection"]
 license = "MIT"
 name = "tonic-reflection"
@@ -20,7 +19,6 @@ rust-version = { workspace = true }
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 
 [features]
 server = ["dep:prost-types", "dep:tokio", "dep:tokio-stream"]
