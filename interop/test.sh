@@ -74,12 +74,22 @@ sleep 1
 
 ./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
-TLS_ARGS=""
-
-if [ -n "${ARG}" ]; then
-  TLS_ARGS="--use_tls --use_test_ca --server_host_override=foo.test.google.fr --ca_file=${TLS_CA}"
+# Run client test cases
+if [ -n "${ARG:-}" ]; then
+  TLS_ARRAY=( \
+    -use_tls \
+    -use_test_ca \
+    -server_host_override=foo.test.google.fr \
+    -ca_file="${TLS_CA}" \
+  )
+else
+  TLS_ARRAY=()
 fi
 
 for CASE in "${TEST_CASES[@]}"; do
-  interop/bin/client_${OS}_amd64${EXT} --test_case="${CASE}" "${TLS_ARGS}"
+  flags=( "-test_case=${CASE}" )
+  flags+=( "${TLS_ARRAY[@]}" )
+
+  interop/bin/client_"${OS}"_amd64"${EXT}" "${flags[@]}"
 done
+
