@@ -180,7 +180,7 @@ impl crate::Method for TonicBuildMethod {
                     .unwrap()
                     .to_token_stream()
             } else {
-                syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, rust_type))
+                syn::parse_str::<syn::Path>(&format!("{proto_path}::{rust_type}"))
                     .unwrap()
                     .to_token_stream()
             }

@@ -145,16 +145,16 @@ async fn run_services_in_background_uds() -> (String, String) {
         .collect();
     let tmpdir = fs::canonicalize(env::temp_dir())
         .unwrap()
-        .join(format!("tonic_test_{}", suffix));
+        .join(format!("tonic_test_{suffix}"));
     fs::create_dir(&tmpdir).unwrap();
 
     let uds_filepath = tmpdir.join("impl.sock").to_str().unwrap().to_string();
     let listener = UnixListener::bind(uds_filepath.as_str()).unwrap();
-    let uds_addr = format!("unix://{}", uds_filepath);
+    let uds_addr = format!("unix://{uds_filepath}");
 
     let uds_default_stubs_filepath = tmpdir.join("stub.sock").to_str().unwrap().to_string();
     let listener_default_stubs = UnixListener::bind(uds_default_stubs_filepath.as_str()).unwrap();
-    let uds_default_stubs_addr = format!("unix://{}", uds_default_stubs_filepath);
+    let uds_default_stubs_addr = format!("unix://{uds_default_stubs_filepath}");
 
     tokio::spawn(async move {
         Server::builder()

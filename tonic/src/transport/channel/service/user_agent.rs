@@ -77,7 +77,7 @@ mod tests {
     fn prepends_custom_user_agent_to_default() {
         assert_eq!(
             UserAgent::new(Svc, Some(HeaderValue::from_static("Greeter 1.1"))).user_agent,
-            HeaderValue::from_str(&format!("Greeter 1.1 {}", TONIC_USER_AGENT)).unwrap()
+            HeaderValue::from_str(&format!("Greeter 1.1 {TONIC_USER_AGENT}")).unwrap()
         )
     }
 
@@ -115,7 +115,7 @@ mod tests {
 
     #[tokio::test]
     async fn sets_custom_user_agent_if_none_present() {
-        let expected_user_agent = format!("Greeter 1.1 {}", TONIC_USER_AGENT);
+        let expected_user_agent = format!("Greeter 1.1 {TONIC_USER_AGENT}");
         let mut ua = UserAgent::new(
             TestSvc {
                 expected_user_agent,
@@ -131,7 +131,7 @@ mod tests {
         req.headers_mut()
             .insert(USER_AGENT, HeaderValue::from_static("request-ua/x.y"));
 
-        let expected_user_agent = format!("request-ua/x.y {}", TONIC_USER_AGENT);
+        let expected_user_agent = format!("request-ua/x.y {TONIC_USER_AGENT}");
         let mut ua = UserAgent::new(
             TestSvc {
                 expected_user_agent,
@@ -147,7 +147,7 @@ mod tests {
         req.headers_mut()
             .insert(USER_AGENT, HeaderValue::from_static("request-ua/x.y"));
 
-        let expected_user_agent = format!("request-ua/x.y Greeter 1.1 {}", TONIC_USER_AGENT);
+        let expected_user_agent = format!("request-ua/x.y Greeter 1.1 {TONIC_USER_AGENT}");
         let mut ua = UserAgent::new(
             TestSvc {
                 expected_user_agent,

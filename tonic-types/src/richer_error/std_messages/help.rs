@@ -146,7 +146,7 @@ mod tests {
     #[test]
     fn gen_help() {
         let mut help = Help::new(Vec::new());
-        let formatted = format!("{:?}", help);
+        let formatted = format!("{help:?}");
 
         let expected = "Help { links: [] }";
 
@@ -163,7 +163,7 @@ mod tests {
         help.add_link("link to resource a", "resource-a.example.local")
             .add_link("link to resource b", "resource-b.example.local");
 
-        let formatted = format!("{:?}", help);
+        let formatted = format!("{help:?}");
 
         let expected_filled = "Help { links: [HelpLink { description: \"link to resource a\", url: \"resource-a.example.local\" }, HelpLink { description: \"link to resource b\", url: \"resource-b.example.local\" }] }";
 
@@ -179,7 +179,7 @@ mod tests {
 
         let gen_any = help.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected = "Any { type_url: \"type.googleapis.com/google.rpc.Help\", value: [10, 46, 10, 18, 108, 105, 110, 107, 32, 116, 111, 32, 114, 101, 115, 111, 117, 114, 99, 101, 32, 97, 18, 24, 114, 101, 115, 111, 117, 114, 99, 101, 45, 97, 46, 101, 120, 97, 109, 112, 108, 101, 46, 108, 111, 99, 97, 108, 10, 46, 10, 18, 108, 105, 110, 107, 32, 116, 111, 32, 114, 101, 115, 111, 117, 114, 99, 101, 32, 98, 18, 24, 114, 101, 115, 111, 117, 114, 99, 101, 45, 98, 46, 101, 120, 97, 109, 112, 108, 101, 46, 108, 111, 99, 97, 108] }";
 
@@ -189,11 +189,11 @@ mod tests {
         );
 
         let br_details = match Help::from_any(gen_any) {
-            Err(error) => panic!("Error generating Help from Any: {:?}", error),
+            Err(error) => panic!("Error generating Help from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

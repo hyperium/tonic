@@ -29,15 +29,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
             if let Some(bad_request) = err_details.bad_request() {
                 // Handle bad_request details
-                println!(" {:?}", bad_request);
+                println!(" {bad_request:?}");
             }
             if let Some(help) = err_details.help() {
                 // Handle help details
-                println!(" {:?}", help);
+                println!(" {help:?}");
             }
             if let Some(localized_message) = err_details.localized_message() {
                 // Handle localized_message details
-                println!(" {:?}", localized_message);
+                println!(" {localized_message:?}");
             }
 
             println!();
@@ -46,7 +46,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    println!(" Successful response received.\n\n {:?}\n", response);
+    println!(" Successful response received.\n\n {response:?}\n");
 
     Ok(())
 }

@@ -234,7 +234,7 @@ fn generate_attributes<'a>(
         .filter(|(matcher, _)| match_name(matcher, name))
         .flat_map(|(_, attr)| {
             // attributes cannot be parsed directly, so we pretend they're on a struct
-            syn::parse_str::<syn::DeriveInput>(&format!("{}\nstruct fake;", attr))
+            syn::parse_str::<syn::DeriveInput>(&format!("{attr}\nstruct fake;"))
                 .unwrap()
                 .attrs
         })
@@ -259,7 +259,7 @@ fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
     let comment = comment.as_ref();
 
     let comment = if !comment.starts_with(' ') {
-        format!(" {}", comment)
+        format!(" {comment}")
     } else {
         comment.to_string()
     };
