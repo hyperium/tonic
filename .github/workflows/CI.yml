@@ -93,7 +93,7 @@ jobs:
         CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
     - name: Get MSRV from manifest file
       id: msrv
-      run: echo "version=$(yq '.workspace.package.rust-version' Cargo.toml)" >> $GITHUB_OUTPUT
+      run: echo "version=$(yq '.workspace.package.rust-version' Cargo.toml)" >> "$GITHUB_OUTPUT"
     - uses: hecrj/setup-rust-action@v2
       with:
         rust-version: ${{ steps.msrv.outputs.version }}
