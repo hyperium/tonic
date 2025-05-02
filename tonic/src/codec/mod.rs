@@ -21,6 +21,8 @@ pub use self::encode::EncodeBody;
 pub use self::prost::ProstCodec;
 
 /// Unless overridden, this is the buffer size used for encoding requests.
+/// 
+///
 /// This is spent per-rpc, so you may wish to adjust it. The default is
 /// pretty good for most uses, but if you have a ton of concurrent rpcs
 /// you may find it too expensive.
