@@ -361,7 +361,7 @@ impl Status {
     fn from_h2_error(err: Box<h2::Error>) -> Status {
         let code = Self::code_from_h2(&err);
 
-        let mut status = Self::new(code, format!("h2 protocol error: {}", err));
+        let mut status = Self::new(code, format!("h2 protocol error: {err}"));
         status.source = Some(Arc::new(*err));
         status
     }
@@ -421,7 +421,7 @@ impl Status {
         #[cfg(feature = "server")]
         if let Some(h2_err) = err.source().and_then(|e| e.downcast_ref::<h2::Error>()) {
             let code = Status::code_from_h2(h2_err);
-            let status = Self::new(code, format!("h2 protocol error: {}", err));
+            let status = Self::new(code, format!("h2 protocol error: {err}"));
 
             return Some(status);
         }
@@ -581,6 +581,7 @@ impl Status {
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
         self.add_header(response.headers_mut()).unwrap();
+        response.extensions_mut().insert(self);
         response
     }
 
