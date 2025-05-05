@@ -73,7 +73,7 @@ impl Body for MockBody {
     }
 
     fn is_end_stream(&self) -> bool {
-        !self.data.is_empty()
+        self.data.is_empty()
     }
 
     fn size_hint(&self) -> SizeHint {

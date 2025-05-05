@@ -150,7 +150,7 @@ mod tests {
     #[test]
     fn gen_bad_request() {
         let mut br_details = BadRequest::new(Vec::new());
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         let expected = "BadRequest { field_violations: [] }";
 
@@ -168,7 +168,7 @@ mod tests {
             .add_violation("field_a", "description_a")
             .add_violation("field_b", "description_b");
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         let expected_filled = "BadRequest { field_violations: [FieldViolation { field: \"field_a\", description: \"description_a\" }, FieldViolation { field: \"field_b\", description: \"description_b\" }] }";
 
@@ -183,7 +183,7 @@ mod tests {
         );
 
         let gen_any = br_details.into_any();
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected = "Any { type_url: \"type.googleapis.com/google.rpc.BadRequest\", value: [10, 24, 10, 7, 102, 105, 101, 108, 100, 95, 97, 18, 13, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 95, 97, 10, 24, 10, 7, 102, 105, 101, 108, 100, 95, 98, 18, 13, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 95, 98] }";
 
@@ -193,11 +193,11 @@ mod tests {
         );
 
         let br_details = match BadRequest::from_any(gen_any) {
-            Err(error) => panic!("Error generating BadRequest from Any: {:?}", error),
+            Err(error) => panic!("Error generating BadRequest from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

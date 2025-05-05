@@ -359,8 +359,7 @@ mod tests {
                 assert_eq!(
                     res.status(),
                     StatusCode::METHOD_NOT_ALLOWED,
-                    "{} should not be allowed",
-                    method
+                    "{method} should not be allowed"
                 );
             }
         }
@@ -445,7 +444,7 @@ mod tests {
                 let mut req = request();
                 req.headers_mut().insert(
                     CONTENT_TYPE,
-                    HeaderValue::from_maybe_shared(format!("application/{}", variant)).unwrap(),
+                    HeaderValue::from_maybe_shared(format!("application/{variant}")).unwrap(),
                 );
 
                 let res = svc.call(req).await.unwrap();

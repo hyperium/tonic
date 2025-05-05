@@ -111,7 +111,7 @@ mod tests {
     fn gen_resource_info() {
         let res_info = ResourceInfo::new("resource-type", "resource-name", "owner", "description");
 
-        let formatted = format!("{:?}", res_info);
+        let formatted = format!("{res_info:?}");
 
         let expected_filled = "ResourceInfo { resource_type: \"resource-type\", resource_name: \"resource-name\", owner: \"owner\", description: \"description\" }";
 
@@ -122,7 +122,7 @@ mod tests {
 
         let gen_any = res_info.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.ResourceInfo\", value: [10, 13, 114, 101, 115, 111, 117, 114, 99, 101, 45, 116, 121, 112, 101, 18, 13, 114, 101, 115, 111, 117, 114, 99, 101, 45, 110, 97, 109, 101, 26, 5, 111, 119, 110, 101, 114, 34, 11, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110] }";
@@ -133,11 +133,11 @@ mod tests {
         );
 
         let br_details = match ResourceInfo::from_any(gen_any) {
-            Err(error) => panic!("Error generating ResourceInfo from Any: {:?}", error),
+            Err(error) => panic!("Error generating ResourceInfo from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

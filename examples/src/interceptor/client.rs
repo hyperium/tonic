@@ -25,7 +25,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = client.say_hello(request).await?;
 
-    println!("RESPONSE={:?}", response);
+    println!("RESPONSE={response:?}");
 
     Ok(())
 }
@@ -34,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// `Status` here will cancel the request and have that status returned to
 /// the caller.
 fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
-    println!("Intercepting request: {:?}", req);
+    println!("Intercepting request: {req:?}");
     Ok(req)
 }
 

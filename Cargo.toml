@@ -41,5 +41,8 @@ missing_docs = "warn"
 rust_2018_idioms = "warn"
 unreachable_pub = "warn"
 
+[workspace.lints.clippy]
+uninlined_format_args = "deny"
+
 [workspace.lints.rustdoc]
 broken_intra_doc_links = "deny"

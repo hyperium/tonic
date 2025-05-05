@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // structs.
     let svc = GreeterServer::with_interceptor(greeter, intercept);
 
-    println!("GreeterServer listening on {}", addr);
+    println!("GreeterServer listening on {addr}");
 
     Server::builder().add_service(svc).serve(addr).await?;
 
@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 /// is returned, it will cancel the request and return that status to the
 /// client.
 fn intercept(mut req: Request<()>) -> Result<Request<()>, Status> {
-    println!("Intercepting request: {:?}", req);
+    println!("Intercepting request: {req:?}");
 
     // Set an extension that can be retrieved by `say_hello`
     req.extensions_mut().insert(MyExtension {
