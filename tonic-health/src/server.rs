@@ -37,7 +37,8 @@ pub struct HealthReporter {
 }
 
 impl HealthReporter {
-    fn new() -> Self {
+    /// Create a new HealthReporter with an initial service (named ""), corresponding to overall server health
+    pub fn new() -> Self {
         // According to the gRPC Health Check specification, the empty service "" corresponds to the overall server health
         let server_status = ("".to_string(), watch::channel(ServingStatus::Serving));
 
@@ -97,6 +98,12 @@ impl HealthReporter {
     }
 }
 
+impl Default for HealthReporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A service providing implementations of gRPC health checking protocol.
 #[derive(Debug)]
 pub struct HealthService {
@@ -106,6 +113,11 @@ pub struct HealthService {
 impl HealthService {
     fn new(services: Arc<RwLock<HashMap<String, StatusPair>>>) -> Self {
         HealthService { statuses: services }
+    }
+
+    /// Create a HealthService, carrying across the statuses from an existing HealthReporter
+    pub fn from_health_reporter(health_reporter: HealthReporter) -> Self {
+        Self::new(health_reporter.statuses)
     }
 
     async fn service_health(&self, service_name: &str) -> Option<ServingStatus> {
