@@ -251,7 +251,7 @@ impl ReflectionServiceState {
 
     fn symbol_by_name(&self, symbol: &str) -> Result<Vec<u8>, Status> {
         match self.symbols.get(symbol) {
-            None => Err(Status::not_found(format!("symbol '{}' not found", symbol))),
+            None => Err(Status::not_found(format!("symbol '{symbol}' not found"))),
             Some(fd) => {
                 let mut encoded_fd = Vec::new();
                 if fd.clone().encode(&mut encoded_fd).is_err() {
@@ -265,7 +265,7 @@ impl ReflectionServiceState {
 
     fn file_by_filename(&self, filename: &str) -> Result<Vec<u8>, Status> {
         match self.files.get(filename) {
-            None => Err(Status::not_found(format!("file '{}' not found", filename))),
+            None => Err(Status::not_found(format!("file '{filename}' not found"))),
             Some(fd) => {
                 let mut encoded_fd = Vec::new();
                 if fd.clone().encode(&mut encoded_fd).is_err() {
@@ -285,14 +285,13 @@ fn extract_name(
 ) -> Result<String, Error> {
     match maybe_name {
         None => Err(Error::InvalidFileDescriptorSet(format!(
-            "missing {} name",
-            name_type
+            "missing {name_type} name"
         ))),
         Some(name) => {
             if prefix.is_empty() {
                 Ok(name.to_string())
             } else {
-                Ok(format!("{}.{}", prefix, name))
+                Ok(format!("{prefix}.{name}"))
             }
         }
     }
@@ -320,7 +319,7 @@ impl Display for Error {
         match self {
             Error::DecodeError(_) => f.write_str("error decoding FileDescriptorSet from buffer"),
             Error::InvalidFileDescriptorSet(s) => {
-                write!(f, "invalid FileDescriptorSet - {}", s)
+                write!(f, "invalid FileDescriptorSet - {s}")
             }
         }
     }

@@ -64,7 +64,6 @@
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.13.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -235,7 +234,7 @@ fn generate_attributes<'a>(
         .filter(|(matcher, _)| match_name(matcher, name))
         .flat_map(|(_, attr)| {
             // attributes cannot be parsed directly, so we pretend they're on a struct
-            syn::parse_str::<syn::DeriveInput>(&format!("{}\nstruct fake;", attr))
+            syn::parse_str::<syn::DeriveInput>(&format!("{attr}\nstruct fake;"))
                 .unwrap()
                 .attrs
         })
@@ -260,7 +259,7 @@ fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
     let comment = comment.as_ref();
 
     let comment = if !comment.starts_with(' ') {
-        format!(" {}", comment)
+        format!(" {comment}")
     } else {
         comment.to_string()
     };

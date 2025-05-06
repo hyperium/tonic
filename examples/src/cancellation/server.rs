@@ -37,7 +37,7 @@ impl Greeter for MyGreeter {
             Ok(Response::new(reply))
         };
         let cancellation_future = async move {
-            println!("Request from {:?} cancelled by client", remote_addr);
+            println!("Request from {remote_addr:?} cancelled by client");
             // If this future is executed it means the request future was dropped,
             // so it doesn't actually matter what is returned here
             Err(Status::cancelled("Request cancelled by client"))
@@ -74,7 +74,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
-    println!("GreeterServer listening on {}", addr);
+    println!("GreeterServer listening on {addr}");
 
     Server::builder()
         .add_service(GreeterServer::new(greeter))

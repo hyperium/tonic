@@ -80,8 +80,8 @@ where
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
 
-        if let Poll::Ready(result) = this.inner.poll(cx) {
-            return Poll::Ready(result.map_err(Into::into));
+        if let ready @ Poll::Ready(_) = this.inner.poll(cx) {
+            return ready.map_err(Into::into);
         }
 
         if let Some(sleep) = this.sleep.as_pin_mut() {
@@ -113,7 +113,7 @@ fn try_parse_grpc_timeout(
         .and_then(|s| if s.is_empty() { Err(val) } else { Ok(s) })?
         // `HeaderValue::to_str` only returns `Ok` if the header contains ASCII so this
         // `split_at` will never panic from trying to split in the middle of a character.
-        // See https://docs.rs/http/0.2.4/http/header/struct.HeaderValue.html#method.to_str
+        // See https://docs.rs/http/1/http/header/struct.HeaderValue.html#method.to_str
         //
         // `len - 1` also wont panic since we just checked `s.is_empty`.
         .split_at(val.len() - 1);

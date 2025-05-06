@@ -37,7 +37,8 @@ pub struct HealthReporter {
 }
 
 impl HealthReporter {
-    fn new() -> Self {
+    /// Create a new HealthReporter with an initial service (named ""), corresponding to overall server health
+    pub fn new() -> Self {
         // According to the gRPC Health Check specification, the empty service "" corresponds to the overall server health
         let server_status = ("".to_string(), watch::channel(ServingStatus::Serving));
 
@@ -48,7 +49,7 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `Serving`. This notifies any watchers
     /// if there is a change in status.
-    pub async fn set_serving<S>(&mut self)
+    pub async fn set_serving<S>(&self)
     where
         S: NamedService,
     {
@@ -59,7 +60,7 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `NotServing`. This notifies any watchers
     /// if there is a change in status.
-    pub async fn set_not_serving<S>(&mut self)
+    pub async fn set_not_serving<S>(&self)
     where
         S: NamedService,
     {
@@ -70,7 +71,7 @@ impl HealthReporter {
 
     /// Sets the status of the service with `service_name` to `status`. This notifies any watchers
     /// if there is a change in status.
-    pub async fn set_service_status<S>(&mut self, service_name: S, status: ServingStatus)
+    pub async fn set_service_status<S>(&self, service_name: S, status: ServingStatus)
     where
         S: AsRef<str>,
     {
@@ -97,6 +98,12 @@ impl HealthReporter {
     }
 }
 
+impl Default for HealthReporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A service providing implementations of gRPC health checking protocol.
 #[derive(Debug)]
 pub struct HealthService {
@@ -106,6 +113,11 @@ pub struct HealthService {
 impl HealthService {
     fn new(services: Arc<RwLock<HashMap<String, StatusPair>>>) -> Self {
         HealthService { statuses: services }
+    }
+
+    /// Create a HealthService, carrying across the statuses from an existing HealthReporter
+    pub fn from_health_reporter(health_reporter: HealthReporter) -> Self {
+        Self::new(health_reporter.statuses)
     }
 
     async fn service_health(&self, service_name: &str) -> Option<ServingStatus> {
@@ -220,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_service_check() {
-        let (mut reporter, service) = make_test_service().await;
+        let (reporter, service) = make_test_service().await;
 
         // Overall server health
         let resp = service

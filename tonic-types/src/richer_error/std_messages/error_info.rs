@@ -114,7 +114,7 @@ mod tests {
 
         let error_info = ErrorInfo::new("SOME_INFO", "mydomain.com", metadata);
 
-        let formatted = format!("{:?}", error_info);
+        let formatted = format!("{error_info:?}");
 
         let expected_filled = "ErrorInfo { reason: \"SOME_INFO\", domain: \"mydomain.com\", metadata: {\"instanceLimitPerRequest\": \"100\"} }";
 
@@ -125,7 +125,7 @@ mod tests {
 
         let gen_any = error_info.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.ErrorInfo\", value: [10, 9, 83, 79, 77, 69, 95, 73, 78, 70, 79, 18, 12, 109, 121, 100, 111, 109, 97, 105, 110, 46, 99, 111, 109, 26, 30, 10, 23, 105, 110, 115, 116, 97, 110, 99, 101, 76, 105, 109, 105, 116, 80, 101, 114, 82, 101, 113, 117, 101, 115, 116, 18, 3, 49, 48, 48] }";
@@ -136,11 +136,11 @@ mod tests {
         );
 
         let br_details = match ErrorInfo::from_any(gen_any) {
-            Err(error) => panic!("Error generating ErrorInfo from Any: {:?}", error),
+            Err(error) => panic!("Error generating ErrorInfo from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

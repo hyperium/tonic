@@ -10,6 +10,7 @@ pub struct ServerTlsConfig {
     client_ca_root: Option<Certificate>,
     client_auth_optional: bool,
     ignore_client_order: bool,
+    use_key_log: bool,
 }
 
 impl fmt::Debug for ServerTlsConfig {
@@ -64,12 +65,21 @@ impl ServerTlsConfig {
         }
     }
 
+    /// Use key log as specified by the `SSLKEYLOGFILE` environment variable.
+    pub fn use_key_log(self) -> Self {
+        ServerTlsConfig {
+            use_key_log: true,
+            ..self
+        }
+    }
+
     pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::BoxError> {
         TlsAcceptor::new(
             self.identity.as_ref().unwrap(),
             self.client_ca_root.as_ref(),
             self.client_auth_optional,
             self.ignore_client_order,
+            self.use_key_log,
         )
     }
 }

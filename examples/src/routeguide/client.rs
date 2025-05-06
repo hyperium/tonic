@@ -32,15 +32,15 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         .into_inner();
 
     while let Some(feature) = stream.message().await? {
-        println!("FEATURE = {:?}", feature);
+        println!("FEATURE = {feature:?}");
     }
 
     Ok(())
 }
 
 async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
-    let mut rng = rand::thread_rng();
-    let point_count: i32 = rng.gen_range(2..100);
+    let mut rng = rand::rng();
+    let point_count: i32 = rng.random_range(2..100);
 
     let mut points = vec![];
     for _ in 0..=point_count {
@@ -52,7 +52,7 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 
     match client.record_route(request).await {
         Ok(response) => println!("SUMMARY: {:?}", response.into_inner()),
-        Err(e) => println!("something went wrong: {:?}", e),
+        Err(e) => println!("something went wrong: {e:?}"),
     }
 
     Ok(())
@@ -72,7 +72,7 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
                     latitude: 409146138 + elapsed.as_secs() as i32,
                     longitude: -746188906,
                 }),
-                message: format!("at {:?}", elapsed),
+                message: format!("at {elapsed:?}"),
             };
 
             yield note;
@@ -83,7 +83,7 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
     let mut inbound = response.into_inner();
 
     while let Some(note) = inbound.message().await? {
-        println!("NOTE = {:?}", note);
+        println!("NOTE = {note:?}");
     }
 
     Ok(())
@@ -100,7 +100,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             longitude: -746_188_906,
         }))
         .await?;
-    println!("RESPONSE = {:?}", response);
+    println!("RESPONSE = {response:?}");
 
     println!("\n*** SERVER STREAMING ***");
     print_features(&mut client).await?;
@@ -115,8 +115,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 fn random_point(rng: &mut ThreadRng) -> Point {
-    let latitude = (rng.gen_range(0..180) - 90) * 10_000_000;
-    let longitude = (rng.gen_range(0..360) - 180) * 10_000_000;
+    let latitude = (rng.random_range(0..180) - 90) * 10_000_000;
+    let longitude = (rng.random_range(0..360) - 180) * 10_000_000;
     Point {
         latitude,
         longitude,

@@ -32,15 +32,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 match err_detail {
                     ErrorDetail::BadRequest(bad_request) => {
                         // Handle bad_request details
-                        println!(" {:?}", bad_request);
+                        println!(" {bad_request:?}");
                     }
                     ErrorDetail::Help(help) => {
                         // Handle help details
-                        println!(" {:?}", help);
+                        println!(" {help:?}");
                     }
                     ErrorDetail::LocalizedMessage(localized_message) => {
                         // Handle localized_message details
-                        println!(" {:?}", localized_message);
+                        println!(" {localized_message:?}");
                     }
                     _ => {}
                 }
@@ -52,7 +52,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     };
 
-    println!(" Successful response received.\n\n {:?}\n", response);
+    println!(" Successful response received.\n\n {response:?}\n");
 
     Ok(())
 }

@@ -41,7 +41,7 @@ async fn interceptor_retrieves_grpc_method() {
         .connect_lazy();
 
     fn client_intercept(req: Request<()>) -> Result<Request<()>, Status> {
-        println!("Intercepting client request: {:?}", req);
+        println!("Intercepting client request: {req:?}");
 
         let gm = req.extensions().get::<GrpcMethod>().unwrap();
         assert_eq!(gm.service(), "test.Test");

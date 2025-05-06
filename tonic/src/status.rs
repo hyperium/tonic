@@ -361,7 +361,7 @@ impl Status {
     fn from_h2_error(err: Box<h2::Error>) -> Status {
         let code = Self::code_from_h2(&err);
 
-        let mut status = Self::new(code, format!("h2 protocol error: {}", err));
+        let mut status = Self::new(code, format!("h2 protocol error: {err}"));
         status.source = Some(Arc::new(*err));
         status
     }
@@ -421,7 +421,7 @@ impl Status {
         #[cfg(feature = "server")]
         if let Some(h2_err) = err.source().and_then(|e| e.downcast_ref::<h2::Error>()) {
             let code = Status::code_from_h2(h2_err);
-            let status = Self::new(code, format!("h2 protocol error: {}", err));
+            let status = Self::new(code, format!("h2 protocol error: {err}"));
 
             return Some(status);
         }
@@ -581,6 +581,7 @@ impl Status {
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
         self.add_header(response.headers_mut()).unwrap();
+        response.extensions_mut().insert(self);
         response
     }
 
@@ -779,8 +780,28 @@ impl Code {
     /// Get the `Code` that represents the integer, if known.
     ///
     /// If not known, returns `Code::Unknown` (surprise!).
-    pub fn from_i32(i: i32) -> Code {
-        Code::from(i)
+    pub const fn from_i32(i: i32) -> Code {
+        match i {
+            0 => Code::Ok,
+            1 => Code::Cancelled,
+            2 => Code::Unknown,
+            3 => Code::InvalidArgument,
+            4 => Code::DeadlineExceeded,
+            5 => Code::NotFound,
+            6 => Code::AlreadyExists,
+            7 => Code::PermissionDenied,
+            8 => Code::ResourceExhausted,
+            9 => Code::FailedPrecondition,
+            10 => Code::Aborted,
+            11 => Code::OutOfRange,
+            12 => Code::Unimplemented,
+            13 => Code::Internal,
+            14 => Code::Unavailable,
+            15 => Code::DataLoss,
+            16 => Code::Unauthenticated,
+
+            _ => Code::Unknown,
+        }
     }
 
     /// Convert the string representation of a `Code` (as stored, for example, in the `grpc-status`
@@ -845,27 +866,7 @@ impl Code {
 
 impl From<i32> for Code {
     fn from(i: i32) -> Self {
-        match i {
-            0 => Code::Ok,
-            1 => Code::Cancelled,
-            2 => Code::Unknown,
-            3 => Code::InvalidArgument,
-            4 => Code::DeadlineExceeded,
-            5 => Code::NotFound,
-            6 => Code::AlreadyExists,
-            7 => Code::PermissionDenied,
-            8 => Code::ResourceExhausted,
-            9 => Code::FailedPrecondition,
-            10 => Code::Aborted,
-            11 => Code::OutOfRange,
-            12 => Code::Unimplemented,
-            13 => Code::Internal,
-            14 => Code::Unavailable,
-            15 => Code::DataLoss,
-            16 => Code::Unauthenticated,
-
-            _ => Code::Unknown,
-        }
+        Code::from_i32(i)
     }
 }
 

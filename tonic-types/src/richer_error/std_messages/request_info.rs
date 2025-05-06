@@ -94,7 +94,7 @@ mod tests {
     fn gen_request_info() {
         let req_info = RequestInfo::new("some-id", "some-data");
 
-        let formatted = format!("{:?}", req_info);
+        let formatted = format!("{req_info:?}");
 
         let expected_filled =
             "RequestInfo { request_id: \"some-id\", serving_data: \"some-data\" }";
@@ -106,7 +106,7 @@ mod tests {
 
         let gen_any = req_info.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.RequestInfo\", value: [10, 7, 115, 111, 109, 101, 45, 105, 100, 18, 9, 115, 111, 109, 101, 45, 100, 97, 116, 97] }";
@@ -117,11 +117,11 @@ mod tests {
         );
 
         let br_details = match RequestInfo::from_any(gen_any) {
-            Err(error) => panic!("Error generating RequestInfo from Any: {:?}", error),
+            Err(error) => panic!("Error generating RequestInfo from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),
