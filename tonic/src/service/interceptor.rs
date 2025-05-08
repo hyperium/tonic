@@ -40,14 +40,14 @@ use tower_service::Service;
 /// [tower-example]: https://github.com/hyperium/tonic/tree/master/examples/src/tower
 pub trait Interceptor {
     /// Intercept a request before it is sent, optionally cancelling it.
-    fn call(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status>;
+    fn intercept(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status>;
 }
 
 impl<F> Interceptor for F
 where
     F: FnMut(crate::Request<()>) -> Result<crate::Request<()>, Status>,
 {
-    fn call(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status> {
+    fn intercept(&mut self, request: crate::Request<()>) -> Result<crate::Request<()>, Status> {
         self(request)
     }
 }
@@ -140,7 +140,7 @@ where
 
         match self
             .interceptor
-            .call(crate::Request::from_parts(metadata, extensions, ()))
+            .intercept(crate::Request::from_parts(metadata, extensions, ()))
         {
             Ok(req) => {
                 let (metadata, extensions, _) = req.into_parts();
