@@ -11,9 +11,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  RUSTFLAGS: "-D warnings"
-
 jobs:
 
   rustfmt:
@@ -69,6 +66,8 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
