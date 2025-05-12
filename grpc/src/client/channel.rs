@@ -24,13 +24,8 @@ use crate::service::{Request, Response};
 
 use super::ConnectivityState;
 
+#[derive(Default)]
 pub struct ChannelOptions {}
-
-impl Default for ChannelOptions {
-    fn default() -> Self {
-        Self {}
-    }
-}
 
 impl ChannelOptions {}
 
