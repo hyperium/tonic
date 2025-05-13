@@ -160,11 +160,13 @@ jobs:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2024-06-30
+        toolchain: nightly-2025-05-04
     - name: Install cargo-check-external-types
       uses: taiki-e/cache-cargo-install-action@v2
       with:
-        tool: cargo-check-external-types@0.1.13
+        tool: cargo-check-external-types@0.2.0
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack --no-private check-external-types
+    - run: cargo hack --no-private check-external-types --all-features
+      env:
+        RUSTFLAGS: "-D warnings"
