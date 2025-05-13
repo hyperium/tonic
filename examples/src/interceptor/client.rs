@@ -43,7 +43,7 @@ fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
 struct MyInterceptor;
 
 impl Interceptor for MyInterceptor {
-    fn call(&mut self, request: tonic::Request<()>) -> Result<tonic::Request<()>, Status> {
+    fn intercept(&mut self, request: tonic::Request<()>) -> Result<tonic::Request<()>, Status> {
         Ok(request)
     }
 }
