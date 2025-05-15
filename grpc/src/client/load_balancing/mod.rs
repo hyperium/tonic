@@ -22,10 +22,12 @@ use std::{any::Any, error::Error, hash::Hash, sync::Arc};
 
 use tonic::{metadata::MetadataMap, Status};
 
-use crate::client::{
-    name_resolution::{Address, ResolverUpdate},
+use crate::{
+    client::{
+        name_resolution::{Address, ResolverUpdate},
+        ConnectivityState,
+    },
     service::Request,
-    ConnectivityState,
 };
 
 /// A collection of data configured on the channel that is constructing this

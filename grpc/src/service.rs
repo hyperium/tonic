@@ -16,17 +16,19 @@
  *
  */
 
-//! The official Rust implementation of [gRPC], a high performance, open source,
-//! universal RPC framework
-//!
-//! This version is in progress and not recommended for any production use.  All
-//! APIs are unstable.  Proceed at your own risk.
-//!
-//! [gRPC]: https://grpc.io
+use std::{any::Any, pin::Pin};
 
-#![allow(dead_code)]
+use futures_core::Stream;
+use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
 
-pub mod client;
-pub mod service;
+pub type Request = TonicRequest<Pin<Box<dyn Stream<Item = Box<dyn Message>> + Send + Sync>>>;
+pub type Response =
+    TonicResponse<Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send + Sync>>>;
 
-pub(crate) mod attributes;
+#[async_trait]
+pub trait Service: Send + Sync {
+    async fn call(&self, method: String, request: Request) -> Response;
+}
+
+// TODO: define methods that will allow serialization/deserialization.
+pub trait Message: Any + Send + Sync {}
