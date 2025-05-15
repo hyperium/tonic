@@ -19,6 +19,7 @@
 use std::fmt::Display;
 
 pub mod channel;
+pub mod service;
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
 pub mod service_config;
