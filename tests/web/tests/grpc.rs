@@ -33,7 +33,7 @@ async fn smoke_unary() {
 async fn smoke_client_stream() {
     let (mut c1, mut c2, mut c3, mut c4) = spawn().await.expect("clients");
 
-    let input_stream = || stream::iter(vec![input(), input()]);
+    let input_stream = || stream::iter(vec![Ok(input()), Ok(input())]);
 
     let (r1, r2, r3, r4) = try_join!(
         c1.client_stream(input_stream()),

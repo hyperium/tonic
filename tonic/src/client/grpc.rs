@@ -218,7 +218,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| tokio_stream::once(m));
+        let request = request.map(|m| tokio_stream::once(Ok(m)));
         self.client_streaming(request, path, codec).await
     }
 
@@ -233,7 +233,7 @@ impl<T> Grpc<T> {
         T: GrpcService<Body>,
         T::ResponseBody: HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::BoxError>,
-        S: Stream<Item = M1> + Send + 'static,
+        S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -274,7 +274,7 @@ impl<T> Grpc<T> {
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
     {
-        let request = request.map(|m| tokio_stream::once(m));
+        let request = request.map(|m| tokio_stream::once(Ok(m)));
         self.streaming(request, path, codec).await
     }
 
@@ -289,7 +289,7 @@ impl<T> Grpc<T> {
         T: GrpcService<Body>,
         T::ResponseBody: HttpBody + Send + 'static,
         <T::ResponseBody as HttpBody>::Error: Into<crate::BoxError>,
-        S: Stream<Item = M1> + Send + 'static,
+        S: Stream<Item = Result<M1, Status>> + Send + 'static,
         C: Codec<Encode = M1, Decode = M2>,
         M1: Send + Sync + 'static,
         M2: Send + Sync + 'static,
@@ -298,7 +298,7 @@ impl<T> Grpc<T> {
             .map(|s| {
                 EncodeBody::new_client(
                     codec.encoder(),
-                    s.map(Ok),
+                    s,
                     self.config.send_compression_encodings,
                     self.config.max_encoding_message_size,
                 )

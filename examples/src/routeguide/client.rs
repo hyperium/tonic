@@ -4,6 +4,7 @@ use std::time::Duration;
 use rand::rngs::ThreadRng;
 use rand::Rng;
 use tokio::time;
+use tokio_stream::StreamExt;
 use tonic::transport::Channel;
 use tonic::Request;
 
@@ -48,7 +49,7 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
     }
 
     println!("Traversing {} points", points.len());
-    let request = Request::new(tokio_stream::iter(points));
+    let request = Request::new(tokio_stream::iter(points).map(Ok));
 
     match client.record_route(request).await {
         Ok(response) => println!("SUMMARY: {:?}", response.into_inner()),
@@ -75,7 +76,7 @@ async fn run_route_chat(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
                 message: format!("at {elapsed:?}"),
             };
 
-            yield note;
+            yield Ok(note);
         }
     };
 

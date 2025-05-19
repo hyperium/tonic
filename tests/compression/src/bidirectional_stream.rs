@@ -77,7 +77,10 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         .accept_compressed(encoding);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
-    let stream = tokio_stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
+    let stream = tokio_stream::iter(vec![
+        Ok(SomeData { data: data.clone() }),
+        Ok(SomeData { data }),
+    ]);
     let req = Request::new(stream);
 
     let res = client

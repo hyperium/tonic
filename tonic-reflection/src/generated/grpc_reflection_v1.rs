@@ -229,7 +229,10 @@ pub mod server_reflection_client {
         pub async fn server_reflection_info(
             &mut self,
             request: impl tonic::IntoStreamingRequest<
-                Message = super::ServerReflectionRequest,
+                Message = std::result::Result<
+                    super::ServerReflectionRequest,
+                    tonic::Status,
+                >,
             >,
         ) -> std::result::Result<
             tonic::Response<tonic::codec::Streaming<super::ServerReflectionResponse>>,

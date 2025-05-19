@@ -66,7 +66,10 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
-    let stream = tokio_stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
+    let stream = tokio_stream::iter(vec![
+        Ok(SomeData { data: data.clone() }),
+        Ok(SomeData { data }),
+    ]);
     let req = Request::new(Box::pin(stream));
 
     client.compress_input_client_stream(req).await.unwrap();
@@ -117,7 +120,10 @@ async fn client_disabled_server_enabled(encoding: CompressionEncoding) {
     let mut client = test_client::TestClient::new(mock_io_channel(client).await);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
-    let stream = tokio_stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
+    let stream = tokio_stream::iter(vec![
+        Ok(SomeData { data: data.clone() }),
+        Ok(SomeData { data }),
+    ]);
     let req = Request::new(Box::pin(stream));
 
     client.compress_input_client_stream(req).await.unwrap();
@@ -151,7 +157,10 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
         test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
 
     let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
-    let stream = tokio_stream::iter(vec![SomeData { data: data.clone() }, SomeData { data }]);
+    let stream = tokio_stream::iter(vec![
+        Ok(SomeData { data: data.clone() }),
+        Ok(SomeData { data }),
+    ]);
     let req = Request::new(Box::pin(stream));
 
     let status = client.compress_input_client_stream(req).await.unwrap_err();

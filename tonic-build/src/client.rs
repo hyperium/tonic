@@ -6,7 +6,7 @@ use crate::{
     generate_doc_comments, naive_snake_case,
 };
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote};
+use quote::quote;
 
 pub(crate) fn generate_internal<T: Service>(
     service: &T,
@@ -226,7 +226,7 @@ fn generate_unary<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = quote::format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -257,7 +257,7 @@ fn generate_server_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = quote::format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -288,7 +288,7 @@ fn generate_client_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = quote::format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -297,7 +297,7 @@ fn generate_client_streaming<T: Service>(
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = #request>
+            request: impl tonic::IntoStreamingRequest<Message = std::result::Result<#request, tonic::Status>>
         ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
@@ -319,7 +319,7 @@ fn generate_streaming<T: Service>(
     compile_well_known_types: bool,
 ) -> TokenStream {
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
-    let ident = format_ident!("{}", method.name());
+    let ident = quote::format_ident!("{}", method.name());
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let service_name = format_service_name(service, emit_package);
     let path = format_method_path(service, method, emit_package);
@@ -328,7 +328,7 @@ fn generate_streaming<T: Service>(
     quote! {
         pub async fn #ident(
             &mut self,
-            request: impl tonic::IntoStreamingRequest<Message = #request>
+            request: impl tonic::IntoStreamingRequest<Message = std::result::Result<#request, tonic::Status>>
         ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
                 tonic::Status::unknown(format!("Service was not ready: {}", e.into()))

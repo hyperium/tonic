@@ -82,9 +82,11 @@ pub async fn large_unary(client: &mut TestClient, assertions: &mut Vec<TestAsser
 // }
 
 pub async fn client_streaming(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
-    let requests = REQUEST_LENGTHS.iter().map(|len| StreamingInputCallRequest {
-        payload: Some(crate::client_payload(*len as usize)),
-        ..Default::default()
+    let requests = REQUEST_LENGTHS.iter().map(|len| {
+        Ok(StreamingInputCallRequest {
+            payload: Some(crate::client_payload(*len as usize)),
+            ..Default::default()
+        })
     });
 
     let stream = tokio_stream::iter(requests);
@@ -156,7 +158,7 @@ pub async fn ping_pong(client: &mut TestClient, assertions: &mut Vec<TestAsserti
 
     let result = client
         .full_duplex_call(Request::new(
-            tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
+            tokio_stream::wrappers::UnboundedReceiverStream::new(rx).map(Ok),
         ))
         .await;
 
@@ -271,7 +273,7 @@ pub async fn status_code_and_message(client: &mut TestClient, assertions: &mut V
     validate_response(result, assertions);
 
     let stream = tokio_stream::once(duplex_req);
-    let result = match client.full_duplex_call(Request::new(stream)).await {
+    let result = match client.full_duplex_call(Request::new(stream.map(Ok))).await {
         Ok(response) => {
             let stream = response.into_inner();
             let responses = stream.collect::<Vec<_>>().await;
@@ -357,7 +359,7 @@ pub async fn custom_metadata(client: &mut TestClient, assertions: &mut Vec<TestA
     req_unary.metadata_mut().insert_bin(key2, value2.clone());
 
     let stream = tokio_stream::once(make_ping_pong_request(0));
-    let mut req_stream = Request::new(stream);
+    let mut req_stream = Request::new(stream.map(Ok));
     req_stream.metadata_mut().insert(key1, value1.clone());
     req_stream.metadata_mut().insert_bin(key2, value2.clone());
 

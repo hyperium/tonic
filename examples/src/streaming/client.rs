@@ -35,7 +35,7 @@ async fn bidirectional_streaming_echo(client: &mut EchoClient<Channel>, num: usi
     let in_stream = echo_requests_iter().take(num);
 
     let response = client
-        .bidirectional_streaming_echo(in_stream)
+        .bidirectional_streaming_echo(in_stream.map(Ok))
         .await
         .unwrap();
 
@@ -51,7 +51,7 @@ async fn bidirectional_streaming_echo_throttle(client: &mut EchoClient<Channel>,
     let in_stream = echo_requests_iter().throttle(dur);
 
     let response = client
-        .bidirectional_streaming_echo(in_stream)
+        .bidirectional_streaming_echo(in_stream.map(Ok))
         .await
         .unwrap();
 
