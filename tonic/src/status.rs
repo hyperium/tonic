@@ -35,7 +35,17 @@ const ENCODING_SET: &AsciiSet = &CONTROLS
 /// assert_eq!(status1.code(), status2.code());
 /// ```
 #[derive(Clone)]
-pub struct Status {
+pub struct Status(Box<StatusInner>);
+
+impl From<StatusInner> for Status {
+    fn from(value: StatusInner) -> Self {
+        Self(Box::new(value))
+    }
+}
+
+/// Box the contents of Status to avoid large error variants
+#[derive(Clone)]
+struct StatusInner {
     /// The gRPC status code, found in the `grpc-status` header.
     code: Code,
     /// A relevant error message, found in the `grpc-message` header.
@@ -160,13 +170,14 @@ impl std::fmt::Display for Code {
 impl Status {
     /// Create a new `Status` with the associated code and message.
     pub fn new(code: Code, message: impl Into<String>) -> Status {
-        Status {
+        StatusInner {
             code,
             message: message.into(),
             details: Bytes::new(),
             metadata: MetadataMap::new(),
             source: None,
         }
+        .into()
     }
 
     /// The operation completed successfully.
@@ -318,7 +329,7 @@ impl Status {
     pub fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
         Status::try_from_error(err).unwrap_or_else(|err| {
             let mut status = Status::new(Code::Unknown, err.to_string());
-            status.source = Some(err.into());
+            status.0.source = Some(err.into());
             status
         })
     }
@@ -349,7 +360,7 @@ impl Status {
         };
 
         if let Some(mut status) = find_status_in_source_chain(&*err) {
-            status.source = Some(err.into());
+            status.0.source = Some(err.into());
             return Ok(status);
         }
 
@@ -362,7 +373,7 @@ impl Status {
         let code = Self::code_from_h2(&err);
 
         let mut status = Self::new(code, format!("h2 protocol error: {err}"));
-        status.source = Some(Arc::new(*err));
+        status.0.source = Some(Arc::new(*err));
         status
     }
 
@@ -389,7 +400,7 @@ impl Status {
     #[cfg(feature = "server")]
     fn to_h2_error(&self) -> h2::Error {
         // conservatively transform to h2 error codes...
-        let reason = match self.code {
+        let reason = match self.code() {
             Code::Cancelled => h2::Reason::CANCEL,
             _ => h2::Reason::INTERNAL_ERROR,
         };
@@ -473,53 +484,56 @@ impl Status {
             }
         };
 
-        Some(Status {
-            code,
-            message,
-            details,
-            metadata: MetadataMap::from_headers(other_headers),
-            source: None,
-        })
+        Some(
+            StatusInner {
+                code,
+                message,
+                details,
+                metadata: MetadataMap::from_headers(other_headers),
+                source: None,
+            }
+            .into(),
+        )
     }
 
     /// Get the gRPC `Code` of this `Status`.
     pub fn code(&self) -> Code {
-        self.code
+        self.0.code
     }
 
     /// Get the text error message of this `Status`.
     pub fn message(&self) -> &str {
-        &self.message
+        &self.0.message
     }
 
     /// Get the opaque error details of this `Status`.
     pub fn details(&self) -> &[u8] {
-        &self.details
+        &self.0.details
     }
 
     /// Get a reference to the custom metadata.
     pub fn metadata(&self) -> &MetadataMap {
-        &self.metadata
+        &self.0.metadata
     }
 
     /// Get a mutable reference to the custom metadata.
     pub fn metadata_mut(&mut self) -> &mut MetadataMap {
-        &mut self.metadata
+        &mut self.0.metadata
     }
 
     pub(crate) fn to_header_map(&self) -> Result<HeaderMap, Self> {
-        let mut header_map = HeaderMap::with_capacity(3 + self.metadata.len());
+        let mut header_map = HeaderMap::with_capacity(3 + self.0.metadata.len());
         self.add_header(&mut header_map)?;
         Ok(header_map)
     }
 
     /// Add headers from this `Status` into `header_map`.
     pub fn add_header(&self, header_map: &mut HeaderMap) -> Result<(), Self> {
-        header_map.extend(self.metadata.clone().into_sanitized_headers());
+        header_map.extend(self.0.metadata.clone().into_sanitized_headers());
 
-        header_map.insert(Self::GRPC_STATUS, self.code.to_header_value());
+        header_map.insert(Self::GRPC_STATUS, self.0.code.to_header_value());
 
-        if !self.message.is_empty() {
+        if !self.0.message.is_empty() {
             let to_write = Bytes::copy_from_slice(
                 Cow::from(percent_encode(self.message().as_bytes(), ENCODING_SET)).as_bytes(),
             );
@@ -530,8 +544,8 @@ impl Status {
             );
         }
 
-        if !self.details.is_empty() {
-            let details = crate::util::base64::STANDARD_NO_PAD.encode(&self.details[..]);
+        if !self.0.details.is_empty() {
+            let details = crate::util::base64::STANDARD_NO_PAD.encode(&self.0.details[..]);
 
             header_map.insert(
                 Self::GRPC_STATUS_DETAILS,
@@ -559,18 +573,19 @@ impl Status {
         details: Bytes,
         metadata: MetadataMap,
     ) -> Status {
-        Status {
+        StatusInner {
             code,
             message: message.into(),
             details,
             metadata,
             source: None,
         }
+        .into()
     }
 
     /// Add a source error to this status.
     pub fn set_source(&mut self, source: Arc<dyn Error + Send + Sync + 'static>) -> &mut Status {
-        self.source = Some(source);
+        self.0.source = Some(source);
         self
     }
 
@@ -598,15 +613,18 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
 
     while let Some(err) = source {
         if let Some(status) = err.downcast_ref::<Status>() {
-            return Some(Status {
-                code: status.code,
-                message: status.message.clone(),
-                details: status.details.clone(),
-                metadata: status.metadata.clone(),
-                // Since `Status` is not `Clone`, any `source` on the original Status
-                // cannot be cloned so must remain with the original `Status`.
-                source: None,
-            });
+            return Some(
+                StatusInner {
+                    code: status.0.code,
+                    message: status.0.message.clone(),
+                    details: status.0.details.clone(),
+                    metadata: status.0.metadata.clone(),
+                    // Since `Status` is not `Clone`, any `source` on the original Status
+                    // cannot be cloned so must remain with the original `Status`.
+                    source: None,
+                }
+                .into(),
+            );
         }
 
         if let Some(timeout) = err.downcast_ref::<TimeoutExpired>() {
@@ -637,6 +655,12 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
 }
 
 impl fmt::Debug for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl fmt::Debug for StatusInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // A manual impl to reduce the noise of frequently empty fields.
         let mut builder = f.debug_struct("Status");
@@ -725,7 +749,7 @@ impl fmt::Display for Status {
 
 impl Error for Status {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source.as_ref().map(|err| (&**err) as _)
+        self.0.source.as_ref().map(|err| (&**err) as _)
     }
 }
 
