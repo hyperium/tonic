@@ -37,12 +37,6 @@ const ENCODING_SET: &AsciiSet = &CONTROLS
 #[derive(Clone)]
 pub struct Status(Box<StatusInner>);
 
-impl From<StatusInner> for Status {
-    fn from(value: StatusInner) -> Self {
-        Self(Box::new(value))
-    }
-}
-
 /// Box the contents of Status to avoid large error variants
 #[derive(Clone)]
 struct StatusInner {
@@ -58,6 +52,12 @@ struct StatusInner {
     metadata: MetadataMap,
     /// Optional underlying error.
     source: Option<Arc<dyn Error + Send + Sync + 'static>>,
+}
+
+impl StatusInner {
+    fn into_status(self) -> Status {
+        Status(Box::new(self))
+    }
 }
 
 /// gRPC status codes used by [`Status`].
@@ -177,7 +177,7 @@ impl Status {
             metadata: MetadataMap::new(),
             source: None,
         }
-        .into()
+        .into_status()
     }
 
     /// The operation completed successfully.
@@ -492,7 +492,7 @@ impl Status {
                 metadata: MetadataMap::from_headers(other_headers),
                 source: None,
             }
-            .into(),
+            .into_status(),
         )
     }
 
@@ -580,7 +580,7 @@ impl Status {
             metadata,
             source: None,
         }
-        .into()
+        .into_status()
     }
 
     /// Add a source error to this status.
@@ -623,7 +623,7 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
                     // cannot be cloned so must remain with the original `Status`.
                     source: None,
                 }
-                .into(),
+                .into_status(),
             );
         }
 
