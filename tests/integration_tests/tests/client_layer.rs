@@ -13,7 +13,6 @@ use tower_http::{set_header::SetRequestHeaderLayer, trace::TraceLayer};
 async fn connect_supports_standard_tower_layers() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
             match req.metadata().get("x-test") {

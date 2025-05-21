@@ -10,7 +10,6 @@ use tonic::{
 async fn writes_user_agent_header() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
             match req.metadata().get("user-agent") {

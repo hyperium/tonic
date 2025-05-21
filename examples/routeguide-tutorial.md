@@ -269,7 +269,6 @@ use tokio_stream::{wrappers::ReceiverStream, Stream};
 ```
 
 ```rust
-#[tonic::async_trait]
 impl RouteGuide for RouteGuideService {
     async fn get_feature(&self, _request: Request<Point>) -> Result<Response<Feature>, Status> {
         unimplemented!()
@@ -302,8 +301,8 @@ impl RouteGuide for RouteGuideService {
 }
 ```
 
-**Note**: The `tonic::async_trait` attribute macro adds support for async functions in traits. It
-uses [async-trait] internally. You can learn more about `async fn` in traits in the [async book].
+**Note**: The stubbed traits use `impl Future<...> + Send` for the return values. It
+uses RPIT internally. You can learn more about `async fn` in traits in the [async book].
 
 
 [cargo book]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts

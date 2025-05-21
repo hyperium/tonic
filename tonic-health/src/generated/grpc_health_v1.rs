@@ -213,17 +213,18 @@ pub mod health_server {
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with HealthServer.
-    #[async_trait]
     pub trait Health: std::marker::Send + std::marker::Sync + 'static {
         /// If the requested service is unknown, the call will fail with status
         /// NOT_FOUND.
-        async fn check(
+        fn check(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
-        ) -> std::result::Result<
-            tonic::Response<super::HealthCheckResponse>,
-            tonic::Status,
-        >;
+        ) -> impl std::future::Future<
+            Output = std::result::Result<
+                tonic::Response<super::HealthCheckResponse>,
+                tonic::Status,
+            >,
+        > + Send;
         /// Server streaming response type for the Watch method.
         type WatchStream: tonic::codegen::tokio_stream::Stream<
                 Item = std::result::Result<super::HealthCheckResponse, tonic::Status>,
@@ -245,10 +246,15 @@ pub mod health_server {
         /// should assume this method is not supported and should not retry the
         /// call.  If the call terminates with any other status (including OK),
         /// clients should retry the call with appropriate exponential backoff.
-        async fn watch(
+        fn watch(
             &self,
             request: tonic::Request<super::HealthCheckRequest>,
-        ) -> std::result::Result<tonic::Response<Self::WatchStream>, tonic::Status>;
+        ) -> impl std::future::Future<
+            Output = std::result::Result<
+                tonic::Response<Self::WatchStream>,
+                tonic::Status,
+            >,
+        > + Send;
     }
     #[derive(Debug)]
     pub struct HealthServer<T> {
@@ -334,19 +340,17 @@ pub mod health_server {
                     > tonic::server::UnaryService<super::HealthCheckRequest>
                     for CheckSvc<T> {
                         type Response = super::HealthCheckResponse;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::Response>,
-                            tonic::Status,
-                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::HealthCheckRequest>,
-                        ) -> Self::Future {
+                        ) -> impl std::future::Future<
+                            Output = std::result::Result<
+                                tonic::Response<Self::Response>,
+                                tonic::Status,
+                            >,
+                        > + Send {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Health>::check(&inner, request).await
-                            };
-                            Box::pin(fut)
+                            async move { <T as Health>::check(&inner, request).await }
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;
@@ -380,19 +384,17 @@ pub mod health_server {
                     for WatchSvc<T> {
                         type Response = super::HealthCheckResponse;
                         type ResponseStream = T::WatchStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<super::HealthCheckRequest>,
-                        ) -> Self::Future {
+                        ) -> impl std::future::Future<
+                            Output = std::result::Result<
+                                tonic::Response<Self::ResponseStream>,
+                                tonic::Status,
+                            >,
+                        > + Send {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
-                                <T as Health>::watch(&inner, request).await
-                            };
-                            Box::pin(fut)
+                            async move { <T as Health>::watch(&inner, request).await }
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;

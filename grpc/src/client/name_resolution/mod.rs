@@ -30,8 +30,8 @@ use std::{
     sync::Arc,
 };
 
+use async_trait::async_trait;
 use tokio::sync::Notify;
-use tonic::async_trait;
 use url::Url;
 
 use crate::attributes::Attributes;

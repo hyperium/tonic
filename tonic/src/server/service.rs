@@ -11,21 +11,24 @@ pub trait UnaryService<R> {
     /// Protobuf response message type
     type Response;
 
-    /// Response future
-    type Future: Future<Output = Result<Response<Self::Response>, Status>>;
-
     /// Call the service
-    fn call(&mut self, request: Request<R>) -> Self::Future;
+    fn call(
+        &mut self,
+        request: Request<R>,
+    ) -> impl Future<Output = Result<Response<Self::Response>, Status>> + Send;
 }
 
 impl<T, M1, M2> UnaryService<M1> for T
 where
     T: Service<Request<M1>, Response = Response<M2>, Error = crate::Status>,
+    <T as Service<Request<M1>>>::Future: Send,
 {
     type Response = M2;
-    type Future = T::Future;
 
-    fn call(&mut self, request: Request<M1>) -> Self::Future {
+    fn call(
+        &mut self,
+        request: Request<M1>,
+    ) -> impl Future<Output = Result<Response<Self::Response>, Status>> + Send {
         Service::call(self, request)
     }
 }
@@ -41,23 +44,26 @@ pub trait ServerStreamingService<R> {
     /// Stream of outbound response messages
     type ResponseStream: Stream<Item = Result<Self::Response, Status>>;
 
-    /// Response future
-    type Future: Future<Output = Result<Response<Self::ResponseStream>, Status>>;
-
     /// Call the service
-    fn call(&mut self, request: Request<R>) -> Self::Future;
+    fn call(
+        &mut self,
+        request: Request<R>,
+    ) -> impl Future<Output = Result<Response<Self::ResponseStream>, Status>> + Send;
 }
 
 impl<T, S, M1, M2> ServerStreamingService<M1> for T
 where
     T: Service<Request<M1>, Response = Response<S>, Error = crate::Status>,
+    <T as Service<Request<M1>>>::Future: Send,
     S: Stream<Item = Result<M2, crate::Status>>,
 {
     type Response = M2;
     type ResponseStream = S;
-    type Future = T::Future;
 
-    fn call(&mut self, request: Request<M1>) -> Self::Future {
+    fn call(
+        &mut self,
+        request: Request<M1>,
+    ) -> impl Future<Output = Result<Response<Self::ResponseStream>, Status>> + Send {
         Service::call(self, request)
     }
 }
@@ -70,21 +76,24 @@ pub trait ClientStreamingService<R> {
     /// Protobuf response message type
     type Response;
 
-    /// Response future
-    type Future: Future<Output = Result<Response<Self::Response>, Status>>;
-
     /// Call the service
-    fn call(&mut self, request: Request<Streaming<R>>) -> Self::Future;
+    fn call(
+        &mut self,
+        request: Request<Streaming<R>>,
+    ) -> impl Future<Output = Result<Response<Self::Response>, Status>> + Send;
 }
 
 impl<T, M1, M2> ClientStreamingService<M1> for T
 where
     T: Service<Request<Streaming<M1>>, Response = Response<M2>, Error = crate::Status>,
+    <T as Service<Request<Streaming<M1>>>>::Future: Send,
 {
     type Response = M2;
-    type Future = T::Future;
 
-    fn call(&mut self, request: Request<Streaming<M1>>) -> Self::Future {
+    fn call(
+        &mut self,
+        request: Request<Streaming<M1>>,
+    ) -> impl Future<Output = Result<Response<Self::Response>, Status>> + Send {
         Service::call(self, request)
     }
 }
@@ -100,23 +109,26 @@ pub trait StreamingService<R> {
     /// Stream of outbound response messages
     type ResponseStream: Stream<Item = Result<Self::Response, Status>>;
 
-    /// Response future
-    type Future: Future<Output = Result<Response<Self::ResponseStream>, Status>>;
-
     /// Call the service
-    fn call(&mut self, request: Request<Streaming<R>>) -> Self::Future;
+    fn call(
+        &mut self,
+        request: Request<Streaming<R>>,
+    ) -> impl Future<Output = Result<Response<Self::ResponseStream>, Status>> + Send;
 }
 
 impl<T, S, M1, M2> StreamingService<M1> for T
 where
     T: Service<Request<Streaming<M1>>, Response = Response<S>, Error = crate::Status>,
+    <T as Service<Request<Streaming<M1>>>>::Future: Send,
     S: Stream<Item = Result<M2, crate::Status>>,
 {
     type Response = M2;
     type ResponseStream = S;
-    type Future = T::Future;
 
-    fn call(&mut self, request: Request<Streaming<M1>>) -> Self::Future {
+    fn call(
+        &mut self,
+        request: Request<Streaming<M1>>,
+    ) -> impl Future<Output = Result<Response<Self::ResponseStream>, Status>> + Send {
         Service::call(self, request)
     }
 }
