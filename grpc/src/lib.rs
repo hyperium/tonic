@@ -27,6 +27,7 @@
 #![allow(dead_code)]
 
 pub mod client;
+mod rt;
 pub mod service;
 
 pub(crate) mod attributes;
