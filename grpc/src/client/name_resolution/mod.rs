@@ -35,7 +35,7 @@ use std::{
 mod backoff;
 mod dns;
 mod registry;
-pub use registry::GLOBAL_RESOLVER_REGISTRY;
+pub use registry::global_registry;
 
 /// Target represents a target for gRPC, as specified in:
 /// https://github.com/grpc/grpc/blob/master/doc/naming.md.

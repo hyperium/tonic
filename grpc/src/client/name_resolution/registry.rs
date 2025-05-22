@@ -18,10 +18,12 @@
 
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use super::ResolverBuilder;
+
+static GLOBAL_RESOLVER_REGISTRY: OnceLock<ResolverRegistry> = OnceLock::new();
 
 /// A registry to store and retrieve name resolvers.  Resolvers are indexed by
 /// the URI scheme they are intended to handle.
@@ -66,5 +68,6 @@ impl ResolverRegistry {
 }
 
 /// Global registry for resolver builders.
-pub static GLOBAL_RESOLVER_REGISTRY: std::sync::LazyLock<ResolverRegistry> =
-    std::sync::LazyLock::new(ResolverRegistry::new);
+pub fn global_registry() -> &'static ResolverRegistry {
+    GLOBAL_RESOLVER_REGISTRY.get_or_init(|| ResolverRegistry::new())
+}

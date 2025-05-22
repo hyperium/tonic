@@ -25,7 +25,7 @@ use crate::{
         self,
         backoff::{BackoffConfig, DEFAULT_EXPONENTIAL_CONFIG},
         dns::{parse_endpoint_and_authority, HostPort},
-        ResolverOptions, ResolverUpdate, Target, GLOBAL_RESOLVER_REGISTRY,
+        global_registry, ResolverOptions, ResolverUpdate, Target,
     },
     rt::{self, tokio::TokioRuntime},
 };
@@ -183,7 +183,7 @@ impl name_resolution::ChannelController for FakeChannelController {
 #[tokio::test]
 pub async fn dns_basic() {
     super::reg();
-    let builder = GLOBAL_RESOLVER_REGISTRY.get("dns").unwrap();
+    let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///localhost:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(WorkScheduler {
@@ -212,7 +212,7 @@ pub async fn dns_basic() {
 #[tokio::test]
 pub async fn invalid_target() {
     super::reg();
-    let builder = GLOBAL_RESOLVER_REGISTRY.get("dns").unwrap();
+    let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(WorkScheduler {
@@ -288,7 +288,7 @@ impl rt::Runtime for FakeRuntime {
 #[tokio::test]
 pub async fn dns_lookup_error() {
     super::reg();
-    let builder = GLOBAL_RESOLVER_REGISTRY.get("dns").unwrap();
+    let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///grpc.io:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(WorkScheduler {

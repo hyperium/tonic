@@ -21,11 +21,13 @@
 
 use std::{
     net::{IpAddr, SocketAddr},
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex,
+    },
     time::{Duration, SystemTime},
 };
 
-use once_cell::sync::Lazy;
 use tokio::sync::mpsc::UnboundedSender;
 use url::Host;
 
@@ -36,7 +38,7 @@ use crate::{
 
 use super::{
     backoff::{BackoffConfig, ExponentialBackoff, DEFAULT_EXPONENTIAL_CONFIG},
-    Endpoint, Resolver, ResolverBuilder, GLOBAL_RESOLVER_REGISTRY,
+    global_registry, Endpoint, Resolver, ResolverBuilder,
 };
 
 #[cfg(test)]
@@ -51,31 +53,30 @@ const DEFAULT_DNS_PORT: u16 = 53;
 ///
 /// It is recommended to set this value at application startup. Avoid modifying
 /// this variable after initialization.
-static RESOLVING_TIMEOUT: Lazy<Mutex<Duration>> = Lazy::new(|| Mutex::new(Duration::from_secs(30)));
+static RESOLVING_TIMEOUT_MS: AtomicU64 = AtomicU64::new(30_000); // 30 seconds
 
 /// This is the minimum interval at which re-resolutions are allowed. This helps
 /// to prevent excessive re-resolution.
-static MIN_RESOLUTION_INTERVAL: Lazy<Mutex<Duration>> =
-    Lazy::new(|| Mutex::new(Duration::from_secs(30)));
+static MIN_RESOLUTION_INTERVAL_MS: AtomicU64 = AtomicU64::new(30_000); // 30 seconds
 
 pub fn get_resolving_timeout() -> Duration {
-    RESOLVING_TIMEOUT.lock().unwrap().clone()
+    Duration::from_millis(RESOLVING_TIMEOUT_MS.load(Ordering::Relaxed))
 }
 
 pub fn set_resolving_timeout(duration: Duration) {
-    *RESOLVING_TIMEOUT.lock().unwrap() = duration;
+    RESOLVING_TIMEOUT_MS.store(duration.as_millis() as u64, Ordering::Relaxed);
 }
 
 pub fn get_min_resolution_interval() -> Duration {
-    MIN_RESOLUTION_INTERVAL.lock().unwrap().clone()
+    Duration::from_millis(MIN_RESOLUTION_INTERVAL_MS.load(Ordering::Relaxed))
 }
 
 pub fn set_min_resolution_interval(duration: Duration) {
-    *MIN_RESOLUTION_INTERVAL.lock().unwrap() = duration;
+    MIN_RESOLUTION_INTERVAL_MS.store(duration.as_millis() as u64, Ordering::Relaxed);
 }
 
 pub fn reg() {
-    GLOBAL_RESOLVER_REGISTRY.add_builder(Box::new(Builder {}));
+    global_registry().add_builder(Box::new(Builder {}));
 }
 
 struct Builder {}
