@@ -11,7 +11,6 @@ mod proto {
 #[derive(Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl proto::greeter_server::Greeter for MyGreeter {
     async fn say_hello(
         &self,

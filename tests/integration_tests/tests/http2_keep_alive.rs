@@ -8,7 +8,6 @@ use tonic::{Request, Response, Status};
 
 struct Svc;
 
-#[tonic::async_trait]
 impl test_server::Test for Svc {
     async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
         Ok(Response::new(Output {}))

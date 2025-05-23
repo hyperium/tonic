@@ -9,7 +9,6 @@ use tonic::{
 
 struct Svc(Arc<Mutex<Option<oneshot::Sender<()>>>>);
 
-#[tonic::async_trait]
 impl test_server::Test for Svc {
     async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
         let mut l = self.0.lock().unwrap();

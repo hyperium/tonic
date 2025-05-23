@@ -20,7 +20,6 @@ type EchoResult<T> = Result<Response<T>, Status>;
 #[derive(Default)]
 pub struct MyEcho {}
 
-#[tonic::async_trait]
 impl Echo for MyEcho {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
         println!("Got an echo request from {:?}", request.remote_addr());
@@ -43,7 +42,6 @@ fn init_echo(args: &[String], builder: &mut RoutesBuilder) {
 #[derive(Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,

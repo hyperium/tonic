@@ -20,7 +20,6 @@ async fn test_http_max_header_list_size_and_long_errors() {
         "a".repeat(N)
     }
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, _: Request<Input>) -> Result<Response<Output>, Status> {
             Err(Status::internal(long_message()))

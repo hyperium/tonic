@@ -35,7 +35,6 @@ fn match_for_io_error(err_status: &Status) -> Option<&std::io::Error> {
 #[derive(Debug)]
 pub struct EchoServer {}
 
-#[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, _: Request<EchoRequest>) -> EchoResult<EchoResponse> {
         Err(Status::unimplemented("not implemented"))
