@@ -83,6 +83,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Testcase::CustomMetadata => {
                 client::custom_metadata(&mut client, &mut test_results).await
             }
+            Testcase::TimeoutOnSleepingServer => {
+                client::timeout_on_sleeping_server(&mut client, &mut test_results).await
+            }
             _ => unimplemented!(),
         }
 
