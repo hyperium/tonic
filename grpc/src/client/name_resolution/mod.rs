@@ -100,7 +100,7 @@ impl Display for Target {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "{}//{}/{}",
+            "{}://{}{}",
             self.scheme(),
             self.authority_host_port(),
             self.path()
@@ -166,17 +166,16 @@ pub trait Resolver: Send {
     /// Asks the resolver to obtain an updated resolver result, if
     /// applicable.
     ///
-    /// This is useful for pull-based implementations to decide when to
-    /// re-resolve.  However, the implementation is not required to
+    /// This is useful for polling resolvers to decide when to re-resolve.  
+    /// However, the implementation is not required to
     /// re-resolve immediately upon receiving this call; it may instead
     /// elect to delay based on some configured minimum time between
     /// queries, to avoid hammering the name service with queries.
     ///
-    /// For push-based implementations, this may be a no-op.
+    /// For watch based resolvers, this may be a no-op.
     fn resolve_now(&mut self);
 
-    /// Called serially by the channel to do work after the work scheduler's
-    /// schedule_work method is called.
+    /// Called serially by the channel to to allow access to ChannelController.
     fn work(&mut self, channel_controller: &mut dyn ChannelController);
 }
 
@@ -225,10 +224,10 @@ pub struct ResolverUpdate {
 impl Default for ResolverUpdate {
     fn default() -> Self {
         ResolverUpdate {
-            service_config: Ok(None),
-            attributes: Arc::default(),
-            endpoints: Ok(Vec::default()),
-            resolution_note: None,
+            service_config: Ok(Default::default()),
+            attributes: Default::default(),
+            endpoints: Ok(Default::default()),
+            resolution_note: Default::default(),
         }
     }
 }
@@ -331,6 +330,7 @@ mod test {
             want_port: Option<u16>,
             want_host_port: &'static str,
             want_path: &'static str,
+            want_str: &'static str,
         }
         let test_cases = vec![
             TestCase {
@@ -340,6 +340,7 @@ mod test {
                 want_host: "",
                 want_port: None,
                 want_path: "/grpc.io",
+                want_str: "dns:///grpc.io",
             },
             TestCase {
                 input: "dns://8.8.8.8:53/grpc.io/docs",
@@ -348,6 +349,7 @@ mod test {
                 want_host: "8.8.8.8",
                 want_port: Some(53),
                 want_path: "/grpc.io/docs",
+                want_str: "dns://8.8.8.8:53/grpc.io/docs",
             },
             TestCase {
                 input: "unix:path/to/file",
@@ -356,6 +358,7 @@ mod test {
                 want_host: "",
                 want_port: None,
                 want_path: "path/to/file",
+                want_str: "unix://path/to/file",
             },
             TestCase {
                 input: "unix:///run/containerd/containerd.sock",
@@ -364,6 +367,7 @@ mod test {
                 want_host: "",
                 want_port: None,
                 want_path: "/run/containerd/containerd.sock",
+                want_str: "unix:///run/containerd/containerd.sock",
             },
         ];
 
@@ -374,6 +378,7 @@ mod test {
             assert_eq!(target.authority_port(), tc.want_port);
             assert_eq!(target.authority_host_port(), tc.want_host_port);
             assert_eq!(target.path(), tc.want_path);
+            assert_eq!(&target.to_string(), tc.want_str);
         }
     }
 }
