@@ -55,21 +55,36 @@ pub const DEFAULT_EXPONENTIAL_CONFIG: BackoffConfig = BackoffConfig {
     max_delay: Duration::from_secs(120),
 };
 
-impl ExponentialBackoff {
-    pub fn new(mut config: BackoffConfig) -> Self {
-        // Adjust params to get them in valid ranges.
+impl BackoffConfig {
+    fn validate(&self) -> Result<(), &'static str> {
+        // Valid that params are in valid ranges.
         // 0 <= base_dealy <= max_delay
-        config.base_delay = config.base_delay.min(config.max_delay);
+        if self.base_delay > self.max_delay {
+            Err("base_delay must be greater than max_delay")?;
+        }
         // 1 <= multiplier
-        config.multiplier = config.multiplier.max(1.0);
+        if self.multiplier < 1.0 {
+            Err("multiplier must be greater than 1.0")?;
+        }
         // 0 <= jitter <= 1
-        config.jitter = config.jitter.max(0.0);
-        config.jitter = config.jitter.min(1.0);
+        if self.jitter < 0.0 {
+            Err("jitter must be greater than or equal to 0")?;
+        }
+        if self.jitter > 1.0 {
+            Err("jitter must be less than or equal to 1")?
+        }
+        Ok(())
+    }
+}
+
+impl ExponentialBackoff {
+    pub fn new(config: BackoffConfig) -> Result<Self, &'static str> {
+        config.validate()?;
         let next_delay_secs = config.base_delay.as_secs_f64();
-        ExponentialBackoff {
+        Ok(ExponentialBackoff {
             config,
             next_delay_secs: Mutex::new(next_delay_secs),
-        }
+        })
     }
 
     pub fn reset(&self) {
@@ -94,11 +109,19 @@ impl ExponentialBackoff {
 mod tests {
     use std::time::Duration;
 
-    use crate::client::name_resolution::backoff::{BackoffConfig, ExponentialBackoff};
+    use crate::client::name_resolution::backoff::{
+        BackoffConfig, ExponentialBackoff, DEFAULT_EXPONENTIAL_CONFIG,
+    };
 
     // Epsilon for floating point comparisons if needed, though Duration
     // comparisons are often better.
     const EPSILON: f64 = 1e-9;
+
+    #[test]
+    fn default_config_is_valid() {
+        let result = ExponentialBackoff::new(DEFAULT_EXPONENTIAL_CONFIG.clone());
+        assert_eq!(result.is_ok(), true);
+    }
 
     #[test]
     fn base_less_than_max() {
@@ -108,7 +131,7 @@ mod tests {
             jitter: 0.0,
             max_delay: Duration::from_secs(100),
         };
-        let backoff = ExponentialBackoff::new(config.clone());
+        let backoff = ExponentialBackoff::new(config).unwrap();
         assert_eq!(backoff.backoff_duration(), Duration::from_secs(10));
     }
 
@@ -120,8 +143,8 @@ mod tests {
             base_delay: Duration::from_secs(100),
             max_delay: Duration::from_secs(10),
         };
-        let backoff = ExponentialBackoff::new(config.clone());
-        assert_eq!(backoff.backoff_duration(), Duration::from_secs(10));
+        let result = ExponentialBackoff::new(config);
+        assert_eq!(result.is_err(), true);
     }
 
     #[test]
@@ -132,10 +155,8 @@ mod tests {
             base_delay: Duration::from_secs(10),
             max_delay: Duration::from_secs(100),
         };
-        let backoff = ExponentialBackoff::new(config.clone());
-        // multiplier gets clipped to 1.
-        assert_eq!(backoff.backoff_duration(), Duration::from_secs(10));
-        assert_eq!(backoff.backoff_duration(), Duration::from_secs(10));
+        let result = ExponentialBackoff::new(config);
+        assert_eq!(result.is_err(), true);
     }
 
     #[test]
@@ -146,10 +167,8 @@ mod tests {
             base_delay: Duration::from_secs(10),
             max_delay: Duration::from_secs(100),
         };
-        let backoff = ExponentialBackoff::new(config.clone());
-        // jitter gets clipped to 0.
-        assert_eq!(backoff.backoff_duration(), Duration::from_secs(10));
-        assert_eq!(backoff.backoff_duration(), Duration::from_secs(10));
+        let result = ExponentialBackoff::new(config);
+        assert_eq!(result.is_err(), true);
     }
 
     #[test]
@@ -160,16 +179,8 @@ mod tests {
             base_delay: Duration::from_secs(10),
             max_delay: Duration::from_secs(100),
         };
-        let backoff = ExponentialBackoff::new(config.clone());
-        // jitter gets clipped to 1.
-        // 0 <= duration <= 20.
-        let duration = backoff.backoff_duration();
-        assert_eq!(duration.lt(&Duration::from_secs(20)), true);
-        assert_eq!(duration.gt(&Duration::from_secs(0)), true);
-
-        let duration = backoff.backoff_duration();
-        assert_eq!(duration.lt(&Duration::from_secs(20)), true);
-        assert_eq!(duration.gt(&Duration::from_secs(0)), true);
+        let result = ExponentialBackoff::new(config);
+        assert_eq!(result.is_err(), true);
     }
 
     #[test]
@@ -180,7 +191,7 @@ mod tests {
             base_delay: Duration::from_secs(1),
             max_delay: Duration::from_secs(15),
         };
-        let backoff = ExponentialBackoff::new(config.clone());
+        let backoff = ExponentialBackoff::new(config.clone()).unwrap();
         assert_eq!(backoff.backoff_duration(), Duration::from_secs(1));
         assert_eq!(backoff.backoff_duration(), Duration::from_secs(2));
         assert_eq!(backoff.backoff_duration(), Duration::from_secs(4));
@@ -208,7 +219,7 @@ mod tests {
             base_delay: Duration::from_secs(1),
             max_delay: Duration::from_secs(15),
         };
-        let backoff = ExponentialBackoff::new(config.clone());
+        let backoff = ExponentialBackoff::new(config.clone()).unwrap();
         // 0.8 <= duration <= 1.2.
         let duration = backoff.backoff_duration();
         assert_eq!(duration.gt(&Duration::from_secs_f64(0.8 - EPSILON)), true);
