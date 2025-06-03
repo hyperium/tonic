@@ -142,7 +142,7 @@ impl DnsResolver {
         let resolve_now_rx = resolve_now_notify.clone();
 
         let handle = options.runtime.clone().spawn(Box::pin(async move {
-            let backoff = ExponentialBackoff::new(dns_opts.backoff_config.clone())
+            let mut backoff = ExponentialBackoff::new(dns_opts.backoff_config.clone())
                 .expect("default exponential config must be valid");
             let state = state_copy;
             let work_scheduler = options.work_scheduler;
