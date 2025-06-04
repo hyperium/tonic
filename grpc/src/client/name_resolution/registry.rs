@@ -59,15 +59,11 @@ impl ResolverRegistry {
     /// The provided scheme is case-insensitive; any uppercase characters
     /// will be converted to lowercase before lookup.
     pub fn get(&self, scheme: &str) -> Option<Arc<dyn ResolverBuilder>> {
-        self.m
-            .lock()
-            .unwrap()
-            .get(&scheme.to_lowercase())
-            .map(|b| b.clone())
+        self.m.lock().unwrap().get(&scheme.to_lowercase()).cloned()
     }
 }
 
 /// Global registry for resolver builders.
 pub fn global_registry() -> &'static ResolverRegistry {
-    GLOBAL_RESOLVER_REGISTRY.get_or_init(|| ResolverRegistry::new())
+    GLOBAL_RESOLVER_REGISTRY.get_or_init(ResolverRegistry::new)
 }

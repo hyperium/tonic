@@ -25,12 +25,12 @@ use crate::{
         self,
         backoff::{BackoffConfig, DEFAULT_EXPONENTIAL_CONFIG},
         dns::{parse_endpoint_and_authority, HostPort},
-        global_registry, ResolverOptions, ResolverUpdate, Target,
+        global_registry, Resolver, ResolverOptions, ResolverUpdate, Target,
     },
     rt::{self, tokio::TokioRuntime},
 };
 
-use super::ParseResult;
+use super::{DnsOptions, ParseResult};
 
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 
@@ -323,7 +323,6 @@ pub async fn dns_lookup_error() {
 
 #[tokio::test]
 pub async fn dns_lookup_timeout() {
-    let target = &"dns:///grpc.io:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(WorkScheduler {
         work_tx: work_tx.clone(),
@@ -335,17 +334,20 @@ pub async fn dns_lookup_timeout() {
             lookup_result: Ok(Vec::new()),
         },
     };
+    let dns_client = runtime.dns.clone();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: Arc::new(runtime),
         work_scheduler: work_scheduler.clone(),
     };
-    let dns_opts = super::DnsOptions {
+    let dns_opts = DnsOptions {
         min_resolution_interval: super::get_min_resolution_interval(),
         resolving_timeout: DEFAULT_TEST_SHORT_TIMEOUT,
         backoff_config: DEFAULT_EXPONENTIAL_CONFIG,
+        host: "grpc.io".to_string(),
+        port: 1234,
     };
-    let mut resolver = super::DnsResolver::new(target, opts, dns_opts);
+    let mut resolver = super::DnsResolver::new(Box::new(dns_client), opts, dns_opts);
 
     // Wait for schedule work to be called.
     let _ = work_rx.recv().await.unwrap();
@@ -363,7 +365,6 @@ pub async fn dns_lookup_timeout() {
 
 #[tokio::test]
 pub async fn rate_limit() {
-    let target = &"dns:///localhost:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(WorkScheduler {
         work_tx: work_tx.clone(),
@@ -373,12 +374,18 @@ pub async fn rate_limit() {
         runtime: Arc::new(TokioRuntime {}),
         work_scheduler: work_scheduler.clone(),
     };
-    let dns_opts = super::DnsOptions {
+    let dns_client = opts
+        .runtime
+        .get_dns_resolver(rt::ResolverOptions { server_addr: None })
+        .unwrap();
+    let dns_opts = DnsOptions {
         min_resolution_interval: Duration::from_secs(20),
         resolving_timeout: super::get_resolving_timeout(),
         backoff_config: DEFAULT_EXPONENTIAL_CONFIG,
+        host: "localhost".to_string(),
+        port: 1234,
     };
-    let mut resolver = super::DnsResolver::new(target, opts, dns_opts);
+    let mut resolver = super::DnsResolver::new(dns_client, opts, dns_opts);
 
     // Wait for schedule work to be called.
     let event = work_rx.recv().await.unwrap();
@@ -408,7 +415,6 @@ pub async fn rate_limit() {
 
 #[tokio::test]
 pub async fn re_resolution_after_success() {
-    let target = &"dns:///localhost:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(WorkScheduler {
         work_tx: work_tx.clone(),
@@ -418,12 +424,18 @@ pub async fn re_resolution_after_success() {
         runtime: Arc::new(TokioRuntime {}),
         work_scheduler: work_scheduler.clone(),
     };
-    let dns_opts = super::DnsOptions {
+    let dns_opts = DnsOptions {
         min_resolution_interval: Duration::from_millis(1),
         resolving_timeout: super::get_resolving_timeout(),
         backoff_config: DEFAULT_EXPONENTIAL_CONFIG,
+        host: "localhost".to_string(),
+        port: 1234,
     };
-    let mut resolver = super::DnsResolver::new(target, opts, dns_opts);
+    let dns_client = opts
+        .runtime
+        .get_dns_resolver(rt::ResolverOptions { server_addr: None })
+        .unwrap();
+    let mut resolver = super::DnsResolver::new(dns_client, opts, dns_opts);
 
     // Wait for schedule work to be called.
     let _ = work_rx.recv().await.unwrap();
@@ -447,7 +459,6 @@ pub async fn re_resolution_after_success() {
 
 #[tokio::test]
 pub async fn backoff_on_error() {
-    let target = &"dns:///localhost:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(WorkScheduler {
         work_tx: work_tx.clone(),
@@ -457,7 +468,7 @@ pub async fn backoff_on_error() {
         runtime: Arc::new(TokioRuntime {}),
         work_scheduler: work_scheduler.clone(),
     };
-    let dns_opts = super::DnsOptions {
+    let dns_opts = DnsOptions {
         min_resolution_interval: Duration::from_millis(1),
         resolving_timeout: super::get_resolving_timeout(),
         // Speed up the backoffs to make the test run faster.
@@ -467,8 +478,15 @@ pub async fn backoff_on_error() {
             jitter: 0.0,
             max_delay: Duration::from_millis(1),
         },
+        host: "localhost".to_string(),
+        port: 1234,
     };
-    let mut resolver = super::DnsResolver::new(target, opts, dns_opts);
+    let dns_client = opts
+        .runtime
+        .get_dns_resolver(rt::ResolverOptions { server_addr: None })
+        .unwrap();
+
+    let mut resolver = super::DnsResolver::new(dns_client, opts, dns_opts);
 
     let (update_tx, mut update_rx) = mpsc::unbounded_channel();
     let mut channel_controller = FakeChannelController {

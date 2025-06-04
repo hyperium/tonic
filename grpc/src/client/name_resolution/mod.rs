@@ -121,9 +121,13 @@ pub trait ResolverBuilder: Send + Sync {
     fn scheme(&self) -> &'static str;
 
     /// Returns the default authority for a channel using this name resolver
-    /// and target.  This is typically the same as the service's name. By
-    /// default, the default_authority method automatically returns the path
-    /// portion of the target URI, with the leading prefix removed.
+    /// and target. This refers to the *dataplane authority* — the value used
+    /// in the `:authority` header of HTTP/2 requests — and not to be confused
+    /// with the authority portion of the target URI, which typically specifies
+    /// the name of an external server used for name resolution.
+    ///
+    /// By default, this method returns the path portion of the target URI,
+    /// with the leading prefix removed.
     fn default_authority(&self, target: &Target) -> String {
         let path = target.path();
         path.strip_prefix("/").unwrap_or(path).to_string()
@@ -138,10 +142,14 @@ pub trait ResolverBuilder: Send + Sync {
 /// name resolver.
 #[non_exhaustive]
 pub struct ResolverOptions {
-    /// The authority that will be used for the channel by default.  This
-    /// contains either the result of the default_authority method of this
-    /// ResolverBuilder, or another string if the channel was configured to
-    /// override the default.
+    /// The authority that will be used for the channel by default. This refers
+    /// to the `:authority` value sent in HTTP/2 requests — the dataplane
+    /// authority — and not the authority portion of the target URI, which is
+    /// typically used to identify the name resolution server.
+    ///
+    /// This value is either the result of the `default_authority` method of
+    /// this `ResolverBuilder`, or another string if the channel was explicitly
+    /// configured to override the default.
     pub authority: String,
 
     /// The runtime which provides utilities to do async work.
@@ -163,19 +171,19 @@ pub trait WorkScheduler: Send + Sync {
 /// Resolver watches for the updates on the specified target.
 /// Updates include address updates and service config updates.
 pub trait Resolver: Send {
-    /// Asks the resolver to obtain an updated resolver result, if
-    /// applicable.
+    /// Asks the resolver to obtain an updated resolver result, if applicable.
     ///
     /// This is useful for polling resolvers to decide when to re-resolve.  
-    /// However, the implementation is not required to
-    /// re-resolve immediately upon receiving this call; it may instead
-    /// elect to delay based on some configured minimum time between
-    /// queries, to avoid hammering the name service with queries.
+    /// However, the implementation is not required to re-resolve immediately
+    /// upon receiving this call; it may instead elect to delay based on some
+    /// configured minimum time between queries, to avoid hammering the name
+    /// service with queries.
     ///
     /// For watch based resolvers, this may be a no-op.
     fn resolve_now(&mut self);
 
-    /// Called serially by the channel to to allow access to ChannelController.
+    /// Called serially by the channel to provide access to the
+    /// `ChannelController`.
     fn work(&mut self, channel_controller: &mut dyn ChannelController);
 }
 

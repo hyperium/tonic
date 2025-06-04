@@ -31,14 +31,11 @@ use std::{
 use tokio::sync::Notify;
 use url::Host;
 
-use crate::{
-    client::name_resolution::{Address, NopResolver, ResolverUpdate, TCP_IP_NETWORK_TYPE},
-    rt,
-};
+use crate::rt;
 
 use super::{
     backoff::{BackoffConfig, ExponentialBackoff, DEFAULT_EXPONENTIAL_CONFIG},
-    global_registry, Endpoint, Resolver, ResolverBuilder,
+    Address, Endpoint, NopResolver, Resolver, ResolverOptions, ResolverUpdate, TCP_IP_NETWORK_TYPE,
 };
 
 #[cfg(test)]
@@ -93,7 +90,7 @@ pub fn set_min_resolution_interval(duration: Duration) {
 }
 
 pub fn reg() {
-    global_registry().add_builder(Box::new(Builder {}));
+    super::global_registry().add_builder(Box::new(Builder {}));
 }
 
 struct Builder {}
@@ -102,35 +99,16 @@ struct DnsOptions {
     min_resolution_interval: Duration,
     resolving_timeout: Duration,
     backoff_config: BackoffConfig,
+    host: String,
+    port: u16,
 }
 
 impl DnsResolver {
     fn new(
-        target: &super::Target,
-        options: super::ResolverOptions,
+        dns_client: Box<dyn rt::DnsResolver>,
+        options: ResolverOptions,
         dns_opts: DnsOptions,
-    ) -> Box<dyn Resolver + 'static> {
-        let parsed = match parse_endpoint_and_authority(target) {
-            Ok(res) => res,
-            Err(err) => return nop_resolver_for_err(err.to_string(), options),
-        };
-        let endpoint = parsed.endpoint;
-        let host = match endpoint.host {
-            Host::Domain(d) => d,
-            Host::Ipv4(ipv4) => {
-                return nop_resolver_for_ip(IpAddr::V4(ipv4), endpoint.port, options)
-            }
-            Host::Ipv6(ipv6) => {
-                return nop_resolver_for_ip(IpAddr::V6(ipv6), endpoint.port, options)
-            }
-        };
-        let authority = parsed.authority;
-        let dns = match options.runtime.get_dns_resolver(rt::ResolverOptions {
-            server_addr: authority,
-        }) {
-            Ok(dns) => dns,
-            Err(err) => return nop_resolver_for_err(err.to_string(), options),
-        };
+    ) -> Self {
         let state = Arc::new(Mutex::new(InternalState {
             addrs: Ok(Vec::new()),
             channel_response: None,
@@ -147,7 +125,7 @@ impl DnsResolver {
             let state = state_copy;
             let work_scheduler = options.work_scheduler;
             loop {
-                let mut lookup_fut = dns.lookup_host_name(&host);
+                let mut lookup_fut = dns_client.lookup_host_name(&dns_opts.host);
                 let mut timeout_fut = options.runtime.sleep(dns_opts.resolving_timeout);
                 let addrs = tokio::select! {
                     result = &mut lookup_fut => {
@@ -155,7 +133,7 @@ impl DnsResolver {
                             Ok(ips) => {
                                 let addrs = ips
                                     .into_iter()
-                                    .map(|ip| SocketAddr::new(ip, endpoint.port))
+                                    .map(|ip| SocketAddr::new(ip, dns_opts.port))
                                     .collect();
                                 Ok(addrs)
                             }
@@ -202,27 +180,46 @@ impl DnsResolver {
             }
         }));
 
-        Box::new(DnsResolver {
+        Self {
             state,
             task_handle: handle,
             resolve_now_notifier: resolve_now_notify,
             channel_update_notifier: channel_updated_notify,
-        })
+        }
     }
 }
 
-impl ResolverBuilder for Builder {
-    fn build(
-        &self,
-        target: &super::Target,
-        options: super::ResolverOptions,
-    ) -> Box<dyn super::Resolver> {
+impl super::ResolverBuilder for Builder {
+    fn build(&self, target: &super::Target, options: ResolverOptions) -> Box<dyn Resolver> {
+        let parsed = match parse_endpoint_and_authority(target) {
+            Ok(res) => res,
+            Err(err) => return nop_resolver_for_err(err.to_string(), options),
+        };
+        let endpoint = parsed.endpoint;
+        let host = match endpoint.host {
+            Host::Domain(d) => d,
+            Host::Ipv4(ipv4) => {
+                return nop_resolver_for_ip(IpAddr::V4(ipv4), endpoint.port, options)
+            }
+            Host::Ipv6(ipv6) => {
+                return nop_resolver_for_ip(IpAddr::V6(ipv6), endpoint.port, options)
+            }
+        };
+        let authority = parsed.authority;
+        let dns_client = match options.runtime.get_dns_resolver(rt::ResolverOptions {
+            server_addr: authority,
+        }) {
+            Ok(dns) => dns,
+            Err(err) => return nop_resolver_for_err(err.to_string(), options),
+        };
         let dns_opts = DnsOptions {
             min_resolution_interval: get_min_resolution_interval(),
             resolving_timeout: get_resolving_timeout(),
             backoff_config: DEFAULT_EXPONENTIAL_CONFIG,
+            host,
+            port: endpoint.port,
         };
-        DnsResolver::new(target, options, dns_opts)
+        Box::new(DnsResolver::new(dns_client, options, dns_opts))
     }
 
     fn scheme(&self) -> &'static str {
@@ -254,7 +251,7 @@ struct InternalState {
 
 impl Resolver for DnsResolver {
     fn resolve_now(&mut self) {
-        _ = self.resolve_now_notifier.notify_one();
+        self.resolve_now_notifier.notify_one();
     }
 
     fn work(&mut self, channel_controller: &mut dyn super::ChannelController) {
@@ -282,7 +279,7 @@ impl Resolver for DnsResolver {
         };
         let status = channel_controller.update(update);
         state.channel_response = status.err();
-        _ = self.channel_update_notifier.notify_one();
+        self.channel_update_notifier.notify_one();
     }
 }
 
@@ -344,7 +341,7 @@ fn parse_endpoint_and_authority(target: &super::Target) -> Result<ParseResult, S
 /// Takes the user input string of the format "host:port" and default port,
 /// returns the parsed host and port. If string doesn't specify a port, the
 /// default_port is returned. If the string doesn't specify the host,
-/// Result<None> is returned.
+/// Ok(None) is returned.
 fn parse_host_port(host_and_port: &str, default_port: u16) -> Result<Option<HostPort>, String> {
     // We need to use the https scheme otherwise url::Url::parse doesn't convert
     // IP addresses to Host::Ipv4 or Host::Ipv6 if they could represent valid
@@ -365,11 +362,7 @@ fn parse_host_port(host_and_port: &str, default_port: u16) -> Result<Option<Host
     Ok(Some(HostPort { host, port }))
 }
 
-fn nop_resolver_for_ip(
-    ip: IpAddr,
-    port: u16,
-    options: super::ResolverOptions,
-) -> Box<dyn super::Resolver> {
+fn nop_resolver_for_ip(ip: IpAddr, port: u16, options: ResolverOptions) -> Box<dyn Resolver> {
     options.work_scheduler.schedule_work();
     Box::new(NopResolver {
         update: ResolverUpdate {
@@ -386,7 +379,7 @@ fn nop_resolver_for_ip(
     })
 }
 
-fn nop_resolver_for_err(err: String, options: super::ResolverOptions) -> Box<dyn super::Resolver> {
+fn nop_resolver_for_err(err: String, options: ResolverOptions) -> Box<dyn Resolver> {
     options.work_scheduler.schedule_work();
     Box::new(NopResolver {
         update: ResolverUpdate {

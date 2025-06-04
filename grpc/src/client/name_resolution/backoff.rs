@@ -57,7 +57,7 @@ pub const DEFAULT_EXPONENTIAL_CONFIG: BackoffConfig = BackoffConfig {
 
 impl BackoffConfig {
     fn validate(&self) -> Result<(), &'static str> {
-        // Valid that params are in valid ranges.
+        // Check that the arguments are in valid ranges.
         // 0 <= base_dealy <= max_delay
         if self.base_delay > self.max_delay {
             Err("base_delay must be greater than max_delay")?;
@@ -83,7 +83,7 @@ impl ExponentialBackoff {
         let next_delay_secs = config.base_delay.as_secs_f64();
         Ok(ExponentialBackoff {
             config,
-            next_delay_secs: next_delay_secs,
+            next_delay_secs,
         })
     }
 
