@@ -220,7 +220,6 @@ fn generate_trait<T: Service>(
 
     quote! {
         #trait_doc
-        #[async_trait]
         pub trait #server_trait : std::marker::Send + std::marker::Sync + 'static {
             #methods
         }
@@ -265,41 +264,41 @@ fn generate_trait_methods<T: Service>(
             (false, false, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
             (false, false, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send;
                 }
             }
             (true, false, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
             (true, false, false) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<#res_message>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<#res_message>, tonic::Status>> + Send;
                 }
             }
             (false, true, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
@@ -315,16 +314,16 @@ fn generate_trait_methods<T: Service>(
                     type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + std::marker::Send + 'static;
 
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<#req_message>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<#req_message>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::#stream>, tonic::Status>> + Send;
                 }
             }
             (true, true, true) => {
                 quote! {
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status> {
-                        Err(tonic::Status::unimplemented("Not yet implemented"))
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<BoxStream<#res_message>>, tonic::Status>> + Send {
+                        async { Err(tonic::Status::unimplemented("Not yet implemented")) }
                     }
                 }
             }
@@ -340,8 +339,8 @@ fn generate_trait_methods<T: Service>(
                     type #stream: tonic::codegen::tokio_stream::Stream<Item = std::result::Result<#res_message, tonic::Status>> + std::marker::Send + 'static;
 
                     #method_doc
-                    async fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
-                        -> std::result::Result<tonic::Response<Self::#stream>, tonic::Status>;
+                    fn #name(#self_param, request: tonic::Request<tonic::Streaming<#req_message>>)
+                        -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::#stream>, tonic::Status>> + Send;
                 }
             }
         };
@@ -446,10 +445,12 @@ fn generate_unary<T: Method>(
 
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
 
-    let inner_arg = if use_arc_self {
-        quote!(inner)
+    let calling_convention = if use_arc_self {
+        quote!(<T as #server_trait>::#method_ident(inner, request))
     } else {
-        quote!(&inner)
+        quote!(async move {
+            <T as #server_trait>::#method_ident(&inner, request).await
+        })
     };
 
     quote! {
@@ -458,14 +459,10 @@ fn generate_unary<T: Method>(
 
         impl<T: #server_trait> tonic::server::UnaryService<#request> for #service_ident<T> {
             type Response = #response;
-            type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
-            fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
+            fn call(&mut self, request: tonic::Request<#request>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::Response>, tonic::Status>> + Send {
                 let inner = Arc::clone(&self.0);
-                let fut = async move {
-                    <T as #server_trait>::#method_ident(#inner_arg, request).await
-                };
-                Box::pin(fut)
+                #calling_convention
             }
         }
 
@@ -486,6 +483,7 @@ fn generate_unary<T: Method>(
             Ok(res)
         };
 
+        // This pin is necessary due to tower_service::Service::Future versus RPIT
         Box::pin(fut)
     }
 }
@@ -512,10 +510,12 @@ fn generate_server_streaming<T: Method>(
         quote!(type ResponseStream = BoxStream<#response>)
     };
 
-    let inner_arg = if use_arc_self {
-        quote!(inner)
+    let calling_convention = if use_arc_self {
+        quote!(<T as #server_trait>::#method_ident(inner, request))
     } else {
-        quote!(&inner)
+        quote!(async move {
+            <T as #server_trait>::#method_ident(&inner, request).await
+        })
     };
 
     quote! {
@@ -525,14 +525,10 @@ fn generate_server_streaming<T: Method>(
         impl<T: #server_trait> tonic::server::ServerStreamingService<#request> for #service_ident<T> {
             type Response = #response;
             #response_stream;
-            type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
 
-            fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
+            fn call(&mut self, request: tonic::Request<#request>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::ResponseStream>, tonic::Status>> + Send {
                 let inner = Arc::clone(&self.0);
-                let fut = async move {
-                    <T as #server_trait>::#method_ident(#inner_arg, request).await
-                };
-                Box::pin(fut)
+                #calling_convention
             }
         }
 
@@ -570,10 +566,12 @@ fn generate_client_streaming<T: Method>(
     let (request, response) = method.request_response_name(proto_path, compile_well_known_types);
     let codec_name = syn::parse_str::<syn::Path>(method.codec_path()).unwrap();
 
-    let inner_arg = if use_arc_self {
-        quote!(inner)
+    let calling_convention = if use_arc_self {
+        quote!(<T as #server_trait>::#method_ident(inner, request))
     } else {
-        quote!(&inner)
+        quote!(async move {
+            <T as #server_trait>::#method_ident(&inner, request).await
+        })
     };
 
     quote! {
@@ -583,14 +581,10 @@ fn generate_client_streaming<T: Method>(
         impl<T: #server_trait> tonic::server::ClientStreamingService<#request> for #service_ident<T>
         {
             type Response = #response;
-            type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
 
-            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
+            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::Response>, tonic::Status>> + Send {
                 let inner = Arc::clone(&self.0);
-                let fut = async move {
-                    <T as #server_trait>::#method_ident(#inner_arg, request).await
-                };
-                Box::pin(fut)
+                #calling_convention
             }
         }
 
@@ -637,10 +631,12 @@ fn generate_streaming<T: Method>(
         quote!(type ResponseStream = BoxStream<#response>)
     };
 
-    let inner_arg = if use_arc_self {
-        quote!(inner)
+    let calling_convention = if use_arc_self {
+        quote!(<T as #server_trait>::#method_ident(inner, request))
     } else {
-        quote!(&inner)
+        quote!(async move {
+            <T as #server_trait>::#method_ident(&inner, request).await
+        })
     };
 
     quote! {
@@ -651,14 +647,10 @@ fn generate_streaming<T: Method>(
         {
             type Response = #response;
             #response_stream;
-            type Future = BoxFuture<tonic::Response<Self::ResponseStream>, tonic::Status>;
 
-            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
+            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::ResponseStream>, tonic::Status>> + Send {
                 let inner = Arc::clone(&self.0);
-                let fut = async move {
-                    <T as #server_trait>::#method_ident(#inner_arg, request).await
-                };
-                Box::pin(fut)
+                #calling_convention
             }
         }
 

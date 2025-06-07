@@ -327,18 +327,16 @@ impl<T> Request<T> {
     /// And picked up by RPCs:
     ///
     /// ```no_run
-    /// use tonic::{async_trait, Status, Request, Response};
+    /// use tonic::{Status, Request, Response};
     /// #
     /// # struct Output {}
     /// # struct Input;
     /// # struct MyService;
     /// # struct MyExtension;
-    /// # #[async_trait]
     /// # trait TestService {
     /// #     async fn handler(&self, req: Request<Input>) -> Result<Response<Output>, Status>;
     /// # }
     ///
-    /// #[async_trait]
     /// impl TestService for MyService {
     ///     async fn handler(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
     ///         let value: &MyExtension = req.extensions().get::<MyExtension>().unwrap();

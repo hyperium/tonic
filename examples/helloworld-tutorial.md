@@ -158,7 +158,6 @@ Next up, let's implement the Greeter service we previously defined in our `.prot
 #[derive(Debug, Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,
@@ -207,7 +206,6 @@ pub mod hello_world {
 #[derive(Debug, Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,
