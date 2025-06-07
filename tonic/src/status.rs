@@ -348,6 +348,18 @@ impl Status {
             Err(err) => err,
         };
 
+        // If the load shed middleware is enabled, respond to
+        // service overloaded with an appropriate grpc status.
+        #[cfg(feature = "server")]
+        let err = match err.downcast::<tower::load_shed::error::Overloaded>() {
+            Ok(_) => {
+                return Ok(Status::resource_exhausted(
+                    "Too many active requests for the connection",
+                ));
+            }
+            Err(err) => err,
+        };
+
         if let Some(mut status) = find_status_in_source_chain(&*err) {
             status.source = Some(err.into());
             return Ok(status);
