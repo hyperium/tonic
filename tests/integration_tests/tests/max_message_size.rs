@@ -245,14 +245,11 @@ fn assert_test_case(case: TestCase) {
         (Some(_), Ok(())) => panic!("Expected failure, but got success"),
         (Some(code), Err(status)) => {
             if status.code() != code {
-                panic!(
-                    "Expected failure, got failure but wrong code, got: {:?}",
-                    status
-                )
+                panic!("Expected failure, got failure but wrong code, got: {status:?}")
             }
         }
 
-        (None, Err(status)) => panic!("Expected success, but got failure, got: {:?}", status),
+        (None, Err(status)) => panic!("Expected success, but got failure, got: {status:?}"),
 
         _ => (),
     }

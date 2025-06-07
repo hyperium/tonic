@@ -1002,7 +1002,7 @@ mod tests {
             .add_help_link("link to resource", "resource.example.local")
             .set_localized_message("en-US", "message for the user");
 
-        let fmt_details = format!("{:?}", err_details);
+        let fmt_details = format!("{err_details:?}");
 
         let err_details_vec = vec![
             RetryInfo::new(Some(Duration::from_secs(5))).into(),
@@ -1021,7 +1021,7 @@ mod tests {
             LocalizedMessage::new("en-US", "message for the user").into(),
         ];
 
-        let fmt_details_vec = format!("{:?}", err_details_vec);
+        let fmt_details_vec = format!("{err_details_vec:?}");
 
         let status_from_struct = Status::with_error_details(
             Code::InvalidArgument,
@@ -1037,13 +1037,10 @@ mod tests {
 
         let ext_details = match status_from_vec.check_error_details() {
             Ok(ext_details) => ext_details,
-            Err(err) => panic!(
-                "Error extracting details struct from status_from_vec: {:?}",
-                err
-            ),
+            Err(err) => panic!("Error extracting details struct from status_from_vec: {err:?}"),
         };
 
-        let fmt_ext_details = format!("{:?}", ext_details);
+        let fmt_ext_details = format!("{ext_details:?}");
 
         assert!(
             fmt_ext_details.eq(&fmt_details),
@@ -1052,13 +1049,10 @@ mod tests {
 
         let ext_details_vec = match status_from_struct.check_error_details_vec() {
             Ok(ext_details) => ext_details,
-            Err(err) => panic!(
-                "Error extracting details_vec from status_from_struct: {:?}",
-                err
-            ),
+            Err(err) => panic!("Error extracting details_vec from status_from_struct: {err:?}"),
         };
 
-        let fmt_ext_details_vec = format!("{:?}", ext_details_vec);
+        let fmt_ext_details_vec = format!("{ext_details_vec:?}");
 
         assert!(
             fmt_ext_details_vec.eq(&fmt_details_vec),

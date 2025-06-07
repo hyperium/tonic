@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
-    println!("HealthServer + GreeterServer listening on {}", addr);
+    println!("HealthServer + GreeterServer listening on {addr}");
 
     Server::builder()
         .add_service(health_service)

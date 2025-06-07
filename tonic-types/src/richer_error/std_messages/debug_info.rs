@@ -94,7 +94,7 @@ mod tests {
             "details about the error",
         );
 
-        let formatted = format!("{:?}", debug_info);
+        let formatted = format!("{debug_info:?}");
 
         let expected_filled = "DebugInfo { stack_entries: [\"trace 3\", \"trace 2\", \"trace 1\"], detail: \"details about the error\" }";
 
@@ -104,7 +104,7 @@ mod tests {
         );
 
         let gen_any = debug_info.into_any();
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.DebugInfo\", value: [10, 7, 116, 114, 97, 99, 101, 32, 51, 10, 7, 116, 114, 97, 99, 101, 32, 50, 10, 7, 116, 114, 97, 99, 101, 32, 49, 18, 23, 100, 101, 116, 97, 105, 108, 115, 32, 97, 98, 111, 117, 116, 32, 116, 104, 101, 32, 101, 114, 114, 111, 114] }";
@@ -115,11 +115,11 @@ mod tests {
         );
 
         let br_details = match DebugInfo::from_any(gen_any) {
-            Err(error) => panic!("Error generating DebugInfo from Any: {:?}", error),
+            Err(error) => panic!("Error generating DebugInfo from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

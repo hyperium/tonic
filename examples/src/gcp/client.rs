@@ -21,7 +21,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .nth(1)
         .ok_or_else(|| "Expected a project name as the first argument.".to_string())?;
 
-    let bearer_token = format!("Bearer {}", token);
+    let bearer_token = format!("Bearer {token}");
     let header_value: MetadataValue<_> = bearer_token.parse()?;
 
     let data_dir = std::path::PathBuf::from_iter([std::env!("CARGO_MANIFEST_DIR"), "data"]);
@@ -44,13 +44,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = service
         .list_topics(Request::new(ListTopicsRequest {
-            project: format!("projects/{0}", project),
+            project: format!("projects/{project}"),
             page_size: 10,
             ..Default::default()
         }))
         .await?;
 
-    println!("RESPONSE={:?}", response);
+    println!("RESPONSE={response:?}");
 
     Ok(())
 }
