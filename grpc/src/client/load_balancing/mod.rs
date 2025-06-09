@@ -52,9 +52,19 @@ pub trait WorkScheduler: Send + Sync {
 /// JSON.  Hides internal storage details and includes a method to deserialize
 /// the JSON into a concrete policy struct.
 #[derive(Debug)]
-pub struct ParsedJsonLbConfig(pub serde_json::Value);
+pub struct ParsedJsonLbConfig {
+    value: serde_json::Value,
+}
 
 impl ParsedJsonLbConfig {
+    /// Creates a new ParsedJsonLbConfig from the provided JSON string.
+    pub fn new(json: &str) -> Result<Self, String> {
+        match serde_json::from_str(json) {
+            Ok(value) => Ok(ParsedJsonLbConfig { value }),
+            Err(e) => Err(format!("failed to parse LB config JSON: {}", e)),
+        }
+    }
+
     /// Converts the JSON configuration into a concrete type that represents the
     /// configuration of an LB policy.
     ///
@@ -63,7 +73,7 @@ impl ParsedJsonLbConfig {
     pub fn convert_to<T: serde::de::DeserializeOwned>(
         &self,
     ) -> Result<T, Box<dyn Error + Send + Sync>> {
-        let res: T = match serde_json::from_value(self.0.clone()) {
+        let res: T = match serde_json::from_value(self.value.clone()) {
             Ok(v) => v,
             Err(e) => {
                 return Err(format!("{}", e).into());
