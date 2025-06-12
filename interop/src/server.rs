@@ -22,7 +22,6 @@ type Streaming<T> = Request<tonic::Streaming<T>>;
 type Stream<T> = Pin<Box<dyn tokio_stream::Stream<Item = StdResult<T, Status>> + Send + 'static>>;
 type BoxFuture<T, E> = Pin<Box<dyn Future<Output = StdResult<T, E>> + Send + 'static>>;
 
-#[tonic::async_trait]
 impl pb::test_service_server::TestService for TestService {
     async fn empty_call(&self, _request: Request<Empty>) -> Result<Empty> {
         Ok(Response::new(Empty {}))
@@ -158,7 +157,6 @@ impl pb::test_service_server::TestService for TestService {
 #[derive(Default)]
 pub struct UnimplementedService {}
 
-#[tonic::async_trait]
 impl pb::unimplemented_service_server::UnimplementedService for UnimplementedService {
     async fn unimplemented_call(&self, _req: Request<Empty>) -> Result<Empty> {
         Err(Status::unimplemented(""))

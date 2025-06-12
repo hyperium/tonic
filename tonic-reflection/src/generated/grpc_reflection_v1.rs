@@ -270,7 +270,6 @@ pub mod server_reflection_server {
     )]
     use tonic::codegen::*;
     /// Generated trait containing gRPC methods that should be implemented for use with ServerReflectionServer.
-    #[async_trait]
     pub trait ServerReflection: std::marker::Send + std::marker::Sync + 'static {
         /// Server streaming response type for the ServerReflectionInfo method.
         type ServerReflectionInfoStream: tonic::codegen::tokio_stream::Stream<
@@ -283,13 +282,15 @@ pub mod server_reflection_server {
             + 'static;
         /// The reflection service is structured as a bidirectional stream, ensuring
         /// all related requests go to a single server.
-        async fn server_reflection_info(
+        fn server_reflection_info(
             &self,
             request: tonic::Request<tonic::Streaming<super::ServerReflectionRequest>>,
-        ) -> std::result::Result<
-            tonic::Response<Self::ServerReflectionInfoStream>,
-            tonic::Status,
-        >;
+        ) -> impl std::future::Future<
+            Output = std::result::Result<
+                tonic::Response<Self::ServerReflectionInfoStream>,
+                tonic::Status,
+            >,
+        > + Send;
     }
     #[derive(Debug)]
     pub struct ServerReflectionServer<T> {
@@ -376,25 +377,25 @@ pub mod server_reflection_server {
                     for ServerReflectionInfoSvc<T> {
                         type Response = super::ServerReflectionResponse;
                         type ResponseStream = T::ServerReflectionInfoStream;
-                        type Future = BoxFuture<
-                            tonic::Response<Self::ResponseStream>,
-                            tonic::Status,
-                        >;
                         fn call(
                             &mut self,
                             request: tonic::Request<
                                 tonic::Streaming<super::ServerReflectionRequest>,
                             >,
-                        ) -> Self::Future {
+                        ) -> impl std::future::Future<
+                            Output = std::result::Result<
+                                tonic::Response<Self::ResponseStream>,
+                                tonic::Status,
+                            >,
+                        > + Send {
                             let inner = Arc::clone(&self.0);
-                            let fut = async move {
+                            async move {
                                 <T as ServerReflection>::server_reflection_info(
                                         &inner,
                                         request,
                                     )
                                     .await
-                            };
-                            Box::pin(fut)
+                            }
                         }
                     }
                     let accept_compression_encodings = self.accept_compression_encodings;

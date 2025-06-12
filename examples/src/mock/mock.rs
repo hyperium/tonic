@@ -61,7 +61,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 #[derive(Default)]
 pub struct MyGreeter {}
 
-#[tonic::async_trait]
 impl Greeter for MyGreeter {
     async fn say_hello(
         &self,
