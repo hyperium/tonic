@@ -29,26 +29,28 @@ static GLOBAL_RESOLVER_REGISTRY: OnceLock<ResolverRegistry> = OnceLock::new();
 /// the URI scheme they are intended to handle.
 #[derive(Default)]
 pub struct ResolverRegistry {
-    m: Arc<Mutex<HashMap<String, Arc<dyn ResolverBuilder>>>>,
+    inner: Arc<Mutex<HashMap<String, Arc<dyn ResolverBuilder>>>>,
 }
 
 impl ResolverRegistry {
     /// Construct an empty name resolver registry.
     fn new() -> Self {
-        Self { m: Arc::default() }
+        Self {
+            inner: Arc::default(),
+        }
     }
 
     /// Add a name resolver into the registry. builder.scheme() will
-    // be used as the scheme registered with this builder. If multiple
-    // resolvers are registered with the same name, the one registered last
-    // will take effect. Panics if the given scheme contains uppercase
-    // characters.
+    /// be used as the scheme registered with this builder. If multiple
+    /// resolvers are registered with the same name, the one registered last
+    /// will take effect. Panics if the given scheme contains uppercase
+    /// characters.
     pub fn add_builder(&self, builder: Box<dyn ResolverBuilder>) {
         let scheme = builder.scheme();
         if scheme.chars().any(|c| c.is_ascii_uppercase()) {
             panic!("Scheme must not contain uppercase characters: {}", scheme);
         }
-        self.m
+        self.inner
             .lock()
             .unwrap()
             .insert(scheme.to_string(), Arc::from(builder));
@@ -59,7 +61,11 @@ impl ResolverRegistry {
     /// The provided scheme is case-insensitive; any uppercase characters
     /// will be converted to lowercase before lookup.
     pub fn get(&self, scheme: &str) -> Option<Arc<dyn ResolverBuilder>> {
-        self.m.lock().unwrap().get(&scheme.to_lowercase()).cloned()
+        self.inner
+            .lock()
+            .unwrap()
+            .get(&scheme.to_lowercase())
+            .cloned()
     }
 }
 

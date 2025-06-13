@@ -20,7 +20,7 @@ use std::{future::Future, net::SocketAddr, pin::Pin};
 
 use super::{DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
-#[cfg(feature = "hickory_dns")]
+#[cfg(feature = "dns")]
 mod hickory_resolver;
 
 /// A DNS resolver that uses tokio::net::lookup_host for resolution. It only
@@ -43,7 +43,7 @@ impl DnsResolver for TokioDefaultDnsResolver {
     }
 
     async fn lookup_txt(&self, _name: &str) -> Result<Vec<String>, String> {
-        Err("TXT record lookup unavailable. Enable the optional 'hickory_dns' feature to enable service config lookups.".to_string())
+        Err("TXT record lookup unavailable. Enable the optional 'dns' feature to enable service config lookups.".to_string())
     }
 }
 
@@ -66,11 +66,11 @@ impl Runtime for TokioRuntime {
     }
 
     fn get_dns_resolver(&self, opts: ResolverOptions) -> Result<Box<dyn DnsResolver>, String> {
-        #[cfg(feature = "hickory_dns")]
+        #[cfg(feature = "dns")]
         {
             Ok(Box::new(hickory_resolver::DnsResolver::new(opts)?))
         }
-        #[cfg(not(feature = "hickory_dns"))]
+        #[cfg(not(feature = "dns"))]
         {
             Ok(Box::new(TokioDefaultDnsResolver::new(opts)?))
         }
@@ -84,7 +84,7 @@ impl Runtime for TokioRuntime {
 impl TokioDefaultDnsResolver {
     pub fn new(opts: ResolverOptions) -> Result<Self, String> {
         if opts.server_addr.is_some() {
-            return Err("Custom DNS server are not supported, enable optional feature 'hickory_dns' to enable support.".to_string());
+            return Err("Custom DNS server are not supported, enable optional feature 'dns' to enable support.".to_string());
         }
         Ok(TokioDefaultDnsResolver {})
     }

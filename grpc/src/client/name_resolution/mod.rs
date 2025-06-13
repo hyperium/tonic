@@ -24,7 +24,7 @@
 use core::fmt;
 
 use super::service_config::ServiceConfig;
-use crate::{attributes::Attributes, rt};
+use crate::{attributes::Attributes, byte_str::ByteStr, rt};
 use std::{
     fmt::{Display, Formatter},
     hash::Hash,
@@ -209,7 +209,7 @@ pub trait ChannelController: Send + Sync {
 pub struct ResolverUpdate {
     /// Attributes contains arbitrary data about the resolver intended for
     /// consumption by the load balancing policy.
-    pub attributes: Arc<Attributes>,
+    pub attributes: Attributes,
 
     /// A list of endpoints which each identify a logical host serving the
     /// service indicated by the target URI.
@@ -264,7 +264,7 @@ pub struct Address {
 
     /// The address itself is passed to the transport in order to create a
     /// connection to it.
-    pub address: String,
+    pub address: ByteStr,
 
     /// Attributes contains arbitrary data about this address intended for
     /// consumption by the subchannel.
@@ -301,7 +301,8 @@ impl Hash for Address {
 
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        write!(f, "{}:{}", self.network_type, self.address)
+        let addr: &str = &self.address;
+        write!(f, "{}:{}", self.network_type, addr)
     }
 }
 

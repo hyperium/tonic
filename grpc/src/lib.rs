@@ -31,3 +31,4 @@ mod rt;
 pub mod service;
 
 pub(crate) mod attributes;
+pub(crate) mod byte_str;

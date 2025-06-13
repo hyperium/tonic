@@ -23,15 +23,16 @@ use std::{
     net::{IpAddr, SocketAddr},
     sync::{
         atomic::{AtomicU64, Ordering},
-        Arc, Mutex,
+        Arc,
     },
     time::{Duration, SystemTime},
 };
 
+use parking_lot::Mutex;
 use tokio::sync::Notify;
 use url::Host;
 
-use crate::rt;
+use crate::{byte_str::ByteStr, rt};
 
 use super::{
     backoff::{BackoffConfig, ExponentialBackoff, DEFAULT_EXPONENTIAL_CONFIG},
@@ -119,14 +120,15 @@ impl DnsResolver {
         let channel_updated_rx = channel_updated_notify.clone();
         let resolve_now_rx = resolve_now_notify.clone();
 
-        let handle = options.runtime.clone().spawn(Box::pin(async move {
+        let runtime = options.runtime.clone();
+        let work_scheduler = options.work_scheduler.clone();
+        let handle = options.runtime.spawn(Box::pin(async move {
             let mut backoff = ExponentialBackoff::new(dns_opts.backoff_config.clone())
                 .expect("default exponential config must be valid");
             let state = state_copy;
-            let work_scheduler = options.work_scheduler;
             loop {
                 let mut lookup_fut = dns_client.lookup_host_name(&dns_opts.host);
-                let mut timeout_fut = options.runtime.sleep(dns_opts.resolving_timeout);
+                let mut timeout_fut = runtime.sleep(dns_opts.resolving_timeout);
                 let addrs = tokio::select! {
                     result = &mut lookup_fut => {
                         match result {
@@ -145,38 +147,31 @@ impl DnsResolver {
                     }
                 };
                 {
-                    let mut internal_state = match state.lock() {
-                        Ok(state) => state,
-                        Err(_) => return,
-                    };
-                    internal_state.addrs = addrs;
+                    state.lock().addrs = addrs;
                 }
                 work_scheduler.schedule_work();
                 channel_updated_rx.notified().await;
-                let channel_response: Option<String>;
-                {
-                    channel_response = state.lock().unwrap().channel_response.take();
-                }
-                let next_resoltion_time: SystemTime;
-                if channel_response.is_some() {
-                    next_resoltion_time = SystemTime::now()
+                let channel_response = { state.lock().channel_response.take() };
+                let next_resoltion_time = if let Some(_) = channel_response {
+                    SystemTime::now()
                         .checked_add(backoff.backoff_duration())
-                        .unwrap();
+                        .unwrap()
                 } else {
                     // Success resolving, wait for the next resolve_now. However,
                     // also wait MIN_RESOLUTION_INTERVAL at the very least to prevent
                     // constantly re-resolving.
                     backoff.reset();
-                    next_resoltion_time = SystemTime::now()
+                    let res_time = SystemTime::now()
                         .checked_add(dns_opts.min_resolution_interval)
                         .unwrap();
                     _ = resolve_now_rx.notified().await;
-                }
+                    res_time
+                };
                 // Wait till next resolution time.
                 let Ok(duration) = next_resoltion_time.duration_since(SystemTime::now()) else {
                     continue; // Time has already passed.
                 };
-                options.runtime.sleep(duration).await;
+                runtime.sleep(duration).await;
             }
         }));
 
@@ -255,7 +250,7 @@ impl Resolver for DnsResolver {
     }
 
     fn work(&mut self, channel_controller: &mut dyn super::ChannelController) {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self.state.lock();
         let endpoint_result = match &state.addrs {
             Ok(addrs) => {
                 let endpoints: Vec<_> = addrs
@@ -263,7 +258,7 @@ impl Resolver for DnsResolver {
                     .map(|a| Endpoint {
                         addresses: vec![Address {
                             network_type: TCP_IP_NETWORK_TYPE,
-                            address: a.to_string(),
+                            address: ByteStr::from(a.to_string()),
                             ..Default::default()
                         }],
                         ..Default::default()
@@ -369,7 +364,7 @@ fn nop_resolver_for_ip(ip: IpAddr, port: u16, options: ResolverOptions) -> Box<d
             endpoints: Ok(vec![Endpoint {
                 addresses: vec![Address {
                     network_type: TCP_IP_NETWORK_TYPE,
-                    address: SocketAddr::new(ip, port).to_string(),
+                    address: ByteStr::from(SocketAddr::new(ip, port).to_string()),
                     ..Default::default()
                 }],
                 ..Default::default()
