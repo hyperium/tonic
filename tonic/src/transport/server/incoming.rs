@@ -217,6 +217,10 @@ fn make_keepalive(
         dirty = true;
     }
 
+    // avoid clippy errors for targets that do not use these fields.
+    let _ = keepalive_retries;
+    let _ = keepalive_interval;
+
     dirty.then_some(keepalive)
 }
 
