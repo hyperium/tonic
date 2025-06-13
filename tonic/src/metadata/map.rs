@@ -214,9 +214,8 @@ pub(crate) const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 impl MetadataMap {
     // Headers reserved by the gRPC protocol.
-    pub(crate) const GRPC_RESERVED_HEADERS: [HeaderName; 6] = [
+    pub(crate) const GRPC_RESERVED_HEADERS: [HeaderName; 5] = [
         HeaderName::from_static("te"),
-        HeaderName::from_static("user-agent"),
         HeaderName::from_static("content-type"),
         HeaderName::from_static("grpc-message"),
         HeaderName::from_static("grpc-message-type"),

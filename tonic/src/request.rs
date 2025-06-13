@@ -463,6 +463,25 @@ mod tests {
     }
 
     #[test]
+    fn preserves_user_agent() {
+        let mut r = Request::new(1);
+
+        r.metadata_mut().insert(
+            MetadataKey::from_static("user-agent"),
+            MetadataValue::from_static("Custom/1.2.3"),
+        );
+
+        let http_request = r.into_http(
+            Uri::default(),
+            http::Method::POST,
+            http::Version::HTTP_2,
+            SanitizeHeaders::Yes,
+        );
+        let user_agent = http_request.headers().get("user-agent").unwrap();
+        assert_eq!(user_agent, "Custom/1.2.3");
+    }
+
+    #[test]
     fn duration_to_grpc_timeout_less_than_second() {
         let timeout = Duration::from_millis(500);
         let value = duration_to_grpc_timeout(timeout);
