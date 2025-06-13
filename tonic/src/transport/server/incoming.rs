@@ -19,6 +19,9 @@ pub struct TcpIncoming {
     inner: TcpListenerStream,
     nodelay: Option<bool>,
     keepalive: Option<TcpKeepalive>,
+    keepalive_time: Option<Duration>,
+    keepalive_interval: Option<Duration>,
+    keepalive_retries: Option<u32>,
 }
 
 impl TcpIncoming {
@@ -66,9 +69,42 @@ impl TcpIncoming {
     }
 
     /// Sets the `TCP_KEEPALIVE` option on the accepted connection.
-    pub fn with_keepalive(self, keepalive: Option<Duration>) -> Self {
-        let keepalive = keepalive.map(|t| TcpKeepalive::new().with_time(t));
-        Self { keepalive, ..self }
+    pub fn with_keepalive(self, keepalive_time: Option<Duration>) -> Self {
+        Self {
+            keepalive_time,
+            keepalive: make_keepalive(
+                keepalive_time,
+                self.keepalive_interval,
+                self.keepalive_retries,
+            ),
+            ..self
+        }
+    }
+
+    /// Sets the `TCP_KEEPINTVL` option on the accepted connection.
+    pub fn with_keepalive_interval(self, keepalive_interval: Option<Duration>) -> Self {
+        Self {
+            keepalive_interval,
+            keepalive: make_keepalive(
+                self.keepalive_time,
+                keepalive_interval,
+                self.keepalive_retries,
+            ),
+            ..self
+        }
+    }
+
+    /// Sets the `TCP_KEEPCNT` option on the accepted connection.
+    pub fn with_keepalive_retries(self, keepalive_retries: Option<u32>) -> Self {
+        Self {
+            keepalive_retries,
+            keepalive: make_keepalive(
+                self.keepalive_time,
+                self.keepalive_interval,
+                keepalive_retries,
+            ),
+            ..self
+        }
     }
 
     /// Returns the local address that this tcp incoming is bound to.
@@ -83,6 +119,9 @@ impl From<TcpListener> for TcpIncoming {
             inner: TcpListenerStream::new(listener),
             nodelay: None,
             keepalive: None,
+            keepalive_time: None,
+            keepalive_interval: None,
+            keepalive_retries: None,
         }
     }
 }
@@ -119,6 +158,28 @@ fn set_accepted_socket_options(
             warn!("error trying to set TCP_KEEPALIVE: {e}");
         }
     }
+}
+
+fn make_keepalive(
+    keepalive_time: Option<Duration>,
+    keepalive_interval: Option<Duration>,
+    keepalive_retries: Option<u32>,
+) -> Option<TcpKeepalive> {
+    let mut dirty = false;
+    let mut keepalive = TcpKeepalive::new();
+    if let Some(t) = keepalive_time {
+        keepalive = keepalive.with_time(t);
+        dirty = true;
+    }
+    if let Some(t) = keepalive_interval {
+        keepalive = keepalive.with_interval(t);
+        dirty = true;
+    }
+    if let Some(r) = keepalive_retries {
+        keepalive = keepalive.with_retries(r);
+        dirty = true;
+    }
+    dirty.then_some(keepalive)
 }
 
 #[cfg(test)]
