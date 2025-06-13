@@ -85,9 +85,9 @@ pub use prost::{compile_fds, compile_protos, configure, Builder};
 pub mod manual;
 
 /// Service code generation for client
-pub mod client;
+mod client;
 /// Service code generation for Server
-pub mod server;
+mod server;
 
 mod code_gen;
 pub use code_gen::CodeGenBuilder;
