@@ -39,6 +39,8 @@ pub struct Endpoint {
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
     pub(crate) tcp_keepalive: Option<Duration>,
+    pub(crate) tcp_keepalive_interval: Option<Duration>,
+    pub(crate) tcp_keepalive_retries: Option<u32>,
     pub(crate) tcp_nodelay: bool,
     pub(crate) http2_keep_alive_interval: Option<Duration>,
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
@@ -84,6 +86,8 @@ impl Endpoint {
             init_stream_window_size: None,
             init_connection_window_size: None,
             tcp_keepalive: None,
+            tcp_keepalive_interval: None,
+            tcp_keepalive_retries: None,
             tcp_nodelay: true,
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
@@ -111,6 +115,8 @@ impl Endpoint {
             init_stream_window_size: None,
             init_connection_window_size: None,
             tcp_keepalive: None,
+            tcp_keepalive_interval: None,
+            tcp_keepalive_retries: None,
             tcp_nodelay: true,
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
@@ -258,10 +264,34 @@ impl Endpoint {
     /// probes.
     ///
     /// Default is no keepalive (`None`)
-    ///
     pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
         Endpoint {
             tcp_keepalive,
+            ..self
+        }
+    }
+
+    /// Set the duration between two successive TCP keepalive retransmissions,
+    /// if acknowledgement to the previous keepalive transmission is not received.
+    ///
+    /// This is only used if `tcp_keepalive` is not None.
+    ///
+    /// Defaults to None, which is the system default.
+    pub fn tcp_keepalive_interval(self, tcp_keepalive_interval: Option<Duration>) -> Self {
+        Endpoint {
+            tcp_keepalive_interval,
+            ..self
+        }
+    }
+
+    /// Set the number of retransmissions to be carried out before declaring that remote end is not available.
+    ///
+    /// This is only used if `tcp_keepalive` is not None.
+    ///
+    /// Defaults to None, which is the system default.
+    pub fn tcp_keepalive_retries(self, tcp_keepalive_retries: Option<u32>) -> Self {
+        Endpoint {
+            tcp_keepalive_retries,
             ..self
         }
     }
@@ -428,6 +458,8 @@ impl Endpoint {
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_keepalive_interval(self.tcp_keepalive_interval);
+        http.set_keepalive_retries(self.tcp_keepalive_retries);
         http.set_connect_timeout(self.connect_timeout);
         http.set_local_address(self.local_address);
         self.connector(http)
@@ -542,6 +574,16 @@ impl Endpoint {
     /// probes.
     pub fn get_tcp_keepalive(&self) -> Option<Duration> {
         self.tcp_keepalive
+    }
+
+    /// Get whether TCP keepalive interval.
+    pub fn get_tcp_keepalive_interval(&self) -> Option<Duration> {
+        self.tcp_keepalive_interval
+    }
+
+    /// Get whether TCP keepalive retries.
+    pub fn get_tcp_keepalive_retries(&self) -> Option<u32> {
+        self.tcp_keepalive_retries
     }
 }
 
