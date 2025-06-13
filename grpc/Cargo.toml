@@ -7,6 +7,17 @@ license = "Apache-2.0"
 
 [dependencies]
 url = "2.5.0"
-tokio = { version = "1.37.0", features = ["sync"] }
+tokio = { version = "1.37.0", features = ["sync", "rt", "net", "time", "macros"] }
 tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["codegen"] }
 futures-core = "0.3.31"
+hickory-resolver = { version = "0.25.1", optional = true }
+rand = "0.8.5"
+parking_lot = "0.12.4"
+bytes = "1.10.1"
+
+[dev-dependencies]
+hickory-server =  "0.25.2"
+
+[features]
+default = ["dns"]
+dns = ["dep:hickory-resolver"]
