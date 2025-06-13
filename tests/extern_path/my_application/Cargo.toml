@@ -7,7 +7,7 @@ name = "my_application"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 tonic = {path = "../../../tonic"}
 uuid = {package = "uuid1", path = "../uuid"}
 
