@@ -171,14 +171,52 @@ fn make_keepalive(
         keepalive = keepalive.with_time(t);
         dirty = true;
     }
+
+    #[cfg(
+        // See https://docs.rs/socket2/0.5.8/src/socket2/lib.rs.html#511-525
+        any(
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "visionos",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "tvos",
+            target_os = "watchos",
+            target_os = "windows",
+        )
+    )]
     if let Some(t) = keepalive_interval {
         keepalive = keepalive.with_interval(t);
         dirty = true;
     }
+
+    #[cfg(
+        // See https://docs.rs/socket2/0.5.8/src/socket2/lib.rs.html#557-570
+        any(
+            target_os = "android",
+            target_os = "dragonfly",
+            target_os = "freebsd",
+            target_os = "fuchsia",
+            target_os = "illumos",
+            target_os = "ios",
+            target_os = "visionos",
+            target_os = "linux",
+            target_os = "macos",
+            target_os = "netbsd",
+            target_os = "tvos",
+            target_os = "watchos",
+        )
+    )]
     if let Some(r) = keepalive_retries {
         keepalive = keepalive.with_retries(r);
         dirty = true;
     }
+
     dirty.then_some(keepalive)
 }
 
