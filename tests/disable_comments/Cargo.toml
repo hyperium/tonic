@@ -7,9 +7,9 @@ name = "disable-comments"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 tonic = { path = "../../tonic" }
 
 [build-dependencies]
-prost-build = "0.13"
+prost-build = "0.14"
 tonic-build = { path = "../../tonic-build" }

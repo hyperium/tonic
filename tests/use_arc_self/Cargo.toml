@@ -6,7 +6,7 @@ name = "use_arc_self"
 
 [dependencies]
 tokio-stream = "0.1"
-prost = "0.13"
+prost = "0.14"
 tonic = {path = "../../tonic", features = ["gzip"]}
 
 [build-dependencies]

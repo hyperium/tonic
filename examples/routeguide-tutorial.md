@@ -175,7 +175,7 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 ```toml
 [dependencies]
 tonic = "*"
-prost = "0.13"
+prost = "0.14"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1"
 
@@ -334,27 +334,6 @@ the corresponding `data` module to load and deserialize it in
 
 **Note:** If you are following along, you'll need to change the data file's path  from
 `examples/data/route_guide_db.json` to `data/route_guide_db.json`.
-
-Next, we need to implement `Hash` and `Eq` for `Point`, so we can use point values as map keys:
-
-```rust
-use std::hash::{Hasher, Hash};
-```
-
-```rust
-impl Hash for Point {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: Hasher,
-    {
-        self.latitude.hash(state);
-        self.longitude.hash(state);
-    }
-}
-
-impl Eq for Point {}
-
-```
 
 Lastly, we need implement two helper functions: `in_range` and `calc_distance`. We'll use them
 when performing feature lookups. You can find them in

@@ -7,8 +7,8 @@ name = "wellknown"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.13"
-prost-types = "0.13"
+prost = "0.14"
+prost-types = "0.14"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]
