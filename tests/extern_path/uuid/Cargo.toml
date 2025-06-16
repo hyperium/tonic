@@ -7,6 +7,6 @@ name = "uuid1"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 [build-dependencies]
-prost-build = "0.13"
+prost-build = "0.14"
