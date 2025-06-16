@@ -34,14 +34,14 @@ pub struct Status {
 /// the delay between retries based on `retry_delay`, until either a maximum
 /// number of retries have been reached or a maximum retry delay cap has been
 /// reached.
-#[derive(Clone, Copy, PartialEq, ::prost::Message)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RetryInfo {
     /// Clients should wait at least this long between retrying the same request.
     #[prost(message, optional, tag = "1")]
     pub retry_delay: ::core::option::Option<::prost_types::Duration>,
 }
 /// Describes additional debugging info.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct DebugInfo {
     /// The stack trace entries indicating where the error occurred.
     #[prost(string, repeated, tag = "1")]
@@ -71,7 +71,7 @@ pub struct QuotaFailure {
 pub mod quota_failure {
     /// A message type used to describe a single quota violation.  For example, a
     /// daily quota or a custom quota that was exceeded.
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct Violation {
         /// The subject on which the quota check failed.
         /// For example, "clientip:<ip address of client>" or "project:<Google
@@ -161,7 +161,7 @@ pub struct PreconditionFailure {
 /// Nested message and enum types in `PreconditionFailure`.
 pub mod precondition_failure {
     /// A message type used to describe a single precondition failure.
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct Violation {
         /// The type of PreconditionFailure. We recommend using a service-specific
         /// enum type to define the supported precondition violation subjects. For
@@ -192,7 +192,7 @@ pub struct BadRequest {
 /// Nested message and enum types in `BadRequest`.
 pub mod bad_request {
     /// A message type used to describe a single bad request field.
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct FieldViolation {
         /// A path leading to a field in the request body. The value will be a
         /// sequence of dot-separated identifiers that identify a protocol buffer
@@ -206,7 +206,7 @@ pub mod bad_request {
 }
 /// Contains metadata about the request that clients can attach when filing a bug
 /// or providing other forms of feedback.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct RequestInfo {
     /// An opaque string that should only be interpreted by the service generating
     /// it. For example, it can be used to identify requests in the service's logs.
@@ -218,7 +218,7 @@ pub struct RequestInfo {
     pub serving_data: ::prost::alloc::string::String,
 }
 /// Describes the resource that is being accessed.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct ResourceInfo {
     /// A name for the type of resource being accessed, e.g. "sql table",
     /// "cloud storage bucket", "file", "Google calendar"; or the type URL
@@ -255,7 +255,7 @@ pub struct Help {
 /// Nested message and enum types in `Help`.
 pub mod help {
     /// Describes a URL link.
-    #[derive(Clone, PartialEq, ::prost::Message)]
+    #[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
     pub struct Link {
         /// Describes what the link offers.
         #[prost(string, tag = "1")]
@@ -267,7 +267,7 @@ pub mod help {
 }
 /// Provides a localized error message that is safe to return to the user
 /// which can be attached to an RPC error.
-#[derive(Clone, PartialEq, ::prost::Message)]
+#[derive(Clone, PartialEq, Eq, Hash, ::prost::Message)]
 pub struct LocalizedMessage {
     /// The locale used following the specification defined at
     /// <http://www.rfc-editor.org/rfc/bcp/bcp47.txt.>
