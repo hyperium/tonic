@@ -10,5 +10,8 @@ name = "skip_debug"
 prost = "0.14"
 tonic = { path = "../../tonic" }
 
+[dev-dependencies]
+static_assertions = "1"
+
 [build-dependencies]
 tonic-build = { path = "../../tonic-build" }
