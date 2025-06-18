@@ -8,4 +8,4 @@ license = "Apache-2.0"
 [dependencies]
 url = "2.5.0"
 tokio = { version = "1.37.0", features = ["sync"] }
-tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["codegen"] }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
