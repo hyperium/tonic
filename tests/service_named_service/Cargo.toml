@@ -7,7 +7,7 @@ name = "service_named_service"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]

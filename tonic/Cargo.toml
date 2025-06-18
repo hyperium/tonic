@@ -69,7 +69,7 @@ tower-service = "0.3"
 tokio-stream = {version = "0.1.16", default-features = false}
 
 # prost
-prost = {version = "0.13", default-features = false, features = ["std"], optional = true}
+prost = {version = "0.14", default-features = false, features = ["std"], optional = true}
 
 # transport
 h2 = {version = "0.4", optional = true}
