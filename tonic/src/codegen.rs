@@ -1,6 +1,5 @@
 //! Codegen exports used by `tonic-build`.
 
-pub use async_trait::async_trait;
 pub use tokio_stream;
 
 pub use std::future::Future;

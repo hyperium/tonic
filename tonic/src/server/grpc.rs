@@ -75,10 +75,8 @@ where
     /// #     fn new(svc: T) -> Self { Self(svc) }
     /// #     fn accept_compressed(self, _: CompressionEncoding) -> Self { self }
     /// # }
-    /// # #[tonic::async_trait]
     /// # trait Example {}
     ///
-    /// #[tonic::async_trait]
     /// impl Example for Svc {
     ///     // ...
     /// }
@@ -106,10 +104,8 @@ where
     /// #     fn new(svc: T) -> Self { Self(svc) }
     /// #     fn send_compressed(self, _: CompressionEncoding) -> Self { self }
     /// # }
-    /// # #[tonic::async_trait]
     /// # trait Example {}
     ///
-    /// #[tonic::async_trait]
     /// impl Example for Svc {
     ///     // ...
     /// }
@@ -134,10 +130,8 @@ where
     /// #     fn new(svc: T) -> Self { Self(svc) }
     /// #     fn max_decoding_message_size(self, _: usize) -> Self { self }
     /// # }
-    /// # #[tonic::async_trait]
     /// # trait Example {}
     ///
-    /// #[tonic::async_trait]
     /// impl Example for Svc {
     ///     // ...
     /// }
@@ -164,10 +158,8 @@ where
     /// #     fn new(svc: T) -> Self { Self(svc) }
     /// #     fn max_encoding_message_size(self, _: usize) -> Self { self }
     /// # }
-    /// # #[tonic::async_trait]
     /// # trait Example {}
     ///
-    /// #[tonic::async_trait]
     /// impl Example for Svc {
     ///     // ...
     /// }

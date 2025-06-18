@@ -10,7 +10,6 @@ type Stream<T> = std::pin::Pin<
 async fn status_from_server_stream_with_source() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_stream_server::TestStream for Svc {
         type StreamCallStream = Stream<OutputStream>;
 

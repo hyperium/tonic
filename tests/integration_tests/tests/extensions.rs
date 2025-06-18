@@ -22,7 +22,6 @@ struct ExtensionValue(i32);
 async fn setting_extension_from_interceptor() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
             let value = req.extensions().get::<ExtensionValue>().unwrap();
@@ -72,7 +71,6 @@ async fn setting_extension_from_interceptor() {
 async fn setting_extension_from_tower() {
     struct Svc;
 
-    #[tonic::async_trait]
     impl test_server::Test for Svc {
         async fn unary_call(&self, req: Request<Input>) -> Result<Response<Output>, Status> {
             let value = req.extensions().get::<ExtensionValue>().unwrap();

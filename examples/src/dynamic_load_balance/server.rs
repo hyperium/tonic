@@ -15,7 +15,6 @@ pub struct EchoServer {
     addr: SocketAddr,
 }
 
-#[tonic::async_trait]
 impl pb::echo_server::Echo for EchoServer {
     async fn unary_echo(&self, request: Request<EchoRequest>) -> EchoResult<EchoResponse> {
         let message = format!("{} (from {})", request.into_inner().message, self.addr);

@@ -20,7 +20,7 @@ rust-version = {workspace = true}
 exclude = ["benches-disabled"]
 
 [features]
-codegen = ["dep:async-trait"]
+codegen = []
 gzip = ["dep:flate2"]
 deflate = ["dep:flate2"]
 zstd = ["dep:zstd"]
@@ -71,9 +71,6 @@ tokio-stream = {version = "0.1.16", default-features = false}
 # prost
 prost = {version = "0.14", default-features = false, features = ["std"], optional = true}
 
-# codegen
-async-trait = {version = "0.1.13", optional = true}
-
 # transport
 h2 = {version = "0.4", optional = true}
 hyper = {version = "1", features = ["http1", "http2"], optional = true}
@@ -123,7 +120,6 @@ allowed_external_types = [
   "prost::*",
   "tracing::*",
 
-  "async_trait::async_trait",
   "axum_core::body::Body",
   "axum_core::response::into_response::IntoResponse",
   "axum::routing::Router",

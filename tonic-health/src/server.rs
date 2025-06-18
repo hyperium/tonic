@@ -126,7 +126,6 @@ impl HealthService {
     }
 }
 
-#[tonic::async_trait]
 impl Health for HealthService {
     async fn check(
         &self,
