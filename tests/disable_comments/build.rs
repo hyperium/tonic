@@ -1,5 +1,5 @@
 fn main() {
-    let mut config = prost_build::Config::default();
+    let mut config = tonic_build::Config::default();
     config.disable_comments(["test.Input1", "test.Output1"]);
     tonic_build::configure()
         .disable_comments("test.Service1")
