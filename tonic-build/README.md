@@ -30,7 +30,7 @@ tonic-build = "<tonic-version>"
 
 You can rely on the defaults via
 
-```norun
+```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::compile_protos("proto/service.proto")?;
     Ok(())
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Or configure the generated code deeper via
 
-```norun
+```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
    tonic_build::configure()
         .build_server(false)
@@ -97,7 +97,7 @@ And a bunch of Google proto files in structure will be like this:
 
 Then we can generate Rust code via this setup in our `build.rs`:
 
-```norun
+```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(false)
