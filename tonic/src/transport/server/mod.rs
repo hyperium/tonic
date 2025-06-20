@@ -344,6 +344,8 @@ impl<L> Server<L> {
     /// specified will be the time to remain idle before sending TCP keepalive
     /// probes.
     ///
+    /// Important: This setting is only respected when not using `serve_with_incoming`.
+    ///
     /// Default is no keepalive (`None`)
     ///
     #[must_use]
