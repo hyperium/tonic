@@ -3,8 +3,6 @@ authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
 name = "interop"
-publish = false
-version = "0.1.0"
 
 [[bin]]
 name = "client"
@@ -16,16 +14,15 @@ path = "src/bin/server.rs"
 
 [dependencies]
 async-stream = "0.3"
-strum = {version = "0.26", features = ["derive"]}
+strum = {version = "0.27", features = ["derive"]}
 pico-args = {version = "0.5", features = ["eq-separator"]}
 console = "0.15"
 http = "1"
-http-body = "1"
-hyper = "1"
-prost = "0.13"
+http-body-util = "0.1"
+prost = "0.14"
 tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
-tonic = {path = "../tonic", features = ["tls"]}
+tonic = {path = "../tonic", features = ["tls-ring"]}
 tower = "0.5"
 tracing-subscriber = {version = "0.3"}
 

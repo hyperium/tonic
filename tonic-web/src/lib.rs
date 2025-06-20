@@ -7,26 +7,6 @@
 //!
 //! ## Enabling tonic services
 //!
-//! The easiest way to get started, is to call the [`enable`] function with your tonic service
-//! and allow the tonic server to accept HTTP/1.1 requests:
-//!
-//! ```ignore
-//! #[tokio::main]
-//! async fn main() -> Result<(), Box<dyn std::error::Error>> {
-//!     let addr = "[::1]:50051".parse().unwrap();
-//!     let greeter = GreeterServer::new(MyGreeter::default());
-//!
-//!     Server::builder()
-//!        .accept_http1(true)
-//!        .add_service(tonic_web::enable(greeter))
-//!        .serve(addr)
-//!        .await?;
-//!
-//!    Ok(())
-//! }
-//! ```
-//! This will apply a default configuration that works well with grpc-web clients out of the box.
-//!
 //! You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
 //!
 //! ```ignore
@@ -63,7 +43,8 @@
 //!     // No need to enable HTTP/1
 //!     Server::builder()
 //!        .tls_config(ServerTlsConfig::new().identity(identity))?
-//!        .add_service(tonic_web::enable(greeter))
+//!        .layer(GrpcWebLayer::new())
+//!        .add_service(greeter)
 //!        .serve(addr)
 //!        .await?;
 //!
@@ -87,14 +68,6 @@
 //! [`tonic_web`]: https://github.com/hyperium/tonic
 //! [grpc-web]: https://github.com/grpc/grpc-web
 //! [tower]: https://github.com/tower-rs/tower
-//! [`enable`]: crate::enable()
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
-#![doc(html_root_url = "https://docs.rs/tonic-web/0.13.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
 pub use call::GrpcWebCall;
@@ -107,79 +80,7 @@ mod client;
 mod layer;
 mod service;
 
-use http::header::HeaderName;
-use std::time::Duration;
-use tonic::{body::BoxBody, server::NamedService, Status};
-use tower_http::cors::{AllowOrigin, CorsLayer};
-use tower_layer::Layer;
-use tower_service::Service;
-
-const DEFAULT_MAX_AGE: Duration = Duration::from_secs(24 * 60 * 60);
-const DEFAULT_EXPOSED_HEADERS: [HeaderName; 3] = [
-    Status::GRPC_STATUS,
-    Status::GRPC_MESSAGE,
-    Status::GRPC_STATUS_DETAILS,
-];
-const DEFAULT_ALLOW_HEADERS: [HeaderName; 4] = [
-    HeaderName::from_static("x-grpc-web"),
-    http::header::CONTENT_TYPE,
-    HeaderName::from_static("x-user-agent"),
-    HeaderName::from_static("grpc-timeout"),
-];
-
-/// Enable a tonic service to handle grpc-web requests with the default configuration.
-///
-/// You can customize the CORS configuration composing the [`GrpcWebLayer`] with the cors layer of your choice.
-#[deprecated(
-    since = "0.12.4",
-    note = "compose the `GrpcWebLayer` with the cors layer of your choice"
-)]
-pub fn enable<S>(service: S) -> CorsGrpcWeb<S>
-where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
-{
-    let cors = CorsLayer::new()
-        .allow_origin(AllowOrigin::mirror_request())
-        .allow_credentials(true)
-        .max_age(DEFAULT_MAX_AGE)
-        .expose_headers(DEFAULT_EXPOSED_HEADERS)
-        .allow_headers(DEFAULT_ALLOW_HEADERS);
-
-    tower_layer::layer_fn(|s| CorsGrpcWeb(cors.layer(s))).layer(GrpcWebService::new(service))
-}
-
-/// A newtype wrapper around [`GrpcWebLayer`] and [`tower_http::cors::CorsLayer`] to allow
-/// `tonic_web::enable` to implement the [`NamedService`] trait.
-#[derive(Debug, Clone)]
-pub struct CorsGrpcWeb<S>(tower_http::cors::Cors<GrpcWebService<S>>);
-
-impl<S> Service<http::Request<BoxBody>> for CorsGrpcWeb<S>
-where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>,
-{
-    type Response = S::Response;
-    type Error = S::Error;
-    type Future =
-        <tower_http::cors::Cors<GrpcWebService<S>> as Service<http::Request<BoxBody>>>::Future;
-
-    fn poll_ready(
-        &mut self,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), Self::Error>> {
-        self.0.poll_ready(cx)
-    }
-
-    fn call(&mut self, req: http::Request<BoxBody>) -> Self::Future {
-        self.0.call(req)
-    }
-}
-
-impl<S> NamedService for CorsGrpcWeb<S>
-where
-    S: NamedService,
-{
-    const NAME: &'static str = S::NAME;
-}
+type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) mod util {
     pub(crate) mod base64 {

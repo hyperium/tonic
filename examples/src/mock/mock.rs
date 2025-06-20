@@ -39,10 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Some(client) = client {
                     Ok(TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))
@@ -56,7 +53,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = client.say_hello(request).await?;
 
-    println!("RESPONSE={:?}", response);
+    println!("RESPONSE={response:?}");
 
     Ok(())
 }

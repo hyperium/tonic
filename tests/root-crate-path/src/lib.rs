@@ -1,4 +1,3 @@
-#[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct Animal {
     #[prost(string, optional, tag = "1")]
@@ -13,8 +12,4 @@ pub mod foo {
             tonic::include_proto!("foo.bar.baz");
         }
     }
-}
-
-fn main() {
-    println!("Hello, world!");
 }

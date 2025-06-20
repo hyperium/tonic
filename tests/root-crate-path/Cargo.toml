@@ -3,11 +3,9 @@ authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
 name = "root-crate-path"
-publish = false
-version = "0.1.0"
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]

@@ -7,7 +7,7 @@ use tonic::{transport::Server, Code, Request, Response, Status};
 async fn cancelation_on_timeout() {
     let addr = run_service_in_background(Duration::from_secs(1), Duration::from_secs(100)).await;
 
-    let mut client = test_client::TestClient::connect(format!("http://{}", addr))
+    let mut client = test_client::TestClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 
@@ -27,7 +27,7 @@ async fn cancelation_on_timeout() {
 async fn picks_server_timeout_if_thats_sorter() {
     let addr = run_service_in_background(Duration::from_secs(1), Duration::from_millis(100)).await;
 
-    let mut client = test_client::TestClient::connect(format!("http://{}", addr))
+    let mut client = test_client::TestClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 
@@ -46,7 +46,7 @@ async fn picks_server_timeout_if_thats_sorter() {
 async fn picks_client_timeout_if_thats_sorter() {
     let addr = run_service_in_background(Duration::from_secs(1), Duration::from_secs(100)).await;
 
-    let mut client = test_client::TestClient::connect(format!("http://{}", addr))
+    let mut client = test_client::TestClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 

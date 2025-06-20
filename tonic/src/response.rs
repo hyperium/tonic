@@ -120,10 +120,16 @@ impl<T> Response<T> {
     /// **Note**: This only has effect on responses to unary requests and responses to client to
     /// server streams. Response streams (server to client stream and bidirectional streams) will
     /// still be compressed according to the configuration of the server.
-    #[cfg(feature = "gzip")]
+    #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
     pub fn disable_compression(&mut self) {
         self.extensions_mut()
             .insert(crate::codec::compression::SingleMessageCompressionOverride::Disable);
+    }
+}
+
+impl<T> From<T> for Response<T> {
+    fn from(inner: T) -> Self {
+        Response::new(inner)
     }
 }
 

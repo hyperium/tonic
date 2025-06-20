@@ -6,17 +6,9 @@
 //!
 //! [here]: https://github.com/hyperium/tonic/blob/master/examples/src/health/server.rs
 
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-health/0.13.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]

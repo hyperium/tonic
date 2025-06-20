@@ -47,7 +47,7 @@ TLS_CRT="interop/data/server1.pem"
 TLS_KEY="interop/data/server1.key"
 
 # run the test server
-./"${SERVER}" ${ARG} --tls_cert_file $TLS_CRT --tls_key_file $TLS_KEY &
+./"${SERVER}" "${ARG}" --tls_cert_file $TLS_CRT --tls_key_file $TLS_KEY &
 SERVER_PID=$!
 echo ":; started grpc-go test server."
 
@@ -57,12 +57,12 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client --test_case="${JOINED_TEST_CASES}" ${ARG}
+./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
-echo ":; killing test server"; kill ${SERVER_PID};
+echo ":; killing test server"; kill "${SERVER_PID}";
 
 # run the test server
-./target/debug/server ${ARG} &
+./target/debug/server "${ARG}" &
 SERVER_PID=$!
 echo ":; started tonic test server."
 
@@ -72,14 +72,24 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client --test_case="${JOINED_TEST_CASES}" ${ARG}
+./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
-TLS_ARGS=""
-
-if [ -n "${ARG}" ]; then
-  TLS_ARGS="--use_tls --use_test_ca --server_host_override=foo.test.google.fr --ca_file=${TLS_CA}"
+# Run client test cases
+if [ -n "${ARG:-}" ]; then
+  TLS_ARRAY=( \
+    -use_tls \
+    -use_test_ca \
+    -server_host_override=foo.test.google.fr \
+    -ca_file="${TLS_CA}" \
+  )
+else
+  TLS_ARRAY=()
 fi
 
 for CASE in "${TEST_CASES[@]}"; do
-  interop/bin/client_${OS}_amd64${EXT} --test_case="${CASE}" ${TLS_ARGS}
+  flags=( "-test_case=${CASE}" )
+  flags+=( "${TLS_ARRAY[@]}" )
+
+  interop/bin/client_"${OS}"_amd64"${EXT}" "${flags[@]}"
 done
+

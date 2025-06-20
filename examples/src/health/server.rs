@@ -29,7 +29,7 @@ impl Greeter for MyGreeter {
 
 /// This function (somewhat improbably) flips the status of a service every second, in order
 /// that the effect of `tonic_health::HealthReporter::watch` can be easily observed.
-async fn twiddle_service_status(mut reporter: HealthReporter) {
+async fn twiddle_service_status(reporter: HealthReporter) {
     let mut iter = 0u64;
     loop {
         iter += 1;
@@ -45,7 +45,7 @@ async fn twiddle_service_status(mut reporter: HealthReporter) {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let (mut health_reporter, health_service) = tonic_health::server::health_reporter();
+    let (health_reporter, health_service) = tonic_health::server::health_reporter();
     health_reporter
         .set_serving::<GreeterServer<MyGreeter>>()
         .await;
@@ -55,7 +55,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
-    println!("HealthServer + GreeterServer listening on {}", addr);
+    println!("HealthServer + GreeterServer listening on {addr}");
 
     Server::builder()
         .add_service(health_service)

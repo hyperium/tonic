@@ -1,13 +1,12 @@
 [package]
 name = "service_named_result"
-version = "0.1.0"
 edition = "2021"
-publish = false
+license = "MIT"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]

@@ -172,7 +172,7 @@ impl crate::Method for TonicBuildMethod {
         let convert_type = |proto_type: &str, rust_type: &str| -> TokenStream {
             if (is_google_type(proto_type) && !compile_well_known_types)
                 || rust_type.starts_with("::")
-                || NON_PATH_TYPE_ALLOWLIST.iter().any(|ty| *ty == rust_type)
+                || NON_PATH_TYPE_ALLOWLIST.contains(&rust_type)
             {
                 rust_type.parse::<TokenStream>().unwrap()
             } else if rust_type.starts_with("crate::") {
@@ -180,7 +180,7 @@ impl crate::Method for TonicBuildMethod {
                     .unwrap()
                     .to_token_stream()
             } else {
-                syn::parse_str::<syn::Path>(&format!("{}::{}", proto_path, rust_type))
+                syn::parse_str::<syn::Path>(&format!("{proto_path}::{rust_type}"))
                     .unwrap()
                     .to_token_stream()
             }
@@ -598,28 +598,6 @@ impl Builder {
     pub fn skip_debug(mut self, path: impl AsRef<str>) -> Self {
         self.skip_debug.insert(path.as_ref().to_string());
         self
-    }
-
-    /// Compile the .proto files and execute code generation.
-    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos()`")]
-    pub fn compile(
-        self,
-        protos: &[impl AsRef<Path>],
-        includes: &[impl AsRef<Path>],
-    ) -> io::Result<()> {
-        self.compile_protos(protos, includes)
-    }
-
-    /// Compile the .proto files and execute code generation using a custom
-    /// `prost_build::Config`. The provided config will be updated with this builder's config.
-    #[deprecated(since = "0.12.3", note = "renamed to `compile_protos_with_config()`")]
-    pub fn compile_with_config(
-        self,
-        config: Config,
-        protos: &[impl AsRef<Path>],
-        includes: &[impl AsRef<Path>],
-    ) -> io::Result<()> {
-        self.compile_protos_with_config(config, protos, includes)
     }
 
     /// Compile the .proto files and execute code generation.

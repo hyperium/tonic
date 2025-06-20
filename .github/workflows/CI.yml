@@ -7,8 +7,12 @@ on:
   merge_group:
     branches: [ "master" ]
 
-env:
-  RUSTFLAGS: "-D warnings"
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
 
 jobs:
 
@@ -21,13 +25,6 @@ jobs:
         components: rustfmt
     - run: cargo fmt --all --check
 
-  deny-check:
-    name: cargo-deny check
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v4
-    - uses: EmbarkStudios/cargo-deny-action@v2
-
   clippy:
     runs-on: ubuntu-latest
     steps:
@@ -38,8 +35,6 @@ jobs:
     - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
     - run: cargo clippy --workspace --all-features --all-targets
-      env:
-        RUSTFLAGS: "-A warnings"
 
   codegen:
     runs-on: ubuntu-latest
@@ -51,27 +46,31 @@ jobs:
     - run: git diff --exit-code
 
   udeps:
-    name: Check unused dependencies
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2024-08-04
+        toolchain: nightly-2025-03-27
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
     - uses: taiki-e/install-action@protoc
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --exclude-features tls --each-feature
-    - run: cargo udeps --package tonic --features tls,transport
-    - run: cargo udeps --package tonic --features tls,server
-    - run: cargo udeps --package tonic --features tls,channel
+    - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring --each-feature
+    - run: cargo udeps --package tonic --features tls-ring,transport
+    - run: cargo udeps --package tonic --features tls-ring,server
+    - run: cargo udeps --package tonic --features tls-ring,channel
+    - run: cargo udeps --package tonic --features tls-aws-lc,transport
+    - run: cargo udeps --package tonic --features tls-aws-lc,server
+    - run: cargo udeps --package tonic --features tls-aws-lc,channel
 
   check:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
@@ -86,17 +85,24 @@ jobs:
       run: cargo check --workspace --all-targets --all-features
 
   msrv:
-    name: Check MSRV
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
+    - name: Resolve MSRV aware dependencies
+      run: cargo update
+      env:
+        CARGO_RESOLVER_INCOMPATIBLE_RUST_VERSIONS: fallback
+    - name: Get MSRV from manifest file
+      id: msrv
+      run: echo "version=$(yq '.workspace.package.rust-version' Cargo.toml)" >> "$GITHUB_OUTPUT"
+    - uses: hecrj/setup-rust-action@v2
       with:
-        rust-version: "1.71.1"    # msrv
+        rust-version: ${{ steps.msrv.outputs.version }}
     - uses: taiki-e/install-action@cargo-no-dev-deps
     - uses: Swatinem/rust-cache@v2
     - run: cargo no-dev-deps --no-private check --all-features
-    - run: cargo no-dev-deps --no-private doc --no-deps
+    - run: cargo no-dev-deps --no-private doc --no-deps --all-features
       env:
         RUSTDOCFLAGS: "-D warnings"
 
@@ -109,10 +115,21 @@ jobs:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@cargo-hack
+    - uses: taiki-e/install-action@cargo-nextest
     - uses: Swatinem/rust-cache@v2
-    - run: cargo test --workspace --all-features
+    - run: cargo nextest run --workspace --all-features
       env:
         QUICKCHECK_TESTS: 1000  # run a lot of quickcheck iterations
+
+  doc-test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: hecrj/setup-rust-action@v2
+    - uses: taiki-e/install-action@cargo-hack
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo hack --no-private test --doc --all-features
 
   interop:
     name: Interop Tests
@@ -139,18 +156,21 @@ jobs:
     - uses: obi1kenobi/cargo-semver-checks-action@v2
       with:
         feature-group: all-features
+        exclude: grpc
 
-  check-external-types:
+  external-types:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2024-05-01
+        toolchain: nightly-2025-05-04
     - name: Install cargo-check-external-types
       uses: taiki-e/cache-cargo-install-action@v2
       with:
-        tool: cargo-check-external-types@0.1.12
+        tool: cargo-check-external-types@0.2.0
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack --no-private check-external-types
+    - run: cargo hack --no-private check-external-types --all-features
+      env:
+        RUSTFLAGS: "-D warnings"

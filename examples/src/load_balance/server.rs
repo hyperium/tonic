@@ -41,7 +41,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         tokio::spawn(async move {
             if let Err(e) = serve.await {
-                eprintln!("Error = {:?}", e);
+                eprintln!("Error = {e:?}");
             }
 
             tx.send(()).unwrap();

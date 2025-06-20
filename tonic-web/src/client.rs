@@ -1,6 +1,7 @@
 use http::header::CONTENT_TYPE;
 use http::{Request, Response, Version};
 use pin_project::pin_project;
+use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
@@ -77,8 +78,7 @@ where
     }
 }
 
-/// Response future for the [`GrpcWebService`].
-#[allow(missing_debug_implementations)]
+/// Response future for the [`GrpcWebService`](crate::GrpcWebService).
 #[pin_project]
 #[must_use = "futures do nothing unless polled"]
 pub struct ResponseFuture<F> {
@@ -96,5 +96,11 @@ where
         let res = ready!(self.project().inner.poll(cx));
 
         Poll::Ready(res.map(|r| r.map(GrpcWebCall::client_response)))
+    }
+}
+
+impl<F> fmt::Debug for ResponseFuture<F> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ResponseFuture").finish()
     }
 }

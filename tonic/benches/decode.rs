@@ -1,3 +1,5 @@
+#![allow(missing_docs)]
+
 use bencher::{benchmark_group, benchmark_main, Bencher};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http_body::{Body, Frame, SizeHint};
@@ -45,11 +47,11 @@ struct MockBody {
 }
 
 impl MockBody {
-    pub fn new(data: Bytes, chunk_size: usize) -> Self {
+    fn new(data: Bytes, chunk_size: usize) -> Self {
         MockBody { data, chunk_size }
     }
 
-    pub fn len(&self) -> usize {
+    fn len(&self) -> usize {
         self.data.len()
     }
 }
@@ -71,7 +73,7 @@ impl Body for MockBody {
     }
 
     fn is_end_stream(&self) -> bool {
-        !self.data.is_empty()
+        self.data.is_empty()
     }
 
     fn size_hint(&self) -> SizeHint {

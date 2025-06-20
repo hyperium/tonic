@@ -50,7 +50,7 @@ impl RouteGuide for RouteGuideService {
         tokio::spawn(async move {
             for feature in &features[..] {
                 if in_range(feature.location.as_ref().unwrap(), request.get_ref()) {
-                    println!("  => send {:?}", feature);
+                    println!("  => send {feature:?}");
                     tx.send(Ok(feature.clone())).await.unwrap();
                 }
             }
@@ -76,7 +76,7 @@ impl RouteGuide for RouteGuideService {
         while let Some(point) = stream.next().await {
             let point = point?;
 
-            println!("  ==> Point = {:?}", point);
+            println!("  ==> Point = {point:?}");
 
             // Increment the point count
             summary.point_count += 1;
@@ -135,7 +135,7 @@ impl RouteGuide for RouteGuideService {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:10000".parse().unwrap();
 
-    println!("RouteGuideServer listening on: {}", addr);
+    println!("RouteGuideServer listening on: {addr}");
 
     let route_guide = RouteGuideService {
         features: Arc::new(data::load()),
@@ -147,8 +147,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     Ok(())
 }
-
-impl Eq for Point {}
 
 fn in_range(point: &Point, rect: &Rectangle) -> bool {
     use std::cmp;

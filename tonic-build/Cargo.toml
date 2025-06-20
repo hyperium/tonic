@@ -4,7 +4,6 @@ categories = ["network-programming", "asynchronous"]
 description = """
 Codegen module of `tonic` gRPC implementation.
 """
-documentation = "https://docs.rs/tonic-build/0.13.0"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "codegen", "protobuf"]
@@ -12,13 +11,14 @@ license = "MIT"
 name = "tonic-build"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.13.0"
+version = "0.14.0"
+rust-version = { workspace = true }
 
 [dependencies]
 prettyplease = { version = "0.2" }
 proc-macro2 = "1.0"
-prost-build = { version = "0.13", optional = true }
-prost-types = { version = "0.13", optional = true }
+prost-build = { version = "0.14", optional = true }
+prost-types = { version = "0.14", optional = true }
 quote = "1.0"
 syn = "2.0"
 
@@ -27,6 +27,9 @@ default = ["transport", "prost"]
 prost = ["prost-build", "dep:prost-types"]
 cleanup-markdown = ["prost-build?/cleanup-markdown"]
 transport = []
+
+[lints]
+workspace = true
 
 [package.metadata.docs.rs]
 all-features = true

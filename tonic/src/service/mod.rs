@@ -6,9 +6,6 @@ pub(crate) mod layered;
 pub(crate) mod router;
 
 #[doc(inline)]
-#[allow(deprecated)]
-pub use self::interceptor::interceptor;
-#[doc(inline)]
 pub use self::interceptor::{Interceptor, InterceptorLayer};
 pub use self::layered::{LayerExt, Layered};
 #[doc(inline)]
@@ -16,3 +13,6 @@ pub use self::layered::{LayerExt, Layered};
 pub use self::router::{Routes, RoutesBuilder};
 #[cfg(feature = "router")]
 pub use axum::{body::Body as AxumBody, Router as AxumRouter};
+
+pub mod recover_error;
+pub use self::recover_error::{RecoverError, RecoverErrorLayer};

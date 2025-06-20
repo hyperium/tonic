@@ -1,16 +1,8 @@
 #![doc = include_str!("../README.md")]
 #![recursion_limit = "256"]
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-build/0.13.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
 #![cfg_attr(docsrs, feature(doc_auto_cfg))]
@@ -32,9 +24,9 @@ pub use prost::{compile_fds, compile_protos, configure, Builder};
 pub mod manual;
 
 /// Service code generation for client
-pub mod client;
+mod client;
 /// Service code generation for Server
-pub mod server;
+mod server;
 
 mod code_gen;
 pub use code_gen::CodeGenBuilder;
@@ -181,7 +173,7 @@ fn generate_attributes<'a>(
         .filter(|(matcher, _)| match_name(matcher, name))
         .flat_map(|(_, attr)| {
             // attributes cannot be parsed directly, so we pretend they're on a struct
-            syn::parse_str::<syn::DeriveInput>(&format!("{}\nstruct fake;", attr))
+            syn::parse_str::<syn::DeriveInput>(&format!("{attr}\nstruct fake;"))
                 .unwrap()
                 .attrs
         })
@@ -206,7 +198,7 @@ fn generate_doc_comment<S: AsRef<str>>(comment: S) -> TokenStream {
     let comment = comment.as_ref();
 
     let comment = if !comment.starts_with(' ') {
-        format!(" {}", comment)
+        format!(" {comment}")
     } else {
         comment.to_string()
     };

@@ -52,19 +52,7 @@ where
     }
 }
 
-/// Create a new interceptor layer.
-///
-/// See [`Interceptor`] for more details.
-#[deprecated(since = "0.12.4", note = "use `InterceptorLayer::new()` instead")]
-pub fn interceptor<I>(interceptor: I) -> InterceptorLayer<I>
-where
-    I: Interceptor,
-{
-    InterceptorLayer { interceptor }
-}
-
 /// A gRPC interceptor that can be used as a [`Layer`],
-/// created by calling [`interceptor`].
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Debug, Clone, Copy)]
@@ -128,9 +116,8 @@ impl<S, I, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedServ
 where
     S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
     I: Interceptor,
-    ResBody: Default,
 {
-    type Response = http::Response<ResBody>;
+    type Response = http::Response<ResponseBody<ResBody>>;
     type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
@@ -206,17 +193,75 @@ enum Kind<F> {
 impl<F, E, B> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<http::Response<B>, E>>,
-    B: Default,
 {
-    type Output = Result<http::Response<B>, E>;
+    type Output = Result<http::Response<ResponseBody<B>>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().kind.project() {
-            KindProj::Future(future) => future.poll(cx),
+            KindProj::Future(future) => future.poll(cx).map_ok(|res| res.map(ResponseBody::wrap)),
             KindProj::Status(status) => {
-                let response = status.take().unwrap().into_http();
+                let (parts, ()) = status.take().unwrap().into_http::<()>().into_parts();
+                let response = http::Response::from_parts(parts, ResponseBody::<B>::empty());
                 Poll::Ready(Ok(response))
             }
+        }
+    }
+}
+
+/// Response body for [`InterceptedService`].
+#[pin_project]
+#[derive(Debug)]
+pub struct ResponseBody<B> {
+    #[pin]
+    kind: ResponseBodyKind<B>,
+}
+
+#[pin_project(project = ResponseBodyKindProj)]
+#[derive(Debug)]
+enum ResponseBodyKind<B> {
+    Empty,
+    Wrap(#[pin] B),
+}
+
+impl<B> ResponseBody<B> {
+    fn new(kind: ResponseBodyKind<B>) -> Self {
+        Self { kind }
+    }
+
+    fn empty() -> Self {
+        Self::new(ResponseBodyKind::Empty)
+    }
+
+    fn wrap(body: B) -> Self {
+        Self::new(ResponseBodyKind::Wrap(body))
+    }
+}
+
+impl<B: http_body::Body> http_body::Body for ResponseBody<B> {
+    type Data = B::Data;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        match self.project().kind.project() {
+            ResponseBodyKindProj::Empty => Poll::Ready(None),
+            ResponseBodyKindProj::Wrap(body) => body.poll_frame(cx),
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match &self.kind {
+            ResponseBodyKind::Empty => http_body::SizeHint::with_exact(0),
+            ResponseBodyKind::Wrap(body) => body.size_hint(),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match &self.kind {
+            ResponseBodyKind::Empty => true,
+            ResponseBodyKind::Wrap(body) => body.is_end_stream(),
         }
     }
 }

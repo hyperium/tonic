@@ -1,3 +1,4 @@
+#!/bin/bash
 set -e
 
 # This script updates server and client go binaries for interop tests.

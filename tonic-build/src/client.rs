@@ -67,7 +67,7 @@ pub(crate) fn generate_internal<T: Service>(
 
             impl<T> #service_ident<T>
             where
-                T: tonic::client::GrpcService<tonic::body::BoxBody>,
+                T: tonic::client::GrpcService<tonic::body::Body>,
                 T::Error: Into<StdError>,
                 T::ResponseBody: Body<Data = Bytes> + std::marker::Send  + 'static,
                 <T::ResponseBody as Body>::Error: Into<StdError> + std::marker::Send,
@@ -87,10 +87,10 @@ pub(crate) fn generate_internal<T: Service>(
                     F: tonic::service::Interceptor,
                     T::ResponseBody: Default,
                     T: tonic::codegen::Service<
-                        http::Request<tonic::body::BoxBody>,
-                        Response = http::Response<<T as tonic::client::GrpcService<tonic::body::BoxBody>>::ResponseBody>
+                        http::Request<tonic::body::Body>,
+                        Response = http::Response<<T as tonic::client::GrpcService<tonic::body::Body>>::ResponseBody>
                     >,
-                    <T as tonic::codegen::Service<http::Request<tonic::body::BoxBody>>>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
+                    <T as tonic::codegen::Service<http::Request<tonic::body::Body>>>::Error: Into<StdError> + std::marker::Send + std::marker::Sync,
                 {
                     #service_ident::new(InterceptedService::new(inner, interceptor))
                 }

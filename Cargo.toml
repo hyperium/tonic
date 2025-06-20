@@ -8,6 +8,7 @@ members = [
   "tonic-web", # Non-published crates
   "examples",
   "codegen",
+  "grpc",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",
@@ -30,3 +31,18 @@ members = [
   "tests/skip_debug",
 ]
 resolver = "2"
+
+[workspace.package]
+rust-version = "1.75"
+
+[workspace.lints.rust]
+missing_debug_implementations = "warn"
+missing_docs = "warn"
+rust_2018_idioms = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+uninlined_format_args = "deny"
+
+[workspace.lints.rustdoc]
+broken_intra_doc_links = "deny"

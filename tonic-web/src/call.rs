@@ -177,9 +177,9 @@ where
                     return Poll::Ready(Some(Ok(Frame::data(bytes))));
                 }
 
-                let mut this = self.as_mut().project();
+                let this = self.as_mut().project();
 
-                match ready!(this.inner.as_mut().poll_frame(cx)) {
+                match ready!(this.inner.poll_frame(cx)) {
                     Some(Ok(frame)) if frame.is_data() => this
                         .buf
                         .put(frame.into_data().unwrap_or_else(|_| unreachable!())),
@@ -217,9 +217,9 @@ where
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Frame<Bytes>, Status>>> {
-        let mut this = self.as_mut().project();
+        let this = self.as_mut().project();
 
-        match ready!(this.inner.as_mut().poll_frame(cx)) {
+        match ready!(this.inner.poll_frame(cx)) {
             Some(Ok(frame)) if frame.is_data() => {
                 let mut data = frame.into_data().unwrap_or_else(|_| unreachable!());
                 let mut res = data.copy_to_bytes(data.remaining());
@@ -373,7 +373,7 @@ impl Encoding {
 }
 
 fn internal_error(e: impl std::fmt::Display) -> Status {
-    Status::internal(format!("tonic-web: {}", e))
+    Status::internal(format!("tonic-web: {e}"))
 }
 
 // Key-value pairs encoded as a HTTP/1 headers block (without the terminating newline)
@@ -429,12 +429,14 @@ fn decode_trailers_frame(mut buf: Bytes) -> Result<Option<HeaderMap>, Status> {
         let value = value
             .split(|b| b == &b'\r')
             .next()
-            .ok_or_else(|| Status::internal("trailers was not escaped"))?;
+            .ok_or_else(|| Status::internal("trailers was not escaped"))?
+            .strip_prefix(b" ")
+            .unwrap_or(value);
 
         let header_key = HeaderName::try_from(key)
-            .map_err(|e| Status::internal(format!("Unable to parse HeaderName: {}", e)))?;
+            .map_err(|e| Status::internal(format!("Unable to parse HeaderName: {e}")))?;
         let header_value = HeaderValue::try_from(value)
-            .map_err(|e| Status::internal(format!("Unable to parse HeaderValue: {}", e)))?;
+            .map_err(|e| Status::internal(format!("Unable to parse HeaderValue: {e}")))?;
         map.insert(header_key, header_value);
     }
 
@@ -477,8 +479,7 @@ fn find_trailers(buf: &[u8]) -> Result<FindTrailers, Status> {
 
         if !(header == 0 || header == 1) {
             return Err(Status::internal(format!(
-                "Invalid header bit {} expected 0 or 1",
-                header
+                "Invalid header bit {header} expected 0 or 1"
             )));
         }
 
@@ -541,9 +542,7 @@ mod tests {
 
         let trailers = make_trailers_frame(headers.clone());
 
-        let buf = Bytes::from(trailers);
-
-        let map = decode_trailers_frame(buf).unwrap().unwrap();
+        let map = decode_trailers_frame(trailers).unwrap().unwrap();
 
         assert_eq!(headers, map);
     }
@@ -642,6 +641,21 @@ mod tests {
         expected.insert(Status::GRPC_MESSAGE, "".parse().unwrap());
         expected.insert("a", "1".parse().unwrap());
         expected.insert("b", "2".parse().unwrap());
+
+        assert_eq!(trailers, expected);
+    }
+
+    #[test]
+    fn decode_trailers_with_space_after_colon() {
+        let buf = b"\x80\0\0\0\x0fgrpc-status: 0\r\ngrpc-message: \r\n";
+
+        let trailers = decode_trailers_frame(Bytes::copy_from_slice(&buf[..]))
+            .unwrap()
+            .unwrap();
+
+        let mut expected = HeaderMap::new();
+        expected.insert(Status::GRPC_STATUS, "0".parse().unwrap());
+        expected.insert(Status::GRPC_MESSAGE, "".parse().unwrap());
 
         assert_eq!(trailers, expected);
     }

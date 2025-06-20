@@ -1,16 +1,11 @@
-use crate::{
-    body::{boxed, BoxBody},
-    metadata::GRPC_CONTENT_TYPE,
-    server::NamedService,
-    Status,
-};
-use http::{HeaderValue, Request, Response};
+use crate::{body::Body, server::NamedService, Status};
+use http::{Request, Response};
 use std::{
     convert::Infallible,
     fmt,
     future::Future,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll},
 };
 use tower::{Service, ServiceExt};
 
@@ -30,7 +25,12 @@ impl RoutesBuilder {
     /// Add a new service.
     pub fn add_service<S>(&mut self, svc: S) -> &mut Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<Body>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
@@ -57,7 +57,12 @@ impl Routes {
     /// Create a new routes with `svc` already added to it.
     pub fn new<S>(svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<Body>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
@@ -72,13 +77,18 @@ impl Routes {
     /// Add a new service.
     pub fn add_service<S>(mut self, svc: S) -> Self
     where
-        S: Service<Request<BoxBody>, Error = Infallible> + NamedService + Clone + Send + 'static,
+        S: Service<Request<Body>, Error = Infallible>
+            + NamedService
+            + Clone
+            + Send
+            + Sync
+            + 'static,
         S::Response: axum::response::IntoResponse,
         S::Future: Send + 'static,
     {
         self.router = self.router.route_service(
-            &format!("/{}/*rest", S::NAME),
-            svc.map_request(|req: Request<axum::body::Body>| req.map(boxed)),
+            &format!("/{}/{{*rest}}", S::NAME),
+            svc.map_request(|req: Request<axum::body::Body>| req.map(Body::new)),
         );
         self
     }
@@ -90,12 +100,6 @@ impl Routes {
         Self {
             router: self.router.with_state(()),
         }
-    }
-
-    /// Convert this `Routes` into an [`axum::Router`].
-    #[deprecated(since = "0.12.2", note = "Use `Routes::into_axum_router` instead.")]
-    pub fn into_router(self) -> axum::Router {
-        self.into_axum_router()
     }
 
     /// Convert this `Routes` into an [`axum::Router`].
@@ -131,13 +135,9 @@ impl From<axum::Router> for Routes {
     }
 }
 
-async fn unimplemented() -> impl axum::response::IntoResponse {
-    let status = http::StatusCode::OK;
-    let headers = [
-        (Status::GRPC_STATUS, HeaderValue::from_static("12")),
-        (http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE),
-    ];
-    (status, headers)
+async fn unimplemented() -> Response<Body> {
+    let (parts, ()) = Status::unimplemented("").into_http::<()>().into_parts();
+    Response::from_parts(parts, Body::empty())
 }
 
 impl<B> Service<Request<B>> for Routes
@@ -145,17 +145,17 @@ where
     B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
     B::Error: Into<crate::BoxError>,
 {
-    type Response = Response<BoxBody>;
-    type Error = crate::BoxError;
+    type Response = Response<Body>;
+    type Error = Infallible;
     type Future = RoutesFuture;
 
     #[inline]
-    fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        Service::<Request<B>>::poll_ready(&mut self.router, cx)
     }
 
     fn call(&mut self, req: Request<B>) -> Self::Future {
-        RoutesFuture(self.router.call(req.map(axum::body::Body::new)))
+        RoutesFuture(self.router.call(req))
     }
 }
 
@@ -168,15 +168,11 @@ impl fmt::Debug for RoutesFuture {
 }
 
 impl Future for RoutesFuture {
-    type Output = Result<Response<BoxBody>, crate::BoxError>;
+    type Output = Result<Response<Body>, Infallible>;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match ready!(Pin::new(&mut self.as_mut().0).poll(cx)) {
-            Ok(res) => Ok(res.map(boxed)).into(),
-            // NOTE: This pattern is not needed from Rust 1.82.
-            // See https://github.com/rust-lang/rust/pull/122792.
-            #[allow(unreachable_patterns)]
-            Err(err) => match err {},
-        }
+        Pin::new(&mut self.as_mut().0)
+            .poll(cx)
+            .map_ok(|res| res.map(Body::new))
     }
 }
