@@ -10,7 +10,7 @@ use super::super::{pb, FromAny, IntoAny};
 /// that is safe to return to the user.
 ///
 /// [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct LocalizedMessage {
     /// Locale used, following the specification defined in [BCP 47]. For
     /// example: "en-US", "fr-CH" or "es-MX".

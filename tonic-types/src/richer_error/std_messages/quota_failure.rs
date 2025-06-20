@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
@@ -7,13 +9,32 @@ use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `violations` field of the [`QuotaFailure`] struct. Describes a
 /// single quota violation.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct QuotaViolation {
     /// Subject on which the quota check failed.
     pub subject: String,
 
     /// Description of why the quota check failed.
     pub description: String,
+
+    /// The API service from which the quota check originates.
+    pub api_service: String,
+
+    /// The quota check that was violated.
+    pub quota_metric: String,
+
+    /// The ID of the violated quota check.
+    pub quota_id: String,
+
+    /// The dimensions of the violated quota check.
+    pub quota_dimensions: HashMap<String, String>,
+
+    /// The quota check value at the time of violation.
+    pub quota_value: i64,
+
+    /// The future value of the quota check value when a quota check rollout is
+    /// in progress.
+    pub futura_quota_value: Option<i64>,
 }
 
 impl QuotaViolation {
@@ -22,6 +43,7 @@ impl QuotaViolation {
         QuotaViolation {
             subject: subject.into(),
             description: description.into(),
+            ..Default::default()
         }
     }
 }
@@ -31,6 +53,12 @@ impl From<pb::quota_failure::Violation> for QuotaViolation {
         QuotaViolation {
             subject: value.subject,
             description: value.description,
+            api_service: value.api_service,
+            quota_metric: value.quota_metric,
+            quota_id: value.quota_id,
+            quota_dimensions: value.quota_dimensions,
+            quota_value: value.quota_value,
+            futura_quota_value: value.future_quota_value,
         }
     }
 }
@@ -40,6 +68,12 @@ impl From<QuotaViolation> for pb::quota_failure::Violation {
         pb::quota_failure::Violation {
             subject: value.subject,
             description: value.description,
+            api_service: value.api_service,
+            quota_metric: value.quota_metric,
+            quota_id: value.quota_id,
+            quota_dimensions: value.quota_dimensions,
+            quota_value: value.quota_value,
+            future_quota_value: value.futura_quota_value,
         }
     }
 }
@@ -72,6 +106,7 @@ impl QuotaFailure {
             violations: vec![QuotaViolation {
                 subject: subject.into(),
                 description: description.into(),
+                ..Default::default()
             }],
         }
     }
@@ -85,6 +120,7 @@ impl QuotaFailure {
         self.violations.append(&mut vec![QuotaViolation {
             subject: subject.into(),
             description: description.into(),
+            ..Default::default()
         }]);
         self
     }
@@ -167,7 +203,7 @@ mod tests {
 
         let formatted = format!("{quota_failure:?}");
 
-        let expected_filled = "QuotaFailure { violations: [QuotaViolation { subject: \"clientip:<ip address>\", description: \"description a\" }, QuotaViolation { subject: \"project:<project id>\", description: \"description b\" }] }";
+        let expected_filled = "QuotaFailure { violations: [QuotaViolation { subject: \"clientip:<ip address>\", description: \"description a\", api_service: \"\", quota_metric: \"\", quota_id: \"\", quota_dimensions: {}, quota_value: 0, futura_quota_value: None }, QuotaViolation { subject: \"project:<project id>\", description: \"description b\", api_service: \"\", quota_metric: \"\", quota_id: \"\", quota_dimensions: {}, quota_value: 0, futura_quota_value: None }] }";
 
         assert!(
             formatted.eq(expected_filled),
