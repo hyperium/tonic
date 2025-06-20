@@ -18,5 +18,5 @@
 
 /// An in-memory representation of a service config, usually provided to gRPC as
 /// a JSON object.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub(crate) struct ServiceConfig;
