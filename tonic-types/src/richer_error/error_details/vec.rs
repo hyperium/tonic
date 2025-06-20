@@ -1,5 +1,6 @@
 use super::super::std_messages::{
-    BadRequest, DebugInfo, ErrorInfo, PreconditionFailure, QuotaFailure, RetryInfo,
+    BadRequest, DebugInfo, ErrorInfo, Help, LocalizedMessage, PreconditionFailure, QuotaFailure,
+    RequestInfo, ResourceInfo, RetryInfo,
 };
 
 /// Wraps the structs corresponding to the standard error messages, allowing
@@ -24,6 +25,18 @@ pub enum ErrorDetail {
 
     /// Wraps the [`BadRequest`] struct.
     BadRequest(BadRequest),
+
+    /// Wraps the [`RequestInfo`] struct.
+    RequestInfo(RequestInfo),
+
+    /// Wraps the [`ResourceInfo`] struct.
+    ResourceInfo(ResourceInfo),
+
+    /// Wraps the [`Help`] struct.
+    Help(Help),
+
+    /// Wraps the [`LocalizedMessage`] struct.
+    LocalizedMessage(LocalizedMessage),
 }
 
 impl From<RetryInfo> for ErrorDetail {
@@ -59,5 +72,29 @@ impl From<PreconditionFailure> for ErrorDetail {
 impl From<BadRequest> for ErrorDetail {
     fn from(err_detail: BadRequest) -> Self {
         ErrorDetail::BadRequest(err_detail)
+    }
+}
+
+impl From<RequestInfo> for ErrorDetail {
+    fn from(err_detail: RequestInfo) -> Self {
+        ErrorDetail::RequestInfo(err_detail)
+    }
+}
+
+impl From<ResourceInfo> for ErrorDetail {
+    fn from(err_detail: ResourceInfo) -> Self {
+        ErrorDetail::ResourceInfo(err_detail)
+    }
+}
+
+impl From<Help> for ErrorDetail {
+    fn from(err_detail: Help) -> Self {
+        ErrorDetail::Help(err_detail)
+    }
+}
+
+impl From<LocalizedMessage> for ErrorDetail {
+    fn from(err_detail: LocalizedMessage) -> Self {
+        ErrorDetail::LocalizedMessage(err_detail)
     }
 }

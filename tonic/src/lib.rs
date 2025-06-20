@@ -17,22 +17,28 @@
 //! # Feature Flags
 //!
 //! - `transport`: Enables the fully featured, batteries included client and server
-//!     implementation based on [`hyper`], [`tower`] and [`tokio`]. Enabled by default.
-//! - `channel`: Enables just the full featured channel/client portion of the `transport`
-//!     feature.
+//!   implementation based on [`hyper`], [`tower`] and [`tokio`]. This enables `server`
+//!   and `channel` features. Enabled by default.
+//! - `server`: Enables just the full featured server portion of the `transport` feature.
+//! - `channel`: Enables just the full featured channel portion of the `transport` feature.
+//! - `router`: Enables the [`axum`] based service router. Enabled by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
-//! for [`tonic-build`]. Enabled by default.
-//! - `tls`: Enables the `rustls` based TLS options for the `transport` feature. Not
-//! enabled by default.
-//! - `tls-roots`: Adds system trust roots to `rustls`-based gRPC clients using the
-//! `rustls-native-certs` crate. Not enabled by default. `tls` must be enabled to use
-//! `tls-roots`.
-//! - `tls-webpki-roots`: Add the standard trust roots from the `webpki-roots` crate to
-//! `rustls`-based gRPC clients. Not enabled by default.
-//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation.
-//! - `gzip`: Enables compressing requests, responses, and streams.
-//! Depends on [flate2]. Not enabled by default.
-//! Replaces the `compression` flag from earlier versions of `tonic` (<= 0.7).
+//!   for [`tonic-build`]. Enabled by default.
+//! - `tls-ring`: Enables the [`rustls`] based TLS options for the `transport` feature using
+//!   the [`ring`] libcrypto provider. Not enabled by default.
+//! - `tls-aws-lc`: Enables the [`rustls`] based TLS options for the `transport` feature using
+//!   the [`aws-lc-rs`] libcrypto provider. Not enabled by default.
+//! - `tls-native-roots`: Adds system trust roots to [`rustls`]-based gRPC clients using the
+//!   [`rustls-native-certs`] crate. Not enabled by default.
+//! - `tls-webpki-roots`: Add the standard trust roots from the [`webpki-roots`] crate to
+//!   `rustls`-based gRPC clients. Not enabled by default.
+//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation. Enabled by default.
+//! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
+//!   Not enabled by default.
+//! - `deflate`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
+//!   Not enabled by default.
+//! - `zstd`: Enables compressing requests, responses, and streams. Depends on [`zstd`].
+//!   Not enabled by default.
 //!
 //! # Structure
 //!
@@ -53,6 +59,14 @@
 //! to build even more feature rich clients and servers. This module also provides the ability to
 //! enable TLS using [`rustls`], via the `tls` feature flag.
 //!
+//! # Code generated client/server configuration
+//!
+//! ## Max Message Size
+//!
+//! Currently, both servers and clients can be configured to set the max message encoding and
+//! decoding size. This will ensure that an incoming gRPC message will not exhaust the systems
+//! memory. By default, the decoding message limit is `4MB` and the encoding limit is `usize::MAX`.
+//!
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
 //! [`tokio`]: https://docs.rs/tokio
@@ -60,6 +74,7 @@
 //! [`hyper`]: https://docs.rs/hyper
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
+//! [`ring`]: https://docs.rs/ring
 //! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
@@ -67,24 +82,18 @@
 //! [`rustls`]: https://docs.rs/rustls
 //! [`client`]: client/index.html
 //! [`transport`]: transport/index.html
-//! [flate2]: https://crates.io/crates/flate2
+//! [`rustls-native-certs`]: https://docs.rs/rustls-native-certs
+//! [`webpki-roots`]: https://docs.rs/webpki-roots
+//! [`flate2`]: https://docs.rs/flate2
+//! [`zstd`]: https://docs.rs/zstd
 
 #![recursion_limit = "256"]
-#![allow(clippy::inconsistent_struct_constructor)]
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
-#![deny(rustdoc::broken_intra_doc_links)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic/0.8.3")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 pub mod body;
 pub mod client;
@@ -93,8 +102,7 @@ pub mod metadata;
 pub mod server;
 pub mod service;
 
-#[cfg(feature = "transport")]
-#[cfg_attr(docsrs, doc(cfg(feature = "transport")))]
+#[cfg(any(feature = "server", feature = "channel"))]
 pub mod transport;
 
 mod extensions;
@@ -106,21 +114,20 @@ mod util;
 
 /// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
 #[cfg(feature = "codegen")]
-#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub use async_trait::async_trait;
 
 #[doc(inline)]
 pub use codec::Streaming;
-pub use extensions::Extensions;
+pub use extensions::GrpcMethod;
+pub use http::Extensions;
 pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
-pub use status::{Code, Status};
+pub use status::{Code, ConnectError, Status, TimeoutExpired};
 
-pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
+pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 #[doc(hidden)]
 #[cfg(feature = "codegen")]
-#[cfg_attr(docsrs, doc(cfg(feature = "codegen")))]
 pub mod codegen;
 
 /// `Result` is a type that represents either success ([`Ok`]) or failure ([`Err`]).

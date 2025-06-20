@@ -1,12 +1,11 @@
-use hyper::server::conn::AddrStream;
 use std::net::SocketAddr;
 use tokio::net::TcpStream;
 
-#[cfg(feature = "tls")]
-use crate::transport::Certificate;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 use std::sync::Arc;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
+use tokio_rustls::rustls::pki_types::CertificateDer;
+#[cfg(feature = "_tls-any")]
 use tokio_rustls::server::TlsStream;
 
 /// Trait that connected IO resources implement and use to produce info about the connection.
@@ -68,23 +67,21 @@ pub trait Connected {
 /// [ext]: crate::Request::extensions
 #[derive(Debug, Clone)]
 pub struct TcpConnectInfo {
-    remote_addr: Option<SocketAddr>,
+    /// Returns the local address of this connection.
+    pub local_addr: Option<SocketAddr>,
+    /// Returns the remote (peer) address of this connection.
+    pub remote_addr: Option<SocketAddr>,
 }
 
 impl TcpConnectInfo {
+    /// Return the local address the IO resource is connected.
+    pub fn local_addr(&self) -> Option<SocketAddr> {
+        self.local_addr
+    }
+
     /// Return the remote address the IO resource is connected too.
     pub fn remote_addr(&self) -> Option<SocketAddr> {
         self.remote_addr
-    }
-}
-
-impl Connected for AddrStream {
-    type ConnectInfo = TcpConnectInfo;
-
-    fn connect_info(&self) -> Self::ConnectInfo {
-        TcpConnectInfo {
-            remote_addr: Some(self.remote_addr()),
-        }
     }
 }
 
@@ -93,6 +90,7 @@ impl Connected for TcpStream {
 
     fn connect_info(&self) -> Self::ConnectInfo {
         TcpConnectInfo {
+            local_addr: self.local_addr().ok(),
             remote_addr: self.peer_addr().ok(),
         }
     }
@@ -104,7 +102,7 @@ impl Connected for tokio::io::DuplexStream {
     fn connect_info(&self) -> Self::ConnectInfo {}
 }
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 impl<T> Connected for TlsStream<T>
 where
     T: Connected,
@@ -115,12 +113,9 @@ where
         let (inner, session) = self.get_ref();
         let inner = inner.connect_info();
 
-        let certs = if let Some(certs) = session.peer_certificates() {
-            let certs = certs.iter().map(Certificate::from_pem).collect();
-            Some(Arc::new(certs))
-        } else {
-            None
-        };
+        let certs = session
+            .peer_certificates()
+            .map(|certs| certs.to_owned().into());
 
         TlsConnectInfo { inner, certs }
     }
@@ -133,16 +128,14 @@ where
 /// See [`Connected`] for more details.
 ///
 /// [ext]: crate::Request::extensions
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[cfg(feature = "_tls-any")]
 #[derive(Debug, Clone)]
 pub struct TlsConnectInfo<T> {
     inner: T,
-    certs: Option<Arc<Vec<Certificate>>>,
+    certs: Option<Arc<Vec<CertificateDer<'static>>>>,
 }
 
-#[cfg(feature = "tls")]
-#[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
+#[cfg(feature = "_tls-any")]
 impl<T> TlsConnectInfo<T> {
     /// Get a reference to the underlying connection info.
     pub fn get_ref(&self) -> &T {
@@ -155,7 +148,7 @@ impl<T> TlsConnectInfo<T> {
     }
 
     /// Return the set of connected peer TLS certificates.
-    pub fn peer_certs(&self) -> Option<Arc<Vec<Certificate>>> {
+    pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
         self.certs.clone()
     }
 }

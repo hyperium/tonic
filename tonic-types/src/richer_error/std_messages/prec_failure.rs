@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `violations` field of the [`PreconditionFailure`] struct.
@@ -36,6 +38,26 @@ impl PreconditionViolation {
     }
 }
 
+impl From<pb::precondition_failure::Violation> for PreconditionViolation {
+    fn from(value: pb::precondition_failure::Violation) -> Self {
+        PreconditionViolation {
+            r#type: value.r#type,
+            subject: value.subject,
+            description: value.description,
+        }
+    }
+}
+
+impl From<PreconditionViolation> for pb::precondition_failure::Violation {
+    fn from(value: PreconditionViolation) -> Self {
+        pb::precondition_failure::Violation {
+            r#type: value.r#type,
+            subject: value.subject,
+            description: value.description,
+        }
+    }
+}
+
 /// Used to encode/decode the `PreconditionFailure` standard error message
 /// described in [error_details.proto]. Describes what preconditions have
 /// failed.
@@ -52,8 +74,10 @@ impl PreconditionFailure {
     pub const TYPE_URL: &'static str = "type.googleapis.com/google.rpc.PreconditionFailure";
 
     /// Creates a new [`PreconditionFailure`] struct.
-    pub fn new(violations: Vec<PreconditionViolation>) -> Self {
-        PreconditionFailure { violations }
+    pub fn new(violations: impl Into<Vec<PreconditionViolation>>) -> Self {
+        PreconditionFailure {
+            violations: violations.into(),
+        }
     }
 
     /// Creates a new [`PreconditionFailure`] struct with a single
@@ -97,17 +121,7 @@ impl PreconditionFailure {
 
 impl IntoAny for PreconditionFailure {
     fn into_any(self) -> Any {
-        let detail_data = pb::PreconditionFailure {
-            violations: self
-                .violations
-                .into_iter()
-                .map(|v| pb::precondition_failure::Violation {
-                    r#type: v.r#type,
-                    subject: v.subject,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        let detail_data: pb::PreconditionFailure = self.into();
 
         Any {
             type_url: PreconditionFailure::TYPE_URL.to_string(),
@@ -117,23 +131,34 @@ impl IntoAny for PreconditionFailure {
 }
 
 impl FromAny for PreconditionFailure {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for PreconditionFailure {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let precondition_failure = pb::PreconditionFailure::decode(buf)?;
 
-        let precondition_failure = PreconditionFailure {
-            violations: precondition_failure
-                .violations
-                .into_iter()
-                .map(|v| PreconditionViolation {
-                    r#type: v.r#type,
-                    subject: v.subject,
-                    description: v.description,
-                })
-                .collect(),
-        };
+        Ok(precondition_failure.into())
+    }
+}
 
-        Ok(precondition_failure)
+impl From<pb::PreconditionFailure> for PreconditionFailure {
+    fn from(value: pb::PreconditionFailure) -> Self {
+        PreconditionFailure {
+            violations: value.violations.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<PreconditionFailure> for pb::PreconditionFailure {
+    fn from(value: PreconditionFailure) -> Self {
+        pb::PreconditionFailure {
+            violations: value.violations.into_iter().map(Into::into).collect(),
+        }
     }
 }
 
@@ -145,7 +170,7 @@ mod tests {
     #[test]
     fn gen_prec_failure() {
         let mut prec_failure = PreconditionFailure::new(Vec::new());
-        let formatted = format!("{:?}", prec_failure);
+        let formatted = format!("{prec_failure:?}");
 
         let expected = "PreconditionFailure { violations: [] }";
 
@@ -163,7 +188,7 @@ mod tests {
             .add_violation("TOS", "example.local", "Terms of service not accepted")
             .add_violation("FNF", "example.local", "File not found");
 
-        let formatted = format!("{:?}", prec_failure);
+        let formatted = format!("{prec_failure:?}");
 
         let expected_filled = "PreconditionFailure { violations: [PreconditionViolation { type: \"TOS\", subject: \"example.local\", description: \"Terms of service not accepted\" }, PreconditionViolation { type: \"FNF\", subject: \"example.local\", description: \"File not found\" }] }";
 
@@ -179,7 +204,7 @@ mod tests {
 
         let gen_any = prec_failure.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected = "Any { type_url: \"type.googleapis.com/google.rpc.PreconditionFailure\", value: [10, 51, 10, 3, 84, 79, 83, 18, 13, 101, 120, 97, 109, 112, 108, 101, 46, 108, 111, 99, 97, 108, 26, 29, 84, 101, 114, 109, 115, 32, 111, 102, 32, 115, 101, 114, 118, 105, 99, 101, 32, 110, 111, 116, 32, 97, 99, 99, 101, 112, 116, 101, 100, 10, 36, 10, 3, 70, 78, 70, 18, 13, 101, 120, 97, 109, 112, 108, 101, 46, 108, 111, 99, 97, 108, 26, 14, 70, 105, 108, 101, 32, 110, 111, 116, 32, 102, 111, 117, 110, 100] }";
 
@@ -189,11 +214,11 @@ mod tests {
         );
 
         let br_details = match PreconditionFailure::from_any(gen_any) {
-            Err(error) => panic!("Error generating PreconditionFailure from Any: {:?}", error),
+            Err(error) => panic!("Error generating PreconditionFailure from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

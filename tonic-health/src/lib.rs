@@ -6,31 +6,24 @@
 //!
 //! [here]: https://github.com/hyperium/tonic/blob/master/examples/src/health/server.rs
 
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-health/0.8.0")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_cfg))]
+#![cfg_attr(docsrs, feature(doc_auto_cfg))]
 
 use std::fmt::{Display, Formatter};
 
-/// Generated protobuf types from the `grpc.health.v1` package.
-pub mod pb {
+mod generated {
     #![allow(unreachable_pub)]
     #![allow(missing_docs)]
-    include!("generated/grpc.health.v1.rs");
+    #[rustfmt::skip]
+    pub mod grpc_health_v1;
+    #[rustfmt::skip]
+    pub mod grpc_health_v1_fds;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/grpc_health_v1.bin");
+    pub use grpc_health_v1_fds::FILE_DESCRIPTOR_SET;
 
     #[cfg(test)]
     mod tests {
@@ -42,6 +35,11 @@ pub mod pb {
             prost_types::FileDescriptorSet::decode(FILE_DESCRIPTOR_SET).unwrap();
         }
     }
+}
+
+/// Generated protobuf types from the `grpc.health.v1` package.
+pub mod pb {
+    pub use crate::generated::{grpc_health_v1::*, FILE_DESCRIPTOR_SET};
 }
 
 pub mod server;

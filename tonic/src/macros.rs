@@ -44,8 +44,7 @@ macro_rules! include_proto {
 /// let descriptor_path = PathBuf::from(env::var("OUT_DIR").unwrap()).join("my_descriptor.bin")
 /// tonic_build::configure()
 ///     .file_descriptor_set_path(&descriptor_path)
-///     .format(true)
-///     .compile(&["proto/reflection.proto"], &["proto/"])?;
+///     .compile_protos(&["proto/reflection.proto"], &["proto/"])?;
 /// ```
 ///
 /// Can be included like this:

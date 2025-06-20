@@ -3,6 +3,8 @@ use std::time;
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
@@ -14,7 +16,7 @@ use super::super::{pb, FromAny, IntoAny};
 /// [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
 #[derive(Clone, Debug)]
 pub struct RetryInfo {
-    /// Informs the amout of time that clients should wait before retrying.
+    /// Informs the amount of time that clients should wait before retrying.
     pub retry_delay: Option<time::Duration>,
 }
 
@@ -52,7 +54,49 @@ impl RetryInfo {
 
 impl IntoAny for RetryInfo {
     fn into_any(self) -> Any {
-        let retry_delay = match self.retry_delay {
+        let detail_data: pb::RetryInfo = self.into();
+
+        Any {
+            type_url: RetryInfo::TYPE_URL.to_string(),
+            value: detail_data.encode_to_vec(),
+        }
+    }
+}
+
+impl FromAny for RetryInfo {
+    #[inline]
+    fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for RetryInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
+        let buf: &[u8] = &any.value;
+        let retry_info = pb::RetryInfo::decode(buf)?;
+
+        Ok(retry_info.into())
+    }
+}
+
+impl From<pb::RetryInfo> for RetryInfo {
+    fn from(retry_info: pb::RetryInfo) -> Self {
+        let retry_delay = match retry_info.retry_delay {
+            Some(duration) => {
+                // Negative retry_delays become 0
+                let duration = time::Duration::try_from(duration).unwrap_or(time::Duration::ZERO);
+                Some(duration)
+            }
+            None => None,
+        };
+
+        RetryInfo { retry_delay }
+    }
+}
+
+impl From<RetryInfo> for pb::RetryInfo {
+    fn from(value: RetryInfo) -> Self {
+        let retry_delay = match value.retry_delay {
             Some(duration) => {
                 // If duration is too large, uses max `prost_types::Duration`
                 let duration = match prost_types::Duration::try_from(duration) {
@@ -67,32 +111,7 @@ impl IntoAny for RetryInfo {
             None => None,
         };
 
-        let detail_data = pb::RetryInfo { retry_delay };
-
-        Any {
-            type_url: RetryInfo::TYPE_URL.to_string(),
-            value: detail_data.encode_to_vec(),
-        }
-    }
-}
-
-impl FromAny for RetryInfo {
-    fn from_any(any: Any) -> Result<Self, DecodeError> {
-        let buf: &[u8] = &any.value;
-        let retry_info = pb::RetryInfo::decode(buf)?;
-
-        let retry_delay = match retry_info.retry_delay {
-            Some(duration) => {
-                // Negative retry_delays become 0
-                let duration = time::Duration::try_from(duration).unwrap_or(time::Duration::ZERO);
-                Some(duration)
-            }
-            None => None,
-        };
-
-        let retry_info = RetryInfo { retry_delay };
-
-        Ok(retry_info)
+        pb::RetryInfo { retry_delay }
     }
 }
 
@@ -105,9 +124,9 @@ mod tests {
 
     #[test]
     fn gen_retry_info() {
-        let error_info = RetryInfo::new(Some(Duration::from_secs(u64::MAX)));
+        let retry_info = RetryInfo::new(Some(Duration::from_secs(u64::MAX)));
 
-        let formatted = format!("{:?}", error_info);
+        let formatted = format!("{retry_info:?}");
 
         let expected_filled = "RetryInfo { retry_delay: Some(315576000000.999999999s) }";
 
@@ -117,13 +136,13 @@ mod tests {
         );
 
         assert!(
-            !error_info.is_empty(),
+            !retry_info.is_empty(),
             "filled RetryInfo returns 'false' from .has_retry_delay()"
         );
 
-        let gen_any = error_info.into_any();
+        let gen_any = retry_info.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.RetryInfo\", value: [10, 13, 8, 128, 188, 174, 206, 151, 9, 16, 255, 147, 235, 220, 3] }";
@@ -134,11 +153,11 @@ mod tests {
         );
 
         let br_details = match RetryInfo::from_any(gen_any) {
-            Err(error) => panic!("Error generating RetryInfo from Any: {:?}", error),
+            Err(error) => panic!("Error generating RetryInfo from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

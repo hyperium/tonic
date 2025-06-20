@@ -1,6 +1,8 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
+use crate::richer_error::FromAnyRef;
+
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used to encode/decode the `DebugInfo` standard error message described in
@@ -21,9 +23,9 @@ impl DebugInfo {
     pub const TYPE_URL: &'static str = "type.googleapis.com/google.rpc.DebugInfo";
 
     /// Creates a new [`DebugInfo`] struct.
-    pub fn new(stack_entries: Vec<String>, detail: impl Into<String>) -> Self {
+    pub fn new(stack_entries: impl Into<Vec<String>>, detail: impl Into<String>) -> Self {
         DebugInfo {
-            stack_entries,
+            stack_entries: stack_entries.into(),
             detail: detail.into(),
         }
     }
@@ -37,10 +39,7 @@ impl DebugInfo {
 
 impl IntoAny for DebugInfo {
     fn into_any(self) -> Any {
-        let detail_data = pb::DebugInfo {
-            stack_entries: self.stack_entries,
-            detail: self.detail,
-        };
+        let detail_data: pb::DebugInfo = self.into();
 
         Any {
             type_url: DebugInfo::TYPE_URL.to_string(),
@@ -50,16 +49,36 @@ impl IntoAny for DebugInfo {
 }
 
 impl FromAny for DebugInfo {
+    #[inline]
     fn from_any(any: Any) -> Result<Self, DecodeError> {
+        FromAnyRef::from_any_ref(&any)
+    }
+}
+
+impl FromAnyRef for DebugInfo {
+    fn from_any_ref(any: &Any) -> Result<Self, DecodeError> {
         let buf: &[u8] = &any.value;
         let debug_info = pb::DebugInfo::decode(buf)?;
 
-        let debug_info = DebugInfo {
+        Ok(debug_info.into())
+    }
+}
+
+impl From<pb::DebugInfo> for DebugInfo {
+    fn from(debug_info: pb::DebugInfo) -> Self {
+        DebugInfo {
             stack_entries: debug_info.stack_entries,
             detail: debug_info.detail,
-        };
+        }
+    }
+}
 
-        Ok(debug_info)
+impl From<DebugInfo> for pb::DebugInfo {
+    fn from(debug_info: DebugInfo) -> Self {
+        pb::DebugInfo {
+            stack_entries: debug_info.stack_entries,
+            detail: debug_info.detail,
+        }
     }
 }
 
@@ -75,7 +94,7 @@ mod tests {
             "details about the error",
         );
 
-        let formatted = format!("{:?}", debug_info);
+        let formatted = format!("{debug_info:?}");
 
         let expected_filled = "DebugInfo { stack_entries: [\"trace 3\", \"trace 2\", \"trace 1\"], detail: \"details about the error\" }";
 
@@ -85,7 +104,7 @@ mod tests {
         );
 
         let gen_any = debug_info.into_any();
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected =
             "Any { type_url: \"type.googleapis.com/google.rpc.DebugInfo\", value: [10, 7, 116, 114, 97, 99, 101, 32, 51, 10, 7, 116, 114, 97, 99, 101, 32, 50, 10, 7, 116, 114, 97, 99, 101, 32, 49, 18, 23, 100, 101, 116, 97, 105, 108, 115, 32, 97, 98, 111, 117, 116, 32, 116, 104, 101, 32, 101, 114, 114, 111, 114] }";
@@ -96,11 +115,11 @@ mod tests {
         );
 
         let br_details = match DebugInfo::from_any(gen_any) {
-            Err(error) => panic!("Error generating DebugInfo from Any: {:?}", error),
+            Err(error) => panic!("Error generating DebugInfo from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

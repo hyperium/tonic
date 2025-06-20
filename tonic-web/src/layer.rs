@@ -1,10 +1,9 @@
-use super::{BoxBody, BoxError, GrpcWebService};
+use super::GrpcWebService;
 
 use tower_layer::Layer;
-use tower_service::Service;
 
 /// Layer implementing the grpc-web protocol.
-#[derive(Debug, Clone)]
+#[derive(Debug, Default, Clone)]
 pub struct GrpcWebLayer {
     _priv: (),
 }
@@ -12,23 +11,11 @@ pub struct GrpcWebLayer {
 impl GrpcWebLayer {
     /// Create a new grpc-web layer.
     pub fn new() -> GrpcWebLayer {
-        Self { _priv: () }
+        Self::default()
     }
 }
 
-impl Default for GrpcWebLayer {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<S> Layer<S> for GrpcWebLayer
-where
-    S: Service<http::Request<hyper::Body>, Response = http::Response<BoxBody>>,
-    S: Clone + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
-{
+impl<S> Layer<S> for GrpcWebLayer {
     type Service = GrpcWebService<S>;
 
     fn layer(&self, inner: S) -> Self::Service {

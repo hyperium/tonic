@@ -5,6 +5,7 @@ pub mod pb {
 
 pub mod mock {
     use std::{
+        io::IoSlice,
         pin::Pin,
         task::{Context, Poll},
     };
@@ -51,5 +52,23 @@ pub mod mock {
         ) -> Poll<std::io::Result<()>> {
             Pin::new(&mut self.0).poll_shutdown(cx)
         }
+
+        fn poll_write_vectored(
+            mut self: Pin<&mut Self>,
+            cx: &mut Context<'_>,
+            bufs: &[IoSlice<'_>],
+        ) -> Poll<Result<usize, std::io::Error>> {
+            Pin::new(&mut self.0).poll_write_vectored(cx, bufs)
+        }
+
+        fn is_write_vectored(&self) -> bool {
+            self.0.is_write_vectored()
+        }
     }
 }
+
+pub fn trace_init() {
+    let _ = tracing_subscriber::fmt::try_init();
+}
+
+pub type BoxFuture<'a, T> = std::pin::Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;

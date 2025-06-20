@@ -3,24 +3,21 @@ authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
 name = "compression"
-publish = false
-version = "0.1.0"
 
 [dependencies]
 bytes = "1"
-futures = "0.3"
-http = "0.2"
-http-body = "0.4"
-hyper = "0.14.3"
+http = "1"
+http-body = "1"
+http-body-util = "0.1"
+hyper-util = "0.1"
+paste = "1.0.12"
 pin-project = "1.0"
-prost = "0.11"
+prost = "0.14"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
-tonic = {path = "../../tonic", features = ["gzip"]}
-tower = {version = "0.4", features = []}
-tower-http = {version = "0.3", features = ["map-response-body", "map-request-body"]}
+tokio-stream = "0.1"
+tonic = {path = "../../tonic", features = ["gzip", "deflate", "zstd"]}
+tower = "0.5"
+tower-http = {version = "0.6", features = ["map-response-body", "map-request-body"]}
 
 [build-dependencies]
 tonic-build = {path = "../../tonic-build" }
-
-[package.metadata.cargo-machete]
-ignored = ["prost"]

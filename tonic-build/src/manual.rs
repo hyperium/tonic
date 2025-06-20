@@ -173,6 +173,8 @@ pub struct Method {
     client_streaming: bool,
     /// Identifies if server streams multiple server messages.
     server_streaming: bool,
+    /// Identifies if the method is deprecated.
+    deprecated: bool,
     /// The path to the codec to use for this method
     codec_path: String,
 }
@@ -209,6 +211,10 @@ impl crate::Method for Method {
 
     fn comment(&self) -> &[Self::Comment] {
         &self.comments
+    }
+
+    fn deprecated(&self) -> bool {
+        self.deprecated
     }
 
     fn request_response_name(
@@ -262,6 +268,8 @@ pub struct MethodBuilder {
     client_streaming: bool,
     /// Identifies if server streams multiple server messages.
     server_streaming: bool,
+    /// Identifies if the method is deprecated.
+    deprecated: bool,
     /// The path to the codec to use for this method
     codec_path: Option<String>,
 }
@@ -338,6 +346,7 @@ impl MethodBuilder {
             output_type: self.output_type.unwrap(),
             client_streaming: self.client_streaming,
             server_streaming: self.server_streaming,
+            deprecated: self.deprecated,
             codec_path: self.codec_path.unwrap(),
         }
     }

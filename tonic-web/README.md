@@ -3,13 +3,6 @@
 Enables tonic servers to handle requests from `grpc-web` clients directly,
 without the need of an external proxy.
 
-## Getting Started
-
-```toml
-[dependencies]
-tonic-web = "<tonic-web-version>"
-```
-
 ## Enabling tonic services
 
 The easiest way to get started, is to call the function with your tonic service
@@ -21,9 +14,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = GreeterServer::new(MyGreeter::default());
 
-    Server::builder()
+   Server::builder()
        .accept_http1(true)
-       .add_service(tonic_web::enable(greeter))
+       .layer(GrpcWebLayer::new())
+       .add_service(greeter)
        .serve(addr)
        .await?;
 

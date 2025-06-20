@@ -139,7 +139,7 @@ impl self::value_encoding::Sealed for Binary {
 
     fn from_static(value: &'static str) -> HeaderValue {
         if crate::util::base64::STANDARD.decode(value).is_err() {
-            panic!("Invalid base64 passed to from_static: {}", value);
+            panic!("Invalid base64 passed to from_static: {value}");
         }
         unsafe {
             // Because this is valid base64 this must be a valid HTTP header value,
@@ -173,9 +173,9 @@ impl self::value_encoding::Sealed for Binary {
 
     fn fmt(value: &HeaderValue, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if let Ok(decoded) = Self::decode(value.as_bytes()) {
-            write!(f, "{:?}", decoded)
+            write!(f, "{decoded:?}")
         } else {
-            write!(f, "b[invalid]{:?}", value)
+            write!(f, "b[invalid]{value:?}")
         }
     }
 }

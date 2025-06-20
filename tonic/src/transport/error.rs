@@ -15,8 +15,12 @@ struct ErrorImpl {
 #[derive(Debug)]
 pub(crate) enum Kind {
     Transport,
+    #[cfg(feature = "channel")]
     InvalidUri,
+    #[cfg(feature = "channel")]
     InvalidUserAgent,
+    #[cfg(all(feature = "_tls-any", feature = "channel"))]
+    InvalidTlsConfigForUds,
 }
 
 impl Error {
@@ -31,14 +35,16 @@ impl Error {
         self
     }
 
-    pub(crate) fn from_source(source: impl Into<crate::Error>) -> Self {
+    pub(crate) fn from_source(source: impl Into<crate::BoxError>) -> Self {
         Error::new(Kind::Transport).with(source)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_uri() -> Self {
         Error::new(Kind::InvalidUri)
     }
 
+    #[cfg(feature = "channel")]
     pub(crate) fn new_invalid_user_agent() -> Self {
         Error::new(Kind::InvalidUserAgent)
     }
@@ -46,8 +52,12 @@ impl Error {
     fn description(&self) -> &str {
         match &self.inner.kind {
             Kind::Transport => "transport error",
+            #[cfg(feature = "channel")]
             Kind::InvalidUri => "invalid URI",
+            #[cfg(feature = "channel")]
             Kind::InvalidUserAgent => "user agent is not a valid header value",
+            #[cfg(all(feature = "_tls-any", feature = "channel"))]
+            Kind::InvalidTlsConfigForUds => "cannot apply TLS config for unix domain socket",
         }
     }
 }

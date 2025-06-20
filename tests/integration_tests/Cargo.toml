@@ -3,32 +3,25 @@ authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
 name = "integration-tests"
-publish = false
-version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 bytes = "1.0"
-futures-util = "0.3"
-prost = "0.11"
-tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
+prost = "0.14"
+tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net", "sync"]}
 tonic = {path = "../../tonic"}
+tracing-subscriber = {version = "0.3"}
 
 [dev-dependencies]
-async-stream = "0.3"
-futures = "0.3"
-http = "0.2"
-http-body = "0.4"
-hyper = "0.14"
+http = "1"
+http-body = "1"
+hyper-util = "0.1"
+rustls = {version = "0.23", features = ["ring"]}
 tokio-stream = {version = "0.1.5", features = ["net"]}
-tower = {version = "0.4", features = []}
-tower-http = { version = "0.3", features = ["set-header", "trace"] }
+tower = "0.5"
+tower-http = { version = "0.6", features = ["set-header", "trace"] }
 tower-service = "0.3"
-tracing-subscriber = {version = "0.3", features = ["env-filter"]}
 
 [build-dependencies]
 tonic-build = {path = "../../tonic-build"}
-
-[package.metadata.cargo-machete]
-ignored = ["prost"]

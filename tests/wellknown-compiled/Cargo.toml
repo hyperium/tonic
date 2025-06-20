@@ -3,8 +3,6 @@ authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
 name = "wellknown-compiled"
-publish = false
-version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
@@ -12,12 +10,9 @@ version = "0.1.0"
 doctest = false
 
 [dependencies]
-prost = "0.11"
+prost = "0.14"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]
-prost-build = "0.11.6"
+prost-build = "0.14"
 tonic-build = {path = "../../tonic-build"}
-
-[package.metadata.cargo-machete]
-ignored = ["prost"]

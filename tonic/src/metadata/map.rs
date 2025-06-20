@@ -1,3 +1,5 @@
+use http::HeaderName;
+
 pub(crate) use self::as_encoding_agnostic_metadata_key::AsEncodingAgnosticMetadataKey;
 pub(crate) use self::as_metadata_key::AsMetadataKey;
 pub(crate) use self::into_metadata_key::IntoMetadataKey;
@@ -34,6 +36,18 @@ use std::marker::PhantomData;
 #[derive(Clone, Debug, Default)]
 pub struct MetadataMap {
     headers: http::HeaderMap,
+}
+
+impl AsRef<http::HeaderMap> for MetadataMap {
+    fn as_ref(&self) -> &http::HeaderMap {
+        &self.headers
+    }
+}
+
+impl AsMut<http::HeaderMap> for MetadataMap {
+    fn as_mut(&mut self) -> &mut http::HeaderMap {
+        &mut self.headers
+    }
 }
 
 /// `MetadataMap` entry iterator.
@@ -200,13 +214,13 @@ pub(crate) const GRPC_TIMEOUT_HEADER: &str = "grpc-timeout";
 
 impl MetadataMap {
     // Headers reserved by the gRPC protocol.
-    pub(crate) const GRPC_RESERVED_HEADERS: [&'static str; 6] = [
-        "te",
-        "user-agent",
-        "content-type",
-        "grpc-message",
-        "grpc-message-type",
-        "grpc-status",
+    pub(crate) const GRPC_RESERVED_HEADERS: [HeaderName; 6] = [
+        HeaderName::from_static("te"),
+        HeaderName::from_static("user-agent"),
+        HeaderName::from_static("content-type"),
+        HeaderName::from_static("grpc-message"),
+        HeaderName::from_static("grpc-message-type"),
+        HeaderName::from_static("grpc-status"),
     ];
 
     /// Create an empty `MetadataMap`.
@@ -251,7 +265,7 @@ impl MetadataMap {
 
     pub(crate) fn into_sanitized_headers(mut self) -> http::HeaderMap {
         for r in &Self::GRPC_RESERVED_HEADERS {
-            self.headers.remove(*r);
+            self.headers.remove(r);
         }
         self.headers
     }
@@ -1272,7 +1286,7 @@ impl<'a> Iterator for IterMut<'a> {
 
 // ===== impl ValueDrain =====
 
-impl<'a, VE: ValueEncoding> Iterator for ValueDrain<'a, VE> {
+impl<VE: ValueEncoding> Iterator for ValueDrain<'_, VE> {
     type Item = MetadataValue<VE>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1306,7 +1320,7 @@ impl<'a> Iterator for Keys<'a> {
     }
 }
 
-impl<'a> ExactSizeIterator for Keys<'a> {}
+impl ExactSizeIterator for Keys<'_> {}
 
 // ===== impl Values ====
 
@@ -1965,7 +1979,7 @@ impl<'a, VE: ValueEncoding> GetAll<'a, VE> {
     }
 }
 
-impl<'a, VE: ValueEncoding> PartialEq for GetAll<'a, VE> {
+impl<VE: ValueEncoding> PartialEq for GetAll<'_, VE> {
     fn eq(&self, other: &Self) -> bool {
         self.inner.iter().eq(other.inner.iter())
     }
@@ -2049,7 +2063,7 @@ mod into_metadata_key {
 
     impl<VE: ValueEncoding> IntoMetadataKey<VE> for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn insert(
@@ -2068,7 +2082,7 @@ mod into_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> IntoMetadataKey<VE> for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {}
 
     impl<VE: ValueEncoding> Sealed<VE> for &'static str {
         #[doc(hidden)]
@@ -2178,7 +2192,7 @@ mod as_metadata_key {
 
     impl<VE: ValueEncoding> AsMetadataKey<VE> for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2219,9 +2233,9 @@ mod as_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a str {
+    impl<VE: ValueEncoding> Sealed<VE> for &str {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2281,7 +2295,7 @@ mod as_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a str {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &str {}
 
     impl<VE: ValueEncoding> Sealed<VE> for String {
         #[doc(hidden)]
@@ -2344,7 +2358,7 @@ mod as_metadata_key {
 
     impl<VE: ValueEncoding> AsMetadataKey<VE> for String {}
 
-    impl<'a, VE: ValueEncoding> Sealed<VE> for &'a String {
+    impl<VE: ValueEncoding> Sealed<VE> for &String {
         #[doc(hidden)]
         #[inline]
         fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
@@ -2403,7 +2417,7 @@ mod as_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsMetadataKey<VE> for &'a String {}
+    impl<VE: ValueEncoding> AsMetadataKey<VE> for &String {}
 }
 
 mod as_encoding_agnostic_metadata_key {
@@ -2440,7 +2454,7 @@ mod as_encoding_agnostic_metadata_key {
 
     impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for MetadataKey<VE> {}
 
-    impl<'a, VE: ValueEncoding> Sealed for &'a MetadataKey<VE> {
+    impl<VE: ValueEncoding> Sealed for &MetadataKey<VE> {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2448,9 +2462,9 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a, VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &'a MetadataKey<VE> {}
+    impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &MetadataKey<VE> {}
 
-    impl<'a> Sealed for &'a str {
+    impl Sealed for &str {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2458,7 +2472,7 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a> AsEncodingAgnosticMetadataKey for &'a str {}
+    impl AsEncodingAgnosticMetadataKey for &str {}
 
     impl Sealed for String {
         #[doc(hidden)]
@@ -2470,7 +2484,7 @@ mod as_encoding_agnostic_metadata_key {
 
     impl AsEncodingAgnosticMetadataKey for String {}
 
-    impl<'a> Sealed for &'a String {
+    impl Sealed for &String {
         #[doc(hidden)]
         #[inline]
         fn contains_key(&self, map: &MetadataMap) -> bool {
@@ -2478,7 +2492,7 @@ mod as_encoding_agnostic_metadata_key {
         }
     }
 
-    impl<'a> AsEncodingAgnosticMetadataKey for &'a String {}
+    impl AsEncodingAgnosticMetadataKey for &String {}
 }
 
 #[cfg(test)]
@@ -2497,10 +2511,9 @@ mod tests {
 
     #[test]
     fn test_to_headers_encoding() {
-        use crate::Code;
         use crate::Status;
-        let special_char_message = "Beyond ascii \t\n\r🌶️💉💧🐮🍺";
-        let s1 = Status::new(Code::Unknown, special_char_message);
+        let special_char_message = "Beyond 100% ascii \t\n\r🌶️💉💧🐮🍺";
+        let s1 = Status::unknown(special_char_message);
 
         assert_eq!(s1.message(), special_char_message);
 
@@ -2508,6 +2521,17 @@ mod tests {
         let s2 = Status::from_header_map(&s1_map).unwrap();
 
         assert_eq!(s1.message(), s2.message());
+
+        assert!(
+            s1_map
+                .get("grpc-message")
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .starts_with("Beyond%20100%25%20ascii"),
+            "Percent sign or other character isn't encoded as desired: {:?}",
+            s1_map.get("grpc-message")
+        );
     }
 
     #[test]

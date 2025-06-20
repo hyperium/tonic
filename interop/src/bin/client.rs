@@ -29,13 +29,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let test_cases = matches.test_case;
 
+    let scheme = if matches.use_tls { "https" } else { "http" };
+
     #[allow(unused_mut)]
-    let mut endpoint = Endpoint::from_static("http://localhost:10000")
+    let mut endpoint = Endpoint::try_from(format!("{scheme}://localhost:10000"))?
         .timeout(Duration::from_secs(5))
         .concurrency_limit(30);
 
     if matches.use_tls {
-        let pem = tokio::fs::read("interop/data/ca.pem").await?;
+        let pem = std::fs::read_to_string("interop/data/ca.pem")?;
         let ca = Certificate::from_pem(pem);
         endpoint = endpoint.tls_config(
             ClientTlsConfig::new()
@@ -52,7 +54,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut failures = Vec::new();
 
     for test_case in test_cases {
-        println!("{:?}:", test_case);
+        println!("{test_case:?}:");
         let mut test_results = Vec::new();
 
         match test_case {
@@ -85,7 +87,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         for result in test_results {
-            println!("  {}", result);
+            println!("  {result}");
 
             if result.is_failed() {
                 failures.push(result);

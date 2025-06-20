@@ -5,11 +5,13 @@ pub mod pb {
     tonic::include_proto!("/grpc.examples.unaryecho");
 }
 
-use std::iter::FromIterator;
-
-use hyper::{client::HttpConnector, Uri};
+use hyper::Uri;
+use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
 use pb::{echo_client::EchoClient, EchoRequest};
-use tokio_rustls::rustls::{ClientConfig, RootCertStore};
+use tokio_rustls::rustls::{
+    pki_types::{pem::PemObject as _, CertificateDer},
+    {ClientConfig, RootCertStore},
+};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,11 +21,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut roots = RootCertStore::empty();
 
     let mut buf = std::io::BufReader::new(&fd);
-    let certs = rustls_pemfile::certs(&mut buf)?;
-    roots.add_parsable_certificates(&certs);
+    let certs = CertificateDer::pem_reader_iter(&mut buf).collect::<Result<Vec<_>, _>>()?;
+    roots.add_parsable_certificates(certs.into_iter());
 
     let tls = ClientConfig::builder()
-        .with_safe_defaults()
         .with_root_certificates(roots)
         .with_no_client_auth();
 
@@ -49,10 +50,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .map_request(|_| Uri::from_static("https://[::1]:50051"))
         .service(http);
 
-    let client = hyper::Client::builder().build(connector);
+    let client = hyper_util::client::legacy::Client::builder(TokioExecutor::new()).build(connector);
 
     // Using `with_origin` will let the codegenerated client set the `scheme` and
-    // `authority` from the porvided `Uri`.
+    // `authority` from the provided `Uri`.
     let uri = Uri::from_static("https://example.com");
     let mut client = EchoClient::with_origin(client, uri);
 
@@ -62,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = client.unary_echo(request).await?;
 
-    println!("RESPONSE={:?}", response);
+    println!("RESPONSE={response:?}");
 
     Ok(())
 }

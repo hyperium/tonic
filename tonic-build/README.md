@@ -1,6 +1,6 @@
 # tonic-build
 
-Compiles proto files via prost and generates service stubs and proto definitiones for use with tonic.
+Compiles proto files via prost and generates service stubs and proto definitions for use with tonic.
 
 ## Features
 
@@ -8,11 +8,11 @@ Required dependencies
 
 ```toml
 [dependencies]
-tonic = <tonic-version>
-prost = <prost-version>
+tonic = "<tonic-version>"
+prost = "<prost-version>"
 
 [build-dependencies]
-tonic-build = <tonic-version>
+tonic-build = "<tonic-version>"
 ```
 
 ## Examples
@@ -33,7 +33,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 fn main() -> Result<(), Box<dyn std::error::Error>> {
    tonic_build::configure()
         .build_server(false)
-        .compile(
+        .compile_protos(
             &["proto/helloworld/helloworld.proto"],
             &["proto/helloworld"],
         )?;
@@ -74,7 +74,7 @@ fn main() {
     tonic_build::configure()
         .build_server(false)
         //.out_dir("src/google")  // you can change the generated code's location
-        .compile(
+        .compile_protos(
             &["proto/googleapis/google/pubsub/v1/pubsub.proto"],
             &["proto/googleapis"], // specify the root location to search proto dependencies
         ).unwrap();
