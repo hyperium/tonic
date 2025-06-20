@@ -1,13 +1,13 @@
 use prost::{DecodeError, Message};
 use prost_types::Any;
 
-use crate::richer_error::FromAnyRef;
+use crate::{richer_error::FromAnyRef, LocalizedMessage};
 
 use super::super::{pb, FromAny, IntoAny};
 
 /// Used at the `field_violations` field of the [`BadRequest`] struct.
 /// Describes a single bad request field.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct FieldViolation {
     /// Path leading to a field in the request body. Value should be a
     /// sequence of dot-separated identifiers that identify a protocol buffer
@@ -16,6 +16,14 @@ pub struct FieldViolation {
 
     /// Description of why the field is bad.
     pub description: String,
+
+    /// The reason of the field-level error. Value should be a
+    /// SCREAMING_SNAKE_CASE error identifier from the domain of the API
+    /// service.
+    pub reason: String,
+
+    /// A localized version of the field-level error.
+    pub localized_message: Option<LocalizedMessage>,
 }
 
 impl FieldViolation {
@@ -24,6 +32,7 @@ impl FieldViolation {
         FieldViolation {
             field: field.into(),
             description: description.into(),
+            ..Default::default()
         }
     }
 }
@@ -33,6 +42,8 @@ impl From<pb::bad_request::FieldViolation> for FieldViolation {
         FieldViolation {
             field: value.field,
             description: value.description,
+            reason: value.reason,
+            localized_message: value.localized_message.map(Into::into),
         }
     }
 }
@@ -42,6 +53,7 @@ impl From<FieldViolation> for pb::bad_request::FieldViolation {
         pb::bad_request::FieldViolation {
             field: value.field,
             description: value.description,
+            ..Default::default()
         }
     }
 }
@@ -75,6 +87,7 @@ impl BadRequest {
             field_violations: vec![FieldViolation {
                 field: field.into(),
                 description: description.into(),
+                ..Default::default()
             }],
         }
     }
@@ -88,6 +101,7 @@ impl BadRequest {
         self.field_violations.append(&mut vec![FieldViolation {
             field: field.into(),
             description: description.into(),
+            ..Default::default()
         }]);
         self
     }
@@ -170,7 +184,7 @@ mod tests {
 
         let formatted = format!("{br_details:?}");
 
-        let expected_filled = "BadRequest { field_violations: [FieldViolation { field: \"field_a\", description: \"description_a\" }, FieldViolation { field: \"field_b\", description: \"description_b\" }] }";
+        let expected_filled = "BadRequest { field_violations: [FieldViolation { field: \"field_a\", description: \"description_a\", reason: \"\", localized_message: None }, FieldViolation { field: \"field_b\", description: \"description_b\", reason: \"\", localized_message: None }] }";
 
         assert!(
             formatted.eq(expected_filled),
