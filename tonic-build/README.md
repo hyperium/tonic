@@ -30,7 +30,7 @@ tonic-build = "<tonic-version>"
 
 You can rely on the defaults via
 
-```rust
+```norun
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::compile_protos("proto/service.proto")?;
     Ok(())
@@ -39,7 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 Or configure the generated code deeper via
 
-```rust
+```norun
 fn main() -> Result<(), Box<dyn std::error::Error>> {
    tonic_build::configure()
         .build_server(false)
@@ -97,20 +97,21 @@ And a bunch of Google proto files in structure will be like this:
 
 Then we can generate Rust code via this setup in our `build.rs`:
 
-```rust
-fn main() {
+```norun
+fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_build::configure()
         .build_server(false)
         //.out_dir("src/google")  // you can change the generated code's location
         .compile_protos(
             &["proto/googleapis/google/pubsub/v1/pubsub.proto"],
             &["proto/googleapis"], // specify the root location to search proto dependencies
-        ).unwrap();
+        )?;
+    Ok(())
 }
 ```
 
 Then you can reference the generated Rust like this this in your code:
-```rust
+```rust,compile_fail
 pub mod api {
     tonic::include_proto!("google.pubsub.v1");
 }
@@ -120,7 +121,7 @@ use api::{publisher_client::PublisherClient, ListTopicsRequest};
 Or if you want to save the generated code in your own code base,
 you can uncomment the line `.out_dir(...)` above, and in your lib file
 config a mod like this:
-```rust
+```rust,compile_fail
 pub mod google {
     #[path = ""]
     pub mod pubsub {
