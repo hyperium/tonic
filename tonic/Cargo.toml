@@ -94,6 +94,7 @@ zstd = { version = "0.13.0", optional = true }
 
 # channel
 hyper-timeout = {version = "0.5", optional = true}
+sync_wrapper = "1.0.2"
 
 [dev-dependencies]
 bencher = "0.1.5"
