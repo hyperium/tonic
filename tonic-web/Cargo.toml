@@ -25,10 +25,7 @@ tonic = { version = "0.13.0", path = "../tonic", default-features = false }
 tower-service = "0.3"
 tower-layer = "0.3"
 tracing = "0.1"
-
-[dependencies.axum]
-version = "0.8.1"
-optional = true
+axum = { version = "0.8.1", optional = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt"] }
