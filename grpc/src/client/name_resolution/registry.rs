@@ -43,17 +43,32 @@ impl ResolverRegistry {
     /// Add a name resolver into the registry. builder.scheme() will
     /// be used as the scheme registered with this builder. If multiple
     /// resolvers are registered with the same name, the one registered last
-    /// will take effect. Panics if the given scheme contains uppercase
-    /// characters.
+    /// will take effect.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the given scheme contains uppercase characters.
     pub fn add_builder(&self, builder: Box<dyn ResolverBuilder>) {
+        self.try_add_builder(builder).unwrap();
+    }
+
+    /// Add a name resolver into the registry. builder.scheme() will
+    /// be used as the scheme registered with this builder. If multiple
+    /// resolvers are registered with the same name, the one registered last
+    /// will take effect.
+    pub fn try_add_builder(&self, builder: Box<dyn ResolverBuilder>) -> Result<(), String> {
         let scheme = builder.scheme();
         if scheme.chars().any(|c| c.is_ascii_uppercase()) {
-            panic!("Scheme must not contain uppercase characters: {}", scheme);
+            return Err(format!(
+                "Scheme must not contain uppercase characters: {}",
+                scheme
+            ));
         }
         self.inner
             .lock()
             .unwrap()
             .insert(scheme.to_string(), Arc::from(builder));
+        return Ok(());
     }
 
     /// Returns the resolver builder registered for the given scheme, if any.
