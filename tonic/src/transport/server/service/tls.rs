@@ -1,6 +1,7 @@
-use std::{fmt, sync::Arc};
+use std::{fmt, sync::Arc, time::Duration};
 
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::time;
 use tokio_rustls::{
     rustls::{server::WebPkiClientVerifier, RootCertStore, ServerConfig},
     server::TlsStream,
@@ -8,13 +9,16 @@ use tokio_rustls::{
 };
 
 use crate::transport::{
-    service::tls::{convert_certificate_to_pki_types, convert_identity_to_pki_types, ALPN_H2},
+    service::tls::{
+        convert_certificate_to_pki_types, convert_identity_to_pki_types, TlsError, ALPN_H2,
+    },
     Certificate, Identity,
 };
 
 #[derive(Clone)]
 pub(crate) struct TlsAcceptor {
     inner: Arc<ServerConfig>,
+    timeout: Option<Duration>,
 }
 
 impl TlsAcceptor {
@@ -24,6 +28,7 @@ impl TlsAcceptor {
         client_auth_optional: bool,
         ignore_client_order: bool,
         use_key_log: bool,
+        timeout: Option<Duration>,
     ) -> Result<Self, crate::BoxError> {
         let builder = ServerConfig::builder();
 
@@ -53,6 +58,7 @@ impl TlsAcceptor {
         config.alpn_protocols.push(ALPN_H2.into());
         Ok(Self {
             inner: Arc::new(config),
+            timeout,
         })
     }
 
@@ -61,7 +67,14 @@ impl TlsAcceptor {
         IO: AsyncRead + AsyncWrite + Unpin,
     {
         let acceptor = RustlsAcceptor::from(self.inner.clone());
-        acceptor.accept(io).await.map_err(Into::into)
+        let accept_fut = acceptor.accept(io);
+        match self.timeout {
+            Some(timeout) => time::timeout(timeout, accept_fut)
+                .await
+                .map_err(|_| TlsError::HandshakeTimeout)?,
+            None => accept_fut.await,
+        }
+        .map_err(Into::into)
     }
 }
 

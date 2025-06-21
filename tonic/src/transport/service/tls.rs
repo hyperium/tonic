@@ -15,6 +15,7 @@ pub(crate) enum TlsError {
     NativeCertsNotFound,
     CertificateParseError,
     PrivateKeyParseError,
+    HandshakeTimeout,
 }
 
 impl fmt::Display for TlsError {
@@ -29,6 +30,7 @@ impl fmt::Display for TlsError {
                 f,
                 "Error parsing TLS private key - no RSA or PKCS8-encoded keys found."
             ),
+            TlsError::HandshakeTimeout => write!(f, "TLS handshake timeout."),
         }
     }
 }
