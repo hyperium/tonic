@@ -111,7 +111,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 ```
 
 Then you can reference the generated Rust like this this in your code:
-```rust,compile_fail
+```rust,ignore
 pub mod api {
     tonic::include_proto!("google.pubsub.v1");
 }
@@ -121,7 +121,7 @@ use api::{publisher_client::PublisherClient, ListTopicsRequest};
 Or if you want to save the generated code in your own code base,
 you can uncomment the line `.out_dir(...)` above, and in your lib file
 config a mod like this:
-```rust,compile_fail
+```rust,ignore
 pub mod google {
     #[path = ""]
     pub mod pubsub {
