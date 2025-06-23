@@ -19,13 +19,20 @@
 use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
 
 use tokio::sync::mpsc::{self, UnboundedSender};
+use url::Host;
 
 use crate::{
-    client::name_resolution::{
-        self,
-        backoff::{BackoffConfig, DEFAULT_EXPONENTIAL_CONFIG},
-        dns::{parse_endpoint_and_authority, HostPort},
-        global_registry, Resolver, ResolverOptions, ResolverUpdate, Target,
+    client::{
+        name_resolution::{
+            backoff::{BackoffConfig, DEFAULT_EXPONENTIAL_CONFIG},
+            dns::{
+                get_min_resolution_interval, get_resolving_timeout, parse_endpoint_and_authority,
+                reg, DnsResolver, HostPort,
+            },
+            global_registry, ChannelController, Resolver, ResolverOptions, ResolverUpdate, Target,
+            WorkScheduler,
+        },
+        service_config::ServiceConfig,
     },
     rt::{self, tokio::TokioRuntime},
 };
@@ -45,7 +52,7 @@ pub fn target_parsing() {
             input: "dns:///grpc.io",
             want_result: Ok(ParseResult {
                 endpoint: HostPort {
-                    host: url::Host::Domain("grpc.io".to_string()),
+                    host: Host::Domain("grpc.io".to_string()),
                     port: 443,
                 },
                 authority: None,
@@ -55,7 +62,7 @@ pub fn target_parsing() {
             input: "dns:///grpc.io:1234",
             want_result: Ok(ParseResult {
                 endpoint: HostPort {
-                    host: url::Host::Domain("grpc.io".to_string()),
+                    host: Host::Domain("grpc.io".to_string()),
                     port: 1234,
                 },
                 authority: None,
@@ -65,7 +72,7 @@ pub fn target_parsing() {
             input: "dns://8.8.8.8/grpc.io:1234",
             want_result: Ok(ParseResult {
                 endpoint: HostPort {
-                    host: url::Host::Domain("grpc.io".to_string()),
+                    host: Host::Domain("grpc.io".to_string()),
                     port: 1234,
                 },
                 authority: Some("8.8.8.8:53".parse().unwrap()),
@@ -75,7 +82,7 @@ pub fn target_parsing() {
             input: "dns://8.8.8.8:5678/grpc.io:1234/abc",
             want_result: Ok(ParseResult {
                 endpoint: HostPort {
-                    host: url::Host::Domain("grpc.io".to_string()),
+                    host: Host::Domain("grpc.io".to_string()),
                     port: 1234,
                 },
                 authority: Some("8.8.8.8:5678".parse().unwrap()),
@@ -85,7 +92,7 @@ pub fn target_parsing() {
             input: "dns://[::1]:5678/grpc.io:1234/abc",
             want_result: Ok(ParseResult {
                 endpoint: HostPort {
-                    host: url::Host::Domain("grpc.io".to_string()),
+                    host: Host::Domain("grpc.io".to_string()),
                     port: 1234,
                 },
                 authority: Some("[::1]:5678".parse().unwrap()),
@@ -95,7 +102,7 @@ pub fn target_parsing() {
             input: "dns://[fe80::1]:5678/127.0.0.1:1234/abc",
             want_result: Ok(ParseResult {
                 endpoint: HostPort {
-                    host: url::Host::Ipv4("127.0.0.1".parse().unwrap()),
+                    host: Host::Ipv4("127.0.0.1".parse().unwrap()),
                     port: 1234,
                 },
                 authority: Some("[fe80::1]:5678".parse().unwrap()),
@@ -117,7 +124,7 @@ pub fn target_parsing() {
             input: "dns:///grpc.io:/",
             want_result: Ok(ParseResult {
                 endpoint: HostPort {
-                    host: url::Host::Domain("grpc.io".to_string()),
+                    host: Host::Domain("grpc.io".to_string()),
                     port: 443,
                 },
                 authority: None,
@@ -150,11 +157,11 @@ pub fn target_parsing() {
     }
 }
 
-struct WorkScheduler {
+struct FakeWorkScheduler {
     work_tx: UnboundedSender<()>,
 }
 
-impl name_resolution::WorkScheduler for WorkScheduler {
+impl WorkScheduler for FakeWorkScheduler {
     fn schedule_work(&self) {
         self.work_tx.send(()).unwrap();
     }
@@ -165,28 +172,25 @@ struct FakeChannelController {
     update_tx: UnboundedSender<ResolverUpdate>,
 }
 
-impl name_resolution::ChannelController for FakeChannelController {
-    fn update(&mut self, update: name_resolution::ResolverUpdate) -> Result<(), String> {
+impl ChannelController for FakeChannelController {
+    fn update(&mut self, update: ResolverUpdate) -> Result<(), String> {
         println!("Received resolver update: {:?}", &update);
         self.update_tx.send(update).unwrap();
         self.update_result.clone()
     }
 
-    fn parse_service_config(
-        &self,
-        _: &str,
-    ) -> Result<crate::client::service_config::ServiceConfig, String> {
+    fn parse_service_config(&self, _: &str) -> Result<ServiceConfig, String> {
         Err("Unimplemented".to_string())
     }
 }
 
 #[tokio::test]
 pub async fn dns_basic() {
-    super::reg();
+    reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///localhost:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(WorkScheduler {
+    let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
     });
     let opts = ResolverOptions {
@@ -211,11 +215,11 @@ pub async fn dns_basic() {
 
 #[tokio::test]
 pub async fn invalid_target() {
-    super::reg();
+    reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(WorkScheduler {
+    let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
     });
     let opts = ResolverOptions {
@@ -287,11 +291,11 @@ impl rt::Runtime for FakeRuntime {
 
 #[tokio::test]
 pub async fn dns_lookup_error() {
-    super::reg();
+    reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///grpc.io:1234".parse().unwrap();
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(WorkScheduler {
+    let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
@@ -324,7 +328,7 @@ pub async fn dns_lookup_error() {
 #[tokio::test]
 pub async fn dns_lookup_timeout() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(WorkScheduler {
+    let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
@@ -341,13 +345,13 @@ pub async fn dns_lookup_timeout() {
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
-        min_resolution_interval: super::get_min_resolution_interval(),
+        min_resolution_interval: get_min_resolution_interval(),
         resolving_timeout: DEFAULT_TEST_SHORT_TIMEOUT,
         backoff_config: DEFAULT_EXPONENTIAL_CONFIG,
         host: "grpc.io".to_string(),
         port: 1234,
     };
-    let mut resolver = super::DnsResolver::new(Box::new(dns_client), opts, dns_opts);
+    let mut resolver = DnsResolver::new(Box::new(dns_client), opts, dns_opts);
 
     // Wait for schedule work to be called.
     let _ = work_rx.recv().await.unwrap();
@@ -366,7 +370,7 @@ pub async fn dns_lookup_timeout() {
 #[tokio::test]
 pub async fn rate_limit() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(WorkScheduler {
+    let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
     });
     let opts = ResolverOptions {
@@ -380,12 +384,12 @@ pub async fn rate_limit() {
         .unwrap();
     let dns_opts = DnsOptions {
         min_resolution_interval: Duration::from_secs(20),
-        resolving_timeout: super::get_resolving_timeout(),
+        resolving_timeout: get_resolving_timeout(),
         backoff_config: DEFAULT_EXPONENTIAL_CONFIG,
         host: "localhost".to_string(),
         port: 1234,
     };
-    let mut resolver = super::DnsResolver::new(dns_client, opts, dns_opts);
+    let mut resolver = DnsResolver::new(dns_client, opts, dns_opts);
 
     // Wait for schedule work to be called.
     let event = work_rx.recv().await.unwrap();
@@ -416,7 +420,7 @@ pub async fn rate_limit() {
 #[tokio::test]
 pub async fn re_resolution_after_success() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(WorkScheduler {
+    let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
     });
     let opts = ResolverOptions {
@@ -426,7 +430,7 @@ pub async fn re_resolution_after_success() {
     };
     let dns_opts = DnsOptions {
         min_resolution_interval: Duration::from_millis(1),
-        resolving_timeout: super::get_resolving_timeout(),
+        resolving_timeout: get_resolving_timeout(),
         backoff_config: DEFAULT_EXPONENTIAL_CONFIG,
         host: "localhost".to_string(),
         port: 1234,
@@ -435,7 +439,7 @@ pub async fn re_resolution_after_success() {
         .runtime
         .get_dns_resolver(rt::ResolverOptions { server_addr: None })
         .unwrap();
-    let mut resolver = super::DnsResolver::new(dns_client, opts, dns_opts);
+    let mut resolver = DnsResolver::new(dns_client, opts, dns_opts);
 
     // Wait for schedule work to be called.
     let _ = work_rx.recv().await.unwrap();
@@ -460,7 +464,7 @@ pub async fn re_resolution_after_success() {
 #[tokio::test]
 pub async fn backoff_on_error() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(WorkScheduler {
+    let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
     });
     let opts = ResolverOptions {
@@ -470,7 +474,7 @@ pub async fn backoff_on_error() {
     };
     let dns_opts = DnsOptions {
         min_resolution_interval: Duration::from_millis(1),
-        resolving_timeout: super::get_resolving_timeout(),
+        resolving_timeout: get_resolving_timeout(),
         // Speed up the backoffs to make the test run faster.
         backoff_config: BackoffConfig {
             base_delay: Duration::from_millis(1),
@@ -486,7 +490,7 @@ pub async fn backoff_on_error() {
         .get_dns_resolver(rt::ResolverOptions { server_addr: None })
         .unwrap();
 
-    let mut resolver = super::DnsResolver::new(dns_client, opts, dns_opts);
+    let mut resolver = DnsResolver::new(dns_client, opts, dns_opts);
 
     let (update_tx, mut update_rx) = mpsc::unbounded_channel();
     let mut channel_controller = FakeChannelController {

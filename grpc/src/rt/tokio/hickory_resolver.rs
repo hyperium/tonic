@@ -16,18 +16,26 @@
  *
  */
 
-use hickory_resolver::config::{NameServerConfigGroup, ResolverConfig, ResolverOpts};
+use std::net::IpAddr;
+
+use hickory_resolver::{
+    config::{LookupIpStrategy, NameServerConfigGroup, ResolverConfig, ResolverOpts},
+    name_server::TokioConnectionProvider,
+    TokioResolver,
+};
+
+use crate::rt::{self, ResolverOptions};
 
 /// A DNS resolver that uses hickory with the tokio runtime. This supports txt
 /// lookups in addition to A and AAAA record lookups. It also supports using
 /// custom DNS servers.
-pub struct DnsResolver {
+pub(super) struct DnsResolver {
     resolver: hickory_resolver::TokioResolver,
 }
 
 #[tonic::async_trait]
-impl super::DnsResolver for DnsResolver {
-    async fn lookup_host_name(&self, name: &str) -> Result<Vec<std::net::IpAddr>, String> {
+impl rt::DnsResolver for DnsResolver {
+    async fn lookup_host_name(&self, name: &str) -> Result<Vec<IpAddr>, String> {
         let response = self
             .resolver
             .lookup_ip(name)
@@ -56,21 +64,21 @@ impl super::DnsResolver for DnsResolver {
 }
 
 impl DnsResolver {
-    pub fn new(opts: super::ResolverOptions) -> Result<Self, String> {
+    pub(super) fn new(opts: ResolverOptions) -> Result<Self, String> {
         let builder = if let Some(server_addr) = opts.server_addr {
-            let provider = hickory_resolver::name_server::TokioConnectionProvider::default();
+            let provider = TokioConnectionProvider::default();
             let name_servers = NameServerConfigGroup::from_ips_clear(
                 &[server_addr.ip()],
                 server_addr.port(),
                 true,
             );
             let config = ResolverConfig::from_parts(None, vec![], name_servers);
-            hickory_resolver::TokioResolver::builder_with_config(config, provider)
+            TokioResolver::builder_with_config(config, provider)
         } else {
-            hickory_resolver::TokioResolver::builder_tokio().map_err(|err| err.to_string())?
+            TokioResolver::builder_tokio().map_err(|err| err.to_string())?
         };
         let mut resolver_opts = ResolverOpts::default();
-        resolver_opts.ip_strategy = hickory_resolver::config::LookupIpStrategy::Ipv4AndIpv6;
+        resolver_opts.ip_strategy = LookupIpStrategy::Ipv4AndIpv6;
         Ok(DnsResolver {
             resolver: builder.with_options(resolver_opts).build(),
         })

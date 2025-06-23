@@ -16,7 +16,14 @@
  *
  */
 
-use std::{future::Future, net::SocketAddr, pin::Pin};
+use std::{
+    future::Future,
+    net::{IpAddr, SocketAddr},
+    pin::Pin,
+    time::Duration,
+};
+
+use tokio::task::JoinHandle;
 
 use super::{DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
@@ -25,12 +32,12 @@ mod hickory_resolver;
 
 /// A DNS resolver that uses tokio::net::lookup_host for resolution. It only
 /// supports host lookups.
-pub struct TokioDefaultDnsResolver {}
+struct TokioDefaultDnsResolver {}
 
 #[tonic::async_trait]
 impl DnsResolver for TokioDefaultDnsResolver {
-    async fn lookup_host_name(&self, name: &str) -> Result<Vec<std::net::IpAddr>, String> {
-        let name_with_port = match name.parse::<std::net::IpAddr>() {
+    async fn lookup_host_name(&self, name: &str) -> Result<Vec<IpAddr>, String> {
+        let name_with_port = match name.parse::<IpAddr>() {
             Ok(ip) => SocketAddr::new(ip, 0).to_string(),
             Err(_) => format!("{}:0", name),
         };
@@ -47,9 +54,9 @@ impl DnsResolver for TokioDefaultDnsResolver {
     }
 }
 
-pub struct TokioRuntime {}
+pub(crate) struct TokioRuntime {}
 
-impl TaskHandle for tokio::task::JoinHandle<()> {
+impl TaskHandle for JoinHandle<()> {
     fn abort(&self) {
         self.abort()
     }
@@ -76,7 +83,7 @@ impl Runtime for TokioRuntime {
         }
     }
 
-    fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
+    fn sleep(&self, duration: Duration) -> Pin<Box<dyn Sleep>> {
         Box::pin(tokio::time::sleep(duration))
     }
 }

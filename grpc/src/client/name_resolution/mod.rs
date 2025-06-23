@@ -24,10 +24,10 @@
 use core::fmt;
 
 use super::service_config::ServiceConfig;
-use crate::{attributes::Attributes, byte_str::ByteStr, rt};
+use crate::{attributes::Attributes, byte_str::ByteStr, rt::Runtime};
 use std::{
     fmt::{Display, Formatter},
-    hash::Hash,
+    hash::{Hash, Hasher},
     str::FromStr,
     sync::Arc,
 };
@@ -36,6 +36,7 @@ mod backoff;
 mod dns;
 mod registry;
 pub use registry::global_registry;
+use url::Url;
 
 /// Target represents a target for gRPC, as specified in:
 /// https://github.com/grpc/grpc/blob/master/doc/naming.md.
@@ -49,14 +50,14 @@ pub use registry::global_registry;
 /// apply the default scheme, and will attempt to reparse it.
 #[derive(Debug, Clone)]
 pub struct Target {
-    url: url::Url,
+    url: Url,
 }
 
 impl FromStr for Target {
     type Err = String;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.parse::<url::Url>() {
+        match s.parse::<Url>() {
             Ok(url) => Ok(Target { url }),
             Err(err) => Err(err.to_string()),
         }
@@ -153,7 +154,7 @@ pub struct ResolverOptions {
     pub authority: String,
 
     /// The runtime which provides utilities to do async work.
-    pub runtime: Arc<dyn rt::Runtime>,
+    pub runtime: Arc<dyn Runtime>,
 
     /// A hook into the channel's work scheduler that allows the Resolver to
     /// request the ability to perform operations on the ChannelController.
@@ -170,7 +171,10 @@ pub trait WorkScheduler: Send + Sync {
 
 /// Resolver watches for the updates on the specified target.
 /// Updates include address updates and service config updates.
-pub trait Resolver: Send {
+// This trait may not need the Sync sub-trait if the channel implementation can
+// ensure that the resolver is accessed serially. The sub-trait can be removed
+// in that case.
+pub trait Resolver: Send + Sync {
     /// Asks the resolver to obtain an updated resolver result, if applicable.
     ///
     /// This is useful for polling resolvers to decide when to re-resolve.  
@@ -280,7 +284,7 @@ impl PartialEq for Endpoint {
 }
 
 impl Hash for Endpoint {
-    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
         todo!()
     }
 }
@@ -294,7 +298,7 @@ impl PartialEq for Address {
 }
 
 impl Hash for Address {
-    fn hash<H: std::hash::Hasher>(&self, _state: &mut H) {
+    fn hash<H: Hasher>(&self, _state: &mut H) {
         todo!()
     }
 }

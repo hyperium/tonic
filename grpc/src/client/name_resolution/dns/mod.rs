@@ -32,7 +32,11 @@ use parking_lot::Mutex;
 use tokio::sync::Notify;
 use url::Host;
 
-use crate::{byte_str::ByteStr, rt};
+use crate::{
+    byte_str::ByteStr,
+    client::name_resolution::{global_registry, ChannelController, ResolverBuilder, Target},
+    rt::{self, TaskHandle},
+};
 
 use super::{
     backoff::{BackoffConfig, ExponentialBackoff, DEFAULT_EXPONENTIAL_CONFIG},
@@ -91,7 +95,7 @@ pub fn set_min_resolution_interval(duration: Duration) {
 }
 
 pub fn reg() {
-    super::global_registry().add_builder(Box::new(Builder {}));
+    global_registry().add_builder(Box::new(Builder {}));
 }
 
 struct Builder {}
@@ -184,8 +188,8 @@ impl DnsResolver {
     }
 }
 
-impl super::ResolverBuilder for Builder {
-    fn build(&self, target: &super::Target, options: ResolverOptions) -> Box<dyn Resolver> {
+impl ResolverBuilder for Builder {
+    fn build(&self, target: &Target, options: ResolverOptions) -> Box<dyn Resolver> {
         let parsed = match parse_endpoint_and_authority(target) {
             Ok(res) => res,
             Err(err) => return nop_resolver_for_err(err.to_string(), options),
@@ -221,7 +225,7 @@ impl super::ResolverBuilder for Builder {
         "dns"
     }
 
-    fn is_valid_uri(&self, target: &super::Target) -> bool {
+    fn is_valid_uri(&self, target: &Target) -> bool {
         if let Err(err) = parse_endpoint_and_authority(target) {
             eprintln!("{}", err);
             false
@@ -233,7 +237,7 @@ impl super::ResolverBuilder for Builder {
 
 struct DnsResolver {
     state: Arc<Mutex<InternalState>>,
-    task_handle: Box<dyn rt::TaskHandle>,
+    task_handle: Box<dyn TaskHandle>,
     resolve_now_notifier: Arc<Notify>,
     channel_update_notifier: Arc<Notify>,
 }
@@ -249,7 +253,7 @@ impl Resolver for DnsResolver {
         self.resolve_now_notifier.notify_one();
     }
 
-    fn work(&mut self, channel_controller: &mut dyn super::ChannelController) {
+    fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         let mut state = self.state.lock();
         let endpoint_result = match &state.addrs {
             Ok(addrs) => {
@@ -296,7 +300,7 @@ struct ParseResult {
     authority: Option<SocketAddr>,
 }
 
-fn parse_endpoint_and_authority(target: &super::Target) -> Result<ParseResult, String> {
+fn parse_endpoint_and_authority(target: &Target) -> Result<ParseResult, String> {
     // Parse the endpoint.
     let endpoint = target.path();
     let endpoint = endpoint.strip_prefix("/").unwrap_or(endpoint);
