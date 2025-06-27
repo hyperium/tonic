@@ -48,6 +48,41 @@ pub trait WorkScheduler: Send + Sync {
     fn schedule_work(&self);
 }
 
+/// Abstract representation of the configuration for any LB policy, stored as
+/// JSON.  Hides internal storage details and includes a method to deserialize
+/// the JSON into a concrete policy struct.
+#[derive(Debug)]
+pub struct ParsedJsonLbConfig {
+    value: serde_json::Value,
+}
+
+impl ParsedJsonLbConfig {
+    /// Creates a new ParsedJsonLbConfig from the provided JSON string.
+    pub fn new(json: &str) -> Result<Self, String> {
+        match serde_json::from_str(json) {
+            Ok(value) => Ok(ParsedJsonLbConfig { value }),
+            Err(e) => Err(format!("failed to parse LB config JSON: {}", e)),
+        }
+    }
+
+    /// Converts the JSON configuration into a concrete type that represents the
+    /// configuration of an LB policy.
+    ///
+    /// This will typically be used by the LB policy builder to parse the
+    /// configuration into a type that can be used by the LB policy.
+    pub fn convert_to<T: serde::de::DeserializeOwned>(
+        &self,
+    ) -> Result<T, Box<dyn Error + Send + Sync>> {
+        let res: T = match serde_json::from_value(self.value.clone()) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(format!("{}", e).into());
+            }
+        };
+        Ok(res)
+    }
+}
+
 /// An LB policy factory that produces LbPolicy instances used by the channel
 /// to manage connections and pick connections for RPCs.
 pub trait LbPolicyBuilder: Send + Sync {
@@ -69,7 +104,7 @@ pub trait LbPolicyBuilder: Send + Sync {
     /// default implementation returns Ok(None).
     fn parse_config(
         &self,
-        _config: &str,
+        _config: &ParsedJsonLbConfig,
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
         Ok(None)
     }
@@ -235,9 +270,9 @@ pub struct Pick {
 ///
 /// - READY transitions to IDLE when the connection is lost.
 ///
-/// - TRANSIENT_FAILURE transitions to CONNECTING when the reconnect backoff
-///   timer has expired.  This timer scales exponentially and is reset when the
-///   subchannel becomes READY.
+/// - TRANSIENT_FAILURE transitions to IDLE when the reconnect backoff timer has
+///   expired.  This timer scales exponentially and is reset when the subchannel
+///   becomes READY.
 ///
 /// When a Subchannel is dropped, it is disconnected, and no subsequent state
 /// updates will be provided for it to the LB policy.
