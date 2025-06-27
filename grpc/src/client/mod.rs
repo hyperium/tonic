@@ -16,6 +16,9 @@
  *
  */
 
+use std::fmt::Display;
+
+pub mod channel;
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
 pub mod service;
@@ -38,4 +41,15 @@ pub enum ConnectivityState {
     Connecting,
     Ready,
     TransientFailure,
+}
+
+impl Display for ConnectivityState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ConnectivityState::Idle => write!(f, "Idle"),
+            ConnectivityState::Connecting => write!(f, "Connecting"),
+            ConnectivityState::Ready => write!(f, "Ready"),
+            ConnectivityState::TransientFailure => write!(f, "TransientFailure"),
+        }
+    }
 }
