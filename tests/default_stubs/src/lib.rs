@@ -1,16 +1,12 @@
-#![allow(unused_imports)]
-
-mod test_defaults;
-
 use std::pin::Pin;
-use tokio_stream::{Stream, StreamExt};
+use tokio_stream::Stream;
 use tonic::{Request, Response, Status, Streaming};
 
 tonic::include_proto!("test");
 tonic::include_proto!("test_default");
 
 #[derive(Debug, Default)]
-struct Svc;
+pub struct Svc;
 
 #[tonic::async_trait]
 impl test_server::Test for Svc {
