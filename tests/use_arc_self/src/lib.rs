@@ -1,7 +1,4 @@
-#![allow(unused_imports)]
-
 use std::sync::Arc;
-use tokio_stream::{Stream, StreamExt};
 use tonic::{Request, Response, Status};
 
 tonic::include_proto!("test");
