@@ -16,7 +16,19 @@
  *
  */
 
-/// An in-memory representation of a service config, usually provided to gRPC as
-/// a JSON object.
-#[derive(Debug, Default, Clone)]
-pub(crate) struct ServiceConfig;
+use std::{any::Any, pin::Pin};
+
+use futures_core::Stream;
+use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
+
+pub type Request = TonicRequest<Pin<Box<dyn Stream<Item = Box<dyn Message>> + Send + Sync>>>;
+pub type Response =
+    TonicResponse<Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send + Sync>>>;
+
+#[async_trait]
+pub trait Service: Send + Sync {
+    async fn call(&self, method: String, request: Request) -> Response;
+}
+
+// TODO: define methods that will allow serialization/deserialization.
+pub trait Message: Any + Send + Sync {}
