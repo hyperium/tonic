@@ -3,7 +3,7 @@ name = "grpc"
 version = "0.9.0-alpha.1"
 edition = "2021"
 authors = ["gRPC Authors"]
-license = "Apache-2.0"
+license = "MIT"
 
 [dependencies]
 url = "2.5.0"
