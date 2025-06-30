@@ -27,4 +27,5 @@ dns = ["dep:hickory-resolver"]
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
     "tonic::*",
+    "futures_core::stream::Stream",
 ]
