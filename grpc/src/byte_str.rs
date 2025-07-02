@@ -22,7 +22,36 @@
  *
  */
 
-/// A key-value store for arbitrary configuration data between multiple
-/// pluggable components.
-#[derive(Debug, Default, Clone)]
-pub struct Attributes;
+use core::str;
+use std::ops::Deref;
+
+use bytes::Bytes;
+
+/// A cheaply cloneable and sliceable chunk of contiguous memory.
+#[derive(Debug, Default, Clone, Eq, PartialEq, Ord, PartialOrd, Hash)]
+pub struct ByteStr {
+    // Invariant: bytes contains valid UTF-8
+    bytes: Bytes,
+}
+
+impl Deref for ByteStr {
+    type Target = str;
+
+    #[inline]
+    fn deref(&self) -> &str {
+        let b: &[u8] = self.bytes.as_ref();
+        // The invariant of `bytes` is that it contains valid UTF-8 allows us
+        // to unwrap.
+        str::from_utf8(b).unwrap()
+    }
+}
+
+impl From<String> for ByteStr {
+    #[inline]
+    fn from(src: String) -> ByteStr {
+        ByteStr {
+            // Invariant: src is a String so contains valid UTF-8.
+            bytes: Bytes::from(src),
+        }
+    }
+}

@@ -2,17 +2,23 @@
  *
  * Copyright 2025 gRPC authors.
  *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
  *
  */
 
@@ -22,10 +28,12 @@ use std::{any::Any, error::Error, hash::Hash, sync::Arc};
 
 use tonic::{metadata::MetadataMap, Status};
 
-use crate::client::{
-    name_resolution::{Address, ResolverUpdate},
+use crate::{
+    client::{
+        name_resolution::{Address, ResolverUpdate},
+        ConnectivityState,
+    },
     service::Request,
-    ConnectivityState,
 };
 
 /// A collection of data configured on the channel that is constructing this
@@ -44,6 +52,41 @@ pub trait WorkScheduler: Send + Sync {
     // pending work call that has not yet started, this may not schedule another
     // call.
     fn schedule_work(&self);
+}
+
+/// Abstract representation of the configuration for any LB policy, stored as
+/// JSON.  Hides internal storage details and includes a method to deserialize
+/// the JSON into a concrete policy struct.
+#[derive(Debug)]
+pub struct ParsedJsonLbConfig {
+    value: serde_json::Value,
+}
+
+impl ParsedJsonLbConfig {
+    /// Creates a new ParsedJsonLbConfig from the provided JSON string.
+    pub fn new(json: &str) -> Result<Self, String> {
+        match serde_json::from_str(json) {
+            Ok(value) => Ok(ParsedJsonLbConfig { value }),
+            Err(e) => Err(format!("failed to parse LB config JSON: {}", e)),
+        }
+    }
+
+    /// Converts the JSON configuration into a concrete type that represents the
+    /// configuration of an LB policy.
+    ///
+    /// This will typically be used by the LB policy builder to parse the
+    /// configuration into a type that can be used by the LB policy.
+    pub fn convert_to<T: serde::de::DeserializeOwned>(
+        &self,
+    ) -> Result<T, Box<dyn Error + Send + Sync>> {
+        let res: T = match serde_json::from_value(self.value.clone()) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(format!("{}", e).into());
+            }
+        };
+        Ok(res)
+    }
 }
 
 /// An LB policy factory that produces LbPolicy instances used by the channel
@@ -67,7 +110,7 @@ pub trait LbPolicyBuilder: Send + Sync {
     /// default implementation returns Ok(None).
     fn parse_config(
         &self,
-        _config: &str,
+        _config: &ParsedJsonLbConfig,
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
         Ok(None)
     }
@@ -233,9 +276,9 @@ pub struct Pick {
 ///
 /// - READY transitions to IDLE when the connection is lost.
 ///
-/// - TRANSIENT_FAILURE transitions to CONNECTING when the reconnect backoff
-///   timer has expired.  This timer scales exponentially and is reset when the
-///   subchannel becomes READY.
+/// - TRANSIENT_FAILURE transitions to IDLE when the reconnect backoff timer has
+///   expired.  This timer scales exponentially and is reset when the subchannel
+///   becomes READY.
 ///
 /// When a Subchannel is dropped, it is disconnected, and no subsequent state
 /// updates will be provided for it to the LB policy.

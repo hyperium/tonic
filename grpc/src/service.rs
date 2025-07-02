@@ -22,7 +22,19 @@
  *
  */
 
-/// A key-value store for arbitrary configuration data between multiple
-/// pluggable components.
-#[derive(Debug, Default, Clone)]
-pub struct Attributes;
+use std::{any::Any, pin::Pin};
+
+use futures_core::Stream;
+use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
+
+pub type Request = TonicRequest<Pin<Box<dyn Stream<Item = Box<dyn Message>> + Send + Sync>>>;
+pub type Response =
+    TonicResponse<Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send + Sync>>>;
+
+#[async_trait]
+pub trait Service: Send + Sync {
+    async fn call(&self, method: String, request: Request) -> Response;
+}
+
+// TODO: define methods that will allow serialization/deserialization.
+pub trait Message: Any + Send + Sync {}
