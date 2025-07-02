@@ -17,15 +17,11 @@ rust-version = { workspace = true }
 [dependencies]
 prettyplease = { version = "0.2" }
 proc-macro2 = "1.0"
-prost-build = { version = "0.14", optional = true }
-prost-types = { version = "0.14", optional = true }
 quote = "1.0"
 syn = "2.0"
 
 [features]
-default = ["transport", "prost"]
-prost = ["prost-build", "dep:prost-types"]
-cleanup-markdown = ["prost-build?/cleanup-markdown"]
+default = ["transport"]
 transport = []
 
 [lints]
@@ -38,8 +34,4 @@ all-features = true
 allowed_external_types = [
   # major released
   "proc_macro2::*",
-
-  # not major released
-  "prost_build::*",
-  "prost_types::*",
 ]

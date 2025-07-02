@@ -281,6 +281,7 @@ default = ["full"]
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
 prost = "0.14"
 tonic = { path = "../tonic" }
+tonic-prost = { path = "../tonic-prost" }
 # Optional dependencies
 tonic-web = { path = "../tonic-web", optional = true }
 tonic-health = { path = "../tonic-health", optional = true }
@@ -307,4 +308,4 @@ hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], opti
 tower-http = { version = "0.6", optional = true }
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build", features = ["prost"] }
+tonic-prost-build = { path = "../tonic-prost-build" }
