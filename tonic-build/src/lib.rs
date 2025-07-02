@@ -10,16 +10,7 @@
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use quote::TokenStreamExt;
 
-/// Prost generator
-#[cfg(feature = "prost")]
-mod prost;
-#[cfg(feature = "prost")]
-pub use prost_build::Config;
-#[cfg(feature = "prost")]
-pub use prost_types::FileDescriptorSet;
-
-#[cfg(feature = "prost")]
-pub use prost::{compile_fds, compile_protos, configure, Builder};
+// Prost functionality has been moved to tonic-prost-build
 
 pub mod manual;
 
@@ -28,10 +19,11 @@ mod client;
 /// Service code generation for Server
 mod server;
 
-mod code_gen;
+pub mod code_gen;
 pub use code_gen::CodeGenBuilder;
 
-mod compile_settings;
+pub mod compile_settings;
+pub use compile_settings::CompileSettings;
 
 /// Service generation trait.
 ///

@@ -1,7 +1,7 @@
 fn main() {
-    let mut config = tonic_build::Config::default();
+    let mut config = tonic_prost_build::Config::default();
     config.disable_comments(["test.Input1", "test.Output1"]);
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .disable_comments("test.Service1")
         .disable_comments("test.Service1.Rpc1")
         .build_client(true)

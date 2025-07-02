@@ -14,4 +14,4 @@ tonic = { path = "../../tonic" }
 static_assertions = "1"
 
 [build-dependencies]
-tonic-build = { path = "../../tonic-build" }
+tonic-prost-build = { path = "../../tonic-prost-build" }

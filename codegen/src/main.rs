@@ -6,7 +6,7 @@ use std::{
 
 use protox::prost::Message as _;
 use quote::quote;
-use tonic_build::FileDescriptorSet;
+use tonic_prost_build::FileDescriptorSet;
 
 fn main() {
     // tonic-health
@@ -87,7 +87,7 @@ fn codegen(
 
     write_fds(&fds, &file_descriptor_set_path);
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_client(build_client)
         .build_server(build_server)
         .out_dir(&tempdir)

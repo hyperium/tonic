@@ -11,4 +11,4 @@ rand = "0.9"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]
-tonic-build = {path = "../../tonic-build" }
+tonic-prost-build = {path = "../../tonic-prost-build" }

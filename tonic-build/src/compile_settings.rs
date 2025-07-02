@@ -1,14 +1,16 @@
+//! Compilation settings for code generation.
+
+/// Settings used when compiling generated code.
 #[derive(Debug, Clone)]
-pub(crate) struct CompileSettings {
-    #[cfg(feature = "prost")]
-    pub(crate) codec_path: String,
+pub struct CompileSettings {
+    /// The path to the codec to use for encoding/decoding messages.
+    pub codec_path: String,
 }
 
 impl Default for CompileSettings {
     fn default() -> Self {
         Self {
-            #[cfg(feature = "prost")]
-            codec_path: "tonic::codec::ProstCodec".to_string(),
+            codec_path: "tonic_prost::ProstCodec".to_string(),
         }
     }
 }

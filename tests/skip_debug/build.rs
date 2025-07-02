@@ -1,5 +1,5 @@
 fn main() {
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .skip_debug("test.Test")
         .skip_debug("test.Output")
         .build_client(true)

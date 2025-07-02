@@ -4,12 +4,10 @@
 //! and a protobuf codec based on prost.
 
 mod buffer;
-pub(crate) mod compression;
+/// Compression support for gRPC messages.
+pub mod compression;
 mod decode;
 mod encode;
-#[cfg(feature = "prost")]
-mod prost;
-
 use crate::Status;
 use std::io;
 
@@ -17,8 +15,6 @@ pub use self::buffer::{DecodeBuf, EncodeBuf};
 pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
 pub use self::decode::Streaming;
 pub use self::encode::EncodeBody;
-#[cfg(feature = "prost")]
-pub use self::prost::ProstCodec;
 
 /// Unless overridden, this is the buffer size used for encoding requests.
 /// This is spent per-rpc, so you may wish to adjust it. The default is
@@ -89,8 +85,10 @@ impl Default for BufferSettings {
     }
 }
 
-// 5 bytes
-const HEADER_SIZE: usize =
+/// Size of the gRPC message header in bytes.
+/// 
+/// Contains a compression flag (1 byte) and message length (4 bytes).
+pub const HEADER_SIZE: usize =
     // compression flag
     std::mem::size_of::<u8>() +
     // data length

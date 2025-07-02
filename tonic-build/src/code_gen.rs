@@ -1,3 +1,8 @@
+//! Generic code generation for gRPC services.
+//!
+//! This module provides the generic infrastructure for generating
+//! client and server code from service definitions.
+
 use std::collections::HashSet;
 
 use proc_macro2::TokenStream;
