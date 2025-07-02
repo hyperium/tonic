@@ -9,6 +9,7 @@ members = [
   "examples",
   "codegen",
   "grpc",
+  "grpc-build",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

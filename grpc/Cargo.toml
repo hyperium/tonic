@@ -15,6 +15,7 @@ serde = "1.0.219"
 hickory-resolver = { version = "0.25.1", optional = true }
 rand = "0.8.5"
 parking_lot = "0.12.4"
+protobuf = { version = "4.31.1-release" }
 bytes = "1.10.1"
 
 [dev-dependencies]

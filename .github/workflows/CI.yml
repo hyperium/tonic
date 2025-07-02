@@ -141,6 +141,25 @@ jobs:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@protoc
+    - name: Install Bazel
+      uses: bazel-contrib/setup-bazel@0.15.0
+      with:
+        # Avoid downloading Bazel every time.
+        bazelisk-cache: true
+        # Store build cache per workflow.
+        disk-cache: ${{ github.workflow }}
+        # Share repository cache between workflows.
+        repository-cache: true
+        module-root: ./compiler
+    - name: Build and protoc plugin and dd to PATH
+      id: build_step
+      # This runs all commands within the compiler/ directory
+      working-directory: ./compiler
+      run: |
+        bazel build //src:protoc-gen-rust-grpc
+
+        # Add the output directory to the GitHub PATH for subsequent steps
+        echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
     - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh

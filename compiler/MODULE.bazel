@@ -1,0 +1,15 @@
+bazel_dep(name = "protobuf", repo_name = "com_google_protobuf", version = "31.1")
+
+# Hedron's Compile Commands Extractor for bazel
+# This is used to generate a compile_commands.json file which can be used by
+# LSP servers like clangd.
+# https://github.com/hedronvision/bazel-compile-commands-extractor
+bazel_dep(name = "hedron_compile_commands", dev_dependency = True)
+git_override(
+    module_name = "hedron_compile_commands",
+    # Using a commit from a fork to workaround failures while using absl.
+    # TODO: replace with a commit on the official repo once the following PR is
+    # merged: https://github.com/hedronvision/bazel-compile-commands-extractor/pull/219
+    remote = "https://github.com/mikael-s-persson/bazel-compile-commands-extractor",
+    commit = "f5fbd4cee671d8d908f37c83abaf70fba5928fc7"
+)

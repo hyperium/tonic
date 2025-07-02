@@ -22,21 +22,35 @@
  *
  */
 
-//! The official Rust implementation of [gRPC], a high performance, open source,
-//! universal RPC framework
-//!
-//! This version is in progress and not recommended for any production use.  All
-//! APIs are unstable.  Proceed at your own risk.
-//!
-//! [gRPC]: https://grpc.io
+#ifndef NET_GRPC_COMPILER_RUST_GENERATOR_H_
+#define NET_GRPC_COMPILER_RUST_GENERATOR_H_
 
-#![allow(dead_code)]
+#include <stdlib.h> // for abort()
 
-pub mod client;
-pub mod codec;
-mod macros;
-mod rt;
-pub mod service;
+#include <google/protobuf/compiler/rust/context.h>
+#include <google/protobuf/descriptor.h>
+#include <google/protobuf/io/zero_copy_stream.h>
 
-pub(crate) mod attributes;
-pub(crate) mod byte_str;
+namespace rust_grpc_generator {
+
+namespace impl {
+namespace protobuf = google::protobuf;
+} // namespace impl
+
+class GrpcOpts {
+  /// Path the module containing the generated message code. Defaults to
+  /// "self", i.e. the message code and service code is present in the same
+  /// module.
+public:
+  std::string message_module_path;
+};
+
+// Writes the generated service interface into the given ZeroCopyOutputStream
+void GenerateService(
+    impl::protobuf::compiler::rust::Context &rust_generator_context,
+    const impl::protobuf::ServiceDescriptor *service, const GrpcOpts &opts);
+
+std::string GetRsGrpcFile(const impl::protobuf::FileDescriptor &file);
+} // namespace rust_grpc_generator
+
+#endif // NET_GRPC_COMPILER_RUST_GENERATOR_H_
