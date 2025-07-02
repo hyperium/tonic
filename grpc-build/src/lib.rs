@@ -11,15 +11,15 @@ pub struct Dependency {
     pub proto_files: Vec<String>,
 }
 
-impl Into<protobuf_codegen::Dependency> for &Dependency {
-    fn into(self) -> protobuf_codegen::Dependency {
+impl From<&Dependency> for protobuf_codegen::Dependency {
+    fn from(val: &Dependency) -> Self {
         protobuf_codegen::Dependency {
-            crate_name: self.crate_name.clone(),
-            proto_import_paths: self.proto_import_paths.clone(),
+            crate_name: val.crate_name.clone(),
+            proto_import_paths: val.proto_import_paths.clone(),
             // TODO: Is this useful to expose the following field? It's not used
             // by protobuf codegen.
             c_include_paths: Vec::new(),
-            proto_files: self.proto_files.clone(),
+            proto_files: val.proto_files.clone(),
         }
     }
 }
@@ -191,5 +191,11 @@ impl CodeGen {
             }
         }
         crate_mapping_path
+    }
+}
+
+impl Default for CodeGen {
+    fn default() -> Self {
+        Self::new()
     }
 }

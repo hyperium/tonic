@@ -33,6 +33,25 @@ jobs:
       with:
         components: clippy
     - uses: taiki-e/install-action@protoc
+    - name: Install Bazel
+      uses: bazel-contrib/setup-bazel@0.15.0
+      with:
+        # Avoid downloading Bazel every time.
+        bazelisk-cache: true
+        # Store build cache per workflow.
+        disk-cache: ${{ github.workflow }}
+        # Share repository cache between workflows.
+        repository-cache: true
+        module-root: ./compiler
+    - name: Build and protoc plugin and add to PATH
+      id: build_step
+      # This runs all commands within the compiler/ directory
+      working-directory: ./compiler
+      run: |
+        bazel build //src:protoc-gen-rust-grpc
+
+        # Add the output directory to the GitHub PATH for subsequent steps
+        echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
     - uses: Swatinem/rust-cache@v2
     - run: cargo clippy --workspace --all-features --all-targets
 
@@ -55,6 +74,25 @@ jobs:
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
     - uses: taiki-e/install-action@protoc
+    - name: Install Bazel
+      uses: bazel-contrib/setup-bazel@0.15.0
+      with:
+        # Avoid downloading Bazel every time.
+        bazelisk-cache: true
+        # Store build cache per workflow.
+        disk-cache: ${{ github.workflow }}
+        # Share repository cache between workflows.
+        repository-cache: true
+        module-root: ./compiler
+    - name: Build and protoc plugin and add to PATH
+      id: build_step
+      # This runs all commands within the compiler/ directory
+      working-directory: ./compiler
+      run: |
+        bazel build //src:protoc-gen-rust-grpc
+
+        # Add the output directory to the GitHub PATH for subsequent steps
+        echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
     - uses: Swatinem/rust-cache@v2
     - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring --each-feature
     - run: cargo udeps --package tonic --features tls-ring,transport
@@ -76,6 +114,25 @@ jobs:
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@protoc
+    - name: Install Bazel
+      uses: bazel-contrib/setup-bazel@0.15.0
+      with:
+        # Avoid downloading Bazel every time.
+        bazelisk-cache: true
+        # Store build cache per workflow.
+        disk-cache: ${{ github.workflow }}
+        # Share repository cache between workflows.
+        repository-cache: true
+        module-root: ./compiler
+    - name: Build and protoc plugin and add to PATH
+      id: build_step
+      # This runs all commands within the compiler/ directory
+      working-directory: ./compiler
+      run: |
+        bazel build //src:protoc-gen-rust-grpc
+
+        # Add the output directory to the GitHub PATH for subsequent steps
+        echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
     - uses: Swatinem/rust-cache@v2
     - name: Check features
       run: cargo hack check --workspace --no-private --each-feature --no-dev-deps
@@ -115,6 +172,25 @@ jobs:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@protoc
+    - name: Install Bazel
+      uses: bazel-contrib/setup-bazel@0.15.0
+      with:
+        # Avoid downloading Bazel every time.
+        bazelisk-cache: true
+        # Store build cache per workflow.
+        disk-cache: ${{ github.workflow }}
+        # Share repository cache between workflows.
+        repository-cache: true
+        module-root: ./compiler
+    - name: Build and protoc plugin and add to PATH
+      id: build_step
+      # This runs all commands within the compiler/ directory
+      working-directory: ./compiler
+      run: |
+        bazel build //src:protoc-gen-rust-grpc
+
+        # Add the output directory to the GitHub PATH for subsequent steps
+        echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-nextest
     - uses: Swatinem/rust-cache@v2
@@ -151,7 +227,7 @@ jobs:
         # Share repository cache between workflows.
         repository-cache: true
         module-root: ./compiler
-    - name: Build and protoc plugin and dd to PATH
+    - name: Build and protoc plugin and add to PATH
       id: build_step
       # This runs all commands within the compiler/ directory
       working-directory: ./compiler

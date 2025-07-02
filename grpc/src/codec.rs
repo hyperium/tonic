@@ -2,7 +2,7 @@ use bytes::{Buf, BufMut};
 use protobuf::Message;
 use std::marker::PhantomData;
 use tonic::{
-    codec::{BufferSettings, Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
+    codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
     Status,
 };
 
