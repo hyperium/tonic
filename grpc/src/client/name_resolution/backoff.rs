@@ -100,7 +100,7 @@ impl ExponentialBackoff {
     pub fn backoff_duration(&mut self) -> Duration {
         let next_delay = self.next_delay_secs;
         let cur_delay =
-            next_delay * (1.0 + self.config.jitter * rand::thread_rng().gen_range(-1.0..1.0));
+            next_delay * (1.0 + self.config.jitter * rand::rng().random_range(-1.0..1.0));
         self.next_delay_secs = self
             .config
             .max_delay
