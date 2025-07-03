@@ -11,6 +11,7 @@ bytes = "1.0"
 prost = "0.14"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net", "sync"]}
 tonic = {path = "../../tonic"}
+tonic-prost = {path = "../../tonic-prost"}
 tracing-subscriber = {version = "0.3"}
 
 [dev-dependencies]
@@ -24,4 +25,4 @@ tower-http = { version = "0.6", features = ["set-header", "trace"] }
 tower-service = "0.3"
 
 [build-dependencies]
-tonic-build = {path = "../../tonic-build"}
+tonic-prost-build = {path = "../../tonic-prost-build"}

@@ -12,4 +12,4 @@ prost-types = "0.14"
 tonic = {path = "../../tonic"}
 
 [build-dependencies]
-tonic-build = {path = "../../tonic-build"}
+tonic-prost-build = {path = "../../tonic-prost-build"}

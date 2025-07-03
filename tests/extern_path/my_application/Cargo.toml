@@ -12,4 +12,4 @@ tonic = {path = "../../../tonic"}
 uuid = {package = "uuid1", path = "../uuid"}
 
 [build-dependencies]
-tonic-build = {path = "../../../tonic-build"}
+tonic-prost-build = {path = "../../../tonic-prost-build"}

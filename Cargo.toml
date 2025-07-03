@@ -5,6 +5,8 @@ members = [
   "tonic-health",
   "tonic-types",
   "tonic-reflection",
+  "tonic-prost",
+  "tonic-prost-build",
   "tonic-web", # Non-published crates
   "examples",
   "codegen",

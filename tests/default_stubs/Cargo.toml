@@ -13,4 +13,4 @@ tonic = {path = "../../tonic"}
 tempfile = "3.20"
 
 [build-dependencies]
-tonic-build = {path = "../../tonic-build" }
+tonic-prost-build = {path = "../../tonic-prost-build" }
