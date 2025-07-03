@@ -228,7 +228,7 @@ mod tests {
         let addr = socket.local_addr().unwrap();
         server.register_socket(socket);
 
-        println!("DNS server running on {}", addr);
+        println!("DNS server running on {addr}");
 
         let (tx, rx) = oneshot::channel::<()>();
         let server_task = tokio::spawn(async move {

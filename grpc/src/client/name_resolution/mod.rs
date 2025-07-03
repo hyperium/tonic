@@ -91,7 +91,7 @@ impl Target {
         let host = self.authority_host();
         let port = self.authority_port();
         if let Some(port) = port {
-            format!("{}:{}", host, port)
+            format!("{host}:{port}")
         } else {
             host.to_owned()
         }

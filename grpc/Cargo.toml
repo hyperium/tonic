@@ -24,6 +24,9 @@ hickory-server =  "0.25.2"
 default = ["dns"]
 dns = ["dep:hickory-resolver"]
 
+[lints]
+workspace = true
+
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
     "tonic::*",
