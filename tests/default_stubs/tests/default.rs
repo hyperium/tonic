@@ -127,21 +127,16 @@ async fn run_services_in_background() -> (SocketAddr, SocketAddr) {
 
 #[cfg(not(target_os = "windows"))]
 async fn run_services_in_background_uds() -> (String, String) {
-    use rand::Rng as _;
-    use std::{env, fs};
     use tokio::net::UnixListener;
 
     let svc = test_server::TestServer::new(Svc {});
     let svc_default_stubs = test_default_server::TestDefaultServer::new(Svc {});
 
-    let mut rng = rand::rng();
-    let suffix: String = (0..8)
-        .map(|_| rng.sample(rand::distr::Alphanumeric) as char)
-        .collect();
-    let tmpdir = fs::canonicalize(env::temp_dir())
+    let tmpdir = tempfile::Builder::new()
+        .prefix("tonic-test-")
+        .tempdir()
         .unwrap()
-        .join(format!("tonic_test_{suffix}"));
-    fs::create_dir(&tmpdir).unwrap();
+        .keep();
 
     let uds_filepath = tmpdir.join("impl.sock").to_str().unwrap().to_string();
     let listener = UnixListener::bind(uds_filepath.as_str()).unwrap();
