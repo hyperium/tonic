@@ -67,7 +67,7 @@ impl ParsedJsonLbConfig {
     pub fn new(json: &str) -> Result<Self, String> {
         match serde_json::from_str(json) {
             Ok(value) => Ok(ParsedJsonLbConfig { value }),
-            Err(e) => Err(format!("failed to parse LB config JSON: {}", e)),
+            Err(e) => Err(format!("failed to parse LB config JSON: {e}")),
         }
     }
 
@@ -82,7 +82,7 @@ impl ParsedJsonLbConfig {
         let res: T = match serde_json::from_value(self.value.clone()) {
             Ok(v) => v,
             Err(e) => {
-                return Err(format!("{}", e).into());
+                return Err(format!("{e}").into());
             }
         };
         Ok(res)

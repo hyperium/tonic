@@ -414,7 +414,7 @@ pub async fn rate_limit() {
         resolver.resolve_now();
         tokio::select! {
             _ = work_rx.recv() => {
-                panic!("Received unexpected work request from resolver: {:?}", event);
+                panic!("Received unexpected work request from resolver: {event:?}");
             }
             _ = tokio::time::sleep(DEFAULT_TEST_SHORT_TIMEOUT) => {
                 println!("No work requested from resolver.");
