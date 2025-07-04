@@ -10,4 +10,3 @@ cc_binary(
         "@com_google_protobuf//:protoc_lib",
     ],
 )
-

@@ -25,8 +25,6 @@
 #ifndef NET_GRPC_COMPILER_RUST_GENERATOR_H_
 #define NET_GRPC_COMPILER_RUST_GENERATOR_H_
 
-#include <stdlib.h> // for abort()
-
 #include <google/protobuf/compiler/rust/context.h>
 #include <google/protobuf/descriptor.h>
 #include <google/protobuf/io/zero_copy_stream.h>

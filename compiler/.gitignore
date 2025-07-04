@@ -6,4 +6,3 @@ bazel-grpc-java
 bazel-out
 bazel-testlogs
 MODULE.bazel.lock
-
