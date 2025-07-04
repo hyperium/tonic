@@ -48,7 +48,7 @@ jobs:
       # This runs all commands within the compiler/ directory
       working-directory: ./compiler
       run: |
-        bazel build //src:protoc-gen-rust-grpc
+        bazel build //src:protoc-gen-rust-grpc --enable_platform_specific_config
 
         # Add the output directory to the GitHub PATH for subsequent steps
         echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
@@ -89,7 +89,7 @@ jobs:
       # This runs all commands within the compiler/ directory
       working-directory: ./compiler
       run: |
-        bazel build //src:protoc-gen-rust-grpc
+        bazel build //src:protoc-gen-rust-grpc --enable_platform_specific_config
 
         # Add the output directory to the GitHub PATH for subsequent steps
         echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
@@ -129,7 +129,7 @@ jobs:
       # This runs all commands within the compiler/ directory
       working-directory: ./compiler
       run: |
-        bazel build //src:protoc-gen-rust-grpc
+        bazel build //src:protoc-gen-rust-grpc --enable_platform_specific_config
 
         # Add the output directory to the GitHub PATH for subsequent steps
         echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
@@ -187,7 +187,7 @@ jobs:
       # This runs all commands within the compiler/ directory
       working-directory: ./compiler
       run: |
-        bazel build //src:protoc-gen-rust-grpc
+        bazel build //src:protoc-gen-rust-grpc --enable_platform_specific_config
 
         # Add the output directory to the GitHub PATH for subsequent steps
         echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
@@ -232,7 +232,7 @@ jobs:
       # This runs all commands within the compiler/ directory
       working-directory: ./compiler
       run: |
-        bazel build //src:protoc-gen-rust-grpc
+        bazel build //src:protoc-gen-rust-grpc --enable_platform_specific_config
 
         # Add the output directory to the GitHub PATH for subsequent steps
         echo "$(pwd)/bazel-bin/src" >> $GITHUB_PATH
