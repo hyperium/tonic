@@ -39,6 +39,9 @@
 //!   Not enabled by default.
 //! - `zstd`: Enables compressing requests, responses, and streams. Depends on [`zstd`].
 //!   Not enabled by default.
+//! - `lz4`: Enables LZ4 compression for requests, responses, and streams. Uses [`lz4_flex`]
+//!   with unsafe optimizations for maximum performance. Depends on [`lz4_flex`].
+//!   Not enabled by default.
 //!
 //! # Structure
 //!
@@ -86,6 +89,7 @@
 //! [`webpki-roots`]: https://docs.rs/webpki-roots
 //! [`flate2`]: https://docs.rs/flate2
 //! [`zstd`]: https://docs.rs/zstd
+//! [`lz4_flex`]: https://docs.rs/lz4_flex
 
 #![recursion_limit = "256"]
 #![doc(
