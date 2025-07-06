@@ -1,4 +1,4 @@
-use interop::client_grpc;
+use interop::client_new_codegen;
 use std::{str::FromStr, time::Duration};
 use tonic::transport::Endpoint;
 use tonic::transport::{Certificate, ClientTlsConfig};
@@ -48,8 +48,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let channel = endpoint.connect().await?;
 
-    let mut client = client_grpc::TestClient::new(channel.clone());
-    let mut unimplemented_client = client_grpc::UnimplementedClient::new(channel);
+    let mut client = client_new_codegen::TestClient::new(channel.clone());
+    let mut unimplemented_client = client_new_codegen::UnimplementedClient::new(channel);
 
     let mut failures = Vec::new();
 
@@ -58,33 +58,42 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         let mut test_results = Vec::new();
 
         match test_case {
-            Testcase::EmptyUnary => client_grpc::empty_unary(&mut client, &mut test_results).await,
-            Testcase::LargeUnary => client_grpc::large_unary(&mut client, &mut test_results).await,
+            Testcase::EmptyUnary => {
+                client_new_codegen::empty_unary(&mut client, &mut test_results).await
+            }
+            Testcase::LargeUnary => {
+                client_new_codegen::large_unary(&mut client, &mut test_results).await
+            }
             Testcase::ClientStreaming => {
-                client_grpc::client_streaming(&mut client, &mut test_results).await
+                client_new_codegen::client_streaming(&mut client, &mut test_results).await
             }
             Testcase::ServerStreaming => {
-                client_grpc::server_streaming(&mut client, &mut test_results).await
+                client_new_codegen::server_streaming(&mut client, &mut test_results).await
             }
-            Testcase::PingPong => client_grpc::ping_pong(&mut client, &mut test_results).await,
+            Testcase::PingPong => {
+                client_new_codegen::ping_pong(&mut client, &mut test_results).await
+            }
             Testcase::EmptyStream => {
-                client_grpc::empty_stream(&mut client, &mut test_results).await
+                client_new_codegen::empty_stream(&mut client, &mut test_results).await
             }
             Testcase::StatusCodeAndMessage => {
-                client_grpc::status_code_and_message(&mut client, &mut test_results).await
+                client_new_codegen::status_code_and_message(&mut client, &mut test_results).await
             }
             Testcase::SpecialStatusMessage => {
-                client_grpc::special_status_message(&mut client, &mut test_results).await
+                client_new_codegen::special_status_message(&mut client, &mut test_results).await
             }
             Testcase::UnimplementedMethod => {
-                client_grpc::unimplemented_method(&mut client, &mut test_results).await
+                client_new_codegen::unimplemented_method(&mut client, &mut test_results).await
             }
             Testcase::UnimplementedService => {
-                client_grpc::unimplemented_service(&mut unimplemented_client, &mut test_results)
-                    .await
+                client_new_codegen::unimplemented_service(
+                    &mut unimplemented_client,
+                    &mut test_results,
+                )
+                .await
             }
             Testcase::CustomMetadata => {
-                client_grpc::custom_metadata(&mut client, &mut test_results).await
+                client_new_codegen::custom_metadata(&mut client, &mut test_results).await
             }
             _ => unimplemented!(),
         }

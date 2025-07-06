@@ -60,7 +60,7 @@ sleep 1
 ./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
 # Test a grpc rust client against a Go server.
-./target/debug/client_grpc --test_case="${JOINED_TEST_CASES}" ${ARG}
+./target/debug/client_new_codegen --test_case="${JOINED_TEST_CASES}" ${ARG}
 
 echo ":; killing test server"; kill "${SERVER_PID}";
 

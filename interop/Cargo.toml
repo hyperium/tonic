@@ -14,7 +14,7 @@ path = "src/bin/server.rs"
 
 [[bin]]
 name = "client_grpc"
-path = "src/bin/client_grpc.rs"
+path = "src/bin/client_new_codegen.rs"
 
 [dependencies]
 async-stream = "0.3"
