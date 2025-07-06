@@ -30,4 +30,5 @@ protobuf = ["dep:protobuf"]
 allowed_external_types = [
     "tonic::*",
     "futures_core::stream::Stream",
+    "protobuf::codegen_traits::Message",
 ]
