@@ -63,18 +63,24 @@ static std::string RsTypePath(Context &ctx,
                               const absl::string_view &path_within_module,
                               const GrpcOpts &opts, int depth) {
   // If the message type is defined in an external crate using the crate
-  // mapping, the path must begin ::. If the message type is in the same
-  // crate, add the relative path to the message module.
+  // mapping, the path must begin ::.
   if (absl::StartsWith(path_within_module, "::")) {
     return std::string(path_within_module);
-  }
-  std::string prefix = "";
-  for (int i = 0; i < depth; ++i) {
-    prefix += "super::";
   }
   std::string path_to_message_module = opts.message_module_path + "::";
   if (path_to_message_module == "self::") {
     path_to_message_module = "";
+  }
+
+  // If the path to the message module is defined from the crate or global
+  // root, we don't need to add a prefix of "super::"s.
+  if (absl::StartsWith(path_to_message_module, "crate::") ||
+      absl::StartsWith(path_to_message_module, "::")) {
+    depth = 0;
+  }
+  std::string prefix = "";
+  for (int i = 0; i < depth; ++i) {
+    prefix += "super::";
   }
   return prefix + path_to_message_module + std::string(path_within_module);
 }

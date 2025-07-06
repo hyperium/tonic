@@ -22,48 +22,57 @@
  *
  */
 
-/// Include generated proto server and client items.
+/// Includes generated proto message, client, and server code.
 ///
-/// You must specify the path of the proto file within the proto directory,
-/// without the ".proto" extension.
+/// You must specify the path to the `.proto` file
+/// **relative to the proto root directory**,  without the `.proto` extension.  
+///
+/// For example, if your proto directory is `path/to/protos` and it contains the
+/// file  `helloworld.proto`, you would write:
 ///
 /// ```rust,ignore
 /// mod pb {
-///     grpc::include_proto!("protos", "helloworld");
+///     grpc::include_proto!("path/to/protos", "helloworld");
 /// }
 /// ```
 ///
-/// # Note:
-/// **This only works if the grpc-build output directory and the message path
-/// is unmodified**.
-/// The default output directory is set to the [`OUT_DIR`] environment variable
-/// and the message path is set to `self`.
-/// If the output directory has been modified, the following pattern may be used
-/// instead of this macro.
+/// # Note
+/// **This macro only works if the gRPC build output directory and message path
+/// are unmodified.**
+/// By default:
+/// - The output directory is set to the [`OUT_DIR`] environment variable.
+/// - The message path is set to `self`.
 ///
-/// If the message path is `self`.
+/// If you have modified the output directory or message path, you should
+/// include the generated code manually instead of using this macro.
+///
+/// The following example assumes the message code is imported using `self`:
+///
 /// ```rust,ignore
 /// mod protos {
 ///     // Include message code.
-///     include!("/relative/protobuf/directory/protos/generated.rs");
-///     /// Include service code.
-///     include!("/relative/protobuf/directory/proto/helloworld_grpc.pb.rs");
+///     include!("/protobuf/directory/protos/generated.rs");
+///
+///     // Include service code.
+///     include!("/protobuf/directory/protos/helloworld_grpc.pb.rs");
 /// }
-///```
+/// ```
 ///
-/// If the message code is not in the same module. The following example uses
-/// message path as `super::protos`.
+/// If the message code and service code are in different modules, and the
+/// message path specified during code generation is `super::protos`, use:
+///
 /// ```rust,ignore
 /// mod protos {
 ///     // Include message code.
-///     include!("/relative/protobuf/directory/protos/generated.rs");
+///     include!("/protobuf/directory/protos/generated.rs");
 /// }
 ///
 /// mod grpc {
-///     /// Include service code.
-///     include!("/relative/protobuf/directory/proto/helloworld_grpc.pb.rs");
+///     // Include service code.
+///     include!("/protobuf/directory/proto/helloworld_grpc.pb.rs");
 /// }
 /// ```
+///
 /// [`OUT_DIR`]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 #[macro_export]
 macro_rules! include_proto {

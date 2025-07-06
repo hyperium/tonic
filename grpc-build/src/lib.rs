@@ -28,10 +28,16 @@ use std::{
     path::{Path, PathBuf},
 };
 
+/// Details about a crate containing proto files with symbols refferenced in
+/// the file being compiled currently.
 #[derive(Debug, Clone)]
 pub struct Dependency {
+    /// Name of the external crate.
     pub crate_name: String,
+    /// List of paths .proto files whose codegen is present in the crate. This
+    /// is used to re-run the build command if required.
     pub proto_import_paths: Vec<PathBuf>,
+    /// List of .proto file names whose codegen is present in the crate.
     pub proto_files: Vec<String>,
 }
 
@@ -55,8 +61,6 @@ pub struct CodeGen {
     output_dir: PathBuf,
     includes: Vec<PathBuf>,
     dependencies: Vec<Dependency>,
-    // Rust import path for the generated message code. The gRPC service code
-    // will use this to reference generated message structs. Defaults to "self".
     message_module_path: Option<String>,
     // Whether to generate message code, defaults to true.
     generate_message_code: bool,
@@ -125,9 +129,10 @@ impl CodeGen {
         self
     }
 
-    /// Sets relative path of the module containing the generated message code.
-    /// This is "self" by default, i.e. the service code expects the message
-    /// structs to be present in the same module.
+    /// Sets path of the module containing the generated message code. This is
+    /// "self" by default, i.e. the service code expects the message structs to
+    /// be present in the same module. Set this if the message and service
+    /// codegen needs to live in separate modules.
     pub fn message_module_path(&mut self, message_path: &str) -> &mut Self {
         self.message_module_path = Some(message_path.to_string());
         self
@@ -211,7 +216,7 @@ impl CodeGen {
             file.write_all(format!("{}\n", dep.proto_files.len()).as_bytes())
                 .unwrap();
             for f in &dep.proto_files {
-                file.write_all(format!("{}\n", f).as_bytes()).unwrap();
+                file.write_all(format!("{f}\n").as_bytes()).unwrap();
             }
         }
         crate_mapping_path

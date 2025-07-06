@@ -1,8 +1,7 @@
 # Bazel
 bazel-bin
-bazel-examples
 bazel-genfiles
-bazel-grpc-java
 bazel-out
+bazel-protoc-gen-rust-grpc
 bazel-testlogs
 MODULE.bazel.lock
