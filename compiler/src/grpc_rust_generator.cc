@@ -312,14 +312,14 @@ static void GenerateMethods(Context &ctx, const Service &service,
     const std::string response_type =
         RsTypePath(ctx, method.response_name(ctx), opts, 1);
     {
-      auto vars =
-          ctx.printer().WithVars({{"codec_name", "grpc::codec::ProtoCodec"},
-                                  {"ident", method.name()},
-                                  {"request", request_type},
-                                  {"response", response_type},
-                                  {"service_name", service.full_name()},
-                                  {"path", FormatMethodPath(service, method)},
-                                  {"method_name", method.proto_field_name()}});
+      auto vars = ctx.printer().WithVars(
+          {{"codec_name", "grpc::codec::protobuf::ProtoCodec"},
+           {"ident", method.name()},
+           {"request", request_type},
+           {"response", response_type},
+           {"service_name", service.full_name()},
+           {"path", FormatMethodPath(service, method)},
+           {"method_name", method.proto_field_name()}});
 
       if (!method.is_client_streaming() && !method.is_server_streaming()) {
         ctx.Emit(unary_format);
