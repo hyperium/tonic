@@ -13,7 +13,7 @@ name = "server"
 path = "src/bin/server.rs"
 
 [[bin]]
-name = "client_grpc"
+name = "client_new_codegen"
 path = "src/bin/client_new_codegen.rs"
 
 [dependencies]
