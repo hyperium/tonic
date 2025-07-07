@@ -32,10 +32,20 @@
 use std::collections::HashSet;
 use std::sync::Mutex;
 use std::{collections::HashMap, error::Error, hash::Hash, mem, sync::Arc};
+use std::{
+    fmt::Debug,
+    sync::atomic::{AtomicUsize, Ordering},
+};
 
 use crate::client::load_balancing::{
+<<<<<<< HEAD
     ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
     WeakSubchannel, WorkScheduler,
+=======
+    ChannelController, ConnectivityState, ExternalSubchannel, Failing, LbConfig, LbPolicy,
+    LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig, PickResult, Picker,
+    QueuingPicker, Subchannel, SubchannelState, WeakSubchannel, WorkScheduler, GLOBAL_LB_REGISTRY,
+>>>>>>> f7537e6 (fixed some logic for review)
 };
 use crate::client::name_resolution::{Address, ResolverUpdate};
 
@@ -47,8 +57,18 @@ pub struct ChildManager<T> {
     children: Vec<Child<T>>,
     update_sharder: Box<dyn ResolverUpdateSharder<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
+<<<<<<< HEAD
 }
 
+=======
+    updated: bool, // true if a child has updated its state since the last call to has_updated.
+    prev_state: ConnectivityState,
+    last_ready_pickers: Vec<Arc<dyn Picker>>,
+}
+
+pub trait ChildIdentifier: PartialEq + Hash + Eq + Send + Sync + Debug + 'static {}
+
+>>>>>>> f7537e6 (fixed some logic for review)
 struct Child<T> {
     identifier: T,
     policy: Box<dyn LbPolicy>,
@@ -87,6 +107,12 @@ impl<T> ChildManager<T> {
             subchannel_child_map: Default::default(),
             children: Default::default(),
             pending_work: Default::default(),
+<<<<<<< HEAD
+=======
+            updated: false,
+            prev_state: ConnectivityState::Idle,
+            last_ready_pickers: Vec::new(),
+>>>>>>> f7537e6 (fixed some logic for review)
         }
     }
 
@@ -97,6 +123,14 @@ impl<T> ChildManager<T> {
             .map(|child| (&child.identifier, &child.state))
     }
 
+<<<<<<< HEAD
+=======
+    /// Returns true if a child has produced an update and resets flag to false.
+    pub fn has_updated(&mut self) -> bool {
+        mem::take(&mut self.updated)
+    }
+
+>>>>>>> f7537e6 (fixed some logic for review)
     // Called to update all accounting in the ChildManager from operations
     // performed by a child policy on the WrappedController that was created for
     // it.  child_idx is an index into the children map for the relevant child.
@@ -116,7 +150,135 @@ impl<T> ChildManager<T> {
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
             self.children[child_idx].state = state;
+<<<<<<< HEAD
         };
+=======
+            self.updated = true;
+        };
+    }
+
+    /// Called to aggregate states from children policies then returns a update.
+    pub fn aggregate_states(&mut self) -> Option<LbState> {
+        let current_connectivity_state = self.prev_state.clone();
+        let child_states_vec = self.child_states();
+
+        // Construct pickers to return.
+        let mut ready_pickers = RoundRobinPicker::new();
+
+        let mut has_connecting = false;
+        let mut has_ready = false;
+        let mut is_transient_failure = true;
+
+        for (child_id, state) in child_states_vec {
+            match state.connectivity_state {
+                ConnectivityState::Idle => {
+                    has_connecting = true;
+                    is_transient_failure = false;
+                }
+                ConnectivityState::Connecting => {
+                    has_connecting = true;
+                    is_transient_failure = false;
+                }
+                ConnectivityState::Ready => {
+                    ready_pickers.add_picker(state.picker.clone());
+                    is_transient_failure = false;
+                    has_ready = true;
+                }
+                _ => {}
+            }
+        }
+
+        // Decide the new aggregate state.
+        let new_state = if has_ready {
+            ConnectivityState::Ready
+        } else if has_connecting {
+            ConnectivityState::Connecting
+        } else if is_transient_failure {
+            ConnectivityState::TransientFailure
+        } else {
+            ConnectivityState::Connecting
+        };
+
+        // Now update state and send picker as appropriate.
+        match new_state {
+            ConnectivityState::Ready => {
+                let pickers_vec = ready_pickers.pickers.clone();
+                let picker: Arc<dyn Picker> = Arc::new(ready_pickers);
+                let should_update =
+                    !self.compare_prev_to_new_pickers(&self.last_ready_pickers, &pickers_vec);
+
+                if should_update || self.prev_state != ConnectivityState::Ready {
+                    self.prev_state = ConnectivityState::Ready;
+                    self.last_ready_pickers = pickers_vec;
+                    return Some(LbState {
+                        connectivity_state: ConnectivityState::Ready,
+                        picker,
+                    });
+                } else {
+                    return None;
+                }
+            }
+            ConnectivityState::Connecting => {
+                if self.prev_state == ConnectivityState::TransientFailure
+                    && new_state != ConnectivityState::Ready
+                {
+                    return None;
+                }
+                if self.prev_state != ConnectivityState::Connecting {
+                    let picker = Arc::new(QueuingPicker {});
+                    self.prev_state = ConnectivityState::Connecting;
+                    return Some(LbState {
+                        connectivity_state: ConnectivityState::Connecting,
+                        picker,
+                    });
+                } else {
+                    return None;
+                }
+            }
+            ConnectivityState::Idle => {
+                let picker = Arc::new(QueuingPicker {});
+                self.prev_state = ConnectivityState::Connecting;
+                return Some(LbState {
+                    connectivity_state: ConnectivityState::Connecting,
+                    picker,
+                });
+            }
+            ConnectivityState::TransientFailure => {
+                if current_connectivity_state != ConnectivityState::TransientFailure {
+                    self.prev_state = ConnectivityState::TransientFailure;
+                    let picker = Arc::new(Failing {
+                        error: "No children available".to_string(),
+                    });
+                    return Some(LbState {
+                        connectivity_state: ConnectivityState::TransientFailure,
+                        picker: picker,
+                    });
+                } else {
+                    return None;
+                }
+            }
+        }
+    }
+}
+
+impl<T: ChildIdentifier> ChildManager<T> {
+    fn compare_prev_to_new_pickers(
+        &self,
+        old_pickers: &[Arc<dyn Picker>],
+        new_pickers: &[Arc<dyn Picker>],
+    ) -> bool {
+        // If length is different, then definitely not the same picker.
+        if old_pickers.len() != new_pickers.len() {
+            return false;
+        }
+        // Compares two vectors of pickers by pointer equality and returns true if all pickers are the same.
+        for (x, y) in old_pickers.iter().zip(new_pickers.iter()) {
+            if !Arc::ptr_eq(x, y) {
+                return false;
+            }
+        }
+        true
+>>>>>>> f7537e6 (fixed some logic for review)
     }
 }
 
@@ -263,8 +425,20 @@ impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager
         }
     }
 
+<<<<<<< HEAD
     fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
         todo!("implement exit_idle")
+=======
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        let child_idxes = mem::take(&mut *self.pending_work.lock().unwrap());
+        for child_idx in child_idxes {
+            let mut channel_controller = WrappedController::new(channel_controller);
+            self.children[child_idx]
+                .policy
+                .exit_idle(&mut channel_controller);
+            self.resolve_child_controller(channel_controller, child_idx);
+        }
+>>>>>>> f7537e6 (fixed some logic for review)
     }
 }
 
@@ -292,7 +466,11 @@ impl ChannelController for WrappedController<'_> {
     }
 
     fn update_picker(&mut self, update: LbState) {
+<<<<<<< HEAD
         self.picker_update = Some(update);
+=======
+        self.picker_update = Some(update.clone());
+>>>>>>> f7537e6 (fixed some logic for review)
     }
 
     fn request_resolution(&mut self) {
@@ -313,3 +491,35 @@ impl WorkScheduler for ChildWorkScheduler {
         }
     }
 }
+<<<<<<< HEAD
+=======
+
+struct RoundRobinPicker {
+    pickers: Vec<Arc<dyn Picker>>,
+    next: AtomicUsize,
+}
+
+impl RoundRobinPicker {
+    fn new() -> Self {
+        Self {
+            pickers: vec![],
+            next: AtomicUsize::new(0),
+        }
+    }
+
+    fn add_picker(&mut self, picker: Arc<dyn Picker>) {
+        self.pickers.push(picker);
+    }
+}
+
+impl Picker for RoundRobinPicker {
+    fn pick(&self, request: &Request) -> PickResult {
+        let len = self.pickers.len();
+        if len == 0 {
+            return PickResult::Queue;
+        }
+        let idx = self.next.fetch_add(1, Ordering::Relaxed) % len;
+        self.pickers[idx].pick(request)
+    }
+}
+>>>>>>> f7537e6 (fixed some logic for review)
