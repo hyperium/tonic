@@ -31,19 +31,6 @@
 #include <vector>
 
 namespace protobuf = google::protobuf;
-namespace rust = google::protobuf::compiler::rust;
-
-static std::string ReconstructParameterList(
-    const std::vector<std::pair<std::string, std::string>> &options) {
-  std::string result;
-  for (const auto &[key, value] : options) {
-    if (!result.empty()) {
-      result += ",";
-    }
-    result += key + "=" + value;
-  }
-  return result;
-}
 
 class RustGrpcGenerator : public protobuf::compiler::CodeGenerator {
 public:
@@ -76,56 +63,32 @@ public:
     std::vector<std::pair<std::string, std::string>> options;
     protobuf::compiler::ParseGeneratorParameter(parameter, &options);
 
-    // Filter out GRPC options.
-    std::vector<std::pair<std::string, std::string>> protobuf_options;
     rust_grpc_generator::GrpcOpts grpc_opts;
+    absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+        import_path_to_crate_name;
     for (auto opt : options) {
       if (opt.first == "message_module_path") {
         grpc_opts.message_module_path = opt.second;
-      } else {
-        protobuf_options.push_back(opt);
+      } else if (opt.first == "crate_mapping") {
+        absl::StatusOr status =
+            rust_grpc_generator::GetImportPathToCrateNameMap(opt.second);
+        if (!status.ok()) {
+          *error = std::string(status.status().message());
+          return false;
+        }
+        import_path_to_crate_name = status.value();
       }
     }
 
-    if (grpc_opts.message_module_path.empty()) {
-      grpc_opts.message_module_path = "self";
-    }
+    context->ListParsedFiles(&grpc_opts.files_in_current_crate);
 
-    // The kernel isn't used by gRPC, it is there to pass Rust protobuf's
-    // validation.
-    protobuf_options.emplace_back("kernel", "upb");
-
-    // Copied from protobuf rust's generator.cc.
-    absl::StatusOr<rust::Options> opts =
-        rust::Options::Parse(ReconstructParameterList(protobuf_options));
-    if (!opts.ok()) {
-      *error = std::string(opts.status().message());
-      return false;
-    }
-
-    std::vector<const protobuf::FileDescriptor *> files_in_current_crate;
-    context->ListParsedFiles(&files_in_current_crate);
-
-    absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
-        import_path_to_crate_name = rust::GetImportPathToCrateNameMap(&*opts);
-    if (!import_path_to_crate_name.ok()) {
-      *error = std::string(import_path_to_crate_name.status().message());
-      return false;
-    }
-
-    rust::RustGeneratorContext rust_generator_context(
-        &files_in_current_crate, &*import_path_to_crate_name);
-
-    rust::Context ctx_without_printer(&*opts, &rust_generator_context, nullptr,
-                                      std::vector<std::string>());
     auto outfile = absl::WrapUnique(
         context->Open(rust_grpc_generator::GetRsGrpcFile(*file)));
     protobuf::io::Printer printer(outfile.get());
-    rust::Context ctx = ctx_without_printer.WithPrinter(&printer);
 
     for (int i = 0; i < file->service_count(); ++i) {
       const protobuf::ServiceDescriptor *service = file->service(i);
-      rust_grpc_generator::GenerateService(ctx, service, grpc_opts);
+      rust_grpc_generator::GenerateService(printer, service, grpc_opts);
     }
     return true;
   }

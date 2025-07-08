@@ -24,6 +24,7 @@
 
 #include "src/grpc_rust_generator.h"
 
+#include "absl/strings/str_join.h"
 #include "absl/strings/str_replace.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
@@ -40,11 +41,12 @@ namespace rust_grpc_generator {
 namespace protobuf = google::protobuf;
 namespace rust = protobuf::compiler::rust;
 
+using google::protobuf::FileDescriptor;
 using protobuf::Descriptor;
 using protobuf::MethodDescriptor;
 using protobuf::ServiceDescriptor;
 using protobuf::SourceLocation;
-using protobuf::compiler::rust::Context;
+using protobuf::io::Printer;
 
 template <typename DescriptorType>
 static std::string
@@ -57,15 +59,50 @@ GrpcGetCommentsForDescriptor(const DescriptorType *descriptor) {
   return std::string();
 }
 
-/// Returns the path of a generated message struct relative to the module in the
-/// generated service code.
-static std::string RsTypePath(Context &ctx,
-                              const absl::string_view &path_within_module,
-                              const GrpcOpts &opts, int depth) {
-  // If the message type is defined in an external crate using the crate
-  // mapping, the path must begin ::.
-  if (absl::StartsWith(path_within_module, "::")) {
-    return std::string(path_within_module);
+static std::string
+RustModuleForContainingType(const GrpcOpts &opts,
+                            const Descriptor *containing_type,
+                            const FileDescriptor &file) {
+  std::vector<std::string> modules;
+  // Innermost to outermost order.
+  const Descriptor *parent = containing_type;
+  while (parent != nullptr) {
+    modules.push_back(rust::RsSafeName(rust::CamelToSnakeCase(parent->name())));
+    parent = parent->containing_type();
+  }
+
+  // Reverse the vector to get submodules in outer-to-inner order).
+  std::reverse(modules.begin(), modules.end());
+
+  // If there are any modules at all, push an empty string on the end so that
+  // we get the trailing ::
+  if (!modules.empty()) {
+    modules.push_back("");
+  }
+
+  std::string crate_relative = absl::StrJoin(modules, "::");
+
+  if (opts.is_file_in_current_crate(file)) {
+    return crate_relative;
+  }
+  std::string crate_name =
+      absl::StrCat("::", rust::RsSafeName(opts.get_crate_name(file.name())));
+
+  return absl::StrCat(crate_name, "::", crate_relative);
+}
+
+static std::string RsTypePathWithinMessageModule(const GrpcOpts &opts,
+                                                 const Descriptor &msg) {
+  return absl::StrCat(
+      RustModuleForContainingType(opts, msg.containing_type(), *msg.file()),
+      rust::RsSafeName(msg.name()));
+}
+
+static std::string RsTypePath(const Descriptor &msg, const GrpcOpts &opts,
+                              int depth) {
+  std::string path_within_module = RsTypePathWithinMessageModule(opts, msg);
+  if (!opts.is_file_in_current_crate(*msg.file())) {
+    return path_within_module;
   }
   std::string path_to_message_module = opts.message_module_path + "::";
   if (path_to_message_module == "self::") {
@@ -83,6 +120,61 @@ static std::string RsTypePath(Context &ctx,
     prefix += "super::";
   }
   return prefix + path_to_message_module + std::string(path_within_module);
+}
+
+struct File {
+  static absl::Status ReadFileToString(const std::string &name,
+                                       std::string *output, bool text_mode) {
+    char buffer[1024];
+    FILE *file = fopen(name.c_str(), text_mode ? "rt" : "rb");
+    if (file == nullptr)
+      return absl::NotFoundError("Could not open file");
+
+    while (true) {
+      size_t n = fread(buffer, 1, sizeof(buffer), file);
+      if (n <= 0)
+        break;
+      output->append(buffer, n);
+    }
+
+    int error = ferror(file);
+    if (fclose(file) != 0)
+      return absl::InternalError("Failed to close file");
+    if (error != 0) {
+      return absl::InternalError(absl::StrCat("Failed to read the file ", name,
+                                              ". Error code: ", error));
+    }
+    return absl::OkStatus();
+  }
+};
+
+absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+GetImportPathToCrateNameMap(const std::string &mapping_file_path) {
+  absl::flat_hash_map<std::string, std::string> mapping;
+  std::string mapping_contents;
+  absl::Status status =
+      File::ReadFileToString(mapping_file_path, &mapping_contents, true);
+  if (!status.ok()) {
+    return status;
+  }
+
+  std::vector<absl::string_view> lines =
+      absl::StrSplit(mapping_contents, '\n', absl::SkipEmpty());
+  size_t len = lines.size();
+
+  size_t idx = 0;
+  while (idx < len) {
+    absl::string_view crate_name = lines[idx++];
+    size_t files_cnt;
+    if (!absl::SimpleAtoi(lines[idx++], &files_cnt)) {
+      return absl::InvalidArgumentError(
+          "Couldn't parse number of import paths in mapping file");
+    }
+    for (size_t i = 0; i < files_cnt; ++i) {
+      mapping.insert({std::string(lines[idx++]), std::string(crate_name)});
+    }
+  }
+  return mapping;
 }
 
 /**
@@ -129,9 +221,9 @@ public:
    * @return A string representing the qualified name for the generated request
    * struct.
    */
-  std::string request_name(rust::Context &ctx) const {
+  std::string request_name(const GrpcOpts &opts, int depth) const {
     const Descriptor *input = method_->input_type();
-    return rust::RsTypePath(ctx, *input);
+    return RsTypePath(*input, opts, depth);
   };
 
   /**
@@ -140,9 +232,9 @@ public:
    * @return A string representing the qualified name for the generated response
    * struct.
    */
-  std::string response_name(rust::Context &ctx) const {
+  std::string response_name(const GrpcOpts &opts, int depth) const {
     const Descriptor *output = method_->output_type();
-    return rust::RsTypePath(ctx, *output);
+    return RsTypePath(*output, opts, depth);
   };
 };
 
@@ -237,11 +329,11 @@ static std::string ProtoCommentToRustDoc(absl::string_view proto_comment) {
   return rust_doc;
 }
 
-static void GenerateDeprecated(Context &ctx) { ctx.Emit("#[deprecated]\n"); }
+static void GenerateDeprecated(Printer &ctx) { ctx.Emit("#[deprecated]\n"); }
 
 namespace client {
 
-static void GenerateMethods(Context &ctx, const Service &service,
+static void GenerateMethods(Printer &printer, const Service &service,
                             const GrpcOpts &opts) {
   static std::string unary_format = R"rs(
     pub async fn $ident$(
@@ -309,54 +401,52 @@ static void GenerateMethods(Context &ctx, const Service &service,
 
   const std::vector<Method> methods = service.methods();
   for (const Method &method : methods) {
-    ctx.Emit(ProtoCommentToRustDoc(method.comment()));
+    printer.Emit(ProtoCommentToRustDoc(method.comment()));
     if (method.is_deprecated()) {
-      GenerateDeprecated(ctx);
+      GenerateDeprecated(printer);
     }
-    const std::string request_type =
-        RsTypePath(ctx, method.request_name(ctx), opts, 1);
-    const std::string response_type =
-        RsTypePath(ctx, method.response_name(ctx), opts, 1);
+    const std::string request_type = method.request_name(opts, 1);
+    const std::string response_type = method.response_name(opts, 1);
     {
-      auto vars = ctx.printer().WithVars(
-          {{"codec_name", "grpc::codec::protobuf::ProtoCodec"},
-           {"ident", method.name()},
-           {"request", request_type},
-           {"response", response_type},
-           {"service_name", service.full_name()},
-           {"path", FormatMethodPath(service, method)},
-           {"method_name", method.proto_field_name()}});
+      auto vars =
+          printer.WithVars({{"codec_name", "grpc::codec::protobuf::ProtoCodec"},
+                            {"ident", method.name()},
+                            {"request", request_type},
+                            {"response", response_type},
+                            {"service_name", service.full_name()},
+                            {"path", FormatMethodPath(service, method)},
+                            {"method_name", method.proto_field_name()}});
 
       if (!method.is_client_streaming() && !method.is_server_streaming()) {
-        ctx.Emit(unary_format);
+        printer.Emit(unary_format);
       } else if (!method.is_client_streaming() &&
                  method.is_server_streaming()) {
-        ctx.Emit(server_streaming_format);
+        printer.Emit(server_streaming_format);
       } else if (method.is_client_streaming() &&
                  !method.is_server_streaming()) {
-        ctx.Emit(client_streaming_format);
+        printer.Emit(client_streaming_format);
       } else {
-        ctx.Emit(streaming_format);
+        printer.Emit(streaming_format);
       }
       if (&method != &methods.back()) {
-        ctx.Emit("\n");
+        printer.Emit("\n");
       }
     }
   }
 }
 
-static void generate_client(const Service &service, Context &ctx,
+static void generate_client(const Service &service, Printer &printer,
                             const GrpcOpts &opts) {
   std::string service_ident = absl::StrFormat("%sClient", service.name());
   std::string client_mod =
       absl::StrFormat("%s_client", rust::CamelToSnakeCase(service.name()));
-  ctx.Emit(
+  printer.Emit(
       {
           {"client_mod", client_mod},
           {"service_ident", service_ident},
           {"service_doc",
-           [&] { ctx.Emit(ProtoCommentToRustDoc(service.comment())); }},
-          {"methods", [&] { GenerateMethods(ctx, service, opts); }},
+           [&] { printer.Emit(ProtoCommentToRustDoc(service.comment())); }},
+          {"methods", [&] { GenerateMethods(printer, service, opts); }},
       },
       R"rs(
       /// Generated client implementations.
@@ -462,12 +552,12 @@ namespace server {} // namespace server
 
 // Writes the generated service interface into the given
 // ZeroCopyOutputStream.
-void GenerateService(Context &rust_generator_context,
+void GenerateService(protobuf::io::Printer &printer,
                      const ServiceDescriptor *service_desc,
                      const GrpcOpts &opts) {
   const Service service = Service(service_desc);
 
-  client::generate_client(service, rust_generator_context, opts);
+  client::generate_client(service, printer, opts);
 }
 
 std::string GetRsGrpcFile(const protobuf::FileDescriptor &file) {

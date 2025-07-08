@@ -21,7 +21,6 @@ protoc \
   --plugin=protoc-gen-grpc-rust="$PLUGIN_PATH" \
   --rust_opt="experimental-codegen=enabled,kernel=upb" \
   --rust_out=./generated \
-  --rust-grpc_opt="experimental-codegen=enabled" \
   --rust-grpc_out=./generated \
   routeguide.proto
 
@@ -33,8 +32,6 @@ export PATH="$(pwd)/bazel-bin/src/:$PATH"
 
 These options are specific to the Rust gRPC plugin:
 
-* `experimental-codegen=enabled`: **Required.** Enables compatibility with the 
-experimental Rust codegen.
 * `message_module_path=PATH` (optional): Specifies the Rust path to the module 
 where Protobuf messages are defined. Use this when you plan to place the
 generated message code in a different module than the service code.

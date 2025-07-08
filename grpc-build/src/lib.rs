@@ -176,8 +176,7 @@ impl CodeGen {
             }
         }
 
-        cmd.arg(format!("--rust-grpc_out={}", self.output_dir.display()))
-            .arg("--rust-grpc_opt=experimental-codegen=enabled");
+        cmd.arg(format!("--rust-grpc_out={}", self.output_dir.display()));
         cmd.arg(format!(
             "--rust-grpc_opt=crate_mapping={}",
             crate_mapping_path.display()
