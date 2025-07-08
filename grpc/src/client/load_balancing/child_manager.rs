@@ -263,8 +263,8 @@ impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager
         }
     }
 
-    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        todo!()
+    fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
+        todo!("implement exit_idle")
         // TODO(cjzhao): add exit idle logic once everything has been merged in
     }
 }
