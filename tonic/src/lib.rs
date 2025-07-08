@@ -112,6 +112,10 @@ mod response;
 mod status;
 mod util;
 
+/// A re-export of [`prost`](https://docs.rs/prost) for use with codegen.
+#[cfg(feature = "prost")]
+pub use prost;
+
 /// A re-export of [`async-trait`](https://docs.rs/async-trait) for use with codegen.
 #[cfg(feature = "codegen")]
 pub use async_trait::async_trait;

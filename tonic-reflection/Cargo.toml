@@ -33,7 +33,7 @@ tonic = { version = "0.14.0", path = "../tonic", default-features = false, featu
 
 [dev-dependencies]
 tokio-stream = {version = "0.1", default-features = false, features = ["net"]}
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["transport"] }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["prost", "transport"] }
 
 [lints]
 workspace = true

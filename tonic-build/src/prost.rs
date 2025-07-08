@@ -43,6 +43,7 @@ pub fn configure() -> Builder {
         generate_default_stubs: false,
         compile_settings: CompileSettings::default(),
         skip_debug: HashSet::default(),
+        prost_path: "tonic::prost".to_string(),
     }
 }
 
@@ -312,6 +313,7 @@ pub struct Builder {
     pub(crate) generate_default_stubs: bool,
     pub(crate) compile_settings: CompileSettings,
     pub(crate) skip_debug: HashSet<String>,
+    pub(crate) prost_path: String,
 
     out_dir: Option<PathBuf>,
 }
@@ -600,6 +602,14 @@ impl Builder {
         self
     }
 
+    /// Configures the prost crate path used for codegen
+    ///
+    /// This defaults to `"tonic::prost"`
+    pub fn prost_path(mut self, path: impl Into<String>) -> Self {
+        self.prost_path = path.into();
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile_protos(
         self,
@@ -697,6 +707,7 @@ impl Builder {
             config.protoc_arg(arg);
         }
 
+        config.prost_path(&self.prost_path);
         config.service_generator(self.service_generator());
     }
 

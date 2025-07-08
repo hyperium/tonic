@@ -20,7 +20,7 @@ rust-version = { workspace = true }
 [dependencies]
 prost = "0.14"
 prost-types = "0.14"
-tonic = { version = "0.14.0", path = "../tonic", default-features = false }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["prost"] }
 
 [lints]
 workspace = true
