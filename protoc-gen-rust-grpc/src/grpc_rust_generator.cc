@@ -409,7 +409,7 @@ static void GenerateMethods(Printer &printer, const Service &service,
     const std::string response_type = method.response_name(opts, 1);
     {
       auto vars =
-          printer.WithVars({{"codec_name", "grpc::codec::protobuf::ProtoCodec"},
+          printer.WithVars({{"codec_name", "tonic_protobuf::ProtoCodec"},
                             {"ident", method.name()},
                             {"request", request_type},
                             {"response", response_type},

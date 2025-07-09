@@ -3,13 +3,14 @@ members = [
   "tonic",
   "tonic-build",
   "tonic-health",
+  "tonic-protobuf",
+  "tonic-protobuf-build",
   "tonic-types",
   "tonic-reflection",
   "tonic-web", # Non-published crates
   "examples",
   "codegen",
   "grpc",
-  "grpc-build",
   "interop", # Tests
   "tests/disable_comments",
   "tests/included_service",

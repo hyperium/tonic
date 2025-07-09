@@ -33,7 +33,6 @@
 #![allow(dead_code)]
 
 pub mod client;
-pub mod codec;
 mod macros;
 mod rt;
 pub mod service;
