@@ -17,7 +17,7 @@ pub(crate) enum Kind {
     Transport,
     #[cfg(feature = "channel")]
     InvalidUri,
-    #[cfg(feature = "channel")]
+    #[cfg(all(feature = "channel", feature = "user-agent"))]
     InvalidUserAgent,
     #[cfg(all(feature = "_tls-any", feature = "channel"))]
     InvalidTlsConfigForUds,
@@ -44,7 +44,7 @@ impl Error {
         Error::new(Kind::InvalidUri)
     }
 
-    #[cfg(feature = "channel")]
+    #[cfg(all(feature = "channel", feature = "user-agent"))]
     pub(crate) fn new_invalid_user_agent() -> Self {
         Error::new(Kind::InvalidUserAgent)
     }
@@ -54,7 +54,7 @@ impl Error {
             Kind::Transport => "transport error",
             #[cfg(feature = "channel")]
             Kind::InvalidUri => "invalid URI",
-            #[cfg(feature = "channel")]
+            #[cfg(all(feature = "channel", feature = "user-agent"))]
             Kind::InvalidUserAgent => "user agent is not a valid header value",
             #[cfg(all(feature = "_tls-any", feature = "channel"))]
             Kind::InvalidTlsConfigForUds => "cannot apply TLS config for unix domain socket",

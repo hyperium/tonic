@@ -1,19 +1,25 @@
+use std::{fmt, future::Future, net::IpAddr, pin::Pin, str, str::FromStr, time::Duration};
+
+use bytes::Bytes;
+use http::uri::Uri;
+#[cfg(feature = "user-agent")]
+use http::HeaderValue;
+use hyper::rt;
+use hyper_util::client::legacy::connect::HttpConnector;
+use tower_service::Service;
+
 #[cfg(feature = "_tls-any")]
 use super::service::TlsConnector;
-use super::service::{self, Executor, SharedExec};
-use super::uds_connector::UdsConnector;
-use super::Channel;
 #[cfg(feature = "_tls-any")]
 use super::ClientTlsConfig;
+use super::{
+    service::{self, Executor, SharedExec},
+    uds_connector::UdsConnector,
+    Channel,
+};
 #[cfg(feature = "_tls-any")]
 use crate::transport::error;
 use crate::transport::Error;
-use bytes::Bytes;
-use http::{uri::Uri, HeaderValue};
-use hyper::rt;
-use hyper_util::client::legacy::connect::HttpConnector;
-use std::{fmt, future::Future, net::IpAddr, pin::Pin, str, str::FromStr, time::Duration};
-use tower_service::Service;
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub(crate) enum EndpointType {
@@ -29,6 +35,7 @@ pub struct Endpoint {
     pub(crate) uri: EndpointType,
     fallback_uri: Uri,
     pub(crate) origin: Option<Uri>,
+    #[cfg(feature = "user-agent")]
     pub(crate) user_agent: Option<HeaderValue>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) concurrency_limit: Option<usize>,
@@ -76,6 +83,7 @@ impl Endpoint {
             uri: EndpointType::Uri(uri.clone()),
             fallback_uri: uri,
             origin: None,
+            #[cfg(feature = "user-agent")]
             user_agent: None,
             concurrency_limit: None,
             rate_limit: None,
@@ -105,6 +113,7 @@ impl Endpoint {
             uri: EndpointType::Uds(uds_filepath.to_string()),
             fallback_uri: Uri::from_static("http://tonic"),
             origin: None,
+            #[cfg(feature = "user-agent")]
             user_agent: None,
             concurrency_limit: None,
             rate_limit: None,
@@ -185,6 +194,7 @@ impl Endpoint {
     /// builder.user_agent("Greeter").expect("Greeter should be a valid header value");
     /// // user-agent: "Greeter tonic/x.x.x"
     /// ```
+    #[cfg(feature = "user-agent")]
     pub fn user_agent<T>(self, user_agent: T) -> Result<Self, Error>
     where
         T: TryInto<HeaderValue>,

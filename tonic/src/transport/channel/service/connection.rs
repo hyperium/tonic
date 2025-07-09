@@ -1,24 +1,27 @@
-use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
-use crate::{
-    body::Body,
-    transport::{channel::BoxFuture, service::GrpcTimeout, Endpoint},
-};
-use http::{Request, Response, Uri};
-use hyper::rt;
-use hyper::{client::conn::http2::Builder, rt::Executor};
-use hyper_util::rt::TokioTimer;
 use std::{
     fmt,
     task::{Context, Poll},
 };
-use tower::load::Load;
+
+use http::{Request, Response, Uri};
+use hyper::{client::conn::http2::Builder, rt, rt::Executor};
+use hyper_util::rt::TokioTimer;
 use tower::{
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
+    load::Load,
     util::BoxService,
     ServiceBuilder, ServiceExt,
 };
 use tower_service::Service;
+
+#[cfg(feature = "user-agent")]
+use super::UserAgent;
+use super::{AddOrigin, Reconnect, SharedExec};
+use crate::{
+    body::Body,
+    transport::{channel::BoxFuture, service::GrpcTimeout, Endpoint},
+};
 
 pub(crate) struct Connection {
     inner: BoxService<Request<Body>, Response<Body>, crate::BoxError>,
@@ -55,13 +58,16 @@ impl Connection {
             settings.max_header_list_size(val);
         }
 
-        let stack = ServiceBuilder::new()
-            .layer_fn(|s| {
-                let origin = endpoint.origin.as_ref().unwrap_or(endpoint.uri()).clone();
+        let stack = ServiceBuilder::new().layer_fn(|s| {
+            let origin = endpoint.origin.as_ref().unwrap_or(endpoint.uri()).clone();
 
-                AddOrigin::new(s, origin)
-            })
-            .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
+            AddOrigin::new(s, origin)
+        });
+
+        #[cfg(feature = "user-agent")]
+        let stack = stack.layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()));
+
+        let stack = stack
             .layer_fn(|s| GrpcTimeout::new(s, endpoint.timeout))
             .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
             .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
