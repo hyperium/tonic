@@ -122,9 +122,9 @@ impl CodeGen {
         self
     }
 
-    /// Adds a Rust crate along with a list of proto files whose generated
-    /// messages it contains.
-    pub fn dependency(&mut self, deps: Vec<Dependency>) -> &mut Self {
+    /// Adds a list of Rust crates along with the proto files whose generated
+    /// messages they contains.
+    pub fn dependencies(&mut self, deps: Vec<Dependency>) -> &mut Self {
         self.dependencies.extend(deps);
         self
     }

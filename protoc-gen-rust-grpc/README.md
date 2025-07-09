@@ -9,6 +9,12 @@ bazel build //src:protoc-gen-rust-grpc
 
 ## Usage Example
 
+**Note:** It's generally recommended to use `tonic_protobuf_build::CodeGen`
+and/or `protobuf_codegen::CodeGen` instead of invoking `protoc` directly. Direct
+usage of `protoc` and checking in the generated code can lead to stale output if
+the `protobuf` dependencies are upgraded later. Using the codegen APIs ensures
+consistency with your dependency versions and simplifies regeneration.
+
 ```sh
 # Build the plugin
 bazel build //src:protoc-gen-rust-grpc
@@ -16,7 +22,7 @@ bazel build //src:protoc-gen-rust-grpc
 # Set the plugin path
 PLUGIN_PATH="$(pwd)/bazel-bin/src/protoc-gen-rust-grpc"
 
-# Run protoc with the Rust and Rust gRPC plugins
+# Run protoc with the Rust gRPC plugin
 protoc \
   --plugin=protoc-gen-grpc-rust="$PLUGIN_PATH" \
   --rust_opt="experimental-codegen=enabled,kernel=upb" \
@@ -24,7 +30,7 @@ protoc \
   --rust-grpc_out=./generated \
   routeguide.proto
 
-## Optionally, you can add the plugin to the PATH and omit the --plugin flag.
+# Optionally, you can add the plugin to the PATH and omit the --plugin flag.
 export PATH="$(pwd)/bazel-bin/src/:$PATH"
 ```
 
