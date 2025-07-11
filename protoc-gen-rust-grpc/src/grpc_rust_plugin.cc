@@ -97,5 +97,4 @@ public:
 int main(int argc, char *argv[]) {
   RustGrpcGenerator generator;
   return protobuf::compiler::PluginMain(argc, argv, &generator);
-  return 0;
 }

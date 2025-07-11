@@ -38,8 +38,8 @@ namespace protobuf = google::protobuf;
 
 class GrpcOpts {
 public:
-  /// Path the module containing the generated message code. Defaults to
-  /// "self", i.e. the message code and service code is present in the same
+  /// Path of the module containing the generated message code. Defaults to
+  /// "self", i.e. the message code and service code are present in the same
   /// module.
   std::string message_module_path = "self";
   absl::flat_hash_map<std::string, std::string> import_path_to_crate_name = {};
