@@ -6,19 +6,33 @@ authors = ["gRPC Authors"]
 license = "MIT"
 
 [dependencies]
-url = "2.5.0"
-tokio = { version = "1.37.0", features = ["sync", "rt", "net", "time", "macros"] }
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
-futures-core = "0.3.31"
-serde_json = "1.0.140"
-serde = "1.0.219"
-hickory-resolver = { version = "0.25.1", optional = true }
-rand = "0.9"
-parking_lot = "0.12.4"
 bytes = "1.10.1"
+futures-core = "0.3.31"
+futures-util = "0.3.31"
+hickory-resolver = { version = "0.25.1", optional = true }
+http = "1.1.0"
+http-body = "1.0.1"
+hyper = { version = "1.6.0", features = ["client", "http2"] }
+hyper-util = "0.1.14"
+once_cell = "1.19.0"
+parking_lot = "0.12.4"
+pin-project-lite = "0.2.16"
+rand = "0.9"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+socket2 = "0.5.10"
+tokio = { version = "1.37.0", features = ["sync", "rt", "net", "time", "macros"] }
+tokio-stream = "0.1.17"
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen", "transport"] }
+tower = "0.5.2"
+tower-service = "0.3.3"
+url = "2.5.0"
 
 [dev-dependencies]
+async-stream = "0.3.6"
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["prost", "server", "router"] }
 hickory-server =  "0.25.2"
+prost = "0.13.5"
 
 [features]
 default = ["dns"]

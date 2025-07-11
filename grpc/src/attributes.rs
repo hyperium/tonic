@@ -24,5 +24,5 @@
 
 /// A key-value store for arbitrary configuration data between multiple
 /// pluggable components.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Attributes;

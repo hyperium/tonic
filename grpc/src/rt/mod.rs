@@ -22,7 +22,9 @@
  *
  */
 
-use std::{future::Future, pin::Pin};
+use ::tokio::io::{AsyncRead, AsyncWrite};
+
+use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
 
 pub mod tokio;
 
@@ -73,3 +75,11 @@ pub(super) struct ResolverOptions {
     /// system's default DNS server will be used.
     pub(super) server_addr: Option<std::net::SocketAddr>,
 }
+
+#[derive(Default)]
+pub struct TcpOptions {
+    pub enable_nodelay: bool,
+    pub keepalive: Option<Duration>,
+}
+
+pub trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
