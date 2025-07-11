@@ -24,7 +24,7 @@ PLUGIN_PATH="$(pwd)/bazel-bin/src/protoc-gen-rust-grpc"
 
 # Run protoc with the Rust gRPC plugin
 protoc \
-  --plugin=protoc-gen-grpc-rust="$PLUGIN_PATH" \
+  --plugin=protoc-gen-rust-grpc="$PLUGIN_PATH" \
   --rust_opt="experimental-codegen=enabled,kernel=upb" \
   --rust_out=./generated \
   --rust-grpc_out=./generated \

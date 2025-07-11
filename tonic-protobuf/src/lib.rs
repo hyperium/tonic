@@ -82,7 +82,7 @@ impl<T: Message> Encoder for ProtoEncoder<T> {
 
     fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
         let serialized = item.serialize().map_err(from_decode_error)?;
-        buf.put_slice(&serialized.as_slice());
+        buf.put_slice(serialized.as_slice());
         Ok(())
     }
 }
@@ -106,7 +106,7 @@ impl<U: Message + Default> Decoder for ProtoDecoder<U> {
 
     fn decode(&mut self, buf: &mut DecodeBuf<'_>) -> Result<Option<Self::Item>, Self::Error> {
         let slice = buf.chunk();
-        let item = U::parse(&slice).map_err(from_decode_error)?;
+        let item = U::parse(slice).map_err(from_decode_error)?;
         buf.advance(slice.len());
         Ok(Some(item))
     }

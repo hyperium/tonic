@@ -183,8 +183,7 @@ impl CodeGen {
         ));
         if let Some(message_path) = &self.message_module_path {
             cmd.arg(format!(
-                "--rust-grpc_opt=message_module_path={}",
-                message_path
+                "--rust-grpc_opt=message_module_path={message_path}",
             ));
         }
 
@@ -199,7 +198,7 @@ impl CodeGen {
 
         let output = cmd
             .output()
-            .map_err(|e| format!("failed to run protoc: {}", e))?;
+            .map_err(|e| format!("failed to run protoc: {e}"))?;
         println!("{}", std::str::from_utf8(&output.stdout).unwrap());
         eprintln!("{}", std::str::from_utf8(&output.stderr).unwrap());
         assert!(output.status.success());

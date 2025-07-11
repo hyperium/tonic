@@ -92,20 +92,6 @@ pub async fn large_unary(client: &mut TestClient, assertions: &mut Vec<TestAsser
     }
 }
 
-// pub async fn cachable_unary(client: &mut Client, assertions: &mut Vec<TestAssertion>) {
-//     let payload = Payload {
-//         r#type: PayloadType::Compressable as i32,
-//         body: format!("{:?}", std::time::Instant::now()).into_bytes(),
-//     };
-//     let req = SimpleRequest {
-//         response_type: PayloadType::Compressable as i32,
-//         payload: Some(payload),
-//         ..Default::default()
-//     };
-
-//     client.
-// }
-
 pub async fn client_streaming(client: &mut TestClient, assertions: &mut Vec<TestAssertion>) {
     let requests = REQUEST_LENGTHS.iter().map(|len| {
         proto!(StreamingInputCallRequest {
