@@ -22,11 +22,11 @@
  *
  */
 
+use std::fs::{self, read_to_string};
 use std::io::Write;
-use std::{
-    fs::File,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+
+use syn::parse_file;
 
 /// Details about a crate containing proto files with symbols refferenced in
 /// the file being compiled currently.
@@ -64,6 +64,7 @@ pub struct CodeGen {
     message_module_path: Option<String>,
     // Whether to generate message code, defaults to true.
     generate_message_code: bool,
+    should_format_code: bool,
 }
 
 impl CodeGen {
@@ -75,6 +76,7 @@ impl CodeGen {
             dependencies: Vec::new(),
             message_module_path: None,
             generate_message_code: true,
+            should_format_code: true,
         }
     }
 
@@ -95,6 +97,12 @@ impl CodeGen {
     pub fn inputs(&mut self, inputs: impl IntoIterator<Item = impl AsRef<Path>>) -> &mut Self {
         self.inputs
             .extend(inputs.into_iter().map(|input| input.as_ref().to_owned()));
+        self
+    }
+
+    /// Enables or disables formatting of generated code.
+    pub fn should_format_code(&mut self, enable: bool) -> &mut Self {
+        self.should_format_code = enable;
         self
     }
 
@@ -202,12 +210,44 @@ impl CodeGen {
         println!("{}", std::str::from_utf8(&output.stdout).unwrap());
         eprintln!("{}", std::str::from_utf8(&output.stderr).unwrap());
         assert!(output.status.success());
+
+        if self.should_format_code {
+            self.format_code();
+        }
         Ok(())
+    }
+
+    fn format_code(&self) {
+        let mut generated_file_paths = Vec::new();
+        let output_dir = &self.output_dir;
+        if self.generate_message_code {
+            generated_file_paths.push(output_dir.join("generated.rs"));
+        }
+        for proto_path in &self.inputs {
+            let Some(stem) = proto_path.file_stem().and_then(|s| s.to_str()) else {
+                continue;
+            };
+            generated_file_paths.push(output_dir.join(format!("{}_grpc.pb.rs", stem)));
+            if self.generate_message_code {
+                generated_file_paths.push(output_dir.join(format!("{}.u.pb.rs", stem)));
+            }
+        }
+
+        for path in &generated_file_paths {
+            // The path may not exist if there are no services present in the
+            // proto file.
+            if path.exists() {
+                let src = read_to_string(path).expect("Failed to read generated file");
+                let syntax = parse_file(&src).unwrap();
+                let formatted = prettyplease::unparse(&syntax);
+                fs::write(path, formatted).unwrap();
+            }
+        }
     }
 
     fn generate_crate_mapping_file(&self) -> PathBuf {
         let crate_mapping_path = self.output_dir.join("crate_mapping.txt");
-        let mut file = File::create(crate_mapping_path.clone()).unwrap();
+        let mut file = fs::File::create(crate_mapping_path.clone()).unwrap();
         for dep in &self.dependencies {
             file.write_all(format!("{}\n", dep.crate_name).as_bytes())
                 .unwrap();

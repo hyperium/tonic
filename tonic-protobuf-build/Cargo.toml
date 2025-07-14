@@ -6,4 +6,6 @@ authors = ["gRPC Authors"]
 license = "MIT"
 
 [dependencies]
+prettyplease = "0.2.35"
 protobuf-codegen = { version = "4.31.1-release" }
+syn = "2.0.104"
