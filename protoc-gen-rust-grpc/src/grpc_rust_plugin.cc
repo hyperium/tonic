@@ -1,34 +1,30 @@
-/*
- *
- * Copyright 2025 gRPC authors.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
- */
+// Copyright 2025 gRPC authors.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
+
+#include <vector>
+
+#include "google/protobuf/compiler/code_generator.h"
+#include "google/protobuf/compiler/plugin.h"
+#include "google/protobuf/io/printer.h"
 
 #include "grpc_rust_generator.h"
-#include <google/protobuf/compiler/code_generator.h>
-#include <google/protobuf/compiler/plugin.h>
-#include <google/protobuf/compiler/rust/context.h>
-#include <google/protobuf/compiler/rust/crate_mapping.h>
-#include <google/protobuf/compiler/rust/naming.h>
-#include <vector>
 
 namespace protobuf = google::protobuf;
 
@@ -64,23 +60,25 @@ public:
     protobuf::compiler::ParseGeneratorParameter(parameter, &options);
 
     rust_grpc_generator::GrpcOpts grpc_opts;
-    absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
-        import_path_to_crate_name;
     for (auto opt : options) {
       if (opt.first == "message_module_path") {
-        grpc_opts.message_module_path = opt.second;
+        grpc_opts.SetMessageModulePath(opt.second);
       } else if (opt.first == "crate_mapping") {
-        absl::StatusOr status =
-            rust_grpc_generator::GetImportPathToCrateNameMap(opt.second);
-        if (!status.ok()) {
-          *error = std::string(status.status().message());
+        absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+            crate_map =
+                rust_grpc_generator::GetImportPathToCrateNameMap(opt.second);
+        if (crate_map.ok()) {
+          grpc_opts.SetImportPathToCrateName(std::move(*crate_map));
+        } else {
+          *error = std::string(crate_map.status().message());
           return false;
         }
-        import_path_to_crate_name = status.value();
       }
     }
 
-    context->ListParsedFiles(&grpc_opts.files_in_current_crate);
+    std::vector<const google::protobuf::FileDescriptor *> files;
+    context->ListParsedFiles(&files);
+    grpc_opts.SetFilesInCurrentCrate(std::move(files));
 
     auto outfile = absl::WrapUnique(
         context->Open(rust_grpc_generator::GetRsGrpcFile(*file)));

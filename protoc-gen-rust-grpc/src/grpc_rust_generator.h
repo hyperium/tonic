@@ -1,58 +1,59 @@
-/*
- *
- * Copyright 2025 gRPC authors.
- *
- * Permission is hereby granted, free of charge, to any person obtaining a copy
- * of this software and associated documentation files (the "Software"), to
- * deal in the Software without restriction, including without limitation the
- * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
- * sell copies of the Software, and to permit persons to whom the Software is
- * furnished to do so, subject to the following conditions:
- *
- * The above copyright notice and this permission notice shall be included in
- * all copies or substantial portions of the Software.
- *
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
- * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
- * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
- * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
- * IN THE SOFTWARE.
- *
- */
+// Copyright 2025 gRPC authors.
+//
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to
+// deal in the Software without restriction, including without limitation the
+// rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+// sell copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+// FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+// IN THE SOFTWARE.
 
-#ifndef NET_GRPC_COMPILER_RUST_GENERATOR_H_
-#define NET_GRPC_COMPILER_RUST_GENERATOR_H_
+#ifndef PROTOC_GEN_RUST_GRPC_GRPC_RUST_GENERATOR_H_
+#define PROTOC_GEN_RUST_GRPC_GRPC_RUST_GENERATOR_H_
 
 #include "absl/log/absl_log.h"
-#include <google/protobuf/compiler/rust/context.h>
-#include <google/protobuf/descriptor.h>
-#include <google/protobuf/io/zero_copy_stream.h>
+#include "google/protobuf/descriptor.h"
 
 namespace rust_grpc_generator {
 
-namespace impl {
-namespace protobuf = google::protobuf;
-} // namespace impl
-
 class GrpcOpts {
 public:
-  /// Path of the module containing the generated message code. Defaults to
-  /// "self", i.e. the message code and service code are present in the same
-  /// module.
-  std::string message_module_path = "self";
-  absl::flat_hash_map<std::string, std::string> import_path_to_crate_name = {};
-  std::vector<const impl::protobuf::FileDescriptor *> files_in_current_crate =
-      {};
+  void SetMessageModulePath(const std::string path) {
+    message_module_path_ = std::move(path);
+  }
 
-  absl::string_view get_crate_name(absl::string_view import_path) const {
-    auto it = import_path_to_crate_name.find(import_path);
-    if (it == import_path_to_crate_name.end()) {
+  const std::string &GetMessageModulePath() const {
+    return message_module_path_;
+  }
+
+  void SetImportPathToCrateName(
+      const absl::flat_hash_map<std::string, std::string> mapping) {
+    import_path_to_crate_name_ = std::move(mapping);
+  }
+
+  void SetFilesInCurrentCrate(
+      const std::vector<const google::protobuf::FileDescriptor *> files) {
+    files_in_current_crate_ = std::move(files);
+  }
+
+  absl::string_view GetCrateName(absl::string_view import_path) const {
+    auto it = import_path_to_crate_name_.find(import_path);
+    if (it == import_path_to_crate_name_.end()) {
       ABSL_LOG(ERROR) << "Path " << import_path
                       << " not found in crate mapping. Crate mapping contains "
-                      << import_path_to_crate_name.size() << " entries:";
-      for (const auto &entry : import_path_to_crate_name) {
+                      << import_path_to_crate_name_.size() << " entries:";
+      for (const auto &entry : import_path_to_crate_name_) {
         ABSL_LOG(ERROR) << "  " << entry.first << " : " << entry.second << "\n";
       }
       ABSL_LOG(FATAL) << "Cannot continue with missing crate mapping.";
@@ -60,19 +61,28 @@ public:
     return it->second;
   }
 
-  bool is_file_in_current_crate(const impl::protobuf::FileDescriptor &f) const {
-    return std::find(files_in_current_crate.begin(),
-                     files_in_current_crate.end(),
-                     &f) != files_in_current_crate.end();
+  bool IsFileInCurrentCrate(const google::protobuf::FileDescriptor &f) const {
+    return std::find(files_in_current_crate_.begin(),
+                     files_in_current_crate_.end(),
+                     &f) != files_in_current_crate_.end();
   }
+
+private:
+  // Path of the module containing the generated message code. Defaults to
+  // "self", i.e. the message code and service code are present in the same
+  // module.
+  std::string message_module_path_ = "self";
+  absl::flat_hash_map<std::string, std::string> import_path_to_crate_name_ = {};
+  std::vector<const google::protobuf::FileDescriptor *>
+      files_in_current_crate_ = {};
 };
 
 // Writes the generated service interface into the given ZeroCopyOutputStream
-void GenerateService(impl::protobuf::io::Printer &printer,
-                     const impl::protobuf::ServiceDescriptor *service,
+void GenerateService(google::protobuf::io::Printer &printer,
+                     const google::protobuf::ServiceDescriptor *service,
                      const GrpcOpts &opts);
 
-std::string GetRsGrpcFile(const impl::protobuf::FileDescriptor &file);
+std::string GetRsGrpcFile(const google::protobuf::FileDescriptor &file);
 
 // Returns a map from import path of a .proto file to the name of the crate
 // covering that file.
@@ -86,7 +96,7 @@ std::string GetRsGrpcFile(const impl::protobuf::FileDescriptor &file);
 //    ...
 //    <import path of the last .proto file of the crate\n
 absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
-GetImportPathToCrateNameMap(const std::string &mapping_file_path);
+GetImportPathToCrateNameMap(const absl::string_view mapping_file_path);
 } // namespace rust_grpc_generator
 
-#endif // NET_GRPC_COMPILER_RUST_GENERATOR_H_
+#endif // PROTOC_GEN_RUST_GRPC_GRPC_RUST_GENERATOR_H_
