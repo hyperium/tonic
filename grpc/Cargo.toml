@@ -45,6 +45,3 @@ allowed_external_types = [
     "tokio::sync::oneshot::Sender",
     "once_cell::sync::Lazy",
 ]
-
-[workspace.package]
-rust-version = "1.86"
