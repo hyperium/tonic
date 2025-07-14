@@ -81,5 +81,3 @@ pub struct TcpOptions {
     pub enable_nodelay: bool,
     pub keepalive: Option<Duration>,
 }
-
-pub trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}

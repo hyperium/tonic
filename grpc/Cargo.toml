@@ -42,4 +42,6 @@ dns = ["dep:hickory-resolver"]
 allowed_external_types = [
     "tonic::*",
     "futures_core::stream::Stream",
+    "tokio::sync::oneshot::Sender",
+    "once_cell::sync::Lazy",
 ]
