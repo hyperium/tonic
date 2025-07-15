@@ -37,6 +37,15 @@ pub trait Service: Send + Sync {
 }
 
 // TODO: define methods that will allow serialization/deserialization.
-pub trait Message: Any + Send + Sync {}
+pub trait Message: Any + Send + Sync {
+    fn as_any(self: Box<Self>) -> Box<dyn Any>;
+}
 
-impl<T> Message for T where T: Any + Send + Sync {}
+impl<T> Message for T
+where
+    T: Any + Send + Sync,
+{
+    fn as_any(self: Box<Self>) -> Box<dyn Any> {
+        self
+    }
+}

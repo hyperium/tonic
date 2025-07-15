@@ -17,7 +17,6 @@ rand = "0.9"
 parking_lot = "0.12.4"
 bytes = "1.10.1"
 futures = "0.3.31"
-hyper-util = "0.1.14"
 hyper = { version = "1.6.0", features = ["client", "http2"] }
 pin-project-lite = "0.2.16"
 tokio-stream = "0.1.17"
