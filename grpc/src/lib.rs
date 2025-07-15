@@ -38,3 +38,11 @@ pub mod service;
 
 pub(crate) mod attributes;
 pub(crate) mod byte_str;
+pub(crate) mod codec;
+#[cfg(test)]
+pub(crate) mod echo_pb {
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/src/generated/grpc_examples_echo.rs"
+    ));
+}

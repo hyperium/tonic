@@ -22,9 +22,12 @@
  *
  */
 
-use std::{future::Future, pin::Pin};
+use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
 
-pub mod tokio;
+use ::tokio::io::{AsyncRead, AsyncWrite};
+
+pub(crate) mod hyper_wrapper;
+pub(crate) mod tokio;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -47,6 +50,14 @@ pub(super) trait Runtime: Send + Sync {
 
     /// Returns a future that completes after the specified duration.
     fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>>;
+
+    /// Establishes a TCP connection to the given `target` address with the
+    /// specified `opts`.
+    fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpStream>, String>> + Send>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -73,3 +84,11 @@ pub(super) struct ResolverOptions {
     /// system's default DNS server will be used.
     pub(super) server_addr: Option<std::net::SocketAddr>,
 }
+
+#[derive(Default)]
+pub(crate) struct TcpOptions {
+    pub(crate) enable_nodelay: bool,
+    pub(crate) keepalive: Option<Duration>,
+}
+
+pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}

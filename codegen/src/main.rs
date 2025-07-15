@@ -62,6 +62,20 @@ fn main() {
         false,
         false,
     );
+
+    // grpc
+    codegen(
+        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("grpc"),
+        &["proto/echo/echo.proto"],
+        &["proto"],
+        &PathBuf::from("src/generated"),
+        &PathBuf::from("src/generated/echo_fds.rs"),
+        true,
+        true,
+    );
 }
 
 fn codegen(
