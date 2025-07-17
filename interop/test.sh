@@ -57,10 +57,10 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
+./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
 # Test a grpc rust client against a Go server.
-./target/debug/client_new_codegen --test_case="${JOINED_TEST_CASES}" ${ARG}
+./target/debug/client --codec=protobuf --test_case="${JOINED_TEST_CASES}" ${ARG}
 
 echo ":; killing test server"; kill "${SERVER_PID}";
 
@@ -75,7 +75,7 @@ trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
 sleep 1
 
-./target/debug/client --test_case="${JOINED_TEST_CASES}" "${ARG}"
+./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
 # Run client test cases
 if [ -n "${ARG:-}" ]; then

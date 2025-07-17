@@ -12,10 +12,6 @@ path = "src/bin/client.rs"
 name = "server"
 path = "src/bin/server.rs"
 
-[[bin]]
-name = "client_new_codegen"
-path = "src/bin/client_new_codegen.rs"
-
 [dependencies]
 async-stream = "0.3"
 strum = {version = "0.27", features = ["derive"]}

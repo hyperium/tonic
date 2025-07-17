@@ -1,7 +1,8 @@
 #![recursion_limit = "256"]
 
 pub mod client;
-pub mod client_new_codegen;
+pub mod client_prost;
+pub mod client_protobuf;
 pub mod server;
 
 pub mod pb {
