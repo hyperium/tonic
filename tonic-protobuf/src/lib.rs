@@ -81,6 +81,10 @@ impl<T: Message> Encoder for ProtoEncoder<T> {
     type Error = Status;
 
     fn encode(&mut self, item: Self::Item, buf: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
+        // The protobuf library doesn't support serializing into a user-provided
+        // buffer. Instead, it allocates its own buffer, resulting in an extra
+        // copy and allocation.
+        // TODO: Find a way to avoid this extra copy.
         let serialized = item.serialize().map_err(from_decode_error)?;
         buf.put_slice(serialized.as_slice());
         Ok(())

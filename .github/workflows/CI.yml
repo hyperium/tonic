@@ -52,6 +52,10 @@ jobs:
           # Share repository cache between workflows.
           repository-cache: true
           module-root: ./protoc-gen-rust-grpc
+      # Building the protoc plugin from scratch takes 6–14 minutes, depending on
+      # the OS. This delays the execution of workflows that use the plugin in
+      # build.rs files. We try to avoid rebuilding the plugin if it hasn't
+      # changed.
       - name: Build protoc plugin
         if: steps.cache-plugin.outputs.cache-hit != 'true'
         working-directory: ./protoc-gen-rust-grpc

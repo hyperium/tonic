@@ -28,17 +28,66 @@ use std::path::{Path, PathBuf};
 
 use syn::parse_file;
 
-/// Details about a crate containing proto files with symbols refferenced in
+/// Details about a crate containing proto files with symbols referenced in
 /// the file being compiled currently.
 #[derive(Debug, Clone)]
 pub struct Dependency {
+    crate_name: String,
+    proto_import_paths: Vec<PathBuf>,
+    proto_files: Vec<String>,
+}
+
+impl Dependency {
+    pub fn builder() -> DependencyBuilder {
+        DependencyBuilder::default()
+    }
+}
+
+#[derive(Default, Debug)]
+pub struct DependencyBuilder {
+    crate_name: Option<String>,
+    proto_import_paths: Vec<PathBuf>,
+    proto_files: Vec<String>,
+}
+
+impl DependencyBuilder {
     /// Name of the external crate.
-    pub crate_name: String,
+    pub fn crate_name(mut self, name: impl Into<String>) -> Self {
+        self.crate_name = Some(name.into());
+        self
+    }
+
     /// List of paths .proto files whose codegen is present in the crate. This
     /// is used to re-run the build command if required.
-    pub proto_import_paths: Vec<PathBuf>,
+    pub fn proto_import_path(mut self, path: impl Into<PathBuf>) -> Self {
+        self.proto_import_paths.push(path.into());
+        self
+    }
+
     /// List of .proto file names whose codegen is present in the crate.
-    pub proto_files: Vec<String>,
+    pub fn proto_import_paths(mut self, paths: Vec<PathBuf>) -> Self {
+        self.proto_import_paths = paths;
+        self
+    }
+
+    pub fn proto_file(mut self, file: impl Into<String>) -> Self {
+        self.proto_files.push(file.into());
+        self
+    }
+
+    pub fn proto_files(mut self, files: Vec<String>) -> Self {
+        self.proto_files = files;
+        self
+    }
+
+    pub fn build(self) -> Result<Dependency, &'static str> {
+        let crate_name = self.crate_name.ok_or("crate_name is required")?;
+        Ok(Dependency {
+            crate_name,
+            proto_import_paths: self.proto_import_paths,
+            proto_files: self.proto_files,
+        })
+    }
 }
 
 impl From<&Dependency> for protobuf_codegen::Dependency {
@@ -46,8 +95,7 @@ impl From<&Dependency> for protobuf_codegen::Dependency {
         protobuf_codegen::Dependency {
             crate_name: val.crate_name.clone(),
             proto_import_paths: val.proto_import_paths.clone(),
-            // TODO: Is this useful to expose the following field? It's not used
-            // by protobuf codegen.
+            // The following field is not used by protobuf codegen.
             c_include_paths: Vec::new(),
             proto_files: val.proto_files.clone(),
         }
@@ -146,7 +194,7 @@ impl CodeGen {
         self
     }
 
-    pub fn generate_and_compile(&self) -> Result<(), String> {
+    pub fn compile(&self) -> Result<(), String> {
         // Generate the message code.
         if self.generate_message_code {
             protobuf_codegen::CodeGen::new()

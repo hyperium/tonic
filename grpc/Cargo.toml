@@ -28,5 +28,4 @@ dns = ["dep:hickory-resolver"]
 allowed_external_types = [
     "tonic::*",
     "futures_core::stream::Stream",
-    "protobuf::codegen_traits::Message",
 ]

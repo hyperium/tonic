@@ -11,6 +11,7 @@ Required dependencies
 [dependencies]
 tonic = "<tonic-version>"
 protobuf = "<protobuf-version>"
+tonic-protobuf =  "<tonic-protobuf-version>"
 
 [build-dependencies]
 tonic-protobuf-build = "<tonic-protobuf-build-version>"
@@ -31,7 +32,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     tonic_protobuf_build::CodeGen::new()
         .include("proto")
         .inputs(["service.proto"])
-        .generate_and_compile()?;
+        .compile()?;
     Ok(())
 }
 ```
@@ -40,18 +41,20 @@ Or configure the generated code deeper via
 
 ```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-   tonic_protobuf_build::configure()
+    let dependency = tonic_protobuf_build::Dependency::builder()
+        .crate_name("external_protos".to_string())
+        .proto_import_paths(vec![PathBuf::from("external/message.proto")])
+        .proto_files(vec!["message.proto".to_string()])
+        .build()?;
+
+    tonic_protobuf_build::CodeGen::new()
         .generate_message_code(false)
         .inputs(["proto/helloworld/helloworld.proto"])
         .include("external")
         .message_module_path("super::proto")
-        .dependencies(vec![tonic_protobuf_build::Dependency {
-            crate_name: "external_protos".to_string(),
-            proto_import_paths: vec![PathBuf::from("external/message.proto")],
-            proto_files: vec!["message.proto".to_string()],
-        }])
+        .dependencies(vec![dependency])
         //.out_dir("src/generated")  // you can change the generated code's location
-        .generate_and_compile()?;
+        .compile()?;
    Ok(())
 }
 ```

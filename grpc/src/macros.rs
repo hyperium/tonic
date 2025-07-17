@@ -51,10 +51,10 @@
 /// ```rust,ignore
 /// mod protos {
 ///     // Include message code.
-///     include!("/protobuf/directory/protos/generated.rs");
+///     include!("relative/protobuf/directory/generated.rs");
 ///
 ///     // Include service code.
-///     include!("/protobuf/directory/protos/helloworld_grpc.pb.rs");
+///     include!("relative/protobuf/directory/helloworld_grpc.pb.rs");
 /// }
 /// ```
 ///
@@ -64,12 +64,12 @@
 /// ```rust,ignore
 /// mod protos {
 ///     // Include message code.
-///     include!("/protobuf/directory/protos/generated.rs");
+///     include!("relative/protobuf/directory/generated.rs");
 /// }
 ///
 /// mod grpc {
 ///     // Include service code.
-///     include!("/protobuf/directory/proto/helloworld_grpc.pb.rs");
+///     include!("relative/protobuf/directory/helloworld_grpc.pb.rs");
 /// }
 /// ```
 ///
