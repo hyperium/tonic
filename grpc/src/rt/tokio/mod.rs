@@ -29,7 +29,10 @@ use std::{
     time::Duration,
 };
 
-use tokio::task::JoinHandle;
+use tokio::{
+    io::{AsyncRead, AsyncWrite},
+    task::JoinHandle,
+};
 
 use super::{DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
