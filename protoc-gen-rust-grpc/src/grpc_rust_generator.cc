@@ -401,8 +401,8 @@ static void GenerateMethods(Printer &printer, const Service &service,
   }
 }
 
-static void generate_client(const Service &service, Printer &printer,
-                            const GrpcOpts &opts) {
+static void GenerateClient(const Service &service, Printer &printer,
+                           const GrpcOpts &opts) {
   std::string service_ident = absl::StrFormat("%sClient", service.Name());
   std::string client_mod =
       absl::StrFormat("%s_client", rust::CamelToSnakeCase(service.Name()));
@@ -517,7 +517,7 @@ static void generate_client(const Service &service, Printer &printer,
 void GenerateService(protobuf::io::Printer &printer,
                      const ServiceDescriptor *service_desc,
                      const GrpcOpts &opts) {
-  client::generate_client(Service(service_desc), printer, opts);
+  client::GenerateClient(Service(service_desc), printer, opts);
 }
 
 std::string GetRsGrpcFile(const protobuf::FileDescriptor &file) {
