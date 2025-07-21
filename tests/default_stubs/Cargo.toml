@@ -10,7 +10,7 @@ tokio-stream = {version = "0.1", features = ["net"]}
 tonic = {path = "../../tonic"}
 
 [dev-dependencies]
-rand = "0.9"
+tempfile = "3.20"
 
 [build-dependencies]
 tonic-build = {path = "../../tonic-build" }

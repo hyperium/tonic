@@ -29,12 +29,14 @@
 //! APIs are unstable.  Proceed at your own risk.
 //!
 //! [gRPC]: https://grpc.io
-
-#![allow(dead_code)]
+#![allow(dead_code, unused_variables, unused_imports)]
 
 pub mod client;
+pub mod credentials;
+pub mod inmemory;
 mod macros;
-mod rt;
+pub mod rt;
+pub mod server;
 pub mod service;
 
 pub(crate) mod attributes;
