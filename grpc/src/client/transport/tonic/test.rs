@@ -1,5 +1,5 @@
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
-use crate::client::transport::registry::global_registry;
+use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::echo_pb::echo_server::{Echo, EchoServer};
 use crate::service::Request as GrpcRequest;
 
@@ -44,7 +44,7 @@ pub async fn tonic_transport_rpc() {
             .await;
     });
 
-    let builder = global_registry()
+    let builder = GLOBAL_TRANSPORT_REGISTRY
         .get_transport(TCP_IP_NETWORK_TYPE)
         .unwrap();
     let config = Arc::new(TransportOptions::default());

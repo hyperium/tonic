@@ -22,9 +22,8 @@
  *
  */
 
-use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
-
 use ::tokio::io::{AsyncRead, AsyncWrite};
+use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
 
 pub(crate) mod hyper_wrapper;
 pub(crate) mod tokio;

@@ -1,18 +1,19 @@
+use super::Transport;
+use once_cell::sync::Lazy;
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex, OnceLock},
+    fmt::Debug,
+    sync::{Arc, Mutex},
 };
-
-use super::Transport;
 
 /// A registry to store and retrieve transports.  Transports are indexed by
 /// the address type they are intended to handle.
 #[derive(Clone)]
-pub struct TransportRegistry {
+pub(crate) struct TransportRegistry {
     m: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
 }
 
-impl std::fmt::Debug for TransportRegistry {
+impl Debug for TransportRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let m = self.m.lock().unwrap();
         for key in m.keys() {
@@ -24,12 +25,12 @@ impl std::fmt::Debug for TransportRegistry {
 
 impl TransportRegistry {
     /// Construct an empty name resolver registry.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self { m: Arc::default() }
     }
 
-    /// Add a name resolver into the registry.
-    pub fn add_transport(&self, address_type: &str, transport: impl Transport + 'static) {
+    /// Add a transport into the registry.
+    pub(crate) fn add_transport(&self, address_type: &str, transport: impl Transport + 'static) {
         self.m
             .lock()
             .unwrap()
@@ -37,7 +38,7 @@ impl TransportRegistry {
     }
 
     /// Retrieve a name resolver from the registry, or None if not found.
-    pub fn get_transport(&self, address_type: &str) -> Result<Arc<dyn Transport>, String> {
+    pub(crate) fn get_transport(&self, address_type: &str) -> Result<Arc<dyn Transport>, String> {
         self.m
             .lock()
             .unwrap()
@@ -57,9 +58,4 @@ impl Default for TransportRegistry {
 
 /// The registry used if a local registry is not provided to a channel or if it
 /// does not exist in the local registry.
-static GLOBAL_TRANSPORT_REGISTRY: OnceLock<TransportRegistry> = OnceLock::new();
-
-/// Global registry for resolver builders.
-pub fn global_registry() -> &'static TransportRegistry {
-    GLOBAL_TRANSPORT_REGISTRY.get_or_init(TransportRegistry::new)
-}
+pub static GLOBAL_TRANSPORT_REGISTRY: Lazy<TransportRegistry> = Lazy::new(TransportRegistry::new);

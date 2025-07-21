@@ -1,4 +1,4 @@
-use crate::client::transport::registry::global_registry;
+use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::ConnectedTransport;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
@@ -57,7 +57,7 @@ pub(crate) type BoxError = Box<dyn Error + Send + Sync>;
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub(crate) fn reg() {
-    global_registry().add_transport(TCP_IP_NETWORK_TYPE, TransportBuilder {});
+    GLOBAL_TRANSPORT_REGISTRY.add_transport(TCP_IP_NETWORK_TYPE, TransportBuilder {});
 }
 
 struct TransportBuilder {}

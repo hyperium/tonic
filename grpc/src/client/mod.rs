@@ -27,9 +27,11 @@ use std::fmt::Display;
 pub mod channel;
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
-pub mod service;
 pub mod service_config;
+mod subchannel;
 pub(crate) mod transport;
+pub use channel::Channel;
+pub use channel::ChannelOptions;
 
 /// A representation of the current state of a gRPC channel, also used for the
 /// state of subchannels (individual connections within the channel).

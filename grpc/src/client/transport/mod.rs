@@ -1,11 +1,12 @@
-use std::{sync::Arc, time::Duration};
-
 use crate::{rt::Runtime, service::Service};
+use std::{sync::Arc, time::Duration};
 
 mod registry;
 mod tonic;
 
 use ::tonic::async_trait;
+pub(crate) use registry::TransportRegistry;
+pub(crate) use registry::GLOBAL_TRANSPORT_REGISTRY;
 use tokio::sync::oneshot;
 
 pub(crate) struct ConnectedTransport {

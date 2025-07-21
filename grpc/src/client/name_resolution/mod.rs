@@ -70,6 +70,22 @@ impl FromStr for Target {
     }
 }
 
+impl From<url::Url> for Target {
+    fn from(url: url::Url) -> Self {
+        Target { url }
+    }
+}
+
+/// Target represents a target for gRPC, as specified in:
+/// https://github.com/grpc/grpc/blob/master/doc/naming.md.
+/// It is parsed from the target string that gets passed during channel creation
+/// by the user. gRPC passes it to the resolver and the balancer.
+///
+/// If the target follows the naming spec, and the parsed scheme is registered
+/// with gRPC, we will parse the target string according to the spec. If the
+/// target does not contain a scheme or if the parsed scheme is not registered
+/// (i.e. no corresponding resolver available to resolve the endpoint), we will
+/// apply the default scheme, and will attempt to reparse it.
 impl Target {
     pub fn scheme(&self) -> &str {
         self.url.scheme()
@@ -97,7 +113,7 @@ impl Target {
         }
     }
 
-    /// Return the path for this target URL, as a percent-encoded ASCII string.
+    /// Retrieves endpoint from `Url.path()`.
     pub fn path(&self) -> &str {
         self.url.path()
     }
@@ -125,7 +141,7 @@ pub trait ResolverBuilder: Send + Sync {
     fn build(&self, target: &Target, options: ResolverOptions) -> Box<dyn Resolver>;
 
     /// Reports the URI scheme handled by this name resolver.
-    fn scheme(&self) -> &'static str;
+    fn scheme(&self) -> &str;
 
     /// Returns the default authority for a channel using this name resolver
     /// and target. This refers to the *dataplane authority* — the value used
@@ -264,9 +280,15 @@ pub struct Endpoint {
     pub attributes: Attributes,
 }
 
+impl Hash for Endpoint {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.addresses.hash(state);
+    }
+}
+
 /// An Address is an identifier that indicates how to connect to a server.
 #[non_exhaustive]
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, Ord, PartialOrd)]
 pub struct Address {
     /// The network type is used to identify what kind of transport to create
     /// when connecting to this address.  Typically TCP_IP_ADDRESS_TYPE.
@@ -281,38 +303,24 @@ pub struct Address {
     pub attributes: Attributes,
 }
 
-impl Eq for Endpoint {}
-
-impl PartialEq for Endpoint {
-    fn eq(&self, _other: &Self) -> bool {
-        todo!()
-    }
-}
-
-impl Hash for Endpoint {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        todo!()
-    }
-}
-
 impl Eq for Address {}
 
 impl PartialEq for Address {
-    fn eq(&self, _other: &Self) -> bool {
-        todo!()
+    fn eq(&self, other: &Self) -> bool {
+        self.network_type == other.network_type && self.address == other.address
     }
 }
 
 impl Hash for Address {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        todo!()
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.network_type.hash(state);
+        self.address.hash(state);
     }
 }
 
 impl Display for Address {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let addr: &str = &self.address;
-        write!(f, "{}:{}", self.network_type, addr)
+        write!(f, "{}:{}", self.network_type, self.address.to_string())
     }
 }
 
@@ -320,7 +328,7 @@ impl Display for Address {
 /// via TCP/IP.
 pub static TCP_IP_NETWORK_TYPE: &str = "tcp";
 
-// A resolver that returns the same result every time it's work method is called.
+// A resolver that returns the same result every time its work method is called.
 // It can be used to return an error to the channel when a resolver fails to
 // build.
 struct NopResolver {
