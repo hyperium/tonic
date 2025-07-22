@@ -56,6 +56,7 @@
             packages = with pkgs; [
               nixd
               nixfmt
+              bazel_7
 
               (rustToolchain.withComponents [
                 "cargo"
@@ -67,6 +68,12 @@
               ])
               protobuf
             ];
+
+            shellHook = ''
+              # export PATH="$(pwd)/bazel-bin/src/:$PATH"
+              export PLUGIN_PATH="protoc-gen-rust-grpc/bazel-bin/src/protoc-gen-rust-grpc"
+              export PATH="protoc-gen-rust-grpc/bazel-bin/src:$PATH"
+            '';
           };
         };
     };
