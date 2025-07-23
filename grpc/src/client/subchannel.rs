@@ -61,7 +61,7 @@ struct InternalSubchannelConnectingState {
 }
 
 struct InternalSubchannelReadyState {
-    abort_handle: Option<AbortHandle>,
+    abort_handle: Option<Box<dyn TaskHandle>>,
     svc: SharedService,
 }
 
@@ -395,7 +395,7 @@ impl InternalSubchannel {
         });
 
         let state_machine_tx = self.state_machine_event_sender.clone();
-        let disconnect_task = tokio::task::spawn(async move {
+        let task_handle = self.runtime.spawn(Box::pin(async move {
             // TODO(easwars): Does it make sense for disconnected() to return an
             // error string containing information about why the connection
             // terminated? But what can we do with that error other than logging
@@ -404,10 +404,10 @@ impl InternalSubchannel {
                 eprintln!("Transport closed with error: {}", e.to_string())
             };
             let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionTerminated);
-        });
+        }));
         let mut inner = self.inner.lock().unwrap();
         inner.state = InternalSubchannelState::Ready(InternalSubchannelReadyState {
-            abort_handle: Some(disconnect_task.abort_handle()),
+            abort_handle: Some(task_handle),
             svc: svc2.clone(),
         });
     }

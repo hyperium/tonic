@@ -8,7 +8,7 @@ use std::{
 
 /// A registry to store and retrieve transports.  Transports are indexed by
 /// the address type they are intended to handle.
-#[derive(Clone)]
+#[derive(Default, Clone)]
 pub(crate) struct TransportRegistry {
     m: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
 }
@@ -26,7 +26,7 @@ impl Debug for TransportRegistry {
 impl TransportRegistry {
     /// Construct an empty name resolver registry.
     pub(crate) fn new() -> Self {
-        Self { m: Arc::default() }
+        Self::default()
     }
 
     /// Add a transport into the registry.
@@ -47,12 +47,6 @@ impl TransportRegistry {
                 "no transport found for address type {address_type}"
             ))
             .cloned()
-    }
-}
-
-impl Default for TransportRegistry {
-    fn default() -> Self {
-        Self::new()
     }
 }
 
