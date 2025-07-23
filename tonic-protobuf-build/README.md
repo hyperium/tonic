@@ -11,10 +11,10 @@ Required dependencies
 [dependencies]
 tonic = "<tonic-version>"
 protobuf = "<protobuf-version>"
-tonic-protobuf =  "<tonic-protobuf-version>"
+tonic-protobuf =  "<tonic-version>"
 
 [build-dependencies]
-tonic-protobuf-build = "<tonic-protobuf-build-version>"
+tonic-protobuf-build = "<tonic-version>"
 ```
 
 You must ensure you have the following programs in your PATH:
