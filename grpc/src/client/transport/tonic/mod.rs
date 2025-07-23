@@ -16,6 +16,7 @@ use http::Response as HttpResponse;
 use http::Uri;
 use hyper::client::conn::http2::Builder;
 use hyper::client::conn::http2::SendRequest;
+use std::any::Any;
 use std::{
     error::Error,
     future::Future,
@@ -104,7 +105,7 @@ fn convert_request(req: GrpcRequest) -> TonicRequest<Pin<Box<dyn Stream<Item = B
     let stream = req.into_inner();
 
     let bytes_stream = Box::pin(stream.filter_map(|msg| async {
-        let downcast_result = msg.as_any().downcast::<Bytes>();
+        let downcast_result = (msg as Box<dyn Any>).downcast::<Bytes>();
 
         match downcast_result {
             Ok(boxed_bytes) => Some(*boxed_bytes),
