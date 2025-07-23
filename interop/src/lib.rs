@@ -12,7 +12,7 @@ pub mod pb {
 }
 
 pub mod grpc_pb {
-    grpc::include_proto!("", "test");
+    grpc::include_proto!("test");
 }
 
 use std::{default, fmt, iter};
