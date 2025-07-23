@@ -74,7 +74,7 @@ impl ResolverRegistry {
             .lock()
             .unwrap()
             .insert(scheme.to_string(), Arc::from(builder));
-        return Ok(());
+        Ok(())
     }
 
     /// Returns the resolver builder registered for the given scheme, if any.

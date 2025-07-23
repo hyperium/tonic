@@ -78,7 +78,7 @@ impl Service for TonicTransport {
     async fn call(&self, method: String, request: GrpcRequest) -> GrpcResponse {
         let mut grpc = self.grpc.clone();
         if let Err(e) = grpc.ready().await {
-            let err = Status::unknown(format!("Service was not ready: {}", e.to_string()));
+            let err = Status::unknown(format!("Service was not ready: {}", e));
             return create_error_response(err);
         };
         let path = if let Ok(p) = PathAndQuery::from_maybe_shared(method) {
@@ -135,11 +135,10 @@ fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> Grp
     let stream = response.into_inner();
     let message_stream: Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send>> =
         Box::pin(stream.map(|msg| {
-            let res = msg.map(|b| {
+            msg.map(|b| {
                 let msg: Box<dyn Message> = Box::new(b);
                 msg
-            });
-            res
+            })
         }));
     let mut new_res = TonicResponse::new(message_stream);
     *new_res.metadata_mut() = metadata;
