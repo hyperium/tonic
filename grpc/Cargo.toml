@@ -5,12 +5,20 @@ edition = "2021"
 authors = ["gRPC Authors"]
 license = "MIT"
 
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "tonic::*",
+    "futures_core::stream::Stream",
+    "tokio::sync::oneshot::Sender",
+]
+
+[features]
+default = ["dns"]
+dns = ["dep:hickory-resolver"]
+
 [dependencies]
 bytes = "1.10.1"
 futures = "0.3.31"
-tower = { version = "0.5.2", features = ["buffer", "limit", "util"] }
-tower-service = "0.3.3"
-socket2 = "0.5.10"
 futures-core = "0.3.31"
 futures-util = "0.3.31"
 hickory-resolver = { version = "0.25.1", optional = true }
@@ -24,28 +32,33 @@ pin-project-lite = "0.2.16"
 rand = "0.9"
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
-tokio = { version = "1.37.0", features = ["sync", "rt", "net", "time", "macros"] }
+socket2 = "0.5.10"
+tokio = { version = "1.37.0", features = [
+    "sync",
+    "rt",
+    "net",
+    "time",
+    "macros",
+] }
 tokio-stream = "0.1.17"
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen", "transport"] }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+    "codegen",
+    "transport",
+] }
+tower = { version = "0.5.2", features = ["buffer", "limit", "util"] }
+tower-service = "0.3.3"
 url = "2.5.0"
+
+[build-dependencies]
+prost = "0.14"
+tonic-build = { path = "../tonic-build" }
 
 [dev-dependencies]
 async-stream = "0.3.6"
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["prost", "server", "router"] }
-hickory-server =  "0.25.2"
+hickory-server = "0.25.2"
 prost = "0.14"
-
-[build-dependencies]
-tonic-build = { path = "../tonic-build" }
-prost = "0.14"
-
-[features]
-default = ["dns"]
-dns = ["dep:hickory-resolver"]
-
-[package.metadata.cargo_check_external_types]
-allowed_external_types = [
-    "tonic::*",
-    "futures_core::stream::Stream",
-    "tokio::sync::oneshot::Sender",
-]
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+    "prost",
+    "server",
+    "router",
+] }
