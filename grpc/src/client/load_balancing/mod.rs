@@ -41,6 +41,7 @@ use tonic::{metadata::MetadataMap, Status};
 
 use crate::{
     client::channel::WorkQueueTx,
+    rt::Runtime,
     service::{Request, Response, Service},
 };
 
@@ -64,6 +65,7 @@ pub struct LbPolicyOptions {
     /// A hook into the channel's work scheduler that allows the LbPolicy to
     /// request the ability to perform operations on the ChannelController.
     pub work_scheduler: Arc<dyn WorkScheduler>,
+    pub runtime: Arc<dyn Runtime>,
 }
 
 /// Used to asynchronously request a call into the LbPolicy's work method if

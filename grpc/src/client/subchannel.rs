@@ -24,7 +24,6 @@ use std::{
 };
 use tokio::{
     sync::{mpsc, oneshot, watch, Notify},
-    task::{AbortHandle, JoinHandle},
     time::{Duration, Instant},
 };
 use tonic::async_trait;
@@ -66,7 +65,7 @@ struct InternalSubchannelReadyState {
 }
 
 struct InternalSubchannelTransientFailureState {
-    abort_handle: Option<AbortHandle>,
+    task_handle: Option<Box<dyn TaskHandle>>,
     error: String,
 }
 
@@ -168,7 +167,7 @@ impl Drop for InternalSubchannelState {
                 }
             }
             Self::TransientFailure(st) => {
-                if let Some(ah) = &st.abort_handle {
+                if let Some(ah) = &st.task_handle {
                     ah.abort();
                 }
             }
@@ -189,8 +188,8 @@ pub(crate) struct InternalSubchannel {
 struct InnerSubchannel {
     state: InternalSubchannelState,
     watchers: Vec<Arc<SubchannelStateWatcher>>, // TODO(easwars): Revisit the choice for this data structure.
-    backoff_task: Option<JoinHandle<()>>,
-    disconnect_task: Option<JoinHandle<()>>,
+    backoff_task: Option<Box<dyn TaskHandle>>,
+    disconnect_task: Option<Box<dyn TaskHandle>>,
 }
 
 #[async_trait]
@@ -417,7 +416,7 @@ impl InternalSubchannel {
             let mut inner = self.inner.lock().unwrap();
             inner.state = InternalSubchannelState::TransientFailure(
                 InternalSubchannelTransientFailureState {
-                    abort_handle: None,
+                    task_handle: None,
                     error: err.clone(),
                 },
             );
@@ -431,14 +430,14 @@ impl InternalSubchannel {
 
         let backoff_interval = self.backoff.backoff_until();
         let state_machine_tx = self.state_machine_event_sender.clone();
-        let backoff_task = tokio::task::spawn(async move {
+        let backoff_task = self.runtime.spawn(Box::pin(async move {
             tokio::time::sleep_until(backoff_interval).await;
             let _ = state_machine_tx.send(SubchannelStateMachineEvent::BackoffExpired);
-        });
+        }));
         let mut inner = self.inner.lock().unwrap();
         inner.state =
             InternalSubchannelState::TransientFailure(InternalSubchannelTransientFailureState {
-                abort_handle: Some(backoff_task.abort_handle()),
+                task_handle: Some(backoff_task),
                 error: err.clone(),
             });
     }

@@ -13,6 +13,7 @@ use crate::{
         name_resolution::{Address, ResolverUpdate},
         subchannel, ConnectivityState,
     },
+    rt::Runtime,
     service::Request,
 };
 
@@ -31,6 +32,7 @@ impl LbPolicyBuilder for Builder {
             work_scheduler: options.work_scheduler,
             subchannel: None,
             next_addresses: Vec::default(),
+            runtime: options.runtime,
         })
     }
 
@@ -47,6 +49,7 @@ struct PickFirstPolicy {
     work_scheduler: Arc<dyn WorkScheduler>,
     subchannel: Option<Arc<dyn Subchannel>>,
     next_addresses: Vec<Address>,
+    runtime: Arc<dyn Runtime>,
 }
 
 impl LbPolicy for PickFirstPolicy {
@@ -73,10 +76,10 @@ impl LbPolicy for PickFirstPolicy {
         self.next_addresses = addresses;
         let work_scheduler = self.work_scheduler.clone();
         // TODO: Implement Drop that cancels this task.
-        tokio::task::spawn(async move {
+        self.runtime.spawn(Box::pin(async move {
             sleep(Duration::from_millis(200)).await;
             work_scheduler.schedule_work();
-        });
+        }));
         // TODO: return a picker that queues RPCs.
         Ok(())
     }

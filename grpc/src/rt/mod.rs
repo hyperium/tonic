@@ -23,9 +23,10 @@
  */
 
 use ::tokio::io::{AsyncRead, AsyncWrite};
-use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
+use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 
 pub(crate) mod hyper_wrapper;
+#[cfg(feature = "_runtime-tokio")]
 pub(crate) mod tokio;
 
 /// An abstraction over an asynchronous runtime.
@@ -91,3 +92,45 @@ pub(crate) struct TcpOptions {
 }
 
 pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
+
+/// A fake runtime to satisfy the compiler when no runtime is enabled. This will
+///
+/// # Panics
+///
+/// Panics if any of its functions are called.
+#[derive(Default)]
+pub(crate) struct NoOpRuntime {}
+
+impl Runtime for NoOpRuntime {
+    fn spawn(
+        &self,
+        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
+    ) -> Box<dyn TaskHandle> {
+        unimplemented!()
+    }
+
+    fn get_dns_resolver(&self, opts: ResolverOptions) -> Result<Box<dyn DnsResolver>, String> {
+        unimplemented!()
+    }
+
+    fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
+        unimplemented!()
+    }
+
+    fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpStream>, String>> + Send>> {
+        unimplemented!()
+    }
+}
+
+pub(crate) fn default_runtime() -> Arc<dyn Runtime> {
+    #[cfg(feature = "_runtime-tokio")]
+    {
+        return Arc::new(tokio::TokioRuntime {});
+    }
+    #[allow(unreachable_code)]
+    Arc::new(NoOpRuntime::default())
+}
