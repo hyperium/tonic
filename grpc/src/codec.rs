@@ -12,11 +12,8 @@ pub(crate) struct BytesCodec {}
 
 impl Codec for BytesCodec {
     type Encode = Bytes;
-
     type Decode = Bytes;
-
     type Encoder = BytesEncoder;
-
     type Decoder = BytesDecoder;
 
     fn encoder(&mut self) -> Self::Encoder {
@@ -32,7 +29,6 @@ pub struct BytesEncoder {}
 
 impl Encoder for BytesEncoder {
     type Item = Bytes;
-
     type Error = Status;
 
     fn encode(&mut self, item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
@@ -46,7 +42,6 @@ pub struct BytesDecoder {}
 
 impl Decoder for BytesDecoder {
     type Item = Bytes;
-
     type Error = Status;
 
     fn decode(
