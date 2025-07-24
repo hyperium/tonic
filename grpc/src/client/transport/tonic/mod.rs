@@ -17,6 +17,7 @@ use http::Uri;
 use hyper::client::conn::http2::Builder;
 use hyper::client::conn::http2::SendRequest;
 use std::any::Any;
+use std::time::Instant;
 use std::{
     error::Error,
     future::Future,
@@ -191,7 +192,8 @@ impl Transport for TransportBuilder {
                 keepalive: opts.tcp_keepalive,
             },
         );
-        let tcp_stream = if let Some(timeout) = opts.connect_timeout {
+        let tcp_stream = if let Some(deadline) = opts.connect_deadline {
+            let timeout = deadline.saturating_duration_since(Instant::now());
             tokio::select! {
             _ = runtime.sleep(timeout) => {
                 return Err("timed out waiting for TCP stream to connect".to_string())

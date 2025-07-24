@@ -1,4 +1,5 @@
 use crate::{rt::Runtime, service::Service};
+use std::time::Instant;
 use std::{sync::Arc, time::Duration};
 
 mod registry;
@@ -34,7 +35,7 @@ pub(crate) struct TransportOptions {
     pub rate_limit: Option<(u64, Duration)>,
     pub tcp_keepalive: Option<Duration>,
     pub tcp_nodelay: bool,
-    pub connect_timeout: Option<Duration>,
+    pub connect_deadline: Option<Instant>,
 }
 
 #[async_trait]
