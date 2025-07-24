@@ -28,9 +28,8 @@ pub mod channel;
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
 pub mod service_config;
-pub mod transport;
-
 mod subchannel;
+pub(crate) mod transport;
 pub use channel::Channel;
 pub use channel::ChannelOptions;
 

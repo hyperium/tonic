@@ -293,6 +293,14 @@ impl rt::Runtime for FakeRuntime {
     fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn rt::Sleep>> {
         self.inner.sleep(duration)
     }
+
+    fn tcp_stream(
+        &self,
+        target: std::net::SocketAddr,
+        opts: rt::TcpOptions,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::TcpStream>, String>> + Send>> {
+        self.inner.tcp_stream(target, opts)
+    }
 }
 
 #[tokio::test]
