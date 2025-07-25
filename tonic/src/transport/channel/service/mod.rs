@@ -1,7 +1,9 @@
 mod add_origin;
 use self::add_origin::AddOrigin;
 
+#[cfg(feature = "user-agent")]
 mod user_agent;
+#[cfg(feature = "user-agent")]
 use self::user_agent::UserAgent;
 
 mod reconnect;
