@@ -32,7 +32,7 @@ url = "2.5.0"
 async-stream = "0.3.6"
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["prost", "server", "router"] }
 hickory-server =  "0.25.2"
-prost = "0.13.5"
+prost = "0.14"
 
 [features]
 default = ["dns"]
