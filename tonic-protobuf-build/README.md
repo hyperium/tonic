@@ -85,13 +85,14 @@ you can uncomment the line `.output_dir(...)` above, and in your lib file
 config a mod like this:
 ```rust,ignore
 pub mod generated {
-    #[path = ""]
     pub mod helloworld {
-        #[path = "generated.rs"]
-        pub mod proto;
+        pub mod proto {
+            include!("helloworld/generated.rs");
+        }
 
-        #[path = "test_grpc.pb.rs"]
-        pub mod grpc;
+        pub mod grpc {
+            include!("helloworld/test_grpc.pb.rs");
+        }
     }
 }
 ```
