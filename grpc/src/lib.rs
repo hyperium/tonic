@@ -34,6 +34,7 @@
 pub mod client;
 pub mod credentials;
 pub mod inmemory;
+mod macros;
 pub mod rt;
 pub mod server;
 pub mod service;

@@ -1,0 +1,13 @@
+# Define a custom config for common Unix-like flags
+build:unix --cxxopt=-std=c++17
+build:unix --host_cxxopt=-std=c++17
+
+# Inherit the common 'unix' flags for both macOS and Linux
+build:macos --config=unix
+build:linux --config=unix
+
+# Windows flags remain as they are
+build:windows --cxxopt=/std:c++17
+build:windows --host_cxxopt=/std:c++17
+build:windows --define=protobuf_allow_msvc=true
+
