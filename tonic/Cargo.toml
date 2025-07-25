@@ -24,6 +24,7 @@ codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
 deflate = ["dep:flate2"]
 zstd = ["dep:zstd"]
+lz4 = ["dep:lz4_flex"]
 default = ["router", "transport", "codegen", "prost"]
 prost = ["dep:prost"]
 _tls-any = ["dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"] # Internal. Please choose one of `tls-ring` or `tls-aws-lc`
@@ -91,6 +92,7 @@ webpki-roots = { version = "1", optional = true }
 # compression
 flate2 = {version = "1.0", optional = true}
 zstd = { version = "0.13.0", optional = true }
+lz4_flex = { version = "0.11.3", default-features = false, features = ["std", "frame"], optional = true }
 
 # channel
 hyper-timeout = {version = "0.5", optional = true}

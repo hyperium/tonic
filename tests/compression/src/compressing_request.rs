@@ -7,6 +7,7 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
 }
 
 #[allow(dead_code)]
@@ -33,6 +34,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                 CompressionEncoding::Gzip => "gzip",
                 CompressionEncoding::Zstd => "zstd",
                 CompressionEncoding::Deflate => "deflate",
+                CompressionEncoding::Lz4 => "lz4",
                 _ => panic!("unexpected encoding {:?}", self.encoding),
             };
             assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);
@@ -84,6 +86,7 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
 }
 
 #[allow(dead_code)]
@@ -93,12 +96,13 @@ async fn client_enabled_server_enabled_multi_encoding(encoding: CompressionEncod
     let svc = test_server::TestServer::new(Svc::default())
         .accept_compressed(CompressionEncoding::Gzip)
         .accept_compressed(CompressionEncoding::Zstd)
-        .accept_compressed(CompressionEncoding::Deflate);
+        .accept_compressed(CompressionEncoding::Deflate)
+        .accept_compressed(CompressionEncoding::Lz4);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     fn assert_right_encoding<B>(req: http::Request<B>) -> http::Request<B> {
-        let supported_encodings = ["gzip", "zstd", "deflate"];
+        let supported_encodings = ["gzip", "zstd", "deflate", "lz4"];
         let req_encoding = req.headers().get("grpc-encoding").unwrap();
         assert!(supported_encodings.iter().any(|e| e == req_encoding));
 
@@ -146,6 +150,7 @@ parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
 }
 
 #[allow(dead_code)]
@@ -177,6 +182,7 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
+        CompressionEncoding::Lz4 => "lz4",
         _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(
@@ -194,6 +200,7 @@ parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
 }
 
 #[allow(dead_code)]
