@@ -88,6 +88,8 @@ pub struct Attributes {
     module: Vec<(String, String)>,
     /// `struct` attributes.
     structure: Vec<(String, String)>,
+    /// `trait` attributes.
+    trait_attributes: Vec<(String, String)>,
 }
 
 impl Attributes {
@@ -97,6 +99,10 @@ impl Attributes {
 
     fn for_struct(&self, name: &str) -> Vec<syn::Attribute> {
         generate_attributes(name, &self.structure)
+    }
+
+    fn for_trait(&self, name: &str) -> Vec<syn::Attribute> {
+        generate_attributes(name, &self.trait_attributes)
     }
 
     /// Add an attribute that will be added to `mod` items matching the given pattern.
@@ -123,6 +129,19 @@ impl Attributes {
     /// ```
     pub fn push_struct(&mut self, pattern: impl Into<String>, attr: impl Into<String>) {
         self.structure.push((pattern.into(), attr.into()));
+    }
+
+    /// Add an attribute that will be added to `trait` items matching the given pattern.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tonic_build::*;
+    /// let mut attributes = Attributes::default();
+    /// attributes.push_trait("Server", "#[mockall::automock]");
+    /// ```
+    pub fn push_trait(&mut self, pattern: impl Into<String>, attr: impl Into<String>) {
+        self.trait_attributes.push((pattern.into(), attr.into()));
     }
 }
 
