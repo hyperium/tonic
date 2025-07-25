@@ -545,6 +545,14 @@ impl Builder {
         self
     }
 
+    /// Add additional attribute to matched traits. Passed directly to
+    /// `prost_build::Config.message_attribute`
+    pub fn trait_attribute<P: AsRef<str>, A: AsRef<str>>(mut self, path: P, attribute: A) -> Self {
+        self.server_attributes
+            .push_trait(path.as_ref(), attribute.as_ref());
+        self
+    }
+
     /// Add additional attribute to matched client `mod`s. Passed directly to
     /// `prost_build::Config.message_attribute`
     pub fn client_mod_attribute<P: AsRef<str>, A: AsRef<str>>(
