@@ -204,10 +204,10 @@ impl ResolverBuilder for Builder {
         let host = match endpoint.host {
             Host::Domain(d) => d,
             Host::Ipv4(ipv4) => {
-                return nop_resolver_for_ip(IpAddr::V4(ipv4), endpoint.port, options)
+                return nop_resolver_for_ip(IpAddr::V4(ipv4), endpoint.port, options);
             }
             Host::Ipv6(ipv6) => {
-                return nop_resolver_for_ip(IpAddr::V6(ipv6), endpoint.port, options)
+                return nop_resolver_for_ip(IpAddr::V6(ipv6), endpoint.port, options);
             }
         };
         let authority = parsed.authority;
@@ -233,7 +233,7 @@ impl ResolverBuilder for Builder {
 
     fn is_valid_uri(&self, target: &Target) -> bool {
         if let Err(err) = parse_endpoint_and_authority(target) {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             false
         } else {
             true
@@ -311,7 +311,7 @@ fn parse_endpoint_and_authority(target: &Target) -> Result<ParseResult, String> 
     let endpoint = target.path();
     let endpoint = endpoint.strip_prefix("/").unwrap_or(endpoint);
     let parse_result = parse_host_port(endpoint, DEFAULT_PORT)
-        .map_err(|err| format!("Failed to parse target {}: {}", target, err))?;
+        .map_err(|err| format!("Failed to parse target {target}: {err}"))?;
     let endpoint = parse_result.ok_or("Received empty endpoint host.".to_string())?;
 
     // Parse the authority.
@@ -323,7 +323,7 @@ fn parse_endpoint_and_authority(target: &Target) -> Result<ParseResult, String> 
         });
     }
     let parse_result = parse_host_port(&authority, DEFAULT_DNS_PORT)
-        .map_err(|err| format!("Failed to parse DNS authority {}: {}", target, err))?;
+        .map_err(|err| format!("Failed to parse DNS authority {target}: {err}"))?;
     let Some(authority) = parse_result else {
         return Ok(ParseResult {
             endpoint,
@@ -351,7 +351,7 @@ fn parse_host_port(host_and_port: &str, default_port: u16) -> Result<Option<Host
     // We need to use the https scheme otherwise url::Url::parse doesn't convert
     // IP addresses to Host::Ipv4 or Host::Ipv6 if they could represent valid
     // domains.
-    let url = format!("https://{}", host_and_port);
+    let url = format!("https://{host_and_port}");
     let url = url.parse::<url::Url>().map_err(|err| err.to_string())?;
     let port = url.port().unwrap_or(default_port);
     let host = match url.host() {

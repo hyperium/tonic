@@ -48,7 +48,7 @@ impl DnsResolver for TokioDefaultDnsResolver {
     async fn lookup_host_name(&self, name: &str) -> Result<Vec<IpAddr>, String> {
         let name_with_port = match name.parse::<IpAddr>() {
             Ok(ip) => SocketAddr::new(ip, 0).to_string(),
-            Err(_) => format!("{}:0", name),
+            Err(_) => format!("{name}:0"),
         };
         let ips = tokio::net::lookup_host(name_with_port)
             .await
