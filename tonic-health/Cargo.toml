@@ -18,7 +18,8 @@ rust-version = { workspace = true }
 prost = "0.14"
 tokio = {version = "1.0", features = ["sync"]}
 tokio-stream = {version = "0.1", default-features = false, features = ["sync"]}
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
+tonic-prost = { version = "0.14.0", path = "../tonic-prost", default-features = false }
 
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
