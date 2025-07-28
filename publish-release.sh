@@ -15,12 +15,12 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 CRATES=( \
   "tonic" \
   "tonic-build" \
+  "tonic-prost" \
+  "tonic-prost-build" \
   "tonic-types" \
   "tonic-reflection" \
   "tonic-health" \
   "tonic-web" \
-  "tonic-prost" \
-  "tonic-prost-build" \
 )
 
 for CRATE in "${CRATES[@]}"; do
