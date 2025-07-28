@@ -107,7 +107,7 @@ impl Target {
         let host = self.authority_host();
         let port = self.authority_port();
         if let Some(port) = port {
-            format!("{}:{}", host, port)
+            format!("{host}:{port}")
         } else {
             host.to_owned()
         }
@@ -319,6 +319,7 @@ impl Hash for Address {
 }
 
 impl Display for Address {
+    #[allow(clippy::to_string_in_format_args)]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{}:{}", self.network_type, self.address.to_string())
     }

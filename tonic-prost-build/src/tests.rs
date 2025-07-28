@@ -49,14 +49,12 @@ fn test_request_response_name_google_types_not_compiled() {
         assert_eq!(
             request.to_string(),
             expected.to_string(),
-            "Failed for input type: {}",
-            type_name
+            "Failed for input type: {type_name}"
         );
         assert_eq!(
             response.to_string(),
             expected.to_string(),
-            "Failed for output type: {}",
-            type_name
+            "Failed for output type: {type_name}"
         );
     }
 }
@@ -84,14 +82,12 @@ fn test_request_response_name_google_types_compiled() {
         assert_eq!(
             request.to_string(),
             expected_path,
-            "Failed for input type: {}",
-            type_name
+            "Failed for input type: {type_name}"
         );
         assert_eq!(
             response.to_string(),
             expected_path,
-            "Failed for output type: {}",
-            type_name
+            "Failed for output type: {type_name}"
         );
     }
 }
@@ -124,20 +120,18 @@ fn test_request_response_name_extern_types() {
             "::my_crate::MyType" => ":: my_crate :: MyType",
             "crate::module::MyType" => "crate :: module :: MyType",
             "::external::lib::Type" => ":: external :: lib :: Type",
-            _ => panic!("Unknown test case: {}", type_name),
+            _ => panic!("Unknown test case: {type_name}"),
         };
 
         assert_eq!(
             request.to_string(),
             expected,
-            "Failed for input type: {}",
-            type_name
+            "Failed for input type: {type_name}"
         );
         assert_eq!(
             response.to_string(),
             expected,
-            "Failed for output type: {}",
-            type_name
+            "Failed for output type: {type_name}"
         );
     }
 }
@@ -162,14 +156,12 @@ fn test_request_response_name_regular_protobuf_types() {
         assert_eq!(
             request.to_string(),
             expected,
-            "Failed for input type: {}",
-            input
+            "Failed for input type: {input}"
         );
         assert_eq!(
             response.to_string(),
             expected,
-            "Failed for output type: {}",
-            input
+            "Failed for output type: {input}"
         );
     }
 }
@@ -194,7 +186,7 @@ fn test_request_response_name_different_proto_paths() {
                 proto_path.replace("::", " :: ")
             )
         } else {
-            format!("{} :: mypackage :: MyMessage", proto_path)
+            format!("{proto_path} :: mypackage :: MyMessage")
         };
         let expected_response = if proto_path.contains("::") {
             format!(
@@ -202,20 +194,18 @@ fn test_request_response_name_different_proto_paths() {
                 proto_path.replace("::", " :: ")
             )
         } else {
-            format!("{} :: mypackage :: MyResponse", proto_path)
+            format!("{proto_path} :: mypackage :: MyResponse")
         };
 
         assert_eq!(
             request.to_string(),
             expected_request,
-            "Failed for proto_path: {}",
-            proto_path
+            "Failed for proto_path: {proto_path}"
         );
         assert_eq!(
             response.to_string(),
             expected_response,
-            "Failed for proto_path: {}",
-            proto_path
+            "Failed for proto_path: {proto_path}"
         );
     }
 }

@@ -456,6 +456,7 @@ impl SubchannelKey {
 }
 
 impl Display for SubchannelKey {
+    #[allow(clippy::to_string_in_format_args)]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.address.address.to_string())
     }
@@ -479,7 +480,7 @@ impl InternalSubchannelPool {
     }
 
     pub(super) fn lookup_subchannel(&self, key: &SubchannelKey) -> Option<Arc<InternalSubchannel>> {
-        println!("looking up subchannel for: {:?} in the pool", key);
+        println!("looking up subchannel for: {key:?} in the pool");
         if let Some(weak_isc) = self.subchannels.read().unwrap().get(key) {
             if let Some(isc) = weak_isc.upgrade() {
                 return Some(isc);
@@ -493,7 +494,7 @@ impl InternalSubchannelPool {
         key: &SubchannelKey,
         isc: Arc<InternalSubchannel>,
     ) -> Arc<InternalSubchannel> {
-        println!("registering subchannel for: {:?} with the pool", key);
+        println!("registering subchannel for: {key:?} with the pool");
         self.subchannels
             .write()
             .unwrap()
@@ -507,7 +508,7 @@ impl InternalSubchannelPool {
             if let Some(isc) = weak_isc.upgrade() {
                 return;
             }
-            println!("removing subchannel for: {:?} from the pool", key);
+            println!("removing subchannel for: {key:?} from the pool");
             subchannels.remove(key);
             return;
         }
