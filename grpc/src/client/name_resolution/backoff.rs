@@ -125,7 +125,7 @@ mod tests {
     #[test]
     fn default_config_is_valid() {
         let result = ExponentialBackoff::new(DEFAULT_EXPONENTIAL_CONFIG.clone());
-        assert_eq!(result.is_ok(), true);
+        assert!(result.is_ok());
     }
 
     #[test]
@@ -149,7 +149,7 @@ mod tests {
             max_delay: Duration::from_secs(10),
         };
         let result = ExponentialBackoff::new(config);
-        assert_eq!(result.is_err(), true);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -161,7 +161,7 @@ mod tests {
             max_delay: Duration::from_secs(100),
         };
         let result = ExponentialBackoff::new(config);
-        assert_eq!(result.is_err(), true);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -173,7 +173,7 @@ mod tests {
             max_delay: Duration::from_secs(100),
         };
         let result = ExponentialBackoff::new(config);
-        assert_eq!(result.is_err(), true);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -185,7 +185,7 @@ mod tests {
             max_delay: Duration::from_secs(100),
         };
         let result = ExponentialBackoff::new(config);
-        assert_eq!(result.is_err(), true);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -227,15 +227,15 @@ mod tests {
         let mut backoff = ExponentialBackoff::new(config.clone()).unwrap();
         // 0.8 <= duration <= 1.2.
         let duration = backoff.backoff_duration();
-        assert_eq!(duration.gt(&Duration::from_secs_f64(0.8 - EPSILON)), true);
-        assert_eq!(duration.lt(&Duration::from_secs_f64(1.2 + EPSILON)), true);
+        assert!(duration.gt(&Duration::from_secs_f64(0.8 - EPSILON)));
+        assert!(duration.lt(&Duration::from_secs_f64(1.2 + EPSILON)));
         // 1.6 <= duration <= 2.4.
         let duration = backoff.backoff_duration();
-        assert_eq!(duration.gt(&Duration::from_secs_f64(1.6 - EPSILON)), true);
-        assert_eq!(duration.lt(&Duration::from_secs_f64(2.4 + EPSILON)), true);
+        assert!(duration.gt(&Duration::from_secs_f64(1.6 - EPSILON)));
+        assert!(duration.lt(&Duration::from_secs_f64(2.4 + EPSILON)));
         // 3.2 <= duration <= 4.8.
         let duration = backoff.backoff_duration();
-        assert_eq!(duration.gt(&Duration::from_secs_f64(3.2 - EPSILON)), true);
-        assert_eq!(duration.lt(&Duration::from_secs_f64(4.8 + EPSILON)), true);
+        assert!(duration.gt(&Duration::from_secs_f64(3.2 - EPSILON)));
+        assert!(duration.lt(&Duration::from_secs_f64(4.8 + EPSILON)));
     }
 }
