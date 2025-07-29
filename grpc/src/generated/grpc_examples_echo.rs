@@ -105,7 +105,7 @@ pub mod echo_client {
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.examples.echo.Echo/UnaryEcho",
             );
@@ -130,7 +130,7 @@ pub mod echo_client {
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.examples.echo.Echo/ServerStreamingEcho",
             );
@@ -154,7 +154,7 @@ pub mod echo_client {
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.examples.echo.Echo/ClientStreamingEcho",
             );
@@ -181,7 +181,7 @@ pub mod echo_client {
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.examples.echo.Echo/BidirectionalStreamingEcho",
             );
@@ -354,7 +354,7 @@ pub mod echo_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = UnaryEchoSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -400,7 +400,7 @@ pub mod echo_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ServerStreamingEchoSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -445,7 +445,7 @@ pub mod echo_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = ClientStreamingEchoSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -490,7 +490,7 @@ pub mod echo_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = BidirectionalStreamingEchoSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,

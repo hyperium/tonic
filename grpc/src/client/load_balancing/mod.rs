@@ -91,7 +91,7 @@ impl ParsedJsonLbConfig {
     pub fn new(json: &str) -> Result<Self, String> {
         match serde_json::from_str(json) {
             Ok(value) => Ok(ParsedJsonLbConfig { value }),
-            Err(e) => Err(format!("failed to parse LB config JSON: {}", e)),
+            Err(e) => Err(format!("failed to parse LB config JSON: {e}")),
         }
     }
 
@@ -110,7 +110,7 @@ impl ParsedJsonLbConfig {
         let res: T = match serde_json::from_value(self.value.clone()) {
             Ok(v) => v,
             Err(e) => {
-                return Err(format!("{}", e).into());
+                return Err(format!("{e}").into());
             }
         };
         Ok(res)
@@ -211,7 +211,7 @@ impl Display for SubchannelState {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "connectivity_state: {}", self.connectivity_state)?;
         if let Some(err) = &self.last_connection_error {
-            write!(f, ", last_connection_error: {}", err)?;
+            write!(f, ", last_connection_error: {err}")?;
         }
         Ok(())
     }
@@ -303,8 +303,8 @@ impl Display for PickResult {
         match self {
             Self::Pick(_) => write!(f, "Pick"),
             Self::Queue => write!(f, "Queue"),
-            Self::Fail(st) => write!(f, "Fail({})", st),
-            Self::Drop(st) => write!(f, "Drop({})", st),
+            Self::Fail(st) => write!(f, "Fail({st})"),
+            Self::Drop(st) => write!(f, "Drop({st})"),
         }
     }
 }
@@ -326,6 +326,9 @@ impl LbState {
     }
 }
 
+/// Type alias for the completion callback function.
+pub type CompletionCallback = Box<dyn Fn(&Response) + Send + Sync>;
+
 /// A collection of data used by the channel for routing a request.
 pub struct Pick {
     /// The Subchannel for the request.
@@ -333,10 +336,11 @@ pub struct Pick {
     // Metadata to be added to existing outgoing metadata.
     pub metadata: MetadataMap,
     // Callback to be invoked once the RPC completes.
-    pub on_complete: Option<Box<dyn Fn(&Response) + Send + Sync>>,
+    pub on_complete: Option<CompletionCallback>,
 }
 
 pub trait DynHash {
+    #[allow(clippy::redundant_allocation)]
     fn dyn_hash(&self, state: &mut Box<&mut dyn Hasher>);
 }
 
@@ -504,7 +508,7 @@ impl Subchannel for ExternalSubchannel {
     }
 
     fn connect(&self) {
-        println!("connect called for subchannel: {}", self);
+        println!("connect called for subchannel: {self}");
         self.isc.as_ref().unwrap().connect(false);
     }
 }
@@ -519,7 +523,7 @@ impl Drop for ExternalSubchannel {
         let isc = self.isc.take();
         let _ = self.work_scheduler.send(WorkQueueItem::Closure(Box::new(
             move |c: &mut InternalChannelController| {
-                println!("unregistering connectivity state watcher for {:?}", address);
+                println!("unregistering connectivity state watcher for {address:?}");
                 isc.as_ref()
                     .unwrap()
                     .unregister_connectivity_state_watcher(watcher.unwrap());

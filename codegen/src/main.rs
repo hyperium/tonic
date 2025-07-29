@@ -2,13 +2,18 @@ use std::{
     fs::File,
     io::{BufWriter, Write as _},
     path::{Path, PathBuf},
+    time::Instant,
 };
 
 use protox::prost::Message as _;
 use quote::quote;
-use tonic_build::FileDescriptorSet;
+use tonic_prost_build::FileDescriptorSet;
 
 fn main() {
+    println!("Running codegen...");
+
+    let start = Instant::now();
+
     // tonic-health
     codegen(
         &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
@@ -76,6 +81,7 @@ fn main() {
         true,
         true,
     );
+    println!("Codgen completed: {}ms", start.elapsed().as_millis());
 }
 
 fn codegen(
@@ -101,9 +107,10 @@ fn codegen(
 
     write_fds(&fds, &file_descriptor_set_path);
 
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_client(build_client)
         .build_server(build_server)
+        .build_transport(false)
         .out_dir(&tempdir)
         .compile_fds(fds)
         .unwrap();

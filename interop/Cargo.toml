@@ -23,8 +23,9 @@ prost = "0.14"
 tokio = {version = "1.0", features = ["rt-multi-thread", "time", "macros"]}
 tokio-stream = "0.1"
 tonic = {path = "../tonic", features = ["tls-ring"]}
+tonic-prost = {path = "../tonic-prost"}
 tower = "0.5"
 tracing-subscriber = {version = "0.3"}
 
 [build-dependencies]
-tonic-build = {path = "../tonic-build", features = ["prost"]}
+tonic-prost-build = {path = "../tonic-prost-build"}

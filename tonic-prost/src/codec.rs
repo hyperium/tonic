@@ -1,10 +1,9 @@
-use super::{BufferSettings, Codec, DecodeBuf, Decoder, Encoder};
-use crate::codec::EncodeBuf;
-use crate::Status;
 use prost::Message;
 use std::marker::PhantomData;
+use tonic::codec::{BufferSettings, Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
+use tonic::Status;
 
-/// A [`Codec`] that implements `application/grpc+proto` via the prost library..
+/// A [`Codec`] that implements `application/grpc+proto` via the prost library.
 #[derive(Debug, Clone)]
 pub struct ProstCodec<T, U> {
     _pd: PhantomData<(T, U)>,
@@ -141,7 +140,7 @@ impl<U: Message + Default> Decoder for ProstDecoder<U> {
     }
 }
 
-fn from_decode_error(error: prost::DecodeError) -> crate::Status {
+fn from_decode_error(error: prost::DecodeError) -> Status {
     // Map Protobuf parse errors to an INTERNAL status code, as per
     // https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
     Status::internal(error.to_string())
@@ -149,15 +148,13 @@ fn from_decode_error(error: prost::DecodeError) -> crate::Status {
 
 #[cfg(test)]
 mod tests {
-    use crate::codec::compression::SingleMessageCompressionOverride;
-    use crate::codec::{
-        DecodeBuf, Decoder, EncodeBody, EncodeBuf, Encoder, Streaming, HEADER_SIZE,
-    };
-    use crate::Status;
+    use super::*;
     use bytes::{Buf, BufMut, BytesMut};
     use http_body::Body;
     use http_body_util::BodyExt as _;
     use std::pin::pin;
+    use tonic::codec::SingleMessageCompressionOverride;
+    use tonic::codec::{EncodeBody, Streaming, HEADER_SIZE};
 
     const LEN: usize = 10000;
     // The maximum uncompressed size in bytes for a message. Set to 2MB.
@@ -278,8 +275,6 @@ mod tests {
     #[cfg(not(target_family = "windows"))]
     #[tokio::test]
     async fn encode_too_big() {
-        use crate::codec::EncodeBody;
-
         let encoder = MockEncoder::default();
 
         let msg = vec![0u8; u32::MAX as usize + 1];
@@ -323,7 +318,7 @@ mod tests {
             Ok(())
         }
 
-        fn buffer_settings(&self) -> crate::codec::BufferSettings {
+        fn buffer_settings(&self) -> BufferSettings {
             Default::default()
         }
     }
@@ -341,19 +336,19 @@ mod tests {
             Ok(Some(out))
         }
 
-        fn buffer_settings(&self) -> crate::codec::BufferSettings {
+        fn buffer_settings(&self) -> BufferSettings {
             Default::default()
         }
     }
 
     mod body {
-        use crate::Status;
         use bytes::Bytes;
         use http_body::{Body, Frame};
         use std::{
             pin::Pin,
             task::{Context, Poll},
         };
+        use tonic::Status;
 
         #[derive(Debug)]
         pub(super) struct MockBody {

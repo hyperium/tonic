@@ -66,8 +66,7 @@ impl ResolverRegistry {
         let scheme = builder.scheme();
         if scheme.chars().any(|c| c.is_ascii_uppercase()) {
             return Err(format!(
-                "Scheme must not contain uppercase characters: {}",
-                scheme
+                "Scheme must not contain uppercase characters: {scheme}"
             ));
         }
         self.inner

@@ -7,7 +7,7 @@ use tonic::{transport::Server, Code, Request, Response, Status};
 async fn service_resource_exhausted() {
     let addr = run_service_in_background(0).await;
 
-    let mut client = test_client::TestClient::connect(format!("http://{}", addr))
+    let mut client = test_client::TestClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 
@@ -22,7 +22,7 @@ async fn service_resource_exhausted() {
 async fn service_resource_not_exhausted() {
     let addr = run_service_in_background(1).await;
 
-    let mut client = test_client::TestClient::connect(format!("http://{}", addr))
+    let mut client = test_client::TestClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 

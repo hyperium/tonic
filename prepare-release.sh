@@ -30,6 +30,8 @@ CRATES=( \
   "tonic-reflection" \
   "tonic-health" \
   "tonic-web" \
+  "tonic-prost" \
+  "tonic-prost-build" \
 )
 
 for CRATE in "${CRATES[@]}"; do
