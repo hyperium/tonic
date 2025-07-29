@@ -88,10 +88,7 @@ impl crate::server::Listener for Arc<Listener> {
     async fn accept(&self) -> Option<server::Call> {
         let mut recv = self.r.lock().await;
         let r = recv.recv().await;
-        if r.is_none() {
-            // Listener was closed.
-            return None;
-        }
+        r.as_ref()?;
         r.unwrap()
     }
 }

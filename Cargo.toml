@@ -7,6 +7,8 @@ members = [
   "tonic-protobuf-build",
   "tonic-types",
   "tonic-reflection",
+  "tonic-prost",
+  "tonic-prost-build",
   "tonic-web", # Non-published crates
   "examples",
   "codegen",

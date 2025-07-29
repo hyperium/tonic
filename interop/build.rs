@@ -1,7 +1,7 @@
 fn main() {
     let proto = "proto/grpc/testing/test.proto";
 
-    tonic_build::compile_protos(proto).unwrap();
+    tonic_prost_build::compile_protos(proto).unwrap();
     tonic_protobuf_build::CodeGen::new()
         .include("proto/grpc/testing")
         .inputs(["test.proto", "empty.proto", "messages.proto"])

@@ -66,15 +66,14 @@ impl ResolverRegistry {
         let scheme = builder.scheme();
         if scheme.chars().any(|c| c.is_ascii_uppercase()) {
             return Err(format!(
-                "Scheme must not contain uppercase characters: {}",
-                scheme
+                "Scheme must not contain uppercase characters: {scheme}"
             ));
         }
         self.inner
             .lock()
             .unwrap()
             .insert(scheme.to_string(), Arc::from(builder));
-        return Ok(());
+        Ok(())
     }
 
     /// Returns the resolver builder registered for the given scheme, if any.

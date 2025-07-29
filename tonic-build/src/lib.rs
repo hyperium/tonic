@@ -10,16 +10,7 @@
 use proc_macro2::{Delimiter, Group, Ident, Literal, Punct, Spacing, Span, TokenStream};
 use quote::TokenStreamExt;
 
-/// Prost generator
-#[cfg(feature = "prost")]
-mod prost;
-#[cfg(feature = "prost")]
-pub use prost_build::Config;
-#[cfg(feature = "prost")]
-pub use prost_types::FileDescriptorSet;
-
-#[cfg(feature = "prost")]
-pub use prost::{compile_fds, compile_protos, configure, Builder};
+// Prost functionality has been moved to tonic-prost-build
 
 pub mod manual;
 
@@ -30,8 +21,6 @@ mod server;
 
 mod code_gen;
 pub use code_gen::CodeGenBuilder;
-
-mod compile_settings;
 
 /// Service generation trait.
 ///
@@ -99,6 +88,8 @@ pub struct Attributes {
     module: Vec<(String, String)>,
     /// `struct` attributes.
     structure: Vec<(String, String)>,
+    /// `trait` attributes.
+    trait_attributes: Vec<(String, String)>,
 }
 
 impl Attributes {
@@ -108,6 +99,10 @@ impl Attributes {
 
     fn for_struct(&self, name: &str) -> Vec<syn::Attribute> {
         generate_attributes(name, &self.structure)
+    }
+
+    fn for_trait(&self, name: &str) -> Vec<syn::Attribute> {
+        generate_attributes(name, &self.trait_attributes)
     }
 
     /// Add an attribute that will be added to `mod` items matching the given pattern.
@@ -134,6 +129,19 @@ impl Attributes {
     /// ```
     pub fn push_struct(&mut self, pattern: impl Into<String>, attr: impl Into<String>) {
         self.structure.push((pattern.into(), attr.into()));
+    }
+
+    /// Add an attribute that will be added to `trait` items matching the given pattern.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use tonic_build::*;
+    /// let mut attributes = Attributes::default();
+    /// attributes.push_trait("Server", "#[mockall::automock]");
+    /// ```
+    pub fn push_trait(&mut self, pattern: impl Into<String>, attr: impl Into<String>) {
+        self.trait_attributes.push((pattern.into(), attr.into()));
     }
 }
 

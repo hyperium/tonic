@@ -1,5 +1,5 @@
-use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings};
 use crate::codec::EncodeBody;
+use crate::codec::{CompressionEncoding, EnabledCompressionEncodings};
 use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
     body::Body,
