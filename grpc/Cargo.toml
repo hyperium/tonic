@@ -7,8 +7,6 @@ license = "MIT"
 
 [dependencies]
 bytes = "1.10.1"
-futures-core = "0.3.31"
-futures-util = "0.3.31"
 hickory-resolver = { version = "0.25.1", optional = true }
 http = "1.1.0"
 http-body = "1.0.1"
