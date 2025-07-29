@@ -27,13 +27,13 @@ use crate::{
     grpc_pb::test_service_client::*, grpc_pb::unimplemented_service_client::*, grpc_pb::*,
     test_assert, TestAssertion,
 };
-use protobuf::__internal::MatcherEq;
-use protobuf::proto;
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tonic::async_trait;
 use tonic::transport::Channel;
 use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
+use tonic_protobuf::protobuf::__internal::MatcherEq;
+use tonic_protobuf::protobuf::proto;
 
 pub type TestClient = TestServiceClient<Channel>;
 pub type UnimplementedClient = UnimplementedServiceClient<Channel>;

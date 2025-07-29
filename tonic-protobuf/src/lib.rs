@@ -23,12 +23,14 @@
  */
 
 use bytes::{Buf, BufMut};
-use protobuf::Message;
 use std::marker::PhantomData;
 use tonic::{
     codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
     Status,
 };
+
+pub use protobuf;
+use protobuf::Message;
 
 /// A [`Codec`] that implements `application/grpc+proto` via the protobuf
 /// library.
