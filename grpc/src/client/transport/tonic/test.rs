@@ -7,13 +7,13 @@ use crate::echo_pb::{EchoRequest, EchoResponse};
 use crate::service::Message;
 
 use bytes::Bytes;
-use prost::Message as ProstMessage;
 use std::any::Any;
 use std::{pin::Pin, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot, Notify};
 use tokio::time::timeout;
 use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
+use tonic_prost::prost::Message as ProstMessage;
 
 use tonic::async_trait;
 use tonic::{transport::Server, Request, Response, Status};
@@ -31,7 +31,7 @@ pub async fn tonic_transport_rpc() {
     let addr = listener.local_addr().unwrap(); // get the assigned address
     let shutdown_notify = Arc::new(Notify::new());
     let shutdown_notify_copy = shutdown_notify.clone();
-    println!("EchoServer listening on: {}", addr);
+    println!("EchoServer listening on: {addr}");
     let server_handle = tokio::spawn(async move {
         let echo_server = EchoService {};
         let svc = EchoServer::new(echo_server);
@@ -71,31 +71,32 @@ pub async fn tonic_transport_rpc() {
     // Spawn a sender task
     let client_handle = tokio::spawn(async move {
         for i in 0..5 {
-            let message = format!("message {}", i);
+            let message = format!("message {i}");
             let request = EchoRequest {
                 message: message.clone(),
             };
 
             let bytes = Bytes::from(request.encode_to_vec());
 
-            println!("Sent request: {:?}", request);
-            if let Err(_) = tx.send(Box::new(bytes)).await {
+            println!("Sent request: {request:?}");
+            if tx.send(Box::new(bytes)).await.is_err() {
                 panic!("Receiver dropped");
             }
 
             // Wait for the reply
-            match inbound.next().await {
-                Some(Ok(resp)) => {
+            match inbound
+                .next()
+                .await
+                .expect("server unexpectedly closed the stream!")
+            {
+                Ok(resp) => {
                     let bytes = (resp as Box<dyn Any>).downcast::<Bytes>().unwrap();
                     let echo_reponse = EchoResponse::decode(bytes).unwrap();
-                    println!("Got response: {:?}", echo_reponse);
+                    println!("Got response: {echo_reponse:?}");
                     assert_eq!(echo_reponse.message, message);
                 }
-                Some(Err(status)) => {
-                    panic!("Error from server: {:?}", status);
-                }
-                None => {
-                    panic!("Server closed the stream");
+                Err(status) => {
+                    panic!("Error from server: {status:?}");
                 }
             }
         }

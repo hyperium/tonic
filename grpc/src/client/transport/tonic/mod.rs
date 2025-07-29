@@ -78,15 +78,13 @@ impl Drop for TonicTransport {
 #[async_trait]
 impl Service for TonicTransport {
     async fn call(&self, method: String, request: GrpcRequest) -> GrpcResponse {
-        let mut grpc = self.grpc.clone();
-        if let Err(e) = grpc.ready().await {
-            let err = Status::unknown(format!("Service was not ready: {}", e));
+        let Ok(path) = PathAndQuery::from_maybe_shared(method) else {
+            let err = Status::internal("Failed to parse path");
             return create_error_response(err);
         };
-        let path = if let Ok(p) = PathAndQuery::from_maybe_shared(method) {
-            p
-        } else {
-            let err = Status::internal("Failed to parse path");
+        let mut grpc = self.grpc.clone();
+        if let Err(e) = grpc.ready().await {
+            let err = Status::unknown(format!("Service was not ready: {e}"));
             return create_error_response(err);
         };
         let request = convert_request(request);
@@ -102,27 +100,19 @@ fn create_error_response(status: Status) -> GrpcResponse {
 }
 
 fn convert_request(req: GrpcRequest) -> TonicRequest<Pin<Box<dyn Stream<Item = Bytes> + Send>>> {
-    let (metadata, extensions) = (req.metadata().clone(), req.extensions().clone());
-    let stream = req.into_inner();
+    let (metadata, extensions, stream) = req.into_parts();
 
     let bytes_stream = Box::pin(stream.filter_map(|msg| async {
-        let downcast_result = (msg as Box<dyn Any>).downcast::<Bytes>();
-
-        match downcast_result {
-            Ok(boxed_bytes) => Some(*boxed_bytes),
-
+        if let Ok(bytes) = (msg as Box<dyn Any>).downcast::<Bytes>() {
+            Some(*bytes)
+        } else {
             // If it fails, log the error and return None to filter it out.
-            Err(_) => {
-                eprintln!("A message could not be downcast to Bytes and was skipped.");
-                None
-            }
+            eprintln!("A message could not be downcast to Bytes and was skipped.");
+            None
         }
     }));
 
-    let mut new_req = TonicRequest::new(bytes_stream as _);
-    *new_req.metadata_mut() = metadata;
-    *new_req.extensions_mut() = extensions;
-    new_req
+    TonicRequest::from_parts(metadata, extensions, bytes_stream as _)
 }
 
 fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> GrpcResponse {
@@ -133,8 +123,7 @@ fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> Grp
             return TonicResponse::new(Box::pin(stream));
         }
     };
-    let (metadata, extensions) = (response.metadata().clone(), response.extensions().clone());
-    let stream = response.into_inner();
+    let (metadata, stream, extensions) = response.into_parts();
     let message_stream: Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send>> =
         Box::pin(stream.map(|msg| {
             msg.map(|b| {
@@ -142,10 +131,7 @@ fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> Grp
                 msg
             })
         }));
-    let mut new_res = TonicResponse::new(message_stream);
-    *new_res.metadata_mut() = metadata;
-    *new_res.extensions_mut() = extensions;
-    new_res
+    TonicResponse::from_parts(metadata, message_stream, extensions)
 }
 
 #[async_trait]
