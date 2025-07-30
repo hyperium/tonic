@@ -2,7 +2,6 @@ use crate::grpc_pb::{self, *};
 use async_stream::try_stream;
 use http::header::{HeaderMap, HeaderName};
 use http_body_util::BodyExt;
-use protobuf::proto;
 use std::future::Future;
 use std::pin::Pin;
 use std::result::Result as StdResult;
@@ -11,6 +10,7 @@ use std::time::Duration;
 use tokio_stream::StreamExt;
 use tonic::codegen::BoxStream;
 use tonic::{body::Body, server::NamedService, Code, Request, Response, Status};
+use tonic_protobuf::protobuf::proto;
 use tower::Service;
 
 pub use grpc_pb::test_service_server::TestServiceServer;
@@ -21,7 +21,6 @@ pub struct TestService {}
 
 type Result<T> = StdResult<Response<T>, Status>;
 type Streaming<T> = Request<tonic::Streaming<T>>;
-type Stream<T> = Pin<Box<dyn tokio_stream::Stream<Item = StdResult<T, Status>> + Send + 'static>>;
 type BoxFuture<T, E> = Pin<Box<dyn Future<Output = StdResult<T, E>> + Send + 'static>>;
 
 #[tonic::async_trait]
@@ -49,11 +48,11 @@ impl grpc_pb::test_service_server::TestService for TestService {
             return Err(status);
         };
 
-        let res = proto! {SimpleResponse {
+        let res = proto!(SimpleResponse {
             payload: Payload {
                 body: vec![0; res_size],
             },
-        }};
+        });
 
         Ok(Response::new(res))
     }
@@ -72,7 +71,7 @@ impl grpc_pb::test_service_server::TestService for TestService {
                 tokio::time::sleep(Duration::from_micros(param.interval_us() as u64)).await;
 
                 let payload = crate::grpc_utils::server_payload(param.size() as usize);
-                yield proto!{StreamingOutputCallResponse { payload: payload }};
+                yield proto!(StreamingOutputCallResponse { payload: payload });
             }
         };
 
@@ -90,9 +89,9 @@ impl grpc_pb::test_service_server::TestService for TestService {
             aggregated_payload_size += msg.payload().body().len() as i32;
         }
 
-        let res = proto! {StreamingInputCallResponse {
+        let res = proto!(StreamingInputCallResponse {
             aggregated_payload_size: aggregated_payload_size,
-        }};
+        });
 
         Ok(Response::new(res))
     }
@@ -129,7 +128,7 @@ impl grpc_pb::test_service_server::TestService for TestService {
                         tokio::time::sleep(Duration::from_micros(param.interval_us() as u64)).await;
 
                         let payload = crate::grpc_utils::server_payload(param.size() as usize);
-                        yield proto!{StreamingOutputCallResponse { payload: payload }};
+                        yield proto!(StreamingOutputCallResponse { payload: payload });
                     }
                 }
             };
