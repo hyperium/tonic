@@ -1,0 +1,16 @@
+[package]
+name = "test-compile"
+edition = "2021"
+license = "MIT"
+
+[dependencies]
+prost = "0.14"
+
+[dev-dependencies]
+static_assertions = "1"
+trybuild = "1"
+tonic = {path = "../../tonic"}
+tonic-prost = {path = "../../tonic-prost"}
+
+[build-dependencies]
+tonic-prost-build = {path = "../../tonic-prost-build"}
