@@ -64,35 +64,39 @@ sleep 1
 
 echo ":; killing test server"; kill "${SERVER_PID}";
 
-# run the test server
-./target/debug/server "${ARG}" &
-SERVER_PID=$!
-echo ":; started tonic test server."
+CODECS=("prost" "protobuf")
 
-# trap exits to make sure we kill the server process when the script exits,
-# regardless of why (errors, SIGTERM, etc).
-trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
+for CODEC in "${CODECS[@]}"; do
+    # run the test server
+    ./target/debug/server "${ARG}" --codec "${CODEC}" &
+    SERVER_PID=$!
+    echo ":; started tonic test server with the ${CODEC} codec."
 
-sleep 1
+    # trap exits to make sure we kill the server process when the script exits,
+    # regardless of why (errors, SIGTERM, etc).
+    trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
-./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
+    sleep 1
 
-# Run client test cases
-if [ -n "${ARG:-}" ]; then
-  TLS_ARRAY=( \
-    -use_tls \
-    -use_test_ca \
-    -server_host_override=foo.test.google.fr \
-    -ca_file="${TLS_CA}" \
-  )
-else
-  TLS_ARRAY=()
-fi
+    ./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
-for CASE in "${TEST_CASES[@]}"; do
-  flags=( "-test_case=${CASE}" )
-  flags+=( "${TLS_ARRAY[@]}" )
+    # Run client test cases
+    if [ -n "${ARG:-}" ]; then
+      TLS_ARRAY=( \
+        -use_tls \
+        -use_test_ca \
+        -server_host_override=foo.test.google.fr \
+        -ca_file="${TLS_CA}" \
+      )
+    else
+      TLS_ARRAY=()
+    fi
 
-  interop/bin/client_"${OS}"_amd64"${EXT}" "${flags[@]}"
+    for CASE in "${TEST_CASES[@]}"; do
+      flags=( "-test_case=${CASE}" )
+      flags+=( "${TLS_ARRAY[@]}" )
+
+      interop/bin/client_"${OS}"_amd64"${EXT}" "${flags[@]}"
+    done
+    echo ":; killing test server"; kill "${SERVER_PID}";
 done
-
