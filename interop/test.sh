@@ -51,9 +51,16 @@ TLS_KEY="interop/data/server1.key"
 SERVER_PID=$!
 echo ":; started grpc-go test server."
 
+cleanup() {
+  # Temporarily disable 'exit on error' just for this command.
+  set +e
+  echo ":; killing test server ${SERVER_PID}"
+  kill "${SERVER_PID}"
+}
+
 # trap exits to make sure we kill the server process when the script exits,
 # regardless of why (errors, SIGTERM, etc).
-trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
+trap cleanup EXIT
 
 sleep 1
 
@@ -63,6 +70,9 @@ sleep 1
 ./target/debug/client --codec=protobuf --test_case="${JOINED_TEST_CASES}" ${ARG}
 
 echo ":; killing test server"; kill "${SERVER_PID}";
+while kill -0 ${SERVER_PID} 2> /dev/null; do
+    sleep 0.5
+done
 
 CODECS=("prost" "protobuf")
 
@@ -71,10 +81,6 @@ for CODEC in "${CODECS[@]}"; do
     ./target/debug/server "${ARG}" --codec "${CODEC}" &
     SERVER_PID=$!
     echo ":; started tonic test server with the ${CODEC} codec."
-
-    # trap exits to make sure we kill the server process when the script exits,
-    # regardless of why (errors, SIGTERM, etc).
-    trap 'echo ":; killing test server"; kill ${SERVER_PID};' EXIT
 
     sleep 1
 
@@ -95,8 +101,12 @@ for CODEC in "${CODECS[@]}"; do
     for CASE in "${TEST_CASES[@]}"; do
       flags=( "-test_case=${CASE}" )
       flags+=( "${TLS_ARRAY[@]}" )
-
       interop/bin/client_"${OS}"_amd64"${EXT}" "${flags[@]}"
     done
+
     echo ":; killing test server"; kill "${SERVER_PID}";
+    echo "Waiting for test server to exit..."
+    while kill -0 ${SERVER_PID} 2> /dev/null; do
+        sleep 0.5
+    done
 done
