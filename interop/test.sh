@@ -70,6 +70,7 @@ sleep 1
 ./target/debug/client --codec=protobuf --test_case="${JOINED_TEST_CASES}" ${ARG}
 
 echo ":; killing test server"; kill "${SERVER_PID}";
+echo "Waiting for test server to exit..."
 while kill -0 ${SERVER_PID} 2> /dev/null; do
     sleep 0.5
 done
@@ -100,7 +101,9 @@ for CODEC in "${CODECS[@]}"; do
 
     for CASE in "${TEST_CASES[@]}"; do
       flags=( "-test_case=${CASE}" )
-      flags+=( "${TLS_ARRAY[@]}" )
+      # Avoid unbound variable errors on MacOS with bash version < 4.4.
+      # See: https://stackoverflow.com/a/61551944
+      flags+=( ${TLS_ARRAY[@]+"${TLS_ARRAY[@]}"} )
       interop/bin/client_"${OS}"_amd64"${EXT}" "${flags[@]}"
     done
 
