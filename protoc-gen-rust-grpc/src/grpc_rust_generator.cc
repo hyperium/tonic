@@ -756,28 +756,35 @@ static void GenerateMethods(Printer &printer, const Service &service,
   for (const Method &method : methods) {
     const std::string request_type = method.RequestName(opts, 1);
     const std::string response_type = method.ResponseName(opts, 1);
-    auto vars = printer.WithVars({
-        {"codec_name", "tonic_protobuf::ProtoCodec"},
-        {"service_ident", method.Name() + "Svc"},
-        {"method_ident", method.Name()},
-        {"request", request_type},
-        {"response", response_type},
-        {"server_trait", service.Name()},
-        {"path", FormatMethodPath(service, method)},
-    });
-    printer.Emit(R"rs("$path$" => {
-      )rs");
-
-    if (!method.IsClientStreaming() && !method.IsServerStreaming()) {
-      printer.Emit(unary_format);
-    } else if (!method.IsClientStreaming() && method.IsServerStreaming()) {
-      printer.Emit(server_streaming_format);
-    } else if (method.IsClientStreaming() && !method.IsServerStreaming()) {
-      printer.Emit(client_streaming_format);
-    } else {
-      printer.Emit(streaming_format);
+    printer.Emit(
+        {
+            {"codec_name", "tonic_protobuf::ProtoCodec"},
+            {"service_ident", method.Name() + "Svc"},
+            {"method_ident", method.Name()},
+            {"request", request_type},
+            {"response", response_type},
+            {"server_trait", service.Name()},
+            {"path", FormatMethodPath(service, method)},
+            {"method_body",
+             [&]() {
+               if (!method.IsClientStreaming() && !method.IsServerStreaming()) {
+                 printer.Emit(unary_format);
+               } else if (!method.IsClientStreaming() &&
+                          method.IsServerStreaming()) {
+                 printer.Emit(server_streaming_format);
+               } else if (method.IsClientStreaming() &&
+                          !method.IsServerStreaming()) {
+                 printer.Emit(client_streaming_format);
+               } else {
+                 printer.Emit(streaming_format);
+               }
+             }},
+        },
+        R"rs(
+    "$path$" => {
+        $method_body$
     }
-    printer.Emit("}\n");
+    )rs");
   }
 }
 
