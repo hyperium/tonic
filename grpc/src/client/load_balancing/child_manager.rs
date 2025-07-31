@@ -43,9 +43,6 @@ use crate::rt::Runtime;
 
 use super::{Subchannel, SubchannelState};
 
-#[cfg(test)]
-mod test;
-
 // An LbPolicy implementation that manages multiple children.
 pub struct ChildManager<T> {
     subchannel_child_map: HashMap<WeakSubchannel, usize>,
