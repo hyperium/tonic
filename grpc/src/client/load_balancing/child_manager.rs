@@ -43,6 +43,9 @@ use crate::rt::Runtime;
 
 use super::{Subchannel, SubchannelState};
 
+#[cfg(test)]
+mod test;
+
 // An LbPolicy implementation that manages multiple children.
 pub struct ChildManager<T> {
     subchannel_child_map: HashMap<WeakSubchannel, usize>,
@@ -108,32 +111,32 @@ impl<T> ChildManager<T> {
     pub fn aggregate_states(&mut self) -> ConnectivityState {
         let child_states_vec = self.child_states();
 
-        let mut has_connecting = false;
-        let mut has_ready = false;
+        let mut is_connecting = false;
+        let mut is_ready = false;
         let mut is_transient_failure = true;
 
         for (child_id, state) in child_states_vec {
             match state.connectivity_state {
                 ConnectivityState::Idle => {
-                    has_connecting = true;
+                    is_connecting = true;
                     is_transient_failure = false;
                 }
                 ConnectivityState::Connecting => {
-                    has_connecting = true;
+                    is_connecting = true;
                     is_transient_failure = false;
                 }
                 ConnectivityState::Ready => {
+                    is_ready = true;
                     is_transient_failure = false;
-                    has_ready = true;
                 }
                 _ => {}
             }
         }
 
         // Decide the new aggregate state.
-        let new_state = if has_ready {
+        let new_state = if is_ready {
             ConnectivityState::Ready
-        } else if has_connecting {
+        } else if is_connecting {
             ConnectivityState::Connecting
         } else if is_transient_failure {
             ConnectivityState::TransientFailure
