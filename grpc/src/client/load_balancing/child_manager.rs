@@ -38,6 +38,7 @@ use crate::client::load_balancing::{
     WeakSubchannel, WorkScheduler,
 };
 use crate::client::name_resolution::{Address, ResolverUpdate};
+use crate::client::ConnectivityState;
 use crate::rt::Runtime;
 
 use super::{Subchannel, SubchannelState};
@@ -101,6 +102,45 @@ impl<T> ChildManager<T> {
         self.children
             .iter()
             .map(|child| (&child.identifier, &child.state))
+    }
+
+    /// Called to aggregate states from children policies then returns a update.
+    pub fn aggregate_states(&mut self) -> ConnectivityState {
+        let child_states_vec = self.child_states();
+
+        let mut has_connecting = false;
+        let mut has_ready = false;
+        let mut is_transient_failure = true;
+
+        for (child_id, state) in child_states_vec {
+            match state.connectivity_state {
+                ConnectivityState::Idle => {
+                    has_connecting = true;
+                    is_transient_failure = false;
+                }
+                ConnectivityState::Connecting => {
+                    has_connecting = true;
+                    is_transient_failure = false;
+                }
+                ConnectivityState::Ready => {
+                    is_transient_failure = false;
+                    has_ready = true;
+                }
+                _ => {}
+            }
+        }
+
+        // Decide the new aggregate state.
+        let new_state = if has_ready {
+            ConnectivityState::Ready
+        } else if has_connecting {
+            ConnectivityState::Connecting
+        } else if is_transient_failure {
+            ConnectivityState::TransientFailure
+        } else {
+            ConnectivityState::Connecting
+        };
+        new_state
     }
 
     // Called to update all accounting in the ChildManager from operations
