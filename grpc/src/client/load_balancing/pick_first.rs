@@ -4,7 +4,6 @@ use std::{
     time::Duration,
 };
 
-use tokio::time::sleep;
 use tonic::metadata::MetadataMap;
 
 use crate::{
@@ -75,9 +74,10 @@ impl LbPolicy for PickFirstPolicy {
 
         self.next_addresses = addresses;
         let work_scheduler = self.work_scheduler.clone();
+        let runtime = self.runtime.clone();
         // TODO: Implement Drop that cancels this task.
         self.runtime.spawn(Box::pin(async move {
-            sleep(Duration::from_millis(200)).await;
+            runtime.sleep(Duration::from_millis(200)).await;
             work_scheduler.schedule_work();
         }));
         // TODO: return a picker that queues RPCs.

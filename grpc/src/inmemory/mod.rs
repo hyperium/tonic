@@ -128,6 +128,7 @@ static INMEMORY_NETWORK_TYPE: &str = "inmemory";
 
 pub fn reg() {
     GLOBAL_TRANSPORT_REGISTRY.add_transport(INMEMORY_NETWORK_TYPE, ClientTransport::new());
+    global_registry().add_builder(Box::new(InMemoryResolverBuilder));
 }
 
 struct InMemoryResolverBuilder;

@@ -10,12 +10,12 @@ use std::{
 /// the address type they are intended to handle.
 #[derive(Default, Clone)]
 pub(crate) struct TransportRegistry {
-    m: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
+    inner: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
 }
 
 impl Debug for TransportRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let m = self.m.lock().unwrap();
+        let m = self.inner.lock().unwrap();
         for key in m.keys() {
             write!(f, "k: {key:?}")?
         }
@@ -31,7 +31,7 @@ impl TransportRegistry {
 
     /// Add a transport into the registry.
     pub(crate) fn add_transport(&self, address_type: &str, transport: impl Transport + 'static) {
-        self.m
+        self.inner
             .lock()
             .unwrap()
             .insert(address_type.to_string(), Arc::new(transport));
@@ -39,7 +39,7 @@ impl TransportRegistry {
 
     /// Retrieve a name resolver from the registry, or None if not found.
     pub(crate) fn get_transport(&self, address_type: &str) -> Result<Arc<dyn Transport>, String> {
-        self.m
+        self.inner
             .lock()
             .unwrap()
             .get(address_type)

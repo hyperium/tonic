@@ -24,18 +24,18 @@ pub(crate) struct ConnectedTransport {
 // can hold config relevant to a particular transport.
 #[derive(Default)]
 pub(crate) struct TransportOptions {
-    pub init_stream_window_size: Option<u32>,
-    pub init_connection_window_size: Option<u32>,
-    pub http2_keep_alive_interval: Option<Duration>,
-    pub http2_keep_alive_timeout: Option<Duration>,
-    pub http2_keep_alive_while_idle: Option<bool>,
-    pub http2_max_header_list_size: Option<u32>,
-    pub http2_adaptive_window: Option<bool>,
-    pub concurrency_limit: Option<usize>,
-    pub rate_limit: Option<(u64, Duration)>,
-    pub tcp_keepalive: Option<Duration>,
-    pub tcp_nodelay: bool,
-    pub connect_deadline: Option<Instant>,
+    pub(crate) init_stream_window_size: Option<u32>,
+    pub(crate) init_connection_window_size: Option<u32>,
+    pub(crate) http2_keep_alive_interval: Option<Duration>,
+    pub(crate) http2_keep_alive_timeout: Option<Duration>,
+    pub(crate) http2_keep_alive_while_idle: Option<bool>,
+    pub(crate) http2_max_header_list_size: Option<u32>,
+    pub(crate) http2_adaptive_window: Option<bool>,
+    pub(crate) concurrency_limit: Option<usize>,
+    pub(crate) rate_limit: Option<(u64, Duration)>,
+    pub(crate) tcp_keepalive: Option<Duration>,
+    pub(crate) tcp_nodelay: bool,
+    pub(crate) connect_deadline: Option<Instant>,
 }
 
 #[async_trait]

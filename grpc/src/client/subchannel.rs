@@ -15,6 +15,7 @@ use crate::{
     service::{Request, Response, Service},
 };
 use core::panic;
+use std::time::{Duration, Instant};
 use std::{
     collections::BTreeMap,
     error::Error,
@@ -22,10 +23,7 @@ use std::{
     ops::Sub,
     sync::{Arc, Mutex, RwLock, Weak},
 };
-use tokio::{
-    sync::{mpsc, oneshot, watch, Notify},
-    time::{Duration, Instant},
-};
+use tokio::sync::{mpsc, oneshot, watch, Notify};
 use tonic::async_trait;
 
 type SharedService = Arc<dyn Service>;
@@ -358,7 +356,7 @@ impl InternalSubchannel {
 
         let connect_task = self.runtime.spawn(Box::pin(async move {
             tokio::select! {
-                _ = tokio::time::sleep(min_connect_timeout) => {
+                _ = runtime.sleep(min_connect_timeout) => {
                     let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionTimedOut);
                 }
                 result = transport.connect(address.to_string().clone(), runtime, &transport_opts) => {
@@ -400,7 +398,7 @@ impl InternalSubchannel {
             // terminated? But what can we do with that error other than logging
             // it, which the transport can do as well?
             if let Err(e) = closed_rx.await {
-                eprintln!("Transport closed with error: {}", e.to_string())
+                eprintln!("Transport closed with error: {e}",)
             };
             let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionTerminated);
         }));
@@ -430,8 +428,11 @@ impl InternalSubchannel {
 
         let backoff_interval = self.backoff.backoff_until();
         let state_machine_tx = self.state_machine_event_sender.clone();
+        let runtime = self.runtime.clone();
         let backoff_task = self.runtime.spawn(Box::pin(async move {
-            tokio::time::sleep_until(backoff_interval).await;
+            runtime
+                .sleep(backoff_interval.saturating_duration_since(Instant::now()))
+                .await;
             let _ = state_machine_tx.send(SubchannelStateMachineEvent::BackoffExpired);
         }));
         let mut inner = self.inner.lock().unwrap();

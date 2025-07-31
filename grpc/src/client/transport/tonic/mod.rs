@@ -8,8 +8,6 @@ use crate::service::Message;
 use crate::service::Request as GrpcRequest;
 use crate::service::Response as GrpcResponse;
 use bytes::Bytes;
-use futures::stream::StreamExt;
-use futures::Stream;
 use http::uri::PathAndQuery;
 use http::Request as HttpRequest;
 use http::Response as HttpResponse;
@@ -27,6 +25,8 @@ use std::{
     sync::Arc,
     task::{Context, Poll},
 };
+use tokio_stream::Stream;
+use tokio_stream::StreamExt;
 use tonic::Request as TonicRequest;
 use tonic::Response as TonicResponse;
 use tonic::Streaming;
@@ -95,14 +95,14 @@ impl Service for TonicTransport {
 
 /// Helper function to create an error response stream.
 fn create_error_response(status: Status) -> GrpcResponse {
-    let stream = futures::stream::once(async { Err(status) });
+    let stream = tokio_stream::once(Err(status));
     TonicResponse::new(Box::pin(stream))
 }
 
 fn convert_request(req: GrpcRequest) -> TonicRequest<Pin<Box<dyn Stream<Item = Bytes> + Send>>> {
     let (metadata, extensions, stream) = req.into_parts();
 
-    let bytes_stream = Box::pin(stream.filter_map(|msg| async {
+    let bytes_stream = Box::pin(stream.filter_map(|msg| {
         if let Ok(bytes) = (msg as Box<dyn Any>).downcast::<Bytes>() {
             Some(*bytes)
         } else {
@@ -119,7 +119,7 @@ fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> Grp
     let response = match res {
         Ok(s) => s,
         Err(e) => {
-            let stream = futures::stream::once(async { Err(e) });
+            let stream = tokio_stream::once(Err(e));
             return TonicResponse::new(Box::pin(stream));
         }
     };
