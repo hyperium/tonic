@@ -312,8 +312,6 @@ struct ServiceGenerator {
     compile_well_known_types: bool,
     codec_path: String,
     disable_comments: HashSet<String>,
-    #[allow(dead_code)]
-    out_dir: PathBuf,
 }
 
 impl ServiceGenerator {
@@ -331,7 +329,6 @@ impl ServiceGenerator {
         compile_well_known_types: bool,
         codec_path: String,
         disable_comments: HashSet<String>,
-        out_dir: PathBuf,
     ) -> Self {
         ServiceGenerator {
             build_client,
@@ -345,7 +342,6 @@ impl ServiceGenerator {
             compile_well_known_types,
             codec_path,
             disable_comments,
-            out_dir,
         }
     }
 }
@@ -794,7 +790,6 @@ impl Builder {
                 self.compile_well_known_types,
                 self.codec_path.clone(),
                 self.disable_comments,
-                out_dir,
             );
 
             config.service_generator(Box::new(service_generator));
@@ -897,7 +892,6 @@ impl Builder {
                 self.compile_well_known_types,
                 self.codec_path.clone(),
                 self.disable_comments,
-                out_dir,
             );
 
             config.service_generator(Box::new(service_generator));
@@ -906,5 +900,23 @@ impl Builder {
         config.compile_fds(fds)?;
 
         Ok(())
+    }
+
+    /// Turn the builder into a `ServiceGenerator` ready to be passed to `prost-build`s
+    /// `Config::service_generator`.
+    pub fn service_generator(self) -> Box<dyn prost_build::ServiceGenerator> {
+        Box::new(ServiceGenerator::new(
+            self.build_client,
+            self.build_server,
+            self.build_transport,
+            self.client_attributes,
+            self.server_attributes,
+            self.use_arc_self,
+            self.generate_default_stubs,
+            self.proto_path,
+            self.compile_well_known_types,
+            self.codec_path.clone(),
+            self.disable_comments,
+        ))
     }
 }
