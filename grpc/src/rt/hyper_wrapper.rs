@@ -1,16 +1,9 @@
+use super::{Runtime, TcpStream};
 use hyper::rt::{Executor, Timer};
 use pin_project_lite::pin_project;
-use std::{
-    future::Future,
-    io,
-    pin::Pin,
-    sync::Arc,
-    task::{Context, Poll},
-    time::Instant,
-};
+use std::task::{Context, Poll};
+use std::{future::Future, io, pin::Pin, sync::Arc, time::Instant};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-
-use super::{Runtime, TcpStream};
 
 /// Adapts a runtime to a hyper compatible executor.
 #[derive(Clone)]

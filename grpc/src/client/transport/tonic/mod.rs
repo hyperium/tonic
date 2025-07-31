@@ -3,10 +3,14 @@ use crate::client::transport::ConnectedTransport;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::codec::BytesCodec;
+use crate::rt::hyper_wrapper::{HyperCompatExec, HyperCompatTimer, HyperStream};
+use crate::rt::Runtime;
+use crate::rt::TaskHandle;
 use crate::rt::TcpOptions;
 use crate::service::Message;
 use crate::service::Request as GrpcRequest;
 use crate::service::Response as GrpcResponse;
+use crate::{client::name_resolution::TCP_IP_NETWORK_TYPE, service::Service};
 use bytes::Bytes;
 use http::uri::PathAndQuery;
 use http::Request as HttpRequest;
@@ -15,40 +19,21 @@ use http::Uri;
 use hyper::client::conn::http2::Builder;
 use hyper::client::conn::http2::SendRequest;
 use std::any::Any;
+use std::task::{Context, Poll};
 use std::time::Instant;
-use std::{
-    error::Error,
-    future::Future,
-    net::SocketAddr,
-    pin::Pin,
-    str::FromStr,
-    sync::Arc,
-    task::{Context, Poll},
-};
+use std::{error::Error, future::Future, net::SocketAddr, pin::Pin, str::FromStr, sync::Arc};
+use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
+use tonic::client::GrpcService;
 use tonic::Request as TonicRequest;
 use tonic::Response as TonicResponse;
 use tonic::Streaming;
-use tower::{
-    buffer::{future::ResponseFuture as BufferResponseFuture, Buffer},
-    limit::{ConcurrencyLimitLayer, RateLimitLayer},
-    util::BoxService,
-    ServiceBuilder,
-};
-use tower_service::Service as TowerService;
-
-use crate::{
-    client::name_resolution::TCP_IP_NETWORK_TYPE,
-    rt::{
-        self,
-        hyper_wrapper::{HyperCompatExec, HyperCompatTimer, HyperStream},
-    },
-    service::Service,
-};
-use tokio::sync::oneshot;
-use tonic::client::GrpcService;
 use tonic::{async_trait, body::Body, client::Grpc, Status};
+use tower::buffer::{future::ResponseFuture as BufferResponseFuture, Buffer};
+use tower::limit::{ConcurrencyLimitLayer, RateLimitLayer};
+use tower::{util::BoxService, ServiceBuilder};
+use tower_service::Service as TowerService;
 
 #[cfg(test)]
 mod test;
@@ -66,7 +51,7 @@ struct TransportBuilder {}
 
 struct TonicTransport {
     grpc: Grpc<TonicService>,
-    task_handle: Box<dyn rt::TaskHandle>,
+    task_handle: Box<dyn TaskHandle>,
 }
 
 impl Drop for TonicTransport {
@@ -139,7 +124,7 @@ impl Transport for TransportBuilder {
     async fn connect(
         &self,
         address: String,
-        runtime: Arc<dyn rt::Runtime>,
+        runtime: Arc<dyn Runtime>,
         opts: &TransportOptions,
     ) -> Result<ConnectedTransport, String> {
         let runtime = runtime.clone();
