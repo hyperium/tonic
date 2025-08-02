@@ -38,6 +38,7 @@ use crate::client::load_balancing::{
     WeakSubchannel, WorkScheduler,
 };
 use crate::client::name_resolution::{Address, ResolverUpdate};
+use crate::rt::Runtime;
 
 use super::{Subchannel, SubchannelState};
 
@@ -47,6 +48,7 @@ pub struct ChildManager<T> {
     children: Vec<Child<T>>,
     update_sharder: Box<dyn ResolverUpdateSharder<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
+    runtime: Arc<dyn Runtime>,
 }
 
 struct Child<T> {
@@ -81,12 +83,16 @@ pub trait ResolverUpdateSharder<T>: Send {
 impl<T> ChildManager<T> {
     /// Creates a new ChildManager LB policy.  shard_update is called whenever a
     /// resolver_update operation occurs.
-    pub fn new(update_sharder: Box<dyn ResolverUpdateSharder<T>>) -> Self {
+    pub fn new(
+        update_sharder: Box<dyn ResolverUpdateSharder<T>>,
+        runtime: Arc<dyn Runtime>,
+    ) -> Self {
         Self {
             update_sharder,
             subchannel_child_map: Default::default(),
             children: Default::default(),
             pending_work: Default::default(),
+            runtime,
         }
     }
 
@@ -197,6 +203,7 @@ impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager
                 });
                 let policy = builder.build(LbPolicyOptions {
                     work_scheduler: work_scheduler.clone(),
+                    runtime: self.runtime.clone(),
                 });
                 let state = LbState::initial();
                 self.children.push(Child {

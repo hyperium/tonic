@@ -13,8 +13,9 @@ use crate::{
             self, global_registry, Address, ChannelController, Endpoint, Resolver, ResolverBuilder,
             ResolverOptions, ResolverUpdate,
         },
-        transport::{self, ConnectedTransport, GLOBAL_TRANSPORT_REGISTRY},
+        transport::{self, ConnectedTransport, TransportOptions, GLOBAL_TRANSPORT_REGISTRY},
     },
+    rt::Runtime,
     server,
     service::{Request, Response, Service},
 };
@@ -27,7 +28,7 @@ pub struct Listener {
     s: Box<mpsc::Sender<Option<server::Call>>>,
     r: Arc<Mutex<mpsc::Receiver<Option<server::Call>>>>,
     // List of notifiers to call when closed.
-    closed: Notify,
+    closed_tx: Arc<std::sync::Mutex<Vec<oneshot::Sender<Result<(), String>>>>>,
 }
 
 static ID: AtomicU32 = AtomicU32::new(0);
@@ -39,7 +40,7 @@ impl Listener {
             id: format!("{}", ID.fetch_add(1, Ordering::Relaxed)),
             s: Box::new(tx),
             r: Arc::new(Mutex::new(rx)),
-            closed: Notify::new(),
+            closed_tx: Arc::new(std::sync::Mutex::new(Vec::new())),
         });
         LISTENERS.lock().unwrap().insert(s.id.clone(), s.clone());
         s
@@ -60,7 +61,10 @@ impl Listener {
 
 impl Drop for Listener {
     fn drop(&mut self) {
-        self.closed.notify_waiters();
+        let txs = std::mem::take(&mut *self.closed_tx.lock().unwrap());
+        for rx in txs {
+            let _ = rx.send(Ok(()));
+        }
         LISTENERS.lock().unwrap().remove(&self.id);
     }
 }
@@ -77,19 +81,12 @@ impl Service for Arc<Listener> {
 }
 
 #[async_trait]
-impl ConnectedTransport for Arc<Listener> {
-    async fn disconnected(&self) {
-        self.closed.notified().await;
-    }
-}
-
-#[async_trait]
 impl crate::server::Listener for Arc<Listener> {
     async fn accept(&self) -> Option<server::Call> {
         let mut recv = self.r.lock().await;
         let r = recv.recv().await;
-        r.as_ref()?;
-        r.unwrap()
+        // Listener may be closed.
+        r?
     }
 }
 
@@ -106,14 +103,24 @@ impl ClientTransport {
 
 #[async_trait]
 impl transport::Transport for ClientTransport {
-    async fn connect(&self, address: String) -> Result<Box<dyn ConnectedTransport>, String> {
+    async fn connect(
+        &self,
+        address: String,
+        _: Arc<dyn Runtime>,
+        _: &TransportOptions,
+    ) -> Result<ConnectedTransport, String> {
         let lis = LISTENERS
             .lock()
             .unwrap()
             .get(&address)
             .ok_or(format!("Could not find listener for address {address}"))?
             .clone();
-        Ok(Box::new(lis))
+        let (tx, rx) = oneshot::channel();
+        lis.closed_tx.lock().unwrap().push(tx);
+        Ok(ConnectedTransport {
+            service: Box::new(lis),
+            disconnection_listener: rx,
+        })
     }
 }
 

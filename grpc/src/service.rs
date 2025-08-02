@@ -24,12 +24,12 @@
 
 use std::{any::Any, pin::Pin};
 
-use futures_core::Stream;
+use tokio_stream::Stream;
 use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
 
 pub type Request = TonicRequest<Pin<Box<dyn Stream<Item = Box<dyn Message>> + Send + Sync>>>;
 pub type Response =
-    TonicResponse<Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send + Sync>>>;
+    TonicResponse<Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send>>>;
 
 #[async_trait]
 pub trait Service: Send + Sync {
@@ -38,3 +38,5 @@ pub trait Service: Send + Sync {
 
 // TODO: define methods that will allow serialization/deserialization.
 pub trait Message: Any + Send + Sync {}
+
+impl<T> Message for T where T: Any + Send + Sync {}

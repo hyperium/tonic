@@ -1,8 +1,8 @@
 use std::any::Any;
 
-use futures_util::StreamExt;
 use grpc::service::{Message, Request, Response, Service};
 use grpc::{client::ChannelOptions, inmemory};
+use tokio_stream::StreamExt;
 use tonic::async_trait;
 
 struct Handler {
@@ -12,11 +12,8 @@ struct Handler {
 #[derive(Debug)]
 struct MyReqMessage(String);
 
-impl Message for MyReqMessage {}
-
 #[derive(Debug)]
 struct MyResMessage(String);
-impl Message for MyResMessage {}
 
 #[async_trait]
 impl Service for Handler {
