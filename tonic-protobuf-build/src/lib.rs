@@ -275,9 +275,9 @@ impl CodeGen {
             let Some(stem) = proto_path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            generated_file_paths.push(output_dir.join(format!("{}_grpc.pb.rs", stem)));
+            generated_file_paths.push(output_dir.join(format!("{stem}_grpc.pb.rs")));
             if self.generate_message_code {
-                generated_file_paths.push(output_dir.join(format!("{}.u.pb.rs", stem)));
+                generated_file_paths.push(output_dir.join(format!("{stem}.u.pb.rs")));
             }
         }
 
