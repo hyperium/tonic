@@ -1,9 +1,7 @@
 use std::{
     collections::HashMap,
-    sync::{Arc, Mutex},
+    sync::{Arc, LazyLock, Mutex},
 };
-
-use once_cell::sync::Lazy;
 
 use super::Transport;
 
@@ -59,4 +57,5 @@ impl Default for TransportRegistry {
 
 /// The registry used if a local registry is not provided to a channel or if it
 /// does not exist in the local registry.
-pub static GLOBAL_TRANSPORT_REGISTRY: Lazy<TransportRegistry> = Lazy::new(TransportRegistry::new);
+pub static GLOBAL_TRANSPORT_REGISTRY: LazyLock<TransportRegistry> =
+    LazyLock::new(TransportRegistry::new);
