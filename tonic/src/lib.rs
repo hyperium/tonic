@@ -32,7 +32,6 @@
 //!   [`rustls-native-certs`] crate. Not enabled by default.
 //! - `tls-webpki-roots`: Add the standard trust roots from the [`webpki-roots`] crate to
 //!   `rustls`-based gRPC clients. Not enabled by default.
-//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation. Enabled by default.
 //! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
 //!   Not enabled by default.
 //! - `deflate`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
