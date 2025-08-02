@@ -24,7 +24,7 @@
 
 use std::{any::Any, pin::Pin};
 
-use futures_core::Stream;
+use tokio_stream::Stream;
 use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
 
 pub type Request = TonicRequest<Pin<Box<dyn Stream<Item = Box<dyn Message>> + Send + Sync>>>;
