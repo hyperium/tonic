@@ -151,19 +151,13 @@ impl CompressionEncoding {
             }
             b"identity" => Ok(None),
             other => {
-                // NOTE: Workaround for lifetime limitation. Resolved at Rust 1.79.
-                // https://blog.rust-lang.org/2024/06/13/Rust-1.79.0.html#extending-automatic-temporary-lifetime-extension
-                let other_debug_string;
+                let other = match std::str::from_utf8(other) {
+                    Ok(s) => s,
+                    Err(_) => &format!("{other:?}"),
+                };
 
                 let mut status = Status::unimplemented(format!(
-                    "Content is compressed with `{}` which isn't supported",
-                    match std::str::from_utf8(other) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            other_debug_string = format!("{other:?}");
-                            &other_debug_string
-                        }
-                    }
+                    "Content is compressed with `{other}` which isn't supported"
                 ));
 
                 let header_value = enabled_encodings
