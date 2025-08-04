@@ -1,0 +1,11 @@
+syntax = "proto3";
+
+package skip_debug;
+
+service Test {
+  rpc Rpc(Input) returns (Output);
+}
+
+message Input {}
+
+message Output {}

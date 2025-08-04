@@ -1,6 +1,7 @@
 //! Server implementation and builder.
 
 mod conn;
+mod display_error_stack;
 mod incoming;
 mod io_stream;
 mod service;
@@ -45,6 +46,7 @@ use self::service::{ConnectInfoLayer, ServerIo};
 use super::service::GrpcTimeout;
 use crate::body::Body;
 use crate::service::RecoverErrorLayer;
+use crate::transport::server::display_error_stack::DisplayErrorStack;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
@@ -744,7 +746,7 @@ impl<L> Server<L> {
                     let io = match io {
                         Some(Ok(io)) => io,
                         Some(Err(e)) => {
-                            trace!("error accepting connection: {:#}", e);
+                            trace!("error accepting connection: {}", DisplayErrorStack(&*e));
                             continue;
                         },
                         None => {
@@ -815,7 +817,7 @@ fn serve_connection<B, IO, S, E>(
                 tokio::select! {
                     rv = &mut conn => {
                         if let Err(err) = rv {
-                            debug!("failed serving connection: {:#}", err);
+                            debug!("failed serving connection: {}", DisplayErrorStack(&*err));
                         }
                         break;
                     },

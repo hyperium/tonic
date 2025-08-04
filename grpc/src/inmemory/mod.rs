@@ -3,7 +3,7 @@ use std::{
     ops::Add,
     sync::{
         atomic::{AtomicU32, Ordering},
-        Arc,
+        Arc, LazyLock,
     },
 };
 
@@ -19,7 +19,6 @@ use crate::{
     server,
     service::{Request, Response, Service},
 };
-use once_cell::sync::Lazy;
 use tokio::sync::{mpsc, oneshot, Mutex, Notify};
 use tonic::async_trait;
 
@@ -90,8 +89,8 @@ impl crate::server::Listener for Arc<Listener> {
     }
 }
 
-static LISTENERS: Lazy<std::sync::Mutex<HashMap<String, Arc<Listener>>>> =
-    Lazy::new(std::sync::Mutex::default);
+static LISTENERS: LazyLock<std::sync::Mutex<HashMap<String, Arc<Listener>>>> =
+    LazyLock::new(std::sync::Mutex::default);
 
 struct ClientTransport {}
 

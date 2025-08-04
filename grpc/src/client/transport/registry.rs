@@ -1,10 +1,6 @@
 use super::Transport;
-use once_cell::sync::Lazy;
-use std::{
-    collections::HashMap,
-    fmt::Debug,
-    sync::{Arc, Mutex},
-};
+use std::sync::{Arc, LazyLock, Mutex};
+use std::{collections::HashMap, fmt::Debug};
 
 /// A registry to store and retrieve transports.  Transports are indexed by
 /// the address type they are intended to handle.
@@ -52,4 +48,5 @@ impl TransportRegistry {
 
 /// The registry used if a local registry is not provided to a channel or if it
 /// does not exist in the local registry.
-pub static GLOBAL_TRANSPORT_REGISTRY: Lazy<TransportRegistry> = Lazy::new(TransportRegistry::new);
+pub static GLOBAL_TRANSPORT_REGISTRY: LazyLock<TransportRegistry> =
+    LazyLock::new(TransportRegistry::new);
