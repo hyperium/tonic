@@ -95,6 +95,8 @@
               protobuf
             ];
 
+            hardeningDisable = [ "fortify" ];
+
             shellHook = ''
               export PATH="$PWD/protoc-gen-rust-grpc/bazel-bin/src:$PATH"
 
