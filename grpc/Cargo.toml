@@ -7,14 +7,11 @@ license = "MIT"
 
 [dependencies]
 bytes = "1.10.1"
-futures-core = "0.3.31"
-futures-util = "0.3.31"
 hickory-resolver = { version = "0.25.1", optional = true }
 http = "1.1.0"
 http-body = "1.0.1"
 hyper = { version = "1.6.0", features = ["client", "http2"] }
 hyper-util = "0.1.14"
-once_cell = "1.19.0"
 parking_lot = "0.12.4"
 pin-project-lite = "0.2.16"
 rand = "0.9"
@@ -43,5 +40,4 @@ allowed_external_types = [
     "tonic::*",
     "futures_core::stream::Stream",
     "tokio::sync::oneshot::Sender",
-    "once_cell::sync::Lazy",
 ]
