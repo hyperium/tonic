@@ -69,7 +69,6 @@
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
 //! [`tokio`]: https://docs.rs/tokio
-//! [`prost`]: https://docs.rs/prost
 //! [`hyper`]: https://docs.rs/hyper
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
