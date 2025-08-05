@@ -28,7 +28,9 @@ impl Certificate {
     pub fn from_der(der: impl AsRef<[u8]>) -> Self {
         let der = der.as_ref();
         let pem = der2pem(der);
-        Self { pem: pem.into_bytes() }
+        Self {
+            pem: pem.into_bytes(),
+        }
     }
 
     /// Get a immutable reference to underlying certificate
@@ -70,7 +72,7 @@ impl Identity {
     }
 
     /// Parse a DER encoded certificate and private key.
-    /// 
+    ///
     /// The provided cert must contain exactly one DER encoded certificate.
     pub fn from_der(cert: impl AsRef<[u8]>, key: impl AsRef<[u8]>) -> Self {
         let cert = Certificate::from_der(cert);
@@ -85,4 +87,3 @@ fn der2pem(der: &[u8]) -> String {
     let pem = crate::util::base64::STANDARD_NO_PAD.encode(der);
     format!("{RFC7468_HEADER}\n{pem}\n{RFC7468_FOOTER}\n")
 }
-
