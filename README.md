@@ -41,7 +41,7 @@ may be a good resource as it shows examples of many of the gRPC features.
 
 ### Rust Version
 
-`tonic`'s MSRV is `1.75`.
+`tonic`'s MSRV is `1.82`.
 
 ### Dependencies
 
