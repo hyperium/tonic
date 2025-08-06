@@ -183,9 +183,9 @@ jobs:
         rust-version: ${{ steps.msrv.outputs.version }}
     - uses: taiki-e/install-action@cargo-no-dev-deps
     - uses: Swatinem/rust-cache@v2
-    # grpc has an higher MSRV so we exclude it
-    - run: cargo no-dev-deps --no-private check --all-features --workspace --exclude grpc
-    - run: cargo no-dev-deps --no-private doc --no-deps --all-features --workspace --exclude grpc
+    # we exlude crates that do not use rust-version = { workspace = true }
+    - run: cargo no-dev-deps --no-private check --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
+    - run: cargo no-dev-deps --no-private doc --no-deps --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
       env:
         RUSTDOCFLAGS: "-D warnings"
 

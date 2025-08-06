@@ -29,7 +29,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.82"
+rust-version = "1.75"
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"
