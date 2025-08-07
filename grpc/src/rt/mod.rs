@@ -29,6 +29,8 @@ pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]
 pub(crate) mod tokio;
 
+type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+
 /// An abstraction over an asynchronous runtime.
 ///
 /// The `Runtime` trait defines the core functionality required for
@@ -57,7 +59,7 @@ pub(super) trait Runtime: Send + Sync {
         &self,
         target: SocketAddr,
         opts: TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpStream>, String>> + Send>>;
+    ) -> BoxFuture<Result<Box<dyn TcpStream>, String>>;
 }
 
 /// A future that resolves after a specified duration.

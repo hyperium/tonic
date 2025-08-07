@@ -75,26 +75,19 @@ pub async fn tonic_transport_rpc() {
             let bytes = Bytes::from(request.encode_to_vec());
 
             println!("Sent request: {request:?}");
-            if tx.send(Box::new(bytes)).await.is_err() {
-                panic!("Receiver dropped");
-            }
+            assert!(tx.send(Box::new(bytes)).await.is_ok(), "Receiver dropped");
 
             // Wait for the reply
-            match inbound
+            let resp = inbound
                 .next()
                 .await
                 .expect("server unexpectedly closed the stream!")
-            {
-                Ok(resp) => {
-                    let bytes = (resp as Box<dyn Any>).downcast::<Bytes>().unwrap();
-                    let echo_reponse = EchoResponse::decode(bytes).unwrap();
-                    println!("Got response: {echo_reponse:?}");
-                    assert_eq!(echo_reponse.message, message);
-                }
-                Err(status) => {
-                    panic!("Error from server: {status:?}");
-                }
-            }
+                .expect("server returned error");
+
+            let bytes = (resp as Box<dyn Any>).downcast::<Bytes>().unwrap();
+            let echo_response = EchoResponse::decode(bytes).unwrap();
+            println!("Got response: {echo_response:?}");
+            assert_eq!(echo_response.message, message);
         }
     });
 

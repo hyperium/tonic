@@ -42,6 +42,7 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 pub(crate) type BoxError = Box<dyn Error + Send + Sync>;
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>;
 
 pub(crate) fn reg() {
     GLOBAL_TRANSPORT_REGISTRY.add_transport(TCP_IP_NETWORK_TYPE, TransportBuilder {});
@@ -109,13 +110,12 @@ fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> Grp
         }
     };
     let (metadata, stream, extensions) = response.into_parts();
-    let message_stream: Pin<Box<dyn Stream<Item = Result<Box<dyn Message>, Status>> + Send>> =
-        Box::pin(stream.map(|msg| {
-            msg.map(|b| {
-                let msg: Box<dyn Message> = Box::new(b);
-                msg
-            })
-        }));
+    let message_stream: BoxStream<Box<dyn Message>> = Box::pin(stream.map(|msg| {
+        msg.map(|b| {
+            let msg: Box<dyn Message> = Box::new(b);
+            msg
+        })
+    }));
     TonicResponse::from_parts(metadata, message_stream, extensions)
 }
 
@@ -233,7 +233,6 @@ impl TowerService<HttpRequest<Body>> for SendRequestWrapper {
 
     fn call(&mut self, req: http::Request<Body>) -> Self::Future {
         let fut = self.inner.send_request(req);
-
         Box::pin(async move { fut.await.map_err(Into::into).map(|res| res.map(Body::new)) })
     }
 }
