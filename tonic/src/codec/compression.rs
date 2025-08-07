@@ -4,7 +4,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::{GzDecoder, GzEncoder};
 #[cfg(feature = "deflate")]
 use flate2::read::{ZlibDecoder, ZlibEncoder};
-use std::fmt;
+use std::{borrow::Cow, fmt};
 #[cfg(feature = "zstd")]
 use zstd::stream::read::{Decoder, Encoder};
 
@@ -152,8 +152,8 @@ impl CompressionEncoding {
             b"identity" => Ok(None),
             other => {
                 let other = match std::str::from_utf8(other) {
-                    Ok(s) => s,
-                    Err(_) => &format!("{other:?}"),
+                    Ok(s) => Cow::Borrowed(s),
+                    Err(_) => Cow::Owned(format!("{other:?}")),
                 };
 
                 let mut status = Status::unimplemented(format!(
