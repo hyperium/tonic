@@ -73,6 +73,7 @@
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
 //! [`ring`]: https://docs.rs/ring
+//! [`aws-lc-rs`]: https://docs.rs/aws-lc-rs
 //! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
