@@ -170,7 +170,7 @@ pub trait LbPolicy: Send {
     /// WorkScheduler's request_work method.
     fn work(&mut self, channel_controller: &mut dyn ChannelController);
 
-    /// Called by the channel when a LbPolicy goes Idle and the channel
+    /// Called by the channel when an LbPolicy goes idle and the channel
     /// wants it to start connecting to subchannels again.
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController);
 }
