@@ -262,6 +262,10 @@ impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager
             self.resolve_child_controller(channel_controller, child_idx);
         }
     }
+
+    fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
+        todo!("implement exit_idle")
+    }
 }
 
 struct WrappedController<'a> {
