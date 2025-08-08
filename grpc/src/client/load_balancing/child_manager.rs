@@ -87,12 +87,6 @@ impl<T> ChildManager<T> {
             subchannel_child_map: Default::default(),
             children: Default::default(),
             pending_work: Default::default(),
-<<<<<<< HEAD
-=======
-            updated: false,
-            prev_state: ConnectivityState::Idle,
-            last_ready_pickers: Vec::new(),
->>>>>>> f7537e6 (fixed some logic for review)
         }
     }
 
