@@ -28,7 +28,7 @@ use crate::client::load_balancing::{
 use crate::client::name_resolution::Address;
 use crate::service::{Message, Request, Response, Service};
 use std::hash::{Hash, Hasher};
-use std::{fmt::Display, ops::Add, sync::Arc};
+use std::{fmt::Debug, ops::Add, sync::Arc};
 use tokio::sync::{mpsc, Notify};
 use tokio::task::AbortHandle;
 
@@ -94,7 +94,8 @@ pub(crate) enum TestEvent {
     ScheduleWork,
 }
 
-impl Display for TestEvent {
+// TODO(easwars): Remove this and instead derive Debug.
+impl Debug for TestEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::NewSubchannel(sc) => write!(f, "NewSubchannel({})", sc.address()),
