@@ -12,11 +12,8 @@ struct Handler {
 #[derive(Debug)]
 struct MyReqMessage(String);
 
-impl Message for MyReqMessage {}
-
 #[derive(Debug)]
 struct MyResMessage(String);
-impl Message for MyResMessage {}
 
 #[async_trait]
 impl Service for Handler {

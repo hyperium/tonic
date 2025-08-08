@@ -23,10 +23,13 @@
  */
 
 use ::tokio::io::{AsyncRead, AsyncWrite};
+use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 
-use std::{future::Future, net::SocketAddr, pin::Pin, time::Duration};
+pub(crate) mod hyper_wrapper;
+#[cfg(feature = "_runtime-tokio")]
+pub(crate) mod tokio;
 
-pub mod tokio;
+type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -49,6 +52,14 @@ pub(super) trait Runtime: Send + Sync {
 
     /// Returns a future that completes after the specified duration.
     fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>>;
+
+    /// Establishes a TCP connection to the given `target` address with the
+    /// specified `opts`.
+    fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpStream>, String>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -77,7 +88,51 @@ pub(super) struct ResolverOptions {
 }
 
 #[derive(Default)]
-pub struct TcpOptions {
-    pub enable_nodelay: bool,
-    pub keepalive: Option<Duration>,
+pub(crate) struct TcpOptions {
+    pub(crate) enable_nodelay: bool,
+    pub(crate) keepalive: Option<Duration>,
+}
+
+pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
+
+/// A fake runtime to satisfy the compiler when no runtime is enabled. This will
+///
+/// # Panics
+///
+/// Panics if any of its functions are called.
+#[derive(Default)]
+pub(crate) struct NoOpRuntime {}
+
+impl Runtime for NoOpRuntime {
+    fn spawn(
+        &self,
+        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
+    ) -> Box<dyn TaskHandle> {
+        unimplemented!()
+    }
+
+    fn get_dns_resolver(&self, opts: ResolverOptions) -> Result<Box<dyn DnsResolver>, String> {
+        unimplemented!()
+    }
+
+    fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
+        unimplemented!()
+    }
+
+    fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpStream>, String>> + Send>> {
+        unimplemented!()
+    }
+}
+
+pub(crate) fn default_runtime() -> Arc<dyn Runtime> {
+    #[cfg(feature = "_runtime-tokio")]
+    {
+        return Arc::new(tokio::TokioRuntime {});
+    }
+    #[allow(unreachable_code)]
+    Arc::new(NoOpRuntime::default())
 }
