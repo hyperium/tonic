@@ -1,7 +1,12 @@
 ![](https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-banner.svg?sanitize=true)
 
+
 A rust implementation of [gRPC], a high performance, open source, general
 RPC framework that puts mobile and HTTP/2 first.
+
+> **Note**: tonic's [master](https://github.com/hyperium/tonic) branch is
+> currently preparing breaking changes. For the most recently *released* code,
+> look to the [0.14.x branch](https://github.com/hyperium/tonic/tree/v0.14.x).
 
 [`tonic`] is a gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility. This library was created to have first class support of async/await and to act as a core building block for production systems written in Rust.
 
