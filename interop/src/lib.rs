@@ -12,6 +12,9 @@ pub mod pb {
 }
 
 pub mod grpc_pb {
+    // TODO: Remove this lint when protobuf fixes the issue on their end
+    // Ref: https://github.com/hyperium/tonic/issues/2381
+    #![allow(mismatched_lifetime_syntaxes)]
     grpc::include_proto!("test");
 }
 
