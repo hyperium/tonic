@@ -22,24 +22,15 @@
  *
  */
 
-use crate::client::{
-    load_balancing::{
-        ChannelController, ExternalSubchannel, ForwardingSubchannel, LbState, Subchannel,
-        WorkScheduler,
-    },
-    name_resolution::Address,
+use crate::client::load_balancing::{
+    ChannelController, ExternalSubchannel, ForwardingSubchannel, LbState, Subchannel, WorkScheduler,
 };
+use crate::client::name_resolution::Address;
 use crate::service::{Message, Request, Response, Service};
-use std::{
-    fmt::Display,
-    hash::{Hash, Hasher},
-    ops::Add,
-    sync::Arc,
-};
-use tokio::{
-    sync::{mpsc, Notify},
-    task::AbortHandle,
-};
+use std::hash::{Hash, Hasher};
+use std::{fmt::Display, ops::Add, sync::Arc};
+use tokio::sync::{mpsc, Notify};
+use tokio::task::AbortHandle;
 
 pub(crate) struct EmptyMessage {}
 impl Message for EmptyMessage {}
@@ -90,13 +81,13 @@ impl Hash for TestSubchannel {
 
 impl PartialEq for TestSubchannel {
     fn eq(&self, other: &Self) -> bool {
-        self.address == other.address
+        std::ptr::eq(self, other)
     }
 }
 impl Eq for TestSubchannel {}
 
 pub(crate) enum TestEvent {
-    NewSubchannel(Address, Arc<dyn Subchannel>),
+    NewSubchannel(Arc<dyn Subchannel>),
     UpdatePicker(LbState),
     RequestResolution,
     Connect(Address),
@@ -106,7 +97,7 @@ pub(crate) enum TestEvent {
 impl Display for TestEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::NewSubchannel(addr, _) => write!(f, "NewSubchannel({})", addr),
+            Self::NewSubchannel(sc) => write!(f, "NewSubchannel({})", sc.address()),
             Self::UpdatePicker(state) => write!(f, "UpdatePicker({})", state.connectivity_state),
             Self::RequestResolution => write!(f, "RequestResolution"),
             Self::Connect(addr) => write!(f, "Connect({})", addr.address.to_string()),
@@ -115,11 +106,11 @@ impl Display for TestEvent {
     }
 }
 
-// A test channel controller that forwards calls to a channel.  This allows
-// tests to verify when a channel controller is asked to create subchannels or
-// update the picker.
+/// A test channel controller that forwards calls to a channel.  This allows
+/// tests to verify when a channel controller is asked to create subchannels or
+/// update the picker.
 pub(crate) struct TestChannelController {
-    pub tx_events: mpsc::UnboundedSender<TestEvent>,
+    pub(crate) tx_events: mpsc::UnboundedSender<TestEvent>,
 }
 
 impl ChannelController for TestChannelController {
@@ -129,10 +120,7 @@ impl ChannelController for TestChannelController {
         let subchannel: Arc<dyn Subchannel> =
             Arc::new(TestSubchannel::new(address.clone(), self.tx_events.clone()));
         self.tx_events
-            .send(TestEvent::NewSubchannel(
-                address.clone(),
-                subchannel.clone(),
-            ))
+            .send(TestEvent::NewSubchannel(subchannel.clone()))
             .unwrap();
         subchannel
     }
@@ -148,7 +136,7 @@ impl ChannelController for TestChannelController {
 }
 
 pub(crate) struct TestWorkScheduler {
-    pub tx_events: mpsc::UnboundedSender<TestEvent>,
+    pub(crate) tx_events: mpsc::UnboundedSender<TestEvent>,
 }
 
 impl WorkScheduler for TestWorkScheduler {
