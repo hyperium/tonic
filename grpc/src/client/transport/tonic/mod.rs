@@ -70,6 +70,9 @@ impl Service for TonicTransport {
         };
         let mut grpc = self.grpc.clone();
         if let Err(e) = grpc.ready().await {
+            // TODO: Figure out the exact situations under which the service
+            // may return an error and re-evaluate the status code returned
+            // below.
             let err = Status::unknown(format!("Service was not ready: {e}"));
             return create_error_response(err);
         };
