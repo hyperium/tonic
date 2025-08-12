@@ -104,43 +104,34 @@ impl<T> ChildManager<T> {
             .map(|child| (&child.identifier, &child.state))
     }
 
-    /// Called to aggregate states from children policies then returns a update.
+    /// Aggregates states from children policies.
     pub fn aggregate_states(&mut self) -> ConnectivityState {
-        let child_states_vec = self.child_states();
-
         let mut is_connecting = false;
-        let mut is_ready = false;
-        let mut is_transient_failure = true;
+        let mut is_idle = false;
 
-        for (child_id, state) in child_states_vec {
-            match state.connectivity_state {
+        for child in &self.children {
+            match child.state.connectivity_state {
+                ConnectivityState::Ready => {
+                    return ConnectivityState::Ready;
+                }
                 ConnectivityState::Idle => {
-                    is_connecting = true;
-                    is_transient_failure = false;
+                    is_idle = true;
                 }
                 ConnectivityState::Connecting => {
                     is_connecting = true;
-                    is_transient_failure = false;
-                }
-                ConnectivityState::Ready => {
-                    is_ready = true;
-                    is_transient_failure = false;
                 }
                 _ => {}
             }
         }
 
         // Decide the new aggregate state.
-        let new_state = if is_ready {
-            ConnectivityState::Ready
-        } else if is_connecting {
-            ConnectivityState::Connecting
-        } else if is_transient_failure {
-            ConnectivityState::TransientFailure
+        if is_connecting {
+            return ConnectivityState::Connecting;
+        } else if is_idle {
+            return ConnectivityState::Idle;
         } else {
-            ConnectivityState::Connecting
-        };
-        new_state
+            return ConnectivityState::TransientFailure;
+        }
     }
 
     // Called to update all accounting in the ChildManager from operations
