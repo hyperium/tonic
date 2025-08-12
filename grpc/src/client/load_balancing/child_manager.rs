@@ -114,11 +114,11 @@ impl<T> ChildManager<T> {
                 ConnectivityState::Ready => {
                     return ConnectivityState::Ready;
                 }
-                ConnectivityState::Idle => {
-                    is_idle = true;
-                }
                 ConnectivityState::Connecting => {
                     is_connecting = true;
+                }
+                ConnectivityState::Idle => {
+                    is_idle = true;
                 }
                 _ => {}
             }
