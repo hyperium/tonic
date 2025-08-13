@@ -32,8 +32,8 @@ use std::{fmt::Debug, ops::Add, sync::Arc};
 use tokio::sync::{mpsc, Notify};
 use tokio::task::AbortHandle;
 
+#[derive(Debug)]
 pub(crate) struct EmptyMessage {}
-impl Message for EmptyMessage {}
 pub(crate) fn new_request() -> Request {
     Request::new(Box::pin(tokio_stream::once(
         Box::new(EmptyMessage {}) as Box<dyn Message>
