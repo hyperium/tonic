@@ -30,6 +30,7 @@ use crate::client::load_balancing::{
 use crate::client::name_resolution::{Address, ResolverUpdate};
 use crate::client::service_config::LbConfig;
 use crate::client::ConnectivityState;
+use crate::rt::{Runtime, Sleep};
 use crate::service::{Message, Request, Response, Service};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
@@ -37,7 +38,8 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
 use std::sync::Mutex;
-use std::{fmt::Debug, ops::Add, sync::Arc};
+use std::time::Duration;
+use std::{fmt::Debug, future::Future, ops::Add, sync::Arc};
 use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, Notify};
 use tokio::task::AbortHandle;
@@ -158,26 +160,48 @@ impl WorkScheduler for TestWorkScheduler {
 }
 
 // The callback to invoke when resolver_update is invoked on the stub policy.
-type ResolverUpdateFn = fn(
-    ResolverUpdate,
-    Option<&LbConfig>,
-    &mut dyn ChannelController,
-) -> Result<(), Box<dyn Error + Send + Sync>>;
+type ResolverUpdateFn = Arc<
+    dyn Fn(
+            &mut StubPolicyData,
+            ResolverUpdate,
+            Option<&LbConfig>,
+            &mut dyn ChannelController,
+        ) -> Result<(), Box<dyn Error + Send + Sync>>
+        + Send
+        + Sync,
+>;
 
 // The callback to invoke when subchannel_update is invoked on the stub policy.
-type SubchannelUpdateFn = fn(Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
+type SubchannelUpdateFn = Arc<
+    dyn Fn(&mut StubPolicyData, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController)
+        + Send
+        + Sync,
+>;
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
     pub subchannel_update: Option<SubchannelUpdateFn>,
 }
 
+/// Data holds test data that will be passed all to functions in PolicyFuncs
+pub struct StubPolicyData {
+    pub test_data: Option<Box<dyn Any + Send + Sync>>,
+}
+
+impl StubPolicyData {
+    /// Creates an instance of StubPolicyData.
+    pub fn new() -> Self {
+        Self { test_data: None }
+    }
+}
+
 /// The stub `LbPolicy` that calls the provided functions.
 pub struct StubPolicy {
     funcs: StubPolicyFuncs,
+    data: StubPolicyData,
 }
 
 impl LbPolicy for StubPolicy {
@@ -187,8 +211,8 @@ impl LbPolicy for StubPolicy {
         config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if let Some(f) = &self.funcs.resolver_update {
-            return f(update, config, channel_controller);
+        if let Some(f) = &mut self.funcs.resolver_update {
+            return f(&mut self.data, update, config, channel_controller);
         }
         Ok(())
     }
@@ -200,7 +224,7 @@ impl LbPolicy for StubPolicy {
         channel_controller: &mut dyn ChannelController,
     ) {
         if let Some(f) = &self.funcs.subchannel_update {
-            f(subchannel, state, channel_controller);
+            f(&mut self.data, subchannel, state, channel_controller);
         }
     }
 
@@ -219,10 +243,18 @@ pub struct StubPolicyBuilder {
     funcs: StubPolicyFuncs,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct MockConfig {
+    shuffle_address_list: Option<bool>,
+}
+
 impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
+        let data = StubPolicyData::new();
         Box::new(StubPolicy {
             funcs: self.funcs.clone(),
+            data,
         })
     }
 
@@ -232,9 +264,15 @@ impl LbPolicyBuilder for StubPolicyBuilder {
 
     fn parse_config(
         &self,
-        _config: &ParsedJsonLbConfig,
+        config: &ParsedJsonLbConfig,
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
-        todo!("Implement parse_config in StubPolicyBuilder")
+        let cfg: MockConfig = match config.convert_to() {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(format!("failed to parse JSON config: {}", e).into());
+            }
+        };
+        Ok(Some(LbConfig::new(cfg)))
     }
 }
 
