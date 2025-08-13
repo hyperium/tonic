@@ -22,7 +22,7 @@
  *
  */
 
-use std::{any::Any, pin::Pin};
+use std::{any::Any, fmt::Debug, pin::Pin};
 
 use tokio_stream::Stream;
 use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
@@ -37,6 +37,6 @@ pub trait Service: Send + Sync {
 }
 
 // TODO: define methods that will allow serialization/deserialization.
-pub trait Message: Any + Send + Sync {}
+pub trait Message: Any + Send + Sync + Debug {}
 
-impl<T> Message for T where T: Any + Send + Sync {}
+impl<T> Message for T where T: Any + Send + Sync + Debug {}
