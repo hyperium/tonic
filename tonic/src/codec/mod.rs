@@ -1,7 +1,6 @@
 //! Generic encoding and decoding.
 //!
-//! This module contains the generic `Codec`, `Encoder` and `Decoder` traits
-//! and a protobuf codec based on prost.
+//! This module contains the generic `Codec`, `Encoder` and `Decoder` traits.
 
 mod buffer;
 pub(crate) mod compression;

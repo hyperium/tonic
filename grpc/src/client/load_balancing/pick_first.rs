@@ -102,6 +102,10 @@ impl LbPolicy for PickFirstPolicy {
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {}
+
+    fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
+        todo!("implement exit_idle")
+    }
 }
 
 struct OneSubchannelPicker {
