@@ -4,8 +4,8 @@ use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::codec::BytesCodec;
 use crate::rt::hyper_wrapper::{HyperCompatExec, HyperCompatTimer, HyperStream};
+use crate::rt::BoxedTaskHandle;
 use crate::rt::Runtime;
-use crate::rt::TaskHandle;
 use crate::rt::TcpOptions;
 use crate::service::Message;
 use crate::service::Request as GrpcRequest;
@@ -52,7 +52,7 @@ struct TransportBuilder {}
 
 struct TonicTransport {
     grpc: Grpc<TonicService>,
-    task_handle: Box<dyn TaskHandle>,
+    task_handle: BoxedTaskHandle,
 }
 
 impl Drop for TonicTransport {

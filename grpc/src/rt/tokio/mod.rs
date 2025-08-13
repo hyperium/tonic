@@ -35,7 +35,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
+use super::{BoxedTaskHandle, DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
@@ -75,10 +75,7 @@ impl TaskHandle for JoinHandle<()> {
 impl Sleep for tokio::time::Sleep {}
 
 impl Runtime for TokioRuntime {
-    fn spawn(
-        &self,
-        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
-    ) -> Box<dyn TaskHandle> {
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle {
         Box::new(tokio::spawn(task))
     }
 

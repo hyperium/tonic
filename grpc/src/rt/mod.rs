@@ -30,6 +30,7 @@ pub(crate) mod hyper_wrapper;
 pub(crate) mod tokio;
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+pub(crate) type BoxedTaskHandle = Box<dyn TaskHandle>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -40,10 +41,7 @@ type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 /// and testable infrastructure.
 pub(super) trait Runtime: Send + Sync {
     /// Spawns the given asynchronous task to run in the background.
-    fn spawn(
-        &self,
-        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
-    ) -> Box<dyn TaskHandle>;
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle;
 
     /// Creates and returns an instance of a DNSResolver, optionally
     /// configured by the ResolverOptions struct. This method may return an
@@ -104,10 +102,7 @@ pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
 pub(crate) struct NoOpRuntime {}
 
 impl Runtime for NoOpRuntime {
-    fn spawn(
-        &self,
-        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
-    ) -> Box<dyn TaskHandle> {
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle {
         unimplemented!()
     }
 

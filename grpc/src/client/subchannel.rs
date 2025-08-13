@@ -11,7 +11,7 @@ use crate::{
         subchannel,
         transport::{ConnectedTransport, TransportOptions},
     },
-    rt::{Runtime, TaskHandle},
+    rt::{BoxedTaskHandle, Runtime},
     service::{Request, Response, Service},
 };
 use core::panic;
@@ -54,16 +54,16 @@ enum InternalSubchannelState {
 }
 
 struct InternalSubchannelConnectingState {
-    abort_handle: Option<Box<dyn TaskHandle>>,
+    abort_handle: Option<BoxedTaskHandle>,
 }
 
 struct InternalSubchannelReadyState {
-    abort_handle: Option<Box<dyn TaskHandle>>,
+    abort_handle: Option<BoxedTaskHandle>,
     svc: SharedService,
 }
 
 struct InternalSubchannelTransientFailureState {
-    task_handle: Option<Box<dyn TaskHandle>>,
+    task_handle: Option<BoxedTaskHandle>,
     error: String,
 }
 
@@ -186,8 +186,8 @@ pub(crate) struct InternalSubchannel {
 struct InnerSubchannel {
     state: InternalSubchannelState,
     watchers: Vec<Arc<SubchannelStateWatcher>>, // TODO(easwars): Revisit the choice for this data structure.
-    backoff_task: Option<Box<dyn TaskHandle>>,
-    disconnect_task: Option<Box<dyn TaskHandle>>,
+    backoff_task: Option<BoxedTaskHandle>,
+    disconnect_task: Option<BoxedTaskHandle>,
 }
 
 #[async_trait]
