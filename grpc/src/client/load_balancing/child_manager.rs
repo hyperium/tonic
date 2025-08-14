@@ -104,7 +104,11 @@ impl<T> ChildManager<T> {
             .map(|child| (&child.identifier, &child.state))
     }
 
-    /// Aggregates states from children policies.
+    /// Aggregates states from child policies.
+    /// If any child is READY then we consider the aggregate state to be READY.
+    /// Otherwise, if any child is CONNECTING, then report CONNECTING.
+    /// Otherwise, if any child is IDLE, then report IDLE.
+    /// Report TRANSIENT FAILURE if no conditions above apply.
     pub fn aggregate_states(&mut self) -> ConnectivityState {
         let mut is_connecting = false;
         let mut is_idle = false;
@@ -120,17 +124,17 @@ impl<T> ChildManager<T> {
                 ConnectivityState::Idle => {
                     is_idle = true;
                 }
-                _ => {}
+                ConnectivityState::TransientFailure => {}
             }
         }
 
         // Decide the new aggregate state.
         if is_connecting {
-            return ConnectivityState::Connecting;
+            ConnectivityState::Connecting
         } else if is_idle {
-            return ConnectivityState::Idle;
+            ConnectivityState::Idle
         } else {
-            return ConnectivityState::TransientFailure;
+            ConnectivityState::TransientFailure
         }
     }
 
