@@ -29,15 +29,8 @@
 //! a service.
 use core::fmt;
 
-<<<<<<< HEAD
 use super::service_config::ServiceConfig;
 use crate::{attributes::Attributes, byte_str::ByteStr, rt::Runtime};
-=======
-use super::service_config::{self, ServiceConfig};
-use crate::{attributes::Attributes, rt};
-
-use super::load_balancing::child_manager::ChildIdentifier;
->>>>>>> 03a46d0 (saving changes again?)
 use std::{
     fmt::{Display, Formatter},
     hash::{Hash, Hasher},
