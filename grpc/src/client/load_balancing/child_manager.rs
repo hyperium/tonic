@@ -43,6 +43,9 @@ use crate::rt::Runtime;
 
 use super::{Subchannel, SubchannelState};
 
+#[cfg(test)]
+mod test;
+
 // An LbPolicy implementation that manages multiple children.
 pub struct ChildManager<T> {
     subchannel_child_map: HashMap<WeakSubchannel, usize>,
@@ -128,7 +131,7 @@ impl<T> ChildManager<T> {
             }
         }
 
-        // Decide the new aggregate state.
+        // Decide the new aggregate state if no child is READY.
         if is_connecting {
             ConnectivityState::Connecting
         } else if is_idle {

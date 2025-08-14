@@ -286,6 +286,14 @@ impl Hash for Endpoint {
     }
 }
 
+impl Eq for Endpoint {}
+
+impl PartialEq for Endpoint {
+    fn eq(&self, other: &Self) -> bool {
+        self.addresses == other.addresses
+    }
+}
+
 /// An Address is an identifier that indicates how to connect to a server.
 #[non_exhaustive]
 #[derive(Debug, Clone, Default, Ord, PartialOrd)]
