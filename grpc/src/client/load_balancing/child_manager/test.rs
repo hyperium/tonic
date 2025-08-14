@@ -217,3 +217,31 @@ async fn childmanager_connecting_then_ready() {
 
     assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
 }
+
+// Tests the scenario where a child reports READY but the other children states.
+// The child_manager should keep reporting READY.
+#[tokio::test]
+async fn childmanager_stays_in_ready() {
+    let (_rx, mut child_manager, _tcc) = setup();
+    let endpoints = create_n_endpoints_with_k_addresses(4, 1);
+
+    child_manager.children = vec![
+        mock_child(endpoints[0].clone(), ConnectivityState::Ready),
+        mock_child(endpoints[1].clone(), ConnectivityState::TransientFailure),
+        mock_child(endpoints[2].clone(), ConnectivityState::TransientFailure),
+        mock_child(endpoints[3].clone(), ConnectivityState::TransientFailure),
+    ];
+
+    assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
+
+    child_manager.children = vec![
+        mock_child(endpoints[0].clone(), ConnectivityState::Ready),
+        mock_child(endpoints[1].clone(), ConnectivityState::TransientFailure),
+        mock_child(endpoints[2].clone(), ConnectivityState::Idle),
+        mock_child(endpoints[3].clone(), ConnectivityState::Connecting),
+    ];
+
+    assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
+
+    assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
+}
