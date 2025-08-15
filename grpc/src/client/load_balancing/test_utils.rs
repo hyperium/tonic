@@ -25,17 +25,20 @@
 use crate::client::load_balancing::{
     ChannelController, ExternalSubchannel, ForwardingSubchannel, LbPolicy, LbPolicyBuilder,
     LbPolicyOptions, LbState, ParsedJsonLbConfig, Pick, PickResult, Picker, Subchannel,
-    SubchannelState, WorkScheduler,
+    SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
 };
-use crate::client::name_resolution::Address;
+use crate::client::name_resolution::{Address, ResolverUpdate};
 use crate::client::service_config::LbConfig;
 use crate::client::ConnectivityState;
 use crate::service::{Message, Request, Response, Service};
 use serde::{Deserialize, Serialize};
+use std::any::Any;
 use std::collections::HashMap;
 use std::error::Error;
 use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 use std::{fmt::Debug, ops::Add, sync::Arc};
+use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, Notify};
 use tokio::task::AbortHandle;
 use tonic::metadata::MetadataMap;
@@ -56,7 +59,7 @@ pub(crate) struct TestSubchannel {
 }
 
 impl TestSubchannel {
-    fn new(address: Address, tx_connect: mpsc::UnboundedSender<TestEvent>) -> Self {
+    pub fn new(address: Address, tx_connect: mpsc::UnboundedSender<TestEvent>) -> Self {
         Self {
             address,
             tx_connect,
@@ -109,7 +112,7 @@ impl Debug for TestEvent {
             Self::NewSubchannel(sc) => write!(f, "NewSubchannel({})", sc.address()),
             Self::UpdatePicker(state) => write!(f, "UpdatePicker({})", state.connectivity_state),
             Self::RequestResolution => write!(f, "RequestResolution"),
-            Self::Connect(addr) => write!(f, "Connect({})", addr.address.to_string()),
+            Self::Connect(addr) => write!(f, "Connect({:?})", addr.address),
             Self::ScheduleWork => write!(f, "ScheduleWork"),
         }
     }
@@ -154,160 +157,93 @@ impl WorkScheduler for TestWorkScheduler {
     }
 }
 
-pub(crate) struct FakeChannel {
-    pub tx_events: mpsc::UnboundedSender<TestEvent>,
+/// This struct holds `LbPolicy` trait stub functions that tests are expected to implement.
+#[derive(Clone, Default)]
+pub struct PolicyFuncs {
+    pub resolver_update: Option<
+        Arc<
+            dyn Fn(
+                    &mut Data,
+                    ResolverUpdate,
+                    Option<&LbConfig>,
+                    &mut dyn ChannelController,
+                ) -> Result<(), Box<dyn Error + Send + Sync>>
+                + Send
+                + Sync,
+        >,
+    >,
+    pub subchannel_update: Option<
+        Arc<
+            dyn Fn(&mut Data, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController)
+                + Send
+                + Sync,
+        >,
+    >,
+    pub exit_idle: Option<Arc<dyn Fn(&mut Data) + Send + Sync>>,
 }
 
-impl ChannelController for FakeChannel {
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel> {
-        println!("new_subchannel called for address {}", address);
-        let notify = Arc::new(Notify::new());
-        let subchannel: Arc<dyn Subchannel> =
-            Arc::new(TestSubchannel::new(address.clone(), self.tx_events.clone()));
-        self.tx_events
-            .send(TestEvent::NewSubchannel(subchannel.clone()))
-            .unwrap();
-        subchannel
-    }
-    fn update_picker(&mut self, update: LbState) {
-        println!("picker_update called with {}", update.connectivity_state);
-        self.tx_events
-            .send(TestEvent::UpdatePicker(update))
-            .unwrap();
-    }
-    fn request_resolution(&mut self) {
-        self.tx_events.send(TestEvent::RequestResolution).unwrap();
-    }
+/// Data holds test data that will be passed all to functions in PolicyFuncs
+#[derive(Default)]
+pub struct Data {
+    pub test_data: Option<Box<dyn Any + Send + Sync>>,
 }
 
-#[derive(Clone)]
-struct TestSubchannelData {
-    state: Option<SubchannelState>,
+/// The stub `LbPolicy` that calls the provided functions.
+pub struct StubPolicy {
+    funcs: PolicyFuncs,
+    data: Data,
 }
 
-impl TestSubchannelData {
-    fn new() -> TestSubchannelData {
-        TestSubchannelData { state: None }
-    }
-}
-
-struct TestSubchannelList {
-    subchannels: HashMap<Arc<dyn Subchannel>, TestSubchannelData>,
-}
-
-impl TestSubchannelList {
-    fn new(addresses: &Vec<Address>, channel_controller: &mut dyn ChannelController) -> Self {
-        let mut scl = TestSubchannelList {
-            subchannels: HashMap::new(),
-        };
-        for address in addresses {
-            let sc = channel_controller.new_subchannel(address);
-            scl.subchannels.insert(sc, TestSubchannelData::new());
-        }
-        scl
-    }
-
-    fn subchannel_data(&self, sc: &Arc<dyn Subchannel>) -> Option<TestSubchannelData> {
-        self.subchannels.get(sc).cloned()
-    }
-
-    fn contains(&self, sc: &Arc<dyn Subchannel>) -> bool {
-        self.subchannels.contains_key(sc)
-    }
-
-    // Returns old state corresponding to the subchannel, if one exists.
-    fn update_subchannel_data(
-        &mut self,
-        sc: &Arc<dyn Subchannel>,
-        state: &SubchannelState,
-    ) -> Option<SubchannelState> {
-        let sc_data = self.subchannels.get_mut(sc).unwrap();
-        let old_state = sc_data.state.clone();
-        sc_data.state = Some(state.clone());
-        old_state
-    }
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct MockConfig {
-    shuffle_address_list: Option<bool>,
-}
-
-/// Mock LbPolicy for testing.
-pub struct MockLbPolicy {
-    connectivity_state: ConnectivityState,
-    name: &'static str,
-    subchannel_list: Option<TestSubchannelList>,
-}
-
-impl MockLbPolicy {
-    pub fn new(connectivity_state: ConnectivityState) -> Self {
-        Self {
-            connectivity_state,
-            name: "whatever",
-            subchannel_list: None,
-        }
-    }
-}
-
-impl LbPolicy for MockLbPolicy {
+impl LbPolicy for StubPolicy {
     fn resolver_update(
         &mut self,
-        update: crate::client::name_resolution::ResolverUpdate,
-        config: Option<&crate::client::service_config::LbConfig>,
+        update: ResolverUpdate,
+        config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-        if let Ok(ref endpoints) = update.endpoints {
-            let addresses: Vec<_> = endpoints
-                .iter()
-                .flat_map(|ep| ep.addresses.clone())
-                .collect();
-            let scl = TestSubchannelList::new(&addresses, channel_controller);
-            self.subchannel_list = Some(scl);
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if let Some(f) = &mut self.funcs.resolver_update {
+            return f(&mut self.data, update, config, channel_controller);
         }
-        channel_controller.update_picker(LbState {
-            connectivity_state: self.connectivity_state,
-            picker: Arc::new(MockPicker { name: self.name }),
-        });
         Ok(())
     }
 
     fn subchannel_update(
         &mut self,
         subchannel: Arc<dyn Subchannel>,
-        state: &super::SubchannelState,
+        state: &SubchannelState,
         channel_controller: &mut dyn ChannelController,
     ) {
-        if let Some(ref mut scl) = self.subchannel_list {
-            channel_controller.update_picker(LbState {
-                connectivity_state: state.connectivity_state,
-                picker: Arc::new(MockPicker { name: self.name }),
-            });
+        if let Some(f) = &mut self.funcs.subchannel_update {
+            f(&mut self.data, subchannel, state, channel_controller);
         }
     }
 
-    fn work(&mut self, channel_controller: &mut dyn ChannelController) {
-        todo!()
+    fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
+        if let Some(f) = &mut self.funcs.exit_idle {
+            f(&mut self.data);
+        }
     }
 
-    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        todo!()
+    fn work(&mut self, _channel_controller: &mut dyn ChannelController) {}
+}
+
+/// This StubPolicyBuilder builds a StubLbPolicy.
+pub struct StubPolicyBuilder {
+    name: &'static str,
+    funcs: PolicyFuncs,
+}
+
+impl StubPolicyBuilder {
+    pub fn new(name: &'static str, funcs: PolicyFuncs) -> Self {
+        Self { name, funcs }
     }
 }
 
-/// Mock Policy Builder for testing.
-pub struct MockPolicyBuilder {
-    pub(super) name: &'static str,
-}
-
-impl LbPolicyBuilder for MockPolicyBuilder {
+impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        Box::new(MockLbPolicy {
-            subchannel_list: None,
-            name: self.name,
-            connectivity_state: ConnectivityState::Connecting,
-        })
+        let funcs = self.funcs.clone();
+        let data = Data::default();
+        Box::new(StubPolicy { funcs, data })
     }
 
     fn name(&self) -> &'static str {
@@ -316,40 +252,8 @@ impl LbPolicyBuilder for MockPolicyBuilder {
 
     fn parse_config(
         &self,
-        config: &ParsedJsonLbConfig,
+        _config: &ParsedJsonLbConfig,
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
-        let cfg: MockConfig = match config.convert_to() {
-            Ok(c) => c,
-            Err(e) => {
-                return Err(format!("failed to parse JSON config: {}", e).into());
-            }
-        };
-        Ok(Some(LbConfig::new(cfg)))
-    }
-}
-
-/// Mock Picker for testing purposes.
-pub struct MockPicker {
-    name: &'static str,
-}
-
-impl MockPicker {
-    pub fn new(name: &'static str) -> Self {
-        Self { name }
-    }
-}
-impl Picker for MockPicker {
-    fn pick(&self, _req: &Request) -> PickResult {
-        PickResult::Pick(Pick {
-            subchannel: Arc::new(TestSubchannel::new(
-                Address {
-                    address: self.name.to_string().into(),
-                    ..Default::default()
-                },
-                mpsc::unbounded_channel().0,
-            )),
-            on_complete: None,
-            metadata: MetadataMap::new(),
-        })
+        Ok(None)
     }
 }
