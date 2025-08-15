@@ -157,29 +157,34 @@ impl WorkScheduler for TestWorkScheduler {
     }
 }
 
+// Type for resolver_update.
+type ResolverUpdateFn = Arc<
+    dyn Fn(
+            &mut Data,
+            ResolverUpdate,
+            Option<&LbConfig>,
+            &mut dyn ChannelController,
+        ) -> Result<(), Box<dyn Error + Send + Sync>>
+        + Send
+        + Sync,
+>;
+
+// Type for subchannel_update.
+type SubchannelUpdateFn = Arc<
+    dyn Fn(&mut Data, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController)
+        + Send
+        + Sync,
+>;
+
+// Type for exit_idle.
+type ExitIdleFn = Arc<dyn Fn(&mut Data, &mut dyn ChannelController) + Send + Sync>;
+
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to implement.
 #[derive(Clone, Default)]
 pub struct PolicyFuncs {
-    pub resolver_update: Option<
-        Arc<
-            dyn Fn(
-                    &mut Data,
-                    ResolverUpdate,
-                    Option<&LbConfig>,
-                    &mut dyn ChannelController,
-                ) -> Result<(), Box<dyn Error + Send + Sync>>
-                + Send
-                + Sync,
-        >,
-    >,
-    pub subchannel_update: Option<
-        Arc<
-            dyn Fn(&mut Data, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController)
-                + Send
-                + Sync,
-        >,
-    >,
-    pub exit_idle: Option<Arc<dyn Fn(&mut Data) + Send + Sync>>,
+    pub resolver_update: Option<ResolverUpdateFn>,
+    pub subchannel_update: Option<SubchannelUpdateFn>,
+    pub exit_idle: Option<ExitIdleFn>,
 }
 
 /// Data holds test data that will be passed all to functions in PolicyFuncs
@@ -218,9 +223,9 @@ impl LbPolicy for StubPolicy {
         }
     }
 
-    fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
         if let Some(f) = &mut self.funcs.exit_idle {
-            f(&mut self.data);
+            f(&mut self.data, channel_controller);
         }
     }
 
