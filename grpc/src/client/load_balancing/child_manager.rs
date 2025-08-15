@@ -105,6 +105,7 @@ impl<T> ChildManager<T> {
     }
 
     /// Aggregates states from child policies.
+    /// 
     /// If any child is READY then we consider the aggregate state to be READY.
     /// Otherwise, if any child is CONNECTING, then report CONNECTING.
     /// Otherwise, if any child is IDLE, then report IDLE.
@@ -462,12 +463,10 @@ mod test {
         let work_scheduler = Arc::new(TestWorkScheduler {
             tx_events: tx_events.clone(),
         });
-
         let tcc = Box::new(TestChannelController {
             tx_events: tx_events.clone(),
         });
         let builder = StubPolicyBuilder::new("reusable-stub-policy", funcs);
-
         let endpoint_sharder = EndpointSharder {
             builder: Arc::new(builder),
         };
