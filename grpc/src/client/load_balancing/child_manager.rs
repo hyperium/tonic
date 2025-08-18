@@ -384,8 +384,9 @@ mod test {
     use tokio::sync::mpsc;
     use tonic::metadata::MetadataMap;
 
-    // TODO: This needs to be moved to a common place that can be shared between round_robin and this test.
-    // This EndpointSharder maps endpoints to children policies.
+    // TODO: This needs to be moved to a common place that can be shared between
+    // round_robin and this test. This EndpointSharder maps endpoints to
+    // children policies.
     struct EndpointSharder {
         builder: Arc<dyn LbPolicyBuilder>,
     }
@@ -396,7 +397,7 @@ mod test {
             resolver_update: ResolverUpdate,
         ) -> Result<Box<dyn Iterator<Item = ChildUpdate<Endpoint>>>, Box<dyn Error + Send + Sync>>
         {
-            let mut sharded_endpoints = HashMap::new();
+            let mut sharded_endpoints = Vec::new();
             for endpoint in resolver_update.endpoints.unwrap().iter() {
                 let child_update = ChildUpdate {
                     child_identifier: endpoint.clone(),
@@ -408,9 +409,9 @@ mod test {
                         resolution_note: resolver_update.resolution_note.clone(),
                     },
                 };
-                sharded_endpoints.insert(endpoint.clone(), child_update);
+                sharded_endpoints.push(child_update);
             }
-            Ok(Box::new(sharded_endpoints.into_values()))
+            Ok(Box::new(sharded_endpoints.into_iter()))
         }
     }
 
@@ -497,7 +498,8 @@ mod test {
         );
     }
 
-    // Verifies that the expected number of subchannels is created. Returns the subchannels created.
+    // Verifies that the expected number of subchannels is created. Returns the
+    // subchannels created.
     async fn verify_subchannel_creation_from_policy(
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
         number_of_subchannels: usize,
@@ -514,18 +516,21 @@ mod test {
         subchannels
     }
 
-    // Defines the functions resolver_update and subchannel_update to test aggregate_states.
+    // Defines the functions resolver_update and subchannel_update to test
+    // aggregate_states.
     fn create_verifying_funcs_for_aggregate_tests() -> StubPolicyFuncs {
         StubPolicyFuncs {
-            // Closure for resolver_update. resolver_update should only receive one
-            // endpoint and create one subchannel for the endpoint it receives.
+            // Closure for resolver_update. resolver_update should only receive
+            // one endpoint and create one subchannel for the endpoint it
+            // receives.
             resolver_update: Some(move |update: ResolverUpdate, _, controller| {
                 assert_eq!(update.endpoints.iter().len(), 1);
                 let endpoint = update.endpoints.as_ref().unwrap()[0].clone();
                 let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
                 Ok(())
             }),
-            // Closure for subchannel_update. Sends a picker of the same state that was passed to it.
+            // Closure for subchannel_update. Sends a picker of the same state
+            // that was passed to it.
             subchannel_update: Some(move |updated_subchannel, state, controller| {
                 controller.update_picker(LbState {
                     connectivity_state: state.connectivity_state,
@@ -536,8 +541,9 @@ mod test {
         }
     }
 
-    // Tests the scenario where one child is READY and the rest are in CONNECTING, IDLE, or TRANSIENT FAILURE. The
-    // child manager's aggregate_states function should report READY.
+    // Tests the scenario where one child is READY and the rest are in
+    // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report READY.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_ready_if_any_child_is_ready() {
         let (mut rx_events, mut child_manager, mut tcc) = setup(
@@ -581,8 +587,9 @@ mod test {
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
     }
 
-    // Tests the scenario where no children are READY and the children are in CONNECTING, IDLE, or TRANSIENT
-    // FAILURE. The child manager's aggregate_states function should report CONNECTING.
+    // Tests the scenario where no children are READY and the children are in
+    // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report CONNECTING.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_connecting_if_no_child_is_ready() {
         let (mut rx_events, mut child_manager, mut tcc) = setup(
@@ -624,8 +631,9 @@ mod test {
         );
     }
 
-    // Tests the scenario where no children are READY or CONNECTING and the children are in IDLE, or TRANSIENT
-    // FAILURE. The child manager's aggregate_states function should report IDLE.
+    // Tests the scenario where no children are READY or CONNECTING and the
+    // children are in IDLE, or TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report IDLE.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_idle_if_only_idle_and_failure() {
         let (mut rx_events, mut child_manager, mut tcc) = setup(
@@ -658,8 +666,9 @@ mod test {
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Idle);
     }
 
-    // Tests the scenario where no children are READY, CONNECTING, or IDLE and all children are in TRANSIENT
-    // FAILURE. The child manager's aggregate_states function should report TRANSIENT FAILURE.
+    // Tests the scenario where no children are READY, CONNECTING, or IDLE and
+    // all children are in TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report TRANSIENT FAILURE.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_transient_failure_if_all_children_are() {
         let (mut rx_events, mut child_manager, mut tcc) = setup(

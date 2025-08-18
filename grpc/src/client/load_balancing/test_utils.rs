@@ -220,8 +220,7 @@ pub struct StubPolicyBuilder {
 
 impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        let funcs = self.funcs.clone();
-        Box::new(StubPolicy { funcs })
+        Box::new(StubPolicy { funcs: self.funcs.clone() })
     }
 
     fn name(&self) -> &'static str {
