@@ -363,55 +363,30 @@ mod test {
         Child, ChildManager, ChildUpdate, ChildWorkScheduler, ResolverUpdateSharder,
     };
     use crate::client::load_balancing::test_utils::{
-        self, Data, PolicyFuncs, StubPolicy, StubPolicyBuilder, TestChannelController, TestEvent,
-        TestSubchannel, TestWorkScheduler,
+        self, StubPolicy, StubPolicyBuilder, StubPolicyData, StubPolicyFuncs,
+        TestChannelController, TestEvent, TestSubchannel, TestWorkScheduler,
     };
     use crate::client::load_balancing::{
         ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
-        Pick, PickResult, Picker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
+        Pick, PickResult, Picker, QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
     };
     use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
     use crate::client::service_config::{LbConfig, ServiceConfig};
     use crate::client::ConnectivityState;
     use crate::rt::{default_runtime, Runtime};
     use crate::service::Request;
-    use ::std::collections::{HashMap, HashSet};
-    use ::std::error::Error;
-    use ::std::panic;
-    use ::std::sync::Arc;
     use serde::{Deserialize, Serialize};
+    use std::collections::{HashMap, HashSet};
+    use std::error::Error;
+    use std::panic;
+    use std::sync::Arc;
     use std::sync::Mutex;
     use tokio::sync::mpsc;
     use tonic::metadata::MetadataMap;
 
-    /// This picker is for testing purposes.
-    pub struct DummyPicker {
-        name: &'static str,
-    }
-
-    impl DummyPicker {
-        pub fn new(name: &'static str) -> Self {
-            Self { name }
-        }
-    }
-    impl Picker for DummyPicker {
-        fn pick(&self, _req: &Request) -> PickResult {
-            PickResult::Pick(Pick {
-                subchannel: Arc::new(TestSubchannel::new(
-                    Address {
-                        address: self.name.to_string().into(),
-                        ..Default::default()
-                    },
-                    mpsc::unbounded_channel().0,
-                )),
-                on_complete: None,
-                metadata: MetadataMap::new(),
-            })
-        }
-    }
-
-    /// This EndpointSharder maps endpoints to children policies.
-    pub struct EndpointSharder {
+    // TODO: This needs to moved to a common place that can be shared between round_robin and this
+    // This EndpointSharder maps endpoints to children policies.
+    struct EndpointSharder {
         builder: Arc<dyn LbPolicyBuilder>,
     }
 
@@ -439,21 +414,23 @@ mod test {
         }
     }
 
-    // Sends a resolver update to the LB policy with the specified endpoint.
-    fn send_resolver_update_to_policy(
-        lb_policy: &mut dyn LbPolicy,
-        endpoints: Vec<Endpoint>,
-        tcc: &mut dyn ChannelController,
-    ) {
-        let update = ResolverUpdate {
-            endpoints: Ok(endpoints.clone()),
-            ..Default::default()
-        };
-        assert!(lb_policy.resolver_update(update, None, tcc).is_ok());
-    }
-
+    // Sets up the test environment.
+    //
+    // Performs the following:
+    // 1. Creates a work scheduler.
+    // 2. Creates a fake channel that acts as a channel controller.
+    // 3. Creates an StubPolicyBuilder with StubFuncs that each test will define and name of the test.
+    // 4. Creates an EndpointSharder with StubPolicyBuilder passed in as chldren policies.
+    // 5. Creates a ChildManager with the EndpointSharder
+    //
+    // Returns the following:
+    // 1. A receiver for events initiated by the LB policy (like creating a
+    //    new subchannel, sending a new picker etc).
+    // 2. The ChildManager to send resolver and subchannel updates from the test.
+    // 3. The controller to pass to the LB policy as part of the updates.
     fn setup(
-        funcs: PolicyFuncs,
+        funcs: StubPolicyFuncs,
+        test_name: &'static str,
     ) -> (
         mpsc::UnboundedReceiver<TestEvent>,
         Box<ChildManager<Endpoint>>,
@@ -466,7 +443,7 @@ mod test {
         let tcc = Box::new(TestChannelController {
             tx_events: tx_events.clone(),
         });
-        let builder = StubPolicyBuilder::new("reusable-stub-policy", funcs);
+        let builder = StubPolicyBuilder::new(test_name, funcs);
         let endpoint_sharder = EndpointSharder {
             builder: Arc::new(builder),
         };
@@ -494,6 +471,19 @@ mod test {
             })
         }
         endpoints
+    }
+
+    // Sends a resolver update to the LB policy with the specified endpoint.
+    fn send_resolver_update_to_policy(
+        lb_policy: &mut dyn LbPolicy,
+        endpoints: Vec<Endpoint>,
+        tcc: &mut dyn ChannelController,
+    ) {
+        let update = ResolverUpdate {
+            endpoints: Ok(endpoints.clone()),
+            ..Default::default()
+        };
+        assert!(lb_policy.resolver_update(update, None, tcc).is_ok());
     }
 
     fn move_subchannel_to_idle(
@@ -556,8 +546,7 @@ mod test {
         );
     }
 
-    // Verifies that the subchannels are created for the given addresses in the
-    // given order. Returns the subchannels created.
+    // Verifies that a subchannel is created for each address. Returns the subchannels created.
     async fn verify_subchannel_creation_from_policy(
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
         addresses: Vec<Address>,
@@ -580,26 +569,19 @@ mod test {
         received_endpoints: Vec<Endpoint>,
         created_subchannel: Option<Arc<dyn Subchannel>>,
     }
-    // Maps an endpoint to the child's ChildTestState
-    type AggregateTestState = HashMap<Endpoint, ChildTestState>;
 
-    // Defines the functions resolver_update and subchannel_update
-    // to test aggregate_states
-    fn create_verifying_funcs_for_aggregate_tests(
-        shared_state: Arc<Mutex<AggregateTestState>>,
-    ) -> PolicyFuncs {
-        PolicyFuncs {
-            // Closure for resolver_update. It creates a subchannel
-            // for the endpoint it receives and stores which endpoint it received
-            // and which subchannel this child created in the data field.
+    // Defines the functions resolver_update and subchannel_update to test aggregate_states
+    fn create_verifying_funcs_for_aggregate_tests() -> StubPolicyFuncs {
+        StubPolicyFuncs {
+            // Closure for resolver_update. It creates a subchannel for the endpoint it receives and stores which
+            // endpoint it received and which subchannel this child created in the data field.
             resolver_update: Some(Arc::new({
-                let state_clone = shared_state.clone();
-                move |data: &mut Data, update: ResolverUpdate, _, controller| {
+                move |data: &mut StubPolicyData, update: ResolverUpdate, _, controller| {
                     let endpoint = update.endpoints.as_ref().unwrap()[0].clone();
                     let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
 
-                    // This creates the state for this specific policy instance
-                    // with its endpoints and created subchannel.
+                    // This creates the state for this specific policy instance with its endpoints and created
+                    // subchannel.
                     let child_state = ChildTestState {
                         received_endpoints: vec![endpoint.clone()],
                         created_subchannel: Some(subchannel),
@@ -611,11 +593,10 @@ mod test {
                 }
             })),
             // Closure for subchannel_update. Verify that the subchannel that being updated now is the
-            // same one that this child policy created in resolver_update. It then sends
-            // a picker of the same state that was passed to it.
+            // same one that this child policy created in resolver_update. It then sends a picker of the same state
+            // that was passed to it.
             subchannel_update: Some(Arc::new({
-                let state_clone_for_update = shared_state.clone();
-                move |data: &mut Data, updated_subchannel, state, controller| {
+                move |data: &mut StubPolicyData, updated_subchannel, state, controller| {
                     // Retrieve the specific ChildTestState from the generic test_data field.
                     // This downcasts the `Any` trait object
                     let test_state = data
@@ -627,14 +608,13 @@ mod test {
 
                     let created_sc = test_state.created_subchannel.as_ref().unwrap();
 
-                    assert_eq!(
-                        created_sc.address().address,
-                        updated_subchannel.address().address,
+                    assert!(
+                        Arc::ptr_eq(created_sc, &updated_subchannel),
                         "Subchannel update was for the wrong subchannel!"
                     );
                     controller.update_picker(LbState {
                         connectivity_state: state.connectivity_state,
-                        picker: Arc::new(DummyPicker::new("dummy")),
+                        picker: Arc::new(QueuingPicker {}),
                     });
                 }
             })),
@@ -642,14 +622,13 @@ mod test {
         }
     }
 
-    // Tests the scenario where one child is READY
-    // and the rest are in CONNECTING, IDLE, or TRANSIENT FAILURE.
-    // The child manager's aggregate_states function should report READY.
+    // Tests the scenario where one child is READY and the rest are in CONNECTING, IDLE, or TRANSIENT FAILURE. The
+    // child manager's aggregate_states function should report READY.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_ready_if_any_child_is_ready() {
-        let shared_test_state = Arc::new(Mutex::new(AggregateTestState::default()));
         let (mut rx_events, mut child_manager, mut tcc) = setup(
-            create_verifying_funcs_for_aggregate_tests(shared_test_state.clone()),
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_ready_if_any_child_is_ready",
         );
         let endpoints = create_n_endpoints_with_k_addresses(4, 1);
         send_resolver_update_to_policy(child_manager.as_mut(), endpoints.clone(), tcc.as_mut());
@@ -672,14 +651,13 @@ mod test {
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
     }
 
-    // Tests the scenario where no children are READY
-    // and the children are in CONNECTING, IDLE, or TRANSIENT FAILURE.
-    // The child manager's aggregate_states function should report CONNECTING.
+    // Tests the scenario where no children are READY and the children are in CONNECTING, IDLE, or TRANSIENT
+    // FAILURE. The child manager's aggregate_states function should report CONNECTING.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_connecting_if_no_child_is_ready() {
-        let shared_test_state = Arc::new(Mutex::new(AggregateTestState::default()));
         let (mut rx_events, mut child_manager, mut tcc) = setup(
-            create_verifying_funcs_for_aggregate_tests(shared_test_state.clone()),
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_connecting_if_no_child_is_ready",
         );
         let endpoints = create_n_endpoints_with_k_addresses(3, 1);
         send_resolver_update_to_policy(child_manager.as_mut(), endpoints.clone(), tcc.as_mut());
@@ -705,14 +683,13 @@ mod test {
         );
     }
 
-    // Tests the scenario where no children are READY or CONNECTING
-    // and the children are in IDLE, or TRANSIENT FAILURE.
-    // The child manager's aggregate_states function should report IDLE.
+    // Tests the scenario where no children are READY or CONNECTING and the children are in IDLE, or TRANSIENT
+    // FAILURE. The child manager's aggregate_states function should report IDLE.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_idle_if_only_idle_and_failure() {
-        let shared_test_state = Arc::new(Mutex::new(AggregateTestState::default()));
         let (mut rx_events, mut child_manager, mut tcc) = setup(
-            create_verifying_funcs_for_aggregate_tests(shared_test_state.clone()),
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_idle_if_only_idle_and_failure",
         );
 
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
@@ -734,14 +711,13 @@ mod test {
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Idle);
     }
 
-    // Tests the scenario where no children are READY, CONNECTING, or IDLE
-    // and all children are in TRANSIENT FAILURE.
-    // The child manager's aggregate_states function should report TRANSIENT FAILURE.
+    // Tests the scenario where no children are READY, CONNECTING, or IDLE and all children are in TRANSIENT
+    // FAILURE. The child manager's aggregate_states function should report TRANSIENT FAILURE.
     #[tokio::test]
     async fn childmanager_aggregate_state_is_transient_failure_if_all_children_are() {
-        let shared_test_state = Arc::new(Mutex::new(AggregateTestState::default()));
         let (mut rx_events, mut child_manager, mut tcc) = setup(
-            create_verifying_funcs_for_aggregate_tests(shared_test_state.clone()),
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_transient_failure_if_all_children_are",
         );
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
         send_resolver_update_to_policy(child_manager.as_mut(), endpoints.clone(), tcc.as_mut());
