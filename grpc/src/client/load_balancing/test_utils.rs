@@ -219,9 +219,13 @@ impl LbPolicy for StubPolicy {
         }
     }
 
-    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {}
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        todo!("Implement exit_idle for StubPolicy")
+    }
 
-    fn work(&mut self, _channel_controller: &mut dyn ChannelController) {}
+    fn work(&mut self, _channel_controller: &mut dyn ChannelController) {
+        todo!("Implement work for StubPolicy")
+    }
 }
 
 /// StubPolicyBuilder builds a StubLbPolicy.
