@@ -462,7 +462,7 @@ mod test {
                 });
             }
             endpoints.push(Endpoint {
-                addresses: addresses.clone(),
+                addresses: addresses,
                 ..Default::default()
             })
         }
@@ -525,7 +525,7 @@ mod test {
             // receives.
             resolver_update: Some(move |update: ResolverUpdate, _, controller| {
                 assert_eq!(update.endpoints.iter().len(), 1);
-                let endpoint = update.endpoints.as_ref().unwrap()[0].clone();
+                let endpoint = update.endpoints.unwrap().pop().unwrap();
                 let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
                 Ok(())
             }),
