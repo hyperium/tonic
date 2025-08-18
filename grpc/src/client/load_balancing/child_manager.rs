@@ -363,8 +363,8 @@ mod test {
         Child, ChildManager, ChildUpdate, ChildWorkScheduler, ResolverUpdateSharder,
     };
     use crate::client::load_balancing::test_utils::{
-        self, StubPolicy, StubPolicyBuilder, StubPolicyData, StubPolicyFuncs,
-        TestChannelController, TestEvent, TestSubchannel, TestWorkScheduler,
+        self, StubPolicy, StubPolicyFuncs, TestChannelController, TestEvent, TestSubchannel,
+        TestWorkScheduler,
     };
     use crate::client::load_balancing::{
         ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
@@ -384,7 +384,7 @@ mod test {
     use tokio::sync::mpsc;
     use tonic::metadata::MetadataMap;
 
-    // TODO: This needs to moved to a common place that can be shared between round_robin and this
+    // TODO: This needs to be moved to a common place that can be shared between round_robin and this test.
     // This EndpointSharder maps endpoints to children policies.
     struct EndpointSharder {
         builder: Arc<dyn LbPolicyBuilder>,
@@ -396,8 +396,8 @@ mod test {
             resolver_update: ResolverUpdate,
         ) -> Result<Box<dyn Iterator<Item = ChildUpdate<Endpoint>>>, Box<dyn Error + Send + Sync>>
         {
-            let mut endpoint_to_child_map = HashMap::new();
-            for endpoint in resolver_update.endpoints.clone().unwrap().iter() {
+            let mut sharded_endpoints = HashMap::new();
+            for endpoint in resolver_update.endpoints.unwrap().iter() {
                 let child_update = ChildUpdate {
                     child_identifier: endpoint.clone(),
                     child_policy_builder: self.builder.clone(),
@@ -408,9 +408,9 @@ mod test {
                         resolution_note: resolver_update.resolution_note.clone(),
                     },
                 };
-                endpoint_to_child_map.insert(endpoint.clone(), child_update);
+                sharded_endpoints.insert(endpoint.clone(), child_update);
             }
-            Ok(Box::new(endpoint_to_child_map.into_values()))
+            Ok(Box::new(sharded_endpoints.into_values()))
         }
     }
 
@@ -419,14 +419,17 @@ mod test {
     // Performs the following:
     // 1. Creates a work scheduler.
     // 2. Creates a fake channel that acts as a channel controller.
-    // 3. Creates an StubPolicyBuilder with StubFuncs that each test will define and name of the test.
-    // 4. Creates an EndpointSharder with StubPolicyBuilder passed in as chldren policies.
-    // 5. Creates a ChildManager with the EndpointSharder
+    // 3. Creates an StubPolicyBuilder with StubFuncs that each test will define
+    //    and name of the test.
+    // 4. Creates an EndpointSharder with StubPolicyBuilder passed in as the
+    //    child policy.
+    // 5. Creates a ChildManager with the EndpointSharder.
     //
     // Returns the following:
-    // 1. A receiver for events initiated by the LB policy (like creating a
-    //    new subchannel, sending a new picker etc).
-    // 2. The ChildManager to send resolver and subchannel updates from the test.
+    // 1. A receiver for events initiated by the LB policy (like creating a new
+    //    subchannel, sending a new picker etc).
+    // 2. The ChildManager to send resolver and subchannel updates from the
+    //    test.
     // 3. The controller to pass to the LB policy as part of the updates.
     fn setup(
         funcs: StubPolicyFuncs,
@@ -436,37 +439,29 @@ mod test {
         Box<ChildManager<Endpoint>>,
         Box<dyn ChannelController>,
     ) {
+        test_utils::reg_stub_policy(test_name, funcs);
         let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
-        let work_scheduler = Arc::new(TestWorkScheduler {
-            tx_events: tx_events.clone(),
-        });
         let tcc = Box::new(TestChannelController {
             tx_events: tx_events.clone(),
         });
-        let builder = StubPolicyBuilder::new(test_name, funcs);
-        let endpoint_sharder = EndpointSharder {
-            builder: Arc::new(builder),
-        };
+        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let endpoint_sharder = EndpointSharder { builder: builder };
         let child_manager = ChildManager::new(Box::new(endpoint_sharder), default_runtime());
         (rx_events, Box::new(child_manager), tcc)
     }
 
     fn create_n_endpoints_with_k_addresses(n: usize, k: usize) -> Vec<Endpoint> {
-        let mut addresses = Vec::new();
-        let mut endpoints = Vec::new();
+        let mut endpoints = Vec::with_capacity(n);
         for i in 0..n {
-            let mut n_addresses = Vec::new();
+            let mut addresses: Vec<Address> = Vec::with_capacity(k);
             for j in 0..k {
-                n_addresses.push(Address {
-                    address: format!("{}.{}.{}.{}:{}", j + i, j + i, j + i, j + i, j + i)
-                        .to_string()
-                        .into(),
+                addresses.push(Address {
+                    address: format!("{}.{}.{}.{}:{}", i + 1, i + 1, i + 1, i + 1, j).into(),
                     ..Default::default()
                 });
             }
-            addresses.push(n_addresses);
             endpoints.push(Endpoint {
-                addresses: addresses[i].clone(),
+                addresses: addresses.clone(),
                 ..Default::default()
             })
         }
@@ -480,79 +475,35 @@ mod test {
         tcc: &mut dyn ChannelController,
     ) {
         let update = ResolverUpdate {
-            endpoints: Ok(endpoints.clone()),
+            endpoints: Ok(endpoints),
             ..Default::default()
         };
         assert!(lb_policy.resolver_update(update, None, tcc).is_ok());
     }
 
-    fn move_subchannel_to_idle(
+    fn move_subchannel_to_state(
         lb_policy: &mut dyn LbPolicy,
         subchannel: Arc<dyn Subchannel>,
         tcc: &mut dyn ChannelController,
+        state: ConnectivityState,
     ) {
         lb_policy.subchannel_update(
-            subchannel.clone(),
+            subchannel,
             &SubchannelState {
-                connectivity_state: ConnectivityState::Idle,
+                connectivity_state: state,
                 ..Default::default()
             },
             tcc,
         );
     }
 
-    fn move_subchannel_to_connecting(
-        lb_policy: &mut dyn LbPolicy,
-        subchannel: Arc<dyn Subchannel>,
-        tcc: &mut dyn ChannelController,
-    ) {
-        lb_policy.subchannel_update(
-            subchannel.clone(),
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Connecting,
-                ..Default::default()
-            },
-            tcc,
-        );
-    }
-
-    fn move_subchannel_to_ready(
-        lb_policy: &mut dyn LbPolicy,
-        subchannel: Arc<dyn Subchannel>,
-        tcc: &mut dyn ChannelController,
-    ) {
-        lb_policy.subchannel_update(
-            subchannel.clone(),
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Ready,
-                ..Default::default()
-            },
-            tcc,
-        );
-    }
-
-    fn move_subchannel_to_transient_failure(
-        lb_policy: &mut dyn LbPolicy,
-        subchannel: Arc<dyn Subchannel>,
-        tcc: &mut dyn ChannelController,
-    ) {
-        lb_policy.subchannel_update(
-            subchannel.clone(),
-            &SubchannelState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                ..Default::default()
-            },
-            tcc,
-        );
-    }
-
-    // Verifies that a subchannel is created for each address. Returns the subchannels created.
+    // Verifies that the expected number of subchannels is created. Returns the subchannels created.
     async fn verify_subchannel_creation_from_policy(
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
-        addresses: Vec<Address>,
+        number_of_subchannels: usize,
     ) -> Vec<Arc<dyn Subchannel>> {
         let mut subchannels = Vec::new();
-        for address in addresses {
+        for _ in 0..number_of_subchannels {
             match rx_events.recv().await.unwrap() {
                 TestEvent::NewSubchannel(sc) => {
                     subchannels.push(sc);
@@ -563,61 +514,24 @@ mod test {
         subchannels
     }
 
-    // State for an individual child in the multi-child aggregate tests.
-    #[derive(Default, Debug, Clone)]
-    struct ChildTestState {
-        received_endpoints: Vec<Endpoint>,
-        created_subchannel: Option<Arc<dyn Subchannel>>,
-    }
-
-    // Defines the functions resolver_update and subchannel_update to test aggregate_states
+    // Defines the functions resolver_update and subchannel_update to test aggregate_states.
     fn create_verifying_funcs_for_aggregate_tests() -> StubPolicyFuncs {
         StubPolicyFuncs {
-            // Closure for resolver_update. It creates a subchannel for the endpoint it receives and stores which
-            // endpoint it received and which subchannel this child created in the data field.
-            resolver_update: Some(Arc::new({
-                move |data: &mut StubPolicyData, update: ResolverUpdate, _, controller| {
-                    let endpoint = update.endpoints.as_ref().unwrap()[0].clone();
-                    let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
-
-                    // This creates the state for this specific policy instance with its endpoints and created
-                    // subchannel.
-                    let child_state = ChildTestState {
-                        received_endpoints: vec![endpoint.clone()],
-                        created_subchannel: Some(subchannel),
-                    };
-
-                    // Store this policy's state in its data field.
-                    data.test_data = Some(Box::new(child_state.clone()));
-                    Ok(())
-                }
-            })),
-            // Closure for subchannel_update. Verify that the subchannel that being updated now is the
-            // same one that this child policy created in resolver_update. It then sends a picker of the same state
-            // that was passed to it.
-            subchannel_update: Some(Arc::new({
-                move |data: &mut StubPolicyData, updated_subchannel, state, controller| {
-                    // Retrieve the specific ChildTestState from the generic test_data field.
-                    // This downcasts the `Any` trait object
-                    let test_state = data
-                        .test_data
-                        .as_ref()
-                        .unwrap()
-                        .downcast_ref::<ChildTestState>()
-                        .unwrap();
-
-                    let created_sc = test_state.created_subchannel.as_ref().unwrap();
-
-                    assert!(
-                        Arc::ptr_eq(created_sc, &updated_subchannel),
-                        "Subchannel update was for the wrong subchannel!"
-                    );
-                    controller.update_picker(LbState {
-                        connectivity_state: state.connectivity_state,
-                        picker: Arc::new(QueuingPicker {}),
-                    });
-                }
-            })),
+            // Closure for resolver_update. resolver_update should only receive one
+            // endpoint and create one subchannel for the endpoint it receives.
+            resolver_update: Some(move |update: ResolverUpdate, _, controller| {
+                assert_eq!(update.endpoints.iter().len(), 1);
+                let endpoint = update.endpoints.as_ref().unwrap()[0].clone();
+                let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
+                Ok(())
+            }),
+            // Closure for subchannel_update. Sends a picker of the same state that was passed to it.
+            subchannel_update: Some(move |updated_subchannel, state, controller| {
+                controller.update_picker(LbState {
+                    connectivity_state: state.connectivity_state,
+                    picker: Arc::new(QueuingPicker {}),
+                });
+            }),
             ..Default::default()
         }
     }
@@ -635,19 +549,35 @@ mod test {
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
-                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses)
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
                     .await
                     .remove(0),
             );
         }
-        move_subchannel_to_transient_failure(
+        move_subchannel_to_state(
             child_manager.as_mut(),
             subchannels[0].clone(),
             tcc.as_mut(),
+            ConnectivityState::TransientFailure,
         );
-        move_subchannel_to_idle(child_manager.as_mut(), subchannels[1].clone(), tcc.as_mut());
-        move_subchannel_to_connecting(child_manager.as_mut(), subchannels[2].clone(), tcc.as_mut());
-        move_subchannel_to_ready(child_manager.as_mut(), subchannels[3].clone(), tcc.as_mut());
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels[1].clone(),
+            tcc.as_mut(),
+            ConnectivityState::Idle,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels[2].clone(),
+            tcc.as_mut(),
+            ConnectivityState::Connecting,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels[3].clone(),
+            tcc.as_mut(),
+            ConnectivityState::Ready,
+        );
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
     }
 
@@ -664,18 +594,29 @@ mod test {
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
-                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses)
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
                     .await
                     .remove(0),
             );
         }
-        move_subchannel_to_transient_failure(
+        move_subchannel_to_state(
             child_manager.as_mut(),
             subchannels[0].clone(),
             tcc.as_mut(),
+            ConnectivityState::TransientFailure,
         );
-        move_subchannel_to_idle(child_manager.as_mut(), subchannels[1].clone(), tcc.as_mut());
-        move_subchannel_to_connecting(child_manager.as_mut(), subchannels[2].clone(), tcc.as_mut());
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels[1].clone(),
+            tcc.as_mut(),
+            ConnectivityState::Idle,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels[2].clone(),
+            tcc.as_mut(),
+            ConnectivityState::Connecting,
+        );
 
         assert_eq!(
             child_manager.aggregate_states(),
@@ -697,17 +638,23 @@ mod test {
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
-                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses)
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
                     .await
                     .remove(0),
             );
         }
-        move_subchannel_to_transient_failure(
+        move_subchannel_to_state(
             child_manager.as_mut(),
             subchannels[0].clone(),
             tcc.as_mut(),
+            ConnectivityState::TransientFailure,
         );
-        move_subchannel_to_idle(child_manager.as_mut(), subchannels[1].clone(), tcc.as_mut());
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels[1].clone(),
+            tcc.as_mut(),
+            ConnectivityState::Idle,
+        );
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Idle);
     }
 
@@ -724,20 +671,22 @@ mod test {
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
-                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses)
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
                     .await
                     .remove(0),
             );
         }
-        move_subchannel_to_transient_failure(
+        move_subchannel_to_state(
             child_manager.as_mut(),
             subchannels[0].clone(),
             tcc.as_mut(),
+            ConnectivityState::TransientFailure,
         );
-        move_subchannel_to_transient_failure(
+        move_subchannel_to_state(
             child_manager.as_mut(),
             subchannels[1].clone(),
             tcc.as_mut(),
+            ConnectivityState::TransientFailure,
         );
         assert_eq!(
             child_manager.aggregate_states(),

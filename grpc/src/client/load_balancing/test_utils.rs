@@ -158,23 +158,13 @@ impl WorkScheduler for TestWorkScheduler {
 }
 
 // The callback to invoke when resolver_update is invoked on the stub policy.
-type ResolverUpdateFn = Arc<
-    dyn Fn(
-            &mut StubPolicyData,
-            ResolverUpdate,
-            Option<&LbConfig>,
-            &mut dyn ChannelController,
-        ) -> Result<(), Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync,
->;
-
+type ResolverUpdateFn = fn(
+    ResolverUpdate,
+    Option<&LbConfig>,
+    &mut dyn ChannelController,
+) -> Result<(), Box<dyn Error + Send + Sync>>;
 // The callback to invoke when subchannel_update is invoked on the stub policy.
-type SubchannelUpdateFn = Arc<
-    dyn Fn(&mut StubPolicyData, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController)
-        + Send
-        + Sync,
->;
+type SubchannelUpdateFn = fn(Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to implement.
 #[derive(Clone, Default)]
@@ -183,16 +173,9 @@ pub struct StubPolicyFuncs {
     pub subchannel_update: Option<SubchannelUpdateFn>,
 }
 
-/// Data holds test data that will be passed all to functions in PolicyFuncs
-#[derive(Default)]
-pub struct StubPolicyData {
-    pub test_data: Option<Box<dyn Any + Send + Sync>>,
-}
-
 /// The stub `LbPolicy` that calls the provided functions.
 pub struct StubPolicy {
     funcs: StubPolicyFuncs,
-    data: StubPolicyData,
 }
 
 impl LbPolicy for StubPolicy {
@@ -203,7 +186,7 @@ impl LbPolicy for StubPolicy {
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(f) = &self.funcs.resolver_update {
-            return f(&mut self.data, update, config, channel_controller);
+            return f(update, config, channel_controller);
         }
         Ok(())
     }
@@ -215,7 +198,7 @@ impl LbPolicy for StubPolicy {
         channel_controller: &mut dyn ChannelController,
     ) {
         if let Some(f) = &self.funcs.subchannel_update {
-            f(&mut self.data, subchannel, state, channel_controller);
+            f(subchannel, state, channel_controller);
         }
     }
 
@@ -234,17 +217,10 @@ pub struct StubPolicyBuilder {
     funcs: StubPolicyFuncs,
 }
 
-impl StubPolicyBuilder {
-    pub fn new(name: &'static str, funcs: StubPolicyFuncs) -> Self {
-        Self { name, funcs }
-    }
-}
-
 impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
         let funcs = self.funcs.clone();
-        let data = StubPolicyData::default();
-        Box::new(StubPolicy { funcs, data })
+        Box::new(StubPolicy { funcs })
     }
 
     fn name(&self) -> &'static str {
@@ -257,4 +233,8 @@ impl LbPolicyBuilder for StubPolicyBuilder {
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
         todo!("Implement parse_config in StubPolicyBuilder")
     }
+}
+
+pub fn reg_stub_policy(name: &'static str, funcs: StubPolicyFuncs) {
+    super::GLOBAL_LB_REGISTRY.add_builder(StubPolicyBuilder { name, funcs })
 }

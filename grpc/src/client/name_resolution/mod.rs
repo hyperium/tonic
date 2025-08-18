@@ -269,7 +269,7 @@ impl Default for ResolverUpdate {
 /// An Endpoint is an address or a collection of addresses which reference one
 /// logical server.  Multiple addresses may be used if there are multiple ways
 /// which the server can be reached, e.g. via IPv4 and IPv6 addresses.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Endpoint {
     /// Addresses contains a list of addresses used to access this endpoint.
@@ -283,14 +283,6 @@ pub struct Endpoint {
 impl Hash for Endpoint {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.addresses.hash(state);
-    }
-}
-
-impl Eq for Endpoint {}
-
-impl PartialEq for Endpoint {
-    fn eq(&self, other: &Self) -> bool {
-        self.addresses == other.addresses
     }
 }
 
