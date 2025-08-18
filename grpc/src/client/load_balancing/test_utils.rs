@@ -163,6 +163,7 @@ type ResolverUpdateFn = fn(
     Option<&LbConfig>,
     &mut dyn ChannelController,
 ) -> Result<(), Box<dyn Error + Send + Sync>>;
+
 // The callback to invoke when subchannel_update is invoked on the stub policy.
 type SubchannelUpdateFn = fn(Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
 
