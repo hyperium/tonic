@@ -221,7 +221,9 @@ pub struct StubPolicyBuilder {
 
 impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        Box::new(StubPolicy { funcs: self.funcs.clone() })
+        Box::new(StubPolicy {
+            funcs: self.funcs.clone(),
+        })
     }
 
     fn name(&self) -> &'static str {
