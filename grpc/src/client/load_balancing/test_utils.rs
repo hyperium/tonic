@@ -167,7 +167,8 @@ type ResolverUpdateFn = fn(
 // The callback to invoke when subchannel_update is invoked on the stub policy.
 type SubchannelUpdateFn = fn(Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
 
-/// This struct holds `LbPolicy` trait stub functions that tests are expected to implement.
+/// This struct holds `LbPolicy` trait stub functions that tests are expected to
+/// implement.
 #[derive(Clone, Default)]
 pub struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
