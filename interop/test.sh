@@ -52,10 +52,8 @@ SERVER_PID=$!
 echo ":; started grpc-go test server."
 
 cleanup() {
-  # Temporarily disable 'exit on error' just for this command.
-  set +e
   echo ":; killing test server ${SERVER_PID}"
-  kill "${SERVER_PID}"
+  kill "${SERVER_PID}" || true
 }
 
 # trap exits to make sure we kill the server process when the script exits,
