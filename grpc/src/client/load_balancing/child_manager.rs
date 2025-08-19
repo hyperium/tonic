@@ -560,27 +560,29 @@ mod test {
                     .remove(0),
             );
         }
+
+        let mut subchannels = subchannels.into_iter();
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[0].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::TransientFailure,
         );
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[1].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::Idle,
         );
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[2].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::Connecting,
         );
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[3].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::Ready,
         );
@@ -606,21 +608,22 @@ mod test {
                     .remove(0),
             );
         }
+        let mut subchannels = subchannels.into_iter();
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[0].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::TransientFailure,
         );
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[1].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::Idle,
         );
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[2].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::Connecting,
         );
@@ -651,15 +654,16 @@ mod test {
                     .remove(0),
             );
         }
+        let mut subchannels = subchannels.into_iter();
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[0].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::TransientFailure,
         );
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[1].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::Idle,
         );
@@ -685,15 +689,16 @@ mod test {
                     .remove(0),
             );
         }
+        let mut subchannels = subchannels.into_iter();
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[0].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::TransientFailure,
         );
         move_subchannel_to_state(
             child_manager.as_mut(),
-            subchannels[1].clone(),
+            subchannels.next().unwrap(),
             tcc.as_mut(),
             ConnectivityState::TransientFailure,
         );
