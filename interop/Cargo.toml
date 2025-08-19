@@ -32,7 +32,7 @@ grpc = {path = "../grpc"}
 # We also need the protobuf-codegen crate to support configuring the path
 # to the protobuf crate used in the generated message code, instead of
 # defaulting to `::protobuf`.
-protobuf = { version = "4.31.1-release" }
+protobuf = { version = "4.32.0-release" }
 tonic-protobuf = {path = "../tonic-protobuf"}
 
 [build-dependencies]
