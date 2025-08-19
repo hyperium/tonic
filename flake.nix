@@ -92,13 +92,13 @@
                 "rustfmt"
                 "rust-analyzer"
               ])
-              protobuf
+              # protobuf
             ];
 
             hardeningDisable = [ "fortify" ];
 
             shellHook = ''
-              export PATH="$PWD/protoc-gen-rust-grpc/bazel-bin/src:$PATH"
+              export PATH="$PWD/protoc-gen-rust-grpc/bazel-bin/src:$HOME/code/install/bin:$PATH"
 
               ${config.pre-commit.installationScript}
             '';
