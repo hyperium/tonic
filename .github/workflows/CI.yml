@@ -82,7 +82,9 @@ jobs:
     - uses: hecrj/setup-rust-action@v2
       with:
         components: clippy
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@3.31.1
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -115,7 +117,9 @@ jobs:
         toolchain: nightly-2025-03-27
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@3.31.1
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -147,7 +151,9 @@ jobs:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@3.31.1
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -183,8 +189,9 @@ jobs:
         rust-version: ${{ steps.msrv.outputs.version }}
     - uses: taiki-e/install-action@cargo-no-dev-deps
     - uses: Swatinem/rust-cache@v2
-    - run: cargo no-dev-deps --no-private check --all-features
-    - run: cargo no-dev-deps --no-private doc --no-deps --all-features
+    # we exlude crates that do not use rust-version = { workspace = true }
+    - run: cargo no-dev-deps --no-private check --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
+    - run: cargo no-dev-deps --no-private doc --no-deps --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
       env:
         RUSTDOCFLAGS: "-D warnings"
 
@@ -197,7 +204,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@3.31.1
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -234,7 +243,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@3.31.1
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -267,11 +278,11 @@ jobs:
     - uses: actions/checkout@v4
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2025-05-04
+        toolchain: nightly-2025-08-06
     - name: Install cargo-check-external-types
       uses: taiki-e/cache-cargo-install-action@v2
       with:
-        tool: cargo-check-external-types@0.2.0
+        tool: cargo-check-external-types@0.3.0
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
     - run: cargo hack --no-private check-external-types --all-features

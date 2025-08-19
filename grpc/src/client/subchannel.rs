@@ -2,14 +2,20 @@ use super::{
     channel::{InternalChannelController, WorkQueueTx},
     load_balancing::{self, ExternalSubchannel, Picker, Subchannel, SubchannelState},
     name_resolution::Address,
-    transport::{self, ConnectedTransport, Transport, TransportRegistry},
+    transport::{self, Transport, TransportRegistry},
     ConnectivityState,
 };
 use crate::{
-    client::{channel::WorkQueueItem, subchannel},
+    client::{
+        channel::WorkQueueItem,
+        subchannel,
+        transport::{ConnectedTransport, TransportOptions},
+    },
+    rt::{BoxedTaskHandle, Runtime},
     service::{Request, Response, Service},
 };
 use core::panic;
+use std::time::{Duration, Instant};
 use std::{
     collections::BTreeMap,
     error::Error,
@@ -17,14 +23,10 @@ use std::{
     ops::Sub,
     sync::{Arc, Mutex, RwLock, Weak},
 };
-use tokio::{
-    sync::{mpsc, watch, Notify},
-    task::{AbortHandle, JoinHandle},
-    time::{Duration, Instant},
-};
+use tokio::sync::{mpsc, oneshot, watch, Notify};
 use tonic::async_trait;
 
-type SharedService = Arc<dyn ConnectedTransport>;
+type SharedService = Arc<dyn Service>;
 
 pub trait Backoff: Send + Sync {
     fn backoff_until(&self) -> Instant;
@@ -52,16 +54,16 @@ enum InternalSubchannelState {
 }
 
 struct InternalSubchannelConnectingState {
-    abort_handle: Option<AbortHandle>,
+    abort_handle: Option<BoxedTaskHandle>,
 }
 
 struct InternalSubchannelReadyState {
-    abort_handle: Option<AbortHandle>,
+    abort_handle: Option<BoxedTaskHandle>,
     svc: SharedService,
 }
 
 struct InternalSubchannelTransientFailureState {
-    abort_handle: Option<AbortHandle>,
+    task_handle: Option<BoxedTaskHandle>,
     error: String,
 }
 
@@ -163,7 +165,7 @@ impl Drop for InternalSubchannelState {
                 }
             }
             Self::TransientFailure(st) => {
-                if let Some(ah) = &st.abort_handle {
+                if let Some(ah) = &st.task_handle {
                     ah.abort();
                 }
             }
@@ -178,13 +180,14 @@ pub(crate) struct InternalSubchannel {
     unregister_fn: Option<Box<dyn FnOnce(SubchannelKey) + Send + Sync>>,
     state_machine_event_sender: mpsc::UnboundedSender<SubchannelStateMachineEvent>,
     inner: Mutex<InnerSubchannel>,
+    runtime: Arc<dyn Runtime>,
 }
 
 struct InnerSubchannel {
     state: InternalSubchannelState,
     watchers: Vec<Arc<SubchannelStateWatcher>>, // TODO(easwars): Revisit the choice for this data structure.
-    backoff_task: Option<JoinHandle<()>>,
-    disconnect_task: Option<JoinHandle<()>>,
+    backoff_task: Option<BoxedTaskHandle>,
+    disconnect_task: Option<BoxedTaskHandle>,
 }
 
 #[async_trait]
@@ -204,7 +207,7 @@ impl Service for InternalSubchannel {
 
 enum SubchannelStateMachineEvent {
     ConnectionRequested,
-    ConnectionSucceeded(SharedService),
+    ConnectionSucceeded(SharedService, oneshot::Receiver<Result<(), String>>),
     ConnectionTimedOut,
     ConnectionFailed(String),
     ConnectionTerminated,
@@ -214,7 +217,7 @@ impl Debug for SubchannelStateMachineEvent {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ConnectionRequested => write!(f, "ConnectionRequested"),
-            Self::ConnectionSucceeded(_) => write!(f, "ConnectionSucceeded"),
+            Self::ConnectionSucceeded(_, _) => write!(f, "ConnectionSucceeded"),
             Self::ConnectionTimedOut => write!(f, "ConnectionTimedOut"),
             Self::ConnectionFailed(_) => write!(f, "ConnectionFailed"),
             Self::ConnectionTerminated => write!(f, "ConnectionTerminated"),
@@ -229,6 +232,7 @@ impl InternalSubchannel {
         transport: Arc<dyn Transport>,
         backoff: Arc<dyn Backoff>,
         unregister_fn: Box<dyn FnOnce(SubchannelKey) + Send + Sync>,
+        runtime: Arc<dyn Runtime>,
     ) -> Arc<InternalSubchannel> {
         println!("creating new internal subchannel for: {:?}", &key);
         let (tx, mut rx) = mpsc::unbounded_channel::<SubchannelStateMachineEvent>();
@@ -244,6 +248,7 @@ impl InternalSubchannel {
                 backoff_task: None,
                 disconnect_task: None,
             }),
+            runtime: runtime.clone(),
         });
 
         // This long running task implements the subchannel state machine. When
@@ -251,7 +256,7 @@ impl InternalSubchannel {
         // closed, and therefore this task exits because rx.recv() returns None
         // in that case.
         let arc_to_self = Arc::clone(&isc);
-        tokio::task::spawn(async move {
+        runtime.spawn(Box::pin(async move {
             println!("starting subchannel state machine for: {:?}", &key);
             while let Some(m) = rx.recv().await {
                 println!("subchannel {:?} received event {:?}", &key, &m);
@@ -259,8 +264,8 @@ impl InternalSubchannel {
                     SubchannelStateMachineEvent::ConnectionRequested => {
                         arc_to_self.move_to_connecting();
                     }
-                    SubchannelStateMachineEvent::ConnectionSucceeded(svc) => {
-                        arc_to_self.move_to_ready(svc);
+                    SubchannelStateMachineEvent::ConnectionSucceeded(svc, rx) => {
+                        arc_to_self.move_to_ready(svc, rx);
                     }
                     SubchannelStateMachineEvent::ConnectionTimedOut => {
                         arc_to_self.move_to_transient_failure("connect timeout expired".into());
@@ -277,7 +282,7 @@ impl InternalSubchannel {
                 }
             }
             println!("exiting work queue task in subchannel");
-        });
+        }));
         isc
     }
 
@@ -345,15 +350,19 @@ impl InternalSubchannel {
         let transport = self.transport.clone();
         let address = self.address().address;
         let state_machine_tx = self.state_machine_event_sender.clone();
-        let connect_task = tokio::task::spawn(async move {
+        // TODO: All these options to be configured by users.
+        let transport_opts = TransportOptions::default();
+        let runtime = self.runtime.clone();
+
+        let connect_task = self.runtime.spawn(Box::pin(async move {
             tokio::select! {
-                _ = tokio::time::sleep(min_connect_timeout) => {
+                _ = runtime.sleep(min_connect_timeout) => {
                     let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionTimedOut);
                 }
-                result = transport.connect(address.to_string().clone()) => {
+                result = transport.connect(address.to_string().clone(), runtime, &transport_opts) => {
                     match result {
                         Ok(s) => {
-                            let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionSucceeded(Arc::from(s)));
+                            let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionSucceeded(Arc::from(s.service), s.disconnection_listener));
                         }
                         Err(e) => {
                             let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionFailed(e));
@@ -361,14 +370,14 @@ impl InternalSubchannel {
                     }
                 },
             }
-        });
+        }));
         let mut inner = self.inner.lock().unwrap();
         inner.state = InternalSubchannelState::Connecting(InternalSubchannelConnectingState {
-            abort_handle: Some(connect_task.abort_handle()),
+            abort_handle: Some(connect_task),
         });
     }
 
-    fn move_to_ready(&self, svc: SharedService) {
+    fn move_to_ready(&self, svc: SharedService, closed_rx: oneshot::Receiver<Result<(), String>>) {
         let svc2 = svc.clone();
         {
             let mut inner = self.inner.lock().unwrap();
@@ -383,17 +392,19 @@ impl InternalSubchannel {
         });
 
         let state_machine_tx = self.state_machine_event_sender.clone();
-        let disconnect_task = tokio::task::spawn(async move {
+        let task_handle = self.runtime.spawn(Box::pin(async move {
             // TODO(easwars): Does it make sense for disconnected() to return an
             // error string containing information about why the connection
             // terminated? But what can we do with that error other than logging
             // it, which the transport can do as well?
-            svc.disconnected().await;
+            if let Err(e) = closed_rx.await {
+                eprintln!("Transport closed with error: {e}",)
+            };
             let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionTerminated);
-        });
+        }));
         let mut inner = self.inner.lock().unwrap();
         inner.state = InternalSubchannelState::Ready(InternalSubchannelReadyState {
-            abort_handle: Some(disconnect_task.abort_handle()),
+            abort_handle: Some(task_handle),
             svc: svc2.clone(),
         });
     }
@@ -403,7 +414,7 @@ impl InternalSubchannel {
             let mut inner = self.inner.lock().unwrap();
             inner.state = InternalSubchannelState::TransientFailure(
                 InternalSubchannelTransientFailureState {
-                    abort_handle: None,
+                    task_handle: None,
                     error: err.clone(),
                 },
             );
@@ -417,14 +428,17 @@ impl InternalSubchannel {
 
         let backoff_interval = self.backoff.backoff_until();
         let state_machine_tx = self.state_machine_event_sender.clone();
-        let backoff_task = tokio::task::spawn(async move {
-            tokio::time::sleep_until(backoff_interval).await;
+        let runtime = self.runtime.clone();
+        let backoff_task = self.runtime.spawn(Box::pin(async move {
+            runtime
+                .sleep(backoff_interval.saturating_duration_since(Instant::now()))
+                .await;
             let _ = state_machine_tx.send(SubchannelStateMachineEvent::BackoffExpired);
-        });
+        }));
         let mut inner = self.inner.lock().unwrap();
         inner.state =
             InternalSubchannelState::TransientFailure(InternalSubchannelTransientFailureState {
-                abort_handle: Some(backoff_task.abort_handle()),
+                task_handle: Some(backoff_task),
                 error: err.clone(),
             });
     }

@@ -41,6 +41,7 @@ use tonic::{metadata::MetadataMap, Status};
 
 use crate::{
     client::channel::WorkQueueTx,
+    rt::Runtime,
     service::{Request, Response, Service},
 };
 
@@ -53,6 +54,8 @@ use crate::client::{
 
 pub mod child_manager;
 pub mod pick_first;
+#[cfg(test)]
+pub mod test_utils;
 
 pub(crate) mod registry;
 use super::{service_config::LbConfig, subchannel::SubchannelStateWatcher};
@@ -64,6 +67,7 @@ pub struct LbPolicyOptions {
     /// A hook into the channel's work scheduler that allows the LbPolicy to
     /// request the ability to perform operations on the ChannelController.
     pub work_scheduler: Arc<dyn WorkScheduler>,
+    pub runtime: Arc<dyn Runtime>,
 }
 
 /// Used to asynchronously request a call into the LbPolicy's work method if
@@ -169,6 +173,10 @@ pub trait LbPolicy: Send {
     /// Called by the channel in response to a call from the LB policy to the
     /// WorkScheduler's request_work method.
     fn work(&mut self, channel_controller: &mut dyn ChannelController);
+
+    /// Called by the channel when an LbPolicy goes idle and the channel
+    /// wants it to start connecting to subchannels again.
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController);
 }
 
 /// Controls channel behaviors.

@@ -1,22 +1,17 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, Mutex},
-};
-
-use once_cell::sync::Lazy;
-
 use super::Transport;
+use std::sync::{Arc, LazyLock, Mutex};
+use std::{collections::HashMap, fmt::Debug};
 
 /// A registry to store and retrieve transports.  Transports are indexed by
 /// the address type they are intended to handle.
-#[derive(Clone)]
-pub struct TransportRegistry {
-    m: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
+#[derive(Default, Clone)]
+pub(crate) struct TransportRegistry {
+    inner: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
 }
 
-impl std::fmt::Debug for TransportRegistry {
+impl Debug for TransportRegistry {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let m = self.m.lock().unwrap();
+        let m = self.inner.lock().unwrap();
         for key in m.keys() {
             write!(f, "k: {key:?}")?
         }
@@ -26,21 +21,21 @@ impl std::fmt::Debug for TransportRegistry {
 
 impl TransportRegistry {
     /// Construct an empty name resolver registry.
-    pub fn new() -> Self {
-        Self { m: Arc::default() }
+    pub(crate) fn new() -> Self {
+        Self::default()
     }
-    /// Add a name resolver into the registry.
-    pub fn add_transport(&self, address_type: &str, transport: impl Transport + 'static) {
-        //let a: Arc<dyn Any> = transport;
-        //let a: Arc<dyn Transport<Addr = dyn Any>> = transport;
-        self.m
+
+    /// Add a transport into the registry.
+    pub(crate) fn add_transport(&self, address_type: &str, transport: impl Transport + 'static) {
+        self.inner
             .lock()
             .unwrap()
             .insert(address_type.to_string(), Arc::new(transport));
     }
+
     /// Retrieve a name resolver from the registry, or None if not found.
-    pub fn get_transport(&self, address_type: &str) -> Result<Arc<dyn Transport>, String> {
-        self.m
+    pub(crate) fn get_transport(&self, address_type: &str) -> Result<Arc<dyn Transport>, String> {
+        self.inner
             .lock()
             .unwrap()
             .get(address_type)
@@ -51,12 +46,7 @@ impl TransportRegistry {
     }
 }
 
-impl Default for TransportRegistry {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 /// The registry used if a local registry is not provided to a channel or if it
 /// does not exist in the local registry.
-pub static GLOBAL_TRANSPORT_REGISTRY: Lazy<TransportRegistry> = Lazy::new(TransportRegistry::new);
+pub static GLOBAL_TRANSPORT_REGISTRY: LazyLock<TransportRegistry> =
+    LazyLock::new(TransportRegistry::new);

@@ -37,17 +37,16 @@ use std::{
 };
 
 use tokio::sync::{mpsc, oneshot, watch, Notify};
-use tokio::task::AbortHandle;
 
 use serde_json::json;
 use tonic::async_trait;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
-use crate::credentials::Credentials;
+use crate::attributes::Attributes;
 use crate::rt;
 use crate::service::{Request, Response, Service};
-use crate::{attributes::Attributes, rt::tokio::TokioRuntime};
 use crate::{client::ConnectivityState, rt::Runtime};
+use crate::{credentials::Credentials, rt::default_runtime};
 
 use super::service_config::ServiceConfig;
 use super::transport::{TransportRegistry, GLOBAL_TRANSPORT_REGISTRY};
@@ -156,7 +155,7 @@ impl Channel {
             inner: Arc::new(PersistentChannel::new(
                 target,
                 credentials,
-                Arc::new(rt::tokio::TokioRuntime {}),
+                default_runtime(),
                 options,
             )),
         }
@@ -262,6 +261,7 @@ impl ActiveChannel {
             tx.clone(),
             picker.clone(),
             connectivity_state.clone(),
+            runtime.clone(),
         );
 
         let resolver_helper = Box::new(tx.clone());
@@ -279,7 +279,7 @@ impl ActiveChannel {
         let resolver_opts = name_resolution::ResolverOptions {
             authority,
             work_scheduler,
-            runtime: Arc::new(TokioRuntime {}),
+            runtime: runtime.clone(),
         };
         let resolver = rb.build(&target, resolver_opts);
 
@@ -360,6 +360,7 @@ pub(crate) struct InternalChannelController {
     wqtx: WorkQueueTx,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
+    runtime: Arc<dyn Runtime>,
 }
 
 impl InternalChannelController {
@@ -369,8 +370,9 @@ impl InternalChannelController {
         wqtx: WorkQueueTx,
         picker: Arc<Watcher<Arc<dyn Picker>>>,
         connectivity_state: Arc<Watcher<ConnectivityState>>,
+        runtime: Arc<dyn Runtime>,
     ) -> Self {
-        let lb = Arc::new(GracefulSwitchBalancer::new(wqtx.clone()));
+        let lb = Arc::new(GracefulSwitchBalancer::new(wqtx.clone(), runtime.clone()));
 
         Self {
             lb,
@@ -380,6 +382,7 @@ impl InternalChannelController {
             wqtx,
             picker,
             connectivity_state,
+            runtime,
         }
     }
 
@@ -429,6 +432,7 @@ impl load_balancing::ChannelController for InternalChannelController {
             Box::new(move |k: SubchannelKey| {
                 scp.unregister_subchannel(&k);
             }),
+            self.runtime.clone(),
         );
         let _ = self.subchannel_pool.register_subchannel(&key, isc.clone());
         self.new_esc_for_isc(isc)
@@ -454,6 +458,7 @@ pub(super) struct GracefulSwitchBalancer {
     policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,
     work_scheduler: WorkQueueTx,
     pending: Mutex<bool>,
+    runtime: Arc<dyn Runtime>,
 }
 
 impl WorkScheduler for GracefulSwitchBalancer {
@@ -478,12 +483,13 @@ impl WorkScheduler for GracefulSwitchBalancer {
 }
 
 impl GracefulSwitchBalancer {
-    fn new(work_scheduler: WorkQueueTx) -> Self {
+    fn new(work_scheduler: WorkQueueTx, runtime: Arc<dyn Runtime>) -> Self {
         Self {
             policy_builder: Mutex::default(),
             policy: Mutex::default(), // new(None::<Box<dyn LbPolicy>>),
             work_scheduler,
             pending: Mutex::default(),
+            runtime,
         }
     }
 
@@ -501,6 +507,7 @@ impl GracefulSwitchBalancer {
             let builder = GLOBAL_LB_REGISTRY.get_policy(policy_name).unwrap();
             let newpol = builder.build(LbPolicyOptions {
                 work_scheduler: self.clone(),
+                runtime: self.runtime.clone(),
             });
             *self.policy_builder.lock().unwrap() = Some(builder);
             *p = Some(newpol);

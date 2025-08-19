@@ -32,7 +32,6 @@
 //!   [`rustls-native-certs`] crate. Not enabled by default.
 //! - `tls-webpki-roots`: Add the standard trust roots from the [`webpki-roots`] crate to
 //!   `rustls`-based gRPC clients. Not enabled by default.
-//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation. Enabled by default.
 //! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
 //!   Not enabled by default.
 //! - `deflate`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
@@ -70,11 +69,11 @@
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
 //! [`tokio`]: https://docs.rs/tokio
-//! [`prost`]: https://docs.rs/prost
 //! [`hyper`]: https://docs.rs/hyper
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
 //! [`ring`]: https://docs.rs/ring
+//! [`aws-lc-rs`]: https://docs.rs/aws-lc-rs
 //! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html

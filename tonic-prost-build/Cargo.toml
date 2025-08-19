@@ -1,6 +1,6 @@
 [package]
 name = "tonic-prost-build"
-version = "0.14.0"
+version = "0.14.1"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
@@ -17,7 +17,7 @@ transport = ["tonic-build/transport"]
 cleanup-markdown = ["prost-build/cleanup-markdown"]
 
 [dependencies]
-tonic-build = { version = "0.14.0", path = "../tonic-build", default-features = false, features = ["transport"] }
+tonic-build = { version = "0.14.0", path = "../tonic-build", default-features = false }
 prost-build = { version = "0.14" }
 prost-types = { version = "0.14" }
 prettyplease = { version = "0.2" }

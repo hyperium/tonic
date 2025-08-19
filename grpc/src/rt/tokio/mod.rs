@@ -31,10 +31,11 @@ use std::{
 
 use tokio::{
     io::{AsyncRead, AsyncWrite},
+    net::TcpStream,
     task::JoinHandle,
 };
 
-use super::{DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
+use super::{BoxedTaskHandle, DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
@@ -74,10 +75,7 @@ impl TaskHandle for JoinHandle<()> {
 impl Sleep for tokio::time::Sleep {}
 
 impl Runtime for TokioRuntime {
-    fn spawn(
-        &self,
-        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
-    ) -> Box<dyn TaskHandle> {
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle {
         Box::new(tokio::spawn(task))
     }
 
@@ -95,6 +93,28 @@ impl Runtime for TokioRuntime {
     fn sleep(&self, duration: Duration) -> Pin<Box<dyn Sleep>> {
         Box::pin(tokio::time::sleep(duration))
     }
+
+    fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: super::TcpOptions,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::TcpStream>, String>> + Send>> {
+        Box::pin(async move {
+            let stream = TcpStream::connect(target)
+                .await
+                .map_err(|err| err.to_string())?;
+            if let Some(duration) = opts.keepalive {
+                let sock_ref = socket2::SockRef::from(&stream);
+                let mut ka = socket2::TcpKeepalive::new();
+                ka = ka.with_time(duration);
+                sock_ref
+                    .set_tcp_keepalive(&ka)
+                    .map_err(|err| err.to_string())?;
+            }
+            let stream: Box<dyn super::TcpStream> = Box::new(TokioTcpStream { inner: stream });
+            Ok(stream)
+        })
+    }
 }
 
 impl TokioDefaultDnsResolver {
@@ -105,6 +125,46 @@ impl TokioDefaultDnsResolver {
         Ok(TokioDefaultDnsResolver {})
     }
 }
+
+struct TokioTcpStream {
+    inner: TcpStream,
+}
+
+impl AsyncRead for TokioTcpStream {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+}
+
+impl AsyncWrite for TokioTcpStream {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
+    }
+}
+
+impl super::TcpStream for TokioTcpStream {}
 
 #[cfg(test)]
 mod tests {
