@@ -81,8 +81,8 @@
           devShells.default = pkgs.mkShell {
             packages = with pkgs; [
               cargo-nextest
-              bazel_7
               pre-commit
+              cmake
 
               (rustToolchain.withComponents [
                 "cargo"
@@ -92,14 +92,11 @@
                 "rustfmt"
                 "rust-analyzer"
               ])
-              # protobuf
             ];
 
             hardeningDisable = [ "fortify" ];
 
             shellHook = ''
-              export PATH="$PWD/protoc-gen-rust-grpc/bazel-bin/src:$HOME/code/install/bin:$PATH"
-
               ${config.pre-commit.installationScript}
             '';
           };
