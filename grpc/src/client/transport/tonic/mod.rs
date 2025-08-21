@@ -95,19 +95,13 @@ fn create_error_response(status: Status) -> GrpcResponse {
     TonicResponse::new(Box::pin(stream))
 }
 
-fn convert_request(req: GrpcRequest) -> TonicRequest<Pin<Box<dyn Stream<Item = Bytes> + Send>>> {
+fn convert_request(req: GrpcRequest) -> TonicRequest<BoxStream<Bytes>> {
     let (metadata, extensions, stream) = req.into_parts();
 
-    let bytes_stream = Box::pin(stream.filter_map(|msg| {
+    let bytes_stream = Box::pin(stream.map(|msg| {
         let mut buf = BytesMut::with_capacity(msg.encoded_message_size_hint().unwrap_or(0));
-        if let Ok(()) = msg.encode(&mut buf) {
-            Some(buf.freeze())
-        } else {
-            // TODO: Handle encoding failures.
-            // If it fails, log the error and return None to filter it out.
-            eprintln!("A message could not be downcast to Bytes and was skipped.");
-            None
-        }
+        msg.encode(&mut buf).map_err(Status::internal)?;
+        Ok(buf.freeze())
     }));
 
     TonicRequest::from_parts(metadata, extensions, bytes_stream as _)

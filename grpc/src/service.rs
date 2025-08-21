@@ -58,8 +58,8 @@ pub trait Message: Any + Send + Sync + Debug {
     }
 }
 
-// Allocates messages for responses on the client side and requests on the
-// server.
+/// Allocates messages for responses on the client side and requests on the
+/// server.
 pub trait MessageAllocator: Send + Sync {
     fn allocate(&self) -> Box<dyn Message>;
 }
