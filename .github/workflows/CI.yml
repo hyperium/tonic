@@ -19,7 +19,7 @@ jobs:
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
       with:
         components: rustfmt
@@ -33,7 +33,7 @@ jobs:
     outputs:
       cache-hit: ${{ steps.cache-plugin.outputs.cache-hit }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Cache protoc and plugin
         id: cache-plugin
         uses: actions/cache@v4
@@ -155,7 +155,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-protoc-plugin
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
       with:
         components: clippy
@@ -171,16 +171,16 @@ jobs:
         # Use forward slashes for all paths in bash, even on Windows
         PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
         PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
-        
+
         echo "${PROTOC_DIR}" >> $GITHUB_PATH
-        
+
         # Also set PROTOC for build scripts
         if [ "${{ runner.os }}" = "Windows" ]; then
           echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
         else
           echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
         fi
-        
+
         # Set the protoc include path only if it exists
         if [ -d "${PROTOC_DIR}/include" ]; then
           echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
@@ -191,7 +191,7 @@ jobs:
   codegen:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - uses: Swatinem/rust-cache@v2
     - run: cargo run --package codegen
@@ -201,7 +201,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-protoc-plugin
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: nightly-2025-03-27
@@ -219,16 +219,16 @@ jobs:
         # Use forward slashes for all paths in bash, even on Windows
         PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
         PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
-        
+
         echo "${PROTOC_DIR}" >> $GITHUB_PATH
-        
+
         # Also set PROTOC for build scripts
         if [ "${{ runner.os }}" = "Windows" ]; then
           echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
         else
           echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
         fi
-        
+
         # Set the protoc include path only if it exists
         if [ -d "${PROTOC_DIR}/include" ]; then
           echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
@@ -251,7 +251,7 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
     - name: Restore protoc and plugin from cache
@@ -266,16 +266,16 @@ jobs:
         # Use forward slashes for all paths in bash, even on Windows
         PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
         PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
-        
+
         echo "${PROTOC_DIR}" >> $GITHUB_PATH
-        
+
         # Also set PROTOC for build scripts
         if [ "${{ runner.os }}" = "Windows" ]; then
           echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
         else
           echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
         fi
-        
+
         # Set the protoc include path only if it exists
         if [ -d "${PROTOC_DIR}/include" ]; then
           echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
@@ -291,7 +291,7 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - name: Resolve MSRV aware dependencies
       run: cargo update
@@ -318,7 +318,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - name: Restore protoc and plugin from cache
       id: cache-plugin
@@ -338,16 +338,16 @@ jobs:
         # Use forward slashes for all paths in bash, even on Windows
         PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
         PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
-        
+
         echo "${PROTOC_DIR}" >> $GITHUB_PATH
-        
+
         # Also set PROTOC for build scripts
         if [ "${{ runner.os }}" = "Windows" ]; then
           echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
         else
           echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
         fi
-        
+
         # Set the protoc include path only if it exists
         if [ -d "${PROTOC_DIR}/include" ]; then
           echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
@@ -362,7 +362,7 @@ jobs:
   doc-test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
@@ -376,7 +376,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - name: Restore protoc and plugin from cache
       id: cache-plugin
@@ -390,16 +390,16 @@ jobs:
         # Use forward slashes for all paths in bash, even on Windows
         PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
         PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
-        
+
         echo "${PROTOC_DIR}" >> $GITHUB_PATH
-        
+
         # Also set PROTOC for build scripts
         if [ "${{ runner.os }}" = "Windows" ]; then
           echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
         else
           echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
         fi
-        
+
         # Set the protoc include path only if it exists
         if [ -d "${PROTOC_DIR}/include" ]; then
           echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
@@ -415,7 +415,7 @@ jobs:
   semver:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: obi1kenobi/cargo-semver-checks-action@v2
       with:
         feature-group: all-features
@@ -423,7 +423,7 @@ jobs:
   external-types:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: nightly-2025-08-06
