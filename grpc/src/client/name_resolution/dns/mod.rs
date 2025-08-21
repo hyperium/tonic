@@ -41,7 +41,7 @@ use url::Host;
 use crate::{
     byte_str::ByteStr,
     client::name_resolution::{global_registry, ChannelController, ResolverBuilder, Target},
-    rt::{self, TaskHandle},
+    rt::{self, BoxedTaskHandle},
 };
 
 use super::{
@@ -243,7 +243,7 @@ impl ResolverBuilder for Builder {
 
 struct DnsResolver {
     state: Arc<Mutex<InternalState>>,
-    task_handle: Box<dyn TaskHandle>,
+    task_handle: BoxedTaskHandle,
     resolve_now_notifier: Arc<Notify>,
     channel_update_notifier: Arc<Notify>,
 }

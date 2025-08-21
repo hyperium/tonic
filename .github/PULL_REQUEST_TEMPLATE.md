@@ -2,6 +2,9 @@
 Thank you for your Pull Request. Please provide a description above and review
 the requirements below.
 
+If this change is intended for tonic `v0.14.x` please make this PR against that branch
+otherwise, it may not get included in a relase for a long time.
+
 Bug fixes and new features should include tests.
 
 Contributors guide: https://github.com/hyperium/tonic/blob/master/CONTRIBUTING.md

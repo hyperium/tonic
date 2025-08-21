@@ -9,7 +9,7 @@ publish = false
 [dependencies]
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
 bytes = "1"
-protobuf = { version = "4.31.1-release" }
+protobuf = { version = "4.32.0-release" }
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [

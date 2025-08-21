@@ -95,8 +95,6 @@ impl From<&Dependency> for protobuf_codegen::Dependency {
         protobuf_codegen::Dependency {
             crate_name: val.crate_name.clone(),
             proto_import_paths: val.proto_import_paths.clone(),
-            // The following field is not used by protobuf codegen.
-            c_include_paths: Vec::new(),
             proto_files: val.proto_files.clone(),
         }
     }
