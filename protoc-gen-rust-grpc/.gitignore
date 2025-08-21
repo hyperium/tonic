@@ -5,3 +5,6 @@ bazel-out
 bazel-protoc-gen-rust-grpc
 bazel-testlogs
 MODULE.bazel.lock
+
+build/*
+CMakeFiles/*
