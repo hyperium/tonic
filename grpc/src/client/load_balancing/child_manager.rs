@@ -442,9 +442,7 @@ mod test {
     ) {
         test_utils::reg_stub_policy(test_name, funcs);
         let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
-        let tcc = Box::new(TestChannelController {
-            tx_events,
-        });
+        let tcc = Box::new(TestChannelController { tx_events });
         let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
         let endpoint_sharder = EndpointSharder { builder: builder };
         let child_manager = ChildManager::new(Box::new(endpoint_sharder), default_runtime());
