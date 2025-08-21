@@ -1,4 +1,5 @@
 use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
+use crate::transport::channel::service::Modifier;
 use crate::{
     body::Body,
     transport::{channel::BoxFuture, service::GrpcTimeout, Endpoint},
@@ -25,7 +26,7 @@ pub(crate) struct Connection {
 }
 
 impl Connection {
-    fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool) -> Self
+    fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool) -> Result<Self, crate::BoxError>
     where
         C: Service<Uri> + Send + 'static,
         C::Error: Into<crate::BoxError> + Send,
@@ -55,13 +56,17 @@ impl Connection {
             settings.max_header_list_size(val);
         }
 
+        // We shift detecting abscence of both scheme and authority here
+        let add_origin = AddOrigin::new(endpoint.get_origin())?;
         let stack = ServiceBuilder::new()
             .layer_fn(|s| {
-                let origin = endpoint.origin.as_ref().unwrap_or(endpoint.uri()).clone();
-
-                AddOrigin::new(s, origin)
+                // The clone here is just &Uri
+                Modifier::new(s, add_origin.clone().into_fn())
             })
-            .layer_fn(|s| UserAgent::new(s, endpoint.user_agent.clone()))
+            .layer_fn(|s| {
+                let ua = UserAgent::new(endpoint.user_agent.clone());
+                Modifier::new(s, ua.into_fn())
+            })
             .layer_fn(|s| GrpcTimeout::new(s, endpoint.timeout))
             .option_layer(endpoint.concurrency_limit.map(ConcurrencyLimitLayer::new))
             .option_layer(endpoint.rate_limit.map(|(l, d)| RateLimitLayer::new(l, d)))
@@ -72,9 +77,9 @@ impl Connection {
 
         let conn = Reconnect::new(make_service, endpoint.uri().clone(), is_lazy);
 
-        Self {
+        Ok(Self {
             inner: BoxService::new(stack.layer(conn)),
-        }
+        })
     }
 
     pub(crate) async fn connect<C>(
@@ -87,7 +92,7 @@ impl Connection {
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint, false).ready_oneshot().await
+        Self::new(connector, endpoint, false)?.ready_oneshot().await
     }
 
     pub(crate) fn lazy<C>(connector: C, endpoint: Endpoint) -> Self
@@ -97,7 +102,7 @@ impl Connection {
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
-        Self::new(connector, endpoint, true)
+        Self::new(connector, endpoint, true).expect("Endpoint origin scheme and authority are set")
     }
 }
 

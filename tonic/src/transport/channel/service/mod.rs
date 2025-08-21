@@ -1,8 +1,5 @@
-mod add_origin;
-use self::add_origin::AddOrigin;
-
-mod user_agent;
-use self::user_agent::UserAgent;
+mod request_modifiers;
+use self::request_modifiers::*;
 
 mod reconnect;
 use self::reconnect::Reconnect;
