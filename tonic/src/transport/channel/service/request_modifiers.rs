@@ -1,8 +1,17 @@
+use crate::body::Body;
 use http::{header::USER_AGENT, HeaderValue, Request, Uri};
 use std::task::{Context, Poll};
 use tower_service::Service;
-use crate::body::Body;
 
+/// A generic request modifier.
+///
+/// `Modifier<M, T>` wraps an inner service `T` and applies the
+/// modifier `M` to each outgoing `Request`.
+///
+/// This type centralizes the boilerplate for implementing
+/// request middleware. A modifier is closure which receives
+/// the request and mutates it before forwarding to the
+/// inner service.
 #[derive(Debug)]
 pub(crate) struct Modifier<M, T> {
     modifier_fn: M,
@@ -39,7 +48,7 @@ where
 // and not FnOnce
 #[derive(Debug, Clone)]
 pub(crate) struct AddOrigin<'a> {
-    origin: &'a Uri
+    origin: &'a Uri,
 }
 
 impl<'a> AddOrigin<'a> {
@@ -53,9 +62,7 @@ impl<'a> AddOrigin<'a> {
         Ok(Self { origin })
     }
 
-    pub(crate) fn into_fn(
-        self,
-    ) -> impl FnOnce(Request<Body>) -> Request<Body> + Clone {
+    pub(crate) fn into_fn(self) -> impl FnOnce(Request<Body>) -> Request<Body> + Clone {
         let http::uri::Parts {
             scheme, authority, ..
         } = self.origin.clone().into_parts();
@@ -106,9 +113,7 @@ impl UserAgent {
         Self { user_agent }
     }
 
-    pub(crate) fn into_fn(
-        self,
-    ) -> impl FnOnce(Request<Body>) -> Request<Body> + Clone {
+    pub(crate) fn into_fn(self) -> impl FnOnce(Request<Body>) -> Request<Body> + Clone {
         move |mut req| {
             use http::header::Entry;
 
