@@ -12,7 +12,7 @@ use crate::{
         transport::{ConnectedTransport, TransportOptions},
     },
     rt::{BoxedTaskHandle, Runtime},
-    service::{Request, Response, Service},
+    service::{MessageAllocator, Request, Response, Service},
 };
 use core::panic;
 use std::time::{Duration, Instant};
@@ -192,7 +192,12 @@ struct InnerSubchannel {
 
 #[async_trait]
 impl Service for InternalSubchannel {
-    async fn call(&self, method: String, request: Request) -> Response {
+    async fn call(
+        &self,
+        method: String,
+        request: Request,
+        response_allocator: Box<dyn MessageAllocator>,
+    ) -> Response {
         let svc = self.inner.lock().unwrap().state.connected_transport();
         if svc.is_none() {
             // TODO(easwars): Change the signature of this method to return a
@@ -201,7 +206,7 @@ impl Service for InternalSubchannel {
         }
 
         let svc = svc.unwrap().clone();
-        return svc.call(method, request).await;
+        return svc.call(method, request, response_allocator).await;
     }
 }
 

@@ -40,6 +40,16 @@ pub(crate) fn new_request() -> Request {
     )))
 }
 
+impl Message for EmptyMessage {
+    fn encode(&self, buf: &mut bytes::BytesMut) -> Result<(), String> {
+        Ok(())
+    }
+
+    fn decode(&mut self, buf: &bytes::Bytes) -> Result<(), String> {
+        Ok(())
+    }
+}
+
 // A test subchannel that forwards connect calls to a channel.
 // This allows tests to verify when a subchannel is asked to connect.
 pub(crate) struct TestSubchannel {

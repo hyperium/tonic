@@ -24,6 +24,7 @@
 
 use std::{any::Any, fmt::Debug, pin::Pin};
 
+use bytes::{BufMut, Bytes, BytesMut};
 use tokio_stream::Stream;
 use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
 
@@ -33,10 +34,32 @@ pub type Response =
 
 #[async_trait]
 pub trait Service: Send + Sync {
-    async fn call(&self, method: String, request: Request) -> Response;
+    async fn call(
+        &self,
+        method: String,
+        request: Request,
+        response_allocator: Box<dyn MessageAllocator>,
+    ) -> Response;
 }
 
-// TODO: define methods that will allow serialization/deserialization.
-pub trait Message: Any + Send + Sync + Debug {}
+pub trait Message: Any + Send + Sync + Debug {
+    /// Encodes the message into the provided buffer.
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), String>;
+    /// Decodes the message from the provided buffer.
+    fn decode(&mut self, buf: &Bytes) -> Result<(), String>;
+    /// Provides a hint for the expected size of the encoded message.
+    ///
+    /// This method can be used by encoders to pre-allocate buffer space,
+    /// potentially improving performance by reducing reallocations. It's a
+    /// best-effort hint and implementations may return `None` if an
+    /// accurate size cannot be easily determined without encoding.
+    fn encoded_message_size_hint(&self) -> Option<usize> {
+        None
+    }
+}
 
-impl<T> Message for T where T: Any + Send + Sync + Debug {}
+// Allocates messages for responses on the client side and requests on the
+// server.
+pub trait MessageAllocator: Send + Sync {
+    fn allocate(&self) -> Box<dyn Message>;
+}

@@ -8,10 +8,12 @@ use crate::rt::BoxedTaskHandle;
 use crate::rt::Runtime;
 use crate::rt::TcpOptions;
 use crate::service::Message;
+use crate::service::MessageAllocator;
 use crate::service::Request as GrpcRequest;
 use crate::service::Response as GrpcResponse;
 use crate::{client::name_resolution::TCP_IP_NETWORK_TYPE, service::Service};
 use bytes::Bytes;
+use bytes::BytesMut;
 use http::uri::PathAndQuery;
 use http::Request as HttpRequest;
 use http::Response as HttpResponse;
@@ -63,7 +65,12 @@ impl Drop for TonicTransport {
 
 #[async_trait]
 impl Service for TonicTransport {
-    async fn call(&self, method: String, request: GrpcRequest) -> GrpcResponse {
+    async fn call(
+        &self,
+        method: String,
+        request: GrpcRequest,
+        response_allocator: Box<dyn MessageAllocator>,
+    ) -> GrpcResponse {
         let Ok(path) = PathAndQuery::from_maybe_shared(method) else {
             let err = Status::internal("Failed to parse path");
             return create_error_response(err);
@@ -78,7 +85,7 @@ impl Service for TonicTransport {
         };
         let request = convert_request(request);
         let response = grpc.streaming(request, path, BytesCodec {}).await;
-        convert_response(response)
+        convert_response(response, response_allocator)
     }
 }
 
@@ -92,9 +99,11 @@ fn convert_request(req: GrpcRequest) -> TonicRequest<Pin<Box<dyn Stream<Item = B
     let (metadata, extensions, stream) = req.into_parts();
 
     let bytes_stream = Box::pin(stream.filter_map(|msg| {
-        if let Ok(bytes) = (msg as Box<dyn Any>).downcast::<Bytes>() {
-            Some(*bytes)
+        let mut buf = BytesMut::with_capacity(msg.encoded_message_size_hint().unwrap_or(0));
+        if let Ok(()) = msg.encode(&mut buf) {
+            Some(buf.freeze())
         } else {
+            // TODO: Handle encoding failures.
             // If it fails, log the error and return None to filter it out.
             eprintln!("A message could not be downcast to Bytes and was skipped.");
             None
@@ -104,7 +113,10 @@ fn convert_request(req: GrpcRequest) -> TonicRequest<Pin<Box<dyn Stream<Item = B
     TonicRequest::from_parts(metadata, extensions, bytes_stream as _)
 }
 
-fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> GrpcResponse {
+fn convert_response(
+    res: Result<TonicResponse<Streaming<Bytes>>, Status>,
+    allocator: Box<dyn MessageAllocator>,
+) -> GrpcResponse {
     let response = match res {
         Ok(s) => s,
         Err(e) => {
@@ -113,11 +125,14 @@ fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> Grp
         }
     };
     let (metadata, stream, extensions) = response.into_parts();
-    let message_stream: BoxStream<Box<dyn Message>> = Box::pin(stream.map(|msg| {
-        msg.map(|b| {
-            let msg: Box<dyn Message> = Box::new(b);
-            msg
-        })
+    let allocator: Arc<dyn MessageAllocator> = Arc::from(allocator);
+    let allocator_copy = allocator.clone();
+    let message_stream: BoxStream<Box<dyn Message>> = Box::pin(stream.map(move |msg| {
+        let allocator = allocator_copy.clone();
+        let buf = msg?;
+        let mut msg = allocator.allocate();
+        msg.decode(&buf).map_err(Status::internal)?;
+        Ok(msg)
     }));
     TonicResponse::from_parts(metadata, message_stream, extensions)
 }

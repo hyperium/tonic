@@ -1,12 +1,15 @@
-use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::name_resolution::{self, dns, TCP_IP_NETWORK_TYPE};
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::{Channel, ChannelOptions};
 use crate::echo_pb::echo_server::{Echo, EchoServer};
 use crate::echo_pb::{EchoRequest, EchoResponse};
-use crate::service::Message;
 use crate::service::Request as GrpcRequest;
+use crate::service::{Message, MessageAllocator};
 use crate::{client::transport::TransportOptions, rt::tokio::TokioRuntime};
-use bytes::Bytes;
+use bytes::{Bytes, BytesMut};
 use std::any::Any;
+use std::fmt::Debug;
+use std::marker::PhantomData;
 use std::{pin::Pin, sync::Arc, time::Duration};
 use tokio::net::TcpListener;
 use tokio::sync::{mpsc, oneshot, Notify};
@@ -18,6 +21,99 @@ use tonic_prost::prost::Message as ProstMessage;
 
 const DEFAULT_TEST_DURATION: Duration = Duration::from_secs(10);
 const DEFAULT_TEST_SHORT_DURATION: Duration = Duration::from_millis(10);
+
+impl<T> Message for T
+where
+    T: ProstMessage + Send + Sync + Any + Debug + Default,
+{
+    fn encode(&self, buf: &mut BytesMut) -> Result<(), String> {
+        T::encode(&self, buf).map_err(|err| err.to_string())
+    }
+
+    fn decode(&mut self, buf: &Bytes) -> Result<(), String> {
+        T::merge(self, buf.as_ref()).map_err(|err| err.to_string())?;
+        Ok(())
+    }
+
+    fn encoded_message_size_hint(&self) -> Option<usize> {
+        Some(T::encoded_len(&self))
+    }
+}
+
+#[derive(Default)]
+struct ProstMessageAllocator<T> {
+    _pd: PhantomData<T>,
+}
+
+impl<T> MessageAllocator for ProstMessageAllocator<T>
+where
+    T: ProstMessage + Send + Sync + Any + Debug + Default,
+{
+    fn allocate(&self) -> Box<dyn Message> {
+        Box::new(T::default())
+    }
+}
+
+// Tests the tonic transport by creating a bi-di stream with a tonic server.
+#[tokio::test]
+pub async fn grpc_channel_rpc() {
+    super::reg();
+    dns::reg();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap(); // get the assigned address
+    println!("EchoServer listening on: {addr}");
+    let server_handle = tokio::spawn(async move {
+        let echo_server = EchoService {};
+        let svc = EchoServer::new(echo_server);
+        let _ = Server::builder()
+            .add_service(svc)
+            .serve_with_incoming(tokio_stream::wrappers::TcpListenerStream::new(listener))
+            .await;
+    });
+    let chan_opts = ChannelOptions::default();
+    let chan = Channel::new(&format!("dns:///{addr}"), None, chan_opts);
+
+    let (tx, rx) = mpsc::channel::<Box<dyn Message>>(1);
+
+    // Convert the mpsc receiver into a Stream
+    let outbound: GrpcRequest =
+        Request::new(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
+
+    let mut inbound = chan
+        .call(
+            "/grpc.examples.echo.Echo/BidirectionalStreamingEcho".to_string(),
+            outbound,
+            Box::new(ProstMessageAllocator::<EchoResponse>::default()),
+        )
+        .await
+        .into_inner();
+
+    // Spawn a sender task
+    let client_handle = tokio::spawn(async move {
+        for i in 0..5 {
+            let message = format!("message {i}");
+            let request = EchoRequest {
+                message: message.clone(),
+            };
+
+            println!("Sent request: {request:?}");
+            assert!(tx.send(Box::new(request)).await.is_ok(), "Receiver dropped");
+
+            // Wait for the reply
+            let resp = inbound
+                .next()
+                .await
+                .expect("server unexpectedly closed the stream!")
+                .expect("server returned error");
+
+            let echo_response = (resp as Box<dyn Any>).downcast::<EchoResponse>().unwrap();
+            println!("Got response: {echo_response:?}");
+            assert_eq!(echo_response.message, message);
+        }
+    });
+
+    client_handle.await.unwrap();
+}
 
 // Tests the tonic transport by creating a bi-di stream with a tonic server.
 #[tokio::test]
@@ -60,6 +156,7 @@ pub async fn tonic_transport_rpc() {
         .call(
             "/grpc.examples.echo.Echo/BidirectionalStreamingEcho".to_string(),
             outbound,
+            Box::new(ProstMessageAllocator::<EchoResponse>::default()),
         )
         .await
         .into_inner();
@@ -72,10 +169,8 @@ pub async fn tonic_transport_rpc() {
                 message: message.clone(),
             };
 
-            let bytes = Bytes::from(request.encode_to_vec());
-
             println!("Sent request: {request:?}");
-            assert!(tx.send(Box::new(bytes)).await.is_ok(), "Receiver dropped");
+            assert!(tx.send(Box::new(request)).await.is_ok(), "Receiver dropped");
 
             // Wait for the reply
             let resp = inbound
@@ -84,8 +179,7 @@ pub async fn tonic_transport_rpc() {
                 .expect("server unexpectedly closed the stream!")
                 .expect("server returned error");
 
-            let bytes = (resp as Box<dyn Any>).downcast::<Bytes>().unwrap();
-            let echo_response = EchoResponse::decode(bytes).unwrap();
+            let echo_response = (resp as Box<dyn Any>).downcast::<EchoResponse>().unwrap();
             println!("Got response: {echo_response:?}");
             assert_eq!(echo_response.message, message);
         }
