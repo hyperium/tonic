@@ -50,6 +50,7 @@ pub struct ChildManager<T> {
     update_sharder: Box<dyn ResolverUpdateSharder<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
     runtime: Arc<dyn Runtime>,
+    updated: bool,
 }
 
 struct Child<T> {
@@ -94,6 +95,7 @@ impl<T> ChildManager<T> {
             children: Default::default(),
             pending_work: Default::default(),
             runtime,
+            updated: false,
         }
     }
 
@@ -158,7 +160,13 @@ impl<T> ChildManager<T> {
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
             self.children[child_idx].state = state;
+            self.updated = true;
         };
+    }
+
+    /// Returns true if a child has produced an update and resets flag to false.
+    pub fn has_updated(&mut self) -> bool {
+        mem::take(&mut self.updated)
     }
 }
 
@@ -363,8 +371,8 @@ mod test {
         Child, ChildManager, ChildUpdate, ChildWorkScheduler, ResolverUpdateSharder,
     };
     use crate::client::load_balancing::test_utils::{
-        self, StubPolicy, StubPolicyFuncs, TestChannelController, TestEvent, TestSubchannel,
-        TestWorkScheduler,
+        self, StubPolicy, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
+        TestSubchannel, TestWorkScheduler,
     };
     use crate::client::load_balancing::{
         ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
@@ -444,7 +452,7 @@ mod test {
         let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
         let tcc = Box::new(TestChannelController { tx_events });
         let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
-        let endpoint_sharder = EndpointSharder { builder: builder };
+        let endpoint_sharder = EndpointSharder { builder };
         let child_manager = ChildManager::new(Box::new(endpoint_sharder), default_runtime());
         (rx_events, Box::new(child_manager), tcc)
     }
@@ -517,25 +525,29 @@ mod test {
     // Defines the functions resolver_update and subchannel_update to test
     // aggregate_states.
     fn create_verifying_funcs_for_aggregate_tests() -> StubPolicyFuncs {
+        let data = StubPolicyData::new();
         StubPolicyFuncs {
             // Closure for resolver_update. resolver_update should only receive
             // one endpoint and create one subchannel for the endpoint it
             // receives.
-            resolver_update: Some(move |update: ResolverUpdate, _, controller| {
-                assert_eq!(update.endpoints.iter().len(), 1);
-                let endpoint = update.endpoints.unwrap().pop().unwrap();
-                let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
-                Ok(())
-            }),
+            resolver_update: Some(Arc::new(
+                move |data, update: ResolverUpdate, _, controller| {
+                    assert_eq!(update.endpoints.iter().len(), 1);
+                    let endpoint = update.endpoints.unwrap().pop().unwrap();
+                    let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
+                    Ok(())
+                },
+            )),
             // Closure for subchannel_update. Sends a picker of the same state
             // that was passed to it.
-            subchannel_update: Some(move |updated_subchannel, state, controller| {
-                controller.update_picker(LbState {
-                    connectivity_state: state.connectivity_state,
-                    picker: Arc::new(QueuingPicker {}),
-                });
-            }),
-            ..Default::default()
+            subchannel_update: Some(Arc::new(
+                move |data, updated_subchannel, state, controller| {
+                    controller.update_picker(LbState {
+                        connectivity_state: state.connectivity_state,
+                        picker: Arc::new(QueuingPicker {}),
+                    });
+                },
+            )),
         }
     }
 
