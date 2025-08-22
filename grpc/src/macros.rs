@@ -24,8 +24,8 @@
 
 /// Includes generated proto message, client, and server code.
 ///
-/// You must specify the path to the `.proto` file
-/// **relative to the proto root directory**,  without the `.proto` extension.  
+/// You must specify the path to the `.proto` file **relative to the proto root
+/// directory**,  without the `.proto` extension.  
 ///
 /// For example, if your proto directory is `path/to/protos` and it contains the
 /// file  `helloworld.proto`, you would write:
@@ -38,8 +38,7 @@
 ///
 /// # Note
 /// **This macro only works if the gRPC build output directory and message path
-/// are unmodified.**
-/// By default:
+/// are unmodified.** By default:
 /// - The output directory is set to the [`OUT_DIR`] environment variable.
 /// - The message path is set to `self`.
 ///
@@ -52,8 +51,15 @@
 /// }
 /// ```
 ///
-/// If you have modified the output directory or message path, you should
-/// include the generated code manually instead of using this macro.
+/// If you have modified the output directory or message path, you should use
+/// the include_generated_code macro below instead of using this macro or
+/// manually include it yourself.
+///
+/// ```rust,ignore
+/// mod grpc {
+///     grpc::include_generated_proto!("path/to/protos", "helloworld");
+/// }
+/// ```
 ///
 /// The following example assumes the message code is imported using `self`:
 ///
@@ -82,7 +88,8 @@
 /// }
 /// ```
 ///
-/// [`OUT_DIR`]: https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
+/// [`OUT_DIR`]:
+///     https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
 #[macro_export]
 macro_rules! include_proto {
     // Assume the generated output dir is OUT_DIR.
@@ -94,6 +101,56 @@ macro_rules! include_proto {
         include!(concat!(env!("OUT_DIR"), "/", $parent_dir, "/generated.rs"));
         include!(concat!(
             env!("OUT_DIR"),
+            "/",
+            $parent_dir,
+            "/",
+            $proto_file,
+            "_grpc.pb.rs"
+        ));
+    };
+}
+
+/// Includes generated proto message, client, and server code. This macro is for
+/// if you manually set output_dir instead of using the default OUT_DIR.
+///
+/// You must specify the path to the `.proto` file **relative to the proto root
+/// directory**,  without the `.proto` extension.  
+///
+/// For example, if your proto directory is `path/to/protos` and it contains the
+/// file  `helloworld.proto`, you would write:
+///
+/// ```rust,ignore
+/// mod pb {
+///     grpc::include_generated_proto!("path/to/protos", "helloworld");
+/// }
+/// ```
+///
+/// If your `.proto` files are not in a subdirectory, you can omit the first
+/// parameter.
+///
+/// ```rust,ignore
+/// mod pb {
+///     grpc::include_generated_proto!("helloworld");
+/// }
+/// ```
+///
+/// [`CARGO_MANIFEST_DIR`]:
+///     https://doc.rust-lang.org/cargo/reference/environment-variables.html
+#[macro_export]
+macro_rules! include_generated_proto {
+    ($proto_file:literal) => {
+        $crate::include_generated_proto!("", $proto_file);
+    };
+
+    ($parent_dir:literal, $proto_file:literal) => {
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/",
+            $parent_dir,
+            "/generated.rs"
+        ));
+        include!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
             "/",
             $parent_dir,
             "/",
