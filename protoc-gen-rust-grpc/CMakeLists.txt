@@ -77,10 +77,17 @@ set_target_properties(protoc-gen-rust-grpc
 )
 
 # Add protoc executable as a custom target that copies the built protoc
+# We explicitly name it "protoc" without version suffix
+if(WIN32)
+    set(PROTOC_OUTPUT_NAME "protoc.exe")
+else()
+    set(PROTOC_OUTPUT_NAME "protoc")
+endif()
+
 add_custom_target(copy-protoc ALL
     COMMAND ${CMAKE_COMMAND} -E copy_if_different
         $<TARGET_FILE:protoc>
-        ${CMAKE_BINARY_DIR}/bin/$<TARGET_FILE_NAME:protoc>
+        ${CMAKE_BINARY_DIR}/bin/${PROTOC_OUTPUT_NAME}
     DEPENDS protoc
     COMMENT "Copying protoc to output directory"
 )
@@ -89,7 +96,7 @@ add_custom_target(copy-protoc ALL
 install(TARGETS protoc-gen-rust-grpc
     RUNTIME DESTINATION bin
 )
-install(PROGRAMS ${CMAKE_BINARY_DIR}/bin/$<TARGET_FILE_NAME:protoc>
+install(PROGRAMS ${CMAKE_BINARY_DIR}/bin/${PROTOC_OUTPUT_NAME}
     DESTINATION bin
 )
 
