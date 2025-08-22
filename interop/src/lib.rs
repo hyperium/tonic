@@ -3,7 +3,8 @@
 pub mod client;
 pub mod client_prost;
 pub mod client_protobuf;
-pub mod server;
+pub mod server_prost;
+pub mod server_protobuf;
 
 pub mod pb {
     #![allow(dead_code)]
@@ -81,6 +82,12 @@ mod grpc_utils {
 
     pub(crate) fn response_lengths(responses: &[grpc_pb::StreamingOutputCallResponse]) -> Vec<i32> {
         responses.iter().map(&response_length).collect()
+    }
+
+    pub(crate) fn server_payload(size: usize) -> grpc_pb::Payload {
+        proto!(grpc_pb::Payload {
+            body: iter::repeat_n(0u8, size).collect::<Vec<_>>(),
+        })
     }
 }
 
