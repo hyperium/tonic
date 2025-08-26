@@ -753,10 +753,7 @@ impl fmt::Display for Status {
         if !self.message().is_empty() {
             write!(f, ", self: {:?}", self.message())?;
         }
-        // Binary data - not useful to human eyes.
-        // if !self.details().is_empty() {
-        //     write!(f, ", details: {:?}", self.details())?;
-        // }
+        // We intentionally omit `self.details` since it's binary data, not fit for human eyes.
         if !self.metadata().is_empty() {
             write!(f, ", metadata: {:?}", self.metadata().as_ref())?;
         }
