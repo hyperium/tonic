@@ -58,7 +58,8 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         .await
         .expect("stream empty")
         .expect("item was error");
-    assert!(response_bytes_counter.load(SeqCst) < UNCOMPRESSED_MIN_BODY_SIZE);
+    // The first message shouldn't get compressed because it's below the threshold
+    assert!(response_bytes_counter.load(SeqCst) > UNCOMPRESSED_MIN_BODY_SIZE - 100);
 
     stream
         .next()
