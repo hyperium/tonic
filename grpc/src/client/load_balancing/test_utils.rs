@@ -23,14 +23,25 @@
  */
 
 use crate::client::load_balancing::{
-    ChannelController, ExternalSubchannel, ForwardingSubchannel, LbState, Subchannel, WorkScheduler,
+    ChannelController, ExternalSubchannel, ForwardingSubchannel, LbPolicy, LbPolicyBuilder,
+    LbPolicyOptions, LbState, ParsedJsonLbConfig, Pick, PickResult, Picker, Subchannel,
+    SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
 };
-use crate::client::name_resolution::Address;
+use crate::client::name_resolution::{Address, ResolverUpdate};
+use crate::client::service_config::LbConfig;
+use crate::client::ConnectivityState;
 use crate::service::{Message, Request, Response, Service};
+use serde::{Deserialize, Serialize};
+use std::any::Any;
+use std::collections::HashMap;
+use std::error::Error;
 use std::hash::{Hash, Hasher};
+use std::sync::Mutex;
 use std::{fmt::Debug, ops::Add, sync::Arc};
+use tokio::sync::mpsc::Sender;
 use tokio::sync::{mpsc, Notify};
 use tokio::task::AbortHandle;
+use tonic::metadata::MetadataMap;
 
 #[derive(Debug)]
 pub(crate) struct EmptyMessage {}
@@ -48,7 +59,7 @@ pub(crate) struct TestSubchannel {
 }
 
 impl TestSubchannel {
-    fn new(address: Address, tx_connect: mpsc::UnboundedSender<TestEvent>) -> Self {
+    pub fn new(address: Address, tx_connect: mpsc::UnboundedSender<TestEvent>) -> Self {
         Self {
             address,
             tx_connect,
@@ -101,7 +112,7 @@ impl Debug for TestEvent {
             Self::NewSubchannel(sc) => write!(f, "NewSubchannel({})", sc.address()),
             Self::UpdatePicker(state) => write!(f, "UpdatePicker({})", state.connectivity_state),
             Self::RequestResolution => write!(f, "RequestResolution"),
-            Self::Connect(addr) => write!(f, "Connect({})", addr.address.to_string()),
+            Self::Connect(addr) => write!(f, "Connect({:?})", addr.address),
             Self::ScheduleWork => write!(f, "ScheduleWork"),
         }
     }
@@ -144,4 +155,89 @@ impl WorkScheduler for TestWorkScheduler {
     fn schedule_work(&self) {
         self.tx_events.send(TestEvent::ScheduleWork).unwrap();
     }
+}
+
+// The callback to invoke when resolver_update is invoked on the stub policy.
+type ResolverUpdateFn = fn(
+    ResolverUpdate,
+    Option<&LbConfig>,
+    &mut dyn ChannelController,
+) -> Result<(), Box<dyn Error + Send + Sync>>;
+
+// The callback to invoke when subchannel_update is invoked on the stub policy.
+type SubchannelUpdateFn = fn(Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
+
+/// This struct holds `LbPolicy` trait stub functions that tests are expected to
+/// implement.
+#[derive(Clone, Default)]
+pub struct StubPolicyFuncs {
+    pub resolver_update: Option<ResolverUpdateFn>,
+    pub subchannel_update: Option<SubchannelUpdateFn>,
+}
+
+/// The stub `LbPolicy` that calls the provided functions.
+pub struct StubPolicy {
+    funcs: StubPolicyFuncs,
+}
+
+impl LbPolicy for StubPolicy {
+    fn resolver_update(
+        &mut self,
+        update: ResolverUpdate,
+        config: Option<&LbConfig>,
+        channel_controller: &mut dyn ChannelController,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        if let Some(f) = &self.funcs.resolver_update {
+            return f(update, config, channel_controller);
+        }
+        Ok(())
+    }
+
+    fn subchannel_update(
+        &mut self,
+        subchannel: Arc<dyn Subchannel>,
+        state: &SubchannelState,
+        channel_controller: &mut dyn ChannelController,
+    ) {
+        if let Some(f) = &self.funcs.subchannel_update {
+            f(subchannel, state, channel_controller);
+        }
+    }
+
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        todo!("Implement exit_idle for StubPolicy")
+    }
+
+    fn work(&mut self, _channel_controller: &mut dyn ChannelController) {
+        todo!("Implement work for StubPolicy")
+    }
+}
+
+/// StubPolicyBuilder builds a StubLbPolicy.
+pub struct StubPolicyBuilder {
+    name: &'static str,
+    funcs: StubPolicyFuncs,
+}
+
+impl LbPolicyBuilder for StubPolicyBuilder {
+    fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
+        Box::new(StubPolicy {
+            funcs: self.funcs.clone(),
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        self.name
+    }
+
+    fn parse_config(
+        &self,
+        _config: &ParsedJsonLbConfig,
+    ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
+        todo!("Implement parse_config in StubPolicyBuilder")
+    }
+}
+
+pub fn reg_stub_policy(name: &'static str, funcs: StubPolicyFuncs) {
+    super::GLOBAL_LB_REGISTRY.add_builder(StubPolicyBuilder { name, funcs })
 }

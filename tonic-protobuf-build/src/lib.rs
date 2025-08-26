@@ -28,6 +28,18 @@ use std::path::{Path, PathBuf};
 
 use syn::parse_file;
 
+pub fn protoc() -> String {
+    format!("{}/bin/protoc", env!("OUT_DIR"))
+}
+
+pub fn protoc_gen_rust_grpc() -> String {
+    format!("{}/bin/protoc-gen-rust-grpc", env!("OUT_DIR"))
+}
+
+pub fn bin() -> String {
+    format!("{}/bin", env!("OUT_DIR"))
+}
+
 /// Details about a crate containing proto files with symbols referenced in
 /// the file being compiled currently.
 #[derive(Debug, Clone)]
@@ -273,9 +285,9 @@ impl CodeGen {
             let Some(stem) = proto_path.file_stem().and_then(|s| s.to_str()) else {
                 continue;
             };
-            generated_file_paths.push(output_dir.join(format!("{}_grpc.pb.rs", stem)));
+            generated_file_paths.push(output_dir.join(format!("{stem}_grpc.pb.rs")));
             if self.generate_message_code {
-                generated_file_paths.push(output_dir.join(format!("{}.u.pb.rs", stem)));
+                generated_file_paths.push(output_dir.join(format!("{stem}.u.pb.rs")));
             }
         }
 

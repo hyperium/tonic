@@ -38,6 +38,7 @@ use crate::client::load_balancing::{
     WeakSubchannel, WorkScheduler,
 };
 use crate::client::name_resolution::{Address, ResolverUpdate};
+use crate::client::ConnectivityState;
 use crate::rt::Runtime;
 
 use super::{Subchannel, SubchannelState};
@@ -101,6 +102,41 @@ impl<T> ChildManager<T> {
         self.children
             .iter()
             .map(|child| (&child.identifier, &child.state))
+    }
+
+    /// Aggregates states from child policies.
+    ///
+    /// If any child is READY then we consider the aggregate state to be READY.
+    /// Otherwise, if any child is CONNECTING, then report CONNECTING.
+    /// Otherwise, if any child is IDLE, then report IDLE.
+    /// Report TRANSIENT FAILURE if no conditions above apply.
+    pub fn aggregate_states(&mut self) -> ConnectivityState {
+        let mut is_connecting = false;
+        let mut is_idle = false;
+
+        for child in &self.children {
+            match child.state.connectivity_state {
+                ConnectivityState::Ready => {
+                    return ConnectivityState::Ready;
+                }
+                ConnectivityState::Connecting => {
+                    is_connecting = true;
+                }
+                ConnectivityState::Idle => {
+                    is_idle = true;
+                }
+                ConnectivityState::TransientFailure => {}
+            }
+        }
+
+        // Decide the new aggregate state if no child is READY.
+        if is_connecting {
+            ConnectivityState::Connecting
+        } else if is_idle {
+            ConnectivityState::Idle
+        } else {
+            ConnectivityState::TransientFailure
+        }
     }
 
     // Called to update all accounting in the ChildManager from operations
@@ -318,5 +354,355 @@ impl WorkScheduler for ChildWorkScheduler {
         if let Some(idx) = *self.idx.lock().unwrap() {
             pending_work.insert(idx);
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use crate::client::load_balancing::child_manager::{
+        Child, ChildManager, ChildUpdate, ChildWorkScheduler, ResolverUpdateSharder,
+    };
+    use crate::client::load_balancing::test_utils::{
+        self, StubPolicy, StubPolicyFuncs, TestChannelController, TestEvent, TestSubchannel,
+        TestWorkScheduler,
+    };
+    use crate::client::load_balancing::{
+        ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
+        Pick, PickResult, Picker, QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
+    };
+    use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
+    use crate::client::service_config::{LbConfig, ServiceConfig};
+    use crate::client::ConnectivityState;
+    use crate::rt::{default_runtime, Runtime};
+    use crate::service::Request;
+    use serde::{Deserialize, Serialize};
+    use std::collections::{HashMap, HashSet};
+    use std::error::Error;
+    use std::panic;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+    use tokio::sync::mpsc;
+    use tonic::metadata::MetadataMap;
+
+    // TODO: This needs to be moved to a common place that can be shared between
+    // round_robin and this test. This EndpointSharder maps endpoints to
+    // children policies.
+    struct EndpointSharder {
+        builder: Arc<dyn LbPolicyBuilder>,
+    }
+
+    impl ResolverUpdateSharder<Endpoint> for EndpointSharder {
+        fn shard_update(
+            &self,
+            resolver_update: ResolverUpdate,
+        ) -> Result<Box<dyn Iterator<Item = ChildUpdate<Endpoint>>>, Box<dyn Error + Send + Sync>>
+        {
+            let mut sharded_endpoints = Vec::new();
+            for endpoint in resolver_update.endpoints.unwrap().iter() {
+                let child_update = ChildUpdate {
+                    child_identifier: endpoint.clone(),
+                    child_policy_builder: self.builder.clone(),
+                    child_update: ResolverUpdate {
+                        attributes: resolver_update.attributes.clone(),
+                        endpoints: Ok(vec![endpoint.clone()]),
+                        service_config: resolver_update.service_config.clone(),
+                        resolution_note: resolver_update.resolution_note.clone(),
+                    },
+                };
+                sharded_endpoints.push(child_update);
+            }
+            Ok(Box::new(sharded_endpoints.into_iter()))
+        }
+    }
+
+    // Sets up the test environment.
+    //
+    // Performs the following:
+    // 1. Creates a work scheduler.
+    // 2. Creates a fake channel that acts as a channel controller.
+    // 3. Creates an StubPolicyBuilder with StubFuncs that each test will define
+    //    and name of the test.
+    // 4. Creates an EndpointSharder with StubPolicyBuilder passed in as the
+    //    child policy.
+    // 5. Creates a ChildManager with the EndpointSharder.
+    //
+    // Returns the following:
+    // 1. A receiver for events initiated by the LB policy (like creating a new
+    //    subchannel, sending a new picker etc).
+    // 2. The ChildManager to send resolver and subchannel updates from the
+    //    test.
+    // 3. The controller to pass to the LB policy as part of the updates.
+    fn setup(
+        funcs: StubPolicyFuncs,
+        test_name: &'static str,
+    ) -> (
+        mpsc::UnboundedReceiver<TestEvent>,
+        Box<ChildManager<Endpoint>>,
+        Box<dyn ChannelController>,
+    ) {
+        test_utils::reg_stub_policy(test_name, funcs);
+        let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
+        let tcc = Box::new(TestChannelController { tx_events });
+        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let endpoint_sharder = EndpointSharder { builder: builder };
+        let child_manager = ChildManager::new(Box::new(endpoint_sharder), default_runtime());
+        (rx_events, Box::new(child_manager), tcc)
+    }
+
+    fn create_n_endpoints_with_k_addresses(n: usize, k: usize) -> Vec<Endpoint> {
+        let mut endpoints = Vec::with_capacity(n);
+        for i in 0..n {
+            let mut addresses: Vec<Address> = Vec::with_capacity(k);
+            for j in 0..k {
+                addresses.push(Address {
+                    address: format!("{}.{}.{}.{}:{}", i + 1, i + 1, i + 1, i + 1, j).into(),
+                    ..Default::default()
+                });
+            }
+            endpoints.push(Endpoint {
+                addresses,
+                ..Default::default()
+            })
+        }
+        endpoints
+    }
+
+    // Sends a resolver update to the LB policy with the specified endpoint.
+    fn send_resolver_update_to_policy(
+        lb_policy: &mut dyn LbPolicy,
+        endpoints: Vec<Endpoint>,
+        tcc: &mut dyn ChannelController,
+    ) {
+        let update = ResolverUpdate {
+            endpoints: Ok(endpoints),
+            ..Default::default()
+        };
+        assert!(lb_policy.resolver_update(update, None, tcc).is_ok());
+    }
+
+    fn move_subchannel_to_state(
+        lb_policy: &mut dyn LbPolicy,
+        subchannel: Arc<dyn Subchannel>,
+        tcc: &mut dyn ChannelController,
+        state: ConnectivityState,
+    ) {
+        lb_policy.subchannel_update(
+            subchannel,
+            &SubchannelState {
+                connectivity_state: state,
+                ..Default::default()
+            },
+            tcc,
+        );
+    }
+
+    // Verifies that the expected number of subchannels is created. Returns the
+    // subchannels created.
+    async fn verify_subchannel_creation_from_policy(
+        rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
+        number_of_subchannels: usize,
+    ) -> Vec<Arc<dyn Subchannel>> {
+        let mut subchannels = Vec::new();
+        for _ in 0..number_of_subchannels {
+            match rx_events.recv().await.unwrap() {
+                TestEvent::NewSubchannel(sc) => {
+                    subchannels.push(sc);
+                }
+                other => panic!("unexpected event {:?}", other),
+            };
+        }
+        subchannels
+    }
+
+    // Defines the functions resolver_update and subchannel_update to test
+    // aggregate_states.
+    fn create_verifying_funcs_for_aggregate_tests() -> StubPolicyFuncs {
+        StubPolicyFuncs {
+            // Closure for resolver_update. resolver_update should only receive
+            // one endpoint and create one subchannel for the endpoint it
+            // receives.
+            resolver_update: Some(move |update: ResolverUpdate, _, controller| {
+                assert_eq!(update.endpoints.iter().len(), 1);
+                let endpoint = update.endpoints.unwrap().pop().unwrap();
+                let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
+                Ok(())
+            }),
+            // Closure for subchannel_update. Sends a picker of the same state
+            // that was passed to it.
+            subchannel_update: Some(move |updated_subchannel, state, controller| {
+                controller.update_picker(LbState {
+                    connectivity_state: state.connectivity_state,
+                    picker: Arc::new(QueuingPicker {}),
+                });
+            }),
+            ..Default::default()
+        }
+    }
+
+    // Tests the scenario where one child is READY and the rest are in
+    // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report READY.
+    #[tokio::test]
+    async fn childmanager_aggregate_state_is_ready_if_any_child_is_ready() {
+        let (mut rx_events, mut child_manager, mut tcc) = setup(
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_ready_if_any_child_is_ready",
+        );
+        let endpoints = create_n_endpoints_with_k_addresses(4, 1);
+        send_resolver_update_to_policy(child_manager.as_mut(), endpoints.clone(), tcc.as_mut());
+        let mut subchannels = vec![];
+        for endpoint in endpoints {
+            subchannels.push(
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
+                    .await
+                    .remove(0),
+            );
+        }
+
+        let mut subchannels = subchannels.into_iter();
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::TransientFailure,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::Idle,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::Connecting,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::Ready,
+        );
+        assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
+    }
+
+    // Tests the scenario where no children are READY and the children are in
+    // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report CONNECTING.
+    #[tokio::test]
+    async fn childmanager_aggregate_state_is_connecting_if_no_child_is_ready() {
+        let (mut rx_events, mut child_manager, mut tcc) = setup(
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_connecting_if_no_child_is_ready",
+        );
+        let endpoints = create_n_endpoints_with_k_addresses(3, 1);
+        send_resolver_update_to_policy(child_manager.as_mut(), endpoints.clone(), tcc.as_mut());
+        let mut subchannels = vec![];
+        for endpoint in endpoints {
+            subchannels.push(
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
+                    .await
+                    .remove(0),
+            );
+        }
+        let mut subchannels = subchannels.into_iter();
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::TransientFailure,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::Idle,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::Connecting,
+        );
+
+        assert_eq!(
+            child_manager.aggregate_states(),
+            ConnectivityState::Connecting
+        );
+    }
+
+    // Tests the scenario where no children are READY or CONNECTING and the
+    // children are in IDLE, or TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report IDLE.
+    #[tokio::test]
+    async fn childmanager_aggregate_state_is_idle_if_only_idle_and_failure() {
+        let (mut rx_events, mut child_manager, mut tcc) = setup(
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_idle_if_only_idle_and_failure",
+        );
+
+        let endpoints = create_n_endpoints_with_k_addresses(2, 1);
+        send_resolver_update_to_policy(child_manager.as_mut(), endpoints.clone(), tcc.as_mut());
+        let mut subchannels = vec![];
+        for endpoint in endpoints {
+            subchannels.push(
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
+                    .await
+                    .remove(0),
+            );
+        }
+        let mut subchannels = subchannels.into_iter();
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::TransientFailure,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::Idle,
+        );
+        assert_eq!(child_manager.aggregate_states(), ConnectivityState::Idle);
+    }
+
+    // Tests the scenario where no children are READY, CONNECTING, or IDLE and
+    // all children are in TRANSIENT FAILURE. The child manager's
+    // aggregate_states function should report TRANSIENT FAILURE.
+    #[tokio::test]
+    async fn childmanager_aggregate_state_is_transient_failure_if_all_children_are() {
+        let (mut rx_events, mut child_manager, mut tcc) = setup(
+            create_verifying_funcs_for_aggregate_tests(),
+            "stub-childmanager_aggregate_state_is_transient_failure_if_all_children_are",
+        );
+        let endpoints = create_n_endpoints_with_k_addresses(2, 1);
+        send_resolver_update_to_policy(child_manager.as_mut(), endpoints.clone(), tcc.as_mut());
+        let mut subchannels = vec![];
+        for endpoint in endpoints {
+            subchannels.push(
+                verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
+                    .await
+                    .remove(0),
+            );
+        }
+        let mut subchannels = subchannels.into_iter();
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::TransientFailure,
+        );
+        move_subchannel_to_state(
+            child_manager.as_mut(),
+            subchannels.next().unwrap(),
+            tcc.as_mut(),
+            ConnectivityState::TransientFailure,
+        );
+        assert_eq!(
+            child_manager.aggregate_states(),
+            ConnectivityState::TransientFailure
+        );
     }
 }

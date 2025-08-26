@@ -465,8 +465,10 @@ impl Hash for WeakSubchannel {
 
 impl PartialEq for WeakSubchannel {
     fn eq(&self, other: &Self) -> bool {
-        if let Some(strong) = self.upgrade() {
-            return strong.dyn_eq(&Box::new(other as &dyn Any));
+        if let Some(strong_self) = self.upgrade() {
+            if let Some(strong_other) = other.upgrade() {
+                return strong_self.dyn_eq(&Box::new(&strong_other as &dyn Any));
+            }
         }
         false
     }
