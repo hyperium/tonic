@@ -66,10 +66,15 @@ impl test_server::Test for Svc {
         &self,
         _req: Request<()>,
     ) -> Result<Response<Self::CompressOutputServerStreamStream>, Status> {
-        let data = [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec();
-        let stream = tokio_stream::iter(std::iter::repeat(SomeData { data }))
-            .take(2)
-            .map(Ok::<_, Status>);
+        // Messages smaller than 1024 don't get compressed and we want to
+        // test that the first message doesn't get compressed
+        let small = vec![0u8; UNCOMPRESSED_MIN_BODY_SIZE - 100];
+        let big = vec![0u8; UNCOMPRESSED_MIN_BODY_SIZE];
+
+        let stream = tokio_stream::iter([
+            Ok::<_, Status>(SomeData { data: small }),
+            Ok::<_, Status>(SomeData { data: big }),
+        ]);
         Ok(self.prepare_response(Response::new(Box::pin(stream))))
     }
 
