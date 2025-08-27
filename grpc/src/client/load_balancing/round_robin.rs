@@ -94,6 +94,12 @@ impl RoundRobinPolicy {
         channel_controller.request_resolution();
     }
 
+    // Sends aggregate picker based on states of children.
+    //
+    // If the aggregate state is Idle or Connecting, send a Connecting picker.
+    // If the aggregate state is Ready, send the pickers of all Ready children.
+    // If the aggregate state is Transient Failure, send a Transient Failure
+    // picker.
     fn send_aggregate_picker(&mut self, channel_controller: &mut dyn ChannelController) {
         let state = self.child_manager.aggregate_states();
         match state {
@@ -257,15 +263,14 @@ impl WrappedPickFirstBuilder {
     }
 }
 
+// This wrapped Pick First policy ensures that whenever a Pick First policy goes
+// IDLE, it will exit_idle and immediately try to start connecting to
+// subchannels again. This is because Round Robin attempts to maintain a
+// connection to every endpoint at all times.
 struct WrappedPickFirstPolicy {
     pick_first: Box<dyn LbPolicy>,
 }
 
-/*
-This wrapped Pick First policy ensures that whenever a Pick First policy goes IDLE, it will
-exit_idle and immediately try to start connecting to subchannels again.
-This is because Round Robin attempts to maintain a connection to every endpoint at all times.
- */
 impl LbPolicy for WrappedPickFirstPolicy {
     fn resolver_update(
         &mut self,
@@ -310,10 +315,8 @@ impl LbPolicy for WrappedPickFirstPolicy {
     }
 }
 
-/*
-This wrapped channel controller keeps track of whether a policy
-went idle, thus signaling that whether the policy should exit_idle or not.
- */
+// WrappedController keeps track of whether a policy
+// went idle, thus signaling that whether the policy should exit_idle or not.
 struct WrappedController<'a> {
     channel_controller: &'a mut dyn ChannelController,
     policy_is_idle: bool,
@@ -731,31 +734,6 @@ mod test {
         subchannels
     }
 
-    // Verifies that the subchannels are created for the given addresses in the
-    // given order. Returns the subchannels created.
-    // async fn verify_multi_endpoint_subchannel_creation_from_policy(
-    //     rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
-    //     mut addresses: Vec<Address>,
-    // ) -> Vec<Arc<dyn Subchannel>> {
-    //     println!("verifying subchannel creation");
-    //     let mut subchannels = Vec::new();
-    //     for _ in 0..addresses.len() {
-    //         match rx_events.recv().await.unwrap() {
-    //             TestEvent::NewSubchannel(sc) => {
-    //                 // Find and remove the address from the expected list
-    //                 if let Some(pos) = addresses.iter().position(|a| *a == addr) {
-    //                     addresses.remove(pos);
-    //                     subchannels.push(sc);
-    //                 } else {
-    //                     panic!("unexpected subchannel address: {:?}", addr);
-    //                 }
-    //             }
-    //             other => panic!("unexpected event {:?}", other),
-    //         };
-    //     }
-    //     subchannels
-    // }
-
     // Sends initial subchannel updates to the LB policy for the given
     // subchannels, with their state set to IDLE.
     fn send_initial_subchannel_updates_to_policy(
@@ -766,43 +744,6 @@ mod test {
         for sc in subchannels {
             lb_policy.subchannel_update(sc.clone(), &SubchannelState::default(), tcc);
         }
-    }
-
-    // Sends initial subchannel updates to the LB policy for the given
-    // subchannels, with their state set to ready.
-    fn send_ready_subchannel_updates_to_policy(
-        lb_policy: &mut dyn LbPolicy,
-        subchannels: &[Arc<dyn Subchannel>],
-        tcc: &mut dyn ChannelController,
-    ) {
-        for sc in subchannels {
-            lb_policy.subchannel_update(
-                sc.clone(),
-                &SubchannelState {
-                    connectivity_state: ConnectivityState::Ready,
-                    ..Default::default()
-                },
-                tcc,
-            );
-        }
-    }
-
-    // Verifies that a connection attempt is made to the given subchannel.
-    async fn verify_connection_attempt_from_policy(
-        rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
-        subchannel: Arc<dyn Subchannel>,
-    ) {
-        println!("Verify connection attempt");
-
-        let event = rx_events.recv().await.unwrap();
-        println!("Subchannel: {:?}", event);
-        match event {
-            // match rx_events.recv().await.unwrap() {
-            TestEvent::Connect(addr) => {
-                assert!(addr == subchannel.address());
-            }
-            other => panic!("unexpected event {:?}", other),
-        };
     }
 
     // Verifies that the channel moves to CONNECTING state with a queuing picker.
@@ -855,9 +796,10 @@ mod test {
         }
     }
 
+    // Returns the picker for when there are multiple pickers in the ready
+    // picker.
     async fn verify_roundrobin_ready_picker_from_policy(
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
-        subchannel: Arc<dyn Subchannel>,
     ) -> Arc<dyn Picker> {
         println!("verify ready picker");
         match rx_events.recv().await.unwrap() {
@@ -1170,8 +1112,7 @@ mod test {
             tcc,
             ConnectivityState::Ready,
         );
-        verify_roundrobin_ready_picker_from_policy(&mut rx_events, all_subchannels[0].clone())
-            .await;
+        verify_ready_picker_from_policy(&mut rx_events, all_subchannels[0].clone()).await;
         move_subchannel_to_state(
             lb_policy,
             all_subchannels[1].clone(),
@@ -1295,17 +1236,14 @@ mod test {
             ConnectivityState::Ready,
         );
         let picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, all_subchannels[0].clone())
-                .await;
+            verify_ready_picker_from_policy(&mut rx_events, all_subchannels[0].clone()).await;
         move_subchannel_to_state(
             lb_policy,
             all_subchannels[1].clone(),
             tcc,
             ConnectivityState::Ready,
         );
-        let picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, all_subchannels[0].clone())
-                .await;
+        let picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
         let req = test_utils::new_request();
         let mut picked = Vec::new();
         for _ in 0..4 {
@@ -1333,9 +1271,7 @@ mod test {
             tcc,
             ConnectivityState::TransientFailure,
         );
-        let new_picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, all_subchannels[0].clone())
-                .await;
+        let new_picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
 
         let req = test_utils::new_request();
         let mut picked = Vec::new();
@@ -1422,10 +1358,9 @@ mod test {
             ConnectivityState::Connecting,
         );
         move_subchannel_to_state(lb_policy, removed_sc.clone(), tcc, ConnectivityState::Ready);
-        verify_roundrobin_ready_picker_from_policy(&mut rx_events, removed_sc.clone()).await;
+        verify_ready_picker_from_policy(&mut rx_events, removed_sc.clone()).await;
         move_subchannel_to_state(lb_policy, old_sc.clone(), tcc, ConnectivityState::Ready);
-        let picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, removed_sc.clone()).await;
+        let picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
         let req = test_utils::new_request();
         let mut picked = Vec::new();
         for _ in 0..4 {
@@ -1458,8 +1393,7 @@ mod test {
 
         let new_subchannels =
             verify_subchannel_creation_from_policy(&mut rx_events, all_new_addresses.clone()).await;
-        let picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, old_sc.clone()).await;
+        let picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
         let old_sc = new_subchannels
             .iter()
             .find(|sc| sc.address().address == "old".to_string().into())
@@ -1479,13 +1413,11 @@ mod test {
             },
             tcc,
         );
-        let picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, old_sc.clone()).await;
+        let picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
         println!("new subchannels is {}", new_subchannels[0]);
 
         send_initial_subchannel_updates_to_policy(lb_policy, &vec![new_sc.clone()], tcc);
-        let new_picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, new_sc.clone()).await;
+        let new_picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
 
         move_subchannel_to_state(
             lb_policy,
@@ -1493,13 +1425,11 @@ mod test {
             tcc,
             ConnectivityState::Connecting,
         );
-        let new_picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, new_sc.clone()).await;
+        let new_picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
         move_subchannel_to_state(lb_policy, new_sc.clone(), tcc, ConnectivityState::Ready);
 
-        // Picker should now contain only old and new 
-        let new_picker =
-            verify_roundrobin_ready_picker_from_policy(&mut rx_events, new_sc.clone()).await;
+        // Picker should now contain only old and new
+        let new_picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
         let req = test_utils::new_request();
         let mut picked = Vec::new();
         for _ in 0..4 {

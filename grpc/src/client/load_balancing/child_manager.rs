@@ -50,7 +50,6 @@ pub struct ChildManager<T> {
     update_sharder: Box<dyn ResolverUpdateSharder<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
     runtime: Arc<dyn Runtime>,
-    updated: bool,
 }
 
 struct Child<T> {
@@ -95,7 +94,6 @@ impl<T> ChildManager<T> {
             children: Default::default(),
             pending_work: Default::default(),
             runtime,
-            updated: false,
         }
     }
 
@@ -160,13 +158,7 @@ impl<T> ChildManager<T> {
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
             self.children[child_idx].state = state;
-            self.updated = true;
         };
-    }
-
-    /// Returns true if a child has produced an update and resets flag to false.
-    pub fn has_updated(&mut self) -> bool {
-        mem::take(&mut self.updated)
     }
 }
 
