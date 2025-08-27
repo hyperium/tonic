@@ -25,7 +25,6 @@ use std::ops::Add;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, Once};
 use tokio::sync::{mpsc, Notify};
-use tokio::time::sleep;
 use tonic::{async_trait, metadata::MetadataMap};
 
 pub static POLICY_NAME: &str = "round_robin";
