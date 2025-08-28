@@ -69,17 +69,6 @@ struct RoundRobinPolicy {
 }
 
 impl RoundRobinPolicy {
-    fn endpoints_contain_addresses(&self, endpoints: &[Endpoint]) -> bool {
-        let addresses: Vec<Address> = endpoints
-            .iter()
-            .flat_map(|ep| ep.addresses.clone())
-            .collect();
-        if addresses.is_empty() {
-            return false;
-        }
-        return true;
-    }
-
     fn move_to_transient_failure(&mut self, channel_controller: &mut dyn ChannelController) {
         let err = format!(
             "last seen resolver error: {:?}, last seen connection error: {:?}",
@@ -102,19 +91,7 @@ impl RoundRobinPolicy {
     fn send_aggregate_picker(&mut self, channel_controller: &mut dyn ChannelController) {
         let state = self.child_manager.aggregate_states();
         match state {
-            ConnectivityState::Idle => {
-                if !self.sent_connecting_state {
-                    let picker = Arc::new(QueuingPicker {});
-                    let picker_update = LbState {
-                        connectivity_state: ConnectivityState::Connecting,
-                        picker,
-                    };
-                    self.sent_transient_failure = false;
-                    self.sent_connecting_state = true;
-                    channel_controller.update_picker(picker_update);
-                }
-            }
-            ConnectivityState::Connecting => {
+            ConnectivityState::Idle | ConnectivityState::Connecting => {
                 if !self.sent_connecting_state {
                     let picker = Arc::new(QueuingPicker {});
                     let picker_update = LbState {
@@ -148,7 +125,6 @@ impl RoundRobinPolicy {
                 let picker = Arc::new(Failing {
                     error: "all children in transient failure".to_string(),
                 });
-
                 let picker_update = LbState {
                     connectivity_state: ConnectivityState::TransientFailure,
                     picker,
@@ -180,7 +156,8 @@ impl LbPolicy for RoundRobinPolicy {
                     return Err("received no endpoints from the name resolver".into());
                 }
 
-                self.addresses_available = self.endpoints_contain_addresses(&endpoints);
+                // Check if endpoints don't contain any addresses.
+                self.addresses_available = endpoints.iter().any(|ep| !ep.addresses.is_empty());
 
                 if !self.addresses_available {
                     self.last_resolver_error =
@@ -196,7 +173,6 @@ impl LbPolicy for RoundRobinPolicy {
             }
             Err(error) => {
                 if !self.addresses_available || self.sent_transient_failure {
-                    println!("moving to tf");
                     self.move_to_transient_failure(channel_controller);
                 } else {
                     self.send_aggregate_picker(channel_controller);
@@ -314,8 +290,8 @@ impl LbPolicy for WrappedPickFirstPolicy {
     }
 }
 
-// WrappedController keeps track of whether a policy
-// went idle, thus signaling that whether the policy should exit_idle or not.
+// WrappedController keeps track of whether a policy went idle, thus signaling
+// that whether the policy should exit_idle or not.
 struct WrappedController<'a> {
     channel_controller: &'a mut dyn ChannelController,
     policy_is_idle: bool,
@@ -336,11 +312,7 @@ impl ChannelController for WrappedController<'_> {
     }
 
     fn update_picker(&mut self, update: LbState) {
-        if update.connectivity_state == ConnectivityState::Idle {
-            self.policy_is_idle = true;
-        } else {
-            self.policy_is_idle = false;
-        }
+        self.policy_is_idle = update.connectivity_state == ConnectivityState::Idle;
         self.channel_controller.update_picker(update);
     }
 
@@ -378,8 +350,7 @@ mod test {
     use crate::client::load_balancing::child_manager::{
         ChildManager, ChildUpdate, ResolverUpdateSharder,
     };
-    use crate::client::load_balancing::round_robin::RoundRobinPolicy;
-    use crate::client::load_balancing::round_robin::{self};
+    use crate::client::load_balancing::round_robin::{self, RoundRobinPolicy};
     use crate::client::load_balancing::test_utils::{
         self, StubPolicy, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
         TestSubchannel, TestWorkScheduler,
