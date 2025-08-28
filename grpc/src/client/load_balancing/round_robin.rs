@@ -1133,9 +1133,7 @@ mod test {
             tcc,
             ConnectivityState::Connecting,
         );
-
         verify_connecting_picker_from_policy(&mut rx_events).await;
-
         move_subchannel_to_state(
             lb_policy,
             second_subchannels[0].clone(),
@@ -1596,9 +1594,7 @@ mod test {
             tcc,
             ConnectivityState::Connecting,
         );
-
         verify_connecting_picker_from_policy(&mut rx_events).await;
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
