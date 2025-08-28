@@ -158,23 +158,16 @@ impl WorkScheduler for TestWorkScheduler {
 }
 
 // The callback to invoke when resolver_update is invoked on the stub policy.
-type ResolverUpdateFn = Arc<
-    dyn Fn(
-            &mut StubPolicyData,
-            ResolverUpdate,
-            Option<&LbConfig>,
-            &mut dyn ChannelController,
-        ) -> Result<(), Box<dyn Error + Send + Sync>>
-        + Send
-        + Sync,
->;
+type ResolverUpdateFn = fn(
+    &mut StubPolicyData,
+    ResolverUpdate,
+    Option<&LbConfig>,
+    &mut dyn ChannelController,
+) -> Result<(), Box<dyn Error + Send + Sync>>;
 
 // The callback to invoke when subchannel_update is invoked on the stub policy.
-type SubchannelUpdateFn = Arc<
-    dyn Fn(&mut StubPolicyData, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController)
-        + Send
-        + Sync,
->;
+type SubchannelUpdateFn =
+    fn(&mut StubPolicyData, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
@@ -184,16 +177,10 @@ pub struct StubPolicyFuncs {
     pub subchannel_update: Option<SubchannelUpdateFn>,
 }
 
+#[derive(Default)]
 /// Data holds test data that will be passed all to functions in PolicyFuncs
 pub struct StubPolicyData {
     pub test_data: Option<Box<dyn Any + Send + Sync>>,
-}
-
-impl StubPolicyData {
-    /// Creates an instance of StubPolicyData.
-    pub fn new() -> Self {
-        Self { test_data: None }
-    }
 }
 
 /// The stub `LbPolicy` that calls the provided functions.
@@ -241,15 +228,9 @@ pub struct StubPolicyBuilder {
     funcs: StubPolicyFuncs,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct MockConfig {
-    shuffle_address_list: Option<bool>,
-}
-
 impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        let data = StubPolicyData::new();
+        let data = StubPolicyData::default();
         Box::new(StubPolicy {
             funcs: self.funcs.clone(),
             data,
@@ -264,13 +245,7 @@ impl LbPolicyBuilder for StubPolicyBuilder {
         &self,
         config: &ParsedJsonLbConfig,
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
-        let cfg: MockConfig = match config.convert_to() {
-            Ok(c) => c,
-            Err(e) => {
-                return Err(format!("failed to parse JSON config: {}", e).into());
-            }
-        };
-        Ok(Some(LbConfig::new(cfg)))
+        todo!("Implement parse_config in StubPolicy");
     }
 }
 

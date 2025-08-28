@@ -36,14 +36,14 @@ struct RoundRobinBuilder {}
 impl LbPolicyBuilder for RoundRobinBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
         let resolver_update_sharder = EndpointSharder {
-            builder: WrappedPickFirstBuilder::new(),
+            builder: Arc::new(WrappedPickFirstBuilder::new()),
         };
-        let lb_policy = Box::new(ChildManager::new(
+        let child_manager = Box::new(ChildManager::new(
             Box::new(resolver_update_sharder),
             default_runtime(),
         ));
         Box::new(RoundRobinPolicy {
-            child_manager: lb_policy,
+            child_manager,
             work_scheduler: options.work_scheduler,
             addresses_available: false,
             last_resolver_error: None,
@@ -104,14 +104,12 @@ impl RoundRobinPolicy {
                 }
             }
             ConnectivityState::Ready => {
-                let ready_pickers: Vec<Arc<dyn Picker>> = self
-                    .child_manager
-                    .child_states()
-                    .filter(|(identifier, state)| {
-                        state.connectivity_state == ConnectivityState::Ready
-                    })
-                    .map(|(identifier, state)| state.picker.clone())
-                    .collect();
+                let mut ready_pickers = Vec::new();
+                for (idenifier, state) in self.child_manager.child_states() {
+                    if state.connectivity_state == ConnectivityState::Ready {
+                        ready_pickers.push(state.picker.clone());
+                    }
+                }
                 let picker = RoundRobinPicker::new(ready_pickers);
                 let picker_update = LbState {
                     connectivity_state: ConnectivityState::Ready,
@@ -144,21 +142,17 @@ impl LbPolicy for RoundRobinPolicy {
         config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let cloned_update = update.clone();
-
-        match update.endpoints {
+        match update.clone().endpoints {
             Ok(endpoints) => {
                 if endpoints.is_empty() {
                     self.last_resolver_error =
                         Some("received no endpoints from the name resolver".to_string());
-                    // No endpoints were returned by the resolver.
                     self.move_to_transient_failure(channel_controller);
                     return Err("received no endpoints from the name resolver".into());
                 }
 
                 // Check if endpoints don't contain any addresses.
                 self.addresses_available = endpoints.iter().any(|ep| !ep.addresses.is_empty());
-
                 if !self.addresses_available {
                     self.last_resolver_error =
                         Some("received empty address list from the name resolver".to_string());
@@ -166,16 +160,15 @@ impl LbPolicy for RoundRobinPolicy {
                     return Err("received empty address list from the name resolver".into());
                 }
 
-                let result =
-                    self.child_manager
-                        .resolver_update(cloned_update, config, channel_controller);
+                let result = self
+                    .child_manager
+                    .resolver_update(update, config, channel_controller);
                 self.send_aggregate_picker(channel_controller);
             }
             Err(error) => {
+                self.last_resolver_error = Some(error);
                 if !self.addresses_available || self.sent_transient_failure {
                     self.move_to_transient_failure(channel_controller);
-                } else {
-                    self.send_aggregate_picker(channel_controller);
                 }
             }
         }
@@ -211,19 +204,17 @@ pub fn reg() {
     });
 }
 
-struct WrappedPickFirstBuilder {}
+struct WrappedPickFirstBuilder {
+    pick_first_builder: Arc<dyn LbPolicyBuilder>,
+}
 
 impl LbPolicyBuilder for WrappedPickFirstBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        pick_first::reg();
         Box::new(WrappedPickFirstPolicy {
-            pick_first: GLOBAL_LB_REGISTRY
-                .get_policy(pick_first::POLICY_NAME)
-                .unwrap()
-                .build(LbPolicyOptions {
-                    work_scheduler: options.work_scheduler,
-                    runtime: default_runtime(),
-                }),
+            pick_first: self.pick_first_builder.build(LbPolicyOptions {
+                work_scheduler: options.work_scheduler,
+                runtime: default_runtime(),
+            }),
         })
     }
 
@@ -233,8 +224,16 @@ impl LbPolicyBuilder for WrappedPickFirstBuilder {
 }
 
 impl WrappedPickFirstBuilder {
-    fn new() -> Arc<dyn LbPolicyBuilder> {
-        Arc::new(WrappedPickFirstBuilder {})
+    fn new() -> Self {
+        pick_first::reg();
+
+        let builder = GLOBAL_LB_REGISTRY
+            .get_policy(pick_first::POLICY_NAME)
+            .unwrap();
+
+        Self {
+            pick_first_builder: builder,
+        }
     }
 }
 
@@ -328,10 +327,9 @@ struct RoundRobinPicker {
 
 impl RoundRobinPicker {
     fn new(pickers: Vec<Arc<dyn Picker>>) -> Self {
-        let mut rng = rand::rng();
-        let random_index: usize = rng.random_range(0..pickers.len());
+        let random_index: usize = rand::random_range(..pickers.len());
         Self {
-            pickers: pickers,
+            pickers,
             next: AtomicUsize::new(random_index),
         }
     }
@@ -553,7 +551,7 @@ mod test {
             // Closure for resolver_update. It creates a subchannel for the
             // endpoint it receives and stores which endpoint it received and
             // which subchannel this child created in the data field.
-            resolver_update: Some(Arc::new(
+            resolver_update: Some(
                 move |data: &mut StubPolicyData, update: ResolverUpdate, _, channel_controller| {
                     let state = data
                         .test_data
@@ -594,12 +592,12 @@ mod test {
                     }
                     Ok(())
                 },
-            )),
+            ),
             // Closure for subchannel_update. Verify that the subchannel that
             // being updated now is the same one that this child policy created
             // in resolver_update. It then sends a picker of the same state that
             // was passed to it.
-            subchannel_update: Some(Arc::new(
+            subchannel_update: Some(
                 move |data: &mut StubPolicyData, subchannel, state, channel_controller| {
                     // Retrieve the specific TestState from the generic test_data field.
                     // This downcasts the `Any` trait object
@@ -641,7 +639,7 @@ mod test {
                         }
                     }
                 },
-            )),
+            ),
         }
     }
 
@@ -888,7 +886,6 @@ mod test {
         let picker = verify_ready_picker_from_policy(&mut rx_events, subchannels[0].clone()).await;
         let resolver_error = String::from("resolver error");
         send_resolver_error_to_policy(lb_policy, resolver_error.clone(), tcc);
-        let picker = verify_ready_picker_from_policy(&mut rx_events, subchannels[0].clone()).await;
         verify_no_activity_from_policy(&mut rx_events).await;
 
         let req = test_utils::new_request();
