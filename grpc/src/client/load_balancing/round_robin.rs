@@ -118,7 +118,7 @@ impl RoundRobinPolicy {
                     picker: Arc::new(picker),
                 };
                 self.sent_transient_failure = false;
-                self.sent_connecting_state = true;
+                self.sent_connecting_state = false;
                 channel_controller.update_picker(picker_update);
             }
             ConnectivityState::TransientFailure => {
@@ -130,7 +130,7 @@ impl RoundRobinPolicy {
                     picker,
                 };
                 self.sent_transient_failure = true;
-                self.sent_connecting_state = true;
+                self.sent_connecting_state = false;
                 channel_controller.update_picker(picker_update);
             }
         }
@@ -704,18 +704,6 @@ mod test {
         subchannels
     }
 
-    // Sends initial subchannel updates to the LB policy for the given
-    // subchannels, with their state set to IDLE.
-    fn send_initial_subchannel_updates_to_policy(
-        lb_policy: &mut dyn LbPolicy,
-        subchannels: &[Arc<dyn Subchannel>],
-        tcc: &mut dyn ChannelController,
-    ) {
-        for sc in subchannels {
-            lb_policy.subchannel_update(sc.clone(), &SubchannelState::default(), tcc);
-        }
-    }
-
     // Verifies that the channel moves to CONNECTING state with a queuing picker.
     //
     // Returns the picker for tests to make more picks, if required.
@@ -883,7 +871,6 @@ mod test {
             verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.clone())
                 .await;
 
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -931,7 +918,6 @@ mod test {
             verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.clone())
                 .await;
 
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -972,8 +958,6 @@ mod test {
             verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.clone())
                 .await;
 
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -989,19 +973,24 @@ mod test {
             &connection_error,
             tcc,
         );
+        verify_transient_failure_picker_from_policy(&mut rx_events, connection_error).await;
+
         move_subchannel_to_state(
             lb_policy,
             subchannels[1].clone(),
             tcc,
             ConnectivityState::Connecting,
         );
+
+        verify_connecting_picker_from_policy(&mut rx_events).await;
+        let cloned_connection_error = String::from("test connection error").clone();
         move_subchannel_to_transient_failure(
             lb_policy,
             subchannels[1].clone(),
-            &connection_error,
+            &cloned_connection_error.clone(),
             tcc,
         );
-        verify_transient_failure_picker_from_policy(&mut rx_events, connection_error).await;
+        verify_transient_failure_picker_from_policy(&mut rx_events, cloned_connection_error).await;
 
         let resolver_error = String::from("resolver error");
         send_resolver_error_to_policy(lb_policy, resolver_error.clone(), tcc);
@@ -1022,7 +1011,6 @@ mod test {
         let subchannels =
             verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.clone())
                 .await;
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1067,7 +1055,6 @@ mod test {
                 .await;
         let mut all_subchannels = subchannels.clone();
         all_subchannels.extend(second_subchannels.clone());
-        send_initial_subchannel_updates_to_policy(lb_policy, &all_subchannels, tcc);
 
         move_subchannel_to_state(
             lb_policy,
@@ -1140,7 +1127,6 @@ mod test {
 
         let mut all_subchannels = subchannels.clone();
         all_subchannels.extend(second_subchannels.clone());
-        send_initial_subchannel_updates_to_policy(lb_policy, &all_subchannels, tcc);
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1190,7 +1176,6 @@ mod test {
                 .await;
         let mut all_subchannels = subchannels.clone();
         all_subchannels.extend(second_subchannels.clone());
-        send_initial_subchannel_updates_to_policy(lb_policy, &all_subchannels, tcc);
 
         move_subchannel_to_state(
             lb_policy,
@@ -1313,7 +1298,6 @@ mod test {
         println!("removed_subchannels[0] address: {}", removed_sc.address());
         println!("old_subchannels[0] address: {}", old_sc.address());
 
-        send_initial_subchannel_updates_to_policy(lb_policy, &all_subchannels, tcc);
         move_subchannel_to_state(
             lb_policy,
             removed_sc.clone(),
@@ -1375,19 +1359,9 @@ mod test {
             .unwrap()
             .clone();
 
-        lb_policy.subchannel_update(
-            old_sc.clone(),
-            &SubchannelState {
-                connectivity_state: ConnectivityState::Ready,
-                ..Default::default()
-            },
-            tcc,
-        );
+        move_subchannel_to_state(lb_policy, old_sc.clone(), tcc, ConnectivityState::Ready);
         let picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
         println!("new subchannels is {}", new_subchannels[0]);
-
-        send_initial_subchannel_updates_to_policy(lb_policy, &vec![new_sc.clone()], tcc);
-        let new_picker = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
 
         move_subchannel_to_state(
             lb_policy,
@@ -1455,7 +1429,6 @@ mod test {
         let second_subchannels =
             verify_subchannel_creation_from_policy(&mut rx_events, endpoints[1].addresses.clone())
                 .await;
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1533,8 +1506,6 @@ mod test {
             verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.clone())
                 .await;
 
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1583,8 +1554,6 @@ mod test {
             verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.clone())
                 .await;
 
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1620,8 +1589,6 @@ mod test {
         let subchannels =
             verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.clone())
                 .await;
-
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
 
         move_subchannel_to_state(
             lb_policy,
@@ -1663,8 +1630,6 @@ mod test {
         let subchannels =
             verify_subchannel_creation_from_policy(&mut rx_events, endpoints.addresses.clone())
                 .await;
-        send_initial_subchannel_updates_to_policy(lb_policy, &subchannels, tcc);
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1672,14 +1637,12 @@ mod test {
             ConnectivityState::Connecting,
         );
         verify_connecting_picker_from_policy(&mut rx_events).await;
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
             tcc,
             ConnectivityState::Ready,
         );
-
         verify_ready_picker_from_policy(&mut rx_events, subchannels[0].clone()).await;
 
         let mut endpoints = create_endpoint_with_n_addresses(4);
@@ -1689,7 +1652,7 @@ mod test {
             verify_subchannel_creation_from_policy(&mut rx_events, endpoints.addresses.clone())
                 .await;
         lb_policy.subchannel_update(subchannels[0].clone(), &SubchannelState::default(), tcc);
-
+        verify_connecting_picker_from_policy(&mut rx_events).await;
         lb_policy.subchannel_update(subchannels[1].clone(), &SubchannelState::default(), tcc);
 
         lb_policy.subchannel_update(subchannels[2].clone(), &SubchannelState::default(), tcc);
