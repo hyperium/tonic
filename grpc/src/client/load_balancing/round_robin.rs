@@ -42,15 +42,7 @@ impl LbPolicyBuilder for RoundRobinBuilder {
             Box::new(resolver_update_sharder),
             default_runtime(),
         ));
-        Box::new(RoundRobinPolicy {
-            child_manager,
-            work_scheduler: options.work_scheduler,
-            addresses_available: false,
-            last_resolver_error: None,
-            last_connection_error: None,
-            sent_transient_failure: false,
-            sent_connecting_state: false,
-        })
+        Box::new(RoundRobinPolicy::new(child_manager, options.work_scheduler))
     }
 
     fn name(&self) -> &'static str {
@@ -64,11 +56,25 @@ struct RoundRobinPolicy {
     addresses_available: bool, // Most recent addresses from the name resolver.
     last_resolver_error: Option<String>, // Most recent error from the name resolver.
     last_connection_error: Option<Arc<dyn Error + Send + Sync>>, // Most recent error from any subchannel.
-    sent_transient_failure: bool,
-    sent_connecting_state: bool,
+    connectivity_state: ConnectivityState,
+    sent_picker_update: bool,
 }
 
 impl RoundRobinPolicy {
+    fn new(
+        child_manager: Box<ChildManager<Endpoint>>,
+        work_scheduler: Arc<dyn WorkScheduler>,
+    ) -> Self {
+        Self {
+            child_manager,
+            work_scheduler,
+            addresses_available: false,
+            last_resolver_error: None,
+            last_connection_error: None,
+            connectivity_state: ConnectivityState::Connecting,
+            sent_picker_update: false,
+        }
+    }
     fn move_to_transient_failure(&mut self, channel_controller: &mut dyn ChannelController) {
         let err = format!(
             "last seen resolver error: {:?}, last seen connection error: {:?}",
@@ -78,7 +84,8 @@ impl RoundRobinPolicy {
             connectivity_state: ConnectivityState::TransientFailure,
             picker: Arc::new(Failing { error: err }),
         });
-        self.sent_transient_failure = true;
+        self.sent_picker_update = true;
+        self.connectivity_state = ConnectivityState::TransientFailure;
         channel_controller.request_resolution();
     }
 
@@ -92,14 +99,17 @@ impl RoundRobinPolicy {
         let state = self.child_manager.aggregate_states();
         match state {
             ConnectivityState::Idle | ConnectivityState::Connecting => {
-                if !self.sent_connecting_state {
-                    let picker = Arc::new(QueuingPicker {});
+                // Round Robin shouldn't send another queueing picker if it has
+                // already sent one previously.
+                if self.connectivity_state != ConnectivityState::Connecting
+                    || !self.sent_picker_update
+                {
                     let picker_update = LbState {
                         connectivity_state: ConnectivityState::Connecting,
-                        picker,
+                        picker: Arc::new(QueuingPicker {}),
                     };
-                    self.sent_transient_failure = false;
-                    self.sent_connecting_state = true;
+                    self.sent_picker_update = true;
+                    self.connectivity_state = ConnectivityState::Connecting;
                     channel_controller.update_picker(picker_update);
                 }
             }
@@ -110,13 +120,12 @@ impl RoundRobinPolicy {
                         ready_pickers.push(state.picker.clone());
                     }
                 }
-                let picker = RoundRobinPicker::new(ready_pickers);
                 let picker_update = LbState {
                     connectivity_state: ConnectivityState::Ready,
-                    picker: Arc::new(picker),
+                    picker: Arc::new(RoundRobinPicker::new(ready_pickers)),
                 };
-                self.sent_transient_failure = false;
-                self.sent_connecting_state = false;
+                self.sent_picker_update = true;
+                self.connectivity_state = ConnectivityState::Ready;
                 channel_controller.update_picker(picker_update);
             }
             ConnectivityState::TransientFailure => {
@@ -127,8 +136,8 @@ impl RoundRobinPolicy {
                     connectivity_state: ConnectivityState::TransientFailure,
                     picker,
                 };
-                self.sent_transient_failure = true;
-                self.sent_connecting_state = false;
+                self.sent_picker_update = true;
+                self.connectivity_state = ConnectivityState::TransientFailure;
                 channel_controller.update_picker(picker_update);
             }
         }
@@ -167,7 +176,9 @@ impl LbPolicy for RoundRobinPolicy {
             }
             Err(error) => {
                 self.last_resolver_error = Some(error);
-                if !self.addresses_available || self.sent_transient_failure {
+                if !self.addresses_available
+                    || self.connectivity_state == ConnectivityState::TransientFailure
+                {
                     self.move_to_transient_failure(channel_controller);
                 }
             }
@@ -378,8 +389,8 @@ mod test {
     // Performs the following:
     // 1. Creates a work scheduler.
     // 2. Creates a fake channel that acts as a channel controller.
-    // 3. Creates an StubPolicyBuilder with StubFuncs that each test will define
-    //    and name of the test.
+    // 3. Creates an StubPolicyBuilder with StubFuncs and the name of the test
+    //    passed in.
     // 4. Creates an EndpointSharder with StubPolicyBuilder passed in as the
     //    child policy.
     // 5. Creates a ChildManager with the EndpointSharder.
@@ -388,8 +399,7 @@ mod test {
     // Returns the following:
     // 1. A receiver for events initiated by the LB policy (like creating a new
     //    subchannel, sending a new picker etc).
-    // 2. The ChildManager to send resolver and subchannel updates from the
-    //    test.
+    // 2. The Round Robin to send resolver and subchannel updates from the test.
     // 3. The controller to pass to the LB policy as part of the updates.
     fn setup(
         funcs: StubPolicyFuncs,
@@ -401,10 +411,8 @@ mod test {
     ) {
         round_robin::reg();
         test_utils::reg_stub_policy(test_name, funcs);
-
-        let child_builder = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
         let resolver_update_sharder = EndpointSharder {
-            builder: child_builder,
+            builder: GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap(),
         };
         let child_manager = Box::new(ChildManager::new(
             Box::new(resolver_update_sharder),
@@ -416,15 +424,7 @@ mod test {
         });
         let tcc = Box::new(TestChannelController { tx_events });
 
-        let lb_policy = Box::new(RoundRobinPolicy {
-            child_manager,
-            work_scheduler,
-            addresses_available: false,
-            last_resolver_error: None,
-            last_connection_error: None,
-            sent_transient_failure: false,
-            sent_connecting_state: false,
-        });
+        let lb_policy = Box::new(RoundRobinPolicy::new(child_manager, work_scheduler));
         (rx_events, lb_policy, tcc)
     }
 
@@ -643,16 +643,6 @@ mod test {
         }
     }
 
-    fn create_endpoint_with_one_address(addr: String) -> Endpoint {
-        Endpoint {
-            addresses: vec![Address {
-                address: addr.into(),
-                ..Default::default()
-            }],
-            ..Default::default()
-        }
-    }
-
     // Creates a new endpoint with the specified number of addresses.
     fn create_endpoint_with_n_addresses(n: usize) -> Endpoint {
         let mut addresses = Vec::new();
@@ -680,8 +670,8 @@ mod test {
         assert!(lb_policy.resolver_update(update, None, tcc).is_ok());
     }
 
-    // // Verifies that the subchannels are created for the given addresses in the
-    // // given order. Returns the subchannels created.
+    // Verifies that the subchannels are created for the given addresses in the
+    // given order. Returns the subchannels created.
     async fn verify_subchannel_creation_from_policy(
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
         addresses: Vec<Address>,

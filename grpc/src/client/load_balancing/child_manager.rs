@@ -536,6 +536,7 @@ mod test {
                     picker: Arc::new(QueuingPicker {}),
                 });
             }),
+            ..Default::default()
         }
     }
 

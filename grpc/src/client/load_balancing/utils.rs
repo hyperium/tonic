@@ -6,8 +6,12 @@ use crate::client::name_resolution::{Endpoint, ResolverUpdate};
 use std::error::Error;
 use std::sync::Arc;
 
-/// EndpointSharder is a generic struct that can shared between load balancing
-/// policies that use the child manager and create a child for each endpoint.
+/// EndpointSharder shards a resolver update into individual endpoints, 
+/// with each endpoint serving as the unique identifier for a child.
+///
+/// The EndpointSharder implements the ResolverUpdateSharder trait, 
+/// allowing any load-balancing (LB) policy that uses the ChildManager 
+/// to split a resolver update into individual endpoints, with one endpoint for each child.
 pub struct EndpointSharder {
     pub builder: Arc<dyn LbPolicyBuilder>,
 }

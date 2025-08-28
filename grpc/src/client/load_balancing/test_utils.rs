@@ -171,7 +171,7 @@ type SubchannelUpdateFn =
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
     pub subchannel_update: Option<SubchannelUpdateFn>,
@@ -196,7 +196,7 @@ impl LbPolicy for StubPolicy {
         config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if let Some(f) = &mut self.funcs.resolver_update {
+        if let Some(f) = &self.funcs.resolver_update {
             return f(&mut self.data, update, config, channel_controller);
         }
         Ok(())
@@ -230,10 +230,9 @@ pub struct StubPolicyBuilder {
 
 impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        let data = StubPolicyData::default();
         Box::new(StubPolicy {
             funcs: self.funcs.clone(),
-            data,
+            data: StubPolicyData::default(),
         })
     }
 
