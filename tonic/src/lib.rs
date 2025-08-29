@@ -32,6 +32,10 @@
 //!   [`rustls-native-certs`] crate. Not enabled by default.
 //! - `tls-webpki-roots`: Add the standard trust roots from the [`webpki-roots`] crate to
 //!   `rustls`-based gRPC clients. Not enabled by default.
+//! - `tls-connect-info`: Adds additional implementations of [`Connected`]
+//!   on common TLS connectors. Not enabled by default, unless any of the other `tls-*`
+//!   features are enabled. This feature is useful for when trying to use a custom
+//!   TLS connector with `connect_with_connector` without enabling any `tls-*` features.
 //! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
 //!   Not enabled by default.
 //! - `deflate`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
@@ -78,6 +82,7 @@
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
 //! [`Server`]: transport/struct.Server.html
+//! [`Connected`]: transport/server/trait.Connected.html
 //! [`rustls`]: https://docs.rs/rustls
 //! [`client`]: client/index.html
 //! [`transport`]: transport/index.html

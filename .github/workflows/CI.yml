@@ -127,13 +127,14 @@ jobs:
       run: |
         echo "${{ runner.temp }}/protoc-plugin" >> $GITHUB_PATH
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring --each-feature
+    - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring,tls-connect-info --each-feature
     - run: cargo udeps --package tonic --features tls-ring,transport
     - run: cargo udeps --package tonic --features tls-ring,server
     - run: cargo udeps --package tonic --features tls-ring,channel
     - run: cargo udeps --package tonic --features tls-aws-lc,transport
     - run: cargo udeps --package tonic --features tls-aws-lc,server
     - run: cargo udeps --package tonic --features tls-aws-lc,channel
+    - run: cargo udeps --package tonic --features tls-connect-info
 
   check:
     runs-on: ${{ matrix.os }}
