@@ -115,7 +115,9 @@ jobs:
         toolchain: nightly-2025-03-27
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@31.1
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
