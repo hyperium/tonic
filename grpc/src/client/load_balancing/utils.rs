@@ -4,6 +4,7 @@ use crate::client::load_balancing::child_manager::{
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::name_resolution::{Endpoint, ResolverUpdate};
 use std::error::Error;
+use std::iter::empty;
 use std::sync::Arc;
 
 /// EndpointSharder shards a resolver update into individual endpoints,
@@ -22,20 +23,27 @@ impl ResolverUpdateSharder<Endpoint> for EndpointSharder {
         &self,
         resolver_update: ResolverUpdate,
     ) -> Result<Box<dyn Iterator<Item = ChildUpdate<Endpoint>>>, Box<dyn Error + Send + Sync>> {
-        let mut sharded_endpoints = Vec::new();
-        for endpoint in resolver_update.endpoints.unwrap().iter() {
-            let child_update = ChildUpdate {
-                child_identifier: endpoint.clone(),
+        let update: Vec<_> = resolver_update
+            .endpoints
+            .unwrap()
+            .into_iter()
+            .map(|e| ChildUpdate {
+                child_identifier: e.clone(),
                 child_policy_builder: self.builder.clone(),
                 child_update: ResolverUpdate {
                     attributes: resolver_update.attributes.clone(),
-                    endpoints: Ok(vec![endpoint.clone()]),
+                    endpoints: Ok(vec![e.clone()]),
                     service_config: resolver_update.service_config.clone(),
                     resolution_note: resolver_update.resolution_note.clone(),
                 },
-            };
-            sharded_endpoints.push(child_update);
-        }
-        Ok(Box::new(sharded_endpoints.into_iter()))
+            })
+            .collect();
+        Ok(Box::new(update.into_iter()))
+    }
+}
+
+impl EndpointSharder {
+    pub fn new(builder: Arc<dyn LbPolicyBuilder>) -> Self {
+        Self { builder }
     }
 }

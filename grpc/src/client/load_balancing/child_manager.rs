@@ -50,6 +50,7 @@ pub struct ChildManager<T> {
     update_sharder: Box<dyn ResolverUpdateSharder<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
     runtime: Arc<dyn Runtime>,
+    updated: bool,
 }
 
 struct Child<T> {
@@ -94,6 +95,7 @@ impl<T> ChildManager<T> {
             children: Default::default(),
             pending_work: Default::default(),
             runtime,
+            updated: false,
         }
     }
 
@@ -158,7 +160,36 @@ impl<T> ChildManager<T> {
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
             self.children[child_idx].state = state;
+            self.updated = true;
         };
+    }
+
+    // Called to update all accounting in the ChildManager from operations
+    // performed by a child policy on the WrappedController that was created for
+    // it.  child_idx is an index into the children map for the relevant child.
+    //
+    // TODO: this post-processing step can be eliminated by capturing the right
+    // state inside the WrappedController, however it is fairly complex.  Decide
+    // which way is better.
+    pub(crate) fn forward_update_to_children(
+        &mut self,
+        channel_controller: &mut dyn ChannelController,
+        resolver_update: ResolverUpdate,
+        config: Option<&LbConfig>,
+    ) {
+        for child_idx in 0..self.children.len() {
+            let child = &mut self.children[child_idx];
+            let mut channel_controller = WrappedController::new(channel_controller);
+            let _ = child
+                .policy
+                .resolver_update(resolver_update.clone(), config, &mut channel_controller);
+            self.resolve_child_controller(channel_controller, child_idx);
+        }
+    }
+
+    /// Checks whether a child has produced an update.
+    pub fn has_updated(&mut self) -> bool {
+        mem::take(&mut self.updated)
     }
 }
 
@@ -366,6 +397,7 @@ mod test {
         self, StubPolicy, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
         TestSubchannel, TestWorkScheduler,
     };
+    use crate::client::load_balancing::utils::EndpointSharder;
     use crate::client::load_balancing::{
         ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
         Pick, PickResult, Picker, QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
@@ -383,37 +415,6 @@ mod test {
     use std::sync::Mutex;
     use tokio::sync::mpsc;
     use tonic::metadata::MetadataMap;
-
-    // TODO: This needs to be moved to a common place that can be shared between
-    // round_robin and this test. This EndpointSharder maps endpoints to
-    // children policies.
-    struct EndpointSharder {
-        builder: Arc<dyn LbPolicyBuilder>,
-    }
-
-    impl ResolverUpdateSharder<Endpoint> for EndpointSharder {
-        fn shard_update(
-            &self,
-            resolver_update: ResolverUpdate,
-        ) -> Result<Box<dyn Iterator<Item = ChildUpdate<Endpoint>>>, Box<dyn Error + Send + Sync>>
-        {
-            let mut sharded_endpoints = Vec::new();
-            for endpoint in resolver_update.endpoints.unwrap().iter() {
-                let child_update = ChildUpdate {
-                    child_identifier: endpoint.clone(),
-                    child_policy_builder: self.builder.clone(),
-                    child_update: ResolverUpdate {
-                        attributes: resolver_update.attributes.clone(),
-                        endpoints: Ok(vec![endpoint.clone()]),
-                        service_config: resolver_update.service_config.clone(),
-                        resolution_note: resolver_update.resolution_note.clone(),
-                    },
-                };
-                sharded_endpoints.push(child_update);
-            }
-            Ok(Box::new(sharded_endpoints.into_iter()))
-        }
-    }
 
     // Sets up the test environment.
     //
@@ -444,7 +445,7 @@ mod test {
         let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
         let tcc = Box::new(TestChannelController { tx_events });
         let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
-        let endpoint_sharder = EndpointSharder { builder };
+        let endpoint_sharder = EndpointSharder::new(builder);
         let child_manager = ChildManager::new(Box::new(endpoint_sharder), default_runtime());
         (rx_events, Box::new(child_manager), tcc)
     }
