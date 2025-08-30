@@ -159,13 +159,15 @@ impl WorkScheduler for TestWorkScheduler {
 
 // The callback to invoke when resolver_update is invoked on the stub policy.
 type ResolverUpdateFn = fn(
+    &mut StubPolicyData,
     ResolverUpdate,
     Option<&LbConfig>,
     &mut dyn ChannelController,
 ) -> Result<(), Box<dyn Error + Send + Sync>>;
 
 // The callback to invoke when subchannel_update is invoked on the stub policy.
-type SubchannelUpdateFn = fn(Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
+type SubchannelUpdateFn =
+    fn(&mut StubPolicyData, Arc<dyn Subchannel>, &SubchannelState, &mut dyn ChannelController);
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
@@ -175,9 +177,16 @@ pub struct StubPolicyFuncs {
     pub subchannel_update: Option<SubchannelUpdateFn>,
 }
 
+#[derive(Default)]
+/// Data holds test data that will be passed all to functions in PolicyFuncs
+pub struct StubPolicyData {
+    pub test_data: Option<Box<dyn Any + Send + Sync>>,
+}
+
 /// The stub `LbPolicy` that calls the provided functions.
 pub struct StubPolicy {
     funcs: StubPolicyFuncs,
+    data: StubPolicyData,
 }
 
 impl LbPolicy for StubPolicy {
@@ -188,7 +197,7 @@ impl LbPolicy for StubPolicy {
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(f) = &self.funcs.resolver_update {
-            return f(update, config, channel_controller);
+            return f(&mut self.data, update, config, channel_controller);
         }
         Ok(())
     }
@@ -200,7 +209,7 @@ impl LbPolicy for StubPolicy {
         channel_controller: &mut dyn ChannelController,
     ) {
         if let Some(f) = &self.funcs.subchannel_update {
-            f(subchannel, state, channel_controller);
+            f(&mut self.data, subchannel, state, channel_controller);
         }
     }
 
@@ -223,6 +232,7 @@ impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
         Box::new(StubPolicy {
             funcs: self.funcs.clone(),
+            data: StubPolicyData::default(),
         })
     }
 
@@ -232,9 +242,9 @@ impl LbPolicyBuilder for StubPolicyBuilder {
 
     fn parse_config(
         &self,
-        _config: &ParsedJsonLbConfig,
+        config: &ParsedJsonLbConfig,
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
-        todo!("Implement parse_config in StubPolicyBuilder")
+        todo!("Implement parse_config in StubPolicy");
     }
 }
 
