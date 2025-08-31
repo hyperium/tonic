@@ -180,9 +180,11 @@ impl<T> ChildManager<T> {
         for child_idx in 0..self.children.len() {
             let child = &mut self.children[child_idx];
             let mut channel_controller = WrappedController::new(channel_controller);
-            let _ = child
-                .policy
-                .resolver_update(resolver_update.clone(), config, &mut channel_controller);
+            let _ = child.policy.resolver_update(
+                resolver_update.clone(),
+                config,
+                &mut channel_controller,
+            );
             self.resolve_child_controller(channel_controller, child_idx);
         }
     }
@@ -191,6 +193,8 @@ impl<T> ChildManager<T> {
     pub fn has_updated(&mut self) -> bool {
         mem::take(&mut self.updated)
     }
+
+    
 }
 
 impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager<T> {
@@ -337,8 +341,13 @@ impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager
         }
     }
 
-    fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
-        todo!("implement exit_idle")
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        for child_idx in 0..self.children.len() {
+            let child = &mut self.children[child_idx];
+            let mut channel_controller = WrappedController::new(channel_controller);
+            let _ = child.policy.exit_idle(&mut channel_controller);
+            self.resolve_child_controller(channel_controller, child_idx);
+        }
     }
 }
 
