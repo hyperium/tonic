@@ -142,12 +142,15 @@ fn encode_item<T>(
 where
     T: Encoder<Error = Status>,
 {
+    const COMPRESSION_THRESHOLD: usize = 1024;
     let offset = buf.len();
 
     buf.reserve(HEADER_SIZE);
     unsafe {
         buf.advance_mut(HEADER_SIZE);
     }
+
+    let mut was_compressed = false;
 
     if let Some(encoding) = compression_encoding {
         uncompression_buf.clear();
@@ -158,16 +161,22 @@ where
 
         let uncompressed_len = uncompression_buf.len();
 
-        compress(
-            CompressionSettings {
-                encoding,
-                buffer_growth_interval: buffer_settings.buffer_size,
-            },
-            uncompression_buf,
-            buf,
-            uncompressed_len,
-        )
-        .map_err(|err| Status::internal(format!("Error compressing: {err}")))?;
+        if uncompressed_len >= COMPRESSION_THRESHOLD {
+            compress(
+                CompressionSettings {
+                    encoding,
+                    buffer_growth_interval: buffer_settings.buffer_size,
+                },
+                uncompression_buf,
+                buf,
+                uncompressed_len,
+            )
+            .map_err(|err| Status::internal(format!("Error compressing: {err}")))?;
+            was_compressed = true;
+        } else {
+            buf.reserve(uncompressed_len);
+            buf.extend_from_slice(&uncompression_buf[..]);
+        }
     } else {
         encoder
             .encode(item, &mut EncodeBuf::new(buf))
@@ -175,7 +184,12 @@ where
     }
 
     // now that we know length, we can write the header
-    finish_encoding(compression_encoding, max_message_size, &mut buf[offset..])
+    let final_compression = if was_compressed {
+        compression_encoding
+    } else {
+        None
+    };
+    finish_encoding(final_compression, max_message_size, &mut buf[offset..])
 }
 
 fn finish_encoding(
