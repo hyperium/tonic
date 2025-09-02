@@ -234,6 +234,11 @@ impl<T> ChildManager<T> {
     pub fn has_updated(&mut self) -> bool {
         mem::take(&mut self.updated)
     }
+
+    /// Returns true if there are no children managed.
+    pub fn has_no_children(&self) -> bool {
+        self.children.is_empty()
+    }
 }
 
 impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager<T> {

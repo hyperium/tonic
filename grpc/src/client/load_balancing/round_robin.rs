@@ -183,14 +183,16 @@ impl LbPolicy for RoundRobinPolicy {
                         update,
                         config,
                     );
-                    self.move_to_transient_failure(
-                        channel_controller,
-                        "received empty address list from the name resolver".into(),
-                    );
+                    if self.child_manager.has_updated() && self.child_manager.has_no_children() {
+                        self.send_aggregate_picker(channel_controller);
+                    } else {
+                        self.move_to_transient_failure(
+                            channel_controller,
+                            "received empty address list from the name resolver".into(),
+                        );
+                    }
                     return Err("received empty address list from the name resolver".into());
                 }
-
-                println!("resolver update");
                 let result = self
                     .child_manager
                     .resolver_update(update, config, channel_controller);
@@ -201,7 +203,7 @@ impl LbPolicy for RoundRobinPolicy {
             }
             Err(resolver_error) => {
                 println!("resolver error");
-                if self.child_manager.child_states().next().is_none() {
+                if self.child_manager.has_no_children() {
                     self.move_to_transient_failure(channel_controller, resolver_error.clone());
                     return Err(resolver_error.into());
                 } else {
