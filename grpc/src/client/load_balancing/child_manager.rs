@@ -384,7 +384,7 @@ impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager
         for child_idx in 0..self.children.len() {
             let child = &mut self.children[child_idx];
             let mut channel_controller = WrappedController::new(channel_controller);
-            let _ = child.policy.exit_idle(&mut channel_controller);
+            child.policy.exit_idle(&mut channel_controller);
             self.resolve_child_controller(channel_controller, child_idx);
         }
     }
