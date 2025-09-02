@@ -82,7 +82,9 @@ jobs:
     - uses: hecrj/setup-rust-action@v2
       with:
         components: clippy
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@31
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -115,7 +117,9 @@ jobs:
         toolchain: nightly-2025-03-27
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@31
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -148,7 +152,9 @@ jobs:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@31
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -199,7 +205,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@31
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
@@ -236,7 +244,9 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: hecrj/setup-rust-action@v2
-    - uses: taiki-e/install-action@protoc
+    - uses: taiki-e/install-action@v2
+      with:
+        tool: protoc@31
     - name: Restore protoc plugin from cache
       id: cache-plugin
       uses: actions/cache@v4
