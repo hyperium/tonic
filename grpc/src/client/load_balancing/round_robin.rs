@@ -125,7 +125,6 @@ impl RoundRobinPolicy {
     // FAILURE children.
     fn send_aggregate_picker(&mut self, channel_controller: &mut dyn ChannelController) {
         let state = self.child_manager.aggregate_states();
-        println!("state is {}", state);
         match state {
             ConnectivityState::Idle | ConnectivityState::Connecting => {
                 self.send_picker_with_children(channel_controller, ConnectivityState::Connecting);
@@ -178,12 +177,14 @@ impl LbPolicy for RoundRobinPolicy {
             Ok(endpoints) => {
                 let addresses_available = endpoints.iter().any(|ep| !ep.addresses.is_empty());
                 if !addresses_available {
-                    self.child_manager.forward_update_to_children(
-                        channel_controller,
-                        update,
-                        config,
-                    );
-                    if self.child_manager.has_updated() && self.child_manager.has_no_children() {
+                    // If the child manager has children, round robin over
+                    // children's pickers. Else, move to transient failure.
+                    if self.child_manager.has_updated() && self.child_manager.has_children() {
+                        self.child_manager.forward_update_to_children(
+                            channel_controller,
+                            update,
+                            config,
+                        );
                         self.send_aggregate_picker(channel_controller);
                     } else {
                         self.move_to_transient_failure(
@@ -203,7 +204,7 @@ impl LbPolicy for RoundRobinPolicy {
             }
             Err(resolver_error) => {
                 println!("resolver error");
-                if self.child_manager.has_no_children() {
+                if !self.child_manager.has_children() {
                     self.move_to_transient_failure(channel_controller, resolver_error.clone());
                     return Err(resolver_error.into());
                 } else {
@@ -367,7 +368,7 @@ mod test {
             };
             for address in addresses {
                 let sc = channel_controller.new_subchannel(address);
-                scl.subchannels.push(sc.clone());
+                scl.subchannels.push(sc);
             }
             scl
         }
@@ -443,7 +444,7 @@ mod test {
         tcc: &mut dyn ChannelController,
     ) {
         lb_policy.subchannel_update(
-            subchannel.clone(),
+            subchannel,
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
                 last_connection_error: Some(Arc::from(Box::from(err.to_owned()))),
@@ -510,9 +511,7 @@ mod test {
                     match update.endpoints {
                         Ok(endpoints) => {
                             let new_addresses = address_list_from_endpoints(&endpoints);
-
                             if new_addresses.is_empty() {
-                                println!("new addresses is empty");
                                 channel_controller.update_picker(LbState {
                                     connectivity_state: ConnectivityState::TransientFailure,
                                     picker: Arc::new(Failing {
@@ -808,7 +807,7 @@ mod test {
         let lb_policy = lb_policy.as_mut();
         let tcc = tcc.as_mut();
         let endpoint = create_endpoint_with_n_addresses(1);
-        send_resolver_update_to_policy(lb_policy, vec![endpoint.clone()], tcc);
+        send_resolver_update_to_policy(lb_policy, vec![endpoint], tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 1).await;
 
         move_subchannel_to_state(
@@ -852,7 +851,7 @@ mod test {
         let tcc = tcc.as_mut();
 
         let endpoint = create_endpoint_with_n_addresses(1);
-        send_resolver_update_to_policy(lb_policy, vec![endpoint.clone()], tcc);
+        send_resolver_update_to_policy(lb_policy, vec![endpoint], tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 1).await;
 
         move_subchannel_to_state(
@@ -889,7 +888,7 @@ mod test {
         let lb_policy = lb_policy.as_mut();
         let tcc = tcc.as_mut();
         let endpoint = create_endpoint_with_n_addresses(1);
-        send_resolver_update_to_policy(lb_policy, vec![endpoint.clone()], tcc);
+        send_resolver_update_to_policy(lb_policy, vec![endpoint], tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 1).await;
         move_subchannel_to_state(
             lb_policy,
@@ -921,12 +920,9 @@ mod test {
         );
         let lb_policy = lb_policy.as_mut();
         let tcc = tcc.as_mut();
-
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
-        send_resolver_update_to_policy(lb_policy, endpoints.clone(), tcc);
-
+        send_resolver_update_to_policy(lb_policy, endpoints, tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 2).await;
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1003,8 +999,6 @@ mod test {
         };
         let _ = lb_policy.resolver_update(update, None, tcc);
         let want_error = "received empty address list from the name resolver";
-        verify_resolution_request(&mut rx_events).await;
-        verify_resolution_request(&mut rx_events).await;
         verify_transient_failure_picker_from_policy(&mut rx_events, want_error.to_string()).await;
     }
 
@@ -1019,12 +1013,9 @@ mod test {
         );
         let lb_policy = lb_policy.as_mut();
         let tcc = tcc.as_mut();
-
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
-        send_resolver_update_to_policy(lb_policy, endpoints.clone(), tcc);
-
+        send_resolver_update_to_policy(lb_policy, endpoints, tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 2).await;
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1113,32 +1104,26 @@ mod test {
             ..Default::default()
         };
         let endpoint_one = Endpoint {
-            addresses: vec![addr_one.clone()],
+            addresses: vec![addr_one],
             ..Default::default()
         };
         let endpoint_two = Endpoint {
-            addresses: vec![addr_two.clone()],
+            addresses: vec![addr_two],
             ..Default::default()
         };
 
-        send_resolver_update_to_policy(
-            lb_policy,
-            vec![endpoint_one.clone(), endpoint_two.clone()],
-            tcc,
-        );
+        send_resolver_update_to_policy(lb_policy, vec![endpoint_one, endpoint_two.clone()], tcc);
 
         // Start with two subchannels created
         let all_subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 2).await;
         let subchannel_one = all_subchannels
             .iter()
             .find(|sc| sc.address().address == "subchannel_one".to_string().into())
-            .unwrap()
-            .clone();
+            .unwrap();
         let subchannel_two = all_subchannels
             .iter()
             .find(|sc| sc.address().address == "subchannel_two".to_string().into())
-            .unwrap()
-            .clone();
+            .unwrap();
 
         move_subchannel_to_state(
             lb_policy,
@@ -1187,27 +1172,21 @@ mod test {
             ..Default::default()
         };
         let new_endpoint = Endpoint {
-            addresses: vec![new_addr.clone()],
+            addresses: vec![new_addr],
             ..Default::default()
         };
 
-        send_resolver_update_to_policy(
-            lb_policy,
-            vec![endpoint_two.clone(), new_endpoint.clone()],
-            tcc,
-        );
+        send_resolver_update_to_policy(lb_policy, vec![endpoint_two, new_endpoint], tcc);
 
         let new_subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 2).await;
         let new_sc = new_subchannels
             .iter()
             .find(|sc| sc.address().address == "new".to_string().into())
-            .unwrap()
-            .clone();
+            .unwrap();
         let old_sc = new_subchannels
             .iter()
             .find(|sc| sc.address().address == "subchannel_two".to_string().into()) // <-- fixed lookup
-            .unwrap()
-            .clone();
+            .unwrap();
 
         move_subchannel_to_state(lb_policy, old_sc.clone(), tcc, ConnectivityState::Ready);
         let _ = verify_roundrobin_ready_picker_from_policy(&mut rx_events).await;
@@ -1246,7 +1225,7 @@ mod test {
 
         let endpoints = create_n_endpoints_with_k_addresses(4, 0);
         let update = ResolverUpdate {
-            endpoints: Ok(endpoints.clone()),
+            endpoints: Ok(endpoints),
             ..Default::default()
         };
         assert!(lb_policy.resolver_update(update, None, tcc).is_err());
@@ -1267,7 +1246,7 @@ mod test {
         let lb_policy = lb_policy.as_mut();
         let tcc = tcc.as_mut();
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
-        send_resolver_update_to_policy(lb_policy, endpoints.clone(), tcc);
+        send_resolver_update_to_policy(lb_policy, endpoints, tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 2).await;
         move_subchannel_to_state(
             lb_policy,
@@ -1329,9 +1308,8 @@ mod test {
         let tcc = tcc.as_mut();
 
         let endpoint = create_endpoint_with_n_addresses(1);
-        send_resolver_update_to_policy(lb_policy, vec![endpoint.clone()], tcc);
+        send_resolver_update_to_policy(lb_policy, vec![endpoint], tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 1).await;
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
@@ -1339,22 +1317,18 @@ mod test {
             ConnectivityState::Connecting,
         );
         verify_connecting_picker_from_policy(&mut rx_events).await;
-
         move_subchannel_to_state(
             lb_policy,
             subchannels[0].clone(),
             tcc,
             ConnectivityState::Ready,
         );
-
         verify_ready_picker_from_policy(&mut rx_events, subchannels[0].clone()).await;
-
         let update = ResolverUpdate {
             endpoints: Ok(vec![]),
             ..Default::default()
         };
         assert!(lb_policy.resolver_update(update, None, tcc).is_err());
-        verify_resolution_request(&mut rx_events).await;
         verify_transient_failure_picker_from_policy(
             &mut rx_events,
             "received empty address list from the name resolver".to_string(),
@@ -1432,7 +1406,7 @@ mod test {
         let tcc = tcc.as_mut();
 
         let endpoints = create_endpoint_with_n_addresses(2);
-        send_resolver_update_to_policy(lb_policy, vec![endpoints.clone()], tcc);
+        send_resolver_update_to_policy(lb_policy, vec![endpoints], tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 2).await;
         move_subchannel_to_state(
             lb_policy,
@@ -1451,7 +1425,7 @@ mod test {
 
         let mut endpoints = create_endpoint_with_n_addresses(4);
         endpoints.addresses.reverse();
-        send_resolver_update_to_policy(lb_policy, vec![endpoints.clone()], tcc);
+        send_resolver_update_to_policy(lb_policy, vec![endpoints], tcc);
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events, 4).await;
         // TODO(easwars): Once Pick First gets merged, this won't send a
         // CONNECTING picker.

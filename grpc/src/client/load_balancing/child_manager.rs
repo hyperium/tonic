@@ -235,9 +235,9 @@ impl<T> ChildManager<T> {
         mem::take(&mut self.updated)
     }
 
-    /// Returns true if there are no children managed.
-    pub fn has_no_children(&self) -> bool {
-        self.children.is_empty()
+    /// Returns true if ChildManager has children.
+    pub fn has_children(&self) -> bool {
+        !self.children.is_empty()
     }
 }
 
