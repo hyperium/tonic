@@ -143,7 +143,7 @@ impl RoundRobinPolicy {
 
     fn move_children_from_idle(&mut self, channel_controller: &mut dyn ChannelController) {
         let mut should_exit_idle = false;
-        for (_id, state) in self.child_manager.child_states() {
+        for (_, state) in self.child_manager.child_states() {
             if state.connectivity_state == ConnectivityState::Idle {
                 should_exit_idle = true;
             }
