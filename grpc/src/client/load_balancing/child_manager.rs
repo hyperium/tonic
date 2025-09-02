@@ -37,7 +37,7 @@ use crate::client::load_balancing::{
     ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
     WeakSubchannel, WorkScheduler,
 };
-use crate::client::name_resolution::{Address, ResolverUpdate};
+use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
 use crate::client::ConnectivityState;
 use crate::rt::Runtime;
 
@@ -80,6 +80,47 @@ pub trait ResolverUpdateSharder<T>: Send {
         &self,
         resolver_update: ResolverUpdate,
     ) -> Result<Box<dyn Iterator<Item = ChildUpdate<T>>>, Box<dyn Error + Send + Sync>>;
+}
+
+/// EndpointSharder shards a resolver update into individual endpoints,
+/// with each endpoint serving as the unique identifier for a child.
+///
+/// The EndpointSharder implements the ResolverUpdateSharder trait,
+/// allowing any load-balancing (LB) policy that uses the ChildManager
+/// to split a resolver update into individual endpoints, with one endpoint for each child.
+pub struct EndpointSharder {
+    pub builder: Arc<dyn LbPolicyBuilder>,
+}
+
+// Creates a ChildUpdate for each endpoint received.
+impl ResolverUpdateSharder<Endpoint> for EndpointSharder {
+    fn shard_update(
+        &self,
+        resolver_update: ResolverUpdate,
+    ) -> Result<Box<dyn Iterator<Item = ChildUpdate<Endpoint>>>, Box<dyn Error + Send + Sync>> {
+        let update: Vec<_> = resolver_update
+            .endpoints
+            .unwrap()
+            .into_iter()
+            .map(|e| ChildUpdate {
+                child_identifier: e.clone(),
+                child_policy_builder: self.builder.clone(),
+                child_update: ResolverUpdate {
+                    attributes: resolver_update.attributes.clone(),
+                    endpoints: Ok(vec![e.clone()]),
+                    service_config: resolver_update.service_config.clone(),
+                    resolution_note: resolver_update.resolution_note.clone(),
+                },
+            })
+            .collect();
+        Ok(Box::new(update.into_iter()))
+    }
+}
+
+impl EndpointSharder {
+    pub fn new(builder: Arc<dyn LbPolicyBuilder>) -> Self {
+        Self { builder }
+    }
 }
 
 impl<T> ChildManager<T> {
@@ -193,8 +234,6 @@ impl<T> ChildManager<T> {
     pub fn has_updated(&mut self) -> bool {
         mem::take(&mut self.updated)
     }
-
-    
 }
 
 impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager<T> {
@@ -400,13 +439,13 @@ impl WorkScheduler for ChildWorkScheduler {
 #[cfg(test)]
 mod test {
     use crate::client::load_balancing::child_manager::{
-        Child, ChildManager, ChildUpdate, ChildWorkScheduler, ResolverUpdateSharder,
+        Child, ChildManager, ChildUpdate, ChildWorkScheduler, EndpointSharder,
+        ResolverUpdateSharder,
     };
     use crate::client::load_balancing::test_utils::{
         self, StubPolicy, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
         TestSubchannel, TestWorkScheduler,
     };
-    use crate::client::load_balancing::utils::EndpointSharder;
     use crate::client::load_balancing::{
         ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
         Pick, PickResult, Picker, QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,

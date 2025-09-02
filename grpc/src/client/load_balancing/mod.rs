@@ -57,7 +57,6 @@ pub mod pick_first;
 pub mod round_robin;
 #[cfg(test)]
 pub mod test_utils;
-pub mod utils;
 
 pub(crate) mod registry;
 use super::{service_config::LbConfig, subchannel::SubchannelStateWatcher};
