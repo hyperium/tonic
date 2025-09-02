@@ -179,13 +179,15 @@ impl LbPolicy for RoundRobinPolicy {
                 if !addresses_available {
                     // If the child manager has children, round robin over
                     // children's pickers. Else, move to transient failure.
-                    if self.child_manager.has_updated() && self.child_manager.has_children() {
+                    if self.child_manager.has_children() {
                         self.child_manager.forward_update_to_children(
                             channel_controller,
                             update,
                             config,
                         );
-                        self.send_aggregate_picker(channel_controller);
+                        if self.child_manager.has_updated() {
+                            self.send_aggregate_picker(channel_controller);
+                        }
                     } else {
                         self.move_to_transient_failure(
                             channel_controller,
@@ -999,6 +1001,8 @@ mod test {
         };
         let _ = lb_policy.resolver_update(update, None, tcc);
         let want_error = "received empty address list from the name resolver";
+        verify_resolution_request(&mut rx_events).await;
+        verify_resolution_request(&mut rx_events).await;
         verify_transient_failure_picker_from_policy(&mut rx_events, want_error.to_string()).await;
     }
 
@@ -1329,6 +1333,7 @@ mod test {
             ..Default::default()
         };
         assert!(lb_policy.resolver_update(update, None, tcc).is_err());
+        verify_resolution_request(&mut rx_events).await;
         verify_transient_failure_picker_from_policy(
             &mut rx_events,
             "received empty address list from the name resolver".to_string(),
