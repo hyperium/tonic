@@ -205,13 +205,8 @@ impl<T> ChildManager<T> {
         };
     }
 
-    // Called to update all accounting in the ChildManager from operations
-    // performed by a child policy on the WrappedController that was created for
-    // it.  child_idx is an index into the children map for the relevant child.
-    //
-    // TODO: this post-processing step can be eliminated by capturing the right
-    // state inside the WrappedController, however it is fairly complex.  Decide
-    // which way is better.
+    // Forwards ResolverUpdate to all children. This function avoids resharding
+    // in case you would like to pass resolver errors down to existing children.
     pub(crate) fn forward_update_to_children(
         &mut self,
         channel_controller: &mut dyn ChannelController,
@@ -233,11 +228,6 @@ impl<T> ChildManager<T> {
     /// Checks whether a child has produced an update.
     pub fn has_updated(&mut self) -> bool {
         mem::take(&mut self.updated)
-    }
-
-    /// Returns true if ChildManager has children.
-    pub fn has_children(&self) -> bool {
-        !self.children.is_empty()
     }
 }
 
@@ -386,6 +376,14 @@ impl<T: PartialEq + Hash + Eq + Send + Sync + 'static> LbPolicy for ChildManager
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        let has_idle = self
+            .children
+            .iter()
+            .any(|child| child.state.connectivity_state == ConnectivityState::Idle);
+
+        if !has_idle {
+            return;
+        }
         for child_idx in 0..self.children.len() {
             let child = &mut self.children[child_idx];
             let mut channel_controller = WrappedController::new(channel_controller);
@@ -443,31 +441,20 @@ impl WorkScheduler for ChildWorkScheduler {
 
 #[cfg(test)]
 mod test {
-    use crate::client::load_balancing::child_manager::{
-        Child, ChildManager, ChildUpdate, ChildWorkScheduler, EndpointSharder,
-        ResolverUpdateSharder,
-    };
+    use crate::client::load_balancing::child_manager::{ChildManager, EndpointSharder};
     use crate::client::load_balancing::test_utils::{
-        self, StubPolicy, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
-        TestSubchannel, TestWorkScheduler,
+        self, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
     };
     use crate::client::load_balancing::{
-        ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
-        Pick, PickResult, Picker, QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
+        ChannelController, LbPolicy, LbPolicyBuilder, LbState, QueuingPicker, Subchannel,
+        SubchannelState, GLOBAL_LB_REGISTRY,
     };
     use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
-    use crate::client::service_config::{LbConfig, ServiceConfig};
     use crate::client::ConnectivityState;
-    use crate::rt::{default_runtime, Runtime};
-    use crate::service::Request;
-    use serde::{Deserialize, Serialize};
-    use std::collections::{HashMap, HashSet};
-    use std::error::Error;
+    use crate::rt::default_runtime;
     use std::panic;
     use std::sync::Arc;
-    use std::sync::Mutex;
     use tokio::sync::mpsc;
-    use tonic::metadata::MetadataMap;
 
     // Sets up the test environment.
     //
@@ -571,20 +558,20 @@ mod test {
     // Defines the functions resolver_update and subchannel_update to test
     // aggregate_states.
     fn create_verifying_funcs_for_aggregate_tests() -> StubPolicyFuncs {
-        let data = StubPolicyData::default();
+        let _data = StubPolicyData::default();
         StubPolicyFuncs {
             // Closure for resolver_update. resolver_update should only receive
             // one endpoint and create one subchannel for the endpoint it
             // receives.
-            resolver_update: Some(move |data, update: ResolverUpdate, _, controller| {
+            resolver_update: Some(move |_data, update: ResolverUpdate, _, controller| {
                 assert_eq!(update.endpoints.iter().len(), 1);
                 let endpoint = update.endpoints.unwrap().pop().unwrap();
-                let subchannel = controller.new_subchannel(&endpoint.addresses[0]);
+                let _ = controller.new_subchannel(&endpoint.addresses[0]);
                 Ok(())
             }),
             // Closure for subchannel_update. Sends a picker of the same state
             // that was passed to it.
-            subchannel_update: Some(move |data, updated_subchannel, state, controller| {
+            subchannel_update: Some(move |_data, _updated_subchannel, state, controller| {
                 controller.update_picker(LbState {
                     connectivity_state: state.connectivity_state,
                     picker: Arc::new(QueuingPicker {}),

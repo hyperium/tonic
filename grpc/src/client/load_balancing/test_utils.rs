@@ -242,7 +242,7 @@ impl LbPolicyBuilder for StubPolicyBuilder {
 
     fn parse_config(
         &self,
-        config: &ParsedJsonLbConfig,
+        _config: &ParsedJsonLbConfig,
     ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
         todo!("Implement parse_config in StubPolicy");
     }

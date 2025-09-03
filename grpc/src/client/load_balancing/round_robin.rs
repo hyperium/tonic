@@ -22,33 +22,19 @@
  *
  */
 
-use crate::client::load_balancing::child_manager::{
-    self, ChildManager, ChildUpdate, EndpointSharder, ResolverUpdateSharder,
-};
+use crate::client::load_balancing::child_manager::{ChildManager, EndpointSharder};
 use crate::client::load_balancing::pick_first::{self};
 use crate::client::load_balancing::{
-    ChannelController, ExternalSubchannel, Failing, LbConfig, LbPolicy, LbPolicyBuilder,
-    LbPolicyOptions, LbState, ParsedJsonLbConfig, Pick, PickResult, Picker, QueuingPicker,
-    Subchannel, SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
+    ChannelController, Failing, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
+    PickResult, Picker, Subchannel, SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
 };
-use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
-use crate::client::transport::{Transport, GLOBAL_TRANSPORT_REGISTRY};
+use crate::client::name_resolution::{Endpoint, ResolverUpdate};
 use crate::client::ConnectivityState;
-use crate::rt::{default_runtime, Runtime};
-use crate::service::{Message, Request, Response, Service};
-use core::panic;
-use rand::{self, rngs::StdRng, seq::SliceRandom, Rng, RngCore, SeedableRng};
-use serde::{Deserialize, Serialize};
-use serde_json::json;
-use std::collections::{HashMap, HashSet};
+use crate::service::Request;
+use rand::{self};
 use std::error::Error;
-use std::hash::Hash;
-use std::mem;
-use std::ops::Add;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex, Once};
-use tokio::sync::{mpsc, Notify};
-use tonic::{async_trait, metadata::MetadataMap};
+use std::sync::{Arc, Once};
 
 pub static POLICY_NAME: &str = "round_robin";
 static START: Once = Once::new();
@@ -77,7 +63,7 @@ impl LbPolicyBuilder for RoundRobinBuilder {
 struct RoundRobinPolicy {
     child_manager: Box<ChildManager<Endpoint>>,
     work_scheduler: Arc<dyn WorkScheduler>,
-    addresses_available: bool, // Whether addresses were available from the previous resolver updates.
+    endpoints_available: bool, // Whether endpoints were available from the previous resolver updates.
 }
 
 impl RoundRobinPolicy {
@@ -88,69 +74,29 @@ impl RoundRobinPolicy {
         Self {
             child_manager,
             work_scheduler,
-            addresses_available: false,
+            endpoints_available: false,
         }
     }
 
     // Sends aggregate picker based on states of children.
     //
-    // If the aggregate state is Idle or Connecting, round robin across connecting children's pickers.
-    // If the aggregate state is Ready, send the pickers of all Ready children.
-    // If the aggregate state is Transient Failure, send a Transient Failure
-    // picker.
-    fn send_picker_with_children(
-        &mut self,
-        channel_controller: &mut dyn ChannelController,
-        aggregate_state: ConnectivityState,
-    ) {
-        let mut pickers = Vec::new();
-        for (idenifier, state) in self.child_manager.child_states() {
-            if state.connectivity_state == aggregate_state {
-                pickers.push(state.picker.clone());
-            }
-        }
+    // If the aggregate state is Idle or Connecting, send pickers of IDLE/CONNECTING
+    // children. If the aggregate state is Ready, send the pickers of all Ready
+    // children. If the aggregate state is Transient Failure, send pickers of
+    // TRANSIENT FAILURE children.
+    fn send_aggregate_picker(&mut self, channel_controller: &mut dyn ChannelController) {
+        let state = self.child_manager.aggregate_states();
+        let pickers = self
+            .child_manager
+            .child_states()
+            .filter(|&(_, cs)| (cs.connectivity_state == state))
+            .map(|(_, cs)| cs.picker.clone())
+            .collect();
         let picker_update = LbState {
-            connectivity_state: aggregate_state,
+            connectivity_state: state,
             picker: Arc::new(RoundRobinPicker::new(pickers)),
         };
         channel_controller.update_picker(picker_update);
-    }
-
-    // Sends aggregate picker based on states of children.
-    //
-    // If the aggregate state is Idle or Connecting, send pickers
-    // of CONNECTING children.
-    // If the aggregate state is Ready, send the pickers of all Ready children.
-    // If the aggregate state is Transient Failure, send pickers of TRANSIENT
-    // FAILURE children.
-    fn send_aggregate_picker(&mut self, channel_controller: &mut dyn ChannelController) {
-        let state = self.child_manager.aggregate_states();
-        match state {
-            ConnectivityState::Idle | ConnectivityState::Connecting => {
-                self.send_picker_with_children(channel_controller, ConnectivityState::Connecting);
-            }
-            ConnectivityState::Ready => {
-                self.send_picker_with_children(channel_controller, ConnectivityState::Ready);
-            }
-            ConnectivityState::TransientFailure => {
-                self.send_picker_with_children(
-                    channel_controller,
-                    ConnectivityState::TransientFailure,
-                );
-            }
-        }
-    }
-
-    fn move_children_from_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        let mut should_exit_idle = false;
-        for (_, state) in self.child_manager.child_states() {
-            if state.connectivity_state == ConnectivityState::Idle {
-                should_exit_idle = true;
-            }
-        }
-        if should_exit_idle {
-            self.child_manager.exit_idle(channel_controller);
-        }
     }
 
     fn move_to_transient_failure(
@@ -164,6 +110,14 @@ impl RoundRobinPolicy {
         });
         channel_controller.request_resolution();
     }
+
+    fn resolve_child_updates(&mut self, channel_controller: &mut dyn ChannelController) {
+        if !self.child_manager.has_updated() {
+            return;
+        }
+        self.child_manager.exit_idle(channel_controller);
+        self.send_aggregate_picker(channel_controller);
+    }
 }
 
 impl LbPolicy for RoundRobinPolicy {
@@ -175,50 +129,37 @@ impl LbPolicy for RoundRobinPolicy {
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         match update.clone().endpoints {
             Ok(endpoints) => {
-                let addresses_available = endpoints.iter().any(|ep| !ep.addresses.is_empty());
-                if !addresses_available {
-                    // If the child manager has children, round robin over
-                    // children's pickers. Else, move to transient failure.
-                    if self.child_manager.has_children() {
-                        self.child_manager.forward_update_to_children(
-                            channel_controller,
-                            update,
-                            config,
-                        );
-                        if self.child_manager.has_updated() {
-                            self.send_aggregate_picker(channel_controller);
-                        }
-                    } else {
-                        self.move_to_transient_failure(
-                            channel_controller,
-                            "received empty address list from the name resolver".into(),
-                        );
-                    }
+                if endpoints.is_empty() {
+                    // Call resolver_update to clear children.
+                    let _ = self
+                        .child_manager
+                        .resolver_update(update, config, channel_controller);
+                    self.resolve_child_updates(channel_controller);
+                    self.move_to_transient_failure(
+                        channel_controller,
+                        "received empty address list from the name resolver".into(),
+                    );
+                    self.endpoints_available = false;
                     return Err("received empty address list from the name resolver".into());
                 }
-                let result = self
+                self.endpoints_available = true;
+                let _ = self
                     .child_manager
                     .resolver_update(update, config, channel_controller);
-                self.move_children_from_idle(channel_controller);
-                if self.child_manager.has_updated() {
-                    self.send_aggregate_picker(channel_controller);
-                }
+                self.resolve_child_updates(channel_controller);
             }
             Err(resolver_error) => {
-                println!("resolver error");
-                if !self.child_manager.has_children() {
+                if !self.endpoints_available {
                     self.move_to_transient_failure(channel_controller, resolver_error.clone());
                     return Err(resolver_error.into());
                 } else {
+                    // If there are children, forward the error to the children.
                     self.child_manager.forward_update_to_children(
                         channel_controller,
                         update,
                         config,
                     );
-                    self.move_children_from_idle(channel_controller);
-                    if self.child_manager.has_updated() {
-                        self.send_aggregate_picker(channel_controller);
-                    }
+                    self.resolve_child_updates(channel_controller);
                 }
             }
         }
@@ -233,26 +174,17 @@ impl LbPolicy for RoundRobinPolicy {
     ) {
         self.child_manager
             .subchannel_update(subchannel, state, channel_controller);
-        self.move_children_from_idle(channel_controller);
-        if self.child_manager.has_updated() {
-            self.send_aggregate_picker(channel_controller);
-        }
+        self.resolve_child_updates(channel_controller);
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.work(channel_controller);
-        self.move_children_from_idle(channel_controller);
-        if self.child_manager.has_updated() {
-            self.send_aggregate_picker(channel_controller);
-        }
+        self.resolve_child_updates(channel_controller);
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.exit_idle(channel_controller);
-        self.move_children_from_idle(channel_controller);
-        if self.child_manager.has_updated() {
-            self.send_aggregate_picker(channel_controller);
-        }
+        self.resolve_child_updates(channel_controller);
     }
 }
 
@@ -288,30 +220,22 @@ impl Picker for RoundRobinPicker {
 
 #[cfg(test)]
 mod test {
-    use crate::client::load_balancing::child_manager::{
-        ChildManager, ChildUpdate, EndpointSharder, ResolverUpdateSharder,
-    };
+    use crate::client::load_balancing::child_manager::{ChildManager, EndpointSharder};
     use crate::client::load_balancing::round_robin::{self, RoundRobinPolicy};
     use crate::client::load_balancing::test_utils::{
-        self, StubPolicy, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
-        TestSubchannel, TestWorkScheduler,
+        self, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent, TestWorkScheduler,
     };
     use crate::client::load_balancing::{
-        ChannelController, Failing, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-        ParsedJsonLbConfig, Pick, PickResult, Picker, QueuingPicker, Subchannel, SubchannelState,
-        GLOBAL_LB_REGISTRY,
+        ChannelController, Failing, LbPolicy, LbPolicyBuilder, LbState, Pick, PickResult, Picker,
+        QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
     };
     use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
-    use crate::client::service_config::{LbConfig, ServiceConfig};
     use crate::client::ConnectivityState;
-    use crate::rt::{default_runtime, Runtime};
+    use crate::rt::default_runtime;
     use crate::service::Request;
-    use serde::{Deserialize, Serialize};
-    use std::collections::{HashMap, HashSet};
-    use std::error::Error;
+    use std::collections::HashSet;
     use std::panic;
     use std::sync::Arc;
-    use std::sync::Mutex;
     use tokio::sync::mpsc;
     use tonic::metadata::MetadataMap;
 
@@ -967,10 +891,10 @@ mod test {
         assert!(picked.contains(&subchannels[1]));
     }
 
-    // If round robin receives no addresses in a resolver update,
+    // If round robin receives no endpoints in a resolver update,
     // it should go into transient failure.
     #[tokio::test]
-    async fn roundrobin_addresses_removed() {
+    async fn roundrobin_endpoints_removed() {
         let (mut rx_events, mut lb_policy, mut tcc) = setup(
             create_funcs_for_roundrobin_tests(),
             "stub-roundrobin_addresses_removed",
@@ -1001,9 +925,8 @@ mod test {
         };
         let _ = lb_policy.resolver_update(update, None, tcc);
         let want_error = "received empty address list from the name resolver";
-        verify_resolution_request(&mut rx_events).await;
-        verify_resolution_request(&mut rx_events).await;
         verify_transient_failure_picker_from_policy(&mut rx_events, want_error.to_string()).await;
+        verify_resolution_request(&mut rx_events).await;
     }
 
     // Round robin should only round robin across children that are ready.
@@ -1218,28 +1141,6 @@ mod test {
         assert!(!picked.contains(&subchannel_one));
     }
 
-    #[tokio::test]
-    async fn roundrobin_zero_addresses_from_resolver_before_valid_update() {
-        let (mut rx_events, mut lb_policy, mut tcc) = setup(
-            create_funcs_for_roundrobin_tests(),
-            "stub-roundrobin_zero_addresses_from_resolver_before_valid_update",
-        );
-        let lb_policy = lb_policy.as_mut();
-        let tcc = tcc.as_mut();
-
-        let endpoints = create_n_endpoints_with_k_addresses(4, 0);
-        let update = ResolverUpdate {
-            endpoints: Ok(endpoints),
-            ..Default::default()
-        };
-        assert!(lb_policy.resolver_update(update, None, tcc).is_err());
-        verify_transient_failure_picker_from_policy(
-            &mut rx_events,
-            "received empty address list from the name resolver".to_string(),
-        )
-        .await;
-    }
-
     // Round robin should stay in transient failure until a child reports ready
     #[tokio::test]
     async fn roundrobin_stay_transient_failure_until_ready() {
@@ -1333,12 +1234,12 @@ mod test {
             ..Default::default()
         };
         assert!(lb_policy.resolver_update(update, None, tcc).is_err());
-        verify_resolution_request(&mut rx_events).await;
         verify_transient_failure_picker_from_policy(
             &mut rx_events,
             "received empty address list from the name resolver".to_string(),
         )
         .await;
+        verify_resolution_request(&mut rx_events).await;
     }
 
     // Tests the scenario where the resolver returns an update with multiple
