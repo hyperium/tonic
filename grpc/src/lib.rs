@@ -29,7 +29,7 @@
 //! APIs are unstable.  Proceed at your own risk.
 //!
 //! [gRPC]: https://grpc.io
-#![allow(dead_code, unused_variables)]
+#![allow(dead_code, unused_variables, unused_imports)]
 
 pub mod client;
 pub mod credentials;

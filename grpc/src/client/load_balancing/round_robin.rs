@@ -110,6 +110,8 @@ impl RoundRobinPolicy {
         channel_controller.request_resolution();
     }
 
+    // Moves children from Idle and then sends a picker based on aggregate
+    // state.
     fn resolve_child_updates(&mut self, channel_controller: &mut dyn ChannelController) {
         if !self.child_manager.has_updated() {
             return;
