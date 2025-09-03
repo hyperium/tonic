@@ -31,7 +31,6 @@ use crate::client::load_balancing::{
 use crate::client::name_resolution::{Endpoint, ResolverUpdate};
 use crate::client::ConnectivityState;
 use crate::service::Request;
-use rand::{self};
 use std::error::Error;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Once};
