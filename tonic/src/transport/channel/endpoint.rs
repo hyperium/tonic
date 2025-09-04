@@ -52,6 +52,29 @@ pub struct Endpoint {
     pub(crate) executor: SharedExec,
 }
 
+/// A trait alias for a service accepted by tonic
+pub trait ServiceTrait:
+    Service<
+        Uri,
+        Response: rt::Read + rt::Write + Send + Unpin,
+        Future: Send + Unpin,
+        Error: Send + std::error::Error + Sync,
+    > + Send
+    + 'static
+{
+}
+
+impl<T> ServiceTrait for T where
+    T: Service<
+            Uri,
+            Response: rt::Read + rt::Write + Send + Unpin,
+            Future: Send + Unpin,
+            Error: Send + std::error::Error + Sync,
+        > + Send
+        + 'static
+{
+}
+
 impl Endpoint {
     // FIXME: determine if we want to expose this or not. This is really
     // just used in codegen for a shortcut.
@@ -453,7 +476,12 @@ impl Endpoint {
         }
     }
 
-    pub(crate) fn http_connector(&self) -> service::Connector<HttpConnector> {
+    /// Get the HTTP connector for this Endpoint
+    ///
+    /// The connstructed connector can be passed to `Channel::connect`
+    /// or it can be used to wrap the default connector into wrappers
+    /// for using e.g. a proxy for transport
+    pub fn http_connector(&self) -> impl ServiceTrait {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
@@ -465,7 +493,12 @@ impl Endpoint {
         self.connector(http)
     }
 
-    pub(crate) fn uds_connector(&self, uds_filepath: &str) -> service::Connector<UdsConnector> {
+    /// Get the UDS connector for this endpoint
+    ///
+    /// The connstructed connector can be passed to `Channel::connect`
+    /// or it can be used to wrap the default connector into wrappers
+    /// for using e.g. a proxy for transport
+    pub fn uds_connector(&self, uds_filepath: &str) -> impl ServiceTrait {
         self.connector(UdsConnector::new(uds_filepath))
     }
 

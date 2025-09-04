@@ -7,7 +7,7 @@ mod tls;
 mod uds_connector;
 
 pub use self::service::Change;
-pub use endpoint::Endpoint;
+pub use endpoint::{Endpoint, ServiceTrait};
 #[cfg(feature = "_tls-any")]
 pub use tls::ClientTlsConfig;
 
