@@ -748,10 +748,10 @@ impl From<std::io::Error> for Status {
 
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "status: '{}'", self.code())?;
+        write!(f, "code: '{}'", self.code())?;
 
         if !self.message().is_empty() {
-            write!(f, ", self: {:?}", self.message())?;
+            write!(f, ", message: {:?}", self.message())?;
         }
         // We intentionally omit `self.details` since it's binary data, not fit for human eyes.
         if !self.metadata().is_empty() {
