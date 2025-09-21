@@ -6,6 +6,9 @@ authors = ["gRPC Authors"]
 license = "MIT"
 rust-version = "1.86"
 
+[lints]
+workspace = true
+
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
     "tonic::*",
