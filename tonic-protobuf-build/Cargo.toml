@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 prettyplease = "0.2.35"
-protobuf-codegen = { version = "4.32.0-release" }
+protobuf-codegen = { version = "4.33.0-release" }
 syn = "2.0.104"
 
 [build-dependencies]
