@@ -1,22 +1,37 @@
 use core::fmt;
+use std::error::Error;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
+use bytes::Buf;
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
+use http_body::Body as HttpBody;
 use pin_project::pin_project;
+use tonic::body::Body;
 use tonic::metadata::GRPC_CONTENT_TYPE;
-use tonic::{body::Body, server::NamedService};
+use tonic::server::NamedService;
 use tower_service::Service;
 use tracing::{debug, trace};
 
 use crate::call::content_types::is_grpc_web;
 use crate::call::{Encoding, GrpcWebCall};
+use crate::BoxError;
 
 /// Service implementing the grpc-web protocol.
-#[derive(Debug, Clone)]
-pub struct GrpcWebService<S> {
+#[derive(Debug)]
+pub struct GrpcWebService<S, ResBody = Body> {
     inner: S,
+    _markers: std::marker::PhantomData<fn() -> ResBody>,
+}
+
+impl<S: Clone, ResBody> Clone for GrpcWebService<S, ResBody> {
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+            _markers: std::marker::PhantomData,
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -37,19 +52,24 @@ enum RequestKind<'a> {
     Other(http::Version),
 }
 
-impl<S> GrpcWebService<S> {
+impl<S, ResBody> GrpcWebService<S, ResBody> {
     pub(crate) fn new(inner: S) -> Self {
-        GrpcWebService { inner }
+        GrpcWebService {
+            inner,
+            _markers: std::marker::PhantomData,
+        }
     }
 }
 
-impl<S, ReqBody, ResBody> Service<Request<ReqBody>> for GrpcWebService<S>
+impl<S, ReqBody, ResBody> Service<Request<ReqBody>> for GrpcWebService<S, ResBody>
 where
-    S: Service<Request<Body>, Response = Response<ResBody>>,
-    ReqBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    ReqBody::Error: Into<crate::BoxError> + fmt::Display,
-    ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    ResBody::Error: Into<crate::BoxError> + fmt::Display,
+    S: Service<Request<Body>, Response = Response<ResBody>> + Send + 'static,
+    S::Future: Send + 'static,
+    S::Error: Into<BoxError> + Send,
+    ReqBody: HttpBody<Data = bytes::Bytes> + Send + 'static,
+    ReqBody::Error: Into<BoxError> + Send,
+    ResBody: HttpBody<Data = bytes::Bytes> + Send + 'static,
+    ResBody::Error: Error + Send + Sync + 'static,
 {
     type Response = Response<Body>;
     type Error = S::Error;
@@ -79,7 +99,9 @@ where
 
                 ResponseFuture {
                     case: Case::GrpcWeb {
-                        future: self.inner.call(coerce_request(req, encoding)),
+                        future: self
+                            .inner
+                            .call(coerce_request(req, encoding).map(Body::new)),
                         accept,
                     },
                 }
@@ -154,11 +176,12 @@ impl<F> Case<F> {
     }
 }
 
-impl<F, B, E> Future for ResponseFuture<F>
+impl<F, E, ResBody> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<B>, E>>,
-    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    B::Error: Into<crate::BoxError> + fmt::Display,
+    F: Future<Output = Result<Response<ResBody>, E>> + Send + 'static,
+    ResBody: HttpBody<Data = bytes::Bytes> + Send + 'static,
+    ResBody::Error: Error + Send + Sync,
+    E: Into<BoxError> + Send,
 {
     type Output = Result<Response<Body>, E>;
 
@@ -169,7 +192,7 @@ where
             CaseProj::GrpcWeb { future, accept } => {
                 let res = ready!(future.poll(cx))?;
 
-                Poll::Ready(Ok(coerce_response(res, *accept)))
+                Poll::Ready(Ok(coerce_response(res, *accept).map(Body::new)))
             }
             CaseProj::Other { future } => future.poll(cx).map_ok(|res| res.map(Body::new)),
             CaseProj::ImmediateResponse { res } => {
@@ -180,7 +203,7 @@ where
     }
 }
 
-impl<S: NamedService> NamedService for GrpcWebService<S> {
+impl<S: NamedService, ResBody> NamedService for GrpcWebService<S, ResBody> {
     const NAME: &'static str = S::NAME;
 }
 
@@ -207,11 +230,10 @@ impl<'a> RequestKind<'a> {
 // Mutating request headers to conform to a gRPC request is not really
 // necessary for us at this point. We could remove most of these except
 // maybe for inserting `header::TE`, which tonic should check?
-fn coerce_request<B>(mut req: Request<B>, encoding: Encoding) -> Request<Body>
-where
-    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    B::Error: Into<crate::BoxError> + fmt::Display,
-{
+fn coerce_request<ReqBody: HttpBody + Send + 'static>(
+    mut req: Request<ReqBody>,
+    encoding: Encoding,
+) -> Request<GrpcWebCall<ReqBody>> {
     req.headers_mut().remove(header::CONTENT_LENGTH);
 
     req.headers_mut()
@@ -225,17 +247,18 @@ where
         HeaderValue::from_static("identity,deflate,gzip"),
     );
 
-    req.map(|b| Body::new(GrpcWebCall::request(b, encoding)))
+    req.map(|b| GrpcWebCall::request(b, encoding))
 }
 
-fn coerce_response<B>(res: Response<B>, encoding: Encoding) -> Response<Body>
+fn coerce_response<ResBody, D>(
+    res: Response<ResBody>,
+    encoding: Encoding,
+) -> Response<GrpcWebCall<ResBody>>
 where
-    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    B::Error: Into<crate::BoxError> + fmt::Display,
+    ResBody: HttpBody<Data = D> + Send + 'static,
+    D: Buf,
 {
-    let mut res = res
-        .map(|b| GrpcWebCall::response(b, encoding))
-        .map(Body::new);
+    let mut res = res.map(|b| GrpcWebCall::response(b, encoding));
 
     res.headers_mut().insert(
         header::CONTENT_TYPE,
@@ -252,6 +275,7 @@ mod tests {
     use http::header::{
         ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, CONTENT_TYPE, ORIGIN,
     };
+    use tonic::body::Body;
     use tower_layer::Layer as _;
 
     type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
@@ -280,6 +304,9 @@ mod tests {
     fn enable<S>(service: S) -> tower_http::cors::Cors<GrpcWebService<S>>
     where
         S: Service<http::Request<Body>, Response = http::Response<Body>>,
+        S: Send + 'static,
+        S::Future: Send + 'static,
+        S::Error: Into<BoxError> + Send,
     {
         tower_layer::Stack::new(
             crate::GrpcWebLayer::new(),
