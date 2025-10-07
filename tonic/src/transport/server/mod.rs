@@ -103,6 +103,7 @@ pub struct Server<L = Identity> {
     http2_keepalive_timeout: Duration,
     http2_adaptive_window: Option<bool>,
     http2_max_pending_accept_reset_streams: Option<usize>,
+    http2_max_local_error_reset_streams: Option<usize>,
     http2_max_header_list_size: Option<u32>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
@@ -128,6 +129,7 @@ impl Default for Server<Identity> {
             http2_keepalive_timeout: DEFAULT_HTTP2_KEEPALIVE_TIMEOUT,
             http2_adaptive_window: None,
             http2_max_pending_accept_reset_streams: None,
+            http2_max_local_error_reset_streams: None,
             http2_max_header_list_size: None,
             max_frame_size: None,
             accept_http1: false,
@@ -332,6 +334,17 @@ impl<L> Server<L> {
     pub fn http2_max_pending_accept_reset_streams(self, max: Option<usize>) -> Self {
         Server {
             http2_max_pending_accept_reset_streams: max,
+            ..self
+        }
+    }
+
+    /// Configures the maximum number of local reset streams allowed before a GOAWAY will be sent.
+    ///
+    /// This will default to whatever the default in hyper is.
+    #[must_use]
+    pub fn http2_max_local_error_reset_streams(self, max: Option<usize>) -> Self {
+        Server {
+            http2_max_local_error_reset_streams: max,
             ..self
         }
     }
@@ -554,6 +567,7 @@ impl<L> Server<L> {
             http2_adaptive_window: self.http2_adaptive_window,
             http2_max_pending_accept_reset_streams: self.http2_max_pending_accept_reset_streams,
             http2_max_header_list_size: self.http2_max_header_list_size,
+            http2_max_local_error_reset_streams: self.http2_max_local_error_reset_streams,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
             max_connection_age: self.max_connection_age,
@@ -685,6 +699,7 @@ impl<L> Server<L> {
         let http2_keepalive_timeout = self.http2_keepalive_timeout;
         let http2_adaptive_window = self.http2_adaptive_window;
         let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
+        let http2_max_local_error_reset_streams = self.http2_max_local_error_reset_streams;
         let max_connection_age = self.max_connection_age;
 
         let svc = self.service_builder.service(svc);
@@ -720,6 +735,7 @@ impl<L> Server<L> {
                 .keep_alive_timeout(http2_keepalive_timeout)
                 .adaptive_window(http2_adaptive_window.unwrap_or_default())
                 .max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
+                .max_local_error_reset_streams(http2_max_local_error_reset_streams)
                 .max_frame_size(max_frame_size);
 
             if let Some(max_header_list_size) = max_header_list_size {
