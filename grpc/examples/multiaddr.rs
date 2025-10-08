@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use grpc::service::{Message, Request, Response, Service};
+use grpc::service::{Message, MessageAllocator, Request, Response, Service};
 use grpc::{client::ChannelOptions, inmemory};
 use tokio_stream::StreamExt;
 use tonic::async_trait;
@@ -15,9 +15,43 @@ struct MyReqMessage(String);
 #[derive(Debug)]
 struct MyResMessage(String);
 
+impl Message for MyReqMessage {
+    fn encode(&self, _: &mut bytes::BytesMut) -> Result<(), String> {
+        Err("not implemented".to_string())
+    }
+
+    fn decode(&mut self, _: &bytes::Bytes) -> Result<(), String> {
+        Err("not implemented".to_string())
+    }
+}
+
+#[derive(Debug, Default)]
+struct MyResMessageAllocator {}
+
+impl Message for MyResMessage {
+    fn encode(&self, _: &mut bytes::BytesMut) -> Result<(), String> {
+        Err("not implemented".to_string())
+    }
+
+    fn decode(&mut self, _: &bytes::Bytes) -> Result<(), String> {
+        Err("not implemented".to_string())
+    }
+}
+
+impl MessageAllocator for MyResMessageAllocator {
+    fn allocate(&self) -> Box<dyn Message> {
+        Box::new(MyResMessage(String::new()))
+    }
+}
+
 #[async_trait]
 impl Service for Handler {
-    async fn call(&self, method: String, request: Request) -> Response {
+    async fn call(
+        &self,
+        method: String,
+        request: Request,
+        _: Box<dyn MessageAllocator>,
+    ) -> Response {
         let id = self.id.clone();
         let mut stream = request.into_inner();
         let output = async_stream::try_stream! {
@@ -79,7 +113,13 @@ async fn main() {
     };
 
     let req = Request::new(Box::pin(outbound));
-    let res = chan.call("/some/method".to_string(), req).await;
+    let res = chan
+        .call(
+            "/some/method".to_string(),
+            req,
+            Box::new(MyResMessageAllocator {}),
+        )
+        .await;
     let mut res = res.into_inner();
 
     while let Some(resp) = res.next().await {
