@@ -53,7 +53,9 @@ use crate::client::{
 };
 
 pub mod child_manager;
+pub mod graceful_switch;
 pub mod pick_first;
+
 #[cfg(test)]
 pub mod test_utils;
 
