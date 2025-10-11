@@ -106,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Then you can reference the generated Rust like this this in your code:
+Then you can reference the generated Rust like this in your code:
 ```rust,ignore
 pub mod api {
     tonic::include_proto!("google.pubsub.v1");
