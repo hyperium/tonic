@@ -87,12 +87,10 @@ required-features = ["tls-client-auth"]
 [[bin]]
 name = "tower-server"
 path = "src/tower/server.rs"
-required-features = ["tower"]
 
 [[bin]]
 name = "tower-client"
 path = "src/tower/client.rs"
-required-features = ["tower"]
 
 [[bin]]
 name = "multiplex-server"
