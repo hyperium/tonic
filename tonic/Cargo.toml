@@ -57,7 +57,7 @@ transport = ["server", "channel"]
 [dependencies]
 base64 = "0.22"
 bytes = "1.0"
-http = "1"
+http = "1.1.0"
 tracing = "0.1"
 
 http-body = "1"
