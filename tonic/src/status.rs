@@ -757,6 +757,9 @@ impl fmt::Display for Status {
         if !self.metadata().is_empty() {
             write!(f, ", metadata: {:?}", self.metadata().as_ref())?;
         }
+        if let Some(source) = self.source() {
+            write!(f, ", source: {source:?}")?;
+        }
         Ok(())
     }
 }
