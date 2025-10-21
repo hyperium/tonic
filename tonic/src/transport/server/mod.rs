@@ -124,7 +124,7 @@ impl Default for Server<Identity> {
             init_connection_window_size: None,
             max_concurrent_streams: None,
             tcp_keepalive: None,
-            tcp_nodelay: false,
+            tcp_nodelay: true,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: DEFAULT_HTTP2_KEEPALIVE_TIMEOUT,
             http2_adaptive_window: None,
@@ -150,11 +150,7 @@ pub struct Router<L = Identity> {
 impl Server {
     /// Create a new server builder that can configure a [`Server`].
     pub fn builder() -> Self {
-        Server {
-            tcp_nodelay: true,
-            accept_http1: false,
-            ..Default::default()
-        }
+        Self::default()
     }
 }
 
@@ -359,7 +355,7 @@ impl<L> Server<L> {
     /// specified will be the time to remain idle before sending TCP keepalive
     /// probes.
     ///
-    /// Important: This setting is only respected when not using `serve_with_incoming`.
+    /// Important: This setting is ignored when using `serve_with_incoming`.
     ///
     /// Default is no keepalive (`None`)
     ///
@@ -372,6 +368,8 @@ impl<L> Server<L> {
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    ///
+    /// Important: This setting is ignored when using `serve_with_incoming`.
     #[must_use]
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Server {
@@ -621,6 +619,8 @@ impl<L> Server<L> {
     }
 
     /// Serve the service on the provided incoming stream.
+    ///
+    /// The `tcp_nodelay` and `tcp_keepalive` settings are ignored when using this method.
     pub async fn serve_with_incoming<S, I, IO, IE, ResBody>(
         self,
         svc: S,
@@ -1168,5 +1168,35 @@ where
             }),
             None => Poll::Pending,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::transport::Server;
+
+    #[test]
+    fn server_tcp_defaults() {
+        const EXAMPLE_TCP_KEEPALIVE: Duration = Duration::from_secs(10);
+
+        // Using ::builder() or ::default() should do the same thing
+        let server_via_builder = Server::builder();
+        assert!(server_via_builder.tcp_nodelay);
+        assert_eq!(server_via_builder.tcp_keepalive, None);
+        let server_via_default = Server::default();
+        assert!(server_via_default.tcp_nodelay);
+        assert_eq!(server_via_default.tcp_keepalive, None);
+
+        // overriding should be possible
+        let server_via_builder = Server::builder()
+            .tcp_nodelay(false)
+            .tcp_keepalive(Some(EXAMPLE_TCP_KEEPALIVE));
+        assert!(!server_via_builder.tcp_nodelay);
+        assert_eq!(
+            server_via_builder.tcp_keepalive,
+            Some(EXAMPLE_TCP_KEEPALIVE)
+        );
     }
 }
