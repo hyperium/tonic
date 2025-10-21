@@ -100,6 +100,39 @@
               ${config.pre-commit.installationScript}
             '';
           };
+
+          # App for running the full CI udeps check
+          # `nix run .#udeps-ci`
+          apps.udeps-ci = {
+            type = "app";
+            program = "${pkgs.writeShellScript "udeps-ci" ''
+              set -e
+              export PATH="${pkgs.rustup}/bin:${pkgs.cargo-udeps}/bin:${pkgs.cargo-hack}/bin:$PATH"
+
+              # Ensure nightly toolchain is installed
+              if ! rustup toolchain list | grep -q "nightly-2025-03-27"; then
+                echo "Installing nightly-2025-03-27 toolchain..."
+                rustup toolchain install nightly-2025-03-27
+              fi
+
+              # Set the toolchain for this run
+              export RUSTUP_TOOLCHAIN=nightly-2025-03-27
+
+              echo "Running cargo hack udeps..."
+              cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring,tls-connect-info --each-feature
+
+              echo "Running tonic TLS feature checks..."
+              cargo udeps --package tonic --features tls-ring,transport
+              cargo udeps --package tonic --features tls-ring,server
+              cargo udeps --package tonic --features tls-ring,channel
+              cargo udeps --package tonic --features tls-aws-lc,transport
+              cargo udeps --package tonic --features tls-aws-lc,server
+              cargo udeps --package tonic --features tls-aws-lc,channel
+              cargo udeps --package tonic --features tls-connect-info
+
+              echo "✓ All udeps checks passed!"
+            ''}";
+          };
         };
     };
 }

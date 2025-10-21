@@ -27,6 +27,9 @@ _runtime-tokio = [
     "dep:socket2",
     "dep:tower",
 ]
+# Used for testing with udeps as it wants this feature to exist
+# to be able to do its checks.
+tower = ["_runtime-tokio"]
 
 [dependencies]
 bytes = "1.10.1"
