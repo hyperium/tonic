@@ -87,10 +87,12 @@ required-features = ["tls-client-auth"]
 [[bin]]
 name = "tower-server"
 path = "src/tower/server.rs"
+required-features = ["tower"]
 
 [[bin]]
 name = "tower-client"
 path = "src/tower/client.rs"
+required-features = ["tower"]
 
 [[bin]]
 name = "multiplex-server"
@@ -271,6 +273,7 @@ h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 
 full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c"]
+tower = ["dep:tower", "dep:http"]
 default = ["full"]
 
 [dependencies]
