@@ -20,7 +20,6 @@ fn main() {
 
 ## Features
 
-- `prost`: Enables prost-based protobuf code generation (enabled by default)
 - `transport`: Enables transport layer code generation
 - `cleanup-markdown`: Enables markdown cleanup in generated documentation
 
