@@ -213,10 +213,7 @@ impl StreamingInner {
                 self.decompress_buf.clear();
 
                 if let Err(err) = decompress(
-                    CompressionSettings {
-                        encoding,
-                        buffer_growth_interval: buffer_settings.buffer_size,
-                    },
+                    CompressionSettings::new(encoding, buffer_settings.buffer_size),
                     &mut self.buf,
                     &mut self.decompress_buf,
                     len,

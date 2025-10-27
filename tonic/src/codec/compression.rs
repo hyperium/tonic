@@ -4,12 +4,33 @@ use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::{GzDecoder, GzEncoder};
 #[cfg(feature = "deflate")]
 use flate2::read::{ZlibDecoder, ZlibEncoder};
-use std::{borrow::Cow, fmt};
+use std::{borrow::Cow, fmt, sync::OnceLock};
 #[cfg(feature = "zstd")]
 use zstd::stream::read::{Decoder, Encoder};
 
 pub(crate) const ENCODING_HEADER: &str = "grpc-encoding";
 pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
+
+/// Get the compression threshold from environment variable or default (1024 bytes)
+fn get_compression_threshold() -> usize {
+    static THRESHOLD: OnceLock<usize> = OnceLock::new();
+    *THRESHOLD.get_or_init(|| {
+        std::env::var("TONIC_COMPRESSION_THRESHOLD")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(1024)
+    })
+}
+
+/// Get the spawn_blocking threshold from environment variable (disabled by default)
+fn get_spawn_blocking_threshold() -> Option<usize> {
+    static THRESHOLD: OnceLock<Option<usize>> = OnceLock::new();
+    *THRESHOLD.get_or_init(|| {
+        std::env::var("TONIC_SPAWN_BLOCKING_THRESHOLD")
+            .ok()
+            .and_then(|v| v.parse().ok())
+    })
+}
 
 /// Struct used to configure which encodings are enabled on a server or channel.
 ///
@@ -77,6 +98,26 @@ pub(crate) struct CompressionSettings {
     /// buffer_growth_interval controls memory growth for internal buffers to balance resizing cost against memory waste.
     /// The default buffer growth interval is 8 kilobytes.
     pub(crate) buffer_growth_interval: usize,
+    /// Minimum message size (in bytes) to compress. Messages smaller than this are sent uncompressed.
+    /// Can be configured via TONIC_COMPRESSION_THRESHOLD environment variable. Default: 1024 bytes.
+    pub(crate) compression_threshold: usize,
+    /// Minimum message size (in bytes) to use spawn_blocking for compression.
+    /// If set, messages larger than this threshold will be compressed on a blocking thread pool.
+    /// Can be configured via TONIC_SPAWN_BLOCKING_THRESHOLD environment variable. Default: None (disabled).
+    pub(crate) spawn_blocking_threshold: Option<usize>,
+}
+
+impl CompressionSettings {
+    /// Create new CompressionSettings with thresholds loaded from environment variables
+    #[inline]
+    pub(crate) fn new(encoding: CompressionEncoding, buffer_growth_interval: usize) -> Self {
+        Self {
+            encoding,
+            buffer_growth_interval,
+            compression_threshold: get_compression_threshold(),
+            spawn_blocking_threshold: get_spawn_blocking_threshold(),
+        }
+    }
 }
 
 /// The compression encodings Tonic supports.

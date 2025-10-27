@@ -7,11 +7,20 @@ use bytes::{BufMut, Bytes, BytesMut};
 use http::HeaderMap;
 use http_body::{Body, Frame};
 use pin_project::pin_project;
+use std::future::Future;
 use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
+use tokio::task::JoinHandle;
 use tokio_stream::{adapters::Fuse, Stream, StreamExt};
+
+#[derive(Debug)]
+struct CompressionResult {
+    compressed_data: BytesMut,
+    was_compressed: bool,
+    encoding: Option<CompressionEncoding>,
+}
 
 /// Combinator for efficient encoding of messages into reasonably sized buffers.
 /// EncodedBytes encodes ready messages from its delegate stream into a BytesMut,
@@ -29,6 +38,8 @@ struct EncodedBytes<T, U> {
     buf: BytesMut,
     uncompression_buf: BytesMut,
     error: Option<Status>,
+    #[pin]
+    compression_task: Option<JoinHandle<Result<CompressionResult, Status>>>,
 }
 
 impl<T: Encoder, U: Stream> EncodedBytes<T, U> {
@@ -63,6 +74,138 @@ impl<T: Encoder, U: Stream> EncodedBytes<T, U> {
             buf,
             uncompression_buf,
             error: None,
+            compression_task: None,
+        }
+    }
+}
+
+impl<T, U> EncodedBytes<T, U>
+where
+    T: Encoder<Error = Status>,
+    U: Stream<Item = Result<T::Item, Status>>,
+{
+    fn encode_item_uncompressed(
+        encoder: &mut T,
+        item: T::Item,
+        buf: &mut BytesMut,
+        max_message_size: Option<usize>,
+    ) -> Result<(), Status> {
+        let offset = buf.len();
+        buf.reserve(HEADER_SIZE);
+        unsafe {
+            buf.advance_mut(HEADER_SIZE);
+        }
+
+        if let Err(err) = encoder.encode(item, &mut EncodeBuf::new(buf)) {
+            return Err(Status::internal(format!("Error encoding: {err}")));
+        }
+
+        finish_encoding(None, max_message_size, &mut buf[offset..])
+    }
+
+    /// Process the next item from the stream
+    /// Returns true if we should spawn a blocking task (sets up compression_task)
+    /// Returns false if item was processed inline
+    fn process_next_item(
+        encoder: &mut T,
+        item: T::Item,
+        buf: &mut BytesMut,
+        uncompression_buf: &mut BytesMut,
+        compression_encoding: Option<CompressionEncoding>,
+        max_message_size: Option<usize>,
+        compression_task: &mut Pin<&mut Option<JoinHandle<Result<CompressionResult, Status>>>>,
+        buffer_settings: &BufferSettings,
+    ) -> Result<bool, Status> {
+        let compression_settings = compression_encoding
+            .map(|encoding| CompressionSettings::new(encoding, buffer_settings.buffer_size));
+
+        if let Some(settings) = compression_settings {
+            uncompression_buf.clear();
+            if let Err(err) = encoder.encode(item, &mut EncodeBuf::new(uncompression_buf)) {
+                return Err(Status::internal(format!("Error encoding: {err}")));
+            }
+
+            let uncompressed_len = uncompression_buf.len();
+
+            if let Some(spawn_threshold) = settings.spawn_blocking_threshold {
+                if uncompressed_len >= spawn_threshold
+                    && uncompressed_len >= settings.compression_threshold
+                {
+                    let data_to_compress = uncompression_buf.split().freeze();
+
+                    let task = tokio::task::spawn_blocking(move || {
+                        compress_blocking(data_to_compress, settings)
+                    });
+
+                    compression_task.set(Some(task));
+                    return Ok(true);
+                }
+            }
+
+            compress_and_encode_item(
+                buf,
+                uncompression_buf,
+                settings,
+                max_message_size,
+                uncompressed_len,
+            )?;
+        } else {
+            Self::encode_item_uncompressed(encoder, item, buf, max_message_size)?;
+        }
+
+        Ok(false)
+    }
+
+    fn poll_compression_task(
+        compression_task: &mut Pin<&mut Option<JoinHandle<Result<CompressionResult, Status>>>>,
+        buf: &mut BytesMut,
+        max_message_size: Option<usize>,
+        buffer_settings: &BufferSettings,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<Bytes, Status>>> {
+        if let Some(task) = compression_task.as_mut().as_pin_mut() {
+            match task.poll(cx) {
+                Poll::Ready(Ok(Ok(result))) => {
+                    compression_task.set(None);
+
+                    buf.reserve(HEADER_SIZE + result.compressed_data.len());
+                    let offset = buf.len();
+
+                    unsafe {
+                        buf.advance_mut(HEADER_SIZE);
+                    }
+
+                    buf.extend_from_slice(&result.compressed_data);
+
+                    let final_compression = if result.was_compressed {
+                        result.encoding
+                    } else {
+                        None
+                    };
+
+                    if let Err(status) =
+                        finish_encoding(final_compression, max_message_size, &mut buf[offset..])
+                    {
+                        return Poll::Ready(Some(Err(status)));
+                    }
+
+                    if buf.len() >= buffer_settings.yield_threshold {
+                        return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
+                    }
+                    Poll::Ready(None)
+                }
+                Poll::Ready(Ok(Err(status))) => {
+                    compression_task.set(None);
+                    Poll::Ready(Some(Err(status)))
+                }
+                Poll::Ready(Err(_)) => {
+                    compression_task.set(None);
+                    Poll::Ready(Some(Err(Status::internal("compression task panicked"))))
+                }
+                Poll::Pending => Poll::Pending,
+            }
+        } else {
+            Poll::Ready(None)
         }
     }
 }
@@ -83,11 +226,27 @@ where
             buf,
             uncompression_buf,
             error,
+            mut compression_task,
         } = self.project();
         let buffer_settings = encoder.buffer_settings();
 
         if let Some(status) = error.take() {
             return Poll::Ready(Some(Err(status)));
+        }
+
+        // Check if we have an in-flight compression task
+        match Self::poll_compression_task(
+            &mut compression_task,
+            buf,
+            *max_message_size,
+            &buffer_settings,
+            cx,
+        ) {
+            Poll::Ready(Some(result)) => return Poll::Ready(Some(result)),
+            Poll::Pending => return Poll::Pending,
+            Poll::Ready(None) => {
+                // Task completed, continue processing
+            }
         }
 
         loop {
@@ -102,20 +261,49 @@ where
                     return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
                 }
                 Poll::Ready(Some(Ok(item))) => {
-                    if let Err(status) = encode_item(
+                    match Self::process_next_item(
                         encoder,
+                        item,
                         buf,
                         uncompression_buf,
                         *compression_encoding,
                         *max_message_size,
-                        buffer_settings,
-                        item,
+                        &mut compression_task,
+                        &buffer_settings,
                     ) {
-                        return Poll::Ready(Some(Err(status)));
-                    }
-
-                    if buf.len() >= buffer_settings.yield_threshold {
-                        return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
+                        Ok(true) => {
+                            // We just spawned/armed the blocking compression task.
+                            // Poll it once right away so it can capture our waker.
+                            match Self::poll_compression_task(
+                                &mut compression_task,
+                                buf,
+                                *max_message_size,
+                                &buffer_settings,
+                                cx,
+                            ) {
+                                Poll::Ready(Some(result)) => {
+                                    return Poll::Ready(Some(result));
+                                }
+                                Poll::Ready(None) => {
+                                    if buf.len() >= buffer_settings.yield_threshold {
+                                        return Poll::Ready(Some(Ok(buf
+                                            .split_to(buf.len())
+                                            .freeze())));
+                                    }
+                                }
+                                Poll::Pending => {
+                                    return Poll::Pending;
+                                }
+                            }
+                        }
+                        Ok(false) => {
+                            if buf.len() >= buffer_settings.yield_threshold {
+                                return Poll::Ready(Some(Ok(buf.split_to(buf.len()).freeze())));
+                            }
+                        }
+                        Err(status) => {
+                            return Poll::Ready(Some(Err(status)));
+                        }
                     }
                 }
                 Poll::Ready(Some(Err(status))) => {
@@ -130,19 +318,38 @@ where
     }
 }
 
-fn encode_item<T>(
-    encoder: &mut T,
+/// Compress data in a blocking task (called via spawn_blocking)
+fn compress_blocking(
+    data: Bytes,
+    settings: CompressionSettings,
+) -> Result<CompressionResult, Status> {
+    let uncompressed_len = data.len();
+    let mut uncompression_buf = BytesMut::from(data.as_ref());
+    let mut compressed_buf = BytesMut::new();
+
+    compress(
+        settings,
+        &mut uncompression_buf,
+        &mut compressed_buf,
+        uncompressed_len,
+    )
+    .map_err(|err| Status::internal(format!("Error compressing: {err}")))?;
+
+    Ok(CompressionResult {
+        compressed_data: compressed_buf,
+        was_compressed: true,
+        encoding: Some(settings.encoding),
+    })
+}
+
+/// Compress and encode an already-serialized item inline (without spawn_blocking)
+fn compress_and_encode_item(
     buf: &mut BytesMut,
     uncompression_buf: &mut BytesMut,
-    compression_encoding: Option<CompressionEncoding>,
+    settings: CompressionSettings,
     max_message_size: Option<usize>,
-    buffer_settings: BufferSettings,
-    item: T::Item,
-) -> Result<(), Status>
-where
-    T: Encoder<Error = Status>,
-{
-    const COMPRESSION_THRESHOLD: usize = 1024;
+    uncompressed_len: usize,
+) -> Result<(), Status> {
     let offset = buf.len();
 
     buf.reserve(HEADER_SIZE);
@@ -152,40 +359,18 @@ where
 
     let mut was_compressed = false;
 
-    if let Some(encoding) = compression_encoding {
-        uncompression_buf.clear();
-
-        encoder
-            .encode(item, &mut EncodeBuf::new(uncompression_buf))
-            .map_err(|err| Status::internal(format!("Error encoding: {err}")))?;
-
-        let uncompressed_len = uncompression_buf.len();
-
-        if uncompressed_len >= COMPRESSION_THRESHOLD {
-            compress(
-                CompressionSettings {
-                    encoding,
-                    buffer_growth_interval: buffer_settings.buffer_size,
-                },
-                uncompression_buf,
-                buf,
-                uncompressed_len,
-            )
+    if uncompressed_len >= settings.compression_threshold {
+        compress(settings, uncompression_buf, buf, uncompressed_len)
             .map_err(|err| Status::internal(format!("Error compressing: {err}")))?;
-            was_compressed = true;
-        } else {
-            buf.reserve(uncompressed_len);
-            buf.extend_from_slice(&uncompression_buf[..]);
-        }
+        was_compressed = true;
     } else {
-        encoder
-            .encode(item, &mut EncodeBuf::new(buf))
-            .map_err(|err| Status::internal(format!("Error encoding: {err}")))?;
+        buf.reserve(uncompressed_len);
+        buf.extend_from_slice(&uncompression_buf[..]);
     }
 
     // now that we know length, we can write the header
     let final_compression = if was_compressed {
-        compression_encoding
+        Some(settings.encoding)
     } else {
         None
     };
