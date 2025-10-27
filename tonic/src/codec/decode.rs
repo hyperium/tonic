@@ -1,4 +1,6 @@
-use super::compression::{decompress, CompressionEncoding, CompressionSettings};
+use super::compression::CompressionEncoding;
+#[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
+use super::compression::{decompress, CompressionSettings};
 use super::{BufferSettings, DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
 use crate::{body::Body, metadata::MetadataMap, Code, Status};
 use bytes::{Buf, BufMut, BytesMut};
@@ -30,6 +32,7 @@ struct StreamingInner {
     direction: Direction,
     buf: BytesMut,
     trailers: Option<HeaderMap>,
+    #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
     decompress_buf: BytesMut,
     encoding: Option<CompressionEncoding>,
     max_message_size: Option<usize>,
@@ -136,6 +139,7 @@ impl<T> Streaming<T> {
                 direction,
                 buf: BytesMut::with_capacity(buffer_size),
                 trailers: None,
+                #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
                 decompress_buf: BytesMut::new(),
                 encoding,
                 max_message_size,
@@ -147,6 +151,10 @@ impl<T> Streaming<T> {
 impl StreamingInner {
     fn decode_chunk(
         &mut self,
+        #[cfg_attr(
+            not(any(feature = "gzip", feature = "deflate", feature = "zstd")),
+            allow(unused_variables)
+        )]
         buffer_settings: BufferSettings,
     ) -> Result<Option<DecodeBuf<'_>>, Status> {
         if let State::ReadHeader = self.state {
@@ -209,26 +217,36 @@ impl StreamingInner {
                 return Ok(None);
             }
 
-            let decode_buf = if let Some(encoding) = compression {
-                self.decompress_buf.clear();
+            let decode_buf = if let Some(_encoding) = compression {
+                #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
+                {
+                    let encoding = _encoding;
+                    self.decompress_buf.clear();
 
-                if let Err(err) = decompress(
-                    CompressionSettings::new(encoding, buffer_settings.buffer_size),
-                    &mut self.buf,
-                    &mut self.decompress_buf,
-                    len,
-                ) {
-                    let message = if let Direction::Response(status) = self.direction {
-                        format!(
-                            "Error decompressing: {err}, while receiving response with status: {status}"
-                        )
-                    } else {
-                        format!("Error decompressing: {err}, while sending request")
-                    };
-                    return Err(Status::internal(message));
+                    if let Err(err) = decompress(
+                        CompressionSettings::new(encoding, buffer_settings.buffer_size),
+                        &mut self.buf,
+                        &mut self.decompress_buf,
+                        len,
+                    ) {
+                        let message = if let Direction::Response(status) = self.direction {
+                            format!(
+                                "Error decompressing: {err}, while receiving response with status: {status}"
+                            )
+                        } else {
+                            format!("Error decompressing: {err}, while sending request")
+                        };
+                        return Err(Status::internal(message));
+                    }
+                    let decompressed_len = self.decompress_buf.len();
+                    DecodeBuf::new(&mut self.decompress_buf, decompressed_len)
                 }
-                let decompressed_len = self.decompress_buf.len();
-                DecodeBuf::new(&mut self.decompress_buf, decompressed_len)
+                #[cfg(not(any(feature = "gzip", feature = "deflate", feature = "zstd")))]
+                {
+                    // This branch is unreachable when no compression features are enabled
+                    // because CompressionEncoding has no variants
+                    unreachable!("Compression encoding without compression features")
+                }
             } else {
                 DecodeBuf::new(&mut self.buf, len)
             };

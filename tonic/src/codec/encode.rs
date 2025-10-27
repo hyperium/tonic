@@ -7,14 +7,17 @@ use bytes::{BufMut, Bytes, BytesMut};
 use http::HeaderMap;
 use http_body::{Body, Frame};
 use pin_project::pin_project;
+#[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
 use std::future::Future;
 use std::{
     pin::Pin,
     task::{ready, Context, Poll},
 };
+#[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
 use tokio::task::JoinHandle;
 use tokio_stream::{adapters::Fuse, Stream, StreamExt};
 
+#[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
 #[derive(Debug)]
 struct CompressionResult {
     compressed_data: BytesMut,
@@ -38,6 +41,7 @@ struct EncodedBytes<T, U> {
     buf: BytesMut,
     uncompression_buf: BytesMut,
     error: Option<Status>,
+    #[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
     #[pin]
     compression_task: Option<JoinHandle<Result<CompressionResult, Status>>>,
 }
@@ -74,6 +78,7 @@ impl<T: Encoder, U: Stream> EncodedBytes<T, U> {
             buf,
             uncompression_buf,
             error: None,
+            #[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
             compression_task: None,
         }
     }
@@ -113,7 +118,10 @@ where
         uncompression_buf: &mut BytesMut,
         compression_encoding: Option<CompressionEncoding>,
         max_message_size: Option<usize>,
-        compression_task: &mut Pin<&mut Option<JoinHandle<Result<CompressionResult, Status>>>>,
+        #[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
+        compression_task: &mut Pin<
+            &mut Option<JoinHandle<Result<CompressionResult, Status>>>,
+        >,
         buffer_settings: &BufferSettings,
     ) -> Result<bool, Status> {
         let compression_settings = compression_encoding
@@ -127,6 +135,8 @@ where
 
             let uncompressed_len = uncompression_buf.len();
 
+            // Check if we should use spawn_blocking (only when tokio is available)
+            #[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
             if let Some(spawn_threshold) = settings.spawn_blocking_threshold {
                 if uncompressed_len >= spawn_threshold
                     && uncompressed_len >= settings.compression_threshold
@@ -156,6 +166,7 @@ where
         Ok(false)
     }
 
+    #[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
     fn poll_compression_task(
         compression_task: &mut Pin<&mut Option<JoinHandle<Result<CompressionResult, Status>>>>,
         buf: &mut BytesMut,
@@ -164,7 +175,7 @@ where
         cx: &mut Context<'_>,
     ) -> Poll<Option<Result<Bytes, Status>>> {
         if let Some(task) = compression_task.as_mut().as_pin_mut() {
-            match task.poll(cx) {
+            match Future::poll(task, cx) {
                 Poll::Ready(Ok(Ok(result))) => {
                     compression_task.set(None);
 
@@ -226,6 +237,7 @@ where
             buf,
             uncompression_buf,
             error,
+            #[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
             mut compression_task,
         } = self.project();
         let buffer_settings = encoder.buffer_settings();
@@ -235,17 +247,20 @@ where
         }
 
         // Check if we have an in-flight compression task
-        match Self::poll_compression_task(
-            &mut compression_task,
-            buf,
-            *max_message_size,
-            &buffer_settings,
-            cx,
-        ) {
-            Poll::Ready(Some(result)) => return Poll::Ready(Some(result)),
-            Poll::Pending => return Poll::Pending,
-            Poll::Ready(None) => {
-                // Task completed, continue processing
+        #[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
+        {
+            match Self::poll_compression_task(
+                &mut compression_task,
+                buf,
+                *max_message_size,
+                &buffer_settings,
+                cx,
+            ) {
+                Poll::Ready(Some(result)) => return Poll::Ready(Some(result)),
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => {
+                    // Task completed, continue processing
+                }
             }
         }
 
@@ -268,32 +283,53 @@ where
                         uncompression_buf,
                         *compression_encoding,
                         *max_message_size,
+                        #[cfg(any(
+                            feature = "transport",
+                            feature = "channel",
+                            feature = "server"
+                        ))]
                         &mut compression_task,
                         &buffer_settings,
                     ) {
                         Ok(true) => {
-                            // We just spawned/armed the blocking compression task.
-                            // Poll it once right away so it can capture our waker.
-                            match Self::poll_compression_task(
-                                &mut compression_task,
-                                buf,
-                                *max_message_size,
-                                &buffer_settings,
-                                cx,
-                            ) {
-                                Poll::Ready(Some(result)) => {
-                                    return Poll::Ready(Some(result));
-                                }
-                                Poll::Ready(None) => {
-                                    if buf.len() >= buffer_settings.yield_threshold {
-                                        return Poll::Ready(Some(Ok(buf
-                                            .split_to(buf.len())
-                                            .freeze())));
+                            #[cfg(any(
+                                feature = "transport",
+                                feature = "channel",
+                                feature = "server"
+                            ))]
+                            {
+                                // We just spawned/armed the blocking compression task.
+                                // Poll it once right away so it can capture our waker.
+                                match Self::poll_compression_task(
+                                    &mut compression_task,
+                                    buf,
+                                    *max_message_size,
+                                    &buffer_settings,
+                                    cx,
+                                ) {
+                                    Poll::Ready(Some(result)) => {
+                                        return Poll::Ready(Some(result));
+                                    }
+                                    Poll::Ready(None) => {
+                                        if buf.len() >= buffer_settings.yield_threshold {
+                                            return Poll::Ready(Some(Ok(buf
+                                                .split_to(buf.len())
+                                                .freeze())));
+                                        }
+                                    }
+                                    Poll::Pending => {
+                                        return Poll::Pending;
                                     }
                                 }
-                                Poll::Pending => {
-                                    return Poll::Pending;
-                                }
+                            }
+                            #[cfg(not(any(
+                                feature = "transport",
+                                feature = "channel",
+                                feature = "server"
+                            )))]
+                            {
+                                // This shouldn't happen when tokio is not available
+                                unreachable!("spawn_blocking returned true without tokio")
                             }
                         }
                         Ok(false) => {
@@ -319,6 +355,7 @@ where
 }
 
 /// Compress data in a blocking task (called via spawn_blocking)
+#[cfg(any(feature = "transport", feature = "channel", feature = "server"))]
 fn compress_blocking(
     data: Bytes,
     settings: CompressionSettings,

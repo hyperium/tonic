@@ -293,6 +293,7 @@ pub(crate) fn compress(
 }
 
 /// Decompress `len` bytes from `compressed_buf` into `out_buf`.
+#[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
 #[allow(unused_variables, unreachable_code)]
 pub(crate) fn decompress(
     settings: CompressionSettings,
