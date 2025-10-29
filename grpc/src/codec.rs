@@ -31,6 +31,9 @@ use tonic::codec::Decoder;
 use tonic::codec::EncodeBuf;
 use tonic::codec::Encoder;
 
+pub mod compression;
+pub mod serialization;
+
 /// An adapter for sending and receiving messages as bytes using tonic.
 /// Coding/decoding is handled within gRPC.
 /// TODO: Remove this when tonic allows access to bytes without requiring a
