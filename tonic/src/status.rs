@@ -759,6 +759,9 @@ impl fmt::Display for Status {
         if let Some(source) = self.source() {
             write!(f, ", source: {source:?}")?;
         }
+        if let Some(source) = self.source() {
+            write!(f, ", source: {source:?}")?;
+        }
         Ok(())
     }
 }
