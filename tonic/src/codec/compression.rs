@@ -4,7 +4,7 @@ use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::{GzDecoder, GzEncoder};
 #[cfg(feature = "deflate")]
 use flate2::read::{ZlibDecoder, ZlibEncoder};
-use std::fmt;
+use std::{borrow::Cow, fmt};
 #[cfg(feature = "zstd")]
 use zstd::stream::read::{Decoder, Encoder};
 
@@ -151,19 +151,13 @@ impl CompressionEncoding {
             }
             b"identity" => Ok(None),
             other => {
-                // NOTE: Workaround for lifetime limitation. Resolved at Rust 1.79.
-                // https://blog.rust-lang.org/2024/06/13/Rust-1.79.0.html#extending-automatic-temporary-lifetime-extension
-                let other_debug_string;
+                let other = match std::str::from_utf8(other) {
+                    Ok(s) => Cow::Borrowed(s),
+                    Err(_) => Cow::Owned(format!("{other:?}")),
+                };
 
                 let mut status = Status::unimplemented(format!(
-                    "Content is compressed with `{}` which isn't supported",
-                    match std::str::from_utf8(other) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            other_debug_string = format!("{other:?}");
-                            &other_debug_string
-                        }
-                    }
+                    "Content is compressed with `{other}` which isn't supported"
                 ));
 
                 let header_value = enabled_encodings
@@ -297,6 +291,7 @@ pub(crate) fn decompress(
     Ok(())
 }
 
+/// Controls compression behavior for individual messages within a stream.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum SingleMessageCompressionOverride {
     /// Inherit whatever compression is already configured. If the stream is compressed this

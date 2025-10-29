@@ -12,7 +12,8 @@
 use std::marker::PhantomData;
 
 use prost::Message;
-use tonic::codec::{BufferSettings, Codec, ProstCodec};
+use tonic::codec::{BufferSettings, Codec};
+use tonic_prost::ProstCodec;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SmallBufferCodec<T, U>(PhantomData<(T, U)>);

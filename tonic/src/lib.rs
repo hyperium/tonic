@@ -32,7 +32,10 @@
 //!   [`rustls-native-certs`] crate. Not enabled by default.
 //! - `tls-webpki-roots`: Add the standard trust roots from the [`webpki-roots`] crate to
 //!   `rustls`-based gRPC clients. Not enabled by default.
-//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation. Enabled by default.
+//! - `tls-connect-info`: Adds additional implementations of [`Connected`]
+//!   on common TLS connectors. Not enabled by default, unless any of the other `tls-*`
+//!   features are enabled. This feature is useful for when trying to use a custom
+//!   TLS connector with `connect_with_connector` without enabling any `tls-*` features.
 //! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
 //!   Not enabled by default.
 //! - `deflate`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
@@ -70,15 +73,16 @@
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
 //! [`tokio`]: https://docs.rs/tokio
-//! [`prost`]: https://docs.rs/prost
 //! [`hyper`]: https://docs.rs/hyper
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
 //! [`ring`]: https://docs.rs/ring
+//! [`aws-lc-rs`]: https://docs.rs/aws-lc-rs
 //! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
 //! [`Server`]: transport/struct.Server.html
+//! [`Connected`]: transport/server/trait.Connected.html
 //! [`rustls`]: https://docs.rs/rustls
 //! [`client`]: client/index.html
 //! [`transport`]: transport/index.html

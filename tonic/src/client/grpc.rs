@@ -1,5 +1,5 @@
-use crate::codec::compression::{CompressionEncoding, EnabledCompressionEncodings};
 use crate::codec::EncodeBody;
+use crate::codec::{CompressionEncoding, EnabledCompressionEncodings};
 use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
     body::Body,
@@ -181,7 +181,7 @@ impl<T> Grpc<T> {
     ///     .await
     ///     .unwrap();
     ///
-    /// // Set the limit to 2MB, Defaults to 4MB.
+    /// // Set the limit to 2MB, Defaults to `usize::MAX`.
     /// let limit = 2 * 1024 * 1024;
     /// let client = TestClient::new(channel).max_encoding_message_size(limit);
     /// # };

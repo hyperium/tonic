@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 # Script which automates publishing a crates.io release of the prost crates.
 
@@ -15,6 +15,8 @@ DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 CRATES=( \
   "tonic" \
   "tonic-build" \
+  "tonic-prost" \
+  "tonic-prost-build" \
   "tonic-types" \
   "tonic-reflection" \
   "tonic-health" \

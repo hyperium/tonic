@@ -11,35 +11,187 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  RUSTFLAGS: "-D warnings"
+permissions:
+  contents: read
 
 jobs:
 
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
       with:
         components: rustfmt
     - run: cargo fmt --all --check
 
+  build-protoc-plugin:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest, windows-latest]
+    outputs:
+      cache-hit: ${{ steps.cache-plugin.outputs.cache-hit }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Cache protoc and plugin
+        id: cache-plugin
+        uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/protoc-plugin
+          # The key changes only when plugin source files or CMake files change
+          key: ${{ runner.os }}-protoc-plugin-cmake-v4-${{ hashFiles('protoc-gen-rust-grpc/src/**', 'protoc-gen-rust-grpc/CMakeLists.txt', 'protoc-gen-rust-grpc/cmake/**') }}
+      - name: Install CMake
+        if: steps.cache-plugin.outputs.cache-hit != 'true'
+        uses: lukka/get-cmake@latest
+        with:
+          cmakeVersion: "~3.28.0"
+      # Building the protoc plugin from scratch takes 6–14 minutes, depending on
+      # the OS. This delays the execution of workflows that use the plugin in
+      # build.rs files. We try to avoid rebuilding the plugin if it hasn't
+      # changed.
+      - name: Build protoc plugin
+        if: steps.cache-plugin.outputs.cache-hit != 'true'
+        working-directory: ./protoc-gen-rust-grpc
+        shell: bash
+        run: |
+          set -e
+          # Create build directory
+          mkdir -p build
+          cd build
+
+          # Configure with CMake
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DPROTOBUF_VERSION=32.0
+
+          # Build with limited parallelism to avoid OOM
+          cmake --build . --parallel 2
+
+          # The target path needs to match the cache config.
+          TARGET_PATH="${{ runner.temp }}/protoc-plugin"
+          mkdir -p "${TARGET_PATH}"
+
+          # Copy both protoc and the plugin
+          # First, find and copy protoc
+          PROTOC_FOUND=false
+          for protoc_path in "bin/protoc" "bin/protoc.exe" "bin/Release/protoc.exe" "bin/Debug/protoc.exe" "_deps/protobuf-build/protoc" "_deps/protobuf-build/protoc.exe" "_deps/protobuf-build/Release/protoc.exe" "_deps/protobuf-build/Debug/protoc.exe"; do
+            if [ -f "$protoc_path" ]; then
+              echo "Found protoc at: $protoc_path"
+              # Copy with explicit name to ensure it's called 'protoc' or 'protoc.exe'
+              if [[ "$protoc_path" == *.exe ]]; then
+                cp "$protoc_path" "${TARGET_PATH}/protoc.exe"
+                echo "Copied to: ${TARGET_PATH}/protoc.exe"
+              else
+                cp "$protoc_path" "${TARGET_PATH}/protoc"
+                chmod +x "${TARGET_PATH}/protoc"
+                echo "Copied to: ${TARGET_PATH}/protoc"
+              fi
+              PROTOC_FOUND=true
+              break
+            fi
+          done
+
+          if [ "$PROTOC_FOUND" = "false" ]; then
+            echo "Error: protoc not found in expected locations"
+            echo "Searching for protoc in build directory:"
+            find . -name "protoc" -o -name "protoc.exe" | head -20
+            exit 1
+          fi
+
+          # Copy protoc with its standard installation structure
+          echo "Setting up protoc installation..."
+
+          # protoc expects to find includes relative to its binary location
+          # Standard structure: bin/protoc and include/google/protobuf/*.proto
+
+          # First check if CMake created an install directory
+          if [ -d "install" ] && [ -f "install/bin/protoc" -o -f "install/bin/protoc.exe" ]; then
+            echo "Found CMake install directory"
+            cp -r install/* "${TARGET_PATH}/"
+          else
+            # Manual setup if no install directory
+            echo "Creating manual protoc installation structure..."
+
+            # The protoc binary should already be copied to TARGET_PATH
+            # Now find and copy the include files to the correct relative location
+            mkdir -p "${TARGET_PATH}/include"
+
+            # Find the protobuf include files
+            INCLUDE_FOUND=false
+            for include_path in "_deps/protobuf-src/src" "_deps/protobuf-build/include" "include"; do
+              if [ -d "$include_path/google/protobuf" ] && [ -f "$include_path/google/protobuf/descriptor.proto" ]; then
+                echo "Found protobuf includes at: $include_path"
+                cp -r "$include_path/google" "${TARGET_PATH}/include/"
+                INCLUDE_FOUND=true
+                break
+              fi
+            done
+
+            if [ "$INCLUDE_FOUND" = "false" ]; then
+              echo "Warning: Could not find protobuf include files"
+              echo "Searching for descriptor.proto:"
+              find . -name "descriptor.proto" -type f | grep -v "test" | head -10
+            fi
+          fi
+
+          # Then copy the plugin (handle different output locations)
+          if [ -f "bin/protoc-gen-rust-grpc" ]; then
+            cp bin/protoc-gen-rust-grpc "${TARGET_PATH}/"
+          elif [ -f "bin/protoc-gen-rust-grpc.exe" ]; then
+            cp bin/protoc-gen-rust-grpc.exe "${TARGET_PATH}/"
+          elif [ -f "bin/Release/protoc-gen-rust-grpc.exe" ]; then
+            # Windows Release build
+            cp bin/Release/protoc-gen-rust-grpc.exe "${TARGET_PATH}/"
+          elif [ -f "bin/Debug/protoc-gen-rust-grpc.exe" ]; then
+            # Windows Debug build (shouldn't happen with Release config, but just in case)
+            cp bin/Debug/protoc-gen-rust-grpc.exe "${TARGET_PATH}/"
+          else
+            echo "Error: protoc-gen-rust-grpc not found"
+            echo "Looking for binary in common locations..."
+            find . -name "protoc-gen-rust-grpc*" -type f 2>/dev/null | head -10
+            exit 1
+          fi
+
   clippy:
     runs-on: ubuntu-latest
+    needs: build-protoc-plugin
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
       with:
         components: clippy
-    - uses: taiki-e/install-action@protoc
+    - name: Restore protoc and plugin from cache
+      id: cache-plugin
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/protoc-plugin
+        key: ${{ runner.os }}-protoc-plugin-cmake-v4-${{ hashFiles('protoc-gen-rust-grpc/src/**', 'protoc-gen-rust-grpc/CMakeLists.txt', 'protoc-gen-rust-grpc/cmake/**') }}
+    - name: Add protoc and plugin to PATH
+      shell: bash
+      run: |
+        # Use forward slashes for all paths in bash, even on Windows
+        PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
+        PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
+
+        echo "${PROTOC_DIR}" >> $GITHUB_PATH
+
+        # Also set PROTOC for build scripts
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
+        else
+          echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
+        fi
+
+        # Set the protoc include path only if it exists
+        if [ -d "${PROTOC_DIR}/include" ]; then
+          echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
+        fi
     - uses: Swatinem/rust-cache@v2
     - run: cargo clippy --workspace --all-features --all-targets
 
   codegen:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - uses: Swatinem/rust-cache@v2
     - run: cargo run --package codegen
@@ -47,33 +199,88 @@ jobs:
 
   udeps:
     runs-on: ubuntu-latest
+    needs: build-protoc-plugin
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: dtolnay/rust-toolchain@master
       with:
         toolchain: nightly-2025-03-27
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
-    - uses: taiki-e/install-action@protoc
+    - name: Restore protoc and plugin from cache
+      id: cache-plugin
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/protoc-plugin
+        key: ${{ runner.os }}-protoc-plugin-cmake-v4-${{ hashFiles('protoc-gen-rust-grpc/src/**', 'protoc-gen-rust-grpc/CMakeLists.txt', 'protoc-gen-rust-grpc/cmake/**') }}
+    - name: Add protoc and plugin to PATH
+      shell: bash
+      run: |
+        # Use forward slashes for all paths in bash, even on Windows
+        PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
+        PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
+
+        echo "${PROTOC_DIR}" >> $GITHUB_PATH
+
+        # Also set PROTOC for build scripts
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
+        else
+          echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
+        fi
+
+        # Set the protoc include path only if it exists
+        if [ -d "${PROTOC_DIR}/include" ]; then
+          echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
+        fi
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring --each-feature
+    - run: cargo hack udeps --workspace --exclude-features=_tls-any,tls,tls-aws-lc,tls-ring,tls-connect-info --each-feature
     - run: cargo udeps --package tonic --features tls-ring,transport
     - run: cargo udeps --package tonic --features tls-ring,server
     - run: cargo udeps --package tonic --features tls-ring,channel
     - run: cargo udeps --package tonic --features tls-aws-lc,transport
     - run: cargo udeps --package tonic --features tls-aws-lc,server
     - run: cargo udeps --package tonic --features tls-aws-lc,channel
+    - run: cargo udeps --package tonic --features tls-connect-info
 
   check:
     runs-on: ${{ matrix.os }}
+    needs: build-protoc-plugin
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
+    env:
+      RUSTFLAGS: "-D warnings"
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
-    - uses: taiki-e/install-action@protoc
+    - name: Restore protoc and plugin from cache
+      id: cache-plugin
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/protoc-plugin
+        key: ${{ runner.os }}-protoc-plugin-cmake-v4-${{ hashFiles('protoc-gen-rust-grpc/src/**', 'protoc-gen-rust-grpc/CMakeLists.txt', 'protoc-gen-rust-grpc/cmake/**') }}
+    - name: Add protoc and plugin to PATH
+      shell: bash
+      run: |
+        # Use forward slashes for all paths in bash, even on Windows
+        PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
+        PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
+
+        echo "${PROTOC_DIR}" >> $GITHUB_PATH
+
+        # Also set PROTOC for build scripts
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
+        else
+          echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
+        fi
+
+        # Set the protoc include path only if it exists
+        if [ -d "${PROTOC_DIR}/include" ]; then
+          echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
+        fi
     - uses: Swatinem/rust-cache@v2
     - name: Check features
       run: cargo hack check --workspace --no-private --each-feature --no-dev-deps
@@ -85,7 +292,7 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - name: Resolve MSRV aware dependencies
       run: cargo update
@@ -99,20 +306,53 @@ jobs:
         rust-version: ${{ steps.msrv.outputs.version }}
     - uses: taiki-e/install-action@cargo-no-dev-deps
     - uses: Swatinem/rust-cache@v2
-    - run: cargo no-dev-deps --no-private check --all-features
-    - run: cargo no-dev-deps --no-private doc --no-deps --all-features
+    # we exlude crates that do not use rust-version = { workspace = true }
+    - run: cargo no-dev-deps --no-private check --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
+    - run: cargo no-dev-deps --no-private doc --no-deps --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
       env:
         RUSTDOCFLAGS: "-D warnings"
 
   test:
     runs-on: ${{ matrix.os }}
+    needs: build-protoc-plugin
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
-    - uses: taiki-e/install-action@protoc
+    - name: Restore protoc and plugin from cache
+      id: cache-plugin
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/protoc-plugin
+        key: ${{ runner.os }}-protoc-plugin-cmake-v4-${{ hashFiles('protoc-gen-rust-grpc/src/**', 'protoc-gen-rust-grpc/CMakeLists.txt', 'protoc-gen-rust-grpc/cmake/**') }}
+    - name: Check cache status
+      if: steps.cache-plugin.outputs.cache-hit != 'true'
+      run: |
+        echo "ERROR: Cache miss! The protoc plugin was not found in cache."
+        echo "This means the build-protoc-plugin job either failed or didn't run."
+        exit 1
+    - name: Add protoc and plugin to PATH
+      shell: bash
+      run: |
+        # Use forward slashes for all paths in bash, even on Windows
+        PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
+        PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
+
+        echo "${PROTOC_DIR}" >> $GITHUB_PATH
+
+        # Also set PROTOC for build scripts
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
+        else
+          echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
+        fi
+
+        # Set the protoc include path only if it exists
+        if [ -d "${PROTOC_DIR}/include" ]; then
+          echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
+        fi
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-nextest
     - uses: Swatinem/rust-cache@v2
@@ -123,7 +363,7 @@ jobs:
   doc-test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
@@ -132,13 +372,39 @@ jobs:
   interop:
     name: Interop Tests
     runs-on: ${{ matrix.os }}
+    needs: build-protoc-plugin
     strategy:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: hecrj/setup-rust-action@v2
-    - uses: taiki-e/install-action@protoc
+    - name: Restore protoc and plugin from cache
+      id: cache-plugin
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/protoc-plugin
+        key: ${{ runner.os }}-protoc-plugin-cmake-v4-${{ hashFiles('protoc-gen-rust-grpc/src/**', 'protoc-gen-rust-grpc/CMakeLists.txt', 'protoc-gen-rust-grpc/cmake/**') }}
+    - name: Add protoc and plugin to PATH
+      shell: bash
+      run: |
+        # Use forward slashes for all paths in bash, even on Windows
+        PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
+        PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
+
+        echo "${PROTOC_DIR}" >> $GITHUB_PATH
+
+        # Also set PROTOC for build scripts
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
+        else
+          echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
+        fi
+
+        # Set the protoc include path only if it exists
+        if [ -d "${PROTOC_DIR}/include" ]; then
+          echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
+        fi
     - uses: Swatinem/rust-cache@v2
     - name: Run interop tests
       run: ./interop/test.sh
@@ -150,7 +416,7 @@ jobs:
   semver:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: obi1kenobi/cargo-semver-checks-action@v2
       with:
         feature-group: all-features
@@ -158,14 +424,16 @@ jobs:
   external-types:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v5
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2024-06-30
+        toolchain: nightly-2025-08-06
     - name: Install cargo-check-external-types
       uses: taiki-e/cache-cargo-install-action@v2
       with:
-        tool: cargo-check-external-types@0.1.13
+        tool: cargo-check-external-types@0.3.0
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
-    - run: cargo hack --no-private check-external-types
+    - run: cargo hack --no-private check-external-types --all-features
+      env:
+        RUSTFLAGS: "-D warnings"

@@ -10,9 +10,9 @@ name = "wellknown-compiled"
 doctest = false
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 tonic = {path = "../../tonic"}
+tonic-prost = {path = "../../tonic-prost"}
 
 [build-dependencies]
-prost-build = "0.13"
-tonic-build = {path = "../../tonic-build"}
+tonic-prost-build = {path = "../../tonic-prost-build"}

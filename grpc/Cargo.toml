@@ -3,9 +3,62 @@ name = "grpc"
 version = "0.9.0-alpha.1"
 edition = "2021"
 authors = ["gRPC Authors"]
-license = "Apache-2.0"
+license = "MIT"
+rust-version = "1.86"
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "tonic::*",
+    "futures_core::stream::Stream",
+    "tokio::sync::oneshot::Sender",
+]
+
+[features]
+default = ["dns", "_runtime-tokio"]
+dns = ["dep:hickory-resolver", "_runtime-tokio"]
+# The following feature is used to ensure all modules use the runtime
+# abstraction instead of using tokio directly.
+# Using tower/buffer enables tokio's rt feature even though it's possible to
+# create Buffers with a user provided executor.
+_runtime-tokio = [
+    "tokio/rt",
+    "tokio/net",
+    "tokio/time",
+    "dep:socket2",
+    "dep:tower",
+]
 
 [dependencies]
+bytes = "1.10.1"
+hickory-resolver = { version = "0.25.1", optional = true }
+http = "1.1.0"
+http-body = "1.0.1"
+hyper = { version = "1.6.0", features = ["client", "http2"] }
+parking_lot = "0.12.4"
+pin-project-lite = "0.2.16"
+rand = "0.9"
+serde = { version = "1.0.219", features = ["derive"] }
+serde_json = "1.0.140"
+socket2 = { version = "0.6", optional = true }
+tokio = { version = "1.37.0", features = ["sync", "macros"] }
+tokio-stream = { version = "0.1.17", default-features = false }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+    "codegen",
+] }
+tower = { version = "0.5.2", features = [
+    "limit",
+    "util",
+    "buffer",
+], optional = true }
+tower-service = "0.3.3"
 url = "2.5.0"
-tokio = { version = "1.37.0", features = ["sync"] }
-tonic = { version = "0.13.0", path = "../tonic", default-features = false, features = ["codegen"] }
+
+[dev-dependencies]
+async-stream = "0.3.6"
+hickory-server = "0.25.2"
+prost = "0.14.0"
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+    "server",
+    "router",
+] }
+tonic-prost = { version = "0.14.0", path = "../tonic-prost" }

@@ -1,15 +1,11 @@
 //! Generic encoding and decoding.
 //!
-//! This module contains the generic `Codec`, `Encoder` and `Decoder` traits
-//! and a protobuf codec based on prost.
+//! This module contains the generic `Codec`, `Encoder` and `Decoder` traits.
 
 mod buffer;
 pub(crate) mod compression;
 mod decode;
 mod encode;
-#[cfg(feature = "prost")]
-mod prost;
-
 use crate::Status;
 use std::io;
 
@@ -17,8 +13,11 @@ pub use self::buffer::{DecodeBuf, EncodeBuf};
 pub use self::compression::{CompressionEncoding, EnabledCompressionEncodings};
 pub use self::decode::Streaming;
 pub use self::encode::EncodeBody;
-#[cfg(feature = "prost")]
-pub use self::prost::ProstCodec;
+
+// Doc hidden since this is used in a test in another crate, we can expose this publically later
+// if we need it.
+#[doc(hidden)]
+pub use self::compression::SingleMessageCompressionOverride;
 
 /// Unless overridden, this is the buffer size used for encoding requests.
 /// This is spent per-rpc, so you may wish to adjust it. The default is
@@ -89,8 +88,10 @@ impl Default for BufferSettings {
     }
 }
 
-// 5 bytes
-const HEADER_SIZE: usize =
+// Doc hidden because its used in tests in another crate but not part of the
+// public api.
+#[doc(hidden)]
+pub const HEADER_SIZE: usize =
     // compression flag
     std::mem::size_of::<u8>() +
     // data length
