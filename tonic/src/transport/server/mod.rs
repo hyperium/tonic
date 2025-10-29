@@ -318,7 +318,7 @@ impl<L> Server<L> {
 
     /// Configures the maximum number of local reset streams allowed before a GOAWAY will be sent.
     ///
-    /// This will default to whatever the default in hyper is. As of v1.7.0, it is 1024.
+    /// This will default to whatever the default in hyper is.
     #[must_use]
     pub fn http2_max_local_error_reset_streams(self, max: Option<usize>) -> Self {
         Server {
