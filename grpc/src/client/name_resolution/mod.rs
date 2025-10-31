@@ -39,7 +39,7 @@ use std::{
 };
 
 mod backoff;
-mod dns;
+pub mod dns;
 mod registry;
 pub use registry::global_registry;
 use url::Url;

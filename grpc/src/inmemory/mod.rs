@@ -2,6 +2,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::{collections::HashMap, ops::Add};
 
+use crate::service::MessageAllocator;
 use crate::{
     client::{
         name_resolution::{
@@ -66,7 +67,12 @@ impl Drop for Listener {
 
 #[async_trait]
 impl Service for Arc<Listener> {
-    async fn call(&self, method: String, request: Request) -> Response {
+    async fn call(
+        &self,
+        method: String,
+        request: Request,
+        _: Box<dyn MessageAllocator>,
+    ) -> Response {
         // 1. unblock accept, giving it a func back to me
         // 2. return what that func had
         let (s, r) = oneshot::channel();
