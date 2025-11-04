@@ -1,16 +1,12 @@
 use super::{
     channel::{InternalChannelController, WorkQueueTx},
-    load_balancing::{self, ExternalSubchannel, Picker, Subchannel, SubchannelState},
+    load_balancing::{ExternalSubchannel, SubchannelState},
     name_resolution::Address,
-    transport::{self, Transport, TransportRegistry},
+    transport::Transport,
     ConnectivityState,
 };
 use crate::{
-    client::{
-        channel::WorkQueueItem,
-        subchannel,
-        transport::{ConnectedTransport, TransportOptions},
-    },
+    client::{channel::WorkQueueItem, transport::TransportOptions},
     rt::{BoxedTaskHandle, Runtime},
     service::{Request, Response, Service},
 };
@@ -20,10 +16,9 @@ use std::{
     collections::BTreeMap,
     error::Error,
     fmt::{Debug, Display},
-    ops::Sub,
     sync::{Arc, Mutex, RwLock, Weak},
 };
-use tokio::sync::{mpsc, oneshot, watch, Notify};
+use tokio::sync::{mpsc, oneshot};
 use tonic::async_trait;
 
 type SharedService = Arc<dyn Service>;

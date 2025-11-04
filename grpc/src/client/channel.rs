@@ -25,21 +25,17 @@
 use core::panic;
 use std::{
     any::Any,
-    collections::HashMap,
     error::Error,
-    fmt::Display,
     mem,
-    ops::Add,
     str::FromStr,
-    sync::{Arc, Mutex, Weak},
+    sync::{Arc, Mutex},
     time::{Duration, Instant},
     vec,
 };
 
-use tokio::sync::{mpsc, oneshot, watch, Notify};
+use tokio::sync::{mpsc, watch, Notify};
 
 use serde_json::json;
-use tonic::async_trait;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
 use crate::attributes::Attributes;
@@ -48,24 +44,19 @@ use crate::service::{Request, Response, Service};
 use crate::{client::ConnectivityState, rt::Runtime};
 use crate::{credentials::Credentials, rt::default_runtime};
 
+use super::name_resolution::{self, global_registry, Address, ResolverUpdate};
 use super::service_config::ServiceConfig;
 use super::transport::{TransportRegistry, GLOBAL_TRANSPORT_REGISTRY};
 use super::{
     load_balancing::{
-        self, pick_first, ExternalSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions,
-        LbPolicyRegistry, LbState, ParsedJsonLbConfig, PickResult, Picker, Subchannel,
-        SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
+        self, pick_first, ExternalSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
+        ParsedJsonLbConfig, PickResult, Picker, Subchannel, SubchannelState, WorkScheduler,
+        GLOBAL_LB_REGISTRY,
     },
     subchannel::{
         InternalSubchannel, InternalSubchannelPool, NopBackoff, SubchannelKey,
         SubchannelStateWatcher,
     },
-};
-use super::{
-    name_resolution::{
-        self, global_registry, Address, ResolverBuilder, ResolverOptions, ResolverUpdate,
-    },
-    subchannel,
 };
 
 #[non_exhaustive]

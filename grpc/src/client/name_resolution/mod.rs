@@ -33,7 +33,7 @@ use super::service_config::ServiceConfig;
 use crate::{attributes::Attributes, byte_str::ByteStr, rt::Runtime};
 use std::{
     fmt::{Display, Formatter},
-    hash::{Hash, Hasher},
+    hash::Hash,
     str::FromStr,
     sync::Arc,
 };
