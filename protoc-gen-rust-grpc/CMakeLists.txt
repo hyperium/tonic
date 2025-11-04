@@ -6,7 +6,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
 # Options
-set(PROTOBUF_VERSION "32.0" CACHE STRING "Version of protobuf to download")
+set(PROTOBUF_VERSION "33.0" CACHE STRING "Version of protobuf to download")
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)
 
 # Add cmake directory to module path
