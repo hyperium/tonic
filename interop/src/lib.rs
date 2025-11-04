@@ -13,8 +13,6 @@ pub mod pb {
 }
 
 pub mod grpc_pb {
-    // TODO: Remove this lint when protobuf fixes the issue on their end
-    // Ref: https://github.com/hyperium/tonic/issues/2381
     grpc::include_proto!("test");
 }
 
