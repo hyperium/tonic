@@ -61,7 +61,7 @@ jobs:
           cd build
 
           # Configure with CMake
-          cmake .. -DCMAKE_BUILD_TYPE=Release -DPROTOBUF_VERSION=32.0
+          cmake .. -DCMAKE_BUILD_TYPE=Release -DPROTOBUF_VERSION=33.0
 
           # Build with limited parallelism to avoid OOM
           cmake --build . --parallel 2
