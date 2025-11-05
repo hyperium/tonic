@@ -75,7 +75,7 @@ pub struct LbPolicyOptions {
 /// Used to asynchronously request a call into the LbPolicy's work method if
 /// the LbPolicy needs to provide an update without waiting for an update
 /// from the channel first.
-pub trait WorkScheduler: Send + Sync {
+pub trait WorkScheduler: Send + Sync + Debug {
     // Schedules a call into the LbPolicy's work method.  If there is already a
     // pending work call that has not yet started, this may not schedule another
     // call.
@@ -123,7 +123,7 @@ impl ParsedJsonLbConfig {
 
 /// An LB policy factory that produces LbPolicy instances used by the channel
 /// to manage connections and pick connections for RPCs.
-pub(crate) trait LbPolicyBuilder: Send + Sync {
+pub(crate) trait LbPolicyBuilder: Send + Sync + Debug {
     /// Builds and returns a new LB policy instance.
     ///
     /// Note that build must not fail.  Any optional configuration is delivered
@@ -153,13 +153,13 @@ pub(crate) trait LbPolicyBuilder: Send + Sync {
 /// LB policies are responsible for creating connections (modeled as
 /// Subchannels) and producing Picker instances for picking connections for
 /// RPCs.
-pub trait LbPolicy: Send {
+pub trait LbPolicy: Send + Debug {
     /// Called by the channel when the name resolver produces a new set of
     /// resolved addresses or a new service config.
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>>;
 
@@ -246,7 +246,7 @@ impl Display for SubchannelState {
 ///
 /// If the ConnectivityState is TransientFailure, the Picker should return an
 /// Err with an error that describes why connections are failing.
-pub trait Picker: Send + Sync {
+pub trait Picker: Send + Sync + Debug {
     /// Picks a connection to use for the request.
     ///
     /// This function should not block.  If the Picker needs to do blocking or
@@ -256,6 +256,7 @@ pub trait Picker: Send + Sync {
     fn pick(&self, request: &Request) -> PickResult;
 }
 
+#[derive(Debug)]
 pub enum PickResult {
     /// Indicates the Subchannel in the Pick should be used for the request.
     Pick(Pick),
@@ -317,7 +318,7 @@ impl Display for PickResult {
     }
 }
 /// Data provided by the LB policy.
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct LbState {
     pub connectivity_state: super::ConnectivityState,
     pub picker: Arc<dyn Picker>,
@@ -345,6 +346,16 @@ pub struct Pick {
     pub metadata: MetadataMap,
     // Callback to be invoked once the RPC completes.
     pub on_complete: Option<CompletionCallback>,
+}
+
+impl Debug for Pick {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Pick")
+            .field("subchannel", &self.subchannel)
+            .field("metadata", &self.metadata)
+            .field("on_complete", &format_args!("{:p}", &self.on_complete))
+            .finish()
+    }
 }
 
 pub trait DynHash {
@@ -438,6 +449,7 @@ impl Display for dyn Subchannel {
     }
 }
 
+#[derive(Debug)]
 struct WeakSubchannel(Weak<dyn Subchannel>);
 
 impl From<Arc<dyn Subchannel>> for WeakSubchannel {
@@ -580,6 +592,7 @@ impl<T: ForwardingSubchannel> private::Sealed for T {}
 
 /// QueuingPicker always returns Queue.  LB policies that are not actively
 /// Connecting should not use this picker.
+#[derive(Debug)]
 pub struct QueuingPicker {}
 
 impl Picker for QueuingPicker {
@@ -588,6 +601,7 @@ impl Picker for QueuingPicker {
     }
 }
 
+#[derive(Debug)]
 pub struct Failing {
     pub error: String,
 }

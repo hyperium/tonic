@@ -23,6 +23,7 @@ use super::{
 
 pub static POLICY_NAME: &str = "pick_first";
 
+#[derive(Debug)]
 struct Builder {}
 
 impl LbPolicyBuilder for Builder {
@@ -44,6 +45,7 @@ pub fn reg() {
     super::GLOBAL_LB_REGISTRY.add_builder(Builder {})
 }
 
+#[derive(Debug)]
 struct PickFirstPolicy {
     work_scheduler: Arc<dyn WorkScheduler>,
     subchannel: Option<Arc<dyn Subchannel>>,
@@ -55,7 +57,7 @@ impl LbPolicy for PickFirstPolicy {
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut addresses = update
@@ -108,6 +110,7 @@ impl LbPolicy for PickFirstPolicy {
     }
 }
 
+#[derive(Debug)]
 struct OneSubchannelPicker {
     sc: Arc<dyn Subchannel>,
 }
@@ -116,8 +119,9 @@ impl Picker for OneSubchannelPicker {
     fn pick(&self, request: &Request) -> PickResult {
         PickResult::Pick(Pick {
             subchannel: self.sc.clone(),
-            on_complete: None,
+            // on_complete: None,
             metadata: MetadataMap::new(),
+            on_complete: None,
         })
     }
 }

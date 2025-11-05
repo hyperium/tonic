@@ -252,7 +252,7 @@ pub async fn invalid_target() {
         .contains(&target.to_string()));
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 struct FakeDns {
     latency: Duration,
     lookup_result: Result<Vec<std::net::IpAddr>, String>,
@@ -270,6 +270,7 @@ impl rt::DnsResolver for FakeDns {
     }
 }
 
+#[derive(Debug)]
 struct FakeRuntime {
     inner: TokioRuntime,
     dns: FakeDns,

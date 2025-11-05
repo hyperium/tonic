@@ -23,6 +23,7 @@
  */
 
 use ::tokio::io::{AsyncRead, AsyncWrite};
+use std::fmt::Debug;
 use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 
 pub(crate) mod hyper_wrapper;
@@ -39,7 +40,7 @@ pub(crate) type BoxedTaskHandle = Box<dyn TaskHandle>;
 /// time-based operations such as sleeping. It provides a uniform interface
 /// that can be implemented for various async runtimes, enabling pluggable
 /// and testable infrastructure.
-pub(super) trait Runtime: Send + Sync {
+pub(super) trait Runtime: Send + Sync + Debug {
     /// Spawns the given asynchronous task to run in the background.
     fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle;
 
@@ -98,7 +99,7 @@ pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
 /// # Panics
 ///
 /// Panics if any of its functions are called.
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub(crate) struct NoOpRuntime {}
 
 impl Runtime for NoOpRuntime {

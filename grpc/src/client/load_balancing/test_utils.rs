@@ -149,6 +149,7 @@ impl ChannelController for TestChannelController {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TestWorkScheduler {
     pub(crate) tx_events: mpsc::UnboundedSender<TestEvent>,
 }
@@ -164,7 +165,7 @@ type ResolverUpdateFn = Arc<
     dyn Fn(
             &mut StubPolicyData,
             ResolverUpdate,
-            Option<&LbConfig>,
+            Option<LbConfig>,
             &mut dyn ChannelController,
         ) -> Result<(), Box<dyn Error + Send + Sync>>
         + Send
@@ -186,7 +187,14 @@ pub struct StubPolicyFuncs {
     pub subchannel_update: Option<SubchannelUpdateFn>,
 }
 
+impl Debug for StubPolicyFuncs {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "stub funcs")
+    }
+}
+
 /// Data holds test data that will be passed all to functions in PolicyFuncs
+#[derive(Debug)]
 pub struct StubPolicyData {
     pub test_data: Option<Box<dyn Any + Send + Sync>>,
 }
@@ -199,6 +207,7 @@ impl StubPolicyData {
 }
 
 /// The stub `LbPolicy` that calls the provided functions.
+#[derive(Debug)]
 pub struct StubPolicy {
     funcs: StubPolicyFuncs,
     data: StubPolicyData,
@@ -208,7 +217,7 @@ impl LbPolicy for StubPolicy {
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(f) = &mut self.funcs.resolver_update {
@@ -238,6 +247,7 @@ impl LbPolicy for StubPolicy {
 }
 
 /// StubPolicyBuilder builds a StubLbPolicy.
+#[derive(Debug)]
 pub struct StubPolicyBuilder {
     name: &'static str,
     funcs: StubPolicyFuncs,
