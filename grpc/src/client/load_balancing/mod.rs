@@ -28,6 +28,7 @@ use std::{
     error::Error,
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
+    ptr::addr_eq,
     sync::{Arc, Mutex, Weak},
 };
 use tonic::{metadata::MetadataMap, Status};
@@ -449,21 +450,13 @@ impl WeakSubchannel {
 
 impl Hash for WeakSubchannel {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        if let Some(strong) = self.upgrade() {
-            return strong.dyn_hash(&mut Box::new(state as &mut dyn Hasher));
-        }
-        panic!("WeakSubchannel is not valid");
+        (self.0.as_ptr() as *const () as usize).hash(state);
     }
 }
 
 impl PartialEq for WeakSubchannel {
     fn eq(&self, other: &Self) -> bool {
-        if let Some(strong_self) = self.upgrade() {
-            if let Some(strong_other) = other.upgrade() {
-                return strong_self.dyn_eq(&Box::new(&strong_other as &dyn Any));
-            }
-        }
-        false
+        addr_eq(self.0.as_ptr(), other.0.as_ptr())
     }
 }
 
