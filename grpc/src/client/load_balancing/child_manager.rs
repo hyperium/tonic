@@ -88,8 +88,8 @@ pub trait ResolverUpdateSharder<T>: Send {
     /// when its resolver_update method is called.
     fn shard_update(
         &mut self,
-        resolver_update: ResolverUpdate,
-        update: Option<LbConfig>,
+        update: ResolverUpdate,
+        config: Option<LbConfig>,
     ) -> Result<impl Iterator<Item = ChildUpdate<T>>, Box<dyn Error + Send + Sync>>;
 }
 
@@ -111,7 +111,7 @@ where
     }
 
     /// Returns data for all current children.
-    pub fn children(&mut self) -> impl Iterator<Item = &Child<T>> {
+    pub fn children(&self) -> impl Iterator<Item = &Child<T>> {
         self.children.iter()
     }
 
@@ -121,7 +121,7 @@ where
     /// Otherwise, if any child is CONNECTING, then report CONNECTING.
     /// Otherwise, if any child is IDLE, then report IDLE.
     /// Report TRANSIENT FAILURE if no conditions above apply.
-    pub fn aggregate_states(&mut self) -> ConnectivityState {
+    pub fn aggregate_states(&self) -> ConnectivityState {
         let mut is_connecting = false;
         let mut is_idle = false;
 
