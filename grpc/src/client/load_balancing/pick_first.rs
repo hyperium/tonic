@@ -57,7 +57,7 @@ impl LbPolicy for PickFirstPolicy {
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<LbConfig>,
+        config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut addresses = update

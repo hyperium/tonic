@@ -165,7 +165,7 @@ type ResolverUpdateFn = Arc<
     dyn Fn(
             &mut StubPolicyData,
             ResolverUpdate,
-            Option<LbConfig>,
+            Option<&LbConfig>,
             &mut dyn ChannelController,
         ) -> Result<(), Box<dyn Error + Send + Sync>>
         + Send
@@ -217,7 +217,7 @@ impl LbPolicy for StubPolicy {
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<LbConfig>,
+        config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         if let Some(f) = &mut self.funcs.resolver_update {

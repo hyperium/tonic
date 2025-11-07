@@ -89,7 +89,7 @@ pub trait ResolverUpdateSharder<T>: Send {
     fn shard_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<LbConfig>,
+        config: Option<&LbConfig>,
     ) -> Result<impl Iterator<Item = ChildUpdate<T>>, Box<dyn Error + Send + Sync>>;
 }
 
@@ -195,7 +195,7 @@ where
     fn resolver_update(
         &mut self,
         resolver_update: ResolverUpdate,
-        config: Option<LbConfig>,
+        config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // First determine if the incoming update is valid.
@@ -306,9 +306,11 @@ where
                 continue;
             };
             let mut channel_controller = WrappedController::new(channel_controller);
-            let _ = child
-                .policy
-                .resolver_update(resolver_update, config, &mut channel_controller);
+            let _ = child.policy.resolver_update(
+                resolver_update,
+                config.as_ref(),
+                &mut channel_controller,
+            );
             self.resolve_child_controller(channel_controller, child_idx);
         }
         Ok(())
@@ -444,7 +446,7 @@ mod test {
         fn shard_update(
             &mut self,
             resolver_update: ResolverUpdate,
-            config: Option<LbConfig>,
+            config: Option<&LbConfig>,
         ) -> Result<impl Iterator<Item = ChildUpdate<Endpoint>>, Box<dyn Error + Send + Sync>>
         {
             let mut sharded_endpoints = Vec::new();
@@ -459,7 +461,7 @@ mod test {
                             service_config: resolver_update.service_config.clone(),
                             resolution_note: resolver_update.resolution_note.clone(),
                         },
-                        config.clone(),
+                        config.cloned(),
                     )),
                 };
                 sharded_endpoints.push(child_update);

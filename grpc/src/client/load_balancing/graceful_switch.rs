@@ -38,7 +38,7 @@ impl ResolverUpdateSharder<()> for UpdateSharder {
     fn shard_update(
         &mut self,
         resolver_update: ResolverUpdate,
-        config: Option<LbConfig>, // The config is always produced based on the state stored in the sharder.
+        config: Option<&LbConfig>, // The config is always produced based on the state stored in the sharder.
     ) -> Result<impl Iterator<Item = child_manager::ChildUpdate<()>>, Box<dyn Error + Send + Sync>>
     {
         if config.is_none() {
@@ -110,7 +110,7 @@ impl LbPolicy for GracefulSwitchPolicy {
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<LbConfig>,
+        config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let res = self
@@ -504,7 +504,7 @@ mod test {
             ..Default::default()
         };
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -556,7 +556,7 @@ mod test {
         };
 
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
         // Subchannel creation and ready
@@ -586,7 +586,7 @@ mod test {
         })
         .unwrap();
         graceful_switch
-            .resolver_update(update.clone(), Some(new_parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
 
         // Simulate subchannel creation and ready for pending
@@ -631,7 +631,7 @@ mod test {
             ..Default::default()
         };
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
         let subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
         let mut subchannels = subchannels.into_iter();
@@ -651,7 +651,7 @@ mod test {
         })
         .unwrap();
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config2), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config2), &mut *tcc)
             .unwrap();
     }
 
@@ -692,7 +692,7 @@ mod test {
 
         // Switch to first one (current)
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
         let current_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -709,7 +709,7 @@ mod test {
         })
         .unwrap();
         graceful_switch
-            .resolver_update(second_update.clone(), Some(new_parsed_config), &mut *tcc)
+            .resolver_update(second_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
 
         let second_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -758,7 +758,7 @@ mod test {
 
         // Switch to first one (current)
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
         let current_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -788,7 +788,7 @@ mod test {
         })
         .unwrap();
         graceful_switch
-            .resolver_update(new_update.clone(), Some(new_parsed_config), &mut *tcc)
+            .resolver_update(new_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
 
         let pending_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -848,7 +848,7 @@ mod test {
 
         // Switch to first one (current)
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
         let current_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -878,7 +878,7 @@ mod test {
         .unwrap();
 
         graceful_switch
-            .resolver_update(new_update.clone(), Some(new_parsed_config), &mut *tcc)
+            .resolver_update(new_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
 
         let pending_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -939,7 +939,7 @@ mod test {
             ..Default::default()
         };
         graceful_switch
-            .resolver_update(update.clone(), Some(parsed_config), &mut *tcc)
+            .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
         let current_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
@@ -969,7 +969,7 @@ mod test {
         })
         .unwrap();
         graceful_switch
-            .resolver_update(second_update.clone(), Some(new_parsed_config), &mut *tcc)
+            .resolver_update(second_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
         let pending_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
         let mut pending_subchannels = pending_subchannels.into_iter();
