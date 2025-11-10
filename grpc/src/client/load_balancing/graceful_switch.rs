@@ -115,7 +115,8 @@ impl LbPolicy for GracefulSwitchPolicy {
         let res = self
             .child_manager
             .resolver_update(update, config, channel_controller)?;
-        self.maybe_swap(channel_controller)
+        self.maybe_swap(channel_controller);
+        Ok(())
     }
 
     fn subchannel_update(
@@ -126,17 +127,17 @@ impl LbPolicy for GracefulSwitchPolicy {
     ) {
         self.child_manager
             .subchannel_update(subchannel, state, channel_controller);
-        let _ = self.maybe_swap(channel_controller);
+        self.maybe_swap(channel_controller);
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.work(channel_controller);
-        let _ = self.maybe_swap(channel_controller);
+        self.maybe_swap(channel_controller);
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.exit_idle(channel_controller);
-        let _ = self.maybe_swap(channel_controller);
+        self.maybe_swap(channel_controller);
     }
 }
 
@@ -190,12 +191,9 @@ impl GracefulSwitchPolicy {
         Err("no supported policies found in config".into())
     }
 
-    fn maybe_swap(
-        &mut self,
-        channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    fn maybe_swap(&mut self, channel_controller: &mut dyn ChannelController) {
         if !self.child_manager.child_updated() {
-            return Ok(());
+            return;
         }
 
         let active_name = self
@@ -235,7 +233,6 @@ impl GracefulSwitchPolicy {
         } else if active_state_if_updated.is_some() {
             channel_controller.update_picker(active_state_if_updated.unwrap());
         }
-        return Ok(());
     }
 }
 
