@@ -26,7 +26,7 @@ use rand::Rng;
 use std::time::Duration;
 
 #[derive(Clone)]
-pub struct BackoffConfig {
+pub(crate) struct BackoffConfig {
     /// The amount of time to backoff after the first failure.
     pub base_delay: Duration,
 
@@ -41,7 +41,7 @@ pub struct BackoffConfig {
     pub max_delay: Duration,
 }
 
-pub struct ExponentialBackoff {
+pub(crate) struct ExponentialBackoff {
     config: BackoffConfig,
 
     /// The delay for the next retry, without the random jitter. Store as f64
@@ -54,7 +54,7 @@ pub struct ExponentialBackoff {
 ///
 /// This should be useful for callers who want to configure backoff with
 /// non-default values only for a subset of the options.
-pub const DEFAULT_EXPONENTIAL_CONFIG: BackoffConfig = BackoffConfig {
+pub(crate) const DEFAULT_EXPONENTIAL_CONFIG: BackoffConfig = BackoffConfig {
     base_delay: Duration::from_secs(1),
     multiplier: 1.6,
     jitter: 0.2,

@@ -21,7 +21,7 @@ use super::{
     SubchannelState, WorkScheduler,
 };
 
-pub static POLICY_NAME: &str = "pick_first";
+pub(crate) static POLICY_NAME: &str = "pick_first";
 
 #[derive(Debug)]
 struct Builder {}
@@ -41,7 +41,7 @@ impl LbPolicyBuilder for Builder {
     }
 }
 
-pub fn reg() {
+pub(crate) fn reg() {
     super::GLOBAL_LB_REGISTRY.add_builder(Builder {})
 }
 

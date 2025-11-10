@@ -48,7 +48,7 @@ use super::{DnsOptions, ParseResult};
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 
 #[test]
-pub fn target_parsing() {
+pub(crate) fn target_parsing() {
     struct TestCase {
         input: &'static str,
         want_result: Result<ParseResult, String>,
@@ -191,7 +191,7 @@ impl ChannelController for FakeChannelController {
 }
 
 #[tokio::test]
-pub async fn dns_basic() {
+pub(crate) async fn dns_basic() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///localhost:1234".parse().unwrap();
@@ -220,7 +220,7 @@ pub async fn dns_basic() {
 }
 
 #[tokio::test]
-pub async fn invalid_target() {
+pub(crate) async fn invalid_target() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///:1234".parse().unwrap();
@@ -302,7 +302,7 @@ impl rt::Runtime for FakeRuntime {
 }
 
 #[tokio::test]
-pub async fn dns_lookup_error() {
+pub(crate) async fn dns_lookup_error() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///grpc.io:1234".parse().unwrap();
@@ -338,7 +338,7 @@ pub async fn dns_lookup_error() {
 }
 
 #[tokio::test]
-pub async fn dns_lookup_timeout() {
+pub(crate) async fn dns_lookup_timeout() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
@@ -380,7 +380,7 @@ pub async fn dns_lookup_timeout() {
 }
 
 #[tokio::test]
-pub async fn rate_limit() {
+pub(crate) async fn rate_limit() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
@@ -430,7 +430,7 @@ pub async fn rate_limit() {
 }
 
 #[tokio::test]
-pub async fn re_resolution_after_success() {
+pub(crate) async fn re_resolution_after_success() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),
@@ -474,7 +474,7 @@ pub async fn re_resolution_after_success() {
 }
 
 #[tokio::test]
-pub async fn backoff_on_error() {
+pub(crate) async fn backoff_on_error() {
     let (work_tx, mut work_rx) = mpsc::unbounded_channel();
     let work_scheduler = Arc::new(FakeWorkScheduler {
         work_tx: work_tx.clone(),

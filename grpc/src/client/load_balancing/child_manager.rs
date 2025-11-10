@@ -46,7 +46,7 @@ use super::{Subchannel, SubchannelState};
 
 // An LbPolicy implementation that manages multiple children.
 #[derive(Debug)]
-pub struct ChildManager<T: Debug, S: ResolverUpdateSharder<T>> {
+pub(crate) struct ChildManager<T: Debug, S: ResolverUpdateSharder<T>> {
     subchannel_child_map: HashMap<WeakSubchannel, usize>,
     children: Vec<Child<T>>,
     update_sharder: S,
@@ -57,7 +57,7 @@ pub struct ChildManager<T: Debug, S: ResolverUpdateSharder<T>> {
 
 #[non_exhaustive]
 #[derive(Debug)]
-pub struct Child<T> {
+pub(crate) struct Child<T> {
     pub identifier: T,
     pub policy: Box<dyn LbPolicy>,
     pub builder: Arc<dyn LbPolicyBuilder>,
@@ -67,7 +67,7 @@ pub struct Child<T> {
 }
 
 /// A collection of data sent to a child of the ChildManager.
-pub struct ChildUpdate<T> {
+pub(crate) struct ChildUpdate<T> {
     /// The identifier the ChildManager should use for this child.
     pub child_identifier: T,
     /// The builder the ChildManager should use to create this child if it does
@@ -82,7 +82,7 @@ pub struct ChildUpdate<T> {
     pub child_update: Option<(ResolverUpdate, Option<LbConfig>)>,
 }
 
-pub trait ResolverUpdateSharder<T>: Send {
+pub(crate) trait ResolverUpdateSharder<T>: Send {
     /// Performs the operation of sharding an aggregate ResolverUpdate/LbConfig
     /// into one or more ChildUpdates.  Called automatically by the ChildManager
     /// when its resolver_update method is called.

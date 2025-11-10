@@ -182,7 +182,7 @@ type SubchannelUpdateFn = Arc<
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
 #[derive(Clone)]
-pub struct StubPolicyFuncs {
+pub(crate) struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
     pub subchannel_update: Option<SubchannelUpdateFn>,
 }
@@ -195,7 +195,7 @@ impl Debug for StubPolicyFuncs {
 
 /// Data holds test data that will be passed all to functions in PolicyFuncs
 #[derive(Debug)]
-pub struct StubPolicyData {
+pub(crate) struct StubPolicyData {
     pub test_data: Option<Box<dyn Any + Send + Sync>>,
 }
 
@@ -208,7 +208,7 @@ impl StubPolicyData {
 
 /// The stub `LbPolicy` that calls the provided functions.
 #[derive(Debug)]
-pub struct StubPolicy {
+pub(crate) struct StubPolicy {
     funcs: StubPolicyFuncs,
     data: StubPolicyData,
 }
@@ -248,7 +248,7 @@ impl LbPolicy for StubPolicy {
 
 /// StubPolicyBuilder builds a StubLbPolicy.
 #[derive(Debug)]
-pub struct StubPolicyBuilder {
+pub(crate) struct StubPolicyBuilder {
     name: &'static str,
     funcs: StubPolicyFuncs,
 }
@@ -286,6 +286,6 @@ impl LbPolicyBuilder for StubPolicyBuilder {
     }
 }
 
-pub fn reg_stub_policy(name: &'static str, funcs: StubPolicyFuncs) {
+pub(crate) fn reg_stub_policy(name: &'static str, funcs: StubPolicyFuncs) {
     super::GLOBAL_LB_REGISTRY.add_builder(StubPolicyBuilder { name, funcs })
 }

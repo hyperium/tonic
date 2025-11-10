@@ -264,7 +264,7 @@ impl GrpcService<Body> for TonicService {
 /// A future that resolves to an HTTP response.
 ///
 /// This is returned by the `Service::call` on [`Channel`].
-pub struct ResponseFuture {
+pub(crate) struct ResponseFuture {
     inner: BufferResponseFuture<BoxFuture<'static, Result<HttpResponse<Body>, BoxError>>>,
 }
 

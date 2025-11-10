@@ -48,5 +48,5 @@ impl TransportRegistry {
 
 /// The registry used if a local registry is not provided to a channel or if it
 /// does not exist in the local registry.
-pub static GLOBAL_TRANSPORT_REGISTRY: LazyLock<TransportRegistry> =
+pub(crate) static GLOBAL_TRANSPORT_REGISTRY: LazyLock<TransportRegistry> =
     LazyLock::new(TransportRegistry::new);

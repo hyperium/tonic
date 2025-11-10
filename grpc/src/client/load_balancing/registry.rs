@@ -7,7 +7,7 @@ use super::LbPolicyBuilder;
 
 /// A registry to store and retrieve LB policies.  LB policies are indexed by
 /// their names.
-pub struct LbPolicyRegistry {
+pub(crate) struct LbPolicyRegistry {
     m: Arc<Mutex<HashMap<String, Arc<dyn LbPolicyBuilder>>>>,
 }
 
@@ -37,4 +37,4 @@ impl Default for LbPolicyRegistry {
 
 /// The registry used if a local registry is not provided to a channel or if it
 /// does not exist in the local registry.
-pub static GLOBAL_LB_REGISTRY: LazyLock<LbPolicyRegistry> = LazyLock::new(LbPolicyRegistry::new);
+pub(crate) static GLOBAL_LB_REGISTRY: LazyLock<LbPolicyRegistry> = LazyLock::new(LbPolicyRegistry::new);

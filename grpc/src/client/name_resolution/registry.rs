@@ -34,7 +34,7 @@ static GLOBAL_RESOLVER_REGISTRY: OnceLock<ResolverRegistry> = OnceLock::new();
 /// A registry to store and retrieve name resolvers.  Resolvers are indexed by
 /// the URI scheme they are intended to handle.
 #[derive(Default)]
-pub struct ResolverRegistry {
+pub(crate) struct ResolverRegistry {
     inner: Arc<Mutex<HashMap<String, Arc<dyn ResolverBuilder>>>>,
 }
 
@@ -90,6 +90,6 @@ impl ResolverRegistry {
 }
 
 /// Global registry for resolver builders.
-pub fn global_registry() -> &'static ResolverRegistry {
+pub(crate) fn global_registry() -> &'static ResolverRegistry {
     GLOBAL_RESOLVER_REGISTRY.get_or_init(ResolverRegistry::new)
 }
