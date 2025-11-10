@@ -1,8 +1,4 @@
-use std::{
-    error::Error,
-    sync::{Arc, Mutex},
-    time::Duration,
-};
+use std::{error::Error, sync::Arc, time::Duration};
 
 use tonic::metadata::MetadataMap;
 
@@ -10,7 +6,7 @@ use crate::{
     client::{
         load_balancing::{LbPolicy, LbPolicyBuilder, LbState},
         name_resolution::{Address, ResolverUpdate},
-        subchannel, ConnectivityState,
+        ConnectivityState,
     },
     rt::Runtime,
     service::Request,

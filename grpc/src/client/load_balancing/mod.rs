@@ -23,26 +23,20 @@
  */
 
 use core::panic;
-use serde::de;
 use std::{
     any::Any,
-    collections::HashMap,
     error::Error,
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
-    ops::{Add, Sub},
-    sync::{
-        atomic::{AtomicI64, Ordering::Relaxed},
-        Arc, Mutex, Weak,
-    },
+    ptr::addr_eq,
+    sync::{Arc, Mutex, Weak},
 };
-use tokio::sync::{mpsc::Sender, Notify};
 use tonic::{metadata::MetadataMap, Status};
 
 use crate::{
     client::channel::WorkQueueTx,
     rt::Runtime,
-    service::{Request, Response, Service},
+    service::{Request, Response},
 };
 
 use crate::client::{
@@ -61,7 +55,7 @@ pub(crate) mod test_utils;
 
 pub(crate) mod registry;
 use super::{service_config::LbConfig, subchannel::SubchannelStateWatcher};
-pub(crate) use registry::{LbPolicyRegistry, GLOBAL_LB_REGISTRY};
+pub(crate) use registry::GLOBAL_LB_REGISTRY;
 
 /// A collection of data configured on the channel that is constructing this
 /// LbPolicy.
@@ -470,21 +464,13 @@ impl WeakSubchannel {
 
 impl Hash for WeakSubchannel {
     fn hash<H: Hasher>(&self, state: &mut H) {
-        if let Some(strong) = self.upgrade() {
-            return strong.dyn_hash(&mut Box::new(state as &mut dyn Hasher));
-        }
-        panic!("WeakSubchannel is not valid");
+        (self.0.as_ptr() as *const () as usize).hash(state);
     }
 }
 
 impl PartialEq for WeakSubchannel {
     fn eq(&self, other: &Self) -> bool {
-        if let Some(strong_self) = self.upgrade() {
-            if let Some(strong_other) = other.upgrade() {
-                return strong_self.dyn_eq(&Box::new(&strong_other as &dyn Any));
-            }
-        }
-        false
+        addr_eq(self.0.as_ptr(), other.0.as_ptr())
     }
 }
 

@@ -21,7 +21,7 @@
  * IN THE SOFTWARE.
  *
  */
-use std::{any::Any, error::Error, sync::Arc};
+use std::{any::Any, sync::Arc};
 
 /// An in-memory representation of a service config, usually provided to gRPC as
 /// a JSON object.

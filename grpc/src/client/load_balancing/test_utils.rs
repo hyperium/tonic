@@ -23,27 +23,18 @@
  */
 
 use crate::client::load_balancing::{
-    ChannelController, ExternalSubchannel, ForwardingSubchannel, LbPolicy, LbPolicyBuilder,
-    LbPolicyOptions, LbState, ParsedJsonLbConfig, Pick, PickResult, Picker, Subchannel,
-    SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
+    ChannelController, ForwardingSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
+    ParsedJsonLbConfig, Subchannel, SubchannelState, WorkScheduler,
 };
 use crate::client::name_resolution::{Address, ResolverUpdate};
 use crate::client::service_config::LbConfig;
-use crate::client::ConnectivityState;
-use crate::rt::{Runtime, Sleep};
-use crate::service::{Message, Request, Response, Service};
+use crate::service::{Message, Request};
 use serde::{Deserialize, Serialize};
 use std::any::Any;
-use std::collections::HashMap;
 use std::error::Error;
-use std::hash::{Hash, Hasher};
-use std::sync::Mutex;
-use std::time::Duration;
-use std::{fmt::Debug, future::Future, ops::Add, sync::Arc};
-use tokio::sync::mpsc::Sender;
+use std::hash::Hash;
+use std::{fmt::Debug, sync::Arc};
 use tokio::sync::{mpsc, Notify};
-use tokio::task::AbortHandle;
-use tonic::metadata::MetadataMap;
 
 #[derive(Debug)]
 pub(crate) struct EmptyMessage {}
