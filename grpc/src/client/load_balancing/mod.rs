@@ -23,27 +23,20 @@
  */
 
 use core::panic;
-use serde::de;
 use std::{
     any::Any,
-    collections::HashMap,
     error::Error,
     fmt::{Debug, Display},
     hash::{Hash, Hasher},
-    ops::{Add, Sub},
     ptr::addr_eq,
-    sync::{
-        atomic::{AtomicI64, Ordering::Relaxed},
-        Arc, Mutex, Weak,
-    },
+    sync::{Arc, Mutex, Weak},
 };
-use tokio::sync::{mpsc::Sender, Notify};
 use tonic::{metadata::MetadataMap, Status};
 
 use crate::{
     client::channel::WorkQueueTx,
     rt::Runtime,
-    service::{Request, Response, Service},
+    service::{Request, Response},
 };
 
 use crate::client::{
@@ -60,7 +53,7 @@ pub mod test_utils;
 
 pub(crate) mod registry;
 use super::{service_config::LbConfig, subchannel::SubchannelStateWatcher};
-pub(crate) use registry::{LbPolicyRegistry, GLOBAL_LB_REGISTRY};
+pub(crate) use registry::GLOBAL_LB_REGISTRY;
 
 /// A collection of data configured on the channel that is constructing this
 /// LbPolicy.

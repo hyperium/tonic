@@ -360,29 +360,22 @@ impl WorkScheduler for ChildWorkScheduler {
 #[cfg(test)]
 mod test {
     use crate::client::load_balancing::child_manager::{
-        Child, ChildManager, ChildUpdate, ChildWorkScheduler, ResolverUpdateSharder,
+        ChildManager, ChildUpdate, ResolverUpdateSharder,
     };
     use crate::client::load_balancing::test_utils::{
-        self, StubPolicy, StubPolicyFuncs, TestChannelController, TestEvent, TestSubchannel,
-        TestWorkScheduler,
+        self, StubPolicyFuncs, TestChannelController, TestEvent,
     };
     use crate::client::load_balancing::{
-        ChannelController, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState, ParsedJsonLbConfig,
-        Pick, PickResult, Picker, QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
+        ChannelController, LbPolicy, LbPolicyBuilder, LbState, QueuingPicker, Subchannel,
+        SubchannelState, GLOBAL_LB_REGISTRY,
     };
     use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
-    use crate::client::service_config::{LbConfig, ServiceConfig};
     use crate::client::ConnectivityState;
-    use crate::rt::{default_runtime, Runtime};
-    use crate::service::Request;
-    use serde::{Deserialize, Serialize};
-    use std::collections::{HashMap, HashSet};
+    use crate::rt::default_runtime;
     use std::error::Error;
     use std::panic;
     use std::sync::Arc;
-    use std::sync::Mutex;
     use tokio::sync::mpsc;
-    use tonic::metadata::MetadataMap;
 
     // TODO: This needs to be moved to a common place that can be shared between
     // round_robin and this test. This EndpointSharder maps endpoints to
