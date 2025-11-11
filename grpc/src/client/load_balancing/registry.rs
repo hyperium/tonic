@@ -37,4 +37,5 @@ impl Default for LbPolicyRegistry {
 
 /// The registry used if a local registry is not provided to a channel or if it
 /// does not exist in the local registry.
-pub(crate) static GLOBAL_LB_REGISTRY: LazyLock<LbPolicyRegistry> = LazyLock::new(LbPolicyRegistry::new);
+pub(crate) static GLOBAL_LB_REGISTRY: LazyLock<LbPolicyRegistry> =
+    LazyLock::new(LbPolicyRegistry::new);

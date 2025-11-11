@@ -399,7 +399,9 @@ pub(crate) trait SealedSubchannel: private::Sealed {}
 ///
 /// When a Subchannel is dropped, it is disconnected automatically, and no
 /// subsequent state updates will be provided for it to the LB policy.
-pub(crate) trait Subchannel: SealedSubchannel + DynHash + DynPartialEq + Any + Send + Sync {
+pub(crate) trait Subchannel:
+    SealedSubchannel + DynHash + DynPartialEq + Any + Send + Sync
+{
     /// Returns the address of the Subchannel.
     /// TODO: Consider whether this should really be public.
     fn address(&self) -> Address;
