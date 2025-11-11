@@ -226,10 +226,19 @@ where
         }
 
         // Build a map of the old children from their IDs for efficient lookups.
+        // This leverages a Child<usize> to hold all the entries where the
+        // identifier becomes the index within the old self.children vector.
         let old_children = old_children.into_iter().enumerate().map(|(old_idx, e)| {
             (
                 (e.builder.name(), e.identifier),
-                (e.policy, e.state, old_idx, e.work_scheduler, e.updated),
+                Child {
+                    identifier: old_idx,
+                    policy: e.policy,
+                    builder: e.builder,
+                    state: e.state,
+                    updated: e.updated,
+                    work_scheduler: e.work_scheduler,
+                },
             )
         });
         let mut old_children: HashMap<(&'static str, T), _> = old_children.collect();
@@ -245,26 +254,25 @@ where
         // subchannel map.
         for (new_idx, (identifier, builder)) in ids_builders.into_iter().enumerate() {
             let k = (builder.name(), identifier);
-            if let Some((policy, state, old_idx, work_scheduler, updated)) = old_children.remove(&k)
-            {
+            if let Some(old_child) = old_children.remove(&k) {
                 for subchannel in old_child_subchannels_map
-                    .remove(&old_idx)
+                    .remove(&old_child.identifier)
                     .into_iter()
                     .flatten()
                 {
                     self.subchannel_child_map.insert(subchannel, new_idx);
                 }
-                if old_pending_work.contains(&old_idx) {
+                if old_pending_work.contains(&old_child.identifier) {
                     pending_work.insert(new_idx);
                 }
-                *work_scheduler.idx.lock().unwrap() = Some(new_idx);
+                *old_child.work_scheduler.idx.lock().unwrap() = Some(new_idx);
                 self.children.push(Child {
                     builder,
                     identifier: k.1,
-                    state,
-                    policy,
-                    work_scheduler,
-                    updated,
+                    state: old_child.state,
+                    policy: old_child.policy,
+                    work_scheduler: old_child.work_scheduler,
+                    updated: old_child.updated,
                 });
             } else {
                 let work_scheduler = Arc::new(ChildWorkScheduler {
@@ -287,8 +295,8 @@ where
         }
 
         // Invalidate all deleted children's work_schedulers.
-        for (_, (_, _, _, work_scheduler, _)) in old_children {
-            *work_scheduler.idx.lock().unwrap() = None;
+        for (_, old_child) in old_children {
+            *old_child.work_scheduler.idx.lock().unwrap() = None;
         }
 
         // Release the pending_work mutex before calling into the children to
