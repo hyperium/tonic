@@ -215,14 +215,12 @@ where
         // Replace the subchannel map with an empty map.
         let old_subchannel_child_map = mem::take(&mut self.subchannel_child_map);
 
-        // Reverse the old subchannel map.
-        let mut old_child_subchannels_map: HashMap<usize, Vec<WeakSubchannel>> = HashMap::new();
+        // Reverse the old subchannel map into a vector indexed by the old child ID.
+        let mut old_child_subchannels: Vec<Vec<WeakSubchannel>> = Vec::new();
+        old_child_subchannels.resize_with(old_children.len(), Vec::new);
 
-        for (subchannel, child_idx) in old_subchannel_child_map {
-            old_child_subchannels_map
-                .entry(child_idx)
-                .or_default()
-                .push(subchannel);
+        for (subchannel, old_idx) in old_subchannel_child_map {
+            old_child_subchannels[old_idx].push(subchannel);
         }
 
         // Build a map of the old children from their IDs for efficient lookups.
@@ -255,14 +253,11 @@ where
         for (new_idx, (identifier, builder)) in ids_builders.into_iter().enumerate() {
             let k = (builder.name(), identifier);
             if let Some(old_child) = old_children.remove(&k) {
-                for subchannel in old_child_subchannels_map
-                    .remove(&old_child.identifier)
-                    .into_iter()
-                    .flatten()
-                {
+                let old_idx = old_child.identifier;
+                for subchannel in mem::take(&mut old_child_subchannels[old_idx]) {
                     self.subchannel_child_map.insert(subchannel, new_idx);
                 }
-                if old_pending_work.contains(&old_child.identifier) {
+                if old_pending_work.contains(&old_idx) {
                     pending_work.insert(new_idx);
                 }
                 *old_child.work_scheduler.idx.lock().unwrap() = Some(new_idx);
