@@ -47,7 +47,7 @@ use super::{Subchannel, SubchannelState};
 // An LbPolicy implementation that manages multiple children.
 #[derive(Debug)]
 pub(crate) struct ChildManager<T: Debug, S: ResolverUpdateSharder<T>> {
-    subchannel_child_map: HashMap<WeakSubchannel, usize>,
+    subchannel_to_child_idx: HashMap<WeakSubchannel, usize>,
     children: Vec<Child<T>>,
     update_sharder: S,
     pending_work: Arc<Mutex<HashSet<usize>>>,
@@ -101,7 +101,7 @@ where
     pub fn new(update_sharder: S, runtime: Arc<dyn Runtime>) -> Self {
         Self {
             update_sharder,
-            subchannel_child_map: Default::default(),
+            subchannel_to_child_idx: Default::default(),
             children: Default::default(),
             pending_work: Default::default(),
             runtime,
@@ -110,7 +110,7 @@ where
     }
 
     /// Returns data for all current children.
-    pub fn children(&mut self) -> impl Iterator<Item = &Child<T>> {
+    pub fn children(&self) -> impl Iterator<Item = &Child<T>> {
         self.children.iter()
     }
 
@@ -163,7 +163,7 @@ where
     ) {
         // Add all created subchannels into the subchannel_child_map.
         for csc in channel_controller.created_subchannels {
-            self.subchannel_child_map.insert(csc.into(), child_idx);
+            self.subchannel_to_child_idx.insert(csc.into(), child_idx);
         }
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
@@ -211,7 +211,7 @@ where
         let old_children = mem::take(&mut self.children);
 
         // Replace the subchannel map with an empty map.
-        let old_subchannel_child_map = mem::take(&mut self.subchannel_child_map);
+        let old_subchannel_child_map = mem::take(&mut self.subchannel_to_child_idx);
 
         // Reverse the old subchannel map into a vector indexed by the old child ID.
         let mut old_child_subchannels: Vec<Vec<WeakSubchannel>> = Vec::new();
@@ -224,19 +224,22 @@ where
         // Build a map of the old children from their IDs for efficient lookups.
         // This leverages a Child<usize> to hold all the entries where the
         // identifier becomes the index within the old self.children vector.
-        let old_children = old_children.into_iter().enumerate().map(|(old_idx, e)| {
-            (
-                (e.builder.name(), e.identifier),
-                Child {
-                    identifier: old_idx,
-                    policy: e.policy,
-                    builder: e.builder,
-                    state: e.state,
-                    work_scheduler: e.work_scheduler,
-                },
-            )
-        });
-        let mut old_children: HashMap<(&'static str, T), _> = old_children.collect();
+        let mut old_children: HashMap<(&'static str, T), _> = old_children
+            .into_iter()
+            .enumerate()
+            .map(|(old_idx, e)| {
+                (
+                    (e.builder.name(), e.identifier),
+                    Child {
+                        identifier: old_idx,
+                        policy: e.policy,
+                        builder: e.builder,
+                        state: e.state,
+                        work_scheduler: e.work_scheduler,
+                    },
+                )
+            })
+            .collect();
 
         // Split the child updates into the IDs and builders, and the
         // ResolverUpdates/LbConfigs.
@@ -252,7 +255,7 @@ where
             if let Some(old_child) = old_children.remove(&k) {
                 let old_idx = old_child.identifier;
                 for subchannel in mem::take(&mut old_child_subchannels[old_idx]) {
-                    self.subchannel_child_map.insert(subchannel, new_idx);
+                    self.subchannel_to_child_idx.insert(subchannel, new_idx);
                 }
                 if old_pending_work.contains(&old_idx) {
                     pending_work.insert(new_idx);
@@ -324,7 +327,7 @@ where
     ) {
         // Determine which child created this subchannel.
         let child_idx = *self
-            .subchannel_child_map
+            .subchannel_to_child_idx
             .get(&WeakSubchannel::new(&subchannel))
             .unwrap();
         let policy = &mut self.children[child_idx].policy;
