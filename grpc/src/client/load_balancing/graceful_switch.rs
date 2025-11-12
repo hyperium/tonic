@@ -1,9 +1,9 @@
 use crate::client::load_balancing::child_manager::{
-    self, ChildManager, ChildUpdate, ResolverUpdateSharder,
+    self, Child, ChildManager, ChildUpdate, ResolverUpdateSharder,
 };
 use crate::client::load_balancing::{
-    ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, ParsedJsonLbConfig, Subchannel,
-    SubchannelState, GLOBAL_LB_REGISTRY,
+    ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbState, ParsedJsonLbConfig,
+    Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
 };
 use crate::client::name_resolution::ResolverUpdate;
 use crate::client::ConnectivityState;
@@ -191,9 +191,15 @@ impl GracefulSwitchPolicy {
         Err("no supported policies found in config".into())
     }
 
-    fn maybe_swap(&mut self, channel_controller: &mut dyn ChannelController) {
+    fn update_picker(&mut self, channel_controller: &mut dyn ChannelController) {
+        if let Some(update) = self.maybe_swap(channel_controller) {
+            channel_controller.update_picker(update);
+        }
+    }
+
+    fn maybe_swap(&mut self, channel_controller: &mut dyn ChannelController) -> Option<LbState> {
         if !self.child_manager.child_updated() {
-            return;
+            return None;
         }
 
         let active_name = self
@@ -203,36 +209,41 @@ impl GracefulSwitchPolicy {
             .as_ref()
             .unwrap()
             .name();
-        let mut could_switch = false;
-        let mut active_state_if_updated = None;
-        let mut pending_builder = None;
-        let mut pending_state = None;
+
+        let mut active_child = None;
+        let mut pending_child = None;
         for child in self.child_manager.children() {
             if child.builder.name() == active_name {
-                could_switch |= child.state.connectivity_state != ConnectivityState::Ready;
-                if child.updated {
-                    active_state_if_updated = Some(child.state.clone());
-                }
+                active_child = Some(child);
             } else {
-                pending_builder = Some(child.builder.clone());
-                pending_state = Some(child.state.clone());
-                could_switch |= child.state.connectivity_state != ConnectivityState::Connecting;
+                pending_child = Some(child);
             }
         }
-        if could_switch && pending_builder.is_some() {
-            self.child_manager
-                .resolver_update(
-                    ResolverUpdate::default(),
-                    Some(&LbConfig::new(GracefulSwitchLbConfig::Swap(
-                        pending_builder.unwrap(),
-                    ))),
-                    channel_controller,
-                )
-                .expect("resolver_update with an empty update should not fail");
-            channel_controller.update_picker(pending_state.unwrap().clone());
-        } else if active_state_if_updated.is_some() {
-            channel_controller.update_picker(active_state_if_updated.unwrap());
+        let active_child = active_child.expect("There should always be an active child policy");
+        let Some(pending_child) = pending_child else {
+            return updated_state(active_child);
+        };
+
+        if active_child.state.connectivity_state == ConnectivityState::Ready
+            && pending_child.state.connectivity_state == ConnectivityState::Connecting
+        {
+            return updated_state(active_child);
         }
+
+        let config = &LbConfig::new(GracefulSwitchLbConfig::Swap(pending_child.builder.clone()));
+        let state = pending_child.state.clone();
+        self.child_manager
+            .resolver_update(ResolverUpdate::default(), Some(config), channel_controller)
+            .expect("resolver_update with an empty update should not fail");
+        return Some(state);
+    }
+}
+
+fn updated_state(child: &Child<()>) -> Option<LbState> {
+    if child.updated {
+        Some(child.state.clone())
+    } else {
+        None
     }
 }
 

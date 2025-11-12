@@ -59,10 +59,10 @@ pub(crate) struct ChildManager<T: Debug, S: ResolverUpdateSharder<T>> {
 #[derive(Debug)]
 pub(crate) struct Child<T> {
     pub identifier: T,
-    pub policy: Box<dyn LbPolicy>,
     pub builder: Arc<dyn LbPolicyBuilder>,
     pub state: LbState,
-    pub updated: bool, // Set when the child updates its picker; cleared in child_states is called.
+    pub updated: bool, // Set when the child updates its picker; cleared when accessed.
+    policy: Box<dyn LbPolicy>,
     work_scheduler: Arc<ChildWorkScheduler>,
 }
 
@@ -111,7 +111,7 @@ where
     }
 
     /// Returns data for all current children.
-    pub fn children(&self) -> impl Iterator<Item = &Child<T>> {
+    pub fn children(&mut self) -> impl Iterator<Item = &Child<T>> {
         self.children.iter()
     }
 
