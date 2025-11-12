@@ -1,5 +1,5 @@
 use crate::client::load_balancing::child_manager::{
-    self, Child, ChildManager, ChildUpdate, ResolverUpdateSharder,
+    self, ChildManager, ChildUpdate, ResolverUpdateSharder,
 };
 use crate::client::load_balancing::{
     ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbState, ParsedJsonLbConfig,
@@ -103,6 +103,7 @@ impl UpdateSharder {
 #[derive(Debug)]
 pub(crate) struct GracefulSwitchPolicy {
     child_manager: ChildManager<(), UpdateSharder>, // Child ID is the name of the child policy.
+    last_update: LbState, // Saves the last output LbState to determine if an update is needed.
 }
 
 impl LbPolicy for GracefulSwitchPolicy {
@@ -115,7 +116,7 @@ impl LbPolicy for GracefulSwitchPolicy {
         let res = self
             .child_manager
             .resolver_update(update, config, channel_controller)?;
-        self.maybe_swap(channel_controller);
+        self.update_picker(channel_controller);
         Ok(())
     }
 
@@ -127,17 +128,17 @@ impl LbPolicy for GracefulSwitchPolicy {
     ) {
         self.child_manager
             .subchannel_update(subchannel, state, channel_controller);
-        self.maybe_swap(channel_controller);
+        self.update_picker(channel_controller);
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.work(channel_controller);
-        self.maybe_swap(channel_controller);
+        self.update_picker(channel_controller);
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.exit_idle(channel_controller);
-        self.maybe_swap(channel_controller);
+        self.update_picker(channel_controller);
     }
 }
 
@@ -152,6 +153,7 @@ impl GracefulSwitchPolicy {
     pub fn new(runtime: Arc<dyn Runtime>) -> Self {
         GracefulSwitchPolicy {
             child_manager: ChildManager::new(UpdateSharder::new(), runtime),
+            last_update: LbState::initial(),
         }
     }
 
@@ -192,11 +194,22 @@ impl GracefulSwitchPolicy {
     }
 
     fn update_picker(&mut self, channel_controller: &mut dyn ChannelController) {
-        if let Some(update) = self.maybe_swap(channel_controller) {
-            channel_controller.update_picker(update);
+        let Some(update) = self.maybe_swap(channel_controller) else {
+            return;
+        };
+        if self.last_update.connectivity_state == update.connectivity_state
+            && std::ptr::addr_eq(
+                Arc::as_ptr(&self.last_update.picker),
+                Arc::as_ptr(&update.picker),
+            )
+        {
+            return;
         }
+        channel_controller.update_picker(update.clone());
+        self.last_update = update;
     }
 
+    // Determines the appropriate state to output
     fn maybe_swap(&mut self, channel_controller: &mut dyn ChannelController) -> Option<LbState> {
         if !self.child_manager.child_updated() {
             return None;
@@ -221,13 +234,13 @@ impl GracefulSwitchPolicy {
         }
         let active_child = active_child.expect("There should always be an active child policy");
         let Some(pending_child) = pending_child else {
-            return updated_state(active_child);
+            return Some(active_child.state.clone());
         };
 
         if active_child.state.connectivity_state == ConnectivityState::Ready
             && pending_child.state.connectivity_state == ConnectivityState::Connecting
         {
-            return updated_state(active_child);
+            return Some(active_child.state.clone());
         }
 
         let config = &LbConfig::new(GracefulSwitchLbConfig::Swap(pending_child.builder.clone()));
@@ -236,14 +249,6 @@ impl GracefulSwitchPolicy {
             .resolver_update(ResolverUpdate::default(), Some(config), channel_controller)
             .expect("resolver_update with an empty update should not fail");
         return Some(state);
-    }
-}
-
-fn updated_state(child: &Child<()>) -> Option<LbState> {
-    if child.updated {
-        Some(child.state.clone())
-    } else {
-        None
     }
 }
 
@@ -816,11 +821,8 @@ mod test {
             tcc.as_mut(),
             ConnectivityState::Connecting,
         );
-        verify_correct_picker_from_policy(
-            &mut rx_events,
-            "stub-gracefulswitch_current_leaving_ready-one",
-        )
-        .await;
+        // This should not produce an update.
+        assert_channel_empty(&mut rx_events).await;
         move_subchannel_to_state(
             &mut *graceful_switch,
             current_subchannel,

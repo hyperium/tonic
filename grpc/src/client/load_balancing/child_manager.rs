@@ -61,7 +61,6 @@ pub(crate) struct Child<T> {
     pub identifier: T,
     pub builder: Arc<dyn LbPolicyBuilder>,
     pub state: LbState,
-    pub updated: bool, // Set when the child updates its picker; cleared when accessed.
     policy: Box<dyn LbPolicy>,
     work_scheduler: Arc<ChildWorkScheduler>,
 }
@@ -169,7 +168,6 @@ where
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
             self.children[child_idx].state = state;
-            self.children[child_idx].updated = true;
             self.updated = true;
         };
     }
@@ -234,7 +232,6 @@ where
                     policy: e.policy,
                     builder: e.builder,
                     state: e.state,
-                    updated: e.updated,
                     work_scheduler: e.work_scheduler,
                 },
             )
@@ -267,7 +264,6 @@ where
                     state: old_child.state,
                     policy: old_child.policy,
                     work_scheduler: old_child.work_scheduler,
-                    updated: old_child.updated,
                 });
             } else {
                 let work_scheduler = Arc::new(ChildWorkScheduler {
@@ -284,7 +280,6 @@ where
                     state: LbState::initial(),
                     policy,
                     work_scheduler,
-                    updated: false,
                 });
             };
         }
