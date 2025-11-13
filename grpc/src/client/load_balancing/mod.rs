@@ -319,6 +319,21 @@ pub(crate) struct LbState {
     pub picker: Arc<dyn Picker>,
 }
 
+impl PartialEq for LbState {
+    /// Equality for two LbStates.
+    ///
+    /// Two `LbState`s are equal if and only if they have the same connectivity
+    /// state and the same Picker allocation.  Even if two Pickers have the same
+    /// behavior or the same underlying implementation, they will be considered
+    /// distinct unless they are the same Picker instance.
+    fn eq(&self, other: &Self) -> bool {
+        self.connectivity_state == other.connectivity_state
+            && std::ptr::addr_eq(Arc::as_ptr(&self.picker), Arc::as_ptr(&other.picker))
+    }
+}
+
+impl Eq for LbState {}
+
 impl LbState {
     /// Returns a generic initial LbState which is Connecting and a picker which
     /// queues all picks.
