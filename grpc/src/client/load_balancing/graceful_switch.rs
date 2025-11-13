@@ -3,7 +3,7 @@ use crate::client::load_balancing::child_manager::{
 };
 use crate::client::load_balancing::{
     ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbState, ParsedJsonLbConfig,
-    Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
+    Subchannel, SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
 };
 use crate::client::name_resolution::ResolverUpdate;
 use crate::client::ConnectivityState;
@@ -150,9 +150,9 @@ enum ChildKind {
 
 impl GracefulSwitchPolicy {
     /// Creates a new Graceful Switch policy.
-    pub fn new(runtime: Arc<dyn Runtime>) -> Self {
+    pub fn new(runtime: Arc<dyn Runtime>, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         GracefulSwitchPolicy {
-            child_manager: ChildManager::new(UpdateSharder::new(), runtime),
+            child_manager: ChildManager::new(UpdateSharder::new(), runtime, work_scheduler),
             last_update: LbState::initial(),
         }
     }
@@ -372,6 +372,7 @@ mod test {
                     });
                 },
             )),
+            work: None,
         }
     }
 
@@ -400,9 +401,12 @@ mod test {
             tx_events: tx_events.clone(),
         });
 
-        let tcc = Box::new(TestChannelController { tx_events });
+        let tcc = Box::new(TestChannelController {
+            tx_events: tx_events.clone(),
+        });
 
-        let graceful_switch = GracefulSwitchPolicy::new(default_runtime());
+        let graceful_switch =
+            GracefulSwitchPolicy::new(default_runtime(), Arc::new(TestWorkScheduler { tx_events }));
         (rx_events, Box::new(graceful_switch), tcc)
     }
 

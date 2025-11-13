@@ -170,12 +170,15 @@ type SubchannelUpdateFn = Arc<
         + Sync,
 >;
 
+type WorkFn = Arc<dyn Fn(&mut StubPolicyData, &mut dyn ChannelController) + Send + Sync>;
+
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
 #[derive(Clone)]
 pub(crate) struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
     pub subchannel_update: Option<SubchannelUpdateFn>,
+    pub work: Option<WorkFn>,
 }
 
 impl Debug for StubPolicyFuncs {
@@ -187,13 +190,17 @@ impl Debug for StubPolicyFuncs {
 /// Data holds test data that will be passed all to functions in PolicyFuncs
 #[derive(Debug)]
 pub(crate) struct StubPolicyData {
+    pub lb_policy_options: LbPolicyOptions,
     pub test_data: Option<Box<dyn Any + Send + Sync>>,
 }
 
 impl StubPolicyData {
     /// Creates an instance of StubPolicyData.
-    pub fn new() -> Self {
-        Self { test_data: None }
+    pub fn new(lb_policy_options: LbPolicyOptions) -> Self {
+        Self {
+            test_data: None,
+            lb_policy_options,
+        }
     }
 }
 
@@ -232,8 +239,10 @@ impl LbPolicy for StubPolicy {
         todo!("Implement exit_idle for StubPolicy")
     }
 
-    fn work(&mut self, _channel_controller: &mut dyn ChannelController) {
-        todo!("Implement work for StubPolicy")
+    fn work(&mut self, channel_controller: &mut dyn ChannelController) {
+        if let Some(f) = &self.funcs.work {
+            f(&mut self.data, channel_controller);
+        }
     }
 }
 
@@ -252,7 +261,7 @@ pub(super) struct MockConfig {
 
 impl LbPolicyBuilder for StubPolicyBuilder {
     fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        let data = StubPolicyData::new();
+        let data = StubPolicyData::new(options);
         Box::new(StubPolicy {
             funcs: self.funcs.clone(),
             data,
