@@ -444,6 +444,7 @@ impl load_balancing::ChannelController for InternalChannelController {
 }
 
 // A channel that is not idle (connecting, ready, or erroring).
+#[derive(Debug)]
 pub(super) struct GracefulSwitchBalancer {
     pub(super) policy: Mutex<Option<Box<dyn LbPolicy>>>,
     policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,

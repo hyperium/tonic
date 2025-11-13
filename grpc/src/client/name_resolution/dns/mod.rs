@@ -83,7 +83,7 @@ fn get_resolving_timeout() -> Duration {
 /// premature timeouts during resolution, while setting it too high may lead to
 /// unnecessary delays in service discovery. Choose a value appropriate for your
 /// specific needs and network environment.
-pub fn set_resolving_timeout(duration: Duration) {
+pub(crate) fn set_resolving_timeout(duration: Duration) {
     RESOLVING_TIMEOUT_MS.store(duration.as_millis() as u64, Ordering::Relaxed);
 }
 
@@ -96,11 +96,11 @@ fn get_min_resolution_interval() -> Duration {
 ///
 /// It must be called only at application startup, before any gRPC calls are
 /// made.
-pub fn set_min_resolution_interval(duration: Duration) {
+pub(crate) fn set_min_resolution_interval(duration: Duration) {
     MIN_RESOLUTION_INTERVAL_MS.store(duration.as_millis() as u64, Ordering::Relaxed);
 }
 
-pub fn reg() {
+pub(crate) fn reg() {
     global_registry().add_builder(Box::new(Builder {}));
 }
 

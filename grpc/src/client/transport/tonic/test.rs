@@ -21,7 +21,7 @@ const DEFAULT_TEST_SHORT_DURATION: Duration = Duration::from_millis(10);
 
 // Tests the tonic transport by creating a bi-di stream with a tonic server.
 #[tokio::test]
-pub async fn tonic_transport_rpc() {
+pub(crate) async fn tonic_transport_rpc() {
     super::reg();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap(); // get the assigned address
@@ -110,7 +110,7 @@ pub async fn tonic_transport_rpc() {
 }
 
 #[derive(Debug)]
-pub struct EchoService {}
+pub(crate) struct EchoService {}
 
 #[async_trait]
 impl Echo for EchoService {
