@@ -1,6 +1,6 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
-use std::{collections::HashMap, ops::Add};
 
 use crate::{
     client::{
@@ -14,7 +14,7 @@ use crate::{
     server,
     service::{Request, Response, Service},
 };
-use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex, Notify};
+use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
 use tonic::async_trait;
 
 pub struct Listener {

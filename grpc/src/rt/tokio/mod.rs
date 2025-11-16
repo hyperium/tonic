@@ -64,6 +64,7 @@ impl DnsResolver for TokioDefaultDnsResolver {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct TokioRuntime {}
 
 impl TaskHandle for JoinHandle<()> {

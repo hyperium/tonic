@@ -25,13 +25,14 @@
 use std::fmt::Display;
 
 pub mod channel;
-pub(crate) mod load_balancing;
-pub(crate) mod name_resolution;
 pub mod service_config;
 mod subchannel;
-pub(crate) mod transport;
 pub use channel::Channel;
 pub use channel::ChannelOptions;
+
+pub(crate) mod load_balancing;
+pub(crate) mod name_resolution;
+pub(crate) mod transport;
 
 /// A representation of the current state of a gRPC channel, also used for the
 /// state of subchannels (individual connections within the channel).
@@ -44,7 +45,7 @@ pub use channel::ChannelOptions;
 ///
 /// Channels may re-enter the Idle state if they are unused for longer than
 /// their configured idleness timeout.
-#[derive(Copy, Clone, PartialEq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum ConnectivityState {
     Idle,
     Connecting,
