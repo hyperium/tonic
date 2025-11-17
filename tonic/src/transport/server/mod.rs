@@ -108,6 +108,7 @@ pub struct Server<L = Identity> {
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
     max_connection_age: Option<Duration>,
+    force_shutdown_after: Option<Duration>,
 }
 
 impl Default for Server<Identity> {
@@ -133,6 +134,7 @@ impl Default for Server<Identity> {
             accept_http1: false,
             service_builder: Default::default(),
             max_connection_age: None,
+            force_shutdown_after: None,
         }
     }
 }
@@ -280,6 +282,36 @@ impl<L> Server<L> {
     pub fn max_connection_age(self, max_connection_age: Duration) -> Self {
         Server {
             max_connection_age: Some(max_connection_age),
+            ..self
+        }
+    }
+
+    /// Sets the maximum time in milliseconds that a connection may continue to exist
+    /// **after** the graceful shutdown period (`max_connection_age`) has elapsed.
+    ///
+    /// This timeout only takes effect *after* a connection has exceeded its
+    /// configured `max_connection_age`. Once that happens, the server will begin
+    /// graceful shutdown for the connection. If the connection does not close
+    /// gracefully within the `force_shutdown_after` duration, the server will then
+    /// forcefully terminate it.
+    ///
+    /// If no `max_connection_age` is configured, this forced shutdown timeout will
+    /// **never trigger**, because the server will not know when to begin the
+    /// graceful shutdown phase.
+    ///
+    /// Default is no limit (`None`).
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// # use std::time::Duration;
+    /// # let builder = Server::builder();
+    /// builder.force_shutdown_after(Duration::from_secs(60));
+    /// ```
+    #[must_use]
+    pub fn force_shutdown_after(self, force_shutdown_after: Duration) -> Self {
+        Server {
+            force_shutdown_after: Some(force_shutdown_after),
             ..self
         }
     }
@@ -559,6 +591,7 @@ impl<L> Server<L> {
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
             max_connection_age: self.max_connection_age,
+            force_shutdown_after: self.force_shutdown_after,
         }
     }
 
@@ -686,6 +719,7 @@ impl<L> Server<L> {
         let http2_adaptive_window = self.http2_adaptive_window;
         let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
         let max_connection_age = self.max_connection_age;
+        let force_shutdown_after = self.force_shutdown_after;
 
         let svc = self.service_builder.service(svc);
 
@@ -764,7 +798,7 @@ impl<L> Server<L> {
                     let hyper_io = TokioIo::new(io);
                     let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(Body::new)));
 
-                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age);
+                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age, force_shutdown_after);
                 }
             }
         }
@@ -793,6 +827,7 @@ fn serve_connection<B, IO, S, E>(
     builder: ConnectionBuilder<E>,
     mut watcher: Option<tokio::sync::watch::Receiver<()>>,
     max_connection_age: Option<Duration>,
+    force_shutdown_after: Option<Duration>,
 ) where
     B: http_body::Body + Send + 'static,
     B::Data: Send,
@@ -811,7 +846,8 @@ fn serve_connection<B, IO, S, E>(
 
             let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
-            let mut sleep = pin!(sleep_or_pending(max_connection_age));
+            let mut graceful_sleep = pin!(sleep_or_pending(max_connection_age));
+            let mut forceful_sleep = pin!(sleep_or_pending(None));
 
             loop {
                 tokio::select! {
@@ -821,12 +857,23 @@ fn serve_connection<B, IO, S, E>(
                         }
                         break;
                     },
-                    _ = &mut sleep  => {
+                    _ = &mut graceful_sleep  => {
                         conn.as_mut().graceful_shutdown();
-                        sleep.set(sleep_or_pending(None));
+                        graceful_sleep.set(sleep_or_pending(None));
+                        forceful_sleep.set(sleep_or_pending(
+                            match (max_connection_age, force_shutdown_after) {
+                                (None, _) => None,
+                                (Some(_), Some(shutdown_after)) => Some(shutdown_after),
+                                (Some(_), None) => None,
+                            }
+                        ));
                     },
                     _ = &mut sig => {
                         conn.as_mut().graceful_shutdown();
+                    },
+                    _ = &mut forceful_sleep => {
+                        debug!("forcefully closed connection");
+                        break;
                     }
                 }
             }
