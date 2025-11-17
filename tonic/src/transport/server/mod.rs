@@ -108,7 +108,7 @@ pub struct Server<L = Identity> {
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
     max_connection_age: Option<Duration>,
-    force_shutdown_after: Option<Duration>,
+    max_connection_age_grace: Option<Duration>,
 }
 
 impl Default for Server<Identity> {
@@ -134,7 +134,7 @@ impl Default for Server<Identity> {
             accept_http1: false,
             service_builder: Default::default(),
             max_connection_age: None,
-            force_shutdown_after: None,
+            max_connection_age_grace: None,
         }
     }
 }
@@ -286,13 +286,13 @@ impl<L> Server<L> {
         }
     }
 
-    /// Sets the maximum time in milliseconds that a connection may continue to exist
+    /// Sets the maximum duration that a connection may continue to exist
     /// **after** the graceful shutdown period (`max_connection_age`) has elapsed.
     ///
     /// This timeout only takes effect *after* a connection has exceeded its
     /// configured `max_connection_age`. Once that happens, the server will begin
     /// graceful shutdown for the connection. If the connection does not close
-    /// gracefully within the `force_shutdown_after` duration, the server will then
+    /// gracefully within the `max_connection_age_grace` duration, the server will then
     /// forcefully terminate it.
     ///
     /// If no `max_connection_age` is configured, this forced shutdown timeout will
@@ -306,12 +306,12 @@ impl<L> Server<L> {
     /// # use tower_service::Service;
     /// # use std::time::Duration;
     /// # let builder = Server::builder();
-    /// builder.force_shutdown_after(Duration::from_secs(60));
+    /// builder.max_connection_age_grace(Duration::from_secs(60));
     /// ```
     #[must_use]
-    pub fn force_shutdown_after(self, force_shutdown_after: Duration) -> Self {
+    pub fn max_connection_age_grace(self, max_connection_age_grace: Duration) -> Self {
         Server {
-            force_shutdown_after: Some(force_shutdown_after),
+            max_connection_age_grace: Some(max_connection_age_grace),
             ..self
         }
     }
@@ -591,7 +591,7 @@ impl<L> Server<L> {
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
             max_connection_age: self.max_connection_age,
-            force_shutdown_after: self.force_shutdown_after,
+            max_connection_age_grace: self.max_connection_age_grace,
         }
     }
 
@@ -719,7 +719,7 @@ impl<L> Server<L> {
         let http2_adaptive_window = self.http2_adaptive_window;
         let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
         let max_connection_age = self.max_connection_age;
-        let force_shutdown_after = self.force_shutdown_after;
+        let max_connection_age_grace = self.max_connection_age_grace;
 
         let svc = self.service_builder.service(svc);
 
@@ -798,7 +798,7 @@ impl<L> Server<L> {
                     let hyper_io = TokioIo::new(io);
                     let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(Body::new)));
 
-                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age, force_shutdown_after);
+                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age, max_connection_age_grace);
                 }
             }
         }
@@ -827,7 +827,7 @@ fn serve_connection<B, IO, S, E>(
     builder: ConnectionBuilder<E>,
     mut watcher: Option<tokio::sync::watch::Receiver<()>>,
     max_connection_age: Option<Duration>,
-    force_shutdown_after: Option<Duration>,
+    max_connection_age_grace: Option<Duration>,
 ) where
     B: http_body::Body + Send + 'static,
     B::Data: Send,
@@ -861,7 +861,7 @@ fn serve_connection<B, IO, S, E>(
                         conn.as_mut().graceful_shutdown();
                         graceful_sleep.set(sleep_or_pending(None));
                         forceful_sleep.set(sleep_or_pending(
-                            match (max_connection_age, force_shutdown_after) {
+                            match (max_connection_age, max_connection_age_grace) {
                                 (None, _) => None,
                                 (Some(_), Some(shutdown_after)) => Some(shutdown_after),
                                 (Some(_), None) => None,
