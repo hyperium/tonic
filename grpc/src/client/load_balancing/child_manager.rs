@@ -828,7 +828,7 @@ mod test {
             tx_events: tx_events.clone(),
         };
 
-        let names = vec![name1, name2];
+        let names = [name1, name2];
         let mut child_manager =
             ChildManager::new(default_runtime(), Arc::new(TestWorkScheduler { tx_events }));
 

@@ -215,9 +215,9 @@ impl GracefulSwitchPolicy {
 
         self.active_child_builder = Some(pending_child_builder.clone());
         self.child_manager
-            .retain_children([((), pending_child_builder)].into_iter());
+            .retain_children([((), pending_child_builder)]);
 
-        return Some(pending_state);
+        Some(pending_state)
     }
 }
 
@@ -395,11 +395,9 @@ mod test {
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
     ) -> Arc<dyn Subchannel> {
         match rx_events.recv().await.unwrap() {
-            TestEvent::NewSubchannel(sc) => {
-                return sc;
-            }
+            TestEvent::NewSubchannel(sc) => sc,
             other => panic!("unexpected event {:?}", other),
-        };
+        }
     }
 
     // Verifies that the channel moves to READY state with a picker that returns the
