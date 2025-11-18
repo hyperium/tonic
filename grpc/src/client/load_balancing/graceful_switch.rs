@@ -42,11 +42,6 @@ impl LbPolicy for GracefulSwitchPolicy {
             .ok_or("graceful switch received no config")?
             .convert_to::<GracefulSwitchLbConfig>()
             .ok_or_else(|| format!("invalid config: {config:?}"))?;
-        if self.active_child_builder.is_none() {
-            self.active_child_builder = Some(config.child_builder.clone());
-        }
-
-        let mut children = Vec::with_capacity(2);
 
         if self.active_child_builder.is_none() {
             // When there are no children yet, the current update immediately
@@ -54,6 +49,8 @@ impl LbPolicy for GracefulSwitchPolicy {
             self.active_child_builder = Some(config.child_builder.clone());
         }
         let active_child_builder = self.active_child_builder.as_ref().unwrap();
+
+        let mut children = Vec::with_capacity(2);
 
         // Always include the incoming update.
         children.push(ChildUpdate {
