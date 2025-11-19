@@ -3,10 +3,18 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 use tonic::async_trait;
 
-use crate::service::{Request, Response, Service};
+use crate::service::{MessageAllocator, Request, Response, Service};
 
 pub struct Server {
     handler: Option<Arc<dyn Service>>,
+}
+
+struct NoOpAllocator {}
+
+impl MessageAllocator for NoOpAllocator {
+    fn allocate(&self) -> Box<dyn crate::service::Message> {
+        unimplemented!()
+    }
 }
 
 pub type Call = (String, Request, oneshot::Sender<Response>);
@@ -28,7 +36,13 @@ impl Server {
     pub async fn serve(&self, l: &impl Listener) {
         while let Some((method, req, reply_on)) = l.accept().await {
             reply_on
-                .send(self.handler.as_ref().unwrap().call(method, req).await)
+                .send(
+                    self.handler
+                        .as_ref()
+                        .unwrap()
+                        .call(method, req, Box::new(NoOpAllocator {}))
+                        .await,
+                )
                 .ok(); // TODO: log error
         }
     }
