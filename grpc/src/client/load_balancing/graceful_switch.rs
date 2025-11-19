@@ -1,6 +1,4 @@
-use crate::client::load_balancing::child_manager::{
-    self, ChildManager, ChildUpdate, ResolverUpdateSharder,
-};
+use crate::client::load_balancing::child_manager::{ChildManager, ChildUpdate};
 use crate::client::load_balancing::{
     ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbState, ParsedJsonLbConfig,
     Subchannel, SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
@@ -13,84 +11,10 @@ use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
 
-enum GracefulSwitchLbConfig {
-    Update(Arc<dyn LbPolicyBuilder>, Option<LbConfig>),
-    Swap(Arc<dyn LbPolicyBuilder>),
-}
-
-#[derive(Debug)]
-struct UpdateSharder {
-    active_child_builder: Option<Arc<dyn LbPolicyBuilder>>,
-}
-
-impl ResolverUpdateSharder<()> for UpdateSharder {
-    fn shard_update(
-        &mut self,
-        resolver_update: ResolverUpdate,
-        config: Option<&LbConfig>, // The config is always produced based on the state stored in the sharder.
-    ) -> Result<impl Iterator<Item = child_manager::ChildUpdate<()>>, Box<dyn Error + Send + Sync>>
-    {
-        let config = config.expect("graceful switch should always get an LbConfig");
-
-        let gsb_config: Arc<GracefulSwitchLbConfig> = config.convert_to().expect("invalid config");
-
-        let child_config;
-        let child_builder;
-        match &*gsb_config {
-            GracefulSwitchLbConfig::Swap(child_builder) => {
-                // When swapping we update the active_child_builder to the one
-                // we are swapping to and send an empty update that only
-                // includes that child, which removes the other child.
-                self.active_child_builder = Some(child_builder.clone());
-                return Ok(vec![ChildUpdate {
-                    child_policy_builder: child_builder.clone(),
-                    child_identifier: (),
-                    child_update: None,
-                }]
-                .into_iter());
-            }
-            GracefulSwitchLbConfig::Update(cb, cc) => {
-                child_builder = cb;
-                child_config = cc;
-            }
-        }
-
-        if self.active_child_builder.is_none() {
-            // When there are no children yet, the current update immediately
-            // becomes the active child.
-            self.active_child_builder = Some(child_builder.clone());
-        }
-        let active_child_builder = self.active_child_builder.as_ref().unwrap();
-
-        let mut resp = Vec::with_capacity(2);
-
-        // Always include the incoming update.
-        resp.push(ChildUpdate {
-            child_policy_builder: child_builder.clone(),
-            child_identifier: (),
-            child_update: Some((resolver_update, child_config.clone())),
-        });
-
-        // Include the active child if it does not match the updated child so
-        // that the child manager will not delete it.
-        if child_builder.name() != active_child_builder.name() {
-            resp.push(ChildUpdate {
-                child_policy_builder: active_child_builder.clone(),
-                child_identifier: (),
-                child_update: None,
-            });
-        }
-
-        Ok(resp.into_iter())
-    }
-}
-
-impl UpdateSharder {
-    fn new() -> Self {
-        Self {
-            active_child_builder: None,
-        }
-    }
+#[derive(Debug, Clone)]
+struct GracefulSwitchLbConfig {
+    child_builder: Arc<dyn LbPolicyBuilder>,
+    child_config: Option<LbConfig>,
 }
 
 /// A graceful switching load balancing policy.  In graceful switch, there is
@@ -102,8 +26,9 @@ impl UpdateSharder {
 /// to to active and tear down the previously active policy.
 #[derive(Debug)]
 pub(crate) struct GracefulSwitchPolicy {
-    child_manager: ChildManager<(), UpdateSharder>, // Child ID is the name of the child policy.
-    last_update: LbState, // Saves the last output LbState to determine if an update is needed.
+    child_manager: ChildManager<()>, // Child ID is the name of the child policy.
+    last_update: Option<LbState>, // Saves the last output LbState to determine if an update is needed.
+    active_child_builder: Option<Arc<dyn LbPolicyBuilder>>,
 }
 
 impl LbPolicy for GracefulSwitchPolicy {
@@ -113,9 +38,40 @@ impl LbPolicy for GracefulSwitchPolicy {
         config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let config = config
+            .ok_or("graceful switch received no config")?
+            .convert_to::<GracefulSwitchLbConfig>()
+            .ok_or_else(|| format!("invalid config: {config:?}"))?;
+
+        if self.active_child_builder.is_none() {
+            // When there are no children yet, the current update immediately
+            // becomes the active child.
+            self.active_child_builder = Some(config.child_builder.clone());
+        }
+        let active_child_builder = self.active_child_builder.as_ref().unwrap();
+
+        let mut children = Vec::with_capacity(2);
+
+        // Always include the incoming update.
+        children.push(ChildUpdate {
+            child_policy_builder: config.child_builder.clone(),
+            child_identifier: (),
+            child_update: Some((update, config.child_config.clone())),
+        });
+
+        // Include the active child if it does not match the updated child so
+        // that the child manager will not delete it.
+        if config.child_builder.name() != active_child_builder.name() {
+            children.push(ChildUpdate {
+                child_policy_builder: active_child_builder.clone(),
+                child_identifier: (),
+                child_update: None,
+            });
+        }
+
         let res = self
             .child_manager
-            .resolver_update(update, config, channel_controller)?;
+            .update(children.into_iter(), channel_controller)?;
         self.update_picker(channel_controller);
         Ok(())
     }
@@ -152,8 +108,9 @@ impl GracefulSwitchPolicy {
     /// Creates a new Graceful Switch policy.
     pub fn new(runtime: Arc<dyn Runtime>, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         GracefulSwitchPolicy {
-            child_manager: ChildManager::new(UpdateSharder::new(), runtime, work_scheduler),
-            last_update: LbState::initial(),
+            child_manager: ChildManager::new(runtime, work_scheduler),
+            last_update: None,
+            active_child_builder: None,
         }
     }
 
@@ -187,42 +144,44 @@ impl GracefulSwitchPolicy {
                 value: policy_config,
             };
             let child_config = child_builder.parse_config(&parsed_config)?;
-            let gsb_config = GracefulSwitchLbConfig::Update(child_builder, child_config);
+            let gsb_config = GracefulSwitchLbConfig {
+                child_builder,
+                child_config,
+            };
             return Ok(LbConfig::new(gsb_config));
         }
         Err("no supported policies found in config".into())
     }
 
     fn update_picker(&mut self, channel_controller: &mut dyn ChannelController) {
+        // If maybe_swap returns a None, then no update needs to happen.
         let Some(update) = self.maybe_swap(channel_controller) else {
             return;
         };
-        if self.last_update.connectivity_state == update.connectivity_state
-            && std::ptr::addr_eq(
-                Arc::as_ptr(&self.last_update.picker),
-                Arc::as_ptr(&update.picker),
-            )
-        {
+        // If the current update is the same as the last update, skip it.
+        if self.last_update.as_ref().is_some_and(|lu| lu == &update) {
             return;
         }
         channel_controller.update_picker(update.clone());
-        self.last_update = update;
+        self.last_update = Some(update);
     }
 
     // Determines the appropriate state to output
     fn maybe_swap(&mut self, channel_controller: &mut dyn ChannelController) -> Option<LbState> {
+        // If no child updated itself, there is nothing we can do.
         if !self.child_manager.child_updated() {
             return None;
         }
 
-        let active_name = self
-            .child_manager
-            .update_sharder()
-            .active_child_builder
-            .as_ref()
-            .unwrap()
-            .name();
+        // If resolver_update has never been called, we have no children, so
+        // there's nothing we can do.
+        let Some(active_child_builder) = &self.active_child_builder else {
+            return None;
+        };
+        let active_name = active_child_builder.name();
 
+        // Scan through the child manager's children for the active and
+        // (optional) pending child.
         let mut active_child = None;
         let mut pending_child = None;
         for child in self.child_manager.children() {
@@ -233,22 +192,32 @@ impl GracefulSwitchPolicy {
             }
         }
         let active_child = active_child.expect("There should always be an active child policy");
+
+        // If no pending child exists, we will update the active child's state.
         let Some(pending_child) = pending_child else {
             return Some(active_child.state.clone());
         };
 
+        // If the active child is still reading and the pending child is still
+        // connecting, keep using the active child's state.
         if active_child.state.connectivity_state == ConnectivityState::Ready
             && pending_child.state.connectivity_state == ConnectivityState::Connecting
         {
             return Some(active_child.state.clone());
         }
 
-        let config = &LbConfig::new(GracefulSwitchLbConfig::Swap(pending_child.builder.clone()));
-        let state = pending_child.state.clone();
+        // Transition to the pending child and remove the active child.
+
+        // Clone some things from child_manager.children to release the
+        // child_manager reference.
+        let pending_child_builder = pending_child.builder.clone();
+        let pending_state = pending_child.state.clone();
+
+        self.active_child_builder = Some(pending_child_builder.clone());
         self.child_manager
-            .resolver_update(ResolverUpdate::default(), Some(config), channel_controller)
-            .expect("resolver_update with an empty update should not fail");
-        return Some(state);
+            .retain_children([((), pending_child_builder)]);
+
+        Some(pending_state)
     }
 }
 
@@ -426,11 +395,9 @@ mod test {
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
     ) -> Arc<dyn Subchannel> {
         match rx_events.recv().await.unwrap() {
-            TestEvent::NewSubchannel(sc) => {
-                return sc;
-            }
+            TestEvent::NewSubchannel(sc) => sc,
             other => panic!("unexpected event {:?}", other),
-        };
+        }
     }
 
     // Verifies that the channel moves to READY state with a picker that returns the
