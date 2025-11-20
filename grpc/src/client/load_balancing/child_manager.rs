@@ -287,7 +287,7 @@ where
         &mut self,
         child_updates: impl IntoIterator<Item = ChildUpdate<T>>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) {
         // Split the child updates into the IDs and builders, and the
         // ResolverUpdates/LbConfigs.
         let (ids_builders, updates): (Vec<_>, Vec<_>) = child_updates
@@ -313,7 +313,25 @@ where
             );
             self.resolve_child_controller(channel_controller, child_idx);
         }
-        Ok(())
+    }
+
+    /// Forwards the `resolver_update` and `config` to all current children.
+    pub fn resolver_update(
+        &mut self,
+        resolver_update: ResolverUpdate,
+        config: Option<&LbConfig>,
+        channel_controller: &mut dyn ChannelController,
+    ) {
+        for child_idx in 0..self.children.len() {
+            let child = &mut self.children[child_idx];
+            let mut channel_controller = WrappedController::new(channel_controller);
+            let _ = child.policy.resolver_update(
+                resolver_update.clone(),
+                config,
+                &mut channel_controller,
+            );
+            self.resolve_child_controller(channel_controller, child_idx);
+        }
     }
 
     /// Forwards the incoming subchannel_update to the child that created the
@@ -513,7 +531,7 @@ mod test {
             )),
         });
 
-        assert!(child_manager.update(updates, tcc).is_ok());
+        child_manager.update(updates, tcc);
     }
 
     fn move_subchannel_to_state(
@@ -849,7 +867,7 @@ mod test {
                 child_update: Some((ResolverUpdate::default(), Some(cfg.clone()))),
             }
         });
-        child_manager.update(updates.clone(), &mut tcc).unwrap();
+        child_manager.update(updates.clone(), &mut tcc);
 
         // Confirm that child one has requested work.
         match rx_events.recv().await.unwrap() {
@@ -873,7 +891,7 @@ mod test {
         // Now have both children request work.
         children.lock().unwrap().insert(name2, ());
 
-        child_manager.update(updates.clone(), &mut tcc).unwrap();
+        child_manager.update(updates.clone(), &mut tcc);
 
         // Confirm that both children requested work.
         match rx_events.recv().await.unwrap() {
@@ -888,6 +906,6 @@ mod test {
 
         // Perform one final call to resolver_update which asserts that both
         // child policies had their work methods called.
-        child_manager.update(updates, &mut tcc).unwrap();
+        child_manager.update(updates, &mut tcc);
     }
 }
