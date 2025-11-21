@@ -30,6 +30,7 @@
 // production.
 
 use std::collections::HashSet;
+use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Mutex;
 use std::{collections::HashMap, hash::Hash, mem, sync::Arc};
@@ -316,22 +317,26 @@ where
     }
 
     /// Forwards the `resolver_update` and `config` to all current children.
+    ///
+    /// Returns the Result from calling into each child.
     pub fn resolver_update(
         &mut self,
         resolver_update: ResolverUpdate,
         config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) {
+    ) -> Vec<Result<(), Box<dyn Error + Send + Sync>>> {
+        let mut res = Vec::with_capacity(self.children.len());
         for child_idx in 0..self.children.len() {
             let child = &mut self.children[child_idx];
             let mut channel_controller = WrappedController::new(channel_controller);
-            let _ = child.policy.resolver_update(
+            res.push(child.policy.resolver_update(
                 resolver_update.clone(),
                 config,
                 &mut channel_controller,
-            );
+            ));
             self.resolve_child_controller(channel_controller, child_idx);
         }
+        res
     }
 
     /// Forwards the incoming subchannel_update to the child that created the

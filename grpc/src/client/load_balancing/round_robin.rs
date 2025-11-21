@@ -92,7 +92,7 @@ impl RoundRobinPolicy {
     //
     // The state is determined according to normal state aggregation rules, and
     // the picker round-robins between all children in that state.
-    fn resolve_child_updates(&mut self, channel_controller: &mut dyn ChannelController) {
+    fn update_picker(&mut self, channel_controller: &mut dyn ChannelController) {
         if !self.child_manager.child_updated() {
             return;
         }
@@ -110,37 +110,28 @@ impl RoundRobinPolicy {
         channel_controller.update_picker(picker_update);
     }
 
-    // Responds to an incoming error in the ResolverUpdate.
-    //
-    // Forwards the error to all children unconditionally. Produces a new picker
-    // of the proper type.
+    // Responds to an incoming ResolverUpdate containing an Err in endpoints by
+    // forwarding it to all children unconditionally.  Updates the picker as
+    // needed.
     fn handle_resolver_error(
         &mut self,
-        resolver_error: String,
+        resolver_update: ResolverUpdate,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let ids_builders: Vec<_> = self
-            .child_manager
-            .children()
-            .map(|c| (c.identifier.clone(), c.builder.clone()))
-            .collect();
-        if ids_builders.is_empty() {
+        let err = format!(
+            "Received error from name resolver: {}",
+            resolver_update.endpoints.as_ref().unwrap_err()
+        );
+        if self.child_manager.children().next().is_none() {
             // We had no children so we must produce an erroring picker.
-            let err = format!("Received error from name resolver: {resolver_error}");
             self.move_to_transient_failure(err.clone(), channel_controller);
             return Err(err.into());
         }
         // Forward the error to each child.
-        let resolver_update = ResolverUpdate {
-            attributes: crate::attributes::Attributes,
-            endpoints: Err(resolver_error.clone()),
-            service_config: Ok(None),
-            resolution_note: None,
-        };
         self.child_manager
             .resolver_update(resolver_update, None, channel_controller);
-        self.resolve_child_updates(channel_controller);
-        Ok(())
+        self.update_picker(channel_controller);
+        return Err(err.into());
     }
 }
 
@@ -151,8 +142,8 @@ impl LbPolicy for RoundRobinPolicy {
         config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if let Err(resolver_error) = update.endpoints {
-            return self.handle_resolver_error(resolver_error, channel_controller);
+        if update.endpoints.is_err() {
+            return self.handle_resolver_error(update, channel_controller);
         }
 
         // Shard the update by endpoint.
@@ -179,7 +170,7 @@ impl LbPolicy for RoundRobinPolicy {
             return Err(err.into());
         }
 
-        self.resolve_child_updates(channel_controller);
+        self.update_picker(channel_controller);
         Ok(())
     }
 
@@ -191,17 +182,17 @@ impl LbPolicy for RoundRobinPolicy {
     ) {
         self.child_manager
             .subchannel_update(subchannel, state, channel_controller);
-        self.resolve_child_updates(channel_controller);
+        self.update_picker(channel_controller);
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.work(channel_controller);
-        self.resolve_child_updates(channel_controller);
+        self.update_picker(channel_controller);
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
         self.child_manager.exit_idle(channel_controller);
-        self.resolve_child_updates(channel_controller);
+        self.update_picker(channel_controller);
     }
 }
 
@@ -301,14 +292,12 @@ mod test {
 
     impl TestSubchannelList {
         fn new(addresses: &Vec<Address>, channel_controller: &mut dyn ChannelController) -> Self {
-            let mut scl = TestSubchannelList {
-                subchannels: Vec::new(),
-            };
-            for address in addresses {
-                let sc = channel_controller.new_subchannel(address);
-                scl.subchannels.push(sc);
+            TestSubchannelList {
+                subchannels: addresses
+                    .into_iter()
+                    .map(|a| channel_controller.new_subchannel(a))
+                    .collect(),
             }
-            scl
         }
 
         fn contains(&self, sc: &Arc<dyn Subchannel>) -> bool {
@@ -579,7 +568,7 @@ mod test {
                 assert!(update.connectivity_state == ConnectivityState::Connecting);
                 let req = test_utils::new_request();
                 assert!(update.picker.pick(&req) == PickResult::Queue);
-                return update.picker.clone();
+                update.picker
             }
             other => panic!("unexpected event {:?}", other),
         }
@@ -1063,8 +1052,8 @@ mod test {
                 other => panic!("unexpected pick result {}", other),
             }
         }
-        assert!(picked.contains(&subchannel_one));
-        assert!(picked.contains(&subchannel_two));
+        assert!(picked.contains(subchannel_one));
+        assert!(picked.contains(subchannel_two));
 
         // Resolver update removes subchannel_one and adds "new"
         let new_addr = Address {
@@ -1119,9 +1108,9 @@ mod test {
                 other => panic!("unexpected pick result {}", other),
             }
         }
-        assert!(picked.contains(&old_sc));
-        assert!(picked.contains(&new_sc));
-        assert!(!picked.contains(&subchannel_one));
+        assert!(picked.contains(old_sc));
+        assert!(picked.contains(new_sc));
+        assert!(!picked.contains(subchannel_one));
     }
 
     // Round robin should stay in transient failure until a child reports ready

@@ -69,9 +69,7 @@ impl LbPolicy for GracefulSwitchPolicy {
             });
         }
 
-        let res = self
-            .child_manager
-            .update(children.into_iter(), channel_controller);
+        self.child_manager.update(children, channel_controller);
         self.update_picker(channel_controller);
         Ok(())
     }
