@@ -127,8 +127,9 @@ impl RoundRobinPolicy {
             self.move_to_transient_failure(err.clone(), channel_controller);
             return Err(err.into());
         }
-        // Forward the error to each child.
-        self.child_manager
+        // Forward the error to each child, ignoring their responses.
+        let _ = self
+            .child_manager
             .resolver_update(resolver_update, None, channel_controller);
         self.update_picker(channel_controller);
         return Err(err.into());
@@ -160,7 +161,9 @@ impl LbPolicy for RoundRobinPolicy {
                 child_update: Some((update, config.cloned())),
             }
         });
-        self.child_manager.update(updates, channel_controller);
+        self.child_manager
+            .update(updates, channel_controller)
+            .unwrap();
 
         if self.child_manager.children().next().is_none() {
             // There are no children remaining, so report this error and produce

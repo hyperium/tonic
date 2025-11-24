@@ -288,9 +288,10 @@ where
         &mut self,
         child_updates: impl IntoIterator<Item = ChildUpdate<T>>,
         channel_controller: &mut dyn ChannelController,
-    ) {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Split the child updates into the IDs and builders, and the
         // ResolverUpdates/LbConfigs.
+        let mut errs = vec![];
         let (ids_builders, updates): (Vec<_>, Vec<_>) = child_updates
             .into_iter()
             .map(|e| ((e.child_identifier, e.child_policy_builder), e.child_update))
@@ -307,12 +308,24 @@ where
                 continue;
             };
             let mut channel_controller = WrappedController::new(channel_controller);
-            let _ = child.policy.resolver_update(
+            if let Err(err) = child.policy.resolver_update(
                 resolver_update,
                 config.as_ref(),
                 &mut channel_controller,
-            );
+            ) {
+                errs.push(err);
+            }
             self.resolve_child_controller(channel_controller, child_idx);
+        }
+        if errs.is_empty() {
+            Ok(())
+        } else {
+            let err = errs
+                .into_iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            Err(err.into())
         }
     }
 
@@ -324,19 +337,30 @@ where
         resolver_update: ResolverUpdate,
         config: Option<&LbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Vec<Result<(), Box<dyn Error + Send + Sync>>> {
-        let mut res = Vec::with_capacity(self.children.len());
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let mut errs = Vec::with_capacity(self.children.len());
         for child_idx in 0..self.children.len() {
             let child = &mut self.children[child_idx];
             let mut channel_controller = WrappedController::new(channel_controller);
-            res.push(child.policy.resolver_update(
+            if let Err(err) = child.policy.resolver_update(
                 resolver_update.clone(),
                 config,
                 &mut channel_controller,
-            ));
+            ) {
+                errs.push(err);
+            }
             self.resolve_child_controller(channel_controller, child_idx);
         }
-        res
+        if errs.is_empty() {
+            Ok(())
+        } else {
+            let err = errs
+                .into_iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            Err(err.into())
+        }
     }
 
     /// Forwards the incoming subchannel_update to the child that created the
@@ -457,6 +481,7 @@ mod test {
     use crate::client::ConnectivityState;
     use crate::rt::default_runtime;
     use std::collections::HashMap;
+    use std::error::Error;
     use std::panic;
     use std::sync::Arc;
     use std::sync::Mutex;
@@ -521,7 +546,7 @@ mod test {
         endpoints: Vec<Endpoint>,
         builder: Arc<dyn LbPolicyBuilder>,
         tcc: &mut dyn ChannelController,
-    ) {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let updates = endpoints.iter().map(|e| ChildUpdate {
             child_identifier: e.clone(),
             child_policy_builder: builder.clone(),
@@ -536,7 +561,7 @@ mod test {
             )),
         });
 
-        child_manager.update(updates, tcc);
+        child_manager.update(updates, tcc)
     }
 
     fn move_subchannel_to_state(
@@ -618,7 +643,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
@@ -671,7 +697,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
@@ -722,7 +749,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
@@ -763,7 +791,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
@@ -872,7 +901,7 @@ mod test {
                 child_update: Some((ResolverUpdate::default(), Some(cfg.clone()))),
             }
         });
-        child_manager.update(updates.clone(), &mut tcc);
+        child_manager.update(updates.clone(), &mut tcc).unwrap();
 
         // Confirm that child one has requested work.
         match rx_events.recv().await.unwrap() {
@@ -896,7 +925,7 @@ mod test {
         // Now have both children request work.
         children.lock().unwrap().insert(name2, ());
 
-        child_manager.update(updates.clone(), &mut tcc);
+        child_manager.update(updates.clone(), &mut tcc).unwrap();
 
         // Confirm that both children requested work.
         match rx_events.recv().await.unwrap() {
@@ -911,6 +940,6 @@ mod test {
 
         // Perform one final call to resolver_update which asserts that both
         // child policies had their work methods called.
-        child_manager.update(updates, &mut tcc);
+        child_manager.update(updates, &mut tcc).unwrap();
     }
 }
