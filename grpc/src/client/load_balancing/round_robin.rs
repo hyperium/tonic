@@ -238,8 +238,8 @@ mod test {
         self, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent, TestWorkScheduler,
     };
     use crate::client::load_balancing::{
-        pick_first, ChannelController, FailingPicker, LbPolicy, LbPolicyBuilder, LbState, Pick,
-        PickResult, Picker, QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
+        pick_first, ChannelController, FailingPicker, LbPolicy, LbState, Pick, PickResult, Picker,
+        QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
     };
     use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
     use crate::client::ConnectivityState;
