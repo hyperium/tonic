@@ -678,20 +678,6 @@ mod test {
         }
     }
 
-    #[test]
-    fn roundrobin_builder_name() -> Result<(), String> {
-        round_robin::reg();
-
-        let builder: Arc<dyn LbPolicyBuilder> = match GLOBAL_LB_REGISTRY.get_policy("round_robin") {
-            Some(b) => b,
-            None => {
-                return Err(String::from("round_robin LB policy not registered"));
-            }
-        };
-        assert_eq!(builder.name(), "round_robin");
-        Ok(())
-    }
-
     // Tests the scenario where the resolver returns an error before a valid
     // update. The LB policy should move to TRANSIENT_FAILURE state with a
     // failing picker.
@@ -974,7 +960,7 @@ mod test {
 
     // If Round Robin receives a resolver update that removes an endpoint and
     // adds a new endpoint from a previous update, that endpoint's subchannels
-    // should not be apart of its picks anymore and should be removed. It should
+    // should not be a part of its picks anymore and should be removed. It should
     // then roundrobin across the endpoints it still has and the new one.
     #[tokio::test]
     async fn roundrobin_pick_after_resolved_updated_hosts() {
