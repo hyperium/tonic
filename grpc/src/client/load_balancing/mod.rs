@@ -49,6 +49,7 @@ use crate::client::{
 pub(crate) mod child_manager;
 pub(crate) mod graceful_switch;
 pub(crate) mod pick_first;
+pub(crate) mod round_robin;
 
 #[cfg(test)]
 pub(crate) mod test_utils;
@@ -606,11 +607,11 @@ impl Picker for QueuingPicker {
 }
 
 #[derive(Debug)]
-pub(crate) struct Failing {
+pub(crate) struct FailingPicker {
     pub error: String,
 }
 
-impl Picker for Failing {
+impl Picker for FailingPicker {
     fn pick(&self, _: &Request) -> PickResult {
         PickResult::Fail(Status::unavailable(self.error.clone()))
     }

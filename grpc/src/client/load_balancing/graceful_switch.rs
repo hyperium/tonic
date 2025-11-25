@@ -26,7 +26,7 @@ struct GracefulSwitchLbConfig {
 /// to to active and tear down the previously active policy.
 #[derive(Debug)]
 pub(crate) struct GracefulSwitchPolicy {
-    child_manager: ChildManager<()>, // Child ID is the name of the child policy.
+    child_manager: ChildManager<()>, // Child ID empty - only the name of the child LB policy matters.
     last_update: Option<LbState>, // Saves the last output LbState to determine if an update is needed.
     active_child_builder: Option<Arc<dyn LbPolicyBuilder>>,
 }
@@ -69,11 +69,9 @@ impl LbPolicy for GracefulSwitchPolicy {
             });
         }
 
-        let res = self
-            .child_manager
-            .update(children.into_iter(), channel_controller)?;
+        let res = self.child_manager.update(children, channel_controller);
         self.update_picker(channel_controller);
-        Ok(())
+        res
     }
 
     fn subchannel_update(
