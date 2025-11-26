@@ -35,6 +35,7 @@ use crate::service::Response;
 use crate::service::Service;
 
 pub mod message;
+pub mod stream;
 
 pub struct Server {
     handler: Option<Arc<dyn Service>>,
