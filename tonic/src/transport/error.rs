@@ -90,3 +90,9 @@ impl StdError for Error {
             .map(|source| &**source as &(dyn StdError + 'static))
     }
 }
+
+impl From<crate::BoxError> for Error {
+    fn from(value: crate::BoxError) -> Self {
+        Self::from_source(value)
+    }
+}
