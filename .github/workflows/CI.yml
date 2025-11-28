@@ -308,7 +308,16 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     # we exlude crates that do not use rust-version = { workspace = true }
     - run: cargo no-dev-deps --no-private check --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
-    - run: cargo no-dev-deps --no-private doc --no-deps --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
+
+  doc:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+    - uses: dtolnay/rust-toolchain@nightly
+    - uses: dtolnay/install@cargo-docs-rs
+    - uses: taiki-e/install-action@cargo-hack
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo +nightly hack --no-private docs-rs
       env:
         RUSTDOCFLAGS: "-D warnings"
 
