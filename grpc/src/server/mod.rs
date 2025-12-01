@@ -37,6 +37,11 @@ use crate::service::Service;
 pub mod message;
 pub mod stream;
 
+mod codegen_api;
+pub use codegen_api::{
+    BidiStreamingMethod, ClientStreamingMethod, ServerStreamingMethod, UnaryMethod,
+};
+
 pub struct Server {
     handler: Option<Arc<dyn Service>>,
 }
