@@ -18,6 +18,7 @@ allowed_external_types = [
 default = ["dns", "_runtime-tokio","tls-rustls", "protobuf"]
 protobuf = ["dep:protobuf"]
 prost = ["dep:prost"]
+unsafe-downcast = []
 dns = ["dep:hickory-resolver", "_runtime-tokio"]
 # The following feature is used to ensure all modules use the runtime
 # abstraction instead of using tokio directly.

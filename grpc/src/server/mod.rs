@@ -42,6 +42,8 @@ pub use codegen_api::{
     BidiStreamingMethod, ClientStreamingMethod, ServerStreamingMethod, UnaryMethod,
 };
 
+pub(crate) mod call;
+
 pub struct Server {
     handler: Option<Arc<dyn Service>>,
 }
