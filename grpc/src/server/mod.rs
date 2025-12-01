@@ -44,6 +44,8 @@ pub use codegen_api::{
 
 pub(crate) mod call;
 
+pub(crate) mod method_handler;
+
 pub struct Server {
     handler: Option<Arc<dyn Service>>,
 }
