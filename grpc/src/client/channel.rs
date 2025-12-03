@@ -38,9 +38,9 @@ use tokio::sync::{mpsc, watch, Notify};
 use serde_json::json;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
-use crate::attributes::Attributes;
 use crate::rt;
 use crate::service::{Request, Response, Service};
+use crate::{attributes::Attributes, service::MessageAllocator};
 use crate::{client::ConnectivityState, rt::Runtime};
 use crate::{credentials::Credentials, rt::default_runtime};
 
@@ -195,9 +195,14 @@ impl Channel {
         s.clone().unwrap()
     }
 
-    pub async fn call(&self, method: String, request: Request) -> Response {
+    pub async fn call(
+        &self,
+        method: String,
+        request: Request,
+        response_allocator: Box<dyn MessageAllocator>,
+    ) -> Response {
         let ac = self.get_or_create_active_channel();
-        ac.call(method, request).await
+        ac.call(method, request, response_allocator).await
     }
 }
 
@@ -293,7 +298,12 @@ impl ActiveChannel {
         })
     }
 
-    async fn call(&self, method: String, request: Request) -> Response {
+    async fn call(
+        &self,
+        method: String,
+        request: Request,
+        response_allocator: Box<dyn MessageAllocator>,
+    ) -> Response {
         // TODO: pre-pick tasks (e.g. deadlines, interceptors, retry)
         let mut i = self.picker.iter();
         loop {
@@ -305,7 +315,12 @@ impl ActiveChannel {
                         if let Some(sc) = (pr.subchannel.as_ref() as &dyn Any)
                             .downcast_ref::<ExternalSubchannel>()
                         {
-                            return sc.isc.as_ref().unwrap().call(method, request).await;
+                            return sc
+                                .isc
+                                .as_ref()
+                                .unwrap()
+                                .call(method, request, response_allocator)
+                                .await;
                         } else {
                             panic!("picked subchannel is not an implementation provided by the channel");
                         }
