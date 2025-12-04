@@ -22,15 +22,14 @@ impl ServerStatus {
         ServerStatus(Status::new(code, message))
     }
 
-    /// Converts the `ServerStatus` to a `Status` for client responses.
-    pub(crate) fn to_status(self) -> Status {
-        self.0
-    }
-}
-
-impl From<Status> for ServerStatus {
-    fn from(status: Status) -> Self {
+    /// Create a new `ServerStatus` from a `Status`.
+    pub fn from_status(status: Status) -> Self {
         ServerStatus(status)
+    }
+
+    /// Converts the `ServerStatus` to a `Status` for client responses.
+    pub(crate) fn into_status(self) -> Status {
+        self.0
     }
 }
 
@@ -54,14 +53,14 @@ mod tests {
     #[test]
     fn test_server_status_from_status() {
         let status = Status::new(StatusCode::Ok, "ok");
-        let server_status: ServerStatus = status.into();
+        let server_status = ServerStatus::from_status(status);
         assert_eq!(server_status.code(), StatusCode::Ok);
     }
 
     #[test]
-    fn test_server_status_to_status() {
+    fn test_server_status_into_status() {
         let server_status = ServerStatus::new(StatusCode::Ok, "ok");
-        let status = server_status.to_status();
+        let status = server_status.into_status();
         assert_eq!(status.code(), StatusCode::Ok);
     }
 }
