@@ -12,13 +12,9 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
-tonic = { version = "0.14", path = "../tonic", optional = true }
-tokio = { version = "1", optional = true }
-prost = { version = "0.14", optional = true }
-prost-types = { version = "0.14", optional = true }
 
 [features]
 default = ["transport-tonic"]
-transport-tonic = ["dep:tonic", "rt-tokio", "codegen-prost"]
-rt-tokio = ["dep:tokio"]
-codegen-prost = ["dep:prost", "dep:prost-types"]
+transport-tonic = ["rt-tokio", "codegen-prost"]
+rt-tokio = []
+codegen-prost = []
