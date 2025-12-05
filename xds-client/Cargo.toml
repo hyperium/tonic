@@ -1,0 +1,21 @@
+[package]
+name = "xds-client"
+version = "0.1.0-alpha.1"
+edition = "2021"
+license = "MIT"
+rust-version = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+tonic = { version = "0.14", path = "../tonic", optional = true }
+tokio = { version = "1", optional = true }
+prost = { version = "0.14", optional = true }
+prost-types = { version = "0.14", optional = true }
+
+[features]
+default = ["transport-tonic"]
+transport-tonic = ["dep:tonic", "rt-tokio", "codegen-prost"]
+rt-tokio = ["dep:tokio"]
+codegen-prost = ["dep:prost", "dep:prost-types"]
