@@ -1,7 +1,10 @@
 [package]
 name = "xds-client"
+description = "An xDS client implementation in Rust"
 version = "0.1.0-alpha.1"
 edition = "2021"
+homepage = "https://github.com/hyperium/tonic"
+repository = "https://github.com/hyperium/tonic"
 license = "MIT"
 rust-version = { workspace = true }
 
