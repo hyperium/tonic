@@ -1,0 +1,1 @@
+//! `prost` codec-specific resources.
