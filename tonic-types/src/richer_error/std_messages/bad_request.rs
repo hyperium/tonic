@@ -53,7 +53,8 @@ impl From<FieldViolation> for pb::bad_request::FieldViolation {
         pb::bad_request::FieldViolation {
             field: value.field,
             description: value.description,
-            ..Default::default()
+            reason: value.reason,
+            localized_message: value.localized_message.map(Into::into),
         }
     }
 }
@@ -159,7 +160,7 @@ impl From<BadRequest> for pb::BadRequest {
 #[cfg(test)]
 mod tests {
     use super::super::super::{FromAny, IntoAny};
-    use super::BadRequest;
+    use super::{BadRequest, FieldViolation, LocalizedMessage};
 
     #[test]
     fn gen_bad_request() {
@@ -212,6 +213,53 @@ mod tests {
         };
 
         let formatted = format!("{br_details:?}");
+
+        assert!(
+            formatted.eq(expected_filled),
+            "BadRequest from Any differs from expected result"
+        );
+    }
+
+    #[test]
+    fn gen_bad_request_with_verbose_field_violation() {
+        let field_violations = vec![FieldViolation {
+            field: "field".to_string(),
+            description: "description".to_string(),
+            reason: "REASON".to_string(),
+            localized_message: Some(LocalizedMessage::new("en-US", "localized error")),
+        }];
+
+        let br_details = BadRequest::new(field_violations);
+        let formatted = format!("{:?}", br_details);
+
+        let expected_filled = "BadRequest { field_violations: [FieldViolation { field: \"field\", description: \"description\", reason: \"REASON\", localized_message: Some(LocalizedMessage { locale: \"en-US\", message: \"localized error\" }) }] }";
+
+        assert!(
+            formatted.eq(expected_filled),
+            "filled BadRequest differs from expected result"
+        );
+
+        assert!(
+            !br_details.is_empty(),
+            "filled BadRequest returns 'true' from .is_empty()"
+        );
+
+        let gen_any = br_details.into_any();
+        let formatted = format!("{:?}", gen_any);
+
+        let expected = "Any { type_url: \"type.googleapis.com/google.rpc.BadRequest\", value: [10, 54, 10, 5, 102, 105, 101, 108, 100, 18, 11, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110, 26, 6, 82, 69, 65, 83, 79, 78, 34, 24, 10, 5, 101, 110, 45, 85, 83, 18, 15, 108, 111, 99, 97, 108, 105, 122, 101, 100, 32, 101, 114, 114, 111, 114] }";
+
+        assert!(
+            formatted.eq(expected),
+            "Any from filled BadRequest differs from expected result"
+        );
+
+        let br_details = match BadRequest::from_any(gen_any) {
+            Err(error) => panic!("Error generating BadRequest from Any: {:?}", error),
+            Ok(from_any) => from_any,
+        };
+
+        let formatted = format!("{:?}", br_details);
 
         assert!(
             formatted.eq(expected_filled),
