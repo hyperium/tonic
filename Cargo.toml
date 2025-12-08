@@ -13,6 +13,7 @@ members = [
   "examples",
   "codegen",
   "grpc",
+  "xds-client",
   "interop", # Tests
   "tests/disable_comments",
   "tests/wellknown",
