@@ -34,6 +34,7 @@ use std::{
 };
 
 use tokio::sync::{mpsc, watch, Notify};
+use tonic::{Code, Status};
 
 use serde_json::json;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
@@ -140,16 +141,16 @@ impl Channel {
         target: &str,
         credentials: Option<Box<dyn Credentials>>,
         options: ChannelOptions,
-    ) -> Self {
+    ) -> Result<Self, Status> {
         pick_first::reg();
-        Self {
+        Ok(Self {
             inner: Arc::new(PersistentChannel::new(
                 target,
                 credentials,
                 default_runtime(),
                 options,
-            )),
-        }
+            )?),
+        })
     }
 
     // TODO: enter_idle(&self) and graceful_stop()?
@@ -220,12 +221,20 @@ impl PersistentChannel {
         _credentials: Option<Box<dyn Credentials>>,
         runtime: Arc<dyn rt::Runtime>,
         options: ChannelOptions,
-    ) -> Self {
-        Self {
-            target: Url::from_str(target).unwrap(), // TODO handle err
-            active_channel: Mutex::default(),
-            options,
-            runtime,
+    ) -> Result<Self, Status> {
+        let url_result = Url::from_str(target);
+
+        match url_result {
+            Ok(url) => Ok(Self {
+                target: url,
+                active_channel: Mutex::default(),
+                options,
+                runtime,
+            }),
+            Err(parse_error) => {
+                let status_error = Status::new(Code::InvalidArgument, format!("{}", parse_error));
+                Err(status_error)
+            }
         }
     }
 }
