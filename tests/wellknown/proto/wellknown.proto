@@ -10,4 +10,13 @@ service Admin {
   rpc EmptyCall(google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc StringCall(google.protobuf.StringValue) returns (google.protobuf.Empty);
   rpc AnyCall(google.protobuf.Any) returns (google.protobuf.Empty);
+  // Wrapper types that map to primitives
+  rpc BoolCall(google.protobuf.BoolValue) returns (google.protobuf.BoolValue);
+  rpc Int32Call(google.protobuf.Int32Value) returns (google.protobuf.Int32Value);
+  rpc Int64Call(google.protobuf.Int64Value) returns (google.protobuf.Int64Value);
+  rpc UInt32Call(google.protobuf.UInt32Value) returns (google.protobuf.UInt32Value);
+  rpc UInt64Call(google.protobuf.UInt64Value) returns (google.protobuf.UInt64Value);
+  rpc FloatCall(google.protobuf.FloatValue) returns (google.protobuf.FloatValue);
+  rpc DoubleCall(google.protobuf.DoubleValue) returns (google.protobuf.DoubleValue);
+  rpc BytesCall(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
 }
