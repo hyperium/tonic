@@ -136,7 +136,6 @@ impl Channel {
     /// connection to a service.  Channel creation cannot fail, but if the
     /// target string is invalid, the returned channel will never connect, and
     /// will fail all RPCs.
-    // TODO: should this return a Result instead?
     pub fn new(
         target: &str,
         credentials: Option<Box<dyn Credentials>>,

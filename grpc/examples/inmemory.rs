@@ -46,7 +46,8 @@ async fn main() {
 
     println!("Creating channel for {}", lis.target());
     let chan_opts = ChannelOptions::default();
-    let chan = grpc::client::Channel::new(lis.target().as_str(), None, chan_opts);
+    let chan = grpc::client::Channel::new(lis.target().as_str(), None, chan_opts)
+        .expect("Could not create channel");
 
     let outbound = async_stream::stream! {
         yield Box::new(MyReqMessage("My Request 1".to_string())) as Box<dyn Message>;
