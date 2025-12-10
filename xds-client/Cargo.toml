@@ -12,6 +12,9 @@ rust-version = { workspace = true }
 workspace = true
 
 [dependencies]
+bytes = "1.11.0"
+futures = "0.3.31"
+thiserror = "2.0.17"
 
 [features]
 default = ["transport-tonic"]
