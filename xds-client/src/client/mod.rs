@@ -17,13 +17,11 @@ pub struct XdsClientBuilder {
 impl XdsClientBuilder {
     /// Create a new builder with the given configuration.
     pub fn new(config: ClientConfig) -> Self {
-        Self {
-            _config: config,
-        }
+        Self { _config: config }
     }
 
     /// Build the client with the given transport and runtime.
-    /// 
+    ///
     /// This starts the background worker that manages the ADS stream.
     pub async fn build<T, R>(self, _transport: T, _runtime: R) -> Result<XdsClient> {
         todo!()
@@ -31,7 +29,7 @@ impl XdsClientBuilder {
 }
 
 /// The xDS client.
-/// 
+///
 /// This is a handle to the background worker that manages the ADS stream.
 /// Cloning this handle creates a new reference to the same worker.
 #[derive(Clone, Debug)]
@@ -46,12 +44,12 @@ impl XdsClient {
     }
 
     /// Watch a resource by name.
-    /// 
+    ///
     /// Returns a [`ResourceWatcher`] that receives events for this resource.
     /// Dropping the watcher automatically unsubscribes.
-    /// 
+    ///
     /// # Example
-    /// 
+    ///
     /// ```ignore
     /// let mut watcher = client.watch::<Listener>("my-listener");
     /// while let Some(event) = watcher.next().await {
@@ -68,11 +66,11 @@ impl XdsClient {
     ///     }
     /// }
     /// ```
-    /// 
+    ///
     /// # Panics
-    /// 
+    ///
     /// Panics if the resource type is not supported.
-    /// 
+    ///
     /// # Errors
     /// ```
     pub fn watch<T: Resource>(&self, _name: impl Into<String>) -> ResourceWatcher<T> {

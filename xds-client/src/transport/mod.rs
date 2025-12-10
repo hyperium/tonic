@@ -6,7 +6,6 @@ use std::future::Future;
 #[cfg(feature = "transport-tonic")]
 pub mod tonic;
 
-
 /// A discovery request to send to the xDS server.
 #[derive(Debug, Clone)]
 pub struct DiscoveryRequest {
@@ -20,7 +19,7 @@ pub struct DiscoveryResponse {
 }
 
 /// Factory for creating xDS transport streams.
-/// 
+///
 /// This abstraction allows for different transport implementations:
 /// - Tonic-based gRPC transport
 /// - The upcoming gRPC Rust transport
@@ -31,7 +30,7 @@ pub trait Transport: Send + Sync + 'static {
     type Stream: TransportStream;
 
     /// Creates a new bidirectional ADS stream to the xDS server.
-    /// 
+    ///
     /// This may be called multiple times for reconnection.
     fn connect(&self) -> impl Future<Output = Result<Self::Stream>> + Send;
 }
@@ -42,7 +41,7 @@ pub trait TransportStream: Send + 'static {
     fn send(&mut self, request: DiscoveryRequest) -> impl Future<Output = Result<()>> + Send;
 
     /// Receive the next discovery response from the server.
-    /// 
+    ///
     /// Returns:
     /// - `Ok(Some(response))` - Received a response.
     /// - `Ok(None)` - Stream closed normally.

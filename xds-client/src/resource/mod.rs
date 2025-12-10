@@ -7,18 +7,18 @@ use bytes::Bytes;
 pub mod prost;
 
 /// Trait for xDS resources.
-/// 
+///
 /// # Validation
-/// 
+///
 /// The `decode` method should:
 /// - Parse the raw bytes based on the serialization format, such as Protobuf.
 /// - Validate the parsed resource against the expected schema.
-/// 
+///
 /// It should return `Err` if parsing fails or validation fails.
 /// The error message will be included in the NACK's `error_detail`.
-/// 
+///
 /// # Example
-/// 
+///
 /// ```ignore
 /// impl Resource for Listener {
 ///     const TYPE_URL: &'static str = "type.googleapis.com/envoy.config.listener.v3.Listener";
@@ -41,12 +41,12 @@ pub trait Resource: Send + Sync + Clone + std::fmt::Debug + 'static {
     const TYPE_URL: &'static str;
 
     /// Decode and validate a resource from its serialized bytes.
-    /// 
+    ///
     /// Returns `Err` if parsing fails or validation fails.
     fn decode(bytes: Bytes) -> Result<Self>;
 
     /// Returns the resource name.
-    /// 
+    ///
     /// The resource name combined with the type URL uniquely identifies a resource.
     fn name(&self) -> &str;
 }
