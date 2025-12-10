@@ -11,7 +11,7 @@ use tonic::{
 pub(crate) struct BytesCodec {}
 
 impl Codec for BytesCodec {
-    type Encode = Bytes;
+    type Encode = Result<Bytes, Status>;
     type Decode = Bytes;
     type Encoder = BytesEncoder;
     type Decoder = BytesDecoder;
@@ -28,11 +28,11 @@ impl Codec for BytesCodec {
 pub struct BytesEncoder {}
 
 impl Encoder for BytesEncoder {
-    type Item = Bytes;
+    type Item = Result<Bytes, Status>;
     type Error = Status;
 
     fn encode(&mut self, item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
-        dst.put_slice(&item);
+        dst.put_slice(&item?);
         Ok(())
     }
 }
