@@ -66,13 +66,6 @@ impl XdsClient {
     ///     }
     /// }
     /// ```
-    ///
-    /// # Panics
-    ///
-    /// Panics if the resource type is not supported.
-    ///
-    /// # Errors
-    /// ```
     pub fn watch<T: Resource>(&self, _name: impl Into<String>) -> ResourceWatcher<T> {
         todo!()
     }
