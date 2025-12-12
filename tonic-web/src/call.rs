@@ -1,4 +1,3 @@
-use std::fmt;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
@@ -9,6 +8,8 @@ use http_body::{Body, Frame, SizeHint};
 use pin_project::pin_project;
 use tokio_stream::Stream;
 use tonic::Status;
+
+use crate::BoxError;
 
 use self::content_types::*;
 
@@ -158,11 +159,11 @@ impl<B> GrpcWebCall<B> {
     }
 }
 
-impl<B> GrpcWebCall<B>
+impl<B, D> GrpcWebCall<B>
 where
-    B: Body,
-    B::Data: Buf,
-    B::Error: fmt::Display,
+    B: Body<Data = D>,
+    B::Error: Into<BoxError> + Send,
+    D: Buf,
 {
     // Poll body for data, decoding (e.g. via Base64 if necessary) and returning frames
     // to the caller. If the caller is a client, it should look for trailers before
@@ -247,10 +248,11 @@ where
     }
 }
 
-impl<B> Body for GrpcWebCall<B>
+impl<B, D> Body for GrpcWebCall<B>
 where
-    B: Body,
-    B::Error: fmt::Display,
+    B: Body<Data = D>,
+    B::Error: Into<BoxError> + Send,
+    D: Buf,
 {
     type Data = Bytes;
     type Error = Status;
@@ -336,10 +338,11 @@ where
     }
 }
 
-impl<B> Stream for GrpcWebCall<B>
+impl<B, D> Stream for GrpcWebCall<B>
 where
-    B: Body,
-    B::Error: fmt::Display,
+    B: Body<Data = D>,
+    B::Error: Into<BoxError> + Send,
+    D: Buf,
 {
     type Item = Result<Frame<Bytes>, Status>;
 
@@ -372,7 +375,8 @@ impl Encoding {
     }
 }
 
-fn internal_error(e: impl std::fmt::Display) -> Status {
+fn internal_error(e: impl Into<BoxError> + Send) -> Status {
+    let e = e.into();
     Status::internal(format!("tonic-web: {e}"))
 }
 
