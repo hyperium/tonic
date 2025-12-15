@@ -33,7 +33,6 @@ use std::{
     vec,
 };
 
-use hyper::client::conn;
 use tokio::sync::{mpsc, watch, Notify};
 
 use serde_json::json;
