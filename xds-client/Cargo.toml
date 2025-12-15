@@ -13,7 +13,6 @@ workspace = true
 
 [dependencies]
 bytes = "1.11.0"
-futures = "0.3.31"
 thiserror = "2.0.17"
 
 [features]
@@ -21,3 +20,9 @@ default = ["transport-tonic"]
 transport-tonic = ["rt-tokio", "codegen-prost"]
 rt-tokio = []
 codegen-prost = []
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    # major released
+    "bytes::*",
+]

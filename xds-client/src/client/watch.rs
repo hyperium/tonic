@@ -2,9 +2,7 @@
 
 use crate::error::Error;
 use crate::resource::Resource;
-use futures::Stream;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::future::Future;
 
 /// Events delivered to resource watchers.
 #[derive(Debug)]
@@ -30,10 +28,23 @@ pub struct ResourceWatcher<T: Resource> {
     _marker: std::marker::PhantomData<T>,
 }
 
-impl<T: Resource> Stream for ResourceWatcher<T> {
-    type Item = ResourceEvent<T>;
-
-    fn poll_next(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
-        todo!()
+impl<T: Resource> ResourceWatcher<T> {
+    /// Returns the next resource event.
+    ///
+    /// Returns `None` when the subscription is closed.
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// while let Some(event) = watcher.next().await {
+    ///     match event {
+    ///         ResourceEvent::Upsert(resource) => { /* handle */}
+    ///         ResourceEvent::Removed { name } => { /* handle */}
+    ///         ResourceEvent::Error(error) => { /* handle */}
+    ///     }
+    /// }
+    /// ```
+    pub fn next(&mut self) -> impl Future<Output = Option<ResourceEvent<T>>> + '_ {
+        async { todo!() }
     }
 }
