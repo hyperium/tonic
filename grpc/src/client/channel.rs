@@ -33,6 +33,7 @@ use std::{
     vec,
 };
 
+use hyper::client::conn;
 use tokio::sync::{mpsc, watch, Notify};
 
 use serde_json::json;
@@ -154,23 +155,14 @@ impl Channel {
 
     // TODO: enter_idle(&self) and graceful_stop()?
 
-    /// Returns the current state of the channel.
+    /// Returns the current state of the channel. Any errors translate into a
+    /// TransientFailure state.
     pub fn state(&mut self, connect: bool) -> ConnectivityState {
-        let ac = if !connect {
-            // If !connect and we have no active channel already, return idle.
-            let ac = self.inner.active_channel.lock().unwrap();
-            if ac.is_none() {
-                return ConnectivityState::Idle;
-            }
-            ac.as_ref().unwrap().clone()
-        } else {
-            // Otherwise, get or create the active channel.
-            self.get_or_create_active_channel()
-        };
-        if let Some(s) = ac.connectivity_state.cur() {
-            return s;
+        let state = self.inner.state(connect);
+        match state {
+            Ok(s) => s,
+            Err(_) => ConnectivityState::TransientFailure,
         }
-        ConnectivityState::Idle
     }
 
     /// Waits for the state of the channel to change from source.  Times out and
@@ -183,20 +175,8 @@ impl Channel {
         todo!()
     }
 
-    fn get_or_create_active_channel(&self) -> Arc<ActiveChannel> {
-        let mut s = self.inner.active_channel.lock().unwrap();
-        if s.is_none() {
-            *s = Some(ActiveChannel::new(
-                self.inner.target.clone(),
-                &self.inner.options,
-                self.inner.runtime.clone(),
-            ));
-        }
-        s.clone().unwrap()
-    }
-
     pub async fn call(&self, method: String, request: Request) -> Response {
-        let ac = self.get_or_create_active_channel();
+        let ac = self.inner.get_active_channel(true).unwrap();
         ac.call(method, request).await
     }
 }
@@ -213,8 +193,8 @@ struct PersistentChannel {
 }
 
 impl PersistentChannel {
-    // Channels begin idle so new is a simple constructor.  Required parameters
-    // are not in ChannelOptions.
+    // Channels begin idle so new does not automatically connect.
+    // ChannelOptions are only non-required parameters.
     fn new(
         target: &str,
         _credentials: Option<Box<dyn Credentials>>,
@@ -227,6 +207,47 @@ impl PersistentChannel {
             options,
             runtime,
         }
+    }
+
+    /// Returns the current state of the channel. If there is no underlying active channel,
+    /// returns Idle. If `connect` is true, will create a new active channel iff none exists.
+    fn state(
+        &self,
+        connect: bool,
+    ) -> Result<ConnectivityState, Box<dyn std::error::Error + Sync + Send>> {
+        let ac = self.get_active_channel(connect)?;
+        if let Some(s) = ac.connectivity_state.cur() {
+            return Ok(s);
+        }
+        return Ok(ConnectivityState::Idle);
+    }
+
+    /// Gets the underlying active channel. If `connect` is true, will create a new channel iff
+    /// there is no active channel.
+    fn get_active_channel(
+        &self,
+        connect: bool,
+    ) -> Result<Arc<ActiveChannel>, Box<dyn std::error::Error + Sync + Send>> {
+        let mut s = self
+            .active_channel
+            .lock()
+            .map_err(|_| "Could not get channel lock.".to_string())?;
+
+        if s.is_none() {
+            if connect {
+                *s = Some(ActiveChannel::new(
+                    self.target.clone(),
+                    &self.options,
+                    self.runtime.clone(),
+                ));
+            } else {
+                return Err("No active channel.".into());
+            }
+        }
+
+        s.as_ref()
+            .cloned()
+            .ok_or_else(|| "Could not clone channel".into())
     }
 }
 
