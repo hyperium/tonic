@@ -20,7 +20,7 @@ pub enum ResourceEvent<T> {
 
 /// A watcher for resources of type `T`.
 ///
-/// Implements [`Stream`] to receive resource events.
+/// Call [`next()`](Self::next) to receive resource events.
 /// Dropping the watcher unsubscribes from the resource.
 #[derive(Debug)]
 pub struct ResourceWatcher<T: Resource> {
