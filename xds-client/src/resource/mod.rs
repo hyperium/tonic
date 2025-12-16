@@ -6,6 +6,25 @@ use bytes::Bytes;
 #[cfg(feature = "codegen-prost")]
 pub mod prost;
 
+/// A type URL identifying an xDS resource type.
+///
+/// Format: `type.googleapis.com/<resource_type>`
+/// e.g. `type.googleapis.com/envoy.config.listener.v3.Listener`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeUrl(&'static str);
+
+impl TypeUrl {
+    /// Create a new type URL from a static string.
+    pub const fn new(url: &'static str) -> Self {
+        Self(url)
+    }
+
+    /// Returns the type URL as a string slice.
+    pub const fn as_str(&self) -> &'static str {
+        self.0
+    }
+}
+
 /// Trait for xDS resources.
 ///
 /// # Validation
@@ -21,7 +40,7 @@ pub mod prost;
 ///
 /// ```ignore
 /// impl Resource for Listener {
-///     const TYPE_URL: &'static str = "type.googleapis.com/envoy.config.listener.v3.Listener";
+///     const TYPE_URL: TypeUrl = TypeUrl::new("type.googleapis.com/envoy.config.listener.v3.Listener");
 ///
 ///     fn decode(bytes: Bytes) -> Result<Self> {
 ///         let proto = ListenerProto::decode(bytes)?;
@@ -34,11 +53,9 @@ pub mod prost;
 ///     }
 /// }
 /// ```
-pub trait Resource: Send + Sync + Clone + std::fmt::Debug + 'static {
+pub trait Resource: Sized + Send + Sync + 'static {
     /// The xDS type URL for this resource type.
-    ///
-    /// Example: `"type.googleapis.com/envoy.config.listener.v3.Listener"`
-    const TYPE_URL: &'static str;
+    const TYPE_URL: TypeUrl;
 
     /// Decode and validate a resource from its serialized bytes.
     ///

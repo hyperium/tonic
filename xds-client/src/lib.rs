@@ -25,7 +25,7 @@
 //! let mut watcher = client.watch::<Listener>("my-listener");
 //! while let Some(event) = watcher.next().await {
 //!     match event {
-//!         ResourceEvent::Upsert(resource) => { /* handle resource update */ }
+//!         ResourceEvent::ResourceChanged(resource) => { /* handle resource change */ }
 //!         // ... handle other events ...
 //!     }
 //! }

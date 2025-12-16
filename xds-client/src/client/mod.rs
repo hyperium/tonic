@@ -9,6 +9,7 @@ pub mod config;
 pub mod watch;
 
 /// Builder for [`XdsClient`].
+/// TODO: parameterize with transport and runtime, default to tonic/tokio stack.
 #[derive(Debug)]
 pub struct XdsClientBuilder {
     _config: ClientConfig,
@@ -23,7 +24,7 @@ impl XdsClientBuilder {
     /// Build the client with the given transport and runtime.
     ///
     /// This starts the background worker that manages the ADS stream.
-    pub async fn build<T, R>(self, _transport: T, _runtime: R) -> Result<XdsClient> {
+    pub async fn build(self) -> Result<XdsClient> {
         todo!()
     }
 }
@@ -54,14 +55,14 @@ impl XdsClient {
     /// let mut watcher = client.watch::<Listener>("my-listener");
     /// while let Some(event) = watcher.next().await {
     ///     match event {
-    ///         ResourceEvent::Upsert(resource) => {
-    ///             println!("Listener updated: {}", resource.name());
+    ///         ResourceEvent::ResourceChanged(resource) => {
+    ///             println!("Listener changed: {}", resource.name());
     ///         }
-    ///         ResourceEvent::Removed { name } => {
-    ///             println!("Listener removed: {}", name);
-    ///         }
-    ///         ResourceEvent::Error(error) => {
+    ///         ResourceEvent::ResourceError(error) => {
     ///             println!("Error watching listener: {}", error);
+    ///         }
+    ///         ResourceEvent::AmbientError(error) => {
+    ///             println!("Ambient error: {}", error);
     ///         }
     ///     }
     /// }

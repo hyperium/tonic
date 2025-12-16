@@ -2,20 +2,19 @@
 
 use crate::error::Error;
 use crate::resource::Resource;
-use std::future::Future;
 
 /// Events delivered to resource watchers.
 #[derive(Debug)]
 pub enum ResourceEvent<T> {
-    /// Resource was added or updated.
-    Upsert(T),
-    /// Resource was removed.
-    Removed {
-        /// Resource name.
-        name: String,
-    },
-    /// Error occurred for this resource type.
-    Error(Error),
+    /// Indicates a new version of the resource is available.
+    ResourceChanged(T),
+    /// Indicates an error occurred while trying to fetch or decode the resource.
+    ResourceError(Error),
+    /// Indicates an error occurred after a resource has been received that should
+    /// not modify the use of that resource but may provide useful information
+    /// about the state of the XdsClient. The previous version of the resource
+    /// should still be considered valid.
+    AmbientError(Error),
 }
 
 /// A watcher for resources of type `T`.
@@ -38,13 +37,13 @@ impl<T: Resource> ResourceWatcher<T> {
     /// ```ignore
     /// while let Some(event) = watcher.next().await {
     ///     match event {
-    ///         ResourceEvent::Upsert(resource) => { /* handle */}
-    ///         ResourceEvent::Removed { name } => { /* handle */}
-    ///         ResourceEvent::Error(error) => { /* handle */}
+    ///         ResourceEvent::ResourceChanged(resource) => { /* handle */}
+    ///         ResourceEvent::ResourceError(error) => { /* handle */}
+    ///         ResourceEvent::AmbientError(error) => { /* handle */}
     ///     }
     /// }
     /// ```
-    pub fn next(&mut self) -> impl Future<Output = Option<ResourceEvent<T>>> + '_ {
-        async { todo!() }
+    pub async fn next(&mut self) -> Option<ResourceEvent<T>> {
+        todo!()
     }
 }

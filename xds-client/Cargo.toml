@@ -7,13 +7,14 @@ homepage = "https://github.com/hyperium/tonic"
 repository = "https://github.com/hyperium/tonic"
 license = "MIT"
 rust-version = { workspace = true }
+publish = false
 
 [lints]
 workspace = true
 
 [dependencies]
 bytes = "1.11.0"
-thiserror = "2.0.17"
+thiserror = "2"
 
 [features]
 default = ["transport-tonic"]
