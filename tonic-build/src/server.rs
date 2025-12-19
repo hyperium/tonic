@@ -246,6 +246,7 @@ fn generate_trait<T: Service>(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn generate_trait_methods<T: Service>(
     service: &T,
     emit_package: bool,
@@ -259,26 +260,42 @@ fn generate_trait_methods<T: Service>(
     let mut stream = TokenStream::new();
 
     for method in service.methods() {
+        let name = quote::format_ident!("{}", method.name());
+
+        let (req_message, res_message) =
+            method.request_response_name(proto_path, compile_well_known_types);
+
+        let method_doc =
+            if disable_comments.contains(&format_method_name(service, method, emit_package)) {
+                TokenStream::new()
+            } else {
+                generate_doc_comments(method.comment())
+            };
+
+        let self_param = if use_arc_self {
+            quote!(self: std::sync::Arc<Self>)
+        } else {
+            quote!(&self)
+        };
+
         let method = match async_trait {
             true => generate_trait_method_async_trait(
-                service,
-                emit_package,
-                proto_path,
-                compile_well_known_types,
-                disable_comments,
-                use_arc_self,
                 generate_default_stubs,
                 method,
+                method_doc,
+                name,
+                self_param,
+                req_message,
+                res_message,
             ),
             false => generate_trait_method_rpit(
-                service,
-                emit_package,
-                proto_path,
-                compile_well_known_types,
-                disable_comments,
-                use_arc_self,
                 generate_default_stubs,
                 method,
+                method_doc,
+                name,
+                self_param,
+                req_message,
+                res_message,
             ),
         };
 
@@ -288,34 +305,15 @@ fn generate_trait_methods<T: Service>(
     stream
 }
 
-fn generate_trait_method_async_trait<T: Service>(
-    service: &T,
-    emit_package: bool,
-    proto_path: &str,
-    compile_well_known_types: bool,
-    disable_comments: &HashSet<String>,
-    use_arc_self: bool,
+fn generate_trait_method_async_trait(
     generate_default_stubs: bool,
-    method: &T::Method,
+    method: &impl Method,
+    method_doc: TokenStream,
+    name: Ident,
+    self_param: TokenStream,
+    req_message: TokenStream,
+    res_message: TokenStream,
 ) -> TokenStream {
-    let name = quote::format_ident!("{}", method.name());
-
-    let (req_message, res_message) =
-        method.request_response_name(proto_path, compile_well_known_types);
-
-    let method_doc =
-        if disable_comments.contains(&format_method_name(service, method, emit_package)) {
-            TokenStream::new()
-        } else {
-            generate_doc_comments(method.comment())
-        };
-
-    let self_param = if use_arc_self {
-        quote!(self: std::sync::Arc<Self>)
-    } else {
-        quote!(&self)
-    };
-
     match (
         method.client_streaming(),
         method.server_streaming(),
@@ -406,34 +404,15 @@ fn generate_trait_method_async_trait<T: Service>(
     }
 }
 
-fn generate_trait_method_rpit<T: Service>(
-    service: &T,
-    emit_package: bool,
-    proto_path: &str,
-    compile_well_known_types: bool,
-    disable_comments: &HashSet<String>,
-    use_arc_self: bool,
+fn generate_trait_method_rpit(
     generate_default_stubs: bool,
-    method: &T::Method,
+    method: &impl Method,
+    method_doc: TokenStream,
+    name: Ident,
+    self_param: TokenStream,
+    req_message: TokenStream,
+    res_message: TokenStream,
 ) -> TokenStream {
-    let name = quote::format_ident!("{}", method.name());
-
-    let (req_message, res_message) =
-        method.request_response_name(proto_path, compile_well_known_types);
-
-    let method_doc =
-        if disable_comments.contains(&format_method_name(service, method, emit_package)) {
-            TokenStream::new()
-        } else {
-            generate_doc_comments(method.comment())
-        };
-
-    let self_param = if use_arc_self {
-        quote!(self: std::sync::Arc<Self>)
-    } else {
-        quote!(&self)
-    };
-
     match (
         method.client_streaming(),
         method.server_streaming(),
