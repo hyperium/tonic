@@ -900,9 +900,9 @@ fn generate_unary_rpit<T: Method>(
 
         impl<T: #server_trait> tonic::server::UnaryService<#request> for #service_ident<T> {
             type Response = #response;
-            type Future = BoxFuture<tonic::Response<Self::Response>, tonic::Status>;
+            type Future = impl std::future::Future<Output = std::result::Result<tonic::Response<Self::Response>, tonic::Status>> + Send;
 
-            fn call(&mut self, request: tonic::Request<#request>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::Response>, tonic::Status>> + Send {
+            fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 #calling_convention
             }
@@ -966,8 +966,9 @@ fn generate_server_streaming_rpit<T: Method>(
         impl<T: #server_trait> tonic::server::ServerStreamingService<#request> for #service_ident<T> {
             type Response = #response;
             #response_stream;
+            type Future = impl std::future::Future<Output = std::result::Result<tonic::Response<Self::ResponseStream>, tonic::Status>> + Send;
 
-            fn call(&mut self, request: tonic::Request<#request>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::ResponseStream>, tonic::Status>> + Send {
+            fn call(&mut self, request: tonic::Request<#request>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 #calling_convention
             }
@@ -1022,8 +1023,9 @@ fn generate_client_streaming_rpit<T: Method>(
         impl<T: #server_trait> tonic::server::ClientStreamingService<#request> for #service_ident<T>
         {
             type Response = #response;
+            type Future = impl std::future::Future<Output = std::result::Result<tonic::Response<Self::Response>, tonic::Status>> + Send;
 
-            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::Response>, tonic::Status>> + Send {
+            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 #calling_convention
             }
@@ -1089,8 +1091,9 @@ fn generate_streaming_rpit<T: Method>(
         {
             type Response = #response;
             #response_stream;
+            type Future = impl std::future::Future<Output = std::result::Result<tonic::Response<Self::ResponseStream>, tonic::Status>> + Send;
 
-            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> impl std::future::Future<Output = std::result::Result<tonic::Response<Self::ResponseStream>, tonic::Status>> + Send {
+            fn call(&mut self, request: tonic::Request<tonic::Streaming<#request>>) -> Self::Future {
                 let inner = Arc::clone(&self.0);
                 #calling_convention
             }
