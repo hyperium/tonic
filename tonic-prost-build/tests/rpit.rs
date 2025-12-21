@@ -8,7 +8,7 @@ fn assert_generated_code() {
         .expect("Failed compiling!");
 
     let expected_without_rustfmt_skip =
-        std::fs::read_to_string("tests/expected.grpc.examples.echo.rs")
+        std::fs::read_to_string("tests/expected/grpc.examples.echo.rs")
             .expect("Failed reading expected")
             .lines()
             .skip(1)
