@@ -689,9 +689,10 @@ impl Builder {
     }
 
     /// Compile the .proto files and execute code generation.
-    pub fn compile_protos<P>(self, protos: &[P], includes: &[P]) -> io::Result<()>
+    pub fn compile_protos<P, I>(self, protos: &[P], includes: &[I]) -> io::Result<()>
     where
         P: AsRef<Path>,
+        I: AsRef<Path>,
     {
         self.compile_with_config(Config::new(), protos, includes)
     }
@@ -700,14 +701,15 @@ impl Builder {
     ///
     /// Note: When using a custom config, any disable_comments settings on the Builder will be ignored
     /// to preserve the disable_comments already configured on the provided Config.
-    pub fn compile_with_config<P>(
+    pub fn compile_with_config<P, I>(
         self,
         mut config: Config,
         protos: &[P],
-        includes: &[P],
+        includes: &[I],
     ) -> io::Result<()>
     where
         P: AsRef<Path>,
+        I: AsRef<Path>,
     {
         let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
             out_dir.clone()
