@@ -88,7 +88,7 @@ impl Default for BufferSettings {
     }
 }
 
-// Doc hidden because its used in tests in another crate but not part of the
+// Doc hidden because it's used in tests in another crate but not part of the
 // public api.
 #[doc(hidden)]
 pub const HEADER_SIZE: usize =
@@ -110,7 +110,7 @@ pub trait Codec {
 
     /// The encoder that can encode a message.
     type Encoder: Encoder<Item = Self::Encode, Error = Status> + Send + 'static;
-    /// The encoder that can decode a message.
+    /// The decoder that can decode a message.
     type Decoder: Decoder<Item = Self::Decode, Error = Status> + Send + 'static;
 
     /// Fetch the encoder.
