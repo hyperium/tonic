@@ -15,6 +15,7 @@ workspace = true
 [dependencies]
 bytes = "1.11.0"
 thiserror = "2"
+futures-channel = "0.3"
 
 [features]
 default = ["transport-tonic"]

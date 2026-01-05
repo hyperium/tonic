@@ -32,7 +32,7 @@ pub trait Transport: Send + Sync + 'static {
     /// Creates a new bidirectional ADS stream to the xDS server.
     ///
     /// This may be called multiple times for reconnection.
-    fn connect(&self) -> impl Future<Output = Result<Self::Stream>> + Send;
+    fn new_stream(&self) -> impl Future<Output = Result<Self::Stream>> + Send;
 }
 
 /// A bidirectional stream for xDS ADS communication.

@@ -25,8 +25,19 @@
 //! let mut watcher = client.watch::<Listener>("my-listener");
 //! while let Some(event) = watcher.next().await {
 //!     match event {
-//!         ResourceEvent::ResourceChanged(resource) => { /* handle resource change */ }
-//!         // ... handle other events ...
+//!         ResourceEvent::ResourceChanged { resource, done } => {
+//!             // Process the resource, possibly add cascading watches.
+//!             client.watch::<RouteConfiguration>(&resource.route_name());
+//!             done.complete();
+//!         }
+//!         ResourceEvent::ResourceError { error, done } => {
+//!             eprintln!("Error: {}", error);
+//!             done.complete();
+//!         }
+//!         ResourceEvent::AmbientError { error, .. } => {
+//!             // Can also rely on auto-signal on drop
+//!             eprintln!("Ambient error: {}", error);
+//!         }
 //!     }
 //! }
 //! ```
@@ -44,7 +55,7 @@ pub mod runtime;
 pub mod transport;
 
 pub use client::config::ClientConfig;
-pub use client::watch::{ResourceEvent, ResourceWatcher};
+pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
 pub use client::{XdsClient, XdsClientBuilder};
 pub use error::{Error, Result};
 pub use resource::Resource;
