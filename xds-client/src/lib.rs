@@ -60,4 +60,12 @@ pub use client::{XdsClient, XdsClientBuilder};
 pub use error::{Error, Result};
 pub use resource::Resource;
 pub use runtime::Runtime;
-pub use transport::{DiscoveryRequest, DiscoveryResponse, Transport, TransportStream};
+pub use transport::{Transport, TransportStream};
+
+// Tokio runtime
+#[cfg(feature = "rt-tokio")]
+pub use runtime::tokio::TokioRuntime;
+
+// Tonic transport
+#[cfg(feature = "transport-tonic")]
+pub use transport::tonic::TonicTransport;
