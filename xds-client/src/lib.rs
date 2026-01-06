@@ -58,6 +58,7 @@ pub mod transport;
 
 pub use client::config::ClientConfig;
 pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
+pub use client::worker::AdsWorker;
 pub use client::{XdsClient, XdsClientBuilder};
 pub use codec::XdsCodec;
 pub use error::{Error, Result};

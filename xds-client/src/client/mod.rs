@@ -7,6 +7,7 @@ use crate::resource::Resource;
 
 pub mod config;
 pub mod watch;
+pub mod worker;
 
 /// Builder for [`XdsClient`].
 /// TODO: parameterize with transport and runtime, default to tonic/tokio stack.

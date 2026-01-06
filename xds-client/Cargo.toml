@@ -28,7 +28,7 @@ envoy-types = { version = "0.7", optional = true }
 prost = { version = "0.14", optional = true }
 
 [features]
-default = ["transport-tonic"]
+default = ["transport-tonic", "codegen-prost"]
 transport-tonic = [
     "rt-tokio",
     "dep:tonic",
@@ -37,7 +37,6 @@ transport-tonic = [
     "dep:http",
 ]
 rt-tokio = ["dep:tokio"]
-# Codec feature: for serialization/deserialization
 codegen-prost = ["dep:envoy-types", "dep:prost"]
 
 [dev-dependencies]
