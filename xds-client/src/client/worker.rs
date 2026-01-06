@@ -29,7 +29,11 @@ pub struct AdsWorker<S, C> {
 impl<S: TransportStream, C: XdsCodec> AdsWorker<S, C> {
     /// Create a new worker with the given stream and codec.
     pub fn new(stream: S, codec: C, node: Option<Node>) -> Self {
-        Self { stream, codec, node }
+        Self {
+            stream,
+            codec,
+            node,
+        }
     }
 
     /// Send a discovery request.
@@ -110,4 +114,3 @@ impl<S: TransportStream, C: XdsCodec> AdsWorker<S, C> {
         todo!("implement worker event loop")
     }
 }
-
