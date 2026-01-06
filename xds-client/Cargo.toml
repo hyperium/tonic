@@ -19,7 +19,7 @@ futures-channel = "0.3"
 
 # Optional dependencies for tonic transport
 tonic = { version = "0.14", optional = true }
-tokio = { version = "1", features = ["time", "sync"], optional = true }
+tokio = { version = "1", features = ["rt", "time", "sync"], optional = true }
 tokio-stream = { version = "0.1", optional = true }
 http = { version = "1", optional = true }
 

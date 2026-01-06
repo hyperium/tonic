@@ -222,7 +222,7 @@ mod tests {
     #[tokio::test]
     async fn test_tonic_transport_connect_and_stream() {
         let addr = start_mock_server().await;
-        let uri = format!("http://{}", addr);
+        let uri = format!("http://{addr}");
 
         let transport = TonicTransport::connect(&uri).await.unwrap();
 
