@@ -921,7 +921,6 @@ fn serve_connection<B, IO, S, E>(
     });
 }
 
-
 #[cfg(feature = "router")]
 impl<L> Router<L> {
     pub(crate) fn new(server: Server<L>, routes: Routes) -> Self {
@@ -1252,10 +1251,7 @@ mod tests {
 
     #[tokio::test(start_paused = true)]
     async fn test_connection_timeout_with_max_connection_age() {
-        let future = connection_timeout_future(
-            Some(Duration::from_secs(10)),
-            None,
-        );
+        let future = connection_timeout_future(Some(Duration::from_secs(10)), None);
 
         let action = future.await;
         assert!(matches!(action, TimeoutAction::GracefulShutdown));
