@@ -93,6 +93,37 @@ fn test_request_response_name_google_types_compiled() {
 }
 
 #[test]
+fn test_request_response_name_wrapper_types() {
+    // Test Google well-known types map to primitive types when compile_well_known_types is false.
+    let test_cases = vec![
+        (".google.protobuf.BoolValue", quote!(bool)),
+        (".google.protobuf.Int32Value", quote!(i32)),
+        (".google.protobuf.Int64Value", quote!(i64)),
+        (".google.protobuf.UInt32Value", quote!(u32)),
+        (".google.protobuf.UInt64Value", quote!(u64)),
+        (".google.protobuf.FloatValue", quote!(f32)),
+        (".google.protobuf.DoubleValue", quote!(f64)),
+        (".google.protobuf.BytesValue", quote!(::prost::bytes::Bytes)),
+    ];
+
+    for (type_name, expected) in test_cases {
+        let method = create_test_method(type_name.to_string(), type_name.to_string());
+        let (request, response) = method.request_response_name("super", false);
+
+        assert_eq!(
+            request.to_string(),
+            expected.to_string(),
+            "Failed for input type: {type_name}"
+        );
+        assert_eq!(
+            response.to_string(),
+            expected.to_string(),
+            "Failed for output type: {type_name}"
+        );
+    }
+}
+
+#[test]
 fn test_request_response_name_non_path_types() {
     // Test types in NON_PATH_TYPE_ALLOWLIST
     let method = create_test_method("()".to_string(), "()".to_string());
