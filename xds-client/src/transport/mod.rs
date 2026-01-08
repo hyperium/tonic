@@ -1,21 +1,14 @@
 //! Provides abstraction for transport layers.
 
 use crate::error::Result;
+use bytes::Bytes;
 use std::future::Future;
 
 #[cfg(feature = "transport-tonic")]
 pub mod tonic;
 
-/// A discovery request to send to the xDS server.
-#[derive(Debug, Clone)]
-pub struct DiscoveryRequest {
-    // TODO: Add fields as needed
-}
-
-/// A discovery response from the xDS server.
-#[derive(Debug, Clone)]
-pub struct DiscoveryResponse {
-    // TODO: Add fields as needed
+mod sealed {
+    pub trait Sealed {}
 }
 
 /// Factory for creating xDS transport streams.
@@ -35,16 +28,23 @@ pub trait Transport: Send + Sync + 'static {
     fn new_stream(&self) -> impl Future<Output = Result<Self::Stream>> + Send;
 }
 
-/// A bidirectional stream for xDS ADS communication.
-pub trait TransportStream: Send + 'static {
-    /// Send a discovery request to the server.
-    fn send(&mut self, request: DiscoveryRequest) -> impl Future<Output = Result<()>> + Send;
+/// A bidirectional byte stream for xDS ADS communication.
+///
+/// Raw byte transport where the bytes are serialized DiscoveryRequest/DiscoveryResponse
+/// (de)serialization is handled at the xDS client worker layer.
+// Sealed for now to limit API surface.
+pub trait TransportStream: sealed::Sealed + Send + 'static {
+    /// Send serialized DiscoveryRequest bytes to the server.
+    fn send(&mut self, request: Bytes) -> impl Future<Output = Result<()>> + Send;
 
-    /// Receive the next discovery response from the server.
+    /// Receive serialized DiscoveryResponse bytes from the server.
     ///
     /// Returns:
-    /// - `Ok(Some(response))` - Received a response.
+    /// - `Ok(Some(bytes))` - Received a response.
     /// - `Ok(None)` - Stream closed normally.
     /// - `Err(_)` - Stream error (connection dropped, etc.)
-    fn recv(&mut self) -> impl Future<Output = Result<Option<DiscoveryResponse>>> + Send;
+    fn recv(&mut self) -> impl Future<Output = Result<Option<Bytes>>> + Send;
 }
+
+#[cfg(feature = "transport-tonic")]
+impl sealed::Sealed for tonic::TonicAdsStream {}

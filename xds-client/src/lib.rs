@@ -49,15 +49,32 @@
 //! - `codegen-prost`: Enables the use of the `prost` codec generated resources. Enabled by default.
 
 pub mod client;
+pub mod codec;
 pub mod error;
+pub mod message;
 pub mod resource;
 pub mod runtime;
 pub mod transport;
 
 pub use client::config::ClientConfig;
 pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
+pub use client::worker::AdsWorker;
 pub use client::{XdsClient, XdsClientBuilder};
+pub use codec::XdsCodec;
 pub use error::{Error, Result};
+pub use message::{DiscoveryRequest, DiscoveryResponse, ErrorDetail, Locality, Node, ResourceAny};
 pub use resource::Resource;
 pub use runtime::Runtime;
-pub use transport::{DiscoveryRequest, DiscoveryResponse, Transport, TransportStream};
+pub use transport::{Transport, TransportStream};
+
+// Tokio runtime
+#[cfg(feature = "rt-tokio")]
+pub use runtime::tokio::TokioRuntime;
+
+// Tonic transport
+#[cfg(feature = "transport-tonic")]
+pub use transport::tonic::TonicTransport;
+
+// Prost codec
+#[cfg(feature = "codegen-prost")]
+pub use codec::prost::ProstCodec;
