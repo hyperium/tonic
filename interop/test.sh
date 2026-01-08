@@ -60,7 +60,7 @@ cleanup() {
 # regardless of why (errors, SIGTERM, etc).
 trap cleanup EXIT
 
-sleep 1
+sleep 3
 
 ./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
@@ -81,7 +81,7 @@ for CODEC in "${CODECS[@]}"; do
     SERVER_PID=$!
     echo ":; started tonic test server with the ${CODEC} codec."
 
-    sleep 1
+    sleep 3
 
     ./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
