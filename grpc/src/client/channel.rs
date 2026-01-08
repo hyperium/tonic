@@ -157,11 +157,7 @@ impl Channel {
     /// Returns the current state of the channel. Any errors translate into a
     /// TransientFailure state.
     pub fn state(&mut self, connect: bool) -> ConnectivityState {
-        let state = self.inner.state(connect);
-        match state {
-            Ok(s) => s,
-            Err(_) => ConnectivityState::TransientFailure,
-        }
+        self.inner.state(connect)
     }
 
     /// Waits for the state of the channel to change from source.  Times out and
@@ -210,43 +206,35 @@ impl PersistentChannel {
 
     /// Returns the current state of the channel. If there is no underlying active channel,
     /// returns Idle. If `connect` is true, will create a new active channel iff none exists.
-    fn state(
-        &self,
-        connect: bool,
-    ) -> Result<ConnectivityState, Box<dyn std::error::Error + Sync + Send>> {
-        let ac = self.get_active_channel(connect)?;
-        if let Some(s) = ac.connectivity_state.cur() {
-            return Ok(s);
+    fn state(&self, connect: bool) -> ConnectivityState {
+        if let Some(ac) = self.get_active_channel(connect) {
+            return ac
+                .connectivity_state
+                .cur()
+                .unwrap_or(ConnectivityState::Idle);
         }
-        return Ok(ConnectivityState::Idle);
+
+        ConnectivityState::Idle
     }
 
     /// Gets the underlying active channel. If `connect` is true, will create a new channel iff
     /// there is no active channel.
-    fn get_active_channel(
-        &self,
-        connect: bool,
-    ) -> Result<Arc<ActiveChannel>, Box<dyn std::error::Error + Sync + Send>> {
-        let mut s = self
-            .active_channel
-            .lock()
-            .map_err(|_| "Could not get channel lock.".to_string())?;
+    fn get_active_channel(&self, connect: bool) -> Option<Arc<ActiveChannel>> {
+        let mut active_channel = self.active_channel.lock().unwrap(); // If this panics, the lock is poisoned and we should also panic.
 
-        if s.is_none() {
+        if active_channel.is_none() {
             if connect {
-                *s = Some(ActiveChannel::new(
+                *active_channel = Some(ActiveChannel::new(
                     self.target.clone(),
                     &self.options,
                     self.runtime.clone(),
                 ));
             } else {
-                return Err("No active channel.".into());
+                return None;
             }
         }
 
-        s.as_ref()
-            .cloned()
-            .ok_or_else(|| "Could not clone channel".into())
+        return active_channel.as_ref().cloned();
     }
 }
 
