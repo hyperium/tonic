@@ -154,23 +154,10 @@ impl Channel {
 
     // TODO: enter_idle(&self) and graceful_stop()?
 
-    /// Returns the current state of the channel.
+    /// Returns the current state of the channel. Any errors translate into a
+    /// TransientFailure state.
     pub fn state(&mut self, connect: bool) -> ConnectivityState {
-        let ac = if !connect {
-            // If !connect and we have no active channel already, return idle.
-            let ac = self.inner.active_channel.lock().unwrap();
-            if ac.is_none() {
-                return ConnectivityState::Idle;
-            }
-            ac.as_ref().unwrap().clone()
-        } else {
-            // Otherwise, get or create the active channel.
-            self.get_or_create_active_channel()
-        };
-        if let Some(s) = ac.connectivity_state.cur() {
-            return s;
-        }
-        ConnectivityState::Idle
+        self.inner.state(connect)
     }
 
     /// Waits for the state of the channel to change from source.  Times out and
@@ -183,20 +170,8 @@ impl Channel {
         todo!()
     }
 
-    fn get_or_create_active_channel(&self) -> Arc<ActiveChannel> {
-        let mut s = self.inner.active_channel.lock().unwrap();
-        if s.is_none() {
-            *s = Some(ActiveChannel::new(
-                self.inner.target.clone(),
-                &self.inner.options,
-                self.inner.runtime.clone(),
-            ));
-        }
-        s.clone().unwrap()
-    }
-
     pub async fn call(&self, method: String, request: Request) -> Response {
-        let ac = self.get_or_create_active_channel();
+        let ac = self.inner.get_active_channel();
         ac.call(method, request).await
     }
 }
@@ -213,8 +188,8 @@ struct PersistentChannel {
 }
 
 impl PersistentChannel {
-    // Channels begin idle so new is a simple constructor.  Required parameters
-    // are not in ChannelOptions.
+    // Channels begin idle so new does not automatically connect.
+    // ChannelOptions are only non-required parameters.
     fn new(
         target: &str,
         _credentials: Option<Box<dyn Credentials>>,
@@ -227,6 +202,49 @@ impl PersistentChannel {
             options,
             runtime,
         }
+    }
+
+    // Internal use only to get the locked active channel. If this panics it means the lock is
+    // poisoned and we should also panic.
+    fn locked_active_channel(&self) -> std::sync::MutexGuard<'_, Option<Arc<ActiveChannel>>> {
+        self.active_channel.lock().unwrap()
+    }
+
+    /// Returns the current state of the channel. If there is no underlying active channel,
+    /// returns Idle. If `connect` is true, will create a new active channel iff none exists.
+    fn state(&self, connect: bool) -> ConnectivityState {
+        // Done this away to avoid potentially locking twice.
+        let active_channel = if connect {
+            self.get_active_channel()
+        } else {
+            match self.locked_active_channel().as_ref().cloned() {
+                Some(x) => x,
+                None => {
+                    return ConnectivityState::Idle;
+                }
+            }
+        };
+
+        active_channel
+            .connectivity_state
+            .cur()
+            .unwrap_or(ConnectivityState::Idle)
+    }
+
+    /// Gets the underlying active channel. If there is no current connection, it will create one.
+    /// This cannot fail and will always return a valid active channel.
+    fn get_active_channel(&self) -> Arc<ActiveChannel> {
+        let mut active_channel = self.locked_active_channel();
+
+        if active_channel.is_none() {
+            *active_channel = Some(ActiveChannel::new(
+                self.target.clone(),
+                &self.options,
+                self.runtime.clone(),
+            ));
+        }
+
+        active_channel.as_ref().cloned().unwrap() // We have ensured this is not None.
     }
 }
 
