@@ -171,7 +171,7 @@ impl Channel {
     }
 
     pub async fn call(&self, method: String, request: Request) -> Response {
-        let ac = self.inner.get_active_channel().unwrap();
+        let ac = self.inner.get_active_channel();
         ac.call(method, request).await
     }
 }
@@ -217,20 +217,23 @@ impl PersistentChannel {
         let active_channel = if connect {
             self.get_active_channel()
         } else {
-            self.locked_active_channel().as_ref().cloned()
+            match self.locked_active_channel().as_ref().cloned() {
+                Some(x) => x,
+                None => {
+                    return ConnectivityState::Idle;
+                }
+            }
         };
 
-        match active_channel {
-            Some(ac) => ac
-                .connectivity_state
-                .cur()
-                .unwrap_or(ConnectivityState::Idle),
-            None => ConnectivityState::Idle,
-        }
+        active_channel
+            .connectivity_state
+            .cur()
+            .unwrap_or(ConnectivityState::Idle)
     }
 
     /// Gets the underlying active channel. If there is no current connection, it will create one.
-    fn get_active_channel(&self) -> Option<Arc<ActiveChannel>> {
+    /// This cannot fail and will always return a valid active channel.
+    fn get_active_channel(&self) -> Arc<ActiveChannel> {
         let mut active_channel = self.locked_active_channel();
 
         if active_channel.is_none() {
@@ -241,7 +244,7 @@ impl PersistentChannel {
             ));
         }
 
-        return active_channel.as_ref().cloned();
+        active_channel.as_ref().cloned().unwrap() // We have ensured this is not None.
     }
 }
 
