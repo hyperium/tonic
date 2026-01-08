@@ -171,7 +171,7 @@ impl Channel {
     }
 
     pub async fn call(&self, method: String, request: Request) -> Response {
-        let ac = self.inner.get_active_channel(true).unwrap();
+        let ac = self.inner.get_active_channel().unwrap();
         ac.call(method, request).await
     }
 }
@@ -204,34 +204,41 @@ impl PersistentChannel {
         }
     }
 
+    // Internal use only to get the locked active channel. If this panics it means the lock is
+    // poisoned and we should also panic.
+    fn locked_active_channel(&self) -> std::sync::MutexGuard<'_, Option<Arc<ActiveChannel>>> {
+        self.active_channel.lock().unwrap()
+    }
+
     /// Returns the current state of the channel. If there is no underlying active channel,
     /// returns Idle. If `connect` is true, will create a new active channel iff none exists.
     fn state(&self, connect: bool) -> ConnectivityState {
-        if let Some(ac) = self.get_active_channel(connect) {
-            return ac
+        // Done this away to avoid potentially locking twice.
+        let active_channel = if connect {
+            self.get_active_channel()
+        } else {
+            self.locked_active_channel().as_ref().cloned()
+        };
+
+        match active_channel {
+            Some(ac) => ac
                 .connectivity_state
                 .cur()
-                .unwrap_or(ConnectivityState::Idle);
+                .unwrap_or(ConnectivityState::Idle),
+            None => ConnectivityState::Idle,
         }
-
-        ConnectivityState::Idle
     }
 
-    /// Gets the underlying active channel. If `connect` is true, will create a new channel iff
-    /// there is no active channel.
-    fn get_active_channel(&self, connect: bool) -> Option<Arc<ActiveChannel>> {
-        let mut active_channel = self.active_channel.lock().unwrap(); // If this panics, the lock is poisoned and we should also panic.
+    /// Gets the underlying active channel. If there is no current connection, it will create one.
+    fn get_active_channel(&self) -> Option<Arc<ActiveChannel>> {
+        let mut active_channel = self.locked_active_channel();
 
         if active_channel.is_none() {
-            if connect {
-                *active_channel = Some(ActiveChannel::new(
-                    self.target.clone(),
-                    &self.options,
-                    self.runtime.clone(),
-                ));
-            } else {
-                return None;
-            }
+            *active_channel = Some(ActiveChannel::new(
+                self.target.clone(),
+                &self.options,
+                self.runtime.clone(),
+            ));
         }
 
         return active_channel.as_ref().cloned();
