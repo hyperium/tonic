@@ -18,6 +18,8 @@ use tonic::{Status, Streaming};
 const ADS_PATH: &str =
     "/envoy.service.discovery.v3.AggregatedDiscoveryService/StreamAggregatedResources";
 
+const ADS_CHANNEL_BUFFER_SIZE: usize = 16;
+
 /// A codec that passes bytes through without serialization.
 ///
 /// This allows us to handle serialization in the xDS client layer
@@ -101,7 +103,7 @@ impl Transport for TonicTransport {
             .await
             .map_err(|e| Error::Connection(e.to_string()))?;
 
-        let (tx, rx) = mpsc::channel::<Bytes>(16);
+        let (tx, rx) = mpsc::channel::<Bytes>(ADS_CHANNEL_BUFFER_SIZE);
         let request_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
 
         let path = PathAndQuery::from_static(ADS_PATH);

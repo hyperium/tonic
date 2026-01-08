@@ -7,6 +7,10 @@ use std::future::Future;
 #[cfg(feature = "transport-tonic")]
 pub mod tonic;
 
+mod sealed {
+    pub trait Sealed {}
+}
+
 /// Factory for creating xDS transport streams.
 ///
 /// This abstraction allows for different transport implementations:
@@ -28,7 +32,8 @@ pub trait Transport: Send + Sync + 'static {
 ///
 /// Raw byte transport where the bytes are serialized DiscoveryRequest/DiscoveryResponse
 /// (de)serialization is handled at the xDS client worker layer.
-pub trait TransportStream: Send + 'static {
+// Sealed for now to limit API surface.
+pub trait TransportStream: sealed::Sealed + Send + 'static {
     /// Send serialized DiscoveryRequest bytes to the server.
     fn send(&mut self, request: Bytes) -> impl Future<Output = Result<()>> + Send;
 
@@ -40,3 +45,6 @@ pub trait TransportStream: Send + 'static {
     /// - `Err(_)` - Stream error (connection dropped, etc.)
     fn recv(&mut self) -> impl Future<Output = Result<Option<Bytes>>> + Send;
 }
+
+#[cfg(feature = "transport-tonic")]
+impl sealed::Sealed for tonic::TonicAdsStream {}
