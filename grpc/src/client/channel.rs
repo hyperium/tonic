@@ -204,12 +204,6 @@ impl PersistentChannel {
         }
     }
 
-    // Internal use only to get the locked active channel. If this panics it means the lock is
-    // poisoned and we should also panic.
-    fn locked_active_channel(&self) -> std::sync::MutexGuard<'_, Option<Arc<ActiveChannel>>> {
-        self.active_channel.lock().unwrap()
-    }
-
     /// Returns the current state of the channel. If there is no underlying active channel,
     /// returns Idle. If `connect` is true, will create a new active channel iff none exists.
     fn state(&self, connect: bool) -> ConnectivityState {
@@ -217,7 +211,7 @@ impl PersistentChannel {
         let active_channel = if connect {
             self.get_active_channel()
         } else {
-            match self.locked_active_channel().as_ref().cloned() {
+            match self.active_channel.lock().unwrap().clone() {
                 Some(x) => x,
                 None => {
                     return ConnectivityState::Idle;
@@ -234,7 +228,7 @@ impl PersistentChannel {
     /// Gets the underlying active channel. If there is no current connection, it will create one.
     /// This cannot fail and will always return a valid active channel.
     fn get_active_channel(&self) -> Arc<ActiveChannel> {
-        let mut active_channel = self.locked_active_channel();
+        let mut active_channel = self.active_channel.lock().unwrap();
 
         if active_channel.is_none() {
             *active_channel = Some(ActiveChannel::new(
@@ -244,7 +238,7 @@ impl PersistentChannel {
             ));
         }
 
-        active_channel.as_ref().cloned().unwrap() // We have ensured this is not None.
+        active_channel.clone().unwrap() // We have ensured this is not None.
     }
 }
 
