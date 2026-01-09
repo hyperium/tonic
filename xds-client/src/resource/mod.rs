@@ -2,6 +2,8 @@
 
 use crate::error::Result;
 use bytes::Bytes;
+use std::any::Any;
+use std::sync::Arc;
 
 #[cfg(feature = "codegen-prost")]
 pub mod prost;
@@ -67,3 +69,65 @@ pub trait Resource: Sized + Send + Sync + 'static {
     /// The resource name combined with the type URL uniquely identifies a resource.
     fn name(&self) -> &str;
 }
+
+/// A decoded resource with type-erased value.
+///
+/// Created by the decoder function when a response is received from the xDS server.
+/// The worker stores and dispatches these to watchers, which downcast to the concrete type.
+///
+/// This type is cheaply cloneable (via `Arc`) to support multiple watchers
+/// for the same resource.
+#[derive(Debug, Clone)]
+pub struct DecodedResource {
+    type_url: &'static str,
+    name: String,
+    value: Arc<dyn Any + Send + Sync>,
+}
+
+impl DecodedResource {
+    /// Create a new decoded resource from a concrete resource type.
+    pub fn new<T: Resource>(resource: T) -> Self {
+        Self {
+            type_url: T::TYPE_URL.as_str(),
+            name: resource.name().to_string(),
+            value: Arc::new(resource),
+        }
+    }
+
+    /// Returns the type URL of the resource.
+    pub fn type_url(&self) -> &'static str {
+        self.type_url
+    }
+
+    /// Returns the name of the resource.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Downcast to a concrete type wrapped in `Arc`.
+    ///
+    /// Returns `None` if the type does not match.
+    ///
+    /// This returns `Arc<T>` because `DecodedResource` may be cloned and shared
+    /// across multiple watchers. Each watcher receives a reference to the same
+    /// underlying resource data.
+    ///
+    /// This method clones the internal `Arc` (cheap refcount increment) and
+    /// attempts to downcast it to the concrete type.
+    pub fn downcast<T: Resource>(&self) -> Option<Arc<T>> {
+        Arc::clone(&self.value).downcast().ok()
+    }
+
+    /// Borrow the decoded resource and downcast to a concrete type reference.
+    ///
+    /// Returns `None` if the type does not match.
+    pub fn downcast_ref<T: Resource>(&self) -> Option<&T> {
+        self.value.downcast_ref()
+    }
+}
+
+/// Type-erased decoder function.
+///
+/// Created by `XdsClient::watch()` capturing the resource type `T`.
+/// The worker stores this per type_url and uses it to decode incoming resources.
+pub type DecoderFn = Box<dyn Fn(Bytes) -> Result<DecodedResource> + Send + Sync>;

@@ -15,13 +15,15 @@
 //! # Example
 //!
 //! ```ignore
-//! use xds_client::{XdsClient, ClientConfig, Resource};
+//! use xds_client::{XdsClient, ClientConfig, ResourceEvent};
 //!
-//! let config = ClientConfig::new("http://localhost:10000", "my-node");
-//! let client = XdsClient::builder(config)
-//!     .build(transport, runtime)
-//!     .await?;
+//! // Create configuration with node identification
+//! let config = ClientConfig::with_node_id("my-node");
 //!
+//! // Build client with transport, codec, and runtime
+//! let client = XdsClient::builder(config, transport, codec, runtime).build();
+//!
+//! // Watch for Listener resources
 //! let mut watcher = client.watch::<Listener>("my-listener");
 //! while let Some(event) = watcher.next().await {
 //!     match event {
@@ -58,12 +60,11 @@ pub mod transport;
 
 pub use client::config::ClientConfig;
 pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
-pub use client::worker::AdsWorker;
 pub use client::{XdsClient, XdsClientBuilder};
 pub use codec::XdsCodec;
 pub use error::{Error, Result};
 pub use message::{DiscoveryRequest, DiscoveryResponse, ErrorDetail, Locality, Node, ResourceAny};
-pub use resource::Resource;
+pub use resource::{DecodedResource, Resource};
 pub use runtime::Runtime;
 pub use transport::{Transport, TransportStream};
 
