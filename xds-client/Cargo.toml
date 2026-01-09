@@ -41,9 +41,14 @@ codegen-prost = ["dep:envoy-types", "dep:prost"]
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tonic = { version = "0.14", features = ["tls-ring"] }
 async-stream = "0.3"
 envoy-types = "0.7"
 prost = "0.14"
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [

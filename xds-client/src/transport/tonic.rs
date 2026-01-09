@@ -81,7 +81,33 @@ pub struct TonicTransport {
 }
 
 impl TonicTransport {
-    /// Connect to an xDS server.
+    /// Create a transport from an existing tonic [`Channel`].
+    ///
+    /// Use this when you need custom channel configuration (e.g., TLS, timeouts).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+    ///
+    /// let tls = ClientTlsConfig::new()
+    ///     .ca_certificate(Certificate::from_pem(ca_cert))
+    ///     .domain_name("xds.example.com");
+    ///
+    /// let channel = Channel::from_static("https://xds.example.com:443")
+    ///     .tls_config(tls)?
+    ///     .connect()
+    ///     .await?;
+    ///
+    /// let transport = TonicTransport::from_channel(channel);
+    /// ```
+    pub fn from_channel(channel: Channel) -> Self {
+        Self { channel }
+    }
+
+    /// Connect to an xDS server with default settings.
+    ///
+    /// For custom configuration (TLS, timeouts, etc.), use [`from_channel`](Self::from_channel).
     pub async fn connect(uri: impl Into<String>) -> Result<Self> {
         let uri: String = uri.into();
         let channel = Channel::from_shared(uri)
