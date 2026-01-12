@@ -188,8 +188,8 @@ struct PersistentChannel {
 }
 
 impl PersistentChannel {
-    // Channels begin idle so new does not automatically connect.
-    // ChannelOptions are only non-required parameters.
+    // Channels begin idle so `new()` does not automatically connect.
+    // ChannelOption contain only optional parameters.
     fn new(
         target: &str,
         _credentials: Option<Box<dyn Credentials>>,
