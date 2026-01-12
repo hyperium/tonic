@@ -276,13 +276,22 @@ where
     async fn connect(&mut self) -> Option<T::Stream> {
         self.drain_pending_while_disconnected();
 
+        // Wait for at least one subscription before connecting.
+        // This prevents deadlock with servers that require a message before
+        // sending response headers - we need something to send.
+        while self.type_states.is_empty() {
+            match self.command_rx.next().await {
+                Some(cmd) => self.handle_command_disconnected(cmd),
+                None => return None,
+            }
+        }
+
         loop {
-            match self.transport.new_stream().await {
-                Ok(mut stream) => {
+            let initial_requests = self.build_initial_requests();
+
+            match self.transport.new_stream(initial_requests).await {
+                Ok(stream) => {
                     self.current_backoff = self.config.initial_backoff;
-                    if let Err(_e) = self.send_initial_requests(&mut stream).await {
-                        continue;
-                    }
                     return Some(stream);
                 }
                 Err(_e) => {
@@ -341,26 +350,35 @@ where
         }
     }
 
-    /// Send initial DiscoveryRequests for all active subscriptions.
-    async fn send_initial_requests<S: TransportStream>(&self, stream: &mut S) -> Result<()> {
+    /// Build initial DiscoveryRequests for all active subscriptions.
+    ///
+    /// These are sent when establishing the stream to prevent deadlock with
+    /// servers that don't send response headers until they receive a request.
+    fn build_initial_requests(&self) -> Vec<Bytes> {
+        let mut requests = Vec::new();
+
         for (type_url, type_state) in &self.type_states {
             if type_state.watchers.is_empty() {
                 continue;
             }
 
+            let resource_names = type_state.resource_names_for_request();
+
             let request = DiscoveryRequest {
                 node: self.node.clone(),
                 type_url: type_url.clone(),
-                resource_names: type_state.resource_names_for_request(),
+                resource_names,
                 version_info: type_state.version_info.clone(),
                 response_nonce: String::new(), // Initial request has empty nonce
                 error_detail: None,
             };
 
-            let bytes = self.codec.encode_request(&request)?;
-            stream.send(bytes).await?;
+            if let Ok(bytes) = self.codec.encode_request(&request) {
+                requests.push(bytes);
+            }
         }
-        Ok(())
+
+        requests
     }
 
     /// Handle a command while disconnected (just update state, can't send requests).

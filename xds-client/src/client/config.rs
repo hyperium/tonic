@@ -74,6 +74,31 @@ impl ClientConfig {
         self
     }
 
+    /// Set the user agent name.
+    ///
+    /// This identifies the client to the xDS server. Some servers require
+    /// specific values (e.g., "grpc", "envoy").
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use xds_client::ClientConfig;
+    ///
+    /// let config = ClientConfig::with_node_id("my-node")
+    ///     .user_agent("grpc");
+    /// ```
+    pub fn user_agent(mut self, name: impl Into<String>) -> Self {
+        if let Some(ref mut node) = self.node {
+            node.user_agent_name = name.into();
+        } else {
+            self.node = Some(Node {
+                user_agent_name: name.into(),
+                ..Default::default()
+            });
+        }
+        self
+    }
+
     /// Set the resource timeout.
     pub fn resource_timeout(mut self, timeout: Duration) -> Self {
         self.resource_timeout = timeout;

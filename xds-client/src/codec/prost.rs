@@ -21,6 +21,7 @@ impl XdsCodec for ProstCodec {
             node: request.node.as_ref().map(|n| core::Node {
                 id: n.id.clone(),
                 cluster: n.cluster.clone(),
+                user_agent_name: n.user_agent_name.clone(),
                 locality: n.locality.as_ref().map(|l| core::Locality {
                     region: l.region.clone(),
                     zone: l.zone.clone(),
@@ -100,6 +101,7 @@ mod tests {
                     zone: "us-west-1a".to_string(),
                     sub_zone: "rack-1".to_string(),
                 }),
+                user_agent_name: "grpc".to_string(),
             }),
             ..Default::default()
         };

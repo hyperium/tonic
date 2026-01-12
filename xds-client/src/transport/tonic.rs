@@ -9,6 +9,7 @@ use crate::transport::{Transport, TransportStream};
 use bytes::{Buf, BufMut, Bytes};
 use http::uri::PathAndQuery;
 use tokio::sync::mpsc;
+use tokio_stream::StreamExt as _;
 use tonic::client::Grpc;
 use tonic::codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
 use tonic::transport::Channel;
@@ -122,7 +123,7 @@ impl TonicTransport {
 impl Transport for TonicTransport {
     type Stream = TonicAdsStream;
 
-    async fn new_stream(&self) -> Result<Self::Stream> {
+    async fn new_stream(&self, initial_requests: Vec<Bytes>) -> Result<Self::Stream> {
         let mut grpc = Grpc::new(self.channel.clone());
 
         grpc.ready()
@@ -130,7 +131,14 @@ impl Transport for TonicTransport {
             .map_err(|e| Error::Connection(e.to_string()))?;
 
         let (tx, rx) = mpsc::channel::<Bytes>(ADS_CHANNEL_BUFFER_SIZE);
-        let request_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+
+        // Create a stream that first yields initial requests, then reads from the channel.
+        // This ensures data is available immediately when the stream is polled,
+        // preventing deadlock with servers that don't send response headers
+        // until they receive the first request message.
+        let initial_stream = tokio_stream::iter(initial_requests);
+        let channel_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        let request_stream = initial_stream.chain(channel_stream);
 
         let path = PathAndQuery::from_static(ADS_PATH);
 
@@ -185,7 +193,6 @@ mod tests {
     use tokio::net::TcpListener;
     use tokio_stream::wrappers::TcpListenerStream;
     use tokio_stream::Stream;
-    use tokio_stream::StreamExt as _;
     use tonic::{Request, Response, Status};
 
     /// Mock ADS server that echoes back a response for each request.
@@ -254,16 +261,14 @@ mod tests {
 
         let transport = TonicTransport::connect(&uri).await.unwrap();
 
-        let mut stream = transport.new_stream().await.unwrap();
-
         let request = DiscoveryRequest {
             type_url: "type.googleapis.com/envoy.config.listener.v3.Listener".to_string(),
             resource_names: vec!["listener-1".to_string()],
             ..Default::default()
         };
-        let request_bytes = request.encode_to_vec().into();
+        let request_bytes: Bytes = request.encode_to_vec().into();
 
-        stream.send(request_bytes).await.unwrap();
+        let mut stream = transport.new_stream(vec![request_bytes]).await.unwrap();
 
         let response_bytes = stream.recv().await.unwrap().unwrap();
         let response = DiscoveryResponse::decode(response_bytes).unwrap();

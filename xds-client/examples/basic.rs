@@ -7,72 +7,71 @@
 //!
 //! # Usage
 //!
-//! Update `XDS_SERVER_URI` to point to your xDS management server.
+//! Update the constants below to point to your xDS management server,
+//! then run:
 //!
 //! ```sh
 //! cargo run -p xds-client --example basic
 //! ```
+//!
+//! Enter listener names to watch, one per line. Press Ctrl+C to exit.
 
 use std::time::Duration;
 
 use bytes::Bytes;
 use prost::Message;
+use tokio::io::{AsyncBufReadExt, BufReader};
 
 use xds_client::resource::TypeUrl;
 use xds_client::{
     ClientConfig, ProstCodec, Resource, ResourceEvent, TokioRuntime, TonicTransport, XdsClient,
 };
 
-// Configuration - Update these values for your environment
-
 /// URI of your xDS management server.
 const XDS_SERVER_URI: &str = "http://localhost:18000";
 
-/// Resource name to watch (or empty string "" for wildcard subscription).
-const LISTENER_NAME: &str = "listener-1";
+// Optional: paths for mTLS (set to None for plaintext)
+const CA_CERT_PATH: Option<&str> = None; // e.g., Some("/path/to/ca.pem")
+const CLIENT_CERT_PATH: Option<&str> = None; // e.g., Some("/path/to/client.pem")
+const CLIENT_KEY_PATH: Option<&str> = None; // e.g., Some("/path/to/client.key")
 
-/// A simplified Listener resource.
+// =============================================================================
+
+/// A simplified Listener resource for gRPC xDS.
 ///
-/// In production, you might want to expose more fields from the proto.
+/// Extracts the RDS route config name from the ApiListener's HttpConnectionManager.
 #[derive(Debug, Clone)]
 pub struct Listener {
     /// The listener name.
     pub name: String,
-    /// The bind address.
-    pub address: String,
-    /// The bind port.
-    pub port: u32,
+    /// The RDS route config name (from HttpConnectionManager).
+    pub rds_route_config_name: Option<String>,
 }
 
 impl Resource for Listener {
     const TYPE_URL: TypeUrl = TypeUrl::new("type.googleapis.com/envoy.config.listener.v3.Listener");
 
     fn decode(bytes: Bytes) -> xds_client::Result<Self> {
-        use envoy_types::pb::envoy::config::core::v3::address::Address;
-        use envoy_types::pb::envoy::config::core::v3::socket_address::PortSpecifier;
         use envoy_types::pb::envoy::config::listener::v3::Listener as ListenerProto;
+        use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
+            http_connection_manager::RouteSpecifier, HttpConnectionManager,
+        };
 
         let proto = ListenerProto::decode(bytes)?;
 
-        let (address, port) = proto
-            .address
-            .and_then(|addr| addr.address)
-            .map(|addr| match addr {
-                Address::SocketAddress(sa) => {
-                    let port = match sa.port_specifier {
-                        Some(PortSpecifier::PortValue(p)) => p,
-                        _ => 0,
-                    };
-                    (sa.address, port)
-                }
-                _ => (String::new(), 0),
-            })
-            .unwrap_or_default();
+        let hcm = proto
+            .api_listener
+            .and_then(|api| api.api_listener)
+            .and_then(|any| HttpConnectionManager::decode(Bytes::from(any.value)).ok());
+
+        let rds_route_config_name = hcm.and_then(|hcm| match hcm.route_specifier {
+            Some(RouteSpecifier::Rds(rds)) => Some(rds.route_config_name),
+            _ => None,
+        });
 
         Ok(Self {
             name: proto.name,
-            address,
-            port,
+            rds_route_config_name,
         })
     }
 
@@ -86,47 +85,83 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== xds-client Example ===\n");
     println!("Connecting to xDS server: {XDS_SERVER_URI}");
 
-    let config =
-        ClientConfig::with_node_id("example-node").resource_timeout(Duration::from_secs(15));
+    let config = ClientConfig::with_node_id("example-node")
+        .user_agent("grpc")
+        .resource_timeout(Duration::from_secs(15));
 
-    // For plaintext connection:
-    let transport = TonicTransport::connect(XDS_SERVER_URI).await?;
+    let transport = match CA_CERT_PATH {
+        Some(ca_path) => {
+            use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
 
-    // For TLS, use tonic's Channel directly:
-    //
-    // use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+            let ca_cert = std::fs::read_to_string(ca_path)?;
+            let mut tls = ClientTlsConfig::new().ca_certificate(Certificate::from_pem(&ca_cert));
 
-    // let ca_cert = std::fs::read_to_string("path/to/ca.pem")?;
-    // let tls = ClientTlsConfig::new()
-    //     .ca_certificate(Certificate::from_pem(&ca_cert))
-    //     .domain_name("xds.example.com");
+            if let (Some(cert_path), Some(key_path)) = (CLIENT_CERT_PATH, CLIENT_KEY_PATH) {
+                let client_cert = std::fs::read_to_string(cert_path)?;
+                let client_key = std::fs::read_to_string(key_path)?;
+                tls = tls.identity(Identity::from_pem(client_cert, client_key));
+            }
 
-    // let channel = Channel::from_static("https://xds.example.com:443")
-    //     .tls_config(tls)?
-    //     .connect()
-    //     .await?;
+            let channel = Channel::from_static(XDS_SERVER_URI)
+                .tls_config(tls)?
+                .connect()
+                .await?;
 
-    // let transport = TonicTransport::from_channel(channel);
+            TonicTransport::from_channel(channel)
+        }
+        None => TonicTransport::connect(XDS_SERVER_URI).await?,
+    };
 
     println!("Connected!\n");
 
     let client = XdsClient::builder(config, transport, ProstCodec, TokioRuntime).build();
 
-    println!("Watching for Listener: '{LISTENER_NAME}'");
+    println!("Enter listener names to watch (one per line, Ctrl+C to exit):");
     println!("(Use empty string for wildcard subscription)\n");
 
-    let mut watcher = client.watch::<Listener>(LISTENER_NAME);
+    let (event_tx, mut event_rx) =
+        tokio::sync::mpsc::unbounded_channel::<ResourceEvent<Listener>>();
 
-    // Event loop
-    while let Some(event) = watcher.next().await {
+    let client_clone = client.clone();
+    let event_tx_clone = event_tx.clone();
+    tokio::spawn(async move {
+        let stdin = tokio::io::stdin();
+        let reader = BufReader::new(stdin);
+        let mut lines = reader.lines();
+
+        while let Ok(Some(line)) = lines.next_line().await {
+            let name = line.trim().to_string();
+            if name.is_empty() {
+                continue;
+            }
+
+            println!("→ Watching for Listener: '{name}'");
+
+            let mut watcher = client_clone.watch::<Listener>(&name);
+            let tx = event_tx_clone.clone();
+
+            tokio::spawn(async move {
+                while let Some(event) = watcher.next().await {
+                    if tx.send(event).is_err() {
+                        break;
+                    }
+                }
+            });
+        }
+    });
+
+    while let Some(event) = event_rx.recv().await {
         match event {
             ResourceEvent::ResourceChanged { resource, mut done } => {
                 println!("✓ Listener received:");
-                println!("  name:    {}", resource.name());
-                println!("  address: {}:{}", resource.address, resource.port);
+                println!("  name:        {}", resource.name());
+                if let Some(ref rds) = resource.rds_route_config_name {
+                    println!("  rds_config:  {rds}");
+                }
                 println!();
 
-                // In gRPC xDS, you would want to cascadingly subscribe to RDS, etc. before completing the done signal.
+                // In gRPC xDS, you would cascadingly subscribe to RDS, CDS, EDS, etc.
+                // before completing the done signal.
                 done.complete();
             }
 
@@ -140,6 +175,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
 
-    println!("Watcher closed");
+    println!("Exiting");
     Ok(())
 }

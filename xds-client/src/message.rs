@@ -56,6 +56,8 @@ pub struct Node {
     pub cluster: String,
     /// Locality specifying where the node is running.
     pub locality: Option<Locality>,
+    /// Free-form string identifying the client type (e.g., "envoy", "grpc").
+    pub user_agent_name: String,
 }
 
 /// Locality information identifying where a node is running.
