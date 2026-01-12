@@ -154,8 +154,8 @@ impl Channel {
 
     // TODO: enter_idle(&self) and graceful_stop()?
 
-    /// Returns the current state of the channel. Any errors translate into a
-    /// TransientFailure state.
+    /// Returns the current state of the channel. If there is no underlying active channel,
+    /// returns Idle. If `connect` is true, will create a new active channel.
     pub fn state(&mut self, connect: bool) -> ConnectivityState {
         self.inner.state(connect)
     }
