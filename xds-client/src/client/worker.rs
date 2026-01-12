@@ -286,6 +286,8 @@ where
             }
         }
 
+        self.reset_for_reconnect();
+
         loop {
             let initial_requests = self.build_initial_requests();
 
@@ -311,6 +313,37 @@ where
 
         while let Ok(Some(event)) = self.timer_rx.try_next() {
             self.handle_does_not_exist_timeout(&event.type_url, &event.name, event.watcher_id);
+        }
+    }
+
+    /// Reset state for reconnection.
+    ///
+    /// This method prepares the client state for a new ADS stream:
+    /// - Clears `nonce` (nonces are stream-specific and must not carry over)
+    /// - Preserves `version_info` (server uses this to know what the client has)
+    /// - Clears `received_resources` to detect resources that disappear
+    /// - Restarts does-not-exist timers for proper timeout detection
+    fn reset_for_reconnect(&mut self) {
+        let timers_to_start: Vec<_> = self
+            .type_states
+            .iter()
+            .flat_map(|(type_url, type_state)| {
+                type_state
+                    .watchers
+                    .iter()
+                    .filter(|(_, entry)| !entry.name.is_empty())
+                    .map(|(watcher_id, entry)| (type_url.clone(), entry.name.clone(), *watcher_id))
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+
+        for type_state in self.type_states.values_mut() {
+            type_state.nonce.clear();
+            type_state.received_resources.clear();
+        }
+
+        for (type_url, name, watcher_id) in timers_to_start {
+            self.start_does_not_exist_timer(type_url, name, watcher_id);
         }
     }
 
