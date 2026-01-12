@@ -40,7 +40,12 @@ rt-tokio = ["dep:tokio"]
 codegen-prost = ["dep:envoy-types", "dep:prost"]
 
 [dev-dependencies]
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "io-std",
+] }
 tonic = { version = "0.14", features = ["tls-ring"] }
 async-stream = "0.3"
 envoy-types = "0.7"
