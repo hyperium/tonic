@@ -1,0 +1,306 @@
+use http::{Request, Response};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use tonic::body::Body as TonicBody;
+use tonic::transport::channel::Channel;
+use tower::load::Load;
+use tower::BoxError;
+use tower::Service;
+use tower::ServiceBuilder;
+
+use crate::client::cluster::ClusterClientRegistry;
+use crate::client::endpoint::{EndpointAddress, EndpointChannel};
+use crate::client::lb::XdsLbService;
+use crate::client::route::XdsRoutingLayer;
+use crate::client::route::XdsRoutingService;
+use crate::xds::xds_manager::XdsManager;
+
+/// XdsChannel is an xDS-capable Tower Service.
+///
+/// It routes requests according to the xDS configuration that it fetches from the xDS management server.
+/// The routing implementation is based on the [Google gRPC xDS features](https://grpc.github.io/grpc/core/md_doc_grpc_xds_features.html).
+#[derive(Clone)]
+pub struct XdsChannel<Req, E, S>
+where
+    Req: Send + 'static,
+    S: Service<Req>,
+    S::Response: Send + 'static,
+{
+    inner: XdsRoutingService<XdsLbService<Req, E, S>, E, S>,
+}
+
+type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+
+impl<B, E, S> Service<http::Request<B>> for XdsChannel<Request<B>, E, S>
+where
+    B: Send + 'static,
+    Request<B>: Send + 'static,
+    E: std::hash::Hash + Eq + Clone + Send + 'static,
+    S: Service<Request<B>> + Load + Send + 'static,
+    S::Response: Send + 'static,
+    S::Error: Into<BoxError>,
+    S::Future: Send,
+    <S as tower::load::Load>::Metric: std::fmt::Debug,
+{
+    type Response = S::Response;
+    type Error = BoxError;
+    type Future = BoxFuture<Result<Self::Response, Self::Error>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, request: Request<B>) -> Self::Future {
+        self.inner.call(request)
+    }
+}
+
+/// A type alias for an XdsChannel that uses tonic's Channel as the underlying service.
+pub type XdsChannelGrpc =
+    XdsChannel<http::Request<TonicBody>, EndpointAddress, EndpointChannel<Channel>>;
+
+// Static assertion that XdsChannelGrpc implements GrpcService
+const _: fn() = || {
+    fn assert_grpc_service<T: tonic::client::GrpcService<TonicBody>>() {}
+    assert_grpc_service::<XdsChannelGrpc>();
+};
+
+#[derive(Clone, Debug, Default)]
+pub struct XdsChannelConfig;
+
+pub struct XdsChannelBuilder {
+    config: XdsChannelConfig,
+}
+
+impl XdsChannelBuilder {
+    /// Create a builder from an explicit configuration.
+    pub fn with_config(config: XdsChannelConfig) -> Self {
+        Self { config }
+    }
+
+    /// Builds an `XdsChannel`.
+    pub fn build<Req, E, S>(&self) -> XdsChannel<Req, E, S>
+    where
+        Req: Send + 'static,
+        S: Service<Req>,
+        S::Response: Send + 'static,
+    {
+        todo!("Implement XdsChannel building logic");
+    }
+
+    #[cfg(test)]
+    pub fn build_grpc_channel_from_deps(
+        &self,
+        xds_manager: Arc<dyn XdsManager<EndpointAddress, EndpointChannel<Channel>>>,
+    ) -> XdsChannelGrpc {
+        let routing_layer = XdsRoutingLayer::new(xds_manager.clone());
+        let cluster_registry = Arc::new(ClusterClientRegistry::<
+            Request<TonicBody>,
+            Response<TonicBody>,
+        >::new());
+        let lb_service = XdsLbService::new(cluster_registry, xds_manager.clone());
+        let service = ServiceBuilder::new()
+            .layer(routing_layer)
+            .service(lb_service);
+        XdsChannelGrpc { inner: service }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::XdsChannelBuilder;
+    use super::XdsChannelConfig;
+    use crate::testutil::grpc::GreeterClient;
+    use crate::testutil::grpc::HelloRequest;
+    use crate::testutil::grpc::TestServer;
+    use crate::client::endpoint::EndpointAddress;
+    use crate::xds::xds_manager::XdsManager;
+    use crate::xds::route::RouteInput;
+    use crate::xds::route::RouteDecision;
+    use crate::client::endpoint::EndpointChannel;
+    use crate::xds::xds_manager::{BoxFut, BoxDiscover};
+    use tonic::transport::Channel;
+    use tokio::sync::mpsc;
+    use tower::discover::Change;
+    use std::sync::Arc;
+    use crate::client::channel::XdsChannelGrpc;
+
+    async fn setup_grpc_servers(
+        count: usize,
+    ) -> (Vec<String>, Vec<crate::testutil::grpc::TestServer>) {
+        use crate::testutil::grpc::spawn_greeter_server;
+
+        let mut servers = Vec::new();
+        let mut server_addrs = Vec::new();
+
+        for i in 0..count {
+            let server_name = format!("server-{i}");
+            let server = spawn_greeter_server(&server_name, None, None)
+                .await
+                .expect("Failed to spawn gRPC server");
+
+            server_addrs.push(server.addr.to_string());
+            servers.push(server);
+        }
+
+        (server_addrs, servers)
+    }
+
+    /// A mock XdsManager that provides pre-configured endpoints for testing.
+    pub struct MockXdsManager {
+        endpoints: Vec<(EndpointAddress, Channel)>,
+    }
+
+    impl MockXdsManager {
+        /// Creates a new MockXdsManager from test servers.
+        pub fn from_test_servers(servers: &[TestServer]) -> Self {
+            let endpoints = servers
+                .iter()
+                .map(|s| {
+                    let addr = EndpointAddress::from(s.addr);
+                    (addr, s.channel.clone())
+                })
+                .collect();
+            Self { endpoints }
+        }
+    }
+
+    impl XdsManager<EndpointAddress, EndpointChannel<Channel>> for MockXdsManager {
+        fn route(&self, _input: &RouteInput<'_>) -> BoxFut<RouteDecision> {
+            Box::pin(async move {
+                RouteDecision {
+                    cluster: "test-cluster".to_string(),
+                }
+            })
+        }
+
+        fn discover_cluster(
+            &self,
+            _cluster_name: &str,
+        ) -> BoxDiscover<EndpointAddress, EndpointChannel<Channel>> {
+            let endpoints = self.endpoints.clone();
+            let (tx, rx) = mpsc::channel(16);
+
+            tokio::spawn(async move {
+                for (addr, channel) in endpoints {
+                    let endpoint_channel = EndpointChannel::new(channel);
+                    let change = Change::Insert(addr, endpoint_channel);
+                    tx.send(Ok(change)).await.expect("Failed to send SD change");
+                }
+            });
+
+            Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx))
+        }
+    }
+
+    async fn send_grpc_requests(
+        mut grpc_client: crate::testutil::grpc::GreeterClient<XdsChannelGrpc>,
+        num_requests: usize,
+    ) -> (
+        usize,
+        std::collections::HashMap<String, usize>,
+        std::collections::HashMap<String, usize>,
+    ) {
+        let mut successful_requests = 0;
+        let mut error_types = std::collections::HashMap::new();
+        let mut server_counts = std::collections::HashMap::new();
+
+        for i in 0..num_requests {
+            let request_timeout = tokio::time::Duration::from_secs(3);
+            let request_future = grpc_client.say_hello(HelloRequest {
+                name: format!("test-request-{i}"),
+            });
+
+            match tokio::time::timeout(request_timeout, request_future).await {
+                Ok(Ok(response)) => {
+                    successful_requests += 1;
+                    // Extract server name from response message (format: "server-X: test-request-Y")
+                    let message = response.into_inner().message;
+                    if let Some(server_name) = message.split(':').next() {
+                        *server_counts.entry(server_name.to_string()).or_insert(0) += 1;
+                    }
+                }
+                Ok(Err(e)) => {
+                    let error_type = format!("{e:?}").chars().take(80).collect::<String>();
+                    *error_types.entry(error_type).or_insert(0) += 1;
+                }
+                Err(_) => {
+                    *error_types.entry("Timeout".to_string()).or_insert(0) += 1;
+                    if error_types.get("Timeout").unwrap_or(&0) > &2 {
+                        break;
+                    }
+                }
+            }
+        }
+
+        (successful_requests, error_types, server_counts)
+    }
+
+    #[tokio::test]
+    async fn test_xds_channel_grpc() {
+        let num_requests = 10000;
+        let num_servers = 5;
+        let (_, servers) = setup_grpc_servers(num_servers).await;
+
+        // Here you would set up the xDS manager and configuration to point to the test servers.
+        // For simplicity, this part is omitted.
+
+        let xds_manager = Arc::new(MockXdsManager::from_test_servers(&servers));
+
+        let xds_channel_builder = XdsChannelBuilder::with_config(XdsChannelConfig);
+        let xds_channel = xds_channel_builder.build_grpc_channel_from_deps(xds_manager.clone());
+
+        let client = GreeterClient::new(xds_channel);
+
+        let (successful_requests, error_types, server_counts) =
+            send_grpc_requests(client, num_requests).await;
+
+        println!("Successful requests: {successful_requests}");
+        println!("Error types: {error_types:?}");
+        println!("Per-server call counts: {server_counts:?}");
+
+        assert_eq!(
+            successful_requests, num_requests,
+            "Expected 100% success rate. Got {successful_requests} successful out of {num_requests} requests. Errors: {error_types:?}",
+        );
+
+        assert!(
+            error_types.is_empty(),
+            "Expected no errors but got: {error_types:?}",
+        );
+
+        let actual_server_count = server_counts.len();
+        assert_eq!(
+            actual_server_count, num_servers,
+            "Expected all {num_servers} servers to receive requests, but only {actual_server_count} servers received traffic. Server counts: {server_counts:?}",
+        );
+
+        let expected_per_server = num_requests / num_servers;
+        let min_requests_per_server = (expected_per_server as f64 / 1.5) as usize;
+        let max_requests_per_server = (expected_per_server as f64 * 1.5) as usize;
+
+       for (server_name, count) in &server_counts {
+            assert!(
+                *count >= min_requests_per_server,
+                "Server {server_name} received only {count} requests, expected at least {min_requests_per_server} (expected ~{expected_per_server} per server with 1.5x variance)",
+            );
+            assert!(
+                *count <= max_requests_per_server,
+                "Server {server_name} received {count} requests, expected at most {max_requests_per_server} (expected ~{expected_per_server} per server with 1.5x variance)",
+            );
+        }
+
+        let total_server_requests: usize = server_counts.values().sum();
+        assert_eq!(
+            total_server_requests, successful_requests,
+            "Total server requests ({total_server_requests}) should equal successful requests ({successful_requests}). Server counts: {server_counts:?}",
+        );
+
+        for server in servers {
+            let _ = server.shutdown.send(());
+            let _ = server.handle.await;
+        }
+    }
+}
