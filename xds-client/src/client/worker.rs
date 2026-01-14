@@ -229,16 +229,31 @@ where
     /// (which closes the command channel).
     pub(crate) async fn run(mut self) {
         loop {
-            let stream = match self.connect().await {
-                Some(s) => s,
-                None => {
-                    return;
+            // Wait for at least one subscription before connecting.
+            // This prevents deadlock with servers that require a message before
+            // sending response headers - we need something to send.
+            while self.type_states.is_empty() {
+                match self.command_rx.next().await {
+                    Some(cmd) => self.handle_command_disconnected(cmd),
+                    None => return,
                 }
-            };
+            }
 
-            match self.run_connected(stream).await {
-                ConnectedLoopState::Shutdown => return,
-                ConnectedLoopState::Reconnect => {
+            // Nonce are tied to the stream
+            for type_state in self.type_states.values_mut() {
+                type_state.nonce.clear();
+            }
+
+            let stream = match self
+                .transport
+                .new_stream(self.build_initial_requests())
+                .await
+            {
+                Ok(s) => {
+                    self.current_backoff = self.config.initial_backoff;
+                    s
+                }
+                Err(_) => {
                     self.runtime.sleep(self.current_backoff).await;
                     self.current_backoff = std::cmp::min(
                         Duration::from_secs_f64(
@@ -246,91 +261,14 @@ where
                         ),
                         self.config.max_backoff,
                     );
+                    continue;
                 }
+            };
+
+            if self.run_connected(stream).await {
+                return; // shutdown
             }
-        }
-    }
-
-    /// Attempt to connect, handling commands and timers while waiting.
-    ///
-    /// Returns `None` if the command channel is closed (shutdown).
-    async fn connect(&mut self) -> Option<T::Stream> {
-        self.drain_pending_while_disconnected();
-
-        // Wait for at least one subscription before connecting.
-        // This prevents deadlock with servers that require a message before
-        // sending response headers - we need something to send.
-        while self.type_states.is_empty() {
-            match self.command_rx.next().await {
-                Some(cmd) => self.handle_command_disconnected(cmd),
-                None => return None,
-            }
-        }
-
-        self.reset_for_reconnect();
-
-        loop {
-            let initial_requests = self.build_initial_requests();
-
-            match self.transport.new_stream(initial_requests).await {
-                Ok(stream) => {
-                    self.current_backoff = self.config.initial_backoff;
-                    return Some(stream);
-                }
-                Err(_e) => {
-                    if !self.wait_with_backoff().await {
-                        return None;
-                    }
-                }
-            }
-        }
-    }
-
-    /// Drain any pending commands and timer events while disconnected.
-    fn drain_pending_while_disconnected(&mut self) {
-        while let Ok(Some(cmd)) = self.command_rx.try_next() {
-            self.handle_command_disconnected(cmd);
-        }
-    }
-
-    /// Reset state for reconnection.
-    ///
-    /// This method prepares the client state for a new ADS stream:
-    /// - Clears `nonce` (nonces are stream-specific and must not carry over)
-    /// - Preserves `version_info` (server uses this to know what the client has)
-    fn reset_for_reconnect(&mut self) {
-        for type_state in self.type_states.values_mut() {
-            type_state.nonce.clear();
-        }
-    }
-
-    /// Wait for backoff duration while handling commands.
-    /// Returns false if command channel is closed.
-    async fn wait_with_backoff(&mut self) -> bool {
-        let runtime = self.runtime.clone();
-        let backoff = self.current_backoff;
-        let sleep = runtime.sleep(backoff);
-        futures::pin_mut!(sleep);
-
-        loop {
-            futures::select! {
-                _ = sleep.as_mut().fuse() => {
-                    self.current_backoff = std::cmp::min(
-                        Duration::from_secs_f64(
-                            self.current_backoff.as_secs_f64() * self.config.backoff_multiplier,
-                        ),
-                        self.config.max_backoff,
-                    );
-                    return true;
-                }
-
-                cmd = self.command_rx.next() => {
-                    match cmd {
-                        Some(cmd) => self.handle_command_disconnected(cmd),
-                        None => return false,
-                    }
-                }
-            }
+            // else: reconnect
         }
     }
 
@@ -384,22 +322,20 @@ where
     }
 
     /// Run the main event loop while connected.
-    async fn run_connected<S: TransportStream>(&mut self, mut stream: S) -> ConnectedLoopState {
+    ///
+    /// Returns `true` if the worker should shut down, `false` to reconnect.
+    async fn run_connected<S: TransportStream>(&mut self, mut stream: S) -> bool {
         loop {
             futures::select! {
                 result = stream.recv().fuse() => {
                     match result {
                         Ok(Some(bytes)) => {
                             if let Err(_e) = self.handle_response(&mut stream, bytes).await {
-                                return ConnectedLoopState::Reconnect;
+                                return false;
                             }
                         }
-                        Ok(None) => {
-                            return ConnectedLoopState::Reconnect;
-                        }
-                        Err(_e) => {
-                            return ConnectedLoopState::Reconnect;
-                        }
+                        Ok(None) => return false,
+                        Err(_e) => return false,
                     }
                 }
 
@@ -407,12 +343,10 @@ where
                     match cmd {
                         Some(cmd) => {
                             if let Err(_e) = self.handle_command(&mut stream, cmd).await {
-                                return ConnectedLoopState::Reconnect;
+                                return false;
                             }
                         }
-                        None => {
-                            return ConnectedLoopState::Shutdown;
-                        }
+                        None => return true,
                     }
                 }
             }
@@ -716,12 +650,4 @@ where
         let bytes = self.codec.encode_request(&request)?;
         stream.send(bytes).await
     }
-}
-
-/// State of the connected event loop.
-enum ConnectedLoopState {
-    /// Shutdown requested (command channel closed).
-    Shutdown,
-    /// Need to reconnect (stream error or closed).
-    Reconnect,
 }
