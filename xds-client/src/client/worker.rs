@@ -34,6 +34,12 @@ impl WatcherId {
     }
 }
 
+impl Default for WatcherId {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// Commands sent from `XdsClient` to the worker.
 pub(crate) enum WorkerCommand {
     /// Subscribe to a resource.
