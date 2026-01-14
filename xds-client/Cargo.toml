@@ -45,9 +45,9 @@ tokio = { version = "1", features = [
     "rt-multi-thread",
     "macros",
     "net",
-    "io-std",
 ] }
 tonic = { version = "0.14", features = ["tls-ring"] }
+clap = { version = "4", features = ["derive"] }
 async-stream = "0.3"
 envoy-types = "0.7"
 prost = "0.14"

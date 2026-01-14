@@ -7,22 +7,31 @@
 //!
 //! # Usage
 //!
-//! Update the constants below to point to your xDS management server,
-//! then run:
-//!
 //! ```sh
-//! cargo run -p xds-client --example basic
-//! ```
+//! # Basic usage
+//! cargo run -p xds-client --example basic -- -l my-listener
 //!
-//! Enter listener names to watch, one per line. Press Ctrl+C to exit.
+//! # Multiple listeners
+//! cargo run -p xds-client --example basic -- -l listener-1 -l listener-2
+//!
+//! # Custom server
+//! cargo run -p xds-client --example basic -- -s http://xds.example.com:18000 -l foo
+//!
+//! # With TLS
+//! cargo run -p xds-client --example basic -- \
+//!   --ca-cert /path/to/ca.pem \
+//!   --client-cert /path/to/client.pem \
+//!   --client-key /path/to/client.key \
+//!   -l my-listener
+//! ```
 
 use bytes::Bytes;
+use clap::Parser;
 use envoy_types::pb::envoy::config::listener::v3::Listener as ListenerProto;
 use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
     http_connection_manager::RouteSpecifier, HttpConnectionManager,
 };
 use prost::Message;
-use tokio::io::{AsyncBufReadExt, BufReader};
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
 
 use xds_client::resource::TypeUrl;
@@ -30,13 +39,31 @@ use xds_client::{
     ClientConfig, ProstCodec, Resource, ResourceEvent, TokioRuntime, TonicTransport, XdsClient,
 };
 
-/// URI of your xDS management server.
-const XDS_SERVER_URI: &str = "http://localhost:18000";
+/// Example demonstrating xds-client usage.
+#[derive(Parser, Debug)]
+#[command(name = "basic")]
+#[command(about = "xds-client example - watch Listener resources")]
+struct Args {
+    /// URI of the xDS management server.
+    #[arg(short, long, default_value = "http://localhost:18000")]
+    server: String,
 
-// Optional: paths for mTLS (set to None for plaintext)
-const CA_CERT_PATH: Option<&str> = None; // e.g., Some("/path/to/ca.pem")
-const CLIENT_CERT_PATH: Option<&str> = None; // e.g., Some("/path/to/client.pem")
-const CLIENT_KEY_PATH: Option<&str> = None; // e.g., Some("/path/to/client.key")
+    /// Path to CA certificate for TLS (enables TLS when set).
+    #[arg(long)]
+    ca_cert: Option<String>,
+
+    /// Path to client certificate for mTLS.
+    #[arg(long, requires = "ca_cert")]
+    client_cert: Option<String>,
+
+    /// Path to client key for mTLS.
+    #[arg(long, requires = "client_cert")]
+    client_key: Option<String>,
+
+    /// Listener names to watch (pass multiple: -l foo -l bar).
+    #[arg(short, long = "listener", required = true)]
+    listeners: Vec<String>,
+}
 
 // =============================================================================
 
@@ -80,69 +107,59 @@ impl Resource for Listener {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let args = Args::parse();
+
     println!("=== xds-client Example ===\n");
-    println!("Connecting to xDS server: {XDS_SERVER_URI}");
+    println!("Connecting to xDS server: {}", args.server);
 
     let config = ClientConfig::with_node_id("example-node").user_agent("grpc");
 
-    let transport = match CA_CERT_PATH {
+    let transport = match &args.ca_cert {
         Some(ca_path) => {
             let ca_cert = std::fs::read_to_string(ca_path)?;
             let mut tls = ClientTlsConfig::new().ca_certificate(Certificate::from_pem(&ca_cert));
 
-            if let (Some(cert_path), Some(key_path)) = (CLIENT_CERT_PATH, CLIENT_KEY_PATH) {
+            if let (Some(cert_path), Some(key_path)) = (&args.client_cert, &args.client_key) {
                 let client_cert = std::fs::read_to_string(cert_path)?;
                 let client_key = std::fs::read_to_string(key_path)?;
                 tls = tls.identity(Identity::from_pem(client_cert, client_key));
             }
 
-            let channel = Channel::from_static(XDS_SERVER_URI)
+            let channel = Channel::from_shared(args.server.clone())?
                 .tls_config(tls)?
                 .connect()
                 .await?;
 
             TonicTransport::from_channel(channel)
         }
-        None => TonicTransport::connect(XDS_SERVER_URI).await?,
+        None => TonicTransport::connect(&args.server).await?,
     };
 
     println!("Connected!\n");
 
     let client = XdsClient::builder(config, transport, ProstCodec, TokioRuntime).build();
 
-    println!("Enter listener names to watch (one per line, Ctrl+C to exit):");
-    println!("(Use empty string for wildcard subscription)\n");
-
     let (event_tx, mut event_rx) =
         tokio::sync::mpsc::unbounded_channel::<ResourceEvent<Listener>>();
 
-    let client_clone = client.clone();
-    let event_tx_clone = event_tx.clone();
-    tokio::spawn(async move {
-        let stdin = tokio::io::stdin();
-        let reader = BufReader::new(stdin);
-        let mut lines = reader.lines();
+    // Start watchers for each listener from args
+    for name in &args.listeners {
+        println!("→ Watching for Listener: '{name}'");
 
-        while let Ok(Some(line)) = lines.next_line().await {
-            let name = line.trim().to_string();
-            if name.is_empty() {
-                continue;
-            }
+        let mut watcher = client.watch::<Listener>(name);
+        let tx = event_tx.clone();
 
-            println!("→ Watching for Listener: '{name}'");
-
-            let mut watcher = client_clone.watch::<Listener>(&name);
-            let tx = event_tx_clone.clone();
-
-            tokio::spawn(async move {
-                while let Some(event) = watcher.next().await {
-                    if tx.send(event).is_err() {
-                        break;
-                    }
+        tokio::spawn(async move {
+            while let Some(event) = watcher.next().await {
+                if tx.send(event).is_err() {
+                    break;
                 }
-            });
-        }
-    });
+            }
+        });
+    }
+
+    // Drop the original sender so the loop exits when all watchers complete
+    drop(event_tx);
 
     while let Some(event) = event_rx.recv().await {
         match event {
