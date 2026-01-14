@@ -64,7 +64,7 @@ pub(crate) struct EndpointChannel<S> {
 
 impl<S> EndpointChannel<S> {
     /// Creates a new EndpointChannel.
-    pub fn new(inner: S) -> Self {
+    pub(crate) fn new(inner: S) -> Self {
         Self {
             inner,
             in_flight: Arc::new(AtomicU64::new(0)),
@@ -116,13 +116,3 @@ impl<S> Load for EndpointChannel<S> {
         self.in_flight.load(Ordering::Relaxed)
     }
 }
-
-
-
-pub(crate) struct ClusterChannelRegistry;
-impl ClusterChannelRegistry {
-    pub fn new() -> Self {
-        ClusterChannelRegistry
-    }
-}
-

@@ -5,12 +5,15 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::body::Body as TonicBody;
 use tonic::transport::channel::Channel;
+use tonic::client::GrpcService;
 use tower::load::Load;
 use tower::BoxError;
 use tower::Service;
 use tower::ServiceBuilder;
+use tower::util::BoxCloneService;
 
-use crate::client::cluster::ClusterClientRegistry;
+use crate::XdsUri;
+use crate::client::cluster::ClusterClientRegistryGrpc;
 use crate::client::endpoint::{EndpointAddress, EndpointChannel};
 use crate::client::lb::XdsLbService;
 use crate::client::route::XdsRoutingLayer;
@@ -21,14 +24,29 @@ use crate::xds::xds_manager::XdsManager;
 ///
 /// It routes requests according to the xDS configuration that it fetches from the xDS management server.
 /// The routing implementation is based on the [Google gRPC xDS features](https://grpc.github.io/grpc/core/md_doc_grpc_xds_features.html).
-#[derive(Clone)]
 pub struct XdsChannel<Req, E, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
     S::Response: Send + 'static,
 {
+    // Currently the routing decision is directly executed by the XdsLbService.
+    // In the future, we will add more layers in between for retries, request mirroring, etc.
     inner: XdsRoutingService<XdsLbService<Req, E, S>, E, S>,
+}
+
+impl<Req, E, S> Clone for XdsChannel<Req, E, S>
+where
+    Req: Send + 'static,
+    S: Service<Req>,
+    S::Response: Send + 'static,
+    XdsRoutingService<XdsLbService<Req, E, S>, E, S>: Clone,
+{
+    fn clone(&self) -> Self {
+        Self {
+            inner: self.inner.clone(),
+        }
+    }
 }
 
 type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
@@ -58,17 +76,35 @@ where
 }
 
 /// A type alias for an XdsChannel that uses tonic's Channel as the underlying service.
-pub type XdsChannelGrpc =
+pub(crate) type XdsChannelTonicGrpc =
     XdsChannel<http::Request<TonicBody>, EndpointAddress, EndpointChannel<Channel>>;
+
+/// A type-erased gRPC channel.
+pub type XdsChannelGrpc = BoxCloneService<
+    http::Request<TonicBody>,
+    http::Response<TonicBody>,
+    BoxError,
+>;
 
 // Static assertion that XdsChannelGrpc implements GrpcService
 const _: fn() = || {
     fn assert_grpc_service<T: tonic::client::GrpcService<TonicBody>>() {}
     assert_grpc_service::<XdsChannelGrpc>();
+    assert_grpc_service::<XdsChannelTonicGrpc>();
 };
 
 #[derive(Clone, Debug, Default)]
-pub struct XdsChannelConfig;
+pub struct XdsChannelConfig {
+    uri: Option<XdsUri>,
+}
+
+impl XdsChannelConfig {
+    /// Sets the xDS URI for the channel.
+    pub fn with_uri(mut self, uri: XdsUri) -> Self {
+        self.uri = Some(uri);
+        self
+    }
+}
 
 pub struct XdsChannelBuilder {
     config: XdsChannelConfig,
@@ -81,7 +117,7 @@ impl XdsChannelBuilder {
     }
 
     /// Builds an `XdsChannel`.
-    pub fn build<Req, E, S>(&self) -> XdsChannel<Req, E, S>
+    pub fn build_channel<Req, E, S>(&self) -> XdsChannel<Req, E, S>
     where
         Req: Send + 'static,
         S: Service<Req>,
@@ -90,21 +126,28 @@ impl XdsChannelBuilder {
         todo!("Implement XdsChannel building logic");
     }
 
+    pub(crate) fn build_tonic_grpc_channel(&self) -> XdsChannelTonicGrpc {
+        todo!("Implement XdsChannel building logic");
+    }
+
+    /// Builds an `XdsChannel`.
+    pub fn build_grpc_channel(&self) -> XdsChannelGrpc
+    {
+        BoxCloneService::new(self.build_tonic_grpc_channel())
+    }
+
     #[cfg(test)]
-    pub fn build_grpc_channel_from_deps(
+    pub(crate) fn build_grpc_channel_from_deps(
         &self,
         xds_manager: Arc<dyn XdsManager<EndpointAddress, EndpointChannel<Channel>>>,
     ) -> XdsChannelGrpc {
         let routing_layer = XdsRoutingLayer::new(xds_manager.clone());
-        let cluster_registry = Arc::new(ClusterClientRegistry::<
-            Request<TonicBody>,
-            Response<TonicBody>,
-        >::new());
+        let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, xds_manager.clone());
         let service = ServiceBuilder::new()
             .layer(routing_layer)
             .service(lb_service);
-        XdsChannelGrpc { inner: service }
+        BoxCloneService::new(XdsChannelTonicGrpc { inner: service })
     }
 }
 
@@ -239,7 +282,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_xds_channel_grpc() {
+    async fn test_xds_channel_grpc_with_p2c_lb() {
         let num_requests = 10000;
         let num_servers = 5;
         let (_, servers) = setup_grpc_servers(num_servers).await;
@@ -249,7 +292,7 @@ mod tests {
 
         let xds_manager = Arc::new(MockXdsManager::from_test_servers(&servers));
 
-        let xds_channel_builder = XdsChannelBuilder::with_config(XdsChannelConfig);
+        let xds_channel_builder = XdsChannelBuilder::with_config(XdsChannelConfig::default());
         let xds_channel = xds_channel_builder.build_grpc_channel_from_deps(xds_manager.clone());
 
         let client = GreeterClient::new(xds_channel);

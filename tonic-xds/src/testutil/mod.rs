@@ -1,2 +1,2 @@
 #[cfg(test)]
-pub mod grpc;
+pub(crate) mod grpc;

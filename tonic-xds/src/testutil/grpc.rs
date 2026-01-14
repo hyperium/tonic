@@ -1,19 +1,19 @@
 //! Test utilities for gRPC servers and clients.
 use std::net::SocketAddr;
-use tokio::net::TcpListener;
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::server::NamedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Server, ServerTlsConfig};
+use tonic::{Request, Response, Status};
+use pb::greeter_server::{Greeter, GreeterServer};
 
 /// Protobuf for test purposes.
-pub mod pb {
+pub(crate) mod pb {
     #![allow(missing_docs)]
     tonic::include_proto!("helloworld");
 }
-pub use pb::greeter_client::GreeterClient;
-use pb::greeter_server::{Greeter, GreeterServer};
-pub use pb::{HelloReply, HelloRequest};
-use tonic::{Request, Response, Status};
+pub(crate) use pb::greeter_client::GreeterClient;
+pub(crate) use pb::{HelloReply, HelloRequest};
+
 
 #[derive(Default)]
 struct MyGreeter {
@@ -30,7 +30,7 @@ impl Greeter for MyGreeter {
 }
 
 /// A test server that runs a gRPC service and provides a channel for clients to connect.
-pub struct TestServer {
+pub(crate) struct TestServer {
     /// The gRPC channel for talking to the test server.
     pub channel: Channel,
     /// Signal the server to shutdown.
@@ -46,7 +46,7 @@ impl NamedService for TestServer {
 }
 
 /// Spawns a gRPC greeter server for testing purposes.
-pub async fn spawn_greeter_server(
+pub(crate) async fn spawn_greeter_server(
     msg: &str,
     server_tls: Option<ServerTlsConfig>,
     client_tls: Option<ClientTlsConfig>,
