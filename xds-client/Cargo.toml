@@ -16,6 +16,7 @@ workspace = true
 bytes = "1.11.0"
 thiserror = "2"
 futures = "0.3"
+uuid = { version = "1", features = ["v4"] }
 
 # Optional dependencies for tonic transport
 tonic = { version = "0.14", optional = true }

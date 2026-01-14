@@ -26,15 +26,6 @@ pub enum Error {
     /// Resource validation failed.
     #[error("resource validation failed: {0}")]
     Validation(String),
-
-    /// Resource does not exist on the server.
-    #[error("resource does not exist: {type_url}/{name}")]
-    ResourceDoesNotExist {
-        /// The type URL of the resource.
-        type_url: String,
-        /// The name of the resource.
-        name: String,
-    },
 }
 
 /// Result type alias for xDS client operations.

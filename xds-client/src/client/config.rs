@@ -12,14 +12,6 @@ pub struct ClientConfig {
     /// Default: None.
     pub node: Option<Node>,
 
-    /// Timeout for "resource does not exist" detection.
-    ///
-    /// If a subscribed resource is not received within this duration,
-    /// watchers are notified with a `ResourceDoesNotExist` error.
-    ///
-    /// Default: 15 seconds (per xDS spec).
-    pub resource_timeout: Duration,
-
     /// Initial backoff duration for reconnection attempts.
     ///
     /// Default: 1 second.
@@ -43,7 +35,6 @@ impl Default for ClientConfig {
     fn default() -> Self {
         Self {
             node: None,
-            resource_timeout: Duration::from_secs(15),
             initial_backoff: Duration::from_secs(1),
             max_backoff: Duration::from_secs(30),
             backoff_multiplier: 2.0,
@@ -96,12 +87,6 @@ impl ClientConfig {
                 ..Default::default()
             });
         }
-        self
-    }
-
-    /// Set the resource timeout.
-    pub fn resource_timeout(mut self, timeout: Duration) -> Self {
-        self.resource_timeout = timeout;
         self
     }
 

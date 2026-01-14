@@ -16,11 +16,14 @@
 //!
 //! Enter listener names to watch, one per line. Press Ctrl+C to exit.
 
-use std::time::Duration;
-
 use bytes::Bytes;
+use envoy_types::pb::envoy::config::listener::v3::Listener as ListenerProto;
+use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
+    http_connection_manager::RouteSpecifier, HttpConnectionManager,
+};
 use prost::Message;
 use tokio::io::{AsyncBufReadExt, BufReader};
+use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
 
 use xds_client::resource::TypeUrl;
 use xds_client::{
@@ -52,11 +55,6 @@ impl Resource for Listener {
     const TYPE_URL: TypeUrl = TypeUrl::new("type.googleapis.com/envoy.config.listener.v3.Listener");
 
     fn decode(bytes: Bytes) -> xds_client::Result<Self> {
-        use envoy_types::pb::envoy::config::listener::v3::Listener as ListenerProto;
-        use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
-            http_connection_manager::RouteSpecifier, HttpConnectionManager,
-        };
-
         let proto = ListenerProto::decode(bytes)?;
 
         let hcm = proto
@@ -85,14 +83,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== xds-client Example ===\n");
     println!("Connecting to xDS server: {XDS_SERVER_URI}");
 
-    let config = ClientConfig::with_node_id("example-node")
-        .user_agent("grpc")
-        .resource_timeout(Duration::from_secs(15));
+    let config = ClientConfig::with_node_id("example-node").user_agent("grpc");
 
     let transport = match CA_CERT_PATH {
         Some(ca_path) => {
-            use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
-
             let ca_cert = std::fs::read_to_string(ca_path)?;
             let mut tls = ClientTlsConfig::new().ca_certificate(Certificate::from_pem(&ca_cert));
 

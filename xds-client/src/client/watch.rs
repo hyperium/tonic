@@ -110,7 +110,7 @@ pub enum ResourceEvent<T> {
 #[derive(Debug)]
 pub struct ResourceWatcher<T: Resource> {
     /// Channel to receive events from the worker.
-    event_rx: mpsc::UnboundedReceiver<ResourceEvent<DecodedResource>>,
+    event_rx: mpsc::Receiver<ResourceEvent<DecodedResource>>,
     /// Unique identifier for this watcher.
     watcher_id: WatcherId,
     /// Channel to send commands to the worker (for unwatch on drop).
@@ -122,7 +122,7 @@ pub struct ResourceWatcher<T: Resource> {
 impl<T: Resource> ResourceWatcher<T> {
     /// Create a new resource watcher.
     pub(crate) fn new(
-        event_rx: mpsc::UnboundedReceiver<ResourceEvent<DecodedResource>>,
+        event_rx: mpsc::Receiver<ResourceEvent<DecodedResource>>,
         watcher_id: WatcherId,
         command_tx: mpsc::UnboundedSender<WorkerCommand>,
     ) -> Self {
@@ -163,15 +163,20 @@ impl<T: Resource> ResourceWatcher<T> {
         let event = self.event_rx.next().await?;
 
         Some(match event {
-            ResourceEvent::ResourceChanged { resource, done } => {
-                let typed_resource = resource
-                    .downcast::<T>()
-                    .expect("resource type mismatch - this is a bug in xds-client");
-                ResourceEvent::ResourceChanged {
+            ResourceEvent::ResourceChanged { resource, done } => match resource.downcast::<T>() {
+                Some(typed_resource) => ResourceEvent::ResourceChanged {
                     resource: typed_resource,
                     done,
-                }
-            }
+                },
+                None => ResourceEvent::ResourceError {
+                    error: Error::Validation(format!(
+                        "resource type mismatch (expected: {}, actual: {})",
+                        std::any::type_name::<T>(),
+                        resource.type_url()
+                    )),
+                    done,
+                },
+            },
             ResourceEvent::ResourceError { error, done } => {
                 ResourceEvent::ResourceError { error, done }
             }

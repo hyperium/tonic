@@ -1,8 +1,5 @@
 //! Client interface through which the user can watch and receive updates for xDS resources.
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
-
 use futures::channel::mpsc;
 
 use crate::client::config::ClientConfig;
@@ -50,7 +47,6 @@ where
         let (command_tx, command_rx) = mpsc::unbounded();
 
         let worker_config = WorkerConfig {
-            resource_timeout: self.config.resource_timeout,
             initial_backoff: self.config.initial_backoff,
             max_backoff: self.config.max_backoff,
             backoff_multiplier: self.config.backoff_multiplier,
@@ -69,10 +65,7 @@ where
             worker.run().await;
         });
 
-        XdsClient {
-            command_tx,
-            next_watcher_id: Arc::new(AtomicU64::new(0)),
-        }
+        XdsClient { command_tx }
     }
 }
 
@@ -86,9 +79,12 @@ where
 pub struct XdsClient {
     /// Channel to send commands to the worker.
     command_tx: mpsc::UnboundedSender<WorkerCommand>,
-    /// Counter for generating unique watcher IDs.
-    next_watcher_id: Arc<AtomicU64>,
 }
+
+/// Default buffer size for watcher event channels.
+///
+/// This provides backpressure when watchers are slow to process events.
+const WATCHER_CHANNEL_BUFFER_SIZE: usize = 16;
 
 impl XdsClient {
     /// Create a new builder with the given configuration, transport, codec, and runtime.
@@ -139,8 +135,8 @@ impl XdsClient {
     /// ```
     pub fn watch<T: Resource>(&self, name: impl Into<String>) -> ResourceWatcher<T> {
         let name = name.into();
-        let watcher_id = WatcherId(self.next_watcher_id.fetch_add(1, Ordering::Relaxed));
-        let (event_tx, event_rx) = mpsc::unbounded();
+        let watcher_id = WatcherId::new();
+        let (event_tx, event_rx) = mpsc::channel(WATCHER_CHANNEL_BUFFER_SIZE);
 
         let decoder: DecoderFn = Box::new(|bytes| {
             let resource = T::decode(bytes)?;
