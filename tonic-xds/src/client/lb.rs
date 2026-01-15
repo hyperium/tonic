@@ -16,17 +16,17 @@ pub(crate) enum LoadBalancingError {
 }
 
 /// A Tower Service that performs load balancing based on routing decisions and xDS configuration.
-pub(crate) struct XdsLbService<Req, E, S>
+pub(crate) struct XdsLbService<Req, Endpoint, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
     S::Response: Send + 'static,
 {
     cluster_registry: Arc<ClusterClientRegistry<Req, S::Response>>,
-    cluster_discovery: Arc<dyn XdsClusterDiscovery<E, S>>,
+    cluster_discovery: Arc<dyn XdsClusterDiscovery<Endpoint, S>>,
 }
 
-impl<Req, E, S> XdsLbService<Req, E, S>
+impl<Req, Endpoint, S> XdsLbService<Req, Endpoint, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
@@ -36,7 +36,7 @@ where
     #[allow(dead_code)]
     pub(crate) fn new(
         cluster_registry: Arc<ClusterClientRegistry<Req, S::Response>>,
-        cluster_discovery: Arc<dyn XdsClusterDiscovery<E, S>>,
+        cluster_discovery: Arc<dyn XdsClusterDiscovery<Endpoint, S>>,
     ) -> Self {
         Self {
             cluster_registry,
@@ -45,7 +45,7 @@ where
     }
 }
 
-impl<Req, E, S> Clone for XdsLbService<Req, E, S>
+impl<Req, Endpoint, S> Clone for XdsLbService<Req, Endpoint, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
@@ -59,11 +59,11 @@ where
     }
 }
 
-impl<B, E, S> Service<Request<B>> for XdsLbService<Request<B>, E, S>
+impl<B, Endpoint, S> Service<Request<B>> for XdsLbService<Request<B>, Endpoint, S>
 where
     Request<B>: Send + 'static,
     S::Response: Send + 'static,
-    E: std::hash::Hash + Eq + Clone + Send + 'static,
+    Endpoint: std::hash::Hash + Eq + Clone + Send + 'static,
     S: Service<Request<B>> + Load + Send + 'static,
     S::Response: Send + 'static,
     S::Error: Into<BoxError>,

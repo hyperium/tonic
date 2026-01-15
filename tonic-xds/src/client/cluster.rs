@@ -1,4 +1,5 @@
 use dashmap::DashMap;
+use futures::future::BoxFuture;
 use http::{Request, Response};
 use std::fmt::Debug;
 use std::future::Future;
@@ -11,8 +12,7 @@ use tower::{
     balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load, BoxError, Service,
 };
 
-type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-type RespFut<Resp> = Pin<Box<dyn Future<Output = Result<Resp, BoxError>> + Send>>;
+type RespFut<Resp> = BoxFuture<'static, Result<Resp, BoxError>>;
 
 const DEFAULT_BUFFER_CAPACITY: usize = 1024;
 
@@ -184,7 +184,7 @@ where
 }
 
 /// `ClusterRegistry` is the client registry for all xDS clusters.
-/// The xDS Tower Service implementations uses this to get the client for a specific cluster.
+/// The xDS Tower service implementations uses this to get the client for a specific cluster.
 pub(crate) struct ClusterClientRegistry<Req, Resp>
 where
     Req: Send + 'static,

@@ -1,11 +1,10 @@
 use crate::xds::route::RouteInput;
 use crate::xds::xds_manager::XdsRouter;
+use futures::future::BoxFuture;
 use http::Request;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::{BoxError, Layer, Service};
+use tower::{Layer, Service};
 
 /// Tower service for routing requests to the appropriate cluster based on the xDS routing configurations.
 /// Attaches routing decision as `RoutingDecision` to the request extensions.
@@ -20,13 +19,13 @@ pub(crate) struct XdsRoutingService<S> {
 
 impl<S, B> Service<Request<B>> for XdsRoutingService<S>
 where
-    S: Service<Request<B>, Error = BoxError> + Clone + Send + 'static,
+    S: Service<Request<B>> + Clone + Send + 'static,
     B: Send + 'static,
     S::Future: Send + 'static,
 {
     type Response = S::Response;
-    type Error = BoxError;
-    type Future = Pin<Box<dyn Future<Output = Result<S::Response, BoxError>> + Send>>;
+    type Error = S::Error;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)

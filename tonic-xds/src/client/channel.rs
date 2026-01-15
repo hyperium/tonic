@@ -2,10 +2,9 @@ use crate::client::endpoint::{EndpointAddress, EndpointChannel};
 use crate::client::lb::XdsLbService;
 use crate::client::route::XdsRoutingService;
 use crate::XdsUri;
+use futures::future::BoxFuture;
 use http::Request;
 use std::fmt::Debug;
-use std::future::Future;
-use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::{body::Body as TonicBody, client::GrpcService, transport::channel::Channel};
@@ -42,9 +41,9 @@ impl XdsChannelConfig {
 /// # Type Parameters
 ///
 /// * `Req` - The request type that this channel accepts, as an example: `http::Request<Body>`.
-/// * `E` - The endpoint identifier type used for load balancing (e.g., socket address).
+/// * `Endpoint` - The endpoint identifier type used for load balancing (e.g., socket address).
 /// * `S` - The underlying [`tower::Service`] implementation that handles individual endpoint connections.
-pub struct XdsChannel<Req, E, S>
+pub struct XdsChannel<Req, Endpoint, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
@@ -53,11 +52,11 @@ where
     config: Arc<XdsChannelConfig>,
     // Currently the routing decision is directly executed by the XdsLbService.
     // In the future, we will add more layers in between for retries, request mirroring, etc.
-    inner: XdsRoutingService<XdsLbService<Req, E, S>>,
+    inner: XdsRoutingService<XdsLbService<Req, Endpoint, S>>,
 }
 
 #[allow(clippy::missing_fields_in_debug)]
-impl<Req, E, S> Debug for XdsChannel<Req, E, S>
+impl<Req, Endpoint, S> Debug for XdsChannel<Req, Endpoint, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
@@ -70,12 +69,12 @@ where
     }
 }
 
-impl<Req, E, S> Clone for XdsChannel<Req, E, S>
+impl<Req, Endpoint, S> Clone for XdsChannel<Req, Endpoint, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
     S::Response: Send + 'static,
-    XdsRoutingService<XdsLbService<Req, E, S>>: Clone,
+    XdsRoutingService<XdsLbService<Req, Endpoint, S>>: Clone,
 {
     fn clone(&self) -> Self {
         Self {
@@ -85,13 +84,11 @@ where
     }
 }
 
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
-
-impl<B, E, S> Service<http::Request<B>> for XdsChannel<Request<B>, E, S>
+impl<B, Endpoint, S> Service<http::Request<B>> for XdsChannel<Request<B>, Endpoint, S>
 where
     B: Send + 'static,
     Request<B>: Send + 'static,
-    E: std::hash::Hash + Eq + Clone + Send + 'static,
+    Endpoint: std::hash::Hash + Eq + Clone + Send + 'static,
     S: Service<Request<B>> + Load + Send + 'static,
     S::Response: Send + 'static,
     S::Error: Into<BoxError>,
@@ -100,7 +97,7 @@ where
 {
     type Response = S::Response;
     type Error = BoxError;
-    type Future = BoxFuture<Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -146,7 +143,7 @@ impl XdsChannelBuilder {
     /// Builds an `XdsChannel`, which takes generic request, endpoint, and service types and can be
     /// used for generic HTTP services.
     #[must_use]
-    pub fn build_channel<Req, E, S>(&self) -> XdsChannel<Req, E, S>
+    pub fn build_channel<Req, Endpoint, S>(&self) -> XdsChannel<Req, Endpoint, S>
     where
         Req: Send + 'static,
         S: Service<Req>,

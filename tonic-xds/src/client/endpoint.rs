@@ -1,6 +1,5 @@
-use std::future::Future;
+use futures::future::BoxFuture;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
 use std::task::{Context, Poll};
 use tower::{load::Load, Service};
@@ -95,7 +94,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = Pin<Box<dyn Future<Output = Result<S::Response, S::Error>> + Send>>;
+    type Future = BoxFuture<'static, Result<S::Response, S::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
