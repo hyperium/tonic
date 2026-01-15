@@ -5,8 +5,8 @@ use url::Url;
 #[derive(Debug, Error)]
 pub enum XdsUriError {
     /// The URI scheme is not "xds".
-    #[error("URI scheme must be 'xds'")]
-    InvalidScheme,
+    #[error("URI scheme must be 'xds', got '{0}'")]
+    InvalidScheme(String),
     /// The URI could not be parsed.
     #[error("invalid URI: {0}")]
     InvalidUri(#[from] url::ParseError),
@@ -37,12 +37,16 @@ impl XdsUri {
     ///
     /// let uri = XdsUri::parse("xds:///my-service").expect("Failed to parse valid xDS URI");
     /// assert_eq!(uri.target, "my-service");
+    /// 
+    /// let invalid_uri = XdsUri::parse("http:///my-service");
+    /// assert!(invalid_uri.is_err());
+    /// assert_eq!(invalid_uri.unwrap_err().to_string(), "URI scheme must be 'xds', got 'http'");
     /// ```
     pub fn parse(uri: &str) -> Result<Self, XdsUriError> {
         let uri = Url::parse(uri)?;
 
         if uri.scheme() != XDS_SCHEME {
-            return Err(XdsUriError::InvalidScheme);
+            return Err(XdsUriError::InvalidScheme(uri.scheme().to_string()));
         }
 
         let target = uri.path().trim_start_matches('/').to_string();
