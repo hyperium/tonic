@@ -91,7 +91,8 @@ where
         let cluster_client = self
             .cluster_registry
             .get_cluster(&routing_decision.cluster, || {
-                self.cluster_discovery.discover_cluster(&routing_decision.cluster)
+                self.cluster_discovery
+                    .discover_cluster(&routing_decision.cluster)
             });
 
         // Get the transport channel for the target xDS cluster.

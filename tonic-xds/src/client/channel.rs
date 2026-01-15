@@ -38,7 +38,7 @@ impl XdsChannelConfig {
 ///
 /// It routes requests according to the xDS configuration that it fetches from the xDS management server.
 /// The routing implementation is based on the [Google gRPC xDS features](https://grpc.github.io/grpc/core/md_doc_grpc_xds_features.html).
-/// 
+///
 /// # Type Parameters
 ///
 /// * `Req` - The request type that this channel accepts, as an example: `http::Request<Body>`.

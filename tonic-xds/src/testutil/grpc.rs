@@ -1,18 +1,15 @@
 //! Test utilities for gRPC servers and clients.
-use pb::greeter_server::{Greeter, GreeterServer};
 use std::net::SocketAddr;
 use tokio::{net::TcpListener, sync::oneshot};
 use tonic::server::NamedService;
 use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Server, ServerTlsConfig};
 use tonic::{Request, Response, Status};
 
-/// Protobuf for test purposes.
-#[allow(unreachable_pub, missing_docs)]
-pub(crate) mod pb {
-    tonic::include_proto!("helloworld");
-}
-pub(crate) use pb::greeter_client::GreeterClient;
-pub(crate) use pb::{HelloReply, HelloRequest};
+pub(crate) use crate::testutil::proto::helloworld::{
+    greeter_client::GreeterClient,
+    greeter_server::{Greeter, GreeterServer},
+    HelloReply, HelloRequest,
+};
 
 #[derive(Default)]
 struct MyGreeter {
