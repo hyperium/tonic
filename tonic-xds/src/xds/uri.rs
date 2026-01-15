@@ -37,7 +37,7 @@ impl XdsUri {
     ///
     /// let uri = XdsUri::parse("xds:///my-service").expect("Failed to parse valid xDS URI");
     /// assert_eq!(uri.target, "my-service");
-    /// 
+    ///
     /// let invalid_uri = XdsUri::parse("http:///my-service");
     /// assert!(invalid_uri.is_err());
     /// assert_eq!(invalid_uri.unwrap_err().to_string(), "URI scheme must be 'xds', got 'http'");
