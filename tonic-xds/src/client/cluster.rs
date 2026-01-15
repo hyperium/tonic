@@ -1,22 +1,24 @@
 use dashmap::DashMap;
 use http::{Request, Response};
+use std::fmt::Debug;
 use std::future::Future;
 use std::hash::Hash;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tower::ServiceExt;
 use tonic::body::Body as TonicBody;
-use tower::{balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load, Service, BoxError};
+use tower::{
+    balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load, BoxError, Service,
+};
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 type RespFut<Resp> = Pin<Box<dyn Future<Output = Result<Resp, BoxError>> + Send>>;
 
 const DEFAULT_BUFFER_CAPACITY: usize = 1024;
 
-/// ClusterBalancer is responsible for managing load balancing requests across multiple channels.
-/// Currently, ClusterBalancer leverges tower::balance::p2c for doing P2C load balancing. In the future, we will
-/// swap it for a in-house implementation with more flexibility.
+/// `ClusterBalancer` is responsible for managing load balancing requests across multiple channels.
+/// Currently, `ClusterBalancer` leverges `tower::balance::p2c` for doing P2C load balancing. In the future, we will
+/// support more load balancing strategies as needed.
 pub(crate) struct ClusterBalancer<D, Req>
 where
     D: Discover,
@@ -32,7 +34,7 @@ where
     D::Service: Service<Req>,
     <D::Service as Service<Req>>::Error: Into<BoxError>,
 {
-    /// Creates a new ClusterBalancer with provided service discovery.
+    /// Creates a new `ClusterBalancer` with provided service discovery.
     pub(crate) fn new(discover: D) -> Self {
         Self {
             balancer: Balance::new(discover),
@@ -40,6 +42,8 @@ where
     }
 
     /// Returns the number of endpoints currently tracked by the balancer.
+    /// This can be useful for monitoring and debugging purposes.
+    #[allow(dead_code)]
     pub(crate) fn len(&self) -> usize {
         self.balancer.len()
     }
@@ -68,11 +72,11 @@ where
     }
 }
 
-/// ClusterChannel is similar to tonic::transport::Channel, but is for load-balancing across all
+/// `ClusterChannel` is similar to `tonic::transport::Channel`, but is for load-balancing across all
 /// the channels for a xDS Cluster.
-/// ClusterChannel should be cloned to be used in multi-threaded environment. It leverages a tower::Buffer to
+/// `ClusterChannel` should be cloned to be used in multi-threaded environment. It leverages a `tower::Buffer` to
 /// queue requests from multiple callers and behind the queue, it load-balances the requests across all
-/// available channels by leveraging the inner ClusterBalancer object.
+/// available channels by leveraging the inner `ClusterBalancer` object.
 pub(crate) struct ClusterChannel<Req, Resp>
 where
     Req: Send + 'static,
@@ -99,7 +103,7 @@ where
     Req: Send + 'static,
     Resp: 'static,
 {
-    /// Creates a new ClusterChannel with the given service and picker.
+    /// Creates a new `ClusterChannel` with the given service and picker.
     pub(crate) fn from_balancer<B>(balancer: B, buffer_cap: usize) -> Self
     where
         B: Service<Req, Error = BoxError, Future = RespFut<Resp>> + Send + 'static,
@@ -127,11 +131,7 @@ where
     }
 }
 
-// A type erased cluster channel for tonic clients.
-/// See [ClusterChannel] for details.
-pub(crate) type ClusterChannelGrpc = ClusterChannel<Request<TonicBody>, Response<TonicBody>>;
-
-/// Cluster manages channels and load balancing for a xDS cluster.
+/// `ClusterClient` manages channels that load-balance for a xDS cluster.
 pub(crate) struct ClusterClient<Req, Resp>
 where
     Req: Send + 'static,
@@ -141,12 +141,21 @@ where
     channel: ClusterChannel<Req, Resp>,
 }
 
+impl Debug for ClusterClient<(), ()> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ClusterClient")
+            .field("name", &self.name)
+            .finish()
+    }
+}
+
 impl<Req, Resp> ClusterClient<Req, Resp>
 where
     Req: Send + 'static,
     Resp: 'static,
 {
-    /// Creates a new ClusterClient with the given service and balancer.
+    /// Creates a new `ClusterClient` with the given cluster name and service discovery implementation.
+    /// Currently, `tower::discover::Discover` is used for service discovery.
     pub(crate) fn new<D>(name: String, discover: D) -> Self
     where
         D: Discover + Unpin + Send + 'static,
@@ -168,12 +177,14 @@ where
     }
 
     /// Returns the name of the cluster.
+    #[allow(dead_code)]
     pub(crate) fn name(&self) -> &str {
         &self.name
     }
 }
 
-/// ClusterRegistry is the registry for all xDS clusters.
+/// `ClusterRegistry` is the client registry for all xDS clusters.
+/// The xDS Tower Service implementations uses this to get the client for a specific cluster.
 pub(crate) struct ClusterClientRegistry<Req, Resp>
 where
     Req: Send + 'static,
@@ -187,16 +198,18 @@ where
     Req: Send + 'static,
     Resp: 'static,
 {
-    /// Creates a new ClusterClientRegistry.
+    /// Creates a new `ClusterClientRegistry`.
     pub(crate) fn new() -> Self {
         Self {
             registry: DashMap::new(),
         }
     }
     /// Get the client of a cluster with lazy discovery.
-    /// Only calls discover_fn if the cluster is not already cached.
-    /// This optimizes for the hot path where clusters are already cached.
-    pub(crate) fn get_cluster<F, D>(&self, key: &str, discover_fn: F) -> Arc<ClusterClient<Req, Resp>>
+    pub(crate) fn get_cluster<F, D>(
+        &self,
+        key: &str,
+        discover_fn: F,
+    ) -> Arc<ClusterClient<Req, Resp>>
     where
         F: FnOnce() -> D,
         D: Discover + Unpin + Send + 'static,
@@ -230,5 +243,8 @@ where
     }
 }
 
-/// A type erased registry for tonic clients.
-pub(crate) type ClusterClientRegistryGrpc = ClusterClientRegistry<Request<TonicBody>, Response<TonicBody>>;
+/// A type erased registry for Tonic clients.
+/// This will be used by the xDS Tower Service implementations to get the client for a specific Tonic xDS cluster.
+#[allow(dead_code)]
+pub(crate) type ClusterClientRegistryGrpc =
+    ClusterClientRegistry<Request<TonicBody>, Response<TonicBody>>;

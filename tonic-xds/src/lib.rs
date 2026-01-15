@@ -1,7 +1,7 @@
 //! # tonic-xds
 //!
 //! xDS (discovery service) support for [Tonic](https://docs.rs/tonic) gRPC clients as well as
-//! general [Tower](https://docs.rs/tower) services.
+//! general [Tower](https://docs.rs/tower) Services.
 //!
 //! This crate provides an xDS-enabled Tonic Channel that automatically discovers,
 //! routesand load balances across endpoints using the xDS protocol. The xDS features will align with
@@ -16,13 +16,13 @@
 //!
 //! ```rust,no_run
 //! use tonic_xds::{XdsChannelBuilder, XdsChannelConfig, XdsChannelGrpc, XdsUri};
-//! 
-//! let xds_uri = XdsUri::parse(
-//!   "xds:///xds-management-server-local-test:50051"
-//! ).expect("fail to parse valid xDS URI");
-//! 
+//!
+//! let target_uri = XdsUri::parse(
+//!   "xds:///myservice:50051"
+//! ).expect("fail to parse valid target URI");
+//!
 //! let xds_channel = XdsChannelBuilder::with_config(
-//!   XdsChannelConfig::default().with_uri(xds_uri)
+//!   XdsChannelConfig::default().with_target_uri(target_uri)
 //! ).build_grpc_channel();
 //!
 //! // Use with your generated gRPC client

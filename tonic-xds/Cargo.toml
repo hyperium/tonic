@@ -12,6 +12,7 @@ envoy-types = "0.7"
 dashmap = "6.1"
 thiserror = "2.0.17"
 futures = "0.3.31"
+url = "2.5.8"
 
 [lints]
 workspace = true

@@ -1,9 +1,5 @@
-pub mod channel;
-pub(crate) mod endpoint;
+pub(crate) mod channel;
 pub(crate) mod cluster;
-pub(crate) mod route;
+pub(crate) mod endpoint;
 pub(crate) mod lb;
-
-pub(crate) use cluster::ClusterChannel;
-
-pub use lb::LoadBalancingError;
+pub(crate) mod route;

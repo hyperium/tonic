@@ -1,38 +1,73 @@
-use http::{Request, Response};
+use crate::client::endpoint::{EndpointAddress, EndpointChannel};
+use crate::client::lb::XdsLbService;
+use crate::client::route::XdsRoutingService;
+use crate::XdsUri;
+use http::Request;
+use std::fmt::Debug;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use tonic::body::Body as TonicBody;
-use tonic::transport::channel::Channel;
-use tonic::client::GrpcService;
-use tower::load::Load;
-use tower::BoxError;
-use tower::Service;
-use tower::ServiceBuilder;
-use tower::util::BoxCloneService;
+use tonic::{body::Body as TonicBody, client::GrpcService, transport::channel::Channel};
+use tower::{load::Load, util::BoxCloneService, BoxError, Service};
 
-use crate::XdsUri;
-use crate::client::cluster::ClusterClientRegistryGrpc;
-use crate::client::endpoint::{EndpointAddress, EndpointChannel};
-use crate::client::lb::XdsLbService;
-use crate::client::route::XdsRoutingLayer;
-use crate::client::route::XdsRoutingService;
-use crate::xds::xds_manager::XdsManager;
+#[cfg(test)]
+use {
+    crate::client::cluster::ClusterClientRegistryGrpc, crate::client::route::XdsRoutingLayer,
+    crate::xds::xds_manager::XdsManager, tower::ServiceBuilder,
+};
 
-/// XdsChannel is an xDS-capable Tower Service.
+/// Configuration for an xDS-capable channel.
+/// Currently, only support specifying the xDS URI for the target service.
+/// In the future, more configurations such as xDS management server address will be added.
+#[derive(Clone, Debug, Default)]
+pub struct XdsChannelConfig {
+    target_uri: Option<XdsUri>,
+}
+
+impl XdsChannelConfig {
+    /// Sets the xDS URI for the channel.
+    #[must_use]
+    pub fn with_target_uri(mut self, target_uri: XdsUri) -> Self {
+        self.target_uri = Some(target_uri);
+        self
+    }
+}
+
+/// `XdsChannel` is an xDS-capable Tower Service.
 ///
 /// It routes requests according to the xDS configuration that it fetches from the xDS management server.
 /// The routing implementation is based on the [Google gRPC xDS features](https://grpc.github.io/grpc/core/md_doc_grpc_xds_features.html).
+/// 
+/// # Type Parameters
+///
+/// * `Req` - The request type that this channel accepts, as an example: `http::Request<Body>`.
+/// * `E` - The endpoint identifier type used for load balancing (e.g., socket address).
+/// * `S` - The underlying Tower Service type that handles individual endpoint connections.
 pub struct XdsChannel<Req, E, S>
 where
     Req: Send + 'static,
     S: Service<Req>,
     S::Response: Send + 'static,
 {
+    config: Arc<XdsChannelConfig>,
     // Currently the routing decision is directly executed by the XdsLbService.
     // In the future, we will add more layers in between for retries, request mirroring, etc.
-    inner: XdsRoutingService<XdsLbService<Req, E, S>, E, S>,
+    inner: XdsRoutingService<XdsLbService<Req, E, S>>,
+}
+
+#[allow(clippy::missing_fields_in_debug)]
+impl<Req, E, S> Debug for XdsChannel<Req, E, S>
+where
+    Req: Send + 'static,
+    S: Service<Req>,
+    S::Response: Send + 'static,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("XdsChannel")
+            .field("config", &self.config)
+            .finish()
+    }
 }
 
 impl<Req, E, S> Clone for XdsChannel<Req, E, S>
@@ -40,10 +75,11 @@ where
     Req: Send + 'static,
     S: Service<Req>,
     S::Response: Send + 'static,
-    XdsRoutingService<XdsLbService<Req, E, S>, E, S>: Clone,
+    XdsRoutingService<XdsLbService<Req, E, S>>: Clone,
 {
     fn clone(&self) -> Self {
         Self {
+            config: self.config.clone(),
             inner: self.inner.clone(),
         }
     }
@@ -75,48 +111,40 @@ where
     }
 }
 
-/// A type alias for an XdsChannel that uses tonic's Channel as the underlying service.
+/// A type alias for an `XdsChannel` that uses Tonic's Channel as the underlying transport.
 pub(crate) type XdsChannelTonicGrpc =
     XdsChannel<http::Request<TonicBody>, EndpointAddress, EndpointChannel<Channel>>;
 
 /// A type-erased gRPC channel.
-pub type XdsChannelGrpc = BoxCloneService<
-    http::Request<TonicBody>,
-    http::Response<TonicBody>,
-    BoxError,
->;
+pub type XdsChannelGrpc =
+    BoxCloneService<http::Request<TonicBody>, http::Response<TonicBody>, BoxError>;
 
-// Static assertion that XdsChannelGrpc implements GrpcService
+// Static assertion that XdsChannelGrpc and XdsChannelTonicGrpc implement GrpcService
 const _: fn() = || {
-    fn assert_grpc_service<T: tonic::client::GrpcService<TonicBody>>() {}
+    fn assert_grpc_service<T: GrpcService<TonicBody>>() {}
     assert_grpc_service::<XdsChannelGrpc>();
     assert_grpc_service::<XdsChannelTonicGrpc>();
 };
 
-#[derive(Clone, Debug, Default)]
-pub struct XdsChannelConfig {
-    uri: Option<XdsUri>,
-}
-
-impl XdsChannelConfig {
-    /// Sets the xDS URI for the channel.
-    pub fn with_uri(mut self, uri: XdsUri) -> Self {
-        self.uri = Some(uri);
-        self
-    }
-}
-
+/// Builder for creating an `XdsChannel` or `XdsChannelGrpc`.
+#[derive(Clone, Debug)]
 pub struct XdsChannelBuilder {
-    config: XdsChannelConfig,
+    #[allow(dead_code)]
+    config: Arc<XdsChannelConfig>,
 }
 
 impl XdsChannelBuilder {
-    /// Create a builder from an explicit configuration.
+    /// Create a builder from an channel configurations.
+    #[must_use]
     pub fn with_config(config: XdsChannelConfig) -> Self {
-        Self { config }
+        Self {
+            config: Arc::new(config),
+        }
     }
 
-    /// Builds an `XdsChannel`.
+    /// Builds an `XdsChannel`, which takes generic request, endpoint, and service types and can be
+    /// used for generic HTTP services.
+    #[must_use]
     pub fn build_channel<Req, E, S>(&self) -> XdsChannel<Req, E, S>
     where
         Req: Send + 'static,
@@ -130,14 +158,18 @@ impl XdsChannelBuilder {
         todo!("Implement XdsChannel building logic");
     }
 
-    /// Builds an `XdsChannel`.
-    pub fn build_grpc_channel(&self) -> XdsChannelGrpc
-    {
+    /// Builds an `XdsChannelGrpc`, which is a type-erased gRPC channel.
+    #[must_use]
+    pub fn build_grpc_channel(&self) -> XdsChannelGrpc {
         BoxCloneService::new(self.build_tonic_grpc_channel())
     }
 
+    /// Builds an `XdsChannelGrpc` from the given xDS manager dependencies.
+    /// This is primarily intended for testing purposes for now.
+    /// [`XdsChannelBuilder::build_grpc_channel`] should build [`XdsManager`](crate::xds::xds_manager::XdsManager)
+    /// as part of constructing `XdsChannelGrpc`.
     #[cfg(test)]
-    pub(crate) fn build_grpc_channel_from_deps(
+    pub(crate) fn build_grpc_channel_from_xds_manager(
         &self,
         xds_manager: Arc<dyn XdsManager<EndpointAddress, EndpointChannel<Channel>>>,
     ) -> XdsChannelGrpc {
@@ -147,7 +179,10 @@ impl XdsChannelBuilder {
         let service = ServiceBuilder::new()
             .layer(routing_layer)
             .service(lb_service);
-        BoxCloneService::new(XdsChannelTonicGrpc { inner: service })
+        BoxCloneService::new(XdsChannelTonicGrpc {
+            config: self.config.clone(),
+            inner: service,
+        })
     }
 }
 
@@ -155,21 +190,22 @@ impl XdsChannelBuilder {
 mod tests {
     use super::XdsChannelBuilder;
     use super::XdsChannelConfig;
+    use crate::client::channel::XdsChannelGrpc;
+    use crate::client::endpoint::EndpointAddress;
+    use crate::client::endpoint::EndpointChannel;
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::TestServer;
-    use crate::client::endpoint::EndpointAddress;
-    use crate::xds::xds_manager::XdsManager;
-    use crate::xds::route::RouteInput;
     use crate::xds::route::RouteDecision;
-    use crate::client::endpoint::EndpointChannel;
-    use crate::xds::xds_manager::{BoxFut, BoxDiscover};
-    use tonic::transport::Channel;
-    use tokio::sync::mpsc;
-    use tower::discover::Change;
+    use crate::xds::route::RouteInput;
+    use crate::xds::xds_manager::{BoxDiscover, BoxFut};
+    use crate::xds::xds_manager::{XdsClusterDiscovery, XdsRouter};
     use std::sync::Arc;
-    use crate::client::channel::XdsChannelGrpc;
+    use tokio::sync::mpsc;
+    use tonic::transport::Channel;
+    use tower::discover::Change;
 
+    /// Sets up multiple gRPC test servers and returns their addresses, clients and shutdown handles.
     async fn setup_grpc_servers(
         count: usize,
     ) -> (Vec<String>, Vec<crate::testutil::grpc::TestServer>) {
@@ -192,13 +228,13 @@ mod tests {
     }
 
     /// A mock XdsManager that provides pre-configured endpoints for testing.
-    pub struct MockXdsManager {
+    struct MockXdsManager {
         endpoints: Vec<(EndpointAddress, Channel)>,
     }
 
     impl MockXdsManager {
         /// Creates a new MockXdsManager from test servers.
-        pub fn from_test_servers(servers: &[TestServer]) -> Self {
+        fn from_test_servers(servers: &[TestServer]) -> Self {
             let endpoints = servers
                 .iter()
                 .map(|s| {
@@ -210,7 +246,7 @@ mod tests {
         }
     }
 
-    impl XdsManager<EndpointAddress, EndpointChannel<Channel>> for MockXdsManager {
+    impl XdsRouter for MockXdsManager {
         fn route(&self, _input: &RouteInput<'_>) -> BoxFut<RouteDecision> {
             Box::pin(async move {
                 RouteDecision {
@@ -218,7 +254,9 @@ mod tests {
                 }
             })
         }
+    }
 
+    impl XdsClusterDiscovery<EndpointAddress, EndpointChannel<Channel>> for MockXdsManager {
         fn discover_cluster(
             &self,
             _cluster_name: &str,
@@ -238,6 +276,7 @@ mod tests {
         }
     }
 
+    /// Sends multiple gRPC requests using the provided client and returns statistics about the requests.
     async fn send_grpc_requests(
         mut grpc_client: crate::testutil::grpc::GreeterClient<XdsChannelGrpc>,
         num_requests: usize,
@@ -282,18 +321,18 @@ mod tests {
     }
 
     #[tokio::test]
+    /// Tests the `XdsChannelGrpc` with a power-of-two-choices load balancer.
     async fn test_xds_channel_grpc_with_p2c_lb() {
-        let num_requests = 10000;
+        let num_requests = 1000;
         let num_servers = 5;
         let (_, servers) = setup_grpc_servers(num_servers).await;
 
-        // Here you would set up the xDS manager and configuration to point to the test servers.
-        // For simplicity, this part is omitted.
-
+        // Create a mock XdsManager with the test servers
         let xds_manager = Arc::new(MockXdsManager::from_test_servers(&servers));
 
         let xds_channel_builder = XdsChannelBuilder::with_config(XdsChannelConfig::default());
-        let xds_channel = xds_channel_builder.build_grpc_channel_from_deps(xds_manager.clone());
+        let xds_channel =
+            xds_channel_builder.build_grpc_channel_from_xds_manager(xds_manager.clone());
 
         let client = GreeterClient::new(xds_channel);
 
@@ -324,7 +363,7 @@ mod tests {
         let min_requests_per_server = (expected_per_server as f64 / 1.5) as usize;
         let max_requests_per_server = (expected_per_server as f64 * 1.5) as usize;
 
-       for (server_name, count) in &server_counts {
+        for (server_name, count) in &server_counts {
             assert!(
                 *count >= min_requests_per_server,
                 "Server {server_name} received only {count} requests, expected at least {min_requests_per_server} (expected ~{expected_per_server} per server with 1.5x variance)",

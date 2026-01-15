@@ -8,7 +8,9 @@ pub(crate) struct RouteInput<'a> {
     pub headers: &'a http::HeaderMap,
 }
 
+/// Represents the routing decision made by the xDS routing layer.
 #[derive(Clone)]
 pub(crate) struct RouteDecision {
+    /// The name of the cluster to which the request should be routed.
     pub cluster: String,
 }

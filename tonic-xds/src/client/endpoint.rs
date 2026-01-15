@@ -1,20 +1,22 @@
 use std::future::Future;
-use std::pin::Pin;
-use std::sync::{Arc, atomic::AtomicU64, atomic::Ordering};
-use std::task::{Context, Poll};
-use tower::{BoxError, load::Load, Service};
 use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
+use std::task::{Context, Poll};
+use tower::{load::Load, Service};
 
+/// Represents the host part of an endpoint address
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum EndpointHost {
     Ipv4(std::net::Ipv4Addr),
     Ipv6(std::net::Ipv6Addr),
+    #[allow(dead_code)]
     Hostname(String),
 }
 
 /// Represents a validated endpoint address extracted from xDS
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct EndpointAddress {
+pub(crate) struct EndpointAddress {
     /// The IP address or hostname
     host: EndpointHost,
     /// The port number
@@ -36,6 +38,8 @@ impl From<SocketAddr> for EndpointAddress {
     }
 }
 
+/// RAII tracker for in-flight requests.
+/// This is mainly used to implement endpoint load reporting for load balancing purposes.
 #[derive(Clone, Debug, Default)]
 struct InFlightTracker {
     in_flight: Arc<AtomicU64>,
@@ -44,9 +48,7 @@ struct InFlightTracker {
 impl InFlightTracker {
     fn new(in_flight: Arc<AtomicU64>) -> Self {
         in_flight.fetch_add(1, Ordering::Relaxed);
-        Self {
-            in_flight
-        }
+        Self { in_flight }
     }
 }
 
@@ -63,7 +65,9 @@ pub(crate) struct EndpointChannel<S> {
 }
 
 impl<S> EndpointChannel<S> {
-    /// Creates a new EndpointChannel.
+    /// Creates a new `EndpointChannel`.
+    /// This should be used by xDS implementations to construct channels to individual endpoints.
+    #[allow(dead_code)]
     pub(crate) fn new(inner: S) -> Self {
         Self {
             inner,

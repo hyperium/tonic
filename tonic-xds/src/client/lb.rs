@@ -1,24 +1,21 @@
-use futures::future::BoxFuture;
-use http::Request;
-use tonic::client::GrpcService;
-use std::future::Future;
-use std::task::{Context, Poll};
-use std::pin::Pin;
-use std::sync::Arc;
-use tower::{discover::Discover, load::Load, BoxError, Service};
 use crate::client::cluster::ClusterClientRegistry;
 use crate::xds::route::RouteDecision;
-use crate::xds::xds_manager::XdsManager;
+use crate::xds::xds_manager::XdsClusterDiscovery;
+use futures::future::BoxFuture;
+use http::Request;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 use tower::ServiceExt;
+use tower::{load::Load, BoxError, Service};
 
 /// Errors that can occur during load balancing.
 #[derive(Debug, Clone, thiserror::Error)]
-pub enum LoadBalancingError {
+pub(crate) enum LoadBalancingError {
     #[error("No routing decision extension from the routing layer available")]
     NoRoutingDecision,
 }
 
-/// A Tower service that performs load balancing based on routing decisions and xDS configuration.
+/// A Tower Service that performs load balancing based on routing decisions and xDS configuration.
 pub(crate) struct XdsLbService<Req, E, S>
 where
     Req: Send + 'static,
@@ -26,7 +23,7 @@ where
     S::Response: Send + 'static,
 {
     cluster_registry: Arc<ClusterClientRegistry<Req, S::Response>>,
-    xds_manager: Arc<dyn XdsManager<E, S>>,
+    cluster_discovery: Arc<dyn XdsClusterDiscovery<E, S>>,
 }
 
 impl<Req, E, S> XdsLbService<Req, E, S>
@@ -35,19 +32,19 @@ where
     S: Service<Req>,
     S::Response: Send + 'static,
 {
-    /// Creates a new XdsLbService with the given cluster registry and xDS manager.
+    /// Creates a new `XdsLbService` with the given cluster client registry and xDS cluster discovery.
+    #[allow(dead_code)]
     pub(crate) fn new(
         cluster_registry: Arc<ClusterClientRegistry<Req, S::Response>>,
-        xds_manager: Arc<dyn XdsManager<E, S>>,
+        cluster_discovery: Arc<dyn XdsClusterDiscovery<E, S>>,
     ) -> Self {
         Self {
             cluster_registry,
-            xds_manager,
+            cluster_discovery,
         }
     }
 }
 
-// Manual Clone implementation - derive doesn't work with dyn trait bounds
 impl<Req, E, S> Clone for XdsLbService<Req, E, S>
 where
     Req: Send + 'static,
@@ -57,7 +54,7 @@ where
     fn clone(&self) -> Self {
         Self {
             cluster_registry: self.cluster_registry.clone(),
-            xds_manager: self.xds_manager.clone(),
+            cluster_discovery: self.cluster_discovery.clone(),
         }
     }
 }
@@ -78,23 +75,27 @@ where
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // Ideally we expose the channel readiness here, but because the channel is specific to a cluster,
-        // which may change per request, and we don't have request here, we check for readiness in call() instead.
+        // Under xDS, the destination cluster is decided by the routing layer, which takes
+        // the request as an input. Therefore, we cannot determine readiness without
+        // knowing the target cluster, which is tied to the request.
         Poll::Ready(Ok(()))
     }
 
     fn call(&mut self, request: Request<B>) -> Self::Future {
+        // Extract the routing decision from the request extensions.
         let Some(routing_decision) = request.extensions().get::<RouteDecision>().cloned() else {
             return Box::pin(async move { Err(LoadBalancingError::NoRoutingDecision.into()) });
         };
 
+        // Get or create the cluster client for the target xDS cluster.
         let cluster_client = self
             .cluster_registry
             .get_cluster(&routing_decision.cluster, || {
-                self.xds_manager
-                    .discover_cluster(&routing_decision.cluster)
+                self.cluster_discovery.discover_cluster(&routing_decision.cluster)
             });
 
+        // Get the transport channel for the target xDS cluster.
+        // The actual load-balancing will be performeed by the channel.
         let mut channel = cluster_client.channel();
 
         Box::pin(async move {
