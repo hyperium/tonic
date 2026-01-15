@@ -7,12 +7,12 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::{BoxError, Layer, Service};
 
-/// Tower Service for routing requests to the appropriate cluster based on the xDS routing configurations.
+/// Tower service for routing requests to the appropriate cluster based on the xDS routing configurations.
 /// Attaches routing decision as `RoutingDecision` to the request extensions.
 /// The `RoutingDecision` will be used by the `XdsLbService` to identify the xDS cluster to which the request should be routed.
 #[derive(Clone)]
 pub(crate) struct XdsRoutingService<S> {
-    /// The inner Tower Service to which the request will be forwarded after routing decision is made.
+    /// The inner Tower service to which the request will be forwarded after routing decision is made.
     inner: S,
     /// The xDS router used to make routing decisions based on the request and the xDS routing configurations.
     xds_router: Arc<dyn XdsRouter>,

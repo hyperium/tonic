@@ -1,16 +1,22 @@
 //! # tonic-xds
 //!
 //! xDS (discovery service) support for [Tonic](https://docs.rs/tonic) gRPC clients as well as
-//! general [Tower](https://docs.rs/tower) Services.
+//! general [`tower::Service`].
 //!
-//! This crate provides an xDS-enabled Tonic Channel that automatically discovers,
-//! routesand load balances across endpoints using the xDS protocol. The xDS features will align with
-//! the [gRPC xDS features](https://github.com/grpc/grpc/blob/master/doc/grpc_xds_features.md)
+//! This crate provides an xDS-enabled [`tonic::client::GrpcService`] implementation ([`XdsChannelGrpc`])
+//! that automatically discovers, routes and load-balances across endpoints using the xDS protocol.
+//! The implementation will align with the
+//! [gRPC xDS features](https://github.com/grpc/grpc/blob/master/doc/grpc_xds_features.md).
+//!
+//! In addition to gRPC, this crate also provides a generic [`tower::Service`] implementation ([`XdsChannel`])
+//! for enabling xDS features for generic Http clients. This can be used to support both gRPC and Http
+//! clients by the same xDS management server.
 //!
 //! ## Current Planned Features:
 //!
 //! - LDS / RDS / CDS / EDS subscriptions via ADS stream.
 //! - Client-side P2C load balancing
+//! - Other features will be added in future releases.
 //!
 //! ## Example
 //!
@@ -32,9 +38,9 @@
 //!
 //! ## How it works
 //!
-//! `XdsChannel` connects to an xDS management server and subscribes to resource updates for
-//! listeners, routes, clusters, and endpoints. Requests are automatically routed and load balanced
-//! in stacked Tower services based on the xDS configuration.
+//! [`XdsChannelGrpc`] connects to an xDS management server and subscribes to resource updates for
+//! listeners, routes, clusters, and endpoints. Requests are automatically routed and load-balanced
+//! in stacked [`tower::Service`]s that implement the [gRPC xDS features](https://github.com/grpc/grpc/blob/master/doc/grpc_xds_features.md).
 
 pub(crate) mod client;
 pub(crate) mod xds;

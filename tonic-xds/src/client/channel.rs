@@ -17,7 +17,7 @@ use {
     crate::xds::xds_manager::XdsManager, tower::ServiceBuilder,
 };
 
-/// Configuration for an xDS-capable channel.
+/// Configuration for building [`XdsChannel`] / [`XdsChannelGrpc`].
 /// Currently, only support specifying the xDS URI for the target service.
 /// In the future, more configurations such as xDS management server address will be added.
 #[derive(Clone, Debug, Default)]
@@ -34,7 +34,7 @@ impl XdsChannelConfig {
     }
 }
 
-/// `XdsChannel` is an xDS-capable Tower Service.
+/// `XdsChannel` is an xDS-capable [`tower::Service`] implementation.
 ///
 /// It routes requests according to the xDS configuration that it fetches from the xDS management server.
 /// The routing implementation is based on the [Google gRPC xDS features](https://grpc.github.io/grpc/core/md_doc_grpc_xds_features.html).
@@ -43,7 +43,7 @@ impl XdsChannelConfig {
 ///
 /// * `Req` - The request type that this channel accepts, as an example: `http::Request<Body>`.
 /// * `E` - The endpoint identifier type used for load balancing (e.g., socket address).
-/// * `S` - The underlying Tower Service type that handles individual endpoint connections.
+/// * `S` - The underlying [`tower::Service`] implementation that handles individual endpoint connections.
 pub struct XdsChannel<Req, E, S>
 where
     Req: Send + 'static,
@@ -115,7 +115,8 @@ where
 pub(crate) type XdsChannelTonicGrpc =
     XdsChannel<http::Request<TonicBody>, EndpointAddress, EndpointChannel<Channel>>;
 
-/// A type-erased gRPC channel.
+/// A [`tonic::client::GrpcService`] implementation that can route and load-balance
+/// gRPC requests based on xDS configuration.
 pub type XdsChannelGrpc =
     BoxCloneService<http::Request<TonicBody>, http::Response<TonicBody>, BoxError>;
 
@@ -126,7 +127,7 @@ const _: fn() = || {
     assert_grpc_service::<XdsChannelTonicGrpc>();
 };
 
-/// Builder for creating an `XdsChannel` or `XdsChannelGrpc`.
+/// Builder for creating an [`XdsChannel`] or [`XdsChannelGrpc`].
 #[derive(Clone, Debug)]
 pub struct XdsChannelBuilder {
     #[allow(dead_code)]
