@@ -240,7 +240,9 @@ where
             // sending response headers - we need something to send.
             while self.type_states.is_empty() {
                 match self.command_rx.next().await {
-                    Some(cmd) => self.handle_command_disconnected(cmd),
+                    Some(cmd) => {
+                        let _ = self.handle_command::<T::Stream>(None, cmd).await;
+                    }
                     None => return,
                 }
             }
@@ -309,24 +311,6 @@ where
         requests
     }
 
-    /// Handle a command while disconnected (just update state, can't send requests).
-    fn handle_command_disconnected(&mut self, cmd: WorkerCommand) {
-        match cmd {
-            WorkerCommand::Watch {
-                type_url,
-                name,
-                watcher_id,
-                event_tx,
-                decoder,
-            } => {
-                self.add_watcher(type_url, name, watcher_id, event_tx, decoder);
-            }
-            WorkerCommand::Unwatch { watcher_id } => {
-                self.remove_watcher(watcher_id);
-            }
-        }
-    }
-
     /// Run the main event loop while connected.
     ///
     /// Returns `true` if the worker should shut down, `false` to reconnect.
@@ -348,7 +332,7 @@ where
                 cmd = self.command_rx.next() => {
                     match cmd {
                         Some(cmd) => {
-                            if let Err(_e) = self.handle_command(&mut stream, cmd).await {
+                            if let Err(_e) = self.handle_command(Some(&mut stream), cmd).await {
                                 return false;
                             }
                         }
@@ -359,10 +343,13 @@ where
         }
     }
 
-    /// Handle a command while connected.
+    /// Handle a command, optionally sending network requests if connected.
+    ///
+    /// When `stream` is `None`, only state updates are performed (disconnected mode).
+    /// When `stream` is `Some`, subscription changes trigger network requests.
     async fn handle_command<S: TransportStream>(
         &mut self,
-        stream: &mut S,
+        stream: Option<&mut S>,
         cmd: WorkerCommand,
     ) -> Result<()> {
         match cmd {
@@ -373,43 +360,18 @@ where
                 event_tx,
                 decoder,
             } => {
-                self.handle_watch(stream, type_url, name, watcher_id, event_tx, decoder)
-                    .await
+                if self.add_watcher(type_url, name, watcher_id, event_tx, decoder) {
+                    if let Some(stream) = stream {
+                        self.send_request(stream, type_url).await?;
+                    }
+                }
             }
-            WorkerCommand::Unwatch { watcher_id } => self.handle_unwatch(stream, watcher_id).await,
-        }
-    }
-
-    /// Handle a Watch command.
-    async fn handle_watch<S: TransportStream>(
-        &mut self,
-        stream: &mut S,
-        type_url: &'static str,
-        name: String,
-        watcher_id: WatcherId,
-        event_tx: mpsc::Sender<ResourceEvent<DecodedResource>>,
-        decoder: DecoderFn,
-    ) -> Result<()> {
-        let type_url_string = type_url.to_string();
-        let is_new_type = !self.type_states.contains_key(&type_url_string);
-        let subscriptions_changed = self.add_watcher(type_url, name, watcher_id, event_tx, decoder);
-
-        if is_new_type || subscriptions_changed {
-            self.send_request(stream, &type_url_string).await?;
-        }
-
-        Ok(())
-    }
-
-    /// Handle an Unwatch command.
-    async fn handle_unwatch<S: TransportStream>(
-        &mut self,
-        stream: &mut S,
-        watcher_id: WatcherId,
-    ) -> Result<()> {
-        if let Some((type_url, subscriptions_changed)) = self.remove_watcher(watcher_id) {
-            if subscriptions_changed {
-                self.send_request(stream, &type_url).await?;
+            WorkerCommand::Unwatch { watcher_id } => {
+                if let Some((type_url, true)) = self.remove_watcher(watcher_id) {
+                    if let Some(stream) = stream {
+                        self.send_request(stream, &type_url).await?;
+                    }
+                }
             }
         }
         Ok(())
