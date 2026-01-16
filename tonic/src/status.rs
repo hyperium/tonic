@@ -1059,8 +1059,8 @@ mod tests {
 /// Timeouts can be configured either with [`Endpoint::timeout`], [`Server::timeout`], or by
 /// setting the [`grpc-timeout` metadata value][spec].
 ///
-/// [`Endpoint::timeout`]: crate::transport::server::Server::timeout
-/// [`Server::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Endpoint::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Server::timeout`]: crate::transport::server::Server::timeout
 /// [spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 #[derive(Debug)]
 pub struct TimeoutExpired(pub ());
