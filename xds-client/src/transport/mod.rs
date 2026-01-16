@@ -24,8 +24,17 @@ pub trait Transport: Send + Sync + 'static {
 
     /// Creates a new bidirectional ADS stream to the xDS server.
     ///
+    /// # Arguments
+    ///
+    /// * `initial_requests` - Requests to send immediately when establishing the stream.
+    ///   This is critical for xDS servers that don't send response headers until
+    ///   they receive the first request (prevents deadlock).
+    ///
     /// This may be called multiple times for reconnection.
-    fn new_stream(&self) -> impl Future<Output = Result<Self::Stream>> + Send;
+    fn new_stream(
+        &self,
+        initial_requests: Vec<Bytes>,
+    ) -> impl Future<Output = Result<Self::Stream>> + Send;
 }
 
 /// A bidirectional byte stream for xDS ADS communication.
