@@ -10,7 +10,7 @@ A collection of useful protobuf types that can be used with `tonic`.
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "protobuf"]
-license = "MIT"
+license = "MIT AND Apache-2.0"
 name = "tonic-types"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
