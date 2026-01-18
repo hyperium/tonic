@@ -1,5 +1,6 @@
 use super::*;
 use http_body::Body;
+use prost::Message;
 use tonic::codec::CompressionEncoding;
 
 util::parametrized_tests! {
@@ -233,4 +234,70 @@ async fn client_mark_compressed_without_header_server_enabled(encoding: Compress
         status.message(),
         "protocol error: received message with compressed-flag but no grpc-encoding was specified"
     );
+}
+
+util::parametrized_tests! {
+    limit_decoded_message_size,
+    zstd: CompressionEncoding::Zstd,
+    gzip: CompressionEncoding::Gzip,
+    deflate: CompressionEncoding::Deflate,
+}
+
+#[allow(dead_code)]
+async fn limit_decoded_message_size(encoding: CompressionEncoding) {
+    let under_limit_request = SomeData {
+        data: [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
+    };
+    let limit = under_limit_request.encoded_len();
+    let over_limit_request = SomeData {
+        data: [0_u8; 1 + UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
+    };
+
+    let (client, server) = tokio::io::duplex(UNCOMPRESSED_MIN_BODY_SIZE * 10);
+
+    let svc = test_server::TestServer::new(Svc::default())
+        .accept_compressed(encoding)
+        .max_decoding_message_size(limit);
+
+    let request_bytes_counter = Arc::new(AtomicUsize::new(0));
+
+    tokio::spawn({
+        let request_bytes_counter = request_bytes_counter.clone();
+        async move {
+            Server::builder()
+                .layer(
+                    ServiceBuilder::new()
+                        .layer(
+                            ServiceBuilder::new()
+                                .layer(measure_request_body_size_layer(request_bytes_counter))
+                                .into_inner(),
+                        )
+                        .into_inner(),
+                )
+                .add_service(svc)
+                .serve_with_incoming(tokio_stream::once(Ok::<_, std::io::Error>(server)))
+                .await
+                .unwrap();
+        }
+    });
+
+    let mut client =
+        test_client::TestClient::new(mock_io_channel(client).await).send_compressed(encoding);
+
+    for _ in 0..3 {
+        // compressed messages that are under or exactly at the limit are successful.
+        client
+            .compress_input_unary(under_limit_request.clone())
+            .await
+            .unwrap();
+        let bytes_sent = request_bytes_counter.load(SeqCst);
+        assert!(bytes_sent < UNCOMPRESSED_MIN_BODY_SIZE);
+
+        // compressed messages that are over the limit are fail with resource exhausted
+        let status = client
+            .compress_input_unary(over_limit_request.clone())
+            .await
+            .unwrap_err();
+        assert_eq!(status.code(), tonic::Code::ResourceExhausted);
+    }
 }
