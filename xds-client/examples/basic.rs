@@ -36,7 +36,8 @@ use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
 
 use xds_client::resource::TypeUrl;
 use xds_client::{
-    ClientConfig, ProstCodec, Resource, ResourceEvent, TokioRuntime, TonicTransport, XdsClient,
+    ClientConfig, Node, ProstCodec, Resource, ResourceEvent, TokioRuntime, TonicTransport,
+    XdsClient,
 };
 
 /// Example demonstrating xds-client usage.
@@ -48,15 +49,15 @@ struct Args {
     #[arg(short, long, default_value = "http://localhost:18000")]
     server: String,
 
-    /// Path to CA certificate for TLS (enables TLS when set).
+    /// Path to PEM-encoded CA certificate for TLS (enables TLS when set).
     #[arg(long)]
     ca_cert: Option<String>,
 
-    /// Path to client certificate for mTLS.
+    /// Path to PEM-encoded client certificate for mTLS.
     #[arg(long, requires = "ca_cert")]
     client_cert: Option<String>,
 
-    /// Path to client key for mTLS.
+    /// Path to PEM-encoded client key for mTLS.
     #[arg(long, requires = "client_cert")]
     client_key: Option<String>,
 
@@ -64,8 +65,6 @@ struct Args {
     #[arg(short, long = "listener", required = true)]
     listeners: Vec<String>,
 }
-
-// =============================================================================
 
 /// A simplified Listener resource for gRPC xDS.
 ///
@@ -109,10 +108,16 @@ impl Resource for Listener {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args = Args::parse();
 
-    println!("=== xds-client Example ===\n");
+    if args.client_cert.is_some() != args.client_key.is_some() {
+        eprintln!("Error: --client-cert and --client-key must be provided together");
+        std::process::exit(1);
+    }
+
+    println!("xds-client Example\n");
     println!("Connecting to xDS server: {}", args.server);
 
-    let config = ClientConfig::with_node_id("example-node").user_agent("grpc");
+    let node = Node::new("grpc", "1.0").with_id("example-node");
+    let config = ClientConfig::new(node);
 
     let transport = match &args.ca_cert {
         Some(ca_path) => {
@@ -144,7 +149,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // Start watchers for each listener from args
     for name in &args.listeners {
-        println!("→ Watching for Listener: '{name}'");
+        println!("Watching for Listener: '{name}'");
 
         let mut watcher = client.watch::<Listener>(name);
         let tx = event_tx.clone();
@@ -152,6 +157,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tokio::spawn(async move {
             while let Some(event) = watcher.next().await {
                 if tx.send(event).is_err() {
+                    eprintln!("Event channel closed, stopping watcher");
                     break;
                 }
             }
@@ -163,8 +169,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(event) = event_rx.recv().await {
         match event {
-            ResourceEvent::ResourceChanged { resource, mut done } => {
-                println!("✓ Listener received:");
+            ResourceEvent::ResourceChanged { resource, done } => {
+                println!("Listener received:");
                 println!("  name:        {}", resource.name());
                 if let Some(ref rds) = resource.rds_route_config_name {
                     println!("  rds_config:  {rds}");
@@ -172,16 +178,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 println!();
 
                 // In gRPC xDS, you would cascadingly subscribe to RDS, CDS, EDS, etc.
-                // before completing the done signal.
-                done.complete();
+                // The done signal is sent automatically when it's dropped.
+                drop(done);
             }
 
             ResourceEvent::ResourceError { error, .. } => {
-                println!("✗ Resource error: {error}");
+                println!("Resource error: {error}");
+                // Can also rely on implicit drop of done signal here
             }
 
             ResourceEvent::AmbientError { error, .. } => {
-                println!("⚠ Connection error: {error}");
+                println!("Connection error: {error}");
             }
         }
     }

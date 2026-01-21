@@ -15,10 +15,11 @@
 //! # Example
 //!
 //! ```ignore
-//! use xds_client::{XdsClient, ClientConfig, ResourceEvent};
+//! use xds_client::{XdsClient, ClientConfig, Node, ResourceEvent};
 //!
-//! // Create configuration with node identification
-//! let config = ClientConfig::with_node_id("my-node");
+//! // Create node and configuration
+//! let node = Node::new("grpc", "1.0").with_id("my-node");
+//! let config = ClientConfig::new(node);
 //!
 //! // Build client with transport, codec, and runtime
 //! let client = XdsClient::builder(config, transport, codec, runtime).build();
@@ -59,6 +60,7 @@ pub mod runtime;
 pub mod transport;
 
 pub use client::config::ClientConfig;
+pub use client::retry::RetryPolicy;
 pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
 pub use client::{XdsClient, XdsClientBuilder};
 pub use codec::XdsCodec;

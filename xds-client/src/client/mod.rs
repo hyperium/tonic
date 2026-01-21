@@ -4,13 +4,14 @@ use futures::channel::mpsc;
 
 use crate::client::config::ClientConfig;
 use crate::client::watch::ResourceWatcher;
-use crate::client::worker::{AdsWorker, WatcherId, WorkerCommand, WorkerConfig};
+use crate::client::worker::{AdsWorker, WatcherId, WorkerCommand};
 use crate::codec::XdsCodec;
 use crate::resource::{DecodedResource, DecoderFn, Resource};
 use crate::runtime::Runtime;
 use crate::transport::Transport;
 
 pub mod config;
+pub mod retry;
 pub mod watch;
 pub mod worker;
 
@@ -46,18 +47,12 @@ where
     pub fn build(self) -> XdsClient {
         let (command_tx, command_rx) = mpsc::unbounded();
 
-        let worker_config = WorkerConfig {
-            initial_backoff: self.config.initial_backoff,
-            max_backoff: self.config.max_backoff,
-            backoff_multiplier: self.config.backoff_multiplier,
-        };
-
         let worker = AdsWorker::new(
             self.transport,
             self.codec,
             self.runtime.clone(),
             self.config.node,
-            worker_config,
+            self.config.retry_policy,
             command_rx,
         );
 
@@ -120,14 +115,12 @@ impl XdsClient {
     ///     match event {
     ///         ResourceEvent::ResourceChanged { resource, done } => {
     ///             println!("Listener changed: {}", resource.name());
-    ///             done.complete();
+    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///         ResourceEvent::ResourceError { error, done } => {
     ///             println!("Error watching listener: {}", error);
-    ///             done.complete();
     ///         }
     ///         ResourceEvent::AmbientError { error, .. } => {
-    ///             // Can also rely on auto-signal on drop
     ///             println!("Ambient error: {}", error);
     ///         }
     ///     }

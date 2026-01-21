@@ -18,8 +18,8 @@ use crate::resource::{DecodedResource, Resource};
 ///
 /// # Automatic Signaling
 ///
-/// Signals automatically when dropped, so you don't need to call [`.complete()`](Self::complete)
-/// explicitly if you have no cascading watches to add.
+/// Signals automatically when dropped. If you have cascading watches to add, simply
+/// add them before dropping the `ProcessingDone`.
 ///
 /// # Example
 ///
@@ -28,15 +28,15 @@ use crate::resource::{DecodedResource, Resource};
 ///     ResourceEvent::ResourceChanged { resource, done } => {
 ///         // Process the resource, possibly add cascading watches.
 ///         client.watch::<RouteConfiguration>(&resource.route_name());
-///         done.complete();
+///         // Signal is sent automatically when done is dropped
 ///     }
 ///     ResourceEvent::ResourceError { error, done } => {
 ///         eprintln!("Error: {}", error);
-///         done.complete();
+///         // Signal is sent automatically when done is dropped
 ///     }
 ///     ResourceEvent::AmbientError { error, .. } => {
-///         // Can also rely on auto-signal on drop
 ///         eprintln!("Ambient error: {}", error);
+///         // Signal is sent automatically when done is dropped
 ///     }
 /// }
 /// ```
@@ -47,27 +47,19 @@ impl ProcessingDone {
     /// Create a channel pair for signaling.
     ///
     /// Returns the `ProcessingDone` sender and a receiver future that resolves
-    /// when `complete()` is called or the sender is dropped.
+    /// when the sender is dropped.
     pub(crate) fn channel() -> (Self, oneshot::Receiver<()>) {
         let (tx, rx) = oneshot::channel();
         (Self(Some(tx)), rx)
-    }
-
-    /// Signal that processing is complete.
-    ///
-    /// This is equivalent to dropping the `ProcessingDone`, but more explicit.
-    pub fn complete(&mut self) {
-        if let Some(tx) = self.0.take() {
-            let _ = tx.send(());
-        }
     }
 }
 
 impl Drop for ProcessingDone {
     fn drop(&mut self) {
-        // Auto-signal on drop to prevent deadlocks if the caller forgets
-        // or doesn't need to explicitly signal.
-        self.complete();
+        // Auto-signal on drop to prevent deadlocks.
+        if let Some(tx) = self.0.take() {
+            let _ = tx.send(());
+        }
     }
 }
 
@@ -146,15 +138,15 @@ impl<T: Resource> ResourceWatcher<T> {
     ///         ResourceEvent::ResourceChanged { resource, done } => {
     ///             // Process the resource, possibly add cascading watches.
     ///             client.watch::<RouteConfiguration>(&resource.route_name());
-    ///             done.complete();
+    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///         ResourceEvent::ResourceError { error, done } => {
     ///             eprintln!("Error: {}", error);
-    ///             done.complete();
+    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///         ResourceEvent::AmbientError { error, .. } => {
-    ///             // Can also rely on auto-signal on drop
     ///             eprintln!("Ambient error: {}", error);
+    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///     }
     /// }

@@ -1,110 +1,60 @@
 //! Configuration for the xDS client.
 
-use std::time::Duration;
-
+use crate::client::retry::RetryPolicy;
 use crate::message::Node;
 
 /// Configuration for the xDS client.
 #[derive(Debug, Clone)]
 pub struct ClientConfig {
     /// Node identification sent to the xDS server.
-    ///
-    /// Default: None.
-    pub node: Option<Node>,
+    pub node: Node,
 
-    /// Initial backoff duration for reconnection attempts.
+    /// Retry policy for connection attempts.
     ///
-    /// Default: 1 second.
-    pub initial_backoff: Duration,
-
-    /// Maximum backoff duration for reconnection attempts.
-    ///
-    /// Default: 30 seconds.
-    pub max_backoff: Duration,
-
-    /// Multiplier for exponential backoff.
-    ///
-    /// After each failed connection attempt, the backoff duration is multiplied
-    /// by this value, up to `max_backoff`.
-    ///
-    /// Default: 2.0.
-    pub backoff_multiplier: f64,
-}
-
-impl Default for ClientConfig {
-    fn default() -> Self {
-        Self {
-            node: None,
-            initial_backoff: Duration::from_secs(1),
-            max_backoff: Duration::from_secs(30),
-            backoff_multiplier: 2.0,
-        }
-    }
+    /// Controls the backoff behavior when reconnecting to the xDS server.
+    pub retry_policy: RetryPolicy,
 }
 
 impl ClientConfig {
     /// Create a new configuration with the given node identification.
-    pub fn new(node: Node) -> Self {
-        Self {
-            node: Some(node),
-            ..Default::default()
-        }
-    }
-
-    /// Create a new configuration with a node ID.
-    pub fn with_node_id(id: impl Into<String>) -> Self {
-        Self::new(Node {
-            id: id.into(),
-            ..Default::default()
-        })
-    }
-
-    /// Set the node identification.
-    pub fn node(mut self, node: Node) -> Self {
-        self.node = Some(node);
-        self
-    }
-
-    /// Set the user agent name.
     ///
-    /// This identifies the client to the xDS server. Some servers require
-    /// specific values (e.g., "grpc", "envoy").
+    /// Uses the default retry policy.
     ///
     /// # Example
     ///
     /// ```
-    /// use xds_client::ClientConfig;
+    /// use xds_client::{ClientConfig, Node};
     ///
-    /// let config = ClientConfig::with_node_id("my-node")
-    ///     .user_agent("grpc");
+    /// let node = Node::new("grpc", "1.0")
+    ///     .with_id("my-node")
+    ///     .with_cluster("my-cluster");
+    ///
+    /// let config = ClientConfig::new(node);
     /// ```
-    pub fn user_agent(mut self, name: impl Into<String>) -> Self {
-        if let Some(ref mut node) = self.node {
-            node.user_agent_name = name.into();
-        } else {
-            self.node = Some(Node {
-                user_agent_name: name.into(),
-                ..Default::default()
-            });
+    pub fn new(node: Node) -> Self {
+        Self {
+            node,
+            retry_policy: RetryPolicy::default(),
         }
-        self
     }
 
-    /// Set the initial backoff duration.
-    pub fn initial_backoff(mut self, duration: Duration) -> Self {
-        self.initial_backoff = duration;
-        self
-    }
-
-    /// Set the maximum backoff duration.
-    pub fn max_backoff(mut self, duration: Duration) -> Self {
-        self.max_backoff = duration;
-        self
-    }
-
-    /// Set the backoff multiplier.
-    pub fn backoff_multiplier(mut self, multiplier: f64) -> Self {
-        self.backoff_multiplier = multiplier;
+    /// Set the retry policy.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use xds_client::{ClientConfig, Node, RetryPolicy};
+    /// use std::time::Duration;
+    ///
+    /// let node = Node::new("grpc", "1.0");
+    /// let policy = RetryPolicy::default()
+    ///     .with_initial_backoff(Duration::from_millis(500)).unwrap()
+    ///     .with_max_backoff(Duration::from_secs(60)).unwrap();
+    ///
+    /// let config = ClientConfig::new(node).with_retry_policy(policy);
+    /// ```
+    pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
+        self.retry_policy = policy;
         self
     }
 }

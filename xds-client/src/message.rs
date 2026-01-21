@@ -7,13 +7,13 @@
 use bytes::Bytes;
 
 /// A discovery request to send to the xDS server.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct DiscoveryRequest {
     /// The version_info provided in the most recent successfully processed
     /// response for this type, or empty for the first request.
     pub version_info: String,
     /// The node making the request.
-    pub node: Option<Node>,
+    pub node: Node,
     /// List of resource names to subscribe to.
     pub resource_names: Vec<String>,
     /// Type URL of the resource being requested.
@@ -48,16 +48,51 @@ pub struct ResourceAny {
 }
 
 /// Node identification for the client.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct Node {
     /// An opaque node identifier.
-    pub id: String,
+    pub id: Option<String>,
     /// The cluster the node belongs to.
-    pub cluster: String,
+    pub cluster: Option<String>,
     /// Locality specifying where the node is running.
     pub locality: Option<Locality>,
     /// Free-form string identifying the client type (e.g., "envoy", "grpc").
     pub user_agent_name: String,
+    /// Version of the client.
+    pub user_agent_version: String,
+}
+
+impl Node {
+    /// Create a new Node with the required user agent fields.
+    ///
+    /// Other fields (id, cluster, locality) can be set using builder methods.
+    pub fn new(user_agent_name: impl Into<String>, user_agent_version: impl Into<String>) -> Self {
+        Self {
+            id: None,
+            cluster: None,
+            locality: None,
+            user_agent_name: user_agent_name.into(),
+            user_agent_version: user_agent_version.into(),
+        }
+    }
+
+    /// Set the node ID.
+    pub fn with_id(mut self, id: impl Into<String>) -> Self {
+        self.id = Some(id.into());
+        self
+    }
+
+    /// Set the cluster.
+    pub fn with_cluster(mut self, cluster: impl Into<String>) -> Self {
+        self.cluster = Some(cluster.into());
+        self
+    }
+
+    /// Set the locality.
+    pub fn with_locality(mut self, locality: Locality) -> Self {
+        self.locality = Some(locality);
+        self
+    }
 }
 
 /// Locality information identifying where a node is running.

@@ -7,14 +7,15 @@
 //! - ACK/NACK protocol
 
 use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, SinkExt, StreamExt};
-use uuid::Uuid;
 
+use crate::client::retry::RetryPolicy;
 use crate::client::watch::{ProcessingDone, ResourceEvent};
 use crate::codec::XdsCodec;
 use crate::error::{Error, Result};
@@ -23,14 +24,17 @@ use crate::resource::{DecodedResource, DecoderFn};
 use crate::runtime::Runtime;
 use crate::transport::{Transport, TransportStream};
 
+/// Global counter for generating unique watcher IDs.
+static NEXT_WATCHER_ID: AtomicU64 = AtomicU64::new(1);
+
 /// Unique identifier for a watcher.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct WatcherId(Uuid);
+pub struct WatcherId(u64);
 
 impl WatcherId {
     /// Create a new unique watcher ID.
     pub fn new() -> Self {
-        Self(Uuid::new_v4())
+        Self(NEXT_WATCHER_ID.fetch_add(1, Ordering::Relaxed))
     }
 }
 
@@ -156,30 +160,6 @@ struct WatcherEntry {
     name: String,
 }
 
-/// Configuration for the worker.
-#[derive(Debug, Clone)]
-pub struct WorkerConfig {
-    /// Initial backoff duration for reconnection.
-    /// Default: 1 second.
-    pub initial_backoff: Duration,
-    /// Maximum backoff duration for reconnection.
-    /// Default: 30 seconds.
-    pub max_backoff: Duration,
-    /// Backoff multiplier for exponential backoff.
-    /// Default: 2.0.
-    pub backoff_multiplier: f64,
-}
-
-impl Default for WorkerConfig {
-    fn default() -> Self {
-        Self {
-            initial_backoff: Duration::from_secs(1),
-            max_backoff: Duration::from_secs(30),
-            backoff_multiplier: 2.0,
-        }
-    }
-}
-
 /// The ADS worker manages the xDS stream and dispatches resources to watchers.
 pub(crate) struct AdsWorker<T, C, R> {
     /// Transport for creating streams.
@@ -189,15 +169,13 @@ pub(crate) struct AdsWorker<T, C, R> {
     /// Runtime for spawning tasks and sleeping.
     runtime: R,
     /// Node identification.
-    node: Option<Node>,
-    /// Worker configuration.
-    config: WorkerConfig,
-
+    node: Node,
+    /// Retry configuration.
+    retry_policy: RetryPolicy,
     /// Receiver for commands from XdsClient.
     command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
     /// Per-type_url state.
     type_states: HashMap<String, TypeState>,
-
     /// Current backoff duration for reconnection.
     current_backoff: Duration,
 }
@@ -213,8 +191,8 @@ where
         transport: T,
         codec: C,
         runtime: R,
-        node: Option<Node>,
-        config: WorkerConfig,
+        node: Node,
+        retry_policy: RetryPolicy,
         command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
     ) -> Self {
         Self {
@@ -222,10 +200,10 @@ where
             codec,
             runtime,
             node,
-            config: config.clone(),
+            retry_policy: retry_policy.clone(),
             command_rx,
             type_states: HashMap::new(),
-            current_backoff: config.initial_backoff,
+            current_backoff: retry_policy.initial_backoff,
         }
     }
 
@@ -258,16 +236,17 @@ where
                 .await
             {
                 Ok(s) => {
-                    self.current_backoff = self.config.initial_backoff;
+                    self.current_backoff = self.retry_policy.initial_backoff;
                     s
                 }
                 Err(_) => {
                     self.runtime.sleep(self.current_backoff).await;
                     self.current_backoff = std::cmp::min(
                         Duration::from_secs_f64(
-                            self.current_backoff.as_secs_f64() * self.config.backoff_multiplier,
+                            self.current_backoff.as_secs_f64()
+                                * self.retry_policy.backoff_multiplier,
                         ),
-                        self.config.max_backoff,
+                        self.retry_policy.max_backoff,
                     );
                     continue;
                 }
@@ -579,7 +558,7 @@ where
         };
 
         let request = DiscoveryRequest {
-            node: None, // Only send node on first request per xDS protocol
+            node: self.node.clone(),
             type_url: response.type_url.clone(),
             resource_names: type_state.resource_names_for_request(),
             version_info: response.version_info.clone(),
@@ -604,7 +583,7 @@ where
         };
 
         let request = DiscoveryRequest {
-            node: None,
+            node: self.node.clone(),
             type_url: response.type_url.clone(),
             resource_names: type_state.resource_names_for_request(),
             version_info: type_state.version_info.clone(), // Keep old version for NACK
