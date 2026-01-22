@@ -1,8 +1,8 @@
 use crate::client::endpoint::{EndpointAddress, EndpointChannel};
 use crate::client::lb::XdsLbService;
 use crate::client::route::XdsRoutingService;
+use crate::common::async_util::BoxFuture;
 use crate::XdsUri;
-use futures::future::BoxFuture;
 use http::Request;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -97,7 +97,7 @@ where
 {
     type Response = S::Response;
     type Error = BoxError;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -191,12 +191,13 @@ mod tests {
     use crate::client::channel::XdsChannelGrpc;
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
+    use crate::common::async_util::BoxFuture;
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::TestServer;
     use crate::xds::route::RouteDecision;
     use crate::xds::route::RouteInput;
-    use crate::xds::xds_manager::{BoxDiscover, BoxFut};
+    use crate::xds::xds_manager::BoxDiscover;
     use crate::xds::xds_manager::{XdsClusterDiscovery, XdsRouter};
     use std::sync::Arc;
     use tokio::sync::mpsc;
@@ -245,7 +246,7 @@ mod tests {
     }
 
     impl XdsRouter for MockXdsManager {
-        fn route(&self, _input: &RouteInput<'_>) -> BoxFut<RouteDecision> {
+        fn route(&self, _input: &RouteInput<'_>) -> BoxFuture<RouteDecision> {
             Box::pin(async move {
                 RouteDecision {
                     cluster: "test-cluster".to_string(),

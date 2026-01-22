@@ -1,6 +1,6 @@
+use crate::common::async_util::BoxFuture;
 use crate::xds::route::RouteInput;
 use crate::xds::xds_manager::XdsRouter;
-use futures::future::BoxFuture;
 use http::Request;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -25,7 +25,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)

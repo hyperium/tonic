@@ -1,7 +1,7 @@
 use crate::client::cluster::ClusterClientRegistry;
+use crate::common::async_util::BoxFuture;
 use crate::xds::route::RouteDecision;
 use crate::xds::xds_manager::XdsClusterDiscovery;
-use futures::future::BoxFuture;
 use http::Request;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -72,7 +72,7 @@ where
 {
     type Response = S::Response;
     type Error = BoxError;
-    type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
+    type Future = BoxFuture<Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         // Under xDS, the destination cluster is decided by the routing layer, which takes

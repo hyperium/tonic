@@ -1,16 +1,15 @@
-use std::future::Future;
+use crate::common::async_util::BoxFuture;
 use std::pin::Pin;
 use tower::{discover::Change, BoxError};
 
 use crate::xds::route::{RouteDecision, RouteInput};
 
-pub(crate) type BoxFut<T> = Pin<Box<dyn Future<Output = T> + Send + 'static>>;
 pub(crate) type BoxDiscover<Endpoint, S> =
-    Pin<Box<dyn futures::Stream<Item = Result<Change<Endpoint, S>, BoxError>> + Send>>;
+    Pin<Box<dyn futures_core::Stream<Item = Result<Change<Endpoint, S>, BoxError>> + Send>>;
 
 /// Trait for routing requests to clusters based on xDS routing configurations.
 pub(crate) trait XdsRouter: Send + Sync + 'static {
-    fn route(&self, input: &RouteInput<'_>) -> BoxFut<RouteDecision>;
+    fn route(&self, input: &RouteInput<'_>) -> BoxFuture<RouteDecision>;
 }
 
 /// Trait for discovering cluster endpoints based on xDS cluster configurations.

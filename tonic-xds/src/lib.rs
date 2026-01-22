@@ -43,6 +43,7 @@
 //! in stacked [`tower::Service`]s that implement the [gRPC xDS features](https://github.com/grpc/grpc/blob/master/doc/grpc_xds_features.md).
 
 pub(crate) mod client;
+pub(crate) mod common;
 pub(crate) mod xds;
 
 pub use client::channel::{XdsChannel, XdsChannelBuilder, XdsChannelConfig, XdsChannelGrpc};

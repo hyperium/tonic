@@ -1,4 +1,5 @@
 //! Test utilities for gRPC servers and clients.
+use std::error::Error;
 use std::net::SocketAddr;
 use tokio::{net::TcpListener, sync::oneshot};
 use tonic::server::NamedService;
@@ -46,7 +47,7 @@ pub(crate) async fn spawn_greeter_server(
     msg: &str,
     server_tls: Option<ServerTlsConfig>,
     client_tls: Option<ClientTlsConfig>,
-) -> anyhow::Result<TestServer> {
+) -> Result<TestServer, Box<dyn Error>> {
     // Bind to an ephemeral port (random free port assigned by OS)
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let addr = listener.local_addr()?;

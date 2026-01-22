@@ -1,7 +1,7 @@
-//! Build script for the auxiliary components: protobuf for testing and etc.
+//! Build script for the protobufs used for tests.
 //! To invoke, run:
 //! ```
-//! cargo run -p tonic-xds --bin gen-test-proto --features test-proto-codegen
+//! cargo run -p tonic-xds --example gen_test_proto
 //! ```
 use std::path::PathBuf;
 fn main() {

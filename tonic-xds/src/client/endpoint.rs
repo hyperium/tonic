@@ -1,4 +1,4 @@
-use futures::future::BoxFuture;
+use crate::common::async_util::BoxFuture;
 use std::net::SocketAddr;
 use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
 use std::task::{Context, Poll};
@@ -94,7 +94,7 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = BoxFuture<'static, Result<S::Response, S::Error>>;
+    type Future = BoxFuture<Result<S::Response, S::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)

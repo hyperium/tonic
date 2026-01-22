@@ -1,5 +1,5 @@
+use crate::common::async_util::BoxFuture;
 use dashmap::DashMap;
-use futures::future::BoxFuture;
 use http::{Request, Response};
 use std::fmt::Debug;
 use std::future::Future;
@@ -12,7 +12,7 @@ use tower::{
     balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load, BoxError, Service,
 };
 
-type RespFut<Resp> = BoxFuture<'static, Result<Resp, BoxError>>;
+type RespFut<Resp> = BoxFuture<Result<Resp, BoxError>>;
 
 const DEFAULT_BUFFER_CAPACITY: usize = 1024;
 
@@ -83,7 +83,7 @@ where
     Resp: 'static,
 {
     // The mpsc channel between callers and the actual pool of channels.
-    svc: Buffer<Req, BoxFuture<'static, Result<Resp, BoxError>>>,
+    svc: Buffer<Req, BoxFuture<Result<Resp, BoxError>>>,
 }
 
 impl<Req, Resp> Clone for ClusterChannel<Req, Resp>
