@@ -1,6 +1,5 @@
 use super::*;
 use http_body::Body;
-use prost::Message;
 use tonic::codec::CompressionEncoding;
 
 util::parametrized_tests! {
@@ -243,8 +242,10 @@ util::parametrized_tests! {
     deflate: CompressionEncoding::Deflate,
 }
 
-#[allow(dead_code)]
+#[cfg(test)]
 async fn limit_decoded_message_size(encoding: CompressionEncoding) {
+    use prost::Message;
+
     let under_limit_request = SomeData {
         data: [0_u8; UNCOMPRESSED_MIN_BODY_SIZE].to_vec(),
     };
