@@ -211,6 +211,10 @@ impl StreamingInner {
 
             let decode_buf = if let Some(encoding) = compression {
                 self.decompress_buf.clear();
+                let limit = self
+                    .max_message_size
+                    .unwrap_or(DEFAULT_MAX_RECV_MESSAGE_SIZE);
+                let limited_out_buf = (&mut self.decompress_buf).limit(limit);
 
                 if let Err(err) = decompress(
                     CompressionSettings {
@@ -218,9 +222,14 @@ impl StreamingInner {
                         buffer_growth_interval: buffer_settings.buffer_size,
                     },
                     &mut self.buf,
-                    &mut self.decompress_buf,
+                    limited_out_buf,
                     len,
                 ) {
+                    if matches!(err.kind(), std::io::ErrorKind::WriteZero) {
+                        return Err(Status::resource_exhausted(format!(
+                            "Error decompressing: size limit, of {limit} bytes, exceeded while decompressing message"
+                        )));
+                    }
                     let message = if let Direction::Response(status) = self.direction {
                         format!(
                             "Error decompressing: {err}, while receiving response with status: {status}"
