@@ -344,6 +344,33 @@ impl Resolver for NopResolver {
     }
 }
 
+// A builder for a resolver that will always fail with a configuration error.
+pub(crate) struct MisconfiguredBuilder {
+    pub(crate) error: String,
+}
+
+impl ResolverBuilder for MisconfiguredBuilder {
+    fn build(&self, _target: &Target, options: ResolverOptions) -> Box<dyn Resolver> {
+        options.work_scheduler.schedule_work();
+        Box::new(NopResolver {
+            update: ResolverUpdate {
+                endpoints: Err(self.error.clone()),
+                service_config: Ok(None),
+                attributes: Attributes {},
+                resolution_note: None,
+            },
+        })
+    }
+
+    fn scheme(&self) -> &'static str {
+        "internal-configuration-error"
+    }
+
+    fn is_valid_uri(&self, _target: &Target) -> bool {
+        false
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::Target;
