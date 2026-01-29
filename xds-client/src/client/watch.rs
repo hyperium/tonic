@@ -1,8 +1,14 @@
 //! Resource watcher types.
 
+use std::marker::PhantomData;
+use std::sync::Arc;
+
+use futures::channel::{mpsc, oneshot};
+use futures::StreamExt;
+
+use crate::client::worker::{WatcherId, WorkerCommand};
 use crate::error::Error;
-use crate::resource::Resource;
-use futures_channel::oneshot;
+use crate::resource::{DecodedResource, Resource};
 
 /// A signal to indicate that processing of a resource event is complete.
 ///
@@ -12,8 +18,8 @@ use futures_channel::oneshot;
 ///
 /// # Automatic Signaling
 ///
-/// Signals automatically when dropped, so you don't need to call [`.complete()`](Self::complete)
-/// explicitly if you have no cascading watches to add.
+/// Signals automatically when dropped. If you have cascading watches to add, simply
+/// add them before dropping the `ProcessingDone`.
 ///
 /// # Example
 ///
@@ -22,15 +28,15 @@ use futures_channel::oneshot;
 ///     ResourceEvent::ResourceChanged { resource, done } => {
 ///         // Process the resource, possibly add cascading watches.
 ///         client.watch::<RouteConfiguration>(&resource.route_name());
-///         done.complete();
+///         // Signal is sent automatically when done is dropped
 ///     }
 ///     ResourceEvent::ResourceError { error, done } => {
 ///         eprintln!("Error: {}", error);
-///         done.complete();
+///         // Signal is sent automatically when done is dropped
 ///     }
 ///     ResourceEvent::AmbientError { error, .. } => {
-///         // Can also rely on auto-signal on drop
 ///         eprintln!("Ambient error: {}", error);
+///         // Signal is sent automatically when done is dropped
 ///     }
 /// }
 /// ```
@@ -41,28 +47,19 @@ impl ProcessingDone {
     /// Create a channel pair for signaling.
     ///
     /// Returns the `ProcessingDone` sender and a receiver future that resolves
-    /// when `complete()` is called or the sender is dropped.
-    #[allow(dead_code)] // TODO: remove once used by XdsClient worker
+    /// when the sender is dropped.
     pub(crate) fn channel() -> (Self, oneshot::Receiver<()>) {
         let (tx, rx) = oneshot::channel();
         (Self(Some(tx)), rx)
-    }
-
-    /// Signal that processing is complete.
-    ///
-    /// This is equivalent to dropping the `ProcessingDone`, but more explicit.
-    pub fn complete(&mut self) {
-        if let Some(tx) = self.0.take() {
-            let _ = tx.send(());
-        }
     }
 }
 
 impl Drop for ProcessingDone {
     fn drop(&mut self) {
-        // Auto-signal on drop to prevent deadlocks if the caller forgets
-        // or doesn't need to explicitly signal.
-        self.complete();
+        // Auto-signal on drop to prevent deadlocks.
+        if let Some(tx) = self.0.take() {
+            let _ = tx.send(());
+        }
     }
 }
 
@@ -70,9 +67,12 @@ impl Drop for ProcessingDone {
 #[derive(Debug)]
 pub enum ResourceEvent<T> {
     /// Indicates a new version of the resource is available.
+    ///
+    /// The resource is wrapped in `Arc` because multiple watchers may
+    /// subscribe to the same resource and share the same data.
     ResourceChanged {
-        /// The updated resource.
-        resource: T,
+        /// The updated resource, shared via `Arc`.
+        resource: Arc<T>,
         /// Signal when processing is complete.
         done: ProcessingDone,
     },
@@ -101,14 +101,34 @@ pub enum ResourceEvent<T> {
 /// Dropping the watcher unsubscribes from the resource.
 #[derive(Debug)]
 pub struct ResourceWatcher<T: Resource> {
-    // TODO: replace with proper implementation
-    _marker: std::marker::PhantomData<T>,
+    /// Channel to receive events from the worker.
+    event_rx: mpsc::Receiver<ResourceEvent<DecodedResource>>,
+    /// Unique identifier for this watcher.
+    watcher_id: WatcherId,
+    /// Channel to send commands to the worker (for unwatch on drop).
+    command_tx: mpsc::UnboundedSender<WorkerCommand>,
+    /// Marker for the resource type.
+    _marker: PhantomData<T>,
 }
 
 impl<T: Resource> ResourceWatcher<T> {
+    /// Create a new resource watcher.
+    pub(crate) fn new(
+        event_rx: mpsc::Receiver<ResourceEvent<DecodedResource>>,
+        watcher_id: WatcherId,
+        command_tx: mpsc::UnboundedSender<WorkerCommand>,
+    ) -> Self {
+        Self {
+            event_rx,
+            watcher_id,
+            command_tx,
+            _marker: PhantomData,
+        }
+    }
+
     /// Returns the next resource event.
     ///
-    /// Returns `None` when the subscription is closed.
+    /// Returns `None` when the subscription is closed (worker shut down).
     ///
     /// # Example
     ///
@@ -118,20 +138,51 @@ impl<T: Resource> ResourceWatcher<T> {
     ///         ResourceEvent::ResourceChanged { resource, done } => {
     ///             // Process the resource, possibly add cascading watches.
     ///             client.watch::<RouteConfiguration>(&resource.route_name());
-    ///             done.complete();
+    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///         ResourceEvent::ResourceError { error, done } => {
     ///             eprintln!("Error: {}", error);
-    ///             done.complete();
+    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///         ResourceEvent::AmbientError { error, .. } => {
-    ///             // Can also rely on auto-signal on drop
     ///             eprintln!("Ambient error: {}", error);
+    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///     }
     /// }
     /// ```
     pub async fn next(&mut self) -> Option<ResourceEvent<T>> {
-        todo!()
+        let event = self.event_rx.next().await?;
+
+        Some(match event {
+            ResourceEvent::ResourceChanged { resource, done } => match resource.downcast::<T>() {
+                Some(typed_resource) => ResourceEvent::ResourceChanged {
+                    resource: typed_resource,
+                    done,
+                },
+                None => ResourceEvent::ResourceError {
+                    error: Error::Validation(format!(
+                        "resource type mismatch (expected: {}, actual: {})",
+                        std::any::type_name::<T>(),
+                        resource.type_url()
+                    )),
+                    done,
+                },
+            },
+            ResourceEvent::ResourceError { error, done } => {
+                ResourceEvent::ResourceError { error, done }
+            }
+            ResourceEvent::AmbientError { error, done } => {
+                ResourceEvent::AmbientError { error, done }
+            }
+        })
+    }
+}
+
+impl<T: Resource> Drop for ResourceWatcher<T> {
+    fn drop(&mut self) {
+        let _ = self.command_tx.unbounded_send(WorkerCommand::Unwatch {
+            watcher_id: self.watcher_id,
+        });
     }
 }
