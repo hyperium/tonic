@@ -1,6 +1,7 @@
 #[cfg(feature = "_tls-any")]
 use super::service::TlsConnector;
 use super::service::{self, Executor, SharedExec};
+use super::named_pipe_connector::NamedPipeConnector;
 use super::uds_connector::UdsConnector;
 use super::Channel;
 #[cfg(feature = "_tls-any")]
@@ -19,6 +20,43 @@ use tower_service::Service;
 pub(crate) enum EndpointType {
     Uri(Uri),
     Uds(String),
+    NamedPipe(String),
+}
+
+fn parse_named_pipe_path(s: &str) -> Option<String> {
+    if s.starts_with(r"\\.\pipe\") {
+        return Some(s.to_string());
+    }
+
+    let s = s
+        .strip_prefix("npipe://")
+        .or_else(|| s.strip_prefix("npipe:"))
+        .or_else(|| s.strip_prefix("pipe://"))
+        .or_else(|| s.strip_prefix("pipe:"))?;
+
+    if s.starts_with(r"\\.\pipe\") {
+        return Some(s.to_string());
+    }
+
+    let mut s = s.trim_start_matches('/');
+    if let Some(stripped) = s.strip_prefix("./") {
+        s = stripped;
+    }
+    if let Some(stripped) = s.strip_prefix("pipe/") {
+        s = stripped;
+    }
+    if let Some(stripped) = s.strip_prefix("/pipe/") {
+        s = stripped;
+    }
+    let s = s.trim_start_matches('/');
+
+    if s.is_empty() {
+        return None;
+    }
+
+    let mut path = String::from(r"\\.\pipe\");
+    path.push_str(&s.replace('/', "\\"));
+    Some(path)
 }
 
 /// Channel builder.
@@ -129,6 +167,35 @@ impl Endpoint {
         }
     }
 
+    fn new_named_pipe(pipe_path: &str) -> Self {
+        Self {
+            uri: EndpointType::NamedPipe(pipe_path.to_string()),
+            fallback_uri: Uri::from_static("http://tonic"),
+            origin: None,
+            user_agent: None,
+            concurrency_limit: None,
+            rate_limit: None,
+            timeout: None,
+            #[cfg(feature = "_tls-any")]
+            tls: None,
+            buffer_size: None,
+            init_stream_window_size: None,
+            init_connection_window_size: None,
+            tcp_keepalive: None,
+            tcp_keepalive_interval: None,
+            tcp_keepalive_retries: None,
+            tcp_nodelay: true,
+            http2_keep_alive_interval: None,
+            http2_keep_alive_timeout: None,
+            http2_keep_alive_while_idle: None,
+            http2_max_header_list_size: None,
+            connect_timeout: None,
+            http2_adaptive_window: None,
+            executor: SharedExec::tokio(),
+            local_address: None,
+        }
+    }
+
     /// Convert an `Endpoint` from a static string.
     ///
     /// # Panics
@@ -140,7 +207,9 @@ impl Endpoint {
     /// Endpoint::from_static("https://example.com");
     /// ```
     pub fn from_static(s: &'static str) -> Self {
-        if s.starts_with("unix:") {
+        if let Some(pipe_path) = parse_named_pipe_path(s) {
+            Self::new_named_pipe(&pipe_path)
+        } else if s.starts_with("unix:") {
             let uds_filepath = s
                 .strip_prefix("unix://")
                 .or_else(|| s.strip_prefix("unix:"))
@@ -162,7 +231,9 @@ impl Endpoint {
         let s = str::from_utf8(&s.into())
             .map_err(|e| Error::new_invalid_uri().with(e))?
             .to_string();
-        if s.starts_with("unix:") {
+        if let Some(pipe_path) = parse_named_pipe_path(&s) {
+            Ok(Self::new_named_pipe(&pipe_path))
+        } else if s.starts_with("unix:") {
             let uds_filepath = s
                 .strip_prefix("unix://")
                 .or_else(|| s.strip_prefix("unix:"))
@@ -370,7 +441,9 @@ impl Endpoint {
                 ),
                 ..self
             }),
-            EndpointType::Uds(_) => Err(Error::new(error::Kind::InvalidTlsConfigForUds)),
+            EndpointType::Uds(_) | EndpointType::NamedPipe(_) => {
+                Err(Error::new(error::Kind::InvalidTlsConfigForNonTcp))
+            }
         }
     }
 
@@ -469,6 +542,13 @@ impl Endpoint {
         self.connector(UdsConnector::new(uds_filepath))
     }
 
+    pub(crate) fn named_pipe_connector(
+        &self,
+        pipe_path: &str,
+    ) -> service::Connector<NamedPipeConnector> {
+        self.connector(NamedPipeConnector::new(pipe_path))
+    }
+
     /// Create a channel from this config.
     pub async fn connect(&self) -> Result<Channel, Error> {
         match &self.uri {
@@ -476,6 +556,11 @@ impl Endpoint {
             EndpointType::Uds(uds_filepath) => {
                 Channel::connect(self.uds_connector(uds_filepath.as_str()), self.clone()).await
             }
+            EndpointType::NamedPipe(pipe_path) => Channel::connect(
+                self.named_pipe_connector(pipe_path.as_str()),
+                self.clone(),
+            )
+            .await,
         }
     }
 
@@ -488,6 +573,9 @@ impl Endpoint {
             EndpointType::Uri(_) => Channel::new(self.http_connector(), self.clone()),
             EndpointType::Uds(uds_filepath) => {
                 Channel::new(self.uds_connector(uds_filepath.as_str()), self.clone())
+            }
+            EndpointType::NamedPipe(pipe_path) => {
+                Channel::new(self.named_pipe_connector(pipe_path.as_str()), self.clone())
             }
         }
     }
@@ -554,6 +642,7 @@ impl Endpoint {
         match &self.uri {
             EndpointType::Uri(uri) => uri,
             EndpointType::Uds(_) => &self.fallback_uri,
+            EndpointType::NamedPipe(_) => &self.fallback_uri,
         }
     }
 

@@ -9,6 +9,8 @@ mod service;
 mod tls;
 #[cfg(unix)]
 mod unix;
+#[cfg(windows)]
+mod named_pipe;
 
 use tokio_stream::StreamExt as _;
 use tracing::{debug, trace};
@@ -36,6 +38,8 @@ use self::service::TlsAcceptor;
 
 #[cfg(unix)]
 pub use unix::UdsConnectInfo;
+#[cfg(windows)]
+pub use named_pipe::NamedPipeIncoming;
 
 pub use incoming::TcpIncoming;
 

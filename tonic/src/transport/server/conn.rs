@@ -7,6 +7,8 @@ use std::sync::Arc;
 use tokio_rustls::rustls::pki_types::CertificateDer;
 #[cfg(feature = "tls-connect-info")]
 use tokio_rustls::server::TlsStream;
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::NamedPipeServer;
 
 /// Trait that connected IO resources implement and use to produce info about the connection.
 ///
@@ -97,6 +99,13 @@ impl Connected for TcpStream {
 }
 
 impl Connected for tokio::io::DuplexStream {
+    type ConnectInfo = ();
+
+    fn connect_info(&self) -> Self::ConnectInfo {}
+}
+
+#[cfg(windows)]
+impl Connected for NamedPipeServer {
     type ConnectInfo = ();
 
     fn connect_info(&self) -> Self::ConnectInfo {}

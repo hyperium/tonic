@@ -4,6 +4,7 @@ mod endpoint;
 pub(crate) mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;
+mod named_pipe_connector;
 mod uds_connector;
 
 pub use self::service::Change;
