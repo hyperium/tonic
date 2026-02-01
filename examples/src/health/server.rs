@@ -35,7 +35,7 @@ async fn twiddle_service_status(reporter: HealthReporter) {
         iter += 1;
         tokio::time::sleep(Duration::from_secs(1)).await;
 
-        if iter % 2 == 0 {
+        if iter.is_multiple_of(2) {
             reporter.set_serving::<GreeterServer<MyGreeter>>().await;
         } else {
             reporter.set_not_serving::<GreeterServer<MyGreeter>>().await;

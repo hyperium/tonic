@@ -1,7 +1,7 @@
+use super::named_pipe_connector::NamedPipeConnector;
 #[cfg(feature = "_tls-any")]
 use super::service::TlsConnector;
 use super::service::{self, Executor, SharedExec};
-use super::named_pipe_connector::NamedPipeConnector;
 use super::uds_connector::UdsConnector;
 use super::Channel;
 #[cfg(feature = "_tls-any")]
@@ -556,11 +556,9 @@ impl Endpoint {
             EndpointType::Uds(uds_filepath) => {
                 Channel::connect(self.uds_connector(uds_filepath.as_str()), self.clone()).await
             }
-            EndpointType::NamedPipe(pipe_path) => Channel::connect(
-                self.named_pipe_connector(pipe_path.as_str()),
-                self.clone(),
-            )
-            .await,
+            EndpointType::NamedPipe(pipe_path) => {
+                Channel::connect(self.named_pipe_connector(pipe_path.as_str()), self.clone()).await
+            }
         }
     }
 

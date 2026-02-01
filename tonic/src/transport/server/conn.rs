@@ -3,12 +3,12 @@ use tokio::net::TcpStream;
 
 #[cfg(feature = "tls-connect-info")]
 use std::sync::Arc;
+#[cfg(windows)]
+use tokio::net::windows::named_pipe::NamedPipeServer;
 #[cfg(feature = "tls-connect-info")]
 use tokio_rustls::rustls::pki_types::CertificateDer;
 #[cfg(feature = "tls-connect-info")]
 use tokio_rustls::server::TlsStream;
-#[cfg(windows)]
-use tokio::net::windows::named_pipe::NamedPipeServer;
 
 /// Trait that connected IO resources implement and use to produce info about the connection.
 ///

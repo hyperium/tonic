@@ -2,6 +2,7 @@ use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use std::{fmt, fmt::Debug};
 
 use tokio::net::windows::named_pipe::{NamedPipeServer, ServerOptions};
 use tokio_stream::Stream;
@@ -12,6 +13,15 @@ use tokio_stream::Stream;
 pub struct NamedPipeIncoming {
     pipe_name: String,
     connecting: Option<Pin<Box<dyn Future<Output = io::Result<NamedPipeServer>> + Send>>>,
+}
+
+impl Debug for NamedPipeIncoming {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("NamedPipeIncoming")
+            .field("pipe_name", &self.pipe_name)
+            .field("connecting", &self.connecting.is_some())
+            .finish()
+    }
 }
 
 impl NamedPipeIncoming {

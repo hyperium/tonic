@@ -4,13 +4,13 @@ mod conn;
 mod display_error_stack;
 mod incoming;
 mod io_stream;
+#[cfg(windows)]
+mod named_pipe;
 mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;
 #[cfg(unix)]
 mod unix;
-#[cfg(windows)]
-mod named_pipe;
 
 use tokio_stream::StreamExt as _;
 use tracing::{debug, trace};
@@ -36,10 +36,10 @@ pub use conn::TlsConnectInfo;
 #[cfg(feature = "_tls-any")]
 use self::service::TlsAcceptor;
 
-#[cfg(unix)]
-pub use unix::UdsConnectInfo;
 #[cfg(windows)]
 pub use named_pipe::NamedPipeIncoming;
+#[cfg(unix)]
+pub use unix::UdsConnectInfo;
 
 pub use incoming::TcpIncoming;
 
