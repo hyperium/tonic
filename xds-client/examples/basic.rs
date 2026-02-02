@@ -78,12 +78,20 @@ pub struct Listener {
 }
 
 impl Resource for Listener {
+    type Message = ListenerProto;
+
     const TYPE_URL: TypeUrl = TypeUrl::new("type.googleapis.com/envoy.config.listener.v3.Listener");
 
-    fn decode(bytes: Bytes) -> xds_client::Result<Self> {
-        let proto = ListenerProto::decode(bytes)?;
+    fn deserialize(bytes: Bytes) -> xds_client::Result<Self::Message> {
+        ListenerProto::decode(bytes).map_err(Into::into)
+    }
 
-        let hcm = proto
+    fn name(message: &Self::Message) -> &str {
+        &message.name
+    }
+
+    fn validate(message: Self::Message) -> xds_client::Result<Self> {
+        let hcm = message
             .api_listener
             .and_then(|api| api.api_listener)
             .and_then(|any| HttpConnectionManager::decode(Bytes::from(any.value)).ok());
@@ -94,13 +102,9 @@ impl Resource for Listener {
         });
 
         Ok(Self {
-            name: proto.name,
+            name: message.name,
             rds_route_config_name,
         })
-    }
-
-    fn name(&self) -> &str {
-        &self.name
     }
 }
 
@@ -169,9 +173,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     while let Some(event) = event_rx.recv().await {
         match event {
-            ResourceEvent::ResourceChanged { resource, done } => {
+            ResourceEvent::ResourceChanged {
+                result: Ok(resource),
+                done,
+            } => {
                 println!("Listener received:");
-                println!("  name:        {}", resource.name());
+                println!("  name:        {}", resource.name);
                 if let Some(ref rds) = resource.rds_route_config_name {
                     println!("  rds_config:  {rds}");
                 }
@@ -182,13 +189,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 drop(done);
             }
 
-            ResourceEvent::ResourceError { error, .. } => {
-                println!("Resource error: {error}");
-                // Can also rely on implicit drop of done signal here
+            ResourceEvent::ResourceChanged {
+                result: Err(error), ..
+            } => {
+                // Resource was invalidated (validation error, deleted, etc.)
+                println!("Resource invalidated: {error}");
             }
 
             ResourceEvent::AmbientError { error, .. } => {
-                println!("Connection error: {error}");
+                // Non-fatal error, continue using cached resource if available
+                println!("Ambient error: {error}");
             }
         }
     }

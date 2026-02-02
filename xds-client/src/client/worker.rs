@@ -58,6 +58,8 @@ pub(crate) enum WorkerCommand {
         event_tx: mpsc::Sender<ResourceEvent<DecodedResource>>,
         /// Decoder function for this resource type.
         decoder: DecoderFn,
+        /// Whether all resources must be present in SotW responses (per A53).
+        all_resources_required_in_sotw: bool,
     },
     /// Unsubscribe a watcher.
     Unwatch {
@@ -92,6 +94,65 @@ impl SubscriptionMode {
     }
 }
 
+/// State of a cached resource per gRFC A88.
+#[derive(Debug, Clone)]
+#[allow(dead_code)] // Requested state used for future subscription tracking
+enum ResourceState {
+    /// Resource has been requested but not yet received.
+    Requested,
+    /// Resource has been successfully received and validated.
+    Received,
+    /// Resource validation failed. Contains the error message.
+    NACKed(String),
+    /// Resource does not exist (server indicated deletion or absence).
+    DoesNotExist,
+}
+
+/// A cached resource entry.
+#[derive(Debug, Clone)]
+struct CachedResource {
+    /// Current state of the resource.
+    state: ResourceState,
+    /// The decoded resource, if successfully received.
+    /// None if state is Requested, NACKed, or DoesNotExist.
+    resource: Option<Arc<DecodedResource>>,
+}
+
+impl CachedResource {
+    /// Create a new cached resource in Requested state.
+    #[allow(dead_code)] // Used for future subscription tracking
+    fn requested() -> Self {
+        Self {
+            state: ResourceState::Requested,
+            resource: None,
+        }
+    }
+
+    /// Create a cached resource in Received state.
+    fn received(resource: Arc<DecodedResource>) -> Self {
+        Self {
+            state: ResourceState::Received,
+            resource: Some(resource),
+        }
+    }
+
+    /// Create a cached resource in DoesNotExist state.
+    fn does_not_exist() -> Self {
+        Self {
+            state: ResourceState::DoesNotExist,
+            resource: None,
+        }
+    }
+
+    /// Create a cached resource in NACKed state.
+    fn nacked(error: String) -> Self {
+        Self {
+            state: ResourceState::NACKed(error),
+            resource: None,
+        }
+    }
+}
+
 /// Per-type_url state tracking.
 struct TypeState {
     /// Decoder function for this resource type.
@@ -104,6 +165,10 @@ struct TypeState {
     watchers: HashMap<WatcherId, WatcherEntry>,
     /// Current subscription mode (wildcard or named resources).
     subscription: SubscriptionMode,
+    /// Resource cache: name -> cached resource.
+    cache: HashMap<String, CachedResource>,
+    /// Whether missing resources in SotW should be treated as deleted (per A53).
+    all_resources_required_in_sotw: bool,
 }
 
 impl std::fmt::Debug for TypeState {
@@ -114,18 +179,25 @@ impl std::fmt::Debug for TypeState {
             .field("nonce", &self.nonce)
             .field("watchers", &self.watchers)
             .field("subscription", &self.subscription)
+            .field("cache", &format!("<{} entries>", self.cache.len()))
+            .field(
+                "all_resources_required_in_sotw",
+                &self.all_resources_required_in_sotw,
+            )
             .finish()
     }
 }
 
 impl TypeState {
-    fn new(decoder: DecoderFn) -> Self {
+    fn new(decoder: DecoderFn, all_resources_required_in_sotw: bool) -> Self {
         Self {
             decoder,
             version_info: String::new(),
             nonce: String::new(),
             watchers: HashMap::new(),
             subscription: SubscriptionMode::Named(HashSet::new()),
+            cache: HashMap::new(),
+            all_resources_required_in_sotw,
         }
     }
 
@@ -376,8 +448,16 @@ where
                 watcher_id,
                 event_tx,
                 decoder,
+                all_resources_required_in_sotw,
             } => {
-                if self.add_watcher(type_url, name, watcher_id, event_tx, decoder) {
+                if self.add_watcher(
+                    type_url,
+                    name,
+                    watcher_id,
+                    event_tx,
+                    decoder,
+                    all_resources_required_in_sotw,
+                ) {
                     if let Some(stream) = stream {
                         self.send_request(stream, type_url).await?;
                     }
@@ -395,28 +475,74 @@ where
     }
 
     /// Add a watcher to the state.
-    /// Returns true if subscriptions changed (need to send new request).
+    ///
+    /// If the resource is already cached, the watcher receives the cached state immediately.
+    /// Returns true if subscriptions changed (need to send new request to server).
     fn add_watcher(
         &mut self,
         type_url: &'static str,
         name: String,
         watcher_id: WatcherId,
-        event_tx: mpsc::Sender<ResourceEvent<DecodedResource>>,
+        mut event_tx: mpsc::Sender<ResourceEvent<DecodedResource>>,
         decoder: DecoderFn,
+        all_resources_required_in_sotw: bool,
     ) -> bool {
         let type_url_string = type_url.to_string();
         let type_state = self
             .type_states
             .entry(type_url_string)
-            .or_insert_with(|| TypeState::new(decoder));
+            .or_insert_with(|| TypeState::new(decoder, all_resources_required_in_sotw));
 
         let old_subscription = type_state.subscription.clone();
+        let watcher_subscription = WatcherSubscription::from_name(name.clone());
+
+        // Check cache and send cached state to new watcher if available.
+        // For named subscriptions, check the specific resource.
+        // For wildcard subscriptions, we don't send cached resources immediately
+        // (they'll receive updates as they come in).
+        if let WatcherSubscription::Named(ref resource_name) = watcher_subscription {
+            if let Some(cached) = type_state.cache.get(resource_name) {
+                let event = match &cached.state {
+                    ResourceState::Received => {
+                        if let Some(ref resource) = cached.resource {
+                            let (done, _rx) = ProcessingDone::channel();
+                            Some(ResourceEvent::ResourceChanged {
+                                result: Ok(Arc::clone(resource)),
+                                done,
+                            })
+                        } else {
+                            None
+                        }
+                    }
+                    ResourceState::DoesNotExist => {
+                        let (done, _rx) = ProcessingDone::channel();
+                        Some(ResourceEvent::ResourceChanged {
+                            result: Err(Error::ResourceDoesNotExist),
+                            done,
+                        })
+                    }
+                    ResourceState::NACKed(error) => {
+                        let (done, _rx) = ProcessingDone::channel();
+                        Some(ResourceEvent::ResourceChanged {
+                            result: Err(Error::Validation(error.clone())),
+                            done,
+                        })
+                    }
+                    ResourceState::Requested => None,
+                };
+
+                if let Some(event) = event {
+                    // Send cached state to watcher (non-blocking, ignore if full)
+                    let _ = event_tx.try_send(event);
+                }
+            }
+        }
 
         type_state.watchers.insert(
             watcher_id,
             WatcherEntry {
                 event_tx,
-                subscription: WatcherSubscription::from_name(name),
+                subscription: watcher_subscription,
             },
         );
         type_state.recalculate_subscriptions();
@@ -471,6 +597,13 @@ where
     }
 
     /// Handle a response from the server.
+    ///
+    /// Implements partial success per gRFC A46: valid resources are accepted even
+    /// if some resources in the response fail validation. Each resource is processed
+    /// independently:
+    /// - Valid resources are cached and dispatched to watchers
+    /// - Invalid resources are cached as NACKed and errors sent to specific watchers
+    /// - Missing resources (for types with ALL_RESOURCES_REQUIRED_IN_SOTW) are marked deleted
     async fn handle_response<S: TransportStream>(
         &mut self,
         stream: &mut S,
@@ -486,16 +619,25 @@ where
             }
         };
 
-        let mut decoded_resources = Vec::new();
-        let mut decode_errors = Vec::new();
+        // Decode all resources, tracking valid and invalid separately.
+        // Per A46, we accept valid resources even if some fail validation.
+        // Per A88, we categorize errors:
+        // - top_level_errors: deserialization failures where name cannot be extracted
+        // - per_resource_errors: validation failures where name is known
+        let mut valid_resources: Vec<DecodedResource> = Vec::new();
+        let mut top_level_errors: Vec<String> = Vec::new();
+        let mut per_resource_errors: Vec<(String, String)> = Vec::new(); // (name, error)
 
         for resource_any in &response.resources {
             match decoder(resource_any.value.clone()) {
-                Ok(decoded) => {
-                    decoded_resources.push(decoded);
+                crate::resource::DecodeResult::Success { resource, .. } => {
+                    valid_resources.push(resource);
                 }
-                Err(e) => {
-                    decode_errors.push(format!("{}: {}", resource_any.type_url, e));
+                crate::resource::DecodeResult::ResourceError { name, error } => {
+                    per_resource_errors.push((name, error.to_string()));
+                }
+                crate::resource::DecodeResult::TopLevelError(error) => {
+                    top_level_errors.push(error.to_string());
                 }
             }
         }
@@ -504,28 +646,64 @@ where
             type_state.nonce = response.nonce.clone();
         }
 
-        if !decode_errors.is_empty() {
-            self.send_nack(stream, &response, decode_errors.join("; "))
-                .await?;
-            self.notify_watchers_error(&type_url, Error::Validation(decode_errors.join("; ")))
+        let received_names: HashSet<String> = valid_resources
+            .iter()
+            .map(|r| r.name().to_string())
+            .collect();
+
+        let mut processing_done_futures =
+            self.dispatch_resources(&type_url, valid_resources).await;
+
+        // Only notify watchers for per-resource errors (where we know the name).
+        // Top-level errors have no associated name, so no watcher to notify.
+        for (resource_name, error) in &per_resource_errors {
+            self.notify_resource_error(&type_url, resource_name, error)
                 .await;
-            return Ok(());
         }
 
-        let processing_done_futures = self.dispatch_resources(&type_url, decoded_resources).await;
+        // Detect deleted resources (per A53):
+        // For resource types with ALL_RESOURCES_REQUIRED_IN_SOTW = true,
+        // any previously-received resource not in this response is deleted.
+        let deleted_futures = self
+            .detect_deleted_resources(&type_url, &received_names)
+            .await;
+        processing_done_futures.extend(deleted_futures);
 
-        for rx in processing_done_futures {
-            let _ = rx.await;
-        }
+        // Wait for all watchers to finish processing concurrently.
+        let _ = futures::future::join_all(processing_done_futures).await;
 
         if let Some(ts) = self.type_states.get_mut(&type_url) {
             ts.version_info = response.version_info.clone();
         }
 
-        self.send_ack(stream, &response).await
+        let has_errors = !top_level_errors.is_empty() || !per_resource_errors.is_empty();
+        if !has_errors {
+            self.send_ack(stream, &response).await
+        } else {
+            // Build NACK message combining both error categories
+            let mut error_parts = Vec::new();
+
+            if !top_level_errors.is_empty() {
+                error_parts.push(format!(
+                    "top level errors: {}",
+                    top_level_errors.join("; ")
+                ));
+            }
+
+            if !per_resource_errors.is_empty() {
+                let per_resource_msg = per_resource_errors
+                    .iter()
+                    .map(|(name, err)| format!("{}: {}", name, err))
+                    .collect::<Vec<_>>()
+                    .join("; ");
+                error_parts.push(per_resource_msg);
+            }
+
+            self.send_nack(stream, &response, error_parts.join("; ")).await
+        }
     }
 
-    /// Dispatch decoded resources to watchers.
+    /// Dispatch decoded resources to watchers and update cache.
     ///
     /// Returns futures that resolve when watchers signal ProcessingDone.
     /// Uses backpressure: waits if a watcher's channel is full.
@@ -536,12 +714,20 @@ where
     ) -> Vec<oneshot::Receiver<()>> {
         let mut processing_done_futures = Vec::new();
 
-        let watcher_info: Vec<_> = match self.type_states.get(type_url) {
-            Some(s) => s
-                .watchers
-                .iter()
-                .map(|(id, entry)| (*id, entry.event_tx.clone(), entry.subscription.clone()))
-                .collect(),
+        let watcher_info: Vec<_> = match self.type_states.get_mut(type_url) {
+            Some(s) => {
+                for resource in &resources {
+                    let resource_name = resource.name().to_string();
+                    s.cache.insert(
+                        resource_name,
+                        CachedResource::received(Arc::new(resource.clone())),
+                    );
+                }
+                s.watchers
+                    .iter()
+                    .map(|(id, entry)| (*id, entry.event_tx.clone(), entry.subscription.clone()))
+                    .collect()
+            }
             None => return processing_done_futures,
         };
 
@@ -553,7 +739,7 @@ where
                 if subscription.matches(&resource_name) {
                     let (done, rx) = ProcessingDone::channel();
                     let event = ResourceEvent::ResourceChanged {
-                        resource: Arc::clone(&resource),
+                        result: Ok(Arc::clone(&resource)),
                         done,
                     };
                     // Use backpressure: await if channel is full.
@@ -567,23 +753,94 @@ where
         processing_done_futures
     }
 
-    /// Notify watchers of an error.
+    /// Notify watchers of a validation error for a specific resource.
     ///
-    /// Uses backpressure: waits if a watcher's channel is full.
-    async fn notify_watchers_error(&mut self, type_url: &str, error: Error) {
+    /// Per gRFC A46/A88, errors are routed only to watchers interested in
+    /// that specific resource (plus wildcard watchers).
+    async fn notify_resource_error(&mut self, type_url: &str, resource_name: &str, error: &str) {
+        if let Some(type_state) = self.type_states.get_mut(type_url) {
+            type_state
+                .cache
+                .insert(resource_name.to_string(), CachedResource::nacked(error.to_string()));
+        }
+
         let watcher_senders: Vec<_> = match self.type_states.get(type_url) {
-            Some(s) => s.watchers.values().map(|e| e.event_tx.clone()).collect(),
+            Some(s) => s
+                .watchers
+                .values()
+                .filter(|e| e.subscription.matches(resource_name))
+                .map(|e| e.event_tx.clone())
+                .collect(),
             None => return,
         };
 
         for mut event_tx in watcher_senders {
             let (done, _rx) = ProcessingDone::channel();
-            let event = ResourceEvent::ResourceError {
-                error: Error::Validation(error.to_string()),
+            let event = ResourceEvent::ResourceChanged {
+                result: Err(Error::Validation(error.to_string())),
                 done,
             };
             let _ = event_tx.send(event).await;
         }
+    }
+
+    /// Detect resources that were deleted (present in cache but not in response).
+    ///
+    /// Per gRFC A53, for resource types with ALL_RESOURCES_REQUIRED_IN_SOTW = true,
+    /// if a previously-received resource is absent from a new SotW response,
+    /// it is treated as deleted.
+    async fn detect_deleted_resources(
+        &mut self,
+        type_url: &str,
+        received_names: &HashSet<String>,
+    ) -> Vec<oneshot::Receiver<()>> {
+        let mut processing_done_futures = Vec::new();
+
+        let type_state = match self.type_states.get_mut(type_url) {
+            Some(s) => s,
+            None => return processing_done_futures,
+        };
+
+        if !type_state.all_resources_required_in_sotw {
+            return processing_done_futures;
+        }
+
+        let deleted_names: Vec<String> = type_state
+            .cache
+            .iter()
+            .filter(|(name, cached)| {
+                matches!(cached.state, ResourceState::Received) && !received_names.contains(*name)
+            })
+            .map(|(name, _)| name.clone())
+            .collect();
+
+        for name in &deleted_names {
+            type_state
+                .cache
+                .insert(name.clone(), CachedResource::does_not_exist());
+        }
+
+        let watchers_to_notify: Vec<_> = type_state
+            .watchers
+            .values()
+            .map(|e| (e.event_tx.clone(), e.subscription.clone()))
+            .collect();
+
+        for name in deleted_names {
+            for (mut event_tx, subscription) in watchers_to_notify.clone() {
+                if subscription.matches(&name) {
+                    let (done, rx) = ProcessingDone::channel();
+                    let event = ResourceEvent::ResourceChanged {
+                        result: Err(Error::ResourceDoesNotExist),
+                        done,
+                    };
+                    let _ = event_tx.send(event).await;
+                    processing_done_futures.push(rx);
+                }
+            }
+        }
+
+        processing_done_futures
     }
 
     /// Send an ACK for a response.

@@ -25,18 +25,19 @@ use crate::resource::{DecodedResource, Resource};
 ///
 /// ```ignore
 /// match event {
-///     ResourceEvent::ResourceChanged { resource, done } => {
-///         // Process the resource, possibly add cascading watches.
+///     ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
+///         // Process the new resource, possibly add cascading watches.
 ///         client.watch::<RouteConfiguration>(&resource.route_name());
 ///         // Signal is sent automatically when done is dropped
 ///     }
-///     ResourceEvent::ResourceError { error, done } => {
-///         eprintln!("Error: {}", error);
-///         // Signal is sent automatically when done is dropped
+///     ResourceEvent::ResourceChanged { result: Err(error), done } => {
+///         // Resource was invalidated (validation error or deleted)
+///         eprintln!("Resource invalidated: {}", error);
+///         // Stop using the previously cached resource
 ///     }
 ///     ResourceEvent::AmbientError { error, .. } => {
+///         // Non-fatal error, continue using cached resource
 ///         eprintln!("Ambient error: {}", error);
-///         // Signal is sent automatically when done is dropped
 ///     }
 /// }
 /// ```
@@ -64,29 +65,40 @@ impl Drop for ProcessingDone {
 }
 
 /// Events delivered to resource watchers.
+///
+/// Per gRFC A88, there are two types of events:
+/// - `ResourceChanged`: Indicates a change in the resource's cached state
+/// - `AmbientError`: Non-fatal errors that don't affect the cached resource
 #[derive(Debug)]
 pub enum ResourceEvent<T> {
-    /// Indicates a new version of the resource is available.
+    /// Indicates a change in the resource's cached state.
+    ///
+    /// This event is sent when:
+    /// - A new valid resource is received (`Ok(resource)`)
+    /// - A validation error occurred (`Err(Error::Validation(...))`)
+    /// - The resource was deleted or doesn't exist (`Err(Error::ResourceDoesNotExist)`)
+    ///
+    /// When `result` is `Err`, the previously cached resource (if any) should be
+    /// invalidated. The watcher should stop using the old resource data.
     ///
     /// The resource is wrapped in `Arc` because multiple watchers may
     /// subscribe to the same resource and share the same data.
     ResourceChanged {
-        /// The updated resource, shared via `Arc`.
-        resource: Arc<T>,
+        /// The result of the resource update.
+        /// - `Ok(resource)`: New valid resource received
+        /// - `Err(error)`: Cache-invalidating error (validation failure, does not exist)
+        result: Result<Arc<T>, Error>,
         /// Signal when processing is complete.
         done: ProcessingDone,
     },
-    /// Indicates an error occurred while trying to fetch or decode the resource.
-    ResourceError {
-        /// The error that occurred.
-        error: Error,
-        /// Signal when processing is complete.
-        done: ProcessingDone,
-    },
-    /// Indicates an error occurred after a resource has been received that should
-    /// not modify the use of that resource but may provide useful information
-    /// about the state of the XdsClient. The previous version of the resource
-    /// should still be considered valid.
+    /// Indicates a non-fatal error that doesn't affect the cached resource.
+    ///
+    /// This is sent for transient errors like temporary connectivity issues
+    /// with the xDS management server. The previously cached resource (if any)
+    /// should continue to be used.
+    ///
+    /// Per gRFC A88, ambient errors should not cause the client to stop using
+    /// a previously valid resource.
     AmbientError {
         /// The error that occurred.
         error: Error,
@@ -135,18 +147,18 @@ impl<T: Resource> ResourceWatcher<T> {
     /// ```ignore
     /// while let Some(event) = watcher.next().await {
     ///     match event {
-    ///         ResourceEvent::ResourceChanged { resource, done } => {
-    ///             // Process the resource, possibly add cascading watches.
+    ///         ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
+    ///             // Process the new resource, possibly add cascading watches.
     ///             client.watch::<RouteConfiguration>(&resource.route_name());
     ///             // Signal is sent automatically when done is dropped
     ///         }
-    ///         ResourceEvent::ResourceError { error, done } => {
-    ///             eprintln!("Error: {}", error);
-    ///             // Signal is sent automatically when done is dropped
+    ///         ResourceEvent::ResourceChanged { result: Err(error), done } => {
+    ///             // Resource was invalidated (validation error or deleted)
+    ///             eprintln!("Resource invalidated: {}", error);
     ///         }
     ///         ResourceEvent::AmbientError { error, .. } => {
+    ///             // Non-fatal error, continue using cached resource
     ///             eprintln!("Ambient error: {}", error);
-    ///             // Signal is sent automatically when done is dropped
     ///         }
     ///     }
     /// }
@@ -155,22 +167,22 @@ impl<T: Resource> ResourceWatcher<T> {
         let event = self.event_rx.next().await?;
 
         Some(match event {
-            ResourceEvent::ResourceChanged { resource, done } => match resource.downcast::<T>() {
-                Some(typed_resource) => ResourceEvent::ResourceChanged {
-                    resource: typed_resource,
+            ResourceEvent::ResourceChanged { result, done } => {
+                let typed_result = match result {
+                    Ok(resource) => match resource.downcast::<T>() {
+                        Some(typed_resource) => Ok(typed_resource),
+                        None => Err(Error::Validation(format!(
+                            "resource type mismatch (expected: {}, actual: {})",
+                            std::any::type_name::<T>(),
+                            resource.type_url()
+                        ))),
+                    },
+                    Err(e) => Err(e),
+                };
+                ResourceEvent::ResourceChanged {
+                    result: typed_result,
                     done,
-                },
-                None => ResourceEvent::ResourceError {
-                    error: Error::Validation(format!(
-                        "resource type mismatch (expected: {}, actual: {})",
-                        std::any::type_name::<T>(),
-                        resource.type_url()
-                    )),
-                    done,
-                },
-            },
-            ResourceEvent::ResourceError { error, done } => {
-                ResourceEvent::ResourceError { error, done }
+                }
             }
             ResourceEvent::AmbientError { error, done } => {
                 ResourceEvent::AmbientError { error, done }

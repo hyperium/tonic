@@ -131,9 +131,19 @@ impl XdsClient {
         let watcher_id = WatcherId::new();
         let (event_tx, event_rx) = mpsc::channel(WATCHER_CHANNEL_BUFFER_SIZE);
 
-        let decoder: DecoderFn = Box::new(|bytes| {
-            let resource = T::decode(bytes)?;
-            Ok(DecodedResource::new(resource))
+        let decoder: DecoderFn = Box::new(|bytes| match crate::resource::decode::<T>(bytes) {
+            crate::resource::DecodeResult::Success { name, resource } => {
+                crate::resource::DecodeResult::Success {
+                    name: name.clone(),
+                    resource: DecodedResource::new(name, resource),
+                }
+            }
+            crate::resource::DecodeResult::ResourceError { name, error } => {
+                crate::resource::DecodeResult::ResourceError { name, error }
+            }
+            crate::resource::DecodeResult::TopLevelError(error) => {
+                crate::resource::DecodeResult::TopLevelError(error)
+            }
         });
 
         let _ = self.command_tx.unbounded_send(WorkerCommand::Watch {
@@ -142,6 +152,7 @@ impl XdsClient {
             watcher_id,
             event_tx,
             decoder,
+            all_resources_required_in_sotw: T::ALL_RESOURCES_REQUIRED_IN_SOTW,
         });
 
         ResourceWatcher::new(event_rx, watcher_id, self.command_tx.clone())
