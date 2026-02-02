@@ -7,20 +7,23 @@
 use bytes::Bytes;
 
 /// A discovery request to send to the xDS server.
+///
+/// This struct borrows data to avoid unnecessary allocations when encoding.
+/// The data only needs to live long enough for the codec to encode it.
 #[derive(Debug, Clone)]
-pub struct DiscoveryRequest {
+pub struct DiscoveryRequest<'a> {
     /// The version_info provided in the most recent successfully processed
     /// response for this type, or empty for the first request.
-    pub version_info: String,
+    pub version_info: &'a str,
     /// The node making the request.
-    pub node: Node,
+    pub node: &'a Node,
     /// List of resource names to subscribe to.
-    pub resource_names: Vec<String>,
+    pub resource_names: &'a [String],
     /// Type URL of the resource being requested.
-    pub type_url: String,
+    pub type_url: &'a str,
     /// The nonce from the most recent successfully processed response,
     /// or empty for the first request.
-    pub response_nonce: String,
+    pub response_nonce: &'a str,
     /// Error details if this is a NACK (negative acknowledgment).
     pub error_detail: Option<ErrorDetail>,
 }

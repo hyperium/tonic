@@ -131,7 +131,10 @@ impl TypeState {
 
     /// Recalculate subscription mode from watchers.
     fn recalculate_subscriptions(&mut self) {
-        let has_wildcard = self.watchers.values().any(|entry| entry.name.is_empty());
+        let has_wildcard = self
+            .watchers
+            .values()
+            .any(|entry| entry.subscription.is_wildcard());
 
         if has_wildcard {
             self.subscription = SubscriptionMode::Wildcard;
@@ -139,7 +142,10 @@ impl TypeState {
             let names: HashSet<String> = self
                 .watchers
                 .values()
-                .map(|entry| entry.name.clone())
+                .filter_map(|entry| match &entry.subscription {
+                    WatcherSubscription::Named(name) => Some(name.clone()),
+                    WatcherSubscription::Wildcard => None,
+                })
                 .collect();
             self.subscription = SubscriptionMode::Named(names);
         }
@@ -151,13 +157,47 @@ impl TypeState {
     }
 }
 
+/// Specifies which resources a watcher is interested in.
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum WatcherSubscription {
+    /// Wildcard subscription - receive all resources of this type.
+    Wildcard,
+    /// Named subscription - receive only the specified resource.
+    Named(String),
+}
+
+impl WatcherSubscription {
+    /// Create a subscription from a resource name.
+    /// Empty string is treated as wildcard.
+    fn from_name(name: String) -> Self {
+        if name.is_empty() {
+            Self::Wildcard
+        } else {
+            Self::Named(name)
+        }
+    }
+
+    /// Check if this subscription matches a resource name.
+    fn matches(&self, resource_name: &str) -> bool {
+        match self {
+            Self::Wildcard => true,
+            Self::Named(name) => name == resource_name,
+        }
+    }
+
+    /// Returns true if this is a wildcard subscription.
+    fn is_wildcard(&self) -> bool {
+        matches!(self, Self::Wildcard)
+    }
+}
+
 /// Per-watcher state.
 #[derive(Debug)]
 struct WatcherEntry {
     /// Channel to send events to this watcher.
     event_tx: mpsc::Sender<ResourceEvent<DecodedResource>>,
-    /// Resource name this watcher subscribed to (empty = wildcard).
-    name: String,
+    /// What resources this watcher is subscribed to.
+    subscription: WatcherSubscription,
 }
 
 /// The ADS worker manages the xDS stream and dispatches resources to watchers.
@@ -252,10 +292,10 @@ where
                 }
             };
 
-            if self.run_connected(stream).await {
-                return; // shutdown
+            match self.run_connected(stream).await {
+                Ok(()) => return, // shutdown
+                Err(_e) => continue, // reconnect
             }
-            // else: reconnect
         }
     }
 
@@ -274,11 +314,11 @@ where
             let resource_names = type_state.resource_names_for_request();
 
             let request = DiscoveryRequest {
-                node: self.node.clone(),
-                type_url: type_url.clone(),
-                resource_names,
-                version_info: type_state.version_info.clone(),
-                response_nonce: String::new(), // Initial request has empty nonce
+                node: &self.node,
+                type_url,
+                resource_names: &resource_names,
+                version_info: &type_state.version_info,
+                response_nonce: "", // Initial request has empty nonce
                 error_detail: None,
             };
 
@@ -292,30 +332,28 @@ where
 
     /// Run the main event loop while connected.
     ///
-    /// Returns `true` if the worker should shut down, `false` to reconnect.
-    async fn run_connected<S: TransportStream>(&mut self, mut stream: S) -> bool {
+    /// Returns `Ok(())` if the worker should shut down (command channel closed).
+    /// Returns `Err` if an error occurred and the worker should reconnect.
+    async fn run_connected<S: TransportStream>(&mut self, mut stream: S) -> Result<()> {
         loop {
             futures::select! {
                 result = stream.recv().fuse() => {
                     match result {
                         Ok(Some(bytes)) => {
-                            if let Err(_e) = self.handle_response(&mut stream, bytes).await {
-                                return false;
-                            }
+                            self.handle_response(&mut stream, bytes).await?;
                         }
-                        Ok(None) => return false,
-                        Err(_e) => return false,
+                        // Stream closed by server; return Err to trigger reconnection
+                        Ok(None) => return Err(Error::StreamClosed),
+                        Err(e) => return Err(e),
                     }
                 }
 
                 cmd = self.command_rx.next() => {
                     match cmd {
                         Some(cmd) => {
-                            if let Err(_e) = self.handle_command(Some(&mut stream), cmd).await {
-                                return false;
-                            }
+                            self.handle_command(Some(&mut stream), cmd).await?;
                         }
-                        None => return true,
+                        None => return Ok(()),
                     }
                 }
             }
@@ -374,9 +412,13 @@ where
 
         let old_subscription = type_state.subscription.clone();
 
-        type_state
-            .watchers
-            .insert(watcher_id, WatcherEntry { event_tx, name });
+        type_state.watchers.insert(
+            watcher_id,
+            WatcherEntry {
+                event_tx,
+                subscription: WatcherSubscription::from_name(name),
+            },
+        );
         type_state.recalculate_subscriptions();
 
         type_state.subscription != old_subscription
@@ -414,12 +456,13 @@ where
             None => return Ok(()),
         };
 
+        let resource_names = type_state.resource_names_for_request();
         let request = DiscoveryRequest {
-            node: self.node.clone(),
-            type_url: type_url.to_string(),
-            resource_names: type_state.resource_names_for_request(),
-            version_info: type_state.version_info.clone(),
-            response_nonce: type_state.nonce.clone(),
+            node: &self.node,
+            type_url,
+            resource_names: &resource_names,
+            version_info: &type_state.version_info,
+            response_nonce: &type_state.nonce,
             error_detail: None,
         };
 
@@ -497,7 +540,7 @@ where
             Some(s) => s
                 .watchers
                 .iter()
-                .map(|(id, entry)| (*id, entry.event_tx.clone(), entry.name.clone()))
+                .map(|(id, entry)| (*id, entry.event_tx.clone(), entry.subscription.clone()))
                 .collect(),
             None => return processing_done_futures,
         };
@@ -506,11 +549,8 @@ where
             let resource_name = resource.name().to_string();
             let resource = Arc::new(resource);
 
-            for (_watcher_id, mut event_tx, watcher_name) in watcher_info.clone() {
-                // Watcher is interested if:
-                // - It's a wildcard watcher (empty name), or
-                // - Its name matches the resource name
-                if watcher_name.is_empty() || watcher_name == resource_name {
+            for (_watcher_id, mut event_tx, subscription) in watcher_info.clone() {
+                if subscription.matches(&resource_name) {
                     let (done, rx) = ProcessingDone::channel();
                     let event = ResourceEvent::ResourceChanged {
                         resource: Arc::clone(&resource),
@@ -557,12 +597,13 @@ where
             None => return Ok(()),
         };
 
+        let resource_names = type_state.resource_names_for_request();
         let request = DiscoveryRequest {
-            node: self.node.clone(),
-            type_url: response.type_url.clone(),
-            resource_names: type_state.resource_names_for_request(),
-            version_info: response.version_info.clone(),
-            response_nonce: response.nonce.clone(),
+            node: &self.node,
+            type_url: &response.type_url,
+            resource_names: &resource_names,
+            version_info: &response.version_info,
+            response_nonce: &response.nonce,
             error_detail: None,
         };
 
@@ -582,12 +623,13 @@ where
             None => return Ok(()),
         };
 
+        let resource_names = type_state.resource_names_for_request();
         let request = DiscoveryRequest {
-            node: self.node.clone(),
-            type_url: response.type_url.clone(),
-            resource_names: type_state.resource_names_for_request(),
-            version_info: type_state.version_info.clone(), // Keep old version for NACK
-            response_nonce: response.nonce.clone(),
+            node: &self.node,
+            type_url: &response.type_url,
+            resource_names: &resource_names,
+            version_info: &type_state.version_info, // Keep old version for NACK
+            response_nonce: &response.nonce,
             error_detail: Some(ErrorDetail {
                 code: 3, // INVALID_ARGUMENT
                 message: error_message,

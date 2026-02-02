@@ -5,6 +5,7 @@ use crate::message::Node;
 
 /// Configuration for the xDS client.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct ClientConfig {
     /// Node identification sent to the xDS server.
     pub node: Node,
