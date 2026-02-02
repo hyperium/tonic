@@ -96,7 +96,6 @@ impl SubscriptionMode {
 
 /// State of a cached resource per gRFC A88.
 #[derive(Debug, Clone)]
-#[allow(dead_code)] // Requested state used for future subscription tracking
 enum ResourceState {
     /// Resource has been requested but not yet received.
     Requested,
@@ -120,7 +119,6 @@ struct CachedResource {
 
 impl CachedResource {
     /// Create a new cached resource in Requested state.
-    #[allow(dead_code)] // Used for future subscription tracking
     fn requested() -> Self {
         Self {
             state: ResourceState::Requested,
@@ -535,6 +533,10 @@ where
                     // Send cached state to watcher (non-blocking, ignore if full)
                     let _ = event_tx.try_send(event);
                 }
+            } else {
+                type_state
+                    .cache
+                    .insert(resource_name.clone(), CachedResource::requested());
             }
         }
 
