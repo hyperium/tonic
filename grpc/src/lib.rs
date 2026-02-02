@@ -32,6 +32,7 @@
 #![allow(dead_code, unused_variables)]
 
 pub mod client;
+pub mod core;
 pub mod credentials;
 pub mod inmemory;
 mod macros;

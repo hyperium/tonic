@@ -54,7 +54,7 @@ tower = { version = "0.5.2", features = [
     "buffer",
 ], optional = true }
 tower-service = "0.3.3"
-trait-variant = "0.1"
+trait-variant = "0.1.2"
 url = "2.5.0"
 
 [dev-dependencies]
