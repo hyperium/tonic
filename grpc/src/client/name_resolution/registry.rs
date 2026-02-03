@@ -22,12 +22,11 @@
  *
  */
 
+use super::ResolverBuilder;
 use std::{
     collections::HashMap,
     sync::{Arc, Mutex, OnceLock},
 };
-
-use super::ResolverBuilder;
 
 static GLOBAL_RESOLVER_REGISTRY: OnceLock<ResolverRegistry> = OnceLock::new();
 

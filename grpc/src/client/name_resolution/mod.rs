@@ -131,6 +131,14 @@ impl Display for Target {
     }
 }
 
+/// Returns a default target that can be used when the user does not provide a valid one.
+pub(crate) fn default_target() -> Target {
+    match Target::from_str("inert:///target") {
+        Ok(t) => t,
+        Err(_) => unreachable!("Failed to parse default target URI."),
+    }
+}
+
 /// A name resolver factory that produces Resolver instances used by the channel
 /// to resolve network addresses for the target URI.
 pub(crate) trait ResolverBuilder: Send + Sync {
@@ -155,10 +163,6 @@ pub(crate) trait ResolverBuilder: Send + Sync {
         let path = target.path();
         path.strip_prefix("/").unwrap_or(path).to_string()
     }
-
-    /// Returns a bool indicating whether the input uri is valid to create a
-    /// resolver.
-    fn is_valid_uri(&self, uri: &Target) -> bool;
 }
 
 /// A collection of data configured on the channel that is constructing this
@@ -341,6 +345,29 @@ impl Resolver for NopResolver {
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         let _ = channel_controller.update(self.update.clone());
+    }
+}
+
+// A builder for a resolver that will always fail with a configuration error.
+pub(crate) struct MisconfiguredBuilder {
+    pub(crate) error: String,
+}
+
+impl ResolverBuilder for MisconfiguredBuilder {
+    fn build(&self, _target: &Target, options: ResolverOptions) -> Box<dyn Resolver> {
+        options.work_scheduler.schedule_work();
+        Box::new(NopResolver {
+            update: ResolverUpdate {
+                endpoints: Err(self.error.clone()),
+                service_config: Ok(None),
+                attributes: Attributes {},
+                resolution_note: None,
+            },
+        })
+    }
+
+    fn scheme(&self) -> &'static str {
+        "configuration-error"
     }
 }
 

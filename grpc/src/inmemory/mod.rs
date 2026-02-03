@@ -141,10 +141,6 @@ impl ResolverBuilder for InMemoryResolverBuilder {
         options.work_scheduler.schedule_work();
         Box::new(NopResolver { id })
     }
-
-    fn is_valid_uri(&self, uri: &crate::client::name_resolution::Target) -> bool {
-        true
-    }
 }
 
 struct NopResolver {
