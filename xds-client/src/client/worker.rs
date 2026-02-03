@@ -168,10 +168,14 @@ impl CachedResource {
     fn to_event(&self) -> Option<ResourceEvent<DecodedResource>> {
         let (done, _rx) = ProcessingDone::channel();
         match &self.state {
-            ResourceState::Received => self.resource.as_ref().map(|r| ResourceEvent::ResourceChanged {
-                result: Ok(Arc::clone(r)),
-                done,
-            }),
+            ResourceState::Received => {
+                self.resource
+                    .as_ref()
+                    .map(|r| ResourceEvent::ResourceChanged {
+                        result: Ok(Arc::clone(r)),
+                        done,
+                    })
+            }
             ResourceState::DoesNotExist => Some(ResourceEvent::ResourceChanged {
                 result: Err(Error::ResourceDoesNotExist),
                 done,
