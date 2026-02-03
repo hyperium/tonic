@@ -8,7 +8,7 @@ use crate::client::worker::{AdsWorker, WatcherId, WorkerCommand};
 use crate::codec::XdsCodec;
 use crate::resource::{DecodedResource, DecoderFn, Resource};
 use crate::runtime::Runtime;
-use crate::transport::Transport;
+use crate::transport::TransportBuilder;
 
 pub mod config;
 pub mod retry;
@@ -17,24 +17,24 @@ pub mod worker;
 
 /// Builder for [`XdsClient`].
 #[derive(Debug)]
-pub struct XdsClientBuilder<T, C, R> {
+pub struct XdsClientBuilder<TB, C, R> {
     config: ClientConfig,
-    transport: T,
+    transport_builder: TB,
     codec: C,
     runtime: R,
 }
 
-impl<T, C, R> XdsClientBuilder<T, C, R>
+impl<TB, C, R> XdsClientBuilder<TB, C, R>
 where
-    T: Transport,
+    TB: TransportBuilder,
     C: XdsCodec,
     R: Runtime,
 {
-    /// Create a new builder with the given configuration, transport, codec, and runtime.
-    pub fn new(config: ClientConfig, transport: T, codec: C, runtime: R) -> Self {
+    /// Create a new builder with the given configuration, transport builder, codec, and runtime.
+    pub fn new(config: ClientConfig, transport_builder: TB, codec: C, runtime: R) -> Self {
         Self {
             config,
-            transport,
+            transport_builder,
             codec,
             runtime,
         }
@@ -48,11 +48,12 @@ where
         let (command_tx, command_rx) = mpsc::unbounded();
 
         let worker = AdsWorker::new(
-            self.transport,
+            self.transport_builder,
             self.codec,
             self.runtime.clone(),
             self.config.node,
             self.config.retry_policy,
+            self.config.servers,
             command_rx,
         );
 
@@ -82,19 +83,19 @@ pub struct XdsClient {
 const WATCHER_CHANNEL_BUFFER_SIZE: usize = 16;
 
 impl XdsClient {
-    /// Create a new builder with the given configuration, transport, codec, and runtime.
-    pub fn builder<T, C, R>(
+    /// Create a new builder with the given configuration, transport builder, codec, and runtime.
+    pub fn builder<TB, C, R>(
         config: ClientConfig,
-        transport: T,
+        transport_builder: TB,
         codec: C,
         runtime: R,
-    ) -> XdsClientBuilder<T, C, R>
+    ) -> XdsClientBuilder<TB, C, R>
     where
-        T: Transport,
+        TB: TransportBuilder,
         C: XdsCodec,
         R: Runtime,
     {
-        XdsClientBuilder::new(config, transport, codec, runtime)
+        XdsClientBuilder::new(config, transport_builder, codec, runtime)
     }
 
     /// Watch a resource by name.

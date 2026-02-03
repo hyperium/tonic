@@ -4,8 +4,9 @@
 //! to send and receive raw bytes, allowing the xDS client layer to handle
 //! serialization/deserialization independently.
 
+use crate::client::config::ServerConfig;
 use crate::error::{Error, Result};
-use crate::transport::{Transport, TransportStream};
+use crate::transport::{Transport, TransportBuilder, TransportStream};
 use bytes::{Buf, BufMut, Bytes};
 use http::uri::PathAndQuery;
 use tokio::sync::mpsc;
@@ -117,6 +118,54 @@ impl TonicTransport {
             .await
             .map_err(|e| Error::Connection(e.to_string()))?;
         Ok(Self { channel })
+    }
+}
+
+/// Builder for creating [`TonicTransport`] instances.
+///
+/// This implements [`TransportBuilder`] and can be used with [`XdsClientBuilder`]
+/// to enable server fallback support.
+///
+/// For connections requiring TLS or custom channel configuration, see the
+/// example in [`TonicTransport::from_channel`].
+///
+/// # Example
+///
+/// ```ignore
+/// use xds_client::{ClientConfig, Node, TonicTransportBuilder, XdsClient};
+///
+/// let transport_builder = TonicTransportBuilder::new();
+/// let config = ClientConfig::new(node, "http://xds.example.com:18000");
+/// let client = XdsClient::builder(config, transport_builder, codec, runtime).build();
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct TonicTransportBuilder {
+    // Future extensions:
+    // - TLS configuration (requires tonic TLS feature)
+    // - Connection timeout settings
+    // - Keep-alive configuration
+    // - Connection pooling settings
+    // - Per-server credential overrides (via ServerConfig.extensions)
+}
+
+impl TonicTransportBuilder {
+    /// Create a new transport builder with default settings.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl TransportBuilder for TonicTransportBuilder {
+    type Transport = TonicTransport;
+
+    async fn build(&self, server: &ServerConfig) -> Result<Self::Transport> {
+        let channel = Channel::from_shared(server.uri.clone())
+            .map_err(|e| Error::Connection(e.to_string()))?
+            .connect()
+            .await
+            .map_err(|e| Error::Connection(e.to_string()))?;
+
+        Ok(TonicTransport::from_channel(channel))
     }
 }
 

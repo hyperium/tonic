@@ -9,20 +9,20 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
 
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, SinkExt, StreamExt};
 
-use crate::client::retry::RetryPolicy;
+use crate::client::config::ServerConfig;
+use crate::client::retry::{Backoff, RetryPolicy};
 use crate::client::watch::{ProcessingDone, ResourceEvent};
 use crate::codec::XdsCodec;
 use crate::error::{Error, Result};
 use crate::message::{DiscoveryRequest, DiscoveryResponse, ErrorDetail, Node};
 use crate::resource::{DecodedResource, DecoderFn};
 use crate::runtime::Runtime;
-use crate::transport::{Transport, TransportStream};
+use crate::transport::{Transport, TransportBuilder, TransportStream};
 
 /// Global counter for generating unique watcher IDs.
 static NEXT_WATCHER_ID: AtomicU64 = AtomicU64::new(1);
@@ -271,49 +271,51 @@ struct WatcherEntry {
 }
 
 /// The ADS worker manages the xDS stream and dispatches resources to watchers.
-pub(crate) struct AdsWorker<T, C, R> {
-    /// Transport for creating streams.
-    transport: T,
+pub(crate) struct AdsWorker<TB, C, R> {
+    /// Transport builder for creating transports to xDS servers.
+    transport_builder: TB,
     /// Codec for encoding/decoding messages.
     codec: C,
     /// Runtime for spawning tasks and sleeping.
     runtime: R,
     /// Node identification.
     node: Node,
-    /// Retry configuration.
-    retry_policy: RetryPolicy,
+    /// Backoff calculator for reconnection attempts.
+    backoff: Backoff,
+    /// Priority-ordered list of xDS servers.
+    /// Index 0 has the highest priority.
+    servers: Vec<ServerConfig>,
     /// Receiver for commands from XdsClient.
     command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
     /// Per-type_url state.
     type_states: HashMap<String, TypeState>,
-    /// Current backoff duration for reconnection.
-    current_backoff: Duration,
 }
 
-impl<T, C, R> AdsWorker<T, C, R>
+impl<TB, C, R> AdsWorker<TB, C, R>
 where
-    T: Transport,
+    TB: TransportBuilder,
     C: XdsCodec,
     R: Runtime,
 {
     /// Create a new worker.
     pub(crate) fn new(
-        transport: T,
+        transport_builder: TB,
         codec: C,
         runtime: R,
         node: Node,
         retry_policy: RetryPolicy,
+        servers: Vec<ServerConfig>,
         command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
     ) -> Self {
         Self {
-            transport,
+            transport_builder,
             codec,
             runtime,
             node,
-            retry_policy: retry_policy.clone(),
+            backoff: Backoff::new(retry_policy),
+            servers,
             command_rx,
             type_states: HashMap::new(),
-            current_backoff: retry_policy.initial_backoff,
         }
     }
 
@@ -329,42 +331,60 @@ where
             while self.type_states.is_empty() {
                 match self.command_rx.next().await {
                     Some(cmd) => {
-                        let _ = self.handle_command::<T::Stream>(None, cmd).await;
+                        let _ = self
+                            .handle_command::<<TB::Transport as Transport>::Stream>(None, cmd)
+                            .await;
                     }
                     None => return,
                 }
             }
 
-            // Nonce are tied to the stream
+            // Nonces are tied to the stream
             for type_state in self.type_states.values_mut() {
                 type_state.nonce.clear();
             }
 
-            let stream = match self
-                .transport
-                .new_stream(self.build_initial_requests())
-                .await
-            {
+            // Connect to server.
+            // Future extension (gRFC A71): Try servers in priority order with fallback.
+            let server = match self.servers.first() {
+                Some(s) => s,
+                None => return, // No servers configured
+            };
+
+            let transport = match self.transport_builder.build(server).await {
+                Ok(t) => t,
+                Err(_) => {
+                    match self.backoff.next_backoff() {
+                        Some(backoff) => self.runtime.sleep(backoff).await,
+                        None => return, // Max attempts exceeded
+                    }
+                    continue;
+                }
+            };
+
+            let stream = match transport.new_stream(self.build_initial_requests()).await {
                 Ok(s) => {
-                    self.current_backoff = self.retry_policy.initial_backoff;
+                    self.backoff.reset();
                     s
                 }
                 Err(_) => {
-                    self.runtime.sleep(self.current_backoff).await;
-                    self.current_backoff = std::cmp::min(
-                        Duration::from_secs_f64(
-                            self.current_backoff.as_secs_f64()
-                                * self.retry_policy.backoff_multiplier,
-                        ),
-                        self.retry_policy.max_backoff,
-                    );
+                    match self.backoff.next_backoff() {
+                        Some(backoff) => self.runtime.sleep(backoff).await,
+                        None => return, // Max attempts exceeded
+                    }
                     continue;
                 }
             };
 
             match self.run_connected(stream).await {
                 Ok(()) => return, // shutdown
-                Err(_e) => continue, // reconnect
+                Err(_e) => {
+                    match self.backoff.next_backoff() {
+                        Some(backoff) => self.runtime.sleep(backoff).await,
+                        None => return, // Max attempts exceeded
+                    }
+                    continue;
+                }
             }
         }
     }
@@ -695,7 +715,7 @@ where
             if !per_resource_errors.is_empty() {
                 let per_resource_msg = per_resource_errors
                     .iter()
-                    .map(|(name, err)| format!("{}: {}", name, err))
+                    .map(|(name, err)| format!("{name}: {err}"))
                     .collect::<Vec<_>>()
                     .join("; ");
                 error_parts.push(per_resource_msg);

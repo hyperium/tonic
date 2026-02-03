@@ -59,8 +59,8 @@ pub mod resource;
 pub mod runtime;
 pub mod transport;
 
-pub use client::config::ClientConfig;
-pub use client::retry::RetryPolicy;
+pub use client::config::{ClientConfig, ServerConfig};
+pub use client::retry::{Backoff, RetryPolicy};
 pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
 pub use client::{XdsClient, XdsClientBuilder};
 pub use codec::XdsCodec;
@@ -68,7 +68,7 @@ pub use error::{Error, Result};
 pub use message::{DiscoveryRequest, DiscoveryResponse, ErrorDetail, Locality, Node, ResourceAny};
 pub use resource::{DecodeResult, DecodedResource, Resource};
 pub use runtime::Runtime;
-pub use transport::{Transport, TransportStream};
+pub use transport::{Transport, TransportBuilder, TransportStream};
 
 // Tokio runtime
 #[cfg(feature = "rt-tokio")]
@@ -76,7 +76,7 @@ pub use runtime::tokio::TokioRuntime;
 
 // Tonic transport
 #[cfg(feature = "transport-tonic")]
-pub use transport::tonic::TonicTransport;
+pub use transport::tonic::{TonicTransport, TonicTransportBuilder};
 
 // Prost codec
 #[cfg(feature = "codegen-prost")]

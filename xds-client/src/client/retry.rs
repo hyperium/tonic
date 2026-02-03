@@ -16,9 +16,9 @@ use crate::error::{Error, Result};
 /// use std::time::Duration;
 ///
 /// let policy = RetryPolicy::default()
-///     .with_initial_backoff(Duration::from_secs(1))
-///     .with_max_backoff(Duration::from_secs(30))
-///     .with_backoff_multiplier(2.0);
+///     .with_initial_backoff(Duration::from_secs(1)).unwrap()
+///     .with_max_backoff(Duration::from_secs(30)).unwrap()
+///     .with_backoff_multiplier(2.0).unwrap();
 /// ```
 #[derive(Debug, Clone)]
 pub struct RetryPolicy {
@@ -216,5 +216,58 @@ impl Default for RetryPolicy {
             backoff_multiplier: 2.0,
             max_attempts: None,
         }
+    }
+}
+
+/// Stateful backoff calculator based on a [`RetryPolicy`].
+///
+/// This struct tracks the current attempt number and provides methods to
+/// get the next backoff duration and reset after successful operations.
+///
+/// # Example
+///
+/// ```
+/// use xds_client::{Backoff, RetryPolicy};
+/// use std::time::Duration;
+///
+/// let mut backoff = Backoff::new(RetryPolicy::default());
+///
+/// // First failure: get initial backoff
+/// assert_eq!(backoff.next_backoff(), Some(Duration::from_secs(1)));
+///
+/// // Second failure: backoff doubles
+/// assert_eq!(backoff.next_backoff(), Some(Duration::from_secs(2)));
+///
+/// // Success: reset for next failure sequence
+/// backoff.reset();
+/// assert_eq!(backoff.next_backoff(), Some(Duration::from_secs(1)));
+/// ```
+#[derive(Debug, Clone)]
+pub struct Backoff {
+    policy: RetryPolicy,
+    attempt: usize,
+}
+
+impl Backoff {
+    /// Create a new backoff calculator from a retry policy.
+    pub fn new(policy: RetryPolicy) -> Self {
+        Self { policy, attempt: 0 }
+    }
+
+    /// Get the next backoff duration and advance the attempt counter.
+    ///
+    /// Returns `None` if `max_attempts` is set and has been exceeded.
+    pub fn next_backoff(&mut self) -> Option<Duration> {
+        let duration = self.policy.backoff_duration(self.attempt)?;
+        self.attempt += 1;
+        Some(duration)
+    }
+
+    /// Reset the backoff after a successful operation.
+    ///
+    /// This resets the attempt counter to 0, so the next failure will
+    /// use the initial backoff duration.
+    pub fn reset(&mut self) {
+        self.attempt = 0;
     }
 }
