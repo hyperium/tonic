@@ -1,6 +1,6 @@
 [package]
 name = "tonic-prost"
-version = "0.14.1"
+version = "0.14.3"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
