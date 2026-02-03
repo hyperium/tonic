@@ -1,5 +1,7 @@
 //! Configuration for the xDS client.
 
+use std::time::Duration;
+
 use crate::client::retry::RetryPolicy;
 use crate::message::Node;
 
@@ -22,6 +24,9 @@ impl ServerConfig {
     }
 }
 
+/// Default timeout for initial resource response (30 seconds per gRFC A57).
+pub const DEFAULT_RESOURCE_INITIAL_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// Configuration for the xDS client.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
@@ -40,6 +45,14 @@ pub struct ClientConfig {
     /// to the next server if the current one is unavailable (per gRFC A71).
     /// Index 0 has the highest priority.
     pub servers: Vec<ServerConfig>,
+
+    /// Timeout for initial resource response (gRFC A57).
+    ///
+    /// If a watched resource is not received within this duration after the watch
+    /// is registered, watchers receive a `ResourceDoesNotExist` error.
+    ///
+    /// Default: 30 seconds. Set to `None` to disable the timeout.
+    pub resource_initial_timeout: Option<Duration>,
     // Future extensions:
     // - `authorities: HashMap<String, AuthorityConfig>` for xDS federation (gRFC A47)
     // - Locality / zone information for locality-aware routing
@@ -66,6 +79,7 @@ impl ClientConfig {
             node,
             retry_policy: RetryPolicy::default(),
             servers: vec![ServerConfig::new(server_uri)],
+            resource_initial_timeout: Some(DEFAULT_RESOURCE_INITIAL_TIMEOUT),
         }
     }
 
@@ -89,6 +103,7 @@ impl ClientConfig {
             node,
             retry_policy: RetryPolicy::default(),
             servers,
+            resource_initial_timeout: Some(DEFAULT_RESOURCE_INITIAL_TIMEOUT),
         }
     }
 
@@ -110,6 +125,34 @@ impl ClientConfig {
     /// ```
     pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
         self.retry_policy = policy;
+        self
+    }
+
+    /// Set the timeout for initial resource response (gRFC A57).
+    ///
+    /// If a watched resource is not received within this duration after the watch
+    /// is registered, watchers receive a `ResourceDoesNotExist` error.
+    ///
+    /// Set to `None` to disable the timeout.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use xds_client::{ClientConfig, Node};
+    /// use std::time::Duration;
+    ///
+    /// let node = Node::new("grpc", "1.0");
+    ///
+    /// // Use a custom timeout
+    /// let config = ClientConfig::new(node.clone(), "https://xds.example.com:443")
+    ///     .with_resource_initial_timeout(Some(Duration::from_secs(60)));
+    ///
+    /// // Disable the timeout
+    /// let config = ClientConfig::new(node, "https://xds.example.com:443")
+    ///     .with_resource_initial_timeout(None);
+    /// ```
+    pub fn with_resource_initial_timeout(mut self, timeout: Option<Duration>) -> Self {
+        self.resource_initial_timeout = timeout;
         self
     }
 }

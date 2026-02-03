@@ -9,13 +9,14 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::time::Duration;
 
 use bytes::Bytes;
 use futures::channel::{mpsc, oneshot};
 use futures::{FutureExt, SinkExt, StreamExt};
 
-use crate::client::config::ServerConfig;
-use crate::client::retry::{Backoff, RetryPolicy};
+use crate::client::config::{ClientConfig, ServerConfig};
+use crate::client::retry::Backoff;
 use crate::client::watch::{ProcessingDone, ResourceEvent};
 use crate::codec::XdsCodec;
 use crate::error::{Error, Result};
@@ -65,6 +66,13 @@ pub(crate) enum WorkerCommand {
     Unwatch {
         /// The watcher to remove.
         watcher_id: WatcherId,
+    },
+    /// Timer expired for a resource that was never received (gRFC A57).
+    ResourceTimerExpired {
+        /// The type URL of the resource.
+        type_url: String,
+        /// The resource name.
+        name: String,
     },
 }
 
@@ -149,6 +157,32 @@ impl CachedResource {
             resource: None,
         }
     }
+
+    /// Returns true if the resource is in Requested state (waiting for server response).
+    fn is_requested(&self) -> bool {
+        matches!(self.state, ResourceState::Requested)
+    }
+
+    /// Convert cached state to a ResourceEvent for notifying watchers.
+    /// Returns None if state is Requested (nothing to notify yet).
+    fn to_event(&self) -> Option<ResourceEvent<DecodedResource>> {
+        let (done, _rx) = ProcessingDone::channel();
+        match &self.state {
+            ResourceState::Received => self.resource.as_ref().map(|r| ResourceEvent::ResourceChanged {
+                result: Ok(Arc::clone(r)),
+                done,
+            }),
+            ResourceState::DoesNotExist => Some(ResourceEvent::ResourceChanged {
+                result: Err(Error::ResourceDoesNotExist),
+                done,
+            }),
+            ResourceState::NACKed(error) => Some(ResourceEvent::ResourceChanged {
+                result: Err(Error::Validation(error.clone())),
+                done,
+            }),
+            ResourceState::Requested => None,
+        }
+    }
 }
 
 /// Per-type_url state tracking.
@@ -225,6 +259,15 @@ impl TypeState {
     fn resource_names_for_request(&self) -> Vec<String> {
         self.subscription.resource_names_for_request()
     }
+
+    /// Get senders for all watchers interested in a specific resource.
+    fn matching_watchers(&self, name: &str) -> Vec<mpsc::Sender<ResourceEvent<DecodedResource>>> {
+        self.watchers
+            .values()
+            .filter(|e| e.subscription.matches(name))
+            .map(|e| e.event_tx.clone())
+            .collect()
+    }
 }
 
 /// Specifies which resources a watcher is interested in.
@@ -285,6 +328,10 @@ pub(crate) struct AdsWorker<TB, C, R> {
     /// Priority-ordered list of xDS servers.
     /// Index 0 has the highest priority.
     servers: Vec<ServerConfig>,
+    /// Timeout for initial resource response (gRFC A57). None = disabled.
+    resource_initial_timeout: Option<Duration>,
+    /// Sender for timer callback commands.
+    command_tx: mpsc::UnboundedSender<WorkerCommand>,
     /// Receiver for commands from XdsClient.
     command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
     /// Per-type_url state.
@@ -302,18 +349,19 @@ where
         transport_builder: TB,
         codec: C,
         runtime: R,
-        node: Node,
-        retry_policy: RetryPolicy,
-        servers: Vec<ServerConfig>,
+        config: ClientConfig,
+        command_tx: mpsc::UnboundedSender<WorkerCommand>,
         command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
     ) -> Self {
         Self {
             transport_builder,
             codec,
             runtime,
-            node,
-            backoff: Backoff::new(retry_policy),
-            servers,
+            node: config.node,
+            backoff: Backoff::new(config.retry_policy),
+            servers: config.servers,
+            resource_initial_timeout: config.resource_initial_timeout,
+            command_tx,
             command_rx,
             type_states: HashMap::new(),
         }
@@ -488,6 +536,9 @@ where
                     }
                 }
             }
+            WorkerCommand::ResourceTimerExpired { type_url, name } => {
+                self.handle_resource_timeout(&type_url, &name).await;
+            }
         }
         Ok(())
     }
@@ -508,55 +559,31 @@ where
         let type_url_string = type_url.to_string();
         let type_state = self
             .type_states
-            .entry(type_url_string)
+            .entry(type_url_string.clone())
             .or_insert_with(|| TypeState::new(decoder, all_resources_required_in_sotw));
 
         let old_subscription = type_state.subscription.clone();
         let watcher_subscription = WatcherSubscription::from_name(name.clone());
 
-        // Check cache and send cached state to new watcher if available.
-        // For named subscriptions, check the specific resource.
-        // For wildcard subscriptions, we don't send cached resources immediately
-        // (they'll receive updates as they come in).
-        if let WatcherSubscription::Named(ref resource_name) = watcher_subscription {
-            if let Some(cached) = type_state.cache.get(resource_name) {
-                let event = match &cached.state {
-                    ResourceState::Received => {
-                        if let Some(ref resource) = cached.resource {
-                            let (done, _rx) = ProcessingDone::channel();
-                            Some(ResourceEvent::ResourceChanged {
-                                result: Ok(Arc::clone(resource)),
-                                done,
-                            })
-                        } else {
-                            None
-                        }
-                    }
-                    ResourceState::DoesNotExist => {
-                        let (done, _rx) = ProcessingDone::channel();
-                        Some(ResourceEvent::ResourceChanged {
-                            result: Err(Error::ResourceDoesNotExist),
-                            done,
-                        })
-                    }
-                    ResourceState::NACKed(error) => {
-                        let (done, _rx) = ProcessingDone::channel();
-                        Some(ResourceEvent::ResourceChanged {
-                            result: Err(Error::Validation(error.clone())),
-                            done,
-                        })
-                    }
-                    ResourceState::Requested => None,
-                };
+        // Track if we need to start a timer (resource in Requested state)
+        let mut start_timer_for: Option<String> = None;
 
-                if let Some(event) = event {
-                    // Send cached state to watcher (non-blocking, ignore if full)
-                    let _ = event_tx.try_send(event);
-                }
-            } else {
-                type_state
-                    .cache
-                    .insert(resource_name.clone(), CachedResource::requested());
+        // For named subscriptions, check cache and send cached state to new watcher.
+        // For wildcard subscriptions, watchers receive updates as they come in.
+        if let WatcherSubscription::Named(ref resource_name) = watcher_subscription {
+            let cached = type_state
+                .cache
+                .entry(resource_name.clone())
+                .or_insert_with(CachedResource::requested);
+
+            if let Some(event) = cached.to_event() {
+                // Send cached state to watcher (non-blocking, ignore if full)
+                let _ = event_tx.try_send(event);
+            }
+
+            if cached.is_requested() {
+                // Resource pending - start a timer (gRFC A57)
+                start_timer_for = Some(resource_name.clone());
             }
         }
 
@@ -569,7 +596,16 @@ where
         );
         type_state.recalculate_subscriptions();
 
-        type_state.subscription != old_subscription
+        let subscriptions_changed = type_state.subscription != old_subscription;
+
+        // Start timer if resource is in Requested state
+        if let (Some(resource_name), Some(timeout)) =
+            (start_timer_for, self.resource_initial_timeout)
+        {
+            self.start_resource_timer(&type_url_string, resource_name, timeout);
+        }
+
+        subscriptions_changed
     }
 
     /// Remove a watcher from the state.
@@ -777,24 +813,17 @@ where
     /// Per gRFC A46/A88, errors are routed only to watchers interested in
     /// that specific resource (plus wildcard watchers).
     async fn notify_resource_error(&mut self, type_url: &str, resource_name: &str, error: &str) {
-        if let Some(type_state) = self.type_states.get_mut(type_url) {
-            type_state.cache.insert(
-                resource_name.to_string(),
-                CachedResource::nacked(error.to_string()),
-            );
-        }
-
-        let watcher_senders: Vec<_> = match self.type_states.get(type_url) {
-            Some(s) => s
-                .watchers
-                .values()
-                .filter(|e| e.subscription.matches(resource_name))
-                .map(|e| e.event_tx.clone())
-                .collect(),
+        let type_state = match self.type_states.get_mut(type_url) {
+            Some(s) => s,
             None => return,
         };
 
-        for mut event_tx in watcher_senders {
+        type_state.cache.insert(
+            resource_name.to_string(),
+            CachedResource::nacked(error.to_string()),
+        );
+
+        for mut event_tx in type_state.matching_watchers(resource_name) {
             let (done, _rx) = ProcessingDone::channel();
             let event = ResourceEvent::ResourceChanged {
                 result: Err(Error::Validation(error.to_string())),
@@ -834,29 +863,19 @@ where
             .map(|(name, _)| name.clone())
             .collect();
 
-        for name in &deleted_names {
+        for name in deleted_names {
             type_state
                 .cache
                 .insert(name.clone(), CachedResource::does_not_exist());
-        }
 
-        let watchers_to_notify: Vec<_> = type_state
-            .watchers
-            .values()
-            .map(|e| (e.event_tx.clone(), e.subscription.clone()))
-            .collect();
-
-        for name in deleted_names {
-            for (mut event_tx, subscription) in watchers_to_notify.clone() {
-                if subscription.matches(&name) {
-                    let (done, rx) = ProcessingDone::channel();
-                    let event = ResourceEvent::ResourceChanged {
-                        result: Err(Error::ResourceDoesNotExist),
-                        done,
-                    };
-                    let _ = event_tx.send(event).await;
-                    processing_done_futures.push(rx);
-                }
+            for mut event_tx in type_state.matching_watchers(&name) {
+                let (done, rx) = ProcessingDone::channel();
+                let event = ResourceEvent::ResourceChanged {
+                    result: Err(Error::ResourceDoesNotExist),
+                    done,
+                };
+                let _ = event_tx.send(event).await;
+                processing_done_futures.push(rx);
             }
         }
 
@@ -915,5 +934,57 @@ where
 
         let bytes = self.codec.encode_request(&request)?;
         stream.send(bytes).await
+    }
+
+    /// Start a timer for a resource in Requested state (gRFC A57).
+    ///
+    /// When the timer fires, it sends a `ResourceTimerExpired` command.
+    /// The handler checks if the resource is still in Requested state before acting.
+    fn start_resource_timer(&self, type_url: &str, name: String, timeout: Duration) {
+        let type_url_owned = type_url.to_string();
+        let command_tx = self.command_tx.clone();
+        let runtime = self.runtime.clone();
+
+        self.runtime.spawn(async move {
+            runtime.sleep(timeout).await;
+            let _ = command_tx.unbounded_send(WorkerCommand::ResourceTimerExpired {
+                type_url: type_url_owned,
+                name,
+            });
+        });
+    }
+
+    /// Handle a resource timer expiration (gRFC A57).
+    ///
+    /// If the resource is still in Requested state, marks it as DoesNotExist
+    /// and notifies all watchers interested in this resource.
+    async fn handle_resource_timeout(&mut self, type_url: &str, name: &str) {
+        let type_state = match self.type_states.get_mut(type_url) {
+            Some(s) => s,
+            None => return,
+        };
+
+        let is_pending = type_state
+            .cache
+            .get(name)
+            .map(|c| c.is_requested())
+            .unwrap_or(true);
+
+        if !is_pending {
+            return;
+        }
+
+        type_state
+            .cache
+            .insert(name.to_string(), CachedResource::does_not_exist());
+
+        for mut event_tx in type_state.matching_watchers(name) {
+            let (done, _rx) = ProcessingDone::channel();
+            let event = ResourceEvent::ResourceChanged {
+                result: Err(Error::ResourceDoesNotExist),
+                done,
+            };
+            let _ = event_tx.send(event).await;
+        }
     }
 }

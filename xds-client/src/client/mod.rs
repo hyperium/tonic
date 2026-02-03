@@ -51,9 +51,8 @@ where
             self.transport_builder,
             self.codec,
             self.runtime.clone(),
-            self.config.node,
-            self.config.retry_policy,
-            self.config.servers,
+            self.config,
+            command_tx.clone(),
             command_rx,
         );
 
