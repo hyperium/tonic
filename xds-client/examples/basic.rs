@@ -162,10 +162,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let tls_builder = TlsTransportBuilder { tls_config: tls };
             XdsClient::builder(config, tls_builder, ProstCodec, TokioRuntime).build()
         }
-        None => {
-            XdsClient::builder(config, TonicTransportBuilder::new(), ProstCodec, TokioRuntime)
-                .build()
-        }
+        None => XdsClient::builder(
+            config,
+            TonicTransportBuilder::new(),
+            ProstCodec,
+            TokioRuntime,
+        )
+        .build(),
     };
 
     println!("Starting watchers...\n");

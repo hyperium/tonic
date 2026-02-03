@@ -92,10 +92,7 @@ pub trait TransportBuilder: Send + Sync + 'static {
     ///
     /// This may be called multiple times for reconnection or fallback.
     /// Implementations may cache/pool connections internally.
-    fn build(
-        &self,
-        server: &ServerConfig,
-    ) -> impl Future<Output = Result<Self::Transport>> + Send;
+    fn build(&self, server: &ServerConfig) -> impl Future<Output = Result<Self::Transport>> + Send;
 
     // Future extensions:
     // - `fn close(&self, server: &ServerConfig)` for explicit connection cleanup

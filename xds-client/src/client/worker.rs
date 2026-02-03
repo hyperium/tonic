@@ -673,8 +673,7 @@ where
             .map(|r| r.name().to_string())
             .collect();
 
-        let mut processing_done_futures =
-            self.dispatch_resources(&type_url, valid_resources).await;
+        let mut processing_done_futures = self.dispatch_resources(&type_url, valid_resources).await;
 
         // Only notify watchers for per-resource errors (where we know the name).
         // Top-level errors have no associated name, so no watcher to notify.
@@ -706,10 +705,7 @@ where
             let mut error_parts = Vec::new();
 
             if !top_level_errors.is_empty() {
-                error_parts.push(format!(
-                    "top level errors: {}",
-                    top_level_errors.join("; ")
-                ));
+                error_parts.push(format!("top level errors: {}", top_level_errors.join("; ")));
             }
 
             if !per_resource_errors.is_empty() {
@@ -721,7 +717,8 @@ where
                 error_parts.push(per_resource_msg);
             }
 
-            self.send_nack(stream, &response, error_parts.join("; ")).await
+            self.send_nack(stream, &response, error_parts.join("; "))
+                .await
         }
     }
 
@@ -781,9 +778,10 @@ where
     /// that specific resource (plus wildcard watchers).
     async fn notify_resource_error(&mut self, type_url: &str, resource_name: &str, error: &str) {
         if let Some(type_state) = self.type_states.get_mut(type_url) {
-            type_state
-                .cache
-                .insert(resource_name.to_string(), CachedResource::nacked(error.to_string()));
+            type_state.cache.insert(
+                resource_name.to_string(),
+                CachedResource::nacked(error.to_string()),
+            );
         }
 
         let watcher_senders: Vec<_> = match self.type_states.get(type_url) {
