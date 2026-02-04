@@ -38,11 +38,11 @@ use tokio::sync::{mpsc, watch, Notify};
 use serde_json::json;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
-use crate::attributes::Attributes;
-use crate::rt;
+use crate::rt::{default_runtime, GrpcEndpoint};
 use crate::service::{Request, Response, Service};
+use crate::{attributes::Attributes, credentials::ClientChannelCredential};
 use crate::{client::ConnectivityState, rt::Runtime};
-use crate::{credentials::Credentials, rt::default_runtime};
+use crate::{credentials::dyn_wrappers::DynClientChannelCredential, rt};
 
 use super::name_resolution::{self, global_registry, Address, ResolverUpdate};
 use super::service_config::ServiceConfig;
@@ -136,16 +136,16 @@ impl Channel {
     /// target string is invalid, the returned channel will never connect, and
     /// will fail all RPCs.
     // TODO: should this return a Result instead?
-    pub fn new(
-        target: &str,
-        credentials: Option<Box<dyn Credentials>>,
-        options: ChannelOptions,
-    ) -> Self {
+    pub fn new<C>(target: &str, credentials: C, options: ChannelOptions) -> Self
+    where
+        C: ClientChannelCredential + 'static,
+        C::Output<Box<dyn GrpcEndpoint>>: GrpcEndpoint + 'static,
+    {
         pick_first::reg();
         Self {
             inner: Arc::new(PersistentChannel::new(
                 target,
-                credentials,
+                Box::new(credentials) as Box<dyn DynClientChannelCredential>,
                 default_runtime(),
                 options,
             )),
@@ -192,7 +192,7 @@ impl PersistentChannel {
     // ChannelOption contain only optional parameters.
     fn new(
         target: &str,
-        _credentials: Option<Box<dyn Credentials>>,
+        _credentials: Box<dyn DynClientChannelCredential>,
         runtime: Arc<dyn rt::Runtime>,
         options: ChannelOptions,
     ) -> Self {
