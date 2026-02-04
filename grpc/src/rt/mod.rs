@@ -39,7 +39,7 @@ pub(crate) type BoxedTaskHandle = Box<dyn TaskHandle>;
 /// time-based operations such as sleeping. It provides a uniform interface
 /// that can be implemented for various async runtimes, enabling pluggable
 /// and testable infrastructure.
-pub trait Runtime: Send + Sync + Debug {
+pub(super) trait Runtime: Send + Sync + Debug {
     /// Spawns the given asynchronous task to run in the background.
     fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle;
 
@@ -61,16 +61,16 @@ pub trait Runtime: Send + Sync + Debug {
 }
 
 /// A future that resolves after a specified duration.
-pub trait Sleep: Send + Sync + Future<Output = ()> {}
+pub(super) trait Sleep: Send + Sync + Future<Output = ()> {}
 
-pub trait TaskHandle: Send + Sync {
+pub(super) trait TaskHandle: Send + Sync {
     /// Abort the associated task.
     fn abort(&self);
 }
 
 /// A trait for asynchronous DNS resolution.
 #[tonic::async_trait]
-pub trait DnsResolver: Send + Sync {
+pub(super) trait DnsResolver: Send + Sync {
     /// Resolve an address
     async fn lookup_host_name(&self, name: &str) -> Result<Vec<std::net::IpAddr>, String>;
     /// Perform a TXT record lookup. If a txt record contains multiple strings,
@@ -79,14 +79,14 @@ pub trait DnsResolver: Send + Sync {
 }
 
 #[derive(Default)]
-pub struct ResolverOptions {
+pub(super) struct ResolverOptions {
     /// The address of the DNS server in "IP:port" format. If None, the
     /// system's default DNS server will be used.
-    pub server_addr: Option<std::net::SocketAddr>,
+    pub(super) server_addr: Option<std::net::SocketAddr>,
 }
 
 #[derive(Default)]
-pub struct TcpOptions {
+pub(crate) struct TcpOptions {
     pub(crate) enable_nodelay: bool,
     pub(crate) keepalive: Option<Duration>,
 }
@@ -103,7 +103,7 @@ mod endpoint {
 }
 
 /// GrpcEndpoint is a generic stream-oriented network connection.
-pub trait GrpcEndpoint: endpoint::Sealed + Send + Unpin {
+pub(crate) trait GrpcEndpoint: endpoint::Sealed + Send + Unpin {
     /// Returns the local address that this stream is bound to.
     fn get_local_address(&self) -> &str;
 
