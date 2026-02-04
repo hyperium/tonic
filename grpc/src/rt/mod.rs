@@ -22,7 +22,6 @@
  *
  */
 
-use ::tokio::io::{AsyncRead, AsyncWrite};
 use std::fmt::Debug;
 use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 
@@ -58,7 +57,7 @@ pub(super) trait Runtime: Send + Sync + Debug {
         &self,
         target: SocketAddr,
         opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpStream>, String>>;
+    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -92,7 +91,25 @@ pub(crate) struct TcpOptions {
     pub(crate) keepalive: Option<Duration>,
 }
 
-pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
+mod endpoint {
+    /// This trait is sealed since we may need to change the read and write
+    /// methods to align closely with the gRPC C++ implementations. For example,
+    /// the read method may be responsible for allocating the buffer and
+    /// returning it to enable in-place decryption. Since the libraries used
+    /// for http2 and channel credentials use AsyncRead, designing such an API
+    /// today would require adapters which would incur an extra copy, affecting
+    /// performance.
+    pub(crate) trait Sealed: tokio::io::AsyncRead + tokio::io::AsyncWrite {}
+}
+
+/// GrpcEndpoint is a generic stream-oriented network connection.
+pub(crate) trait GrpcEndpoint: endpoint::Sealed + Send + Unpin {
+    /// Returns the local address that this stream is bound to.
+    fn get_local_address(&self) -> &str;
+
+    /// Returns the remote address that this stream is connected to.
+    fn get_peer_address(&self) -> &str;
+}
 
 /// A fake runtime to satisfy the compiler when no runtime is enabled. This will
 ///
@@ -119,7 +136,7 @@ impl Runtime for NoOpRuntime {
         &self,
         target: SocketAddr,
         opts: TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpStream>, String>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
         unimplemented!()
     }
 }

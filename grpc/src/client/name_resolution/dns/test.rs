@@ -296,7 +296,7 @@ impl rt::Runtime for FakeRuntime {
         &self,
         target: std::net::SocketAddr,
         opts: rt::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::TcpStream>, String>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::GrpcEndpoint>, String>> + Send>> {
         self.inner.tcp_stream(target, opts)
     }
 }

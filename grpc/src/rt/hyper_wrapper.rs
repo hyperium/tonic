@@ -1,4 +1,4 @@
-use super::{Runtime, TcpStream};
+use super::{GrpcEndpoint, Runtime};
 use hyper::rt::{Executor, Timer};
 use pin_project_lite::pin_project;
 use std::task::{Context, Poll};
@@ -66,13 +66,13 @@ pin_project! {
     /// Tokio's async IO traits.
     pub(crate) struct HyperStream {
         #[pin]
-        inner: Box<dyn TcpStream>,
+        inner: Box<dyn GrpcEndpoint>,
     }
 }
 
 impl HyperStream {
     /// Creates a new `HyperStream` from a type implementing `TcpStream`.
-    pub fn new(stream: Box<dyn TcpStream>) -> Self {
+    pub fn new(stream: Box<dyn GrpcEndpoint>) -> Self {
         Self { inner: stream }
     }
 }
