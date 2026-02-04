@@ -26,11 +26,9 @@ use std::sync::Arc;
 
 use tonic::async_trait;
 
-use crate::{
-    attributes::Attributes,
-    credentials::SecurityLevel,
-    rt::{GrpcEndpoint, Runtime},
-};
+use crate::attributes::Attributes;
+use crate::credentials::SecurityLevel;
+use crate::rt::{GrpcEndpoint, Runtime};
 
 #[async_trait]
 pub trait Sealed {

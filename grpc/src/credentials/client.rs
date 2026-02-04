@@ -26,11 +26,9 @@ use std::sync::Arc;
 
 use tonic::async_trait;
 
-use crate::{
-    attributes::Attributes,
-    credentials::{Authority, SecurityLevel},
-    rt::{GrpcEndpoint, Runtime},
-};
+use crate::attributes::Attributes;
+use crate::credentials::{Authority, SecurityLevel};
+use crate::rt::{GrpcEndpoint, Runtime};
 
 #[async_trait]
 pub trait Sealed {
@@ -66,7 +64,8 @@ pub trait Sealed {
 }
 
 pub trait ClientConnectionSecurityContext: Send + Sync + 'static {
-    /// Checks if the established connection is authorized to send requests to the given authority.
+    /// Checks if the established connection is authorized to send requests to
+    /// the given authority.
     ///
     /// This is primarily used for HTTP/2 connection reuse (coalescing). If the
     /// underlying security handshake (e.g., a TLS certificate) covers the provided

@@ -42,7 +42,7 @@ use crate::rt::{default_runtime, GrpcEndpoint};
 use crate::service::{Request, Response, Service};
 use crate::{attributes::Attributes, credentials::ClientChannelCredential};
 use crate::{client::ConnectivityState, rt::Runtime};
-use crate::{credentials::dyn_wrappers::DynClientChannelCredential, rt};
+use crate::{credentials::dyn_wrapper::DynClientChannelCredential, rt};
 
 use super::name_resolution::{self, global_registry, Address, ResolverUpdate};
 use super::service_config::ServiceConfig;

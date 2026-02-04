@@ -26,16 +26,14 @@ use std::sync::Arc;
 
 use tonic::async_trait;
 
-use crate::{
-    credentials::{
-        client::{
-            ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
-        },
-        server::ServerConnectionSecurityInfo,
-        Authority, ClientChannelCredential, ProtocolInfo, ServerChannelCredentials,
-    },
-    rt::{GrpcEndpoint, Runtime},
+use crate::credentials::client::{
+    ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
 };
+use crate::credentials::server::ServerConnectionSecurityInfo;
+use crate::credentials::{
+    Authority, ClientChannelCredential, ProtocolInfo, ServerChannelCredentials,
+};
+use crate::rt::{GrpcEndpoint, Runtime};
 
 impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {}
 type BoxEndpoint = Box<dyn GrpcEndpoint>;

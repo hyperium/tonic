@@ -43,9 +43,9 @@ use crate::{
 /// This credential type does not perform any encryption or authentication. It
 /// simply passes the raw underlying transport as the output.
 #[derive(Debug, Clone, Default)]
-pub struct InsecureChannelCredentials;
+pub struct InsecureClientChannelCredentials;
 
-impl InsecureChannelCredentials {
+impl InsecureClientChannelCredentials {
     /// Creates a new instance of `InsecureChannelCredentials`.
     pub fn new() -> Self {
         Self
@@ -63,7 +63,7 @@ impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {
 }
 
 #[async_trait]
-impl client::Sealed for InsecureChannelCredentials {
+impl client::Sealed for InsecureClientChannelCredentials {
     type ContextType = InsecureConnectionSecurityContext;
     type Output<I> = I;
 
@@ -92,7 +92,7 @@ impl client::Sealed for InsecureChannelCredentials {
     }
 }
 
-impl ClientChannelCredential for InsecureChannelCredentials {
+impl ClientChannelCredential for InsecureClientChannelCredentials {
     fn info(&self) -> &ProtocolInfo {
         static INFO: ProtocolInfo = ProtocolInfo {
             security_protocol: "insecure",
