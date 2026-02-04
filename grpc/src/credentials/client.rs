@@ -27,7 +27,7 @@ use std::sync::Arc;
 use tonic::async_trait;
 
 use crate::attributes::Attributes;
-use crate::credentials::{Authority, SecurityLevel};
+use crate::credentials::common::{Authority, SecurityLevel};
 use crate::rt::{GrpcEndpoint, Runtime};
 
 #[async_trait]

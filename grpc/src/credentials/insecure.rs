@@ -24,19 +24,15 @@
 
 use std::sync::Arc;
 
-use tonic::async_trait;
-
-use crate::{
-    attributes::Attributes,
-    credentials::{
-        client::{
-            self, ClientConnectionSecurityContext, ClientConnectionSecurityInfo,
-            ClientHandshakeInfo,
-        },
-        Authority, ClientChannelCredential, ProtocolInfo, SecurityLevel,
-    },
-    rt::{GrpcEndpoint, Runtime},
+use crate::attributes::Attributes;
+use crate::credentials::client::{
+    self, ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
 };
+use crate::credentials::common::{Authority, SecurityLevel};
+use crate::credentials::server::{self, ServerConnectionSecurityInfo};
+use crate::credentials::{ClientChannelCredential, ProtocolInfo, ServerChannelCredentials};
+use crate::rt::{GrpcEndpoint, Runtime};
+use tonic::async_trait;
 
 /// An implementation of [`ClientChannelCredential`] for insecure connections.
 ///
@@ -57,7 +53,7 @@ impl InsecureClientChannelCredentials {
 pub struct InsecureConnectionSecurityContext;
 
 impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {
-    fn validate_authority(&self, authority: &Authority) -> bool {
+    fn validate_authority(&self, _authority: &Authority) -> bool {
         true
     }
 }
@@ -93,6 +89,45 @@ impl client::Sealed for InsecureClientChannelCredentials {
 }
 
 impl ClientChannelCredential for InsecureClientChannelCredentials {
+    fn info(&self) -> &ProtocolInfo {
+        static INFO: ProtocolInfo = ProtocolInfo {
+            security_protocol: "insecure",
+        };
+        &INFO
+    }
+}
+
+/// An implementation of [`ServerChannelCredentials`] for insecure connections.
+#[derive(Debug, Clone, Default)]
+pub struct InsecureServerChannelCredentials;
+
+impl InsecureServerChannelCredentials {
+    pub fn new() -> Self {
+        Self
+    }
+}
+
+#[async_trait]
+impl server::Sealed for InsecureServerChannelCredentials {
+    type Output<I> = I;
+
+    async fn accept<Input: GrpcEndpoint + 'static>(
+        &self,
+        source: Input,
+        _runtime: Arc<dyn Runtime>,
+    ) -> Result<(Self::Output<Input>, ServerConnectionSecurityInfo), String> {
+        Ok((
+            source,
+            ServerConnectionSecurityInfo {
+                security_protocol: "insecure",
+                security_level: SecurityLevel::NoSecurity,
+                attributes: Attributes,
+            },
+        ))
+    }
+}
+
+impl ServerChannelCredentials for InsecureServerChannelCredentials {
     fn info(&self) -> &ProtocolInfo {
         static INFO: ProtocolInfo = ProtocolInfo {
             security_protocol: "insecure",

@@ -29,10 +29,9 @@ use tonic::async_trait;
 use crate::credentials::client::{
     ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
 };
+use crate::credentials::common::Authority;
 use crate::credentials::server::ServerConnectionSecurityInfo;
-use crate::credentials::{
-    Authority, ClientChannelCredential, ProtocolInfo, ServerChannelCredentials,
-};
+use crate::credentials::{ClientChannelCredential, ProtocolInfo, ServerChannelCredentials};
 use crate::rt::{GrpcEndpoint, Runtime};
 
 impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {}
