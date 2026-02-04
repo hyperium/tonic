@@ -28,9 +28,11 @@ use tonic::async_trait;
 
 use crate::{
     credentials::{
-        Authority, ClientChannelCredential, ClientConnectionSecurityContext,
-        ClientConnectionSecurityInfo, ClientHandshakeInfo, ProtocolInfo, ServerChannelCredentials,
-        ServerConnectionSecurityInfo,
+        client::{
+            ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
+        },
+        server::ServerConnectionSecurityInfo,
+        Authority, ClientChannelCredential, ProtocolInfo, ServerChannelCredentials,
     },
     rt::{GrpcEndpoint, Runtime},
 };

@@ -29,8 +29,11 @@ use tonic::async_trait;
 use crate::{
     attributes::Attributes,
     credentials::{
-        Authority, ClientChannelCredential, ClientConnectionSecurityContext,
-        ClientConnectionSecurityInfo, ClientHandshakeInfo, ProtocolInfo, SecurityLevel,
+        client::{
+            self, ClientConnectionSecurityContext, ClientConnectionSecurityInfo,
+            ClientHandshakeInfo,
+        },
+        Authority, ClientChannelCredential, ProtocolInfo, SecurityLevel,
     },
     rt::{GrpcEndpoint, Runtime},
 };
@@ -53,10 +56,14 @@ impl InsecureChannelCredentials {
 #[derive(Debug, Clone)]
 pub struct InsecureConnectionSecurityContext;
 
-impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {}
+impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {
+    fn validate_authority(&self, authority: &Authority) -> bool {
+        true
+    }
+}
 
 #[async_trait]
-impl ClientChannelCredential for InsecureChannelCredentials {
+impl client::Sealed for InsecureChannelCredentials {
     type ContextType = InsecureConnectionSecurityContext;
     type Output<I> = I;
 
@@ -83,7 +90,9 @@ impl ClientChannelCredential for InsecureChannelCredentials {
             },
         ))
     }
+}
 
+impl ClientChannelCredential for InsecureChannelCredentials {
     fn info(&self) -> &ProtocolInfo {
         static INFO: ProtocolInfo = ProtocolInfo {
             security_protocol: "insecure",
