@@ -340,6 +340,9 @@ pub(crate) struct AdsWorker<TB, C, R> {
     command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
     /// Per-type_url state.
     type_states: HashMap<String, TypeState>,
+    /// Cancellation handles for resource timers (gRFC A57).
+    /// Key is (type_url, resource_name). Dropping the sender cancels the timer.
+    resource_timers: HashMap<(String, String), oneshot::Sender<()>>,
 }
 
 impl<TB, C, R> AdsWorker<TB, C, R>
@@ -368,6 +371,7 @@ where
             command_tx,
             command_rx,
             type_states: HashMap::new(),
+            resource_timers: HashMap::new(),
         }
     }
 
@@ -632,6 +636,8 @@ where
 
         if type_state.watchers.is_empty() {
             self.type_states.remove(&type_url);
+            // Cancel all pending resource timers for this type.
+            self.resource_timers.retain(|key, _| key.0 != type_url);
         }
 
         Some((type_url, subscriptions_changed))
@@ -790,6 +796,12 @@ where
             None => return processing_done_futures,
         };
 
+        // Cancel resource timers for received resources (gRFC A57).
+        for resource in &resources {
+            self.resource_timers
+                .remove(&(type_url.to_string(), resource.name().to_string()));
+        }
+
         for resource in resources {
             let resource_name = resource.name().to_string();
             let resource = Arc::new(resource);
@@ -826,6 +838,10 @@ where
             resource_name.to_string(),
             CachedResource::nacked(error.to_string()),
         );
+
+        // Cancel the resource timer (gRFC A57).
+        self.resource_timers
+            .remove(&(type_url.to_string(), resource_name.to_string()));
 
         for mut event_tx in type_state.matching_watchers(resource_name) {
             let (done, _rx) = ProcessingDone::channel();
@@ -942,20 +958,37 @@ where
 
     /// Start a timer for a resource in Requested state (gRFC A57).
     ///
+    /// If a timer is already running for this resource, this is a no-op to
+    /// preserve the original timeout deadline per A57.
+    ///
     /// When the timer fires, it sends a `ResourceTimerExpired` command.
     /// The handler checks if the resource is still in Requested state before acting.
-    fn start_resource_timer(&self, type_url: &str, name: String, timeout: Duration) {
+    fn start_resource_timer(&mut self, type_url: &str, name: String, timeout: Duration) {
+        let key = (type_url.to_string(), name.clone());
+
+        // Don't reset an existing timer — A57 says timeout starts on first request.
+        if self.resource_timers.contains_key(&key) {
+            return;
+        }
+
+        let (cancel_tx, cancel_rx) = oneshot::channel::<()>();
         let type_url_owned = type_url.to_string();
         let command_tx = self.command_tx.clone();
         let runtime = self.runtime.clone();
 
         self.runtime.spawn(async move {
-            runtime.sleep(timeout).await;
-            let _ = command_tx.unbounded_send(WorkerCommand::ResourceTimerExpired {
-                type_url: type_url_owned,
-                name,
-            });
+            futures::select! {
+                _ = runtime.sleep(timeout).fuse() => {
+                    let _ = command_tx.unbounded_send(WorkerCommand::ResourceTimerExpired {
+                        type_url: type_url_owned,
+                        name,
+                    });
+                }
+                _ = cancel_rx.fuse() => {}
+            }
         });
+
+        self.resource_timers.insert(key, cancel_tx);
     }
 
     /// Handle a resource timer expiration (gRFC A57).
@@ -963,6 +996,9 @@ where
     /// If the resource is still in Requested state, marks it as DoesNotExist
     /// and notifies all watchers interested in this resource.
     async fn handle_resource_timeout(&mut self, type_url: &str, name: &str) {
+        self.resource_timers
+            .remove(&(type_url.to_string(), name.to_string()));
+
         let type_state = match self.type_states.get_mut(type_url) {
             Some(s) => s,
             None => return,
