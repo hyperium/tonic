@@ -739,12 +739,13 @@ where
         // Wait for all watchers to finish processing concurrently.
         let _ = futures::future::join_all(processing_done_futures).await;
 
-        if let Some(ts) = self.type_states.get_mut(&type_url) {
-            ts.version_info = response.version_info.clone();
-        }
-
         let has_errors = !top_level_errors.is_empty() || !per_resource_errors.is_empty();
         if !has_errors {
+            // Only update version on ACK; NACK must keep the old version so the
+            // server knows which version the client is still running.
+            if let Some(ts) = self.type_states.get_mut(&type_url) {
+                ts.version_info = response.version_info.clone();
+            }
             self.send_ack(stream, &response).await
         } else {
             // Build NACK message combining both error categories

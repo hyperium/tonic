@@ -192,8 +192,9 @@ impl RetryPolicy {
             }
         }
 
-        // Calculate exponential backoff
-        let multiplier = self.backoff_multiplier.powi(attempt as i32);
+        // Calculate exponential backoff (saturate to i32::MAX to avoid overflow in powi)
+        let exponent = i32::try_from(attempt).unwrap_or(i32::MAX);
+        let multiplier = self.backoff_multiplier.powi(exponent);
         let backoff = self.initial_backoff.mul_f64(multiplier);
 
         // Cap at max_backoff
