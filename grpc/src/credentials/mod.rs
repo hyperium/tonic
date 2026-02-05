@@ -50,13 +50,20 @@ pub(crate) mod common {
     pub enum SecurityLevel {
         /// The connection is insecure; no protection is applied.
         NoSecurity,
-        /// The connection guarantees both privacy (confidentiality) and data integrity.
+        /// The connection guarantees data integrity (tamper-proofing) but not
+        /// privacy.
+        ///
+        /// Payloads are visible to observers but cannot be modified without
+        /// detection.
+        IntegrityOnly,
+        /// The connection guarantees both privacy (confidentiality) and data
+        /// integrity.
         ///
         /// This is the standard level for secure transports like TLS.
         PrivacyAndIntegrity,
     }
-    /// Represents the value passed as the `:authority` pseudo-header, typically in
-    /// the form `host:port`.
+    /// Represents the value passed as the `:authority` pseudo-header, typically
+    /// in the form `host:port`.
     pub struct Authority<'a> {
         pub(crate) host: &'a str,
         pub(crate) port: Option<u16>,
