@@ -62,7 +62,7 @@ impl Timer for HyperCompatTimer {
 // https://github.com/hyperium/hyper/blob/v1.6.0/benches/support/tokiort.rs
 
 pin_project! {
-    /// A wrapper to make any `TcpStream` compatible with Hyper. It implements
+    /// A wrapper to make any `GrpcEndpoint` compatible with Hyper. It implements
     /// Tokio's async IO traits.
     pub(crate) struct HyperStream {
         #[pin]

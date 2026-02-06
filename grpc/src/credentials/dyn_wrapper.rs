@@ -33,6 +33,7 @@ use crate::credentials::common::Authority;
 use crate::credentials::server::ServerConnectionSecurityInfo;
 use crate::credentials::{ClientChannelCredential, ProtocolInfo, ServerChannelCredentials};
 use crate::rt::{GrpcEndpoint, Runtime};
+use crate::send_future::SendFuture;
 
 impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {}
 type BoxEndpoint = Box<dyn GrpcEndpoint + 'static>;
@@ -76,7 +77,8 @@ where
         ),
         String,
     > {
-        let (stream, sec_info) = self.connect(authority, source, info, runtime).await?;
+        let (stream, sec_info) =
+            SendFuture::send(self.connect(authority, source, info, runtime)).await?;
 
         let boxed_stream: BoxEndpoint = Box::new(stream);
 
@@ -119,7 +121,7 @@ where
         source: BoxEndpoint,
         runtime: Arc<dyn Runtime>,
     ) -> Result<(BoxEndpoint, ServerConnectionSecurityInfo), String> {
-        let (stream, sec_info) = self.accept(source, runtime).await?;
+        let (stream, sec_info) = SendFuture::send(self.accept(source, runtime)).await?;
         let boxed_stream: Box<dyn GrpcEndpoint> = Box::new(stream);
         Ok((boxed_stream, sec_info))
     }
