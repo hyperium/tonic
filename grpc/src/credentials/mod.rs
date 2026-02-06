@@ -26,19 +26,17 @@ pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
 mod insecure;
 pub(crate) mod server;
-use tonic::async_trait;
 
 pub use insecure::{InsecureClientChannelCredentials, InsecureServerChannelCredentials};
 
 /// Defines the common interface for all live gRPC wire protocols and supported
 /// transport security protocols (e.g., TLS, ALTS).
-pub trait ClientChannelCredential: client::Sealed + Send + Sync {
+pub trait ClientChannelCredential: client::Sealed + Sync {
     //// Provides the ProtocolInfo of this ClientChannelCredential.
     fn info(&self) -> &ProtocolInfo;
 }
 
-#[async_trait]
-pub trait ServerChannelCredentials: server::Sealed + Send + Sync {
+pub trait ServerChannelCredentials: server::Sealed + Sync {
     //// Provides the ProtocolInfo of this ServerChannelCredentials.
     fn info(&self) -> &ProtocolInfo;
 }

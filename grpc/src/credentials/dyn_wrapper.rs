@@ -35,7 +35,7 @@ use crate::credentials::{ClientChannelCredential, ProtocolInfo, ServerChannelCre
 use crate::rt::{GrpcEndpoint, Runtime};
 
 impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {}
-type BoxEndpoint = Box<dyn GrpcEndpoint>;
+type BoxEndpoint = Box<dyn GrpcEndpoint + 'static>;
 
 // Bridge trait for type erasure.
 #[async_trait]
@@ -116,9 +116,9 @@ where
 {
     async fn accept(
         &self,
-        source: Box<dyn GrpcEndpoint>,
+        source: BoxEndpoint,
         runtime: Arc<dyn Runtime>,
-    ) -> Result<(Box<dyn GrpcEndpoint>, ServerConnectionSecurityInfo), String> {
+    ) -> Result<(BoxEndpoint, ServerConnectionSecurityInfo), String> {
         let (stream, sec_info) = self.accept(source, runtime).await?;
         let boxed_stream: Box<dyn GrpcEndpoint> = Box::new(stream);
         Ok((boxed_stream, sec_info))

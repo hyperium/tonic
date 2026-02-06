@@ -24,13 +24,11 @@
 
 use std::sync::Arc;
 
-use tonic::async_trait;
-
 use crate::attributes::Attributes;
 use crate::credentials::common::{Authority, SecurityLevel};
 use crate::rt::{GrpcEndpoint, Runtime};
 
-#[async_trait]
+#[trait_variant::make(Send)]
 pub trait Sealed {
     type ContextType: ClientConnectionSecurityContext;
     type Output<I>;

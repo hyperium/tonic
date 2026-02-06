@@ -32,7 +32,6 @@ use crate::credentials::common::{Authority, SecurityLevel};
 use crate::credentials::server::{self, ServerConnectionSecurityInfo};
 use crate::credentials::{ClientChannelCredential, ProtocolInfo, ServerChannelCredentials};
 use crate::rt::{GrpcEndpoint, Runtime};
-use tonic::async_trait;
 
 /// An implementation of [`ClientChannelCredential`] for insecure connections.
 ///
@@ -58,14 +57,13 @@ impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {
     }
 }
 
-#[async_trait]
 impl client::Sealed for InsecureClientChannelCredentials {
     type ContextType = InsecureConnectionSecurityContext;
     type Output<I> = I;
 
     async fn connect<Input: GrpcEndpoint + 'static>(
         &self,
-        _authority: &Authority,
+        _authority: &Authority<'_>,
         source: Input,
         _info: ClientHandshakeInfo,
         _runtime: Arc<dyn Runtime>,
@@ -107,7 +105,6 @@ impl InsecureServerChannelCredentials {
     }
 }
 
-#[async_trait]
 impl server::Sealed for InsecureServerChannelCredentials {
     type Output<I> = I;
 
