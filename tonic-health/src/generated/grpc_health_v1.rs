@@ -152,7 +152,7 @@ pub mod health_client {
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.health.v1.Health/Check",
             );
@@ -191,7 +191,7 @@ pub mod health_client {
                         format!("Service was not ready: {}", e.into()),
                     )
                 })?;
-            let codec = tonic::codec::ProstCodec::default();
+            let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
                 "/grpc.health.v1.Health/Watch",
             );
@@ -356,7 +356,7 @@ pub mod health_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = CheckSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,
@@ -402,7 +402,7 @@ pub mod health_server {
                     let inner = self.inner.clone();
                     let fut = async move {
                         let method = WatchSvc(inner);
-                        let codec = tonic::codec::ProstCodec::default();
+                        let codec = tonic_prost::ProstCodec::default();
                         let mut grpc = tonic::server::Grpc::new(codec)
                             .apply_compression_config(
                                 accept_compression_encodings,

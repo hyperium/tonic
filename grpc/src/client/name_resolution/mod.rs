@@ -33,7 +33,7 @@ use super::service_config::ServiceConfig;
 use crate::{attributes::Attributes, byte_str::ByteStr, rt::Runtime};
 use std::{
     fmt::{Display, Formatter},
-    hash::{Hash, Hasher},
+    hash::Hash,
     str::FromStr,
     sync::Arc,
 };
@@ -41,7 +41,7 @@ use std::{
 mod backoff;
 mod dns;
 mod registry;
-pub use registry::global_registry;
+pub(crate) use registry::global_registry;
 use url::Url;
 
 /// Target represents a target for gRPC, as specified in:
@@ -55,7 +55,7 @@ use url::Url;
 /// (i.e. no corresponding resolver available to resolve the endpoint), we will
 /// apply the default scheme, and will attempt to reparse it.
 #[derive(Debug, Clone)]
-pub struct Target {
+pub(crate) struct Target {
     url: Url,
 }
 
@@ -70,6 +70,22 @@ impl FromStr for Target {
     }
 }
 
+impl From<url::Url> for Target {
+    fn from(url: url::Url) -> Self {
+        Target { url }
+    }
+}
+
+/// Target represents a target for gRPC, as specified in:
+/// https://github.com/grpc/grpc/blob/master/doc/naming.md.
+/// It is parsed from the target string that gets passed during channel creation
+/// by the user. gRPC passes it to the resolver and the balancer.
+///
+/// If the target follows the naming spec, and the parsed scheme is registered
+/// with gRPC, we will parse the target string according to the spec. If the
+/// target does not contain a scheme or if the parsed scheme is not registered
+/// (i.e. no corresponding resolver available to resolve the endpoint), we will
+/// apply the default scheme, and will attempt to reparse it.
 impl Target {
     pub fn scheme(&self) -> &str {
         self.url.scheme()
@@ -91,13 +107,13 @@ impl Target {
         let host = self.authority_host();
         let port = self.authority_port();
         if let Some(port) = port {
-            format!("{}:{}", host, port)
+            format!("{host}:{port}")
         } else {
             host.to_owned()
         }
     }
 
-    /// Return the path for this target URL, as a percent-encoded ASCII string.
+    /// Retrieves endpoint from `Url.path()`.
     pub fn path(&self) -> &str {
         self.url.path()
     }
@@ -117,7 +133,7 @@ impl Display for Target {
 
 /// A name resolver factory that produces Resolver instances used by the channel
 /// to resolve network addresses for the target URI.
-pub trait ResolverBuilder: Send + Sync {
+pub(crate) trait ResolverBuilder: Send + Sync {
     /// Builds a name resolver instance.
     ///
     /// Note that build must not fail.  Instead, an erroring Resolver may be
@@ -125,7 +141,7 @@ pub trait ResolverBuilder: Send + Sync {
     fn build(&self, target: &Target, options: ResolverOptions) -> Box<dyn Resolver>;
 
     /// Reports the URI scheme handled by this name resolver.
-    fn scheme(&self) -> &'static str;
+    fn scheme(&self) -> &str;
 
     /// Returns the default authority for a channel using this name resolver
     /// and target. This refers to the *dataplane authority* — the value used
@@ -148,7 +164,7 @@ pub trait ResolverBuilder: Send + Sync {
 /// A collection of data configured on the channel that is constructing this
 /// name resolver.
 #[non_exhaustive]
-pub struct ResolverOptions {
+pub(crate) struct ResolverOptions {
     /// The authority that will be used for the channel by default. This refers
     /// to the `:authority` value sent in HTTP/2 requests — the dataplane
     /// authority — and not the authority portion of the target URI, which is
@@ -168,7 +184,7 @@ pub struct ResolverOptions {
 }
 
 /// Used to asynchronously request a call into the Resolver's work method.
-pub trait WorkScheduler: Send + Sync {
+pub(crate) trait WorkScheduler: Send + Sync {
     // Schedules a call into the Resolver's work method.  If there is already a
     // pending work call that has not yet started, this may not schedule another
     // call.
@@ -180,7 +196,7 @@ pub trait WorkScheduler: Send + Sync {
 // This trait may not need the Sync sub-trait if the channel implementation can
 // ensure that the resolver is accessed serially. The sub-trait can be removed
 // in that case.
-pub trait Resolver: Send + Sync {
+pub(crate) trait Resolver: Send + Sync {
     /// Asks the resolver to obtain an updated resolver result, if applicable.
     ///
     /// This is useful for polling resolvers to decide when to re-resolve.
@@ -199,7 +215,7 @@ pub trait Resolver: Send + Sync {
 
 /// The `ChannelController` trait provides the resolver with functionality
 /// to interact with the channel.
-pub trait ChannelController: Send + Sync {
+pub(crate) trait ChannelController: Send + Sync {
     /// Notifies the channel about the current state of the name resolver.  If
     /// an error value is returned, the name resolver should attempt to
     /// re-resolve, if possible.  The resolver is responsible for applying an
@@ -216,7 +232,7 @@ pub trait ChannelController: Send + Sync {
 #[non_exhaustive]
 /// ResolverUpdate contains the current Resolver state relevant to the
 /// channel.
-pub struct ResolverUpdate {
+pub(crate) struct ResolverUpdate {
     /// Attributes contains arbitrary data about the resolver intended for
     /// consumption by the load balancing policy.
     pub attributes: Attributes,
@@ -253,9 +269,9 @@ impl Default for ResolverUpdate {
 /// An Endpoint is an address or a collection of addresses which reference one
 /// logical server.  Multiple addresses may be used if there are multiple ways
 /// which the server can be reached, e.g. via IPv4 and IPv6 addresses.
-#[derive(Debug, Default, Clone)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Endpoint {
+pub(crate) struct Endpoint {
     /// Addresses contains a list of addresses used to access this endpoint.
     pub addresses: Vec<Address>,
 
@@ -264,10 +280,16 @@ pub struct Endpoint {
     pub attributes: Attributes,
 }
 
+impl Hash for Endpoint {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.addresses.hash(state);
+    }
+}
+
 /// An Address is an identifier that indicates how to connect to a server.
 #[non_exhaustive]
-#[derive(Debug, Clone, Default)]
-pub struct Address {
+#[derive(Debug, Clone, Default, Ord, PartialOrd)]
+pub(crate) struct Address {
     /// The network type is used to identify what kind of transport to create
     /// when connecting to this address.  Typically TCP_IP_ADDRESS_TYPE.
     pub network_type: &'static str,
@@ -281,46 +303,33 @@ pub struct Address {
     pub attributes: Attributes,
 }
 
-impl Eq for Endpoint {}
-
-impl PartialEq for Endpoint {
-    fn eq(&self, _other: &Self) -> bool {
-        todo!()
-    }
-}
-
-impl Hash for Endpoint {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        todo!()
-    }
-}
-
 impl Eq for Address {}
 
 impl PartialEq for Address {
-    fn eq(&self, _other: &Self) -> bool {
-        todo!()
+    fn eq(&self, other: &Self) -> bool {
+        self.network_type == other.network_type && self.address == other.address
     }
 }
 
 impl Hash for Address {
-    fn hash<H: Hasher>(&self, _state: &mut H) {
-        todo!()
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.network_type.hash(state);
+        self.address.hash(state);
     }
 }
 
 impl Display for Address {
+    #[allow(clippy::to_string_in_format_args)]
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-        let addr: &str = &self.address;
-        write!(f, "{}:{}", self.network_type, addr)
+        write!(f, "{}:{}", self.network_type, self.address.to_string())
     }
 }
 
 /// Indicates the address is an IPv4 or IPv6 address that should be connected to
 /// via TCP/IP.
-pub static TCP_IP_NETWORK_TYPE: &str = "tcp";
+pub(crate) static TCP_IP_NETWORK_TYPE: &str = "tcp";
 
-// A resolver that returns the same result every time it's work method is called.
+// A resolver that returns the same result every time its work method is called.
 // It can be used to return an error to the channel when a resolver fails to
 // build.
 struct NopResolver {

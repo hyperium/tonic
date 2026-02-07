@@ -14,7 +14,7 @@ license = "MIT"
 name = "tonic-reflection"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.14.0"
+version = "0.14.3"
 rust-version = { workspace = true }
 
 [package.metadata.docs.rs]
@@ -29,7 +29,8 @@ prost = "0.14"
 prost-types = {version = "0.14", optional = true}
 tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
 tokio-stream = {version = "0.1", default-features = false, optional = true }
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
+tonic-prost = { version = "0.14.0", path = "../tonic-prost", default-features = false }
 
 [dev-dependencies]
 tokio-stream = {version = "0.1", default-features = false, features = ["net"]}

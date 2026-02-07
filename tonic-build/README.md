@@ -1,13 +1,9 @@
 # tonic-build
 
-Compiles proto files via prost and generates service stubs and proto definitions for use with tonic.
+Provides code generation for service stubs to use with tonic. For protobuf compilation via prost, use the `tonic-prost-build` crate instead.
 
 # Feature flags
 
-- `cleanup-markdown`: Enables cleaning up documentation from the generated code.
-  Useful when documentation of the generated code fails `cargo test --doc` for example.
-  The `prost` feature must be enabled to use this feature.
-- `prost`: Enables usage of prost generator (enabled by default).
 - `transport`: Enables generation of `connect` method using `tonic::transport::Channel`
   (enabled by default).
 
@@ -21,27 +17,27 @@ tonic = "<tonic-version>"
 prost = "<prost-version>"
 
 [build-dependencies]
-tonic-build = "<tonic-version>"
+tonic-prost-build = "<tonic-version>"
 ```
 
 ## Getting Started
 
-`tonic-build` works by being included as a [`build.rs` file](https://doc.rust-lang.org/cargo/reference/build-scripts.html) at the root of the binary/library.
+For protobuf compilation, use `tonic-prost-build` in your [`build.rs` file](https://doc.rust-lang.org/cargo/reference/build-scripts.html) at the root of the binary/library.
 
 You can rely on the defaults via
 
-```rust,no_run
+```rust,no_run,ignore
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::compile_protos("proto/service.proto")?;
+    tonic_prost_build::compile_protos("proto/service.proto")?;
     Ok(())
 }
 ```
 
 Or configure the generated code deeper via
 
-```rust,no_run
+```rust,no_run,ignore
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-   tonic_build::configure()
+   tonic_prost_build::configure()
         .build_server(false)
         .compile_protos(
             &["proto/helloworld/helloworld.proto"],
@@ -97,9 +93,9 @@ And a bunch of Google proto files in structure will be like this:
 
 Then we can generate Rust code via this setup in our `build.rs`:
 
-```rust,no_run
+```rust,no_run,ignore
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_server(false)
         //.out_dir("src/google")  // you can change the generated code's location
         .compile_protos(
@@ -110,7 +106,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
-Then you can reference the generated Rust like this this in your code:
+Then you can reference the generated Rust like this in your code:
 ```rust,ignore
 pub mod api {
     tonic::include_proto!("google.pubsub.v1");

@@ -273,7 +273,7 @@ impl Status {
     ///
     /// Unlike `InvalidArgument`, this error indicates a problem that may be
     /// fixed if the system state changes. For example, a 32-bit file system will
-    /// generate `InvalidArgument if asked to read at an offset that is not in the
+    /// generate `InvalidArgument` if asked to read at an offset that is not in the
     /// range [0,2^32-1], but it will generate `OutOfRange` if asked to read from
     /// an offset past the current file size.
     ///
@@ -748,14 +748,18 @@ impl From<std::io::Error> for Status {
 
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "status: {:?}, message: {:?}, details: {:?}, metadata: {:?}",
-            self.code(),
-            self.message(),
-            self.details(),
-            self.metadata(),
-        )
+        write!(f, "code: '{}'", self.code())?;
+
+        if !self.message().is_empty() {
+            write!(f, ", message: {:?}", self.message())?;
+        }
+        // We intentionally omit `self.details` since it's binary data, not fit for human eyes.
+        // Additionally, `self.metadata` contains low-level details that only belong in the `Debug`
+        // impl.
+        if let Some(source) = self.source() {
+            write!(f, ", source: {source:?}")?;
+        }
+        Ok(())
     }
 }
 
@@ -1054,8 +1058,8 @@ mod tests {
 /// Timeouts can be configured either with [`Endpoint::timeout`], [`Server::timeout`], or by
 /// setting the [`grpc-timeout` metadata value][spec].
 ///
-/// [`Endpoint::timeout`]: crate::transport::server::Server::timeout
-/// [`Server::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Endpoint::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Server::timeout`]: crate::transport::server::Server::timeout
 /// [spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 #[derive(Debug)]
 pub struct TimeoutExpired(pub ());

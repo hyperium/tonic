@@ -41,7 +41,7 @@ use url::Host;
 use crate::{
     byte_str::ByteStr,
     client::name_resolution::{global_registry, ChannelController, ResolverBuilder, Target},
-    rt::{self, TaskHandle},
+    rt::{self, BoxedTaskHandle},
 };
 
 use super::{
@@ -83,7 +83,7 @@ fn get_resolving_timeout() -> Duration {
 /// premature timeouts during resolution, while setting it too high may lead to
 /// unnecessary delays in service discovery. Choose a value appropriate for your
 /// specific needs and network environment.
-pub fn set_resolving_timeout(duration: Duration) {
+pub(crate) fn set_resolving_timeout(duration: Duration) {
     RESOLVING_TIMEOUT_MS.store(duration.as_millis() as u64, Ordering::Relaxed);
 }
 
@@ -96,11 +96,11 @@ fn get_min_resolution_interval() -> Duration {
 ///
 /// It must be called only at application startup, before any gRPC calls are
 /// made.
-pub fn set_min_resolution_interval(duration: Duration) {
+pub(crate) fn set_min_resolution_interval(duration: Duration) {
     MIN_RESOLUTION_INTERVAL_MS.store(duration.as_millis() as u64, Ordering::Relaxed);
 }
 
-pub fn reg() {
+pub(crate) fn reg() {
     global_registry().add_builder(Box::new(Builder {}));
 }
 
@@ -162,7 +162,7 @@ impl DnsResolver {
                 work_scheduler.schedule_work();
                 channel_updated_rx.notified().await;
                 let channel_response = { state.lock().channel_response.take() };
-                let next_resoltion_time = if let Some(_) = channel_response {
+                let next_resoltion_time = if channel_response.is_some() {
                     SystemTime::now()
                         .checked_add(backoff.backoff_duration())
                         .unwrap()
@@ -233,7 +233,7 @@ impl ResolverBuilder for Builder {
 
     fn is_valid_uri(&self, target: &Target) -> bool {
         if let Err(err) = parse_endpoint_and_authority(target) {
-            eprintln!("{}", err);
+            eprintln!("{err}");
             false
         } else {
             true
@@ -243,7 +243,7 @@ impl ResolverBuilder for Builder {
 
 struct DnsResolver {
     state: Arc<Mutex<InternalState>>,
-    task_handle: Box<dyn TaskHandle>,
+    task_handle: BoxedTaskHandle,
     resolve_now_notifier: Arc<Notify>,
     channel_update_notifier: Arc<Notify>,
 }
@@ -311,7 +311,7 @@ fn parse_endpoint_and_authority(target: &Target) -> Result<ParseResult, String> 
     let endpoint = target.path();
     let endpoint = endpoint.strip_prefix("/").unwrap_or(endpoint);
     let parse_result = parse_host_port(endpoint, DEFAULT_PORT)
-        .map_err(|err| format!("Failed to parse target {}: {}", target, err))?;
+        .map_err(|err| format!("Failed to parse target {target}: {err}"))?;
     let endpoint = parse_result.ok_or("Received empty endpoint host.".to_string())?;
 
     // Parse the authority.
@@ -323,7 +323,7 @@ fn parse_endpoint_and_authority(target: &Target) -> Result<ParseResult, String> 
         });
     }
     let parse_result = parse_host_port(&authority, DEFAULT_DNS_PORT)
-        .map_err(|err| format!("Failed to parse DNS authority {}: {}", target, err))?;
+        .map_err(|err| format!("Failed to parse DNS authority {target}: {err}"))?;
     let Some(authority) = parse_result else {
         return Ok(ParseResult {
             endpoint,
@@ -351,7 +351,7 @@ fn parse_host_port(host_and_port: &str, default_port: u16) -> Result<Option<Host
     // We need to use the https scheme otherwise url::Url::parse doesn't convert
     // IP addresses to Host::Ipv4 or Host::Ipv6 if they could represent valid
     // domains.
-    let url = format!("https://{}", host_and_port);
+    let url = format!("https://{host_and_port}");
     let url = url.parse::<url::Url>().map_err(|err| err.to_string())?;
     let port = url.port().unwrap_or(default_port);
     let host = match url.host() {

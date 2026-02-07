@@ -22,9 +22,16 @@
  *
  */
 
-use std::{future::Future, pin::Pin};
+use ::tokio::io::{AsyncRead, AsyncWrite};
+use std::fmt::Debug;
+use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
 
-pub mod tokio;
+pub(crate) mod hyper_wrapper;
+#[cfg(feature = "_runtime-tokio")]
+pub(crate) mod tokio;
+
+type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+pub(crate) type BoxedTaskHandle = Box<dyn TaskHandle>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -33,12 +40,9 @@ pub mod tokio;
 /// time-based operations such as sleeping. It provides a uniform interface
 /// that can be implemented for various async runtimes, enabling pluggable
 /// and testable infrastructure.
-pub(super) trait Runtime: Send + Sync {
+pub(super) trait Runtime: Send + Sync + Debug {
     /// Spawns the given asynchronous task to run in the background.
-    fn spawn(
-        &self,
-        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
-    ) -> Box<dyn TaskHandle>;
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle;
 
     /// Creates and returns an instance of a DNSResolver, optionally
     /// configured by the ResolverOptions struct. This method may return an
@@ -47,6 +51,14 @@ pub(super) trait Runtime: Send + Sync {
 
     /// Returns a future that completes after the specified duration.
     fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>>;
+
+    /// Establishes a TCP connection to the given `target` address with the
+    /// specified `opts`.
+    fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpStream>, String>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -72,4 +84,51 @@ pub(super) struct ResolverOptions {
     /// The address of the DNS server in "IP:port" format. If None, the
     /// system's default DNS server will be used.
     pub(super) server_addr: Option<std::net::SocketAddr>,
+}
+
+#[derive(Default)]
+pub(crate) struct TcpOptions {
+    pub(crate) enable_nodelay: bool,
+    pub(crate) keepalive: Option<Duration>,
+}
+
+pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
+
+/// A fake runtime to satisfy the compiler when no runtime is enabled. This will
+///
+/// # Panics
+///
+/// Panics if any of its functions are called.
+#[derive(Default, Debug)]
+pub(crate) struct NoOpRuntime {}
+
+impl Runtime for NoOpRuntime {
+    fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle {
+        unimplemented!()
+    }
+
+    fn get_dns_resolver(&self, opts: ResolverOptions) -> Result<Box<dyn DnsResolver>, String> {
+        unimplemented!()
+    }
+
+    fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
+        unimplemented!()
+    }
+
+    fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpStream>, String>> + Send>> {
+        unimplemented!()
+    }
+}
+
+pub(crate) fn default_runtime() -> Arc<dyn Runtime> {
+    #[cfg(feature = "_runtime-tokio")]
+    {
+        return Arc::new(tokio::TokioRuntime {});
+    }
+    #[allow(unreachable_code)]
+    Arc::new(NoOpRuntime::default())
 }

@@ -1,0 +1,69 @@
+//! Provides abstraction for xDS resources.
+
+use crate::error::Result;
+use bytes::Bytes;
+
+#[cfg(feature = "codegen-prost")]
+pub mod prost;
+
+/// A type URL identifying an xDS resource type.
+///
+/// Format: `type.googleapis.com/<resource_type>`
+/// e.g. `type.googleapis.com/envoy.config.listener.v3.Listener`
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct TypeUrl(&'static str);
+
+impl TypeUrl {
+    /// Create a new type URL from a static string.
+    pub const fn new(url: &'static str) -> Self {
+        Self(url)
+    }
+
+    /// Returns the type URL as a string slice.
+    pub const fn as_str(&self) -> &'static str {
+        self.0
+    }
+}
+
+/// Trait for xDS resources.
+///
+/// # Validation
+///
+/// The `decode` method should:
+/// - Parse the raw bytes based on the serialization format, such as Protobuf.
+/// - Validate the parsed resource against the expected schema.
+///
+/// It should return `Err` if parsing fails or validation fails.
+/// The error message will be included in the NACK's `error_detail`.
+///
+/// # Example
+///
+/// ```ignore
+/// impl Resource for Listener {
+///     const TYPE_URL: TypeUrl = TypeUrl::new("type.googleapis.com/envoy.config.listener.v3.Listener");
+///
+///     fn decode(bytes: Bytes) -> Result<Self> {
+///         let proto = ListenerProto::decode(bytes)?;
+///         // Validate fields...
+///         Ok(Self { name: proto.name, /* ... */ })
+///     }
+///
+///     fn name(&self) -> &str {
+///         &self.name
+///     }
+/// }
+/// ```
+pub trait Resource: Sized + Send + Sync + 'static {
+    /// The xDS type URL for this resource type.
+    const TYPE_URL: TypeUrl;
+
+    /// Decode and validate a resource from its serialized bytes.
+    ///
+    /// Returns `Err` if parsing fails or validation fails.
+    fn decode(bytes: Bytes) -> Result<Self>;
+
+    /// Returns the resource name.
+    ///
+    /// The resource name combined with the type URL uniquely identifies a resource.
+    fn name(&self) -> &str;
+}

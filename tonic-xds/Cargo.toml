@@ -1,0 +1,41 @@
+[package]
+name = "tonic-xds"
+version = "0.1.0-alpha.1"
+edition = "2021"
+rust-version.workspace = true
+homepage = "https://github.com/hyperium/tonic"
+repository = "https://github.com/hyperium/tonic"
+authors = [
+    "Ankur Mittal <ankurmit2006@gmail.com>",
+    "Jeff Jiang <guokeno0@gmail.com>",
+    "Lucio Franco <luciofranco14@gmail.com>",
+    "Yutao Ma <ytma98@gmail.com>"
+]
+categories = ["web-programming", "network-programming", "asynchronous"]
+description = """
+xDS routing and load balancing implementation for Tonic and Tower services
+"""
+keywords = ["grpc", "xds"]
+license = "MIT"
+publish = false
+exclude = ["proto/test/*"]
+
+[dependencies]
+tonic = "0.14"
+http = "1"
+tower = { version = "0.5", default-features = false, features = ["discover"] }
+dashmap = "6.1"
+thiserror = "2.0.17"
+url = "2.5.8"
+futures-core = "0.3.31"
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
+prost = "0.14"
+tonic-prost = "0.14"
+tokio-stream = "0.1"
+tonic-prost-build = "0.14"

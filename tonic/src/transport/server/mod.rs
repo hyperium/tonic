@@ -1,6 +1,7 @@
 //! Server implementation and builder.
 
 mod conn;
+mod display_error_stack;
 mod incoming;
 mod io_stream;
 mod service;
@@ -45,6 +46,7 @@ use self::service::{ConnectInfoLayer, ServerIo};
 use super::service::GrpcTimeout;
 use crate::body::Body;
 use crate::service::RecoverErrorLayer;
+use crate::transport::server::display_error_stack::DisplayErrorStack;
 use bytes::Bytes;
 use http::{Request, Response};
 use http_body_util::BodyExt;
@@ -96,11 +98,14 @@ pub struct Server<L = Identity> {
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
+    tcp_keepalive_interval: Option<Duration>,
+    tcp_keepalive_retries: Option<u32>,
     tcp_nodelay: bool,
     http2_keepalive_interval: Option<Duration>,
     http2_keepalive_timeout: Duration,
     http2_adaptive_window: Option<bool>,
     http2_max_pending_accept_reset_streams: Option<usize>,
+    http2_max_local_error_reset_streams: Option<usize>,
     http2_max_header_list_size: Option<u32>,
     max_frame_size: Option<u32>,
     accept_http1: bool,
@@ -121,11 +126,14 @@ impl Default for Server<Identity> {
             init_connection_window_size: None,
             max_concurrent_streams: None,
             tcp_keepalive: None,
-            tcp_nodelay: false,
+            tcp_keepalive_interval: None,
+            tcp_keepalive_retries: None,
+            tcp_nodelay: true,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: DEFAULT_HTTP2_KEEPALIVE_TIMEOUT,
             http2_adaptive_window: None,
             http2_max_pending_accept_reset_streams: None,
+            http2_max_local_error_reset_streams: None,
             http2_max_header_list_size: None,
             max_frame_size: None,
             accept_http1: false,
@@ -146,11 +154,7 @@ pub struct Router<L = Identity> {
 impl Server {
     /// Create a new server builder that can configure a [`Server`].
     pub fn builder() -> Self {
-        Server {
-            tcp_nodelay: true,
-            accept_http1: false,
-            ..Default::default()
-        }
+        Self::default()
     }
 }
 
@@ -338,13 +342,24 @@ impl<L> Server<L> {
         }
     }
 
+    /// Configures the maximum number of local reset streams allowed before a GOAWAY will be sent.
+    ///
+    /// This will default to whatever the default in hyper is.
+    #[must_use]
+    pub fn http2_max_local_error_reset_streams(self, max: Option<usize>) -> Self {
+        Server {
+            http2_max_local_error_reset_streams: max,
+            ..self
+        }
+    }
+
     /// Set whether TCP keepalive messages are enabled on accepted connections.
     ///
     /// If `None` is specified, keepalive is disabled, otherwise the duration
     /// specified will be the time to remain idle before sending TCP keepalive
     /// probes.
     ///
-    /// Important: This setting is only respected when not using `serve_with_incoming`.
+    /// Important: This setting is ignored when using `serve_with_incoming`.
     ///
     /// Default is no keepalive (`None`)
     ///
@@ -356,7 +371,46 @@ impl<L> Server<L> {
         }
     }
 
+    /// Set the value of `TCP_KEEPINTVL` option for accepted connections.
+    ///
+    /// This option specifies the time interval between subsequent keepalive probes.
+    /// This setting only takes effect if [`tcp_keepalive`](Self::tcp_keepalive) is also set.
+    ///
+    /// Important: This setting is ignored when using `serve_with_incoming`.
+    ///
+    /// Default is `None` (system default).
+    ///
+    /// Note: This option is only available on some platforms (Linux, macOS, Windows, etc.).
+    #[must_use]
+    pub fn tcp_keepalive_interval(self, tcp_keepalive_interval: Option<Duration>) -> Self {
+        Server {
+            tcp_keepalive_interval,
+            ..self
+        }
+    }
+
+    /// Set the value of `TCP_KEEPCNT` option for accepted connections.
+    ///
+    /// This option specifies the maximum number of keepalive probes that should be sent
+    /// before dropping the connection.
+    /// This setting only takes effect if [`tcp_keepalive`](Self::tcp_keepalive) is also set.
+    ///
+    /// Important: This setting is ignored when using `serve_with_incoming`.
+    ///
+    /// Default is `None` (system default).
+    ///
+    /// Note: This option is only available on some platforms (Linux, macOS, Windows, etc.).
+    #[must_use]
+    pub fn tcp_keepalive_retries(self, tcp_keepalive_retries: Option<u32>) -> Self {
+        Server {
+            tcp_keepalive_retries,
+            ..self
+        }
+    }
+
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    ///
+    /// Important: This setting is ignored when using `serve_with_incoming`.
     #[must_use]
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Server {
@@ -548,12 +602,15 @@ impl<L> Server<L> {
             init_connection_window_size: self.init_connection_window_size,
             max_concurrent_streams: self.max_concurrent_streams,
             tcp_keepalive: self.tcp_keepalive,
+            tcp_keepalive_interval: self.tcp_keepalive_interval,
+            tcp_keepalive_retries: self.tcp_keepalive_retries,
             tcp_nodelay: self.tcp_nodelay,
             http2_keepalive_interval: self.http2_keepalive_interval,
             http2_keepalive_timeout: self.http2_keepalive_timeout,
             http2_adaptive_window: self.http2_adaptive_window,
             http2_max_pending_accept_reset_streams: self.http2_max_pending_accept_reset_streams,
             http2_max_header_list_size: self.http2_max_header_list_size,
+            http2_max_local_error_reset_streams: self.http2_max_local_error_reset_streams,
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
             max_connection_age: self.max_connection_age,
@@ -564,7 +621,9 @@ impl<L> Server<L> {
         Ok(TcpIncoming::bind(addr)
             .map_err(super::Error::from_source)?
             .with_nodelay(Some(self.tcp_nodelay))
-            .with_keepalive(self.tcp_keepalive))
+            .with_keepalive(self.tcp_keepalive)
+            .with_keepalive_interval(self.tcp_keepalive_interval)
+            .with_keepalive_retries(self.tcp_keepalive_retries))
     }
 
     /// Serve the service.
@@ -605,6 +664,8 @@ impl<L> Server<L> {
     }
 
     /// Serve the service on the provided incoming stream.
+    ///
+    /// The `tcp_nodelay` and `tcp_keepalive` settings are ignored when using this method.
     pub async fn serve_with_incoming<S, I, IO, IE, ResBody>(
         self,
         svc: S,
@@ -683,6 +744,7 @@ impl<L> Server<L> {
         let http2_keepalive_timeout = self.http2_keepalive_timeout;
         let http2_adaptive_window = self.http2_adaptive_window;
         let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
+        let http2_max_local_error_reset_streams = self.http2_max_local_error_reset_streams;
         let max_connection_age = self.max_connection_age;
 
         let svc = self.service_builder.service(svc);
@@ -718,6 +780,7 @@ impl<L> Server<L> {
                 .keep_alive_timeout(http2_keepalive_timeout)
                 .adaptive_window(http2_adaptive_window.unwrap_or_default())
                 .max_pending_accept_reset_streams(http2_max_pending_accept_reset_streams)
+                .max_local_error_reset_streams(http2_max_local_error_reset_streams)
                 .max_frame_size(max_frame_size);
 
             if let Some(max_header_list_size) = max_header_list_size {
@@ -744,7 +807,7 @@ impl<L> Server<L> {
                     let io = match io {
                         Some(Ok(io)) => io,
                         Some(Err(e)) => {
-                            trace!("error accepting connection: {:#}", e);
+                            trace!("error accepting connection: {}", DisplayErrorStack(&*e));
                             continue;
                         },
                         None => {
@@ -815,7 +878,7 @@ fn serve_connection<B, IO, S, E>(
                 tokio::select! {
                     rv = &mut conn => {
                         if let Err(err) = rv {
-                            debug!("failed serving connection: {:#}", err);
+                            debug!("failed serving connection: {}", DisplayErrorStack(&*err));
                         }
                         break;
                     },
@@ -1150,5 +1213,51 @@ where
             }),
             None => Poll::Pending,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::transport::Server;
+
+    #[test]
+    fn server_tcp_defaults() {
+        const EXAMPLE_TCP_KEEPALIVE: Duration = Duration::from_secs(10);
+        const EXAMPLE_TCP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+        const EXAMPLE_TCP_KEEPALIVE_RETRIES: u32 = 3;
+
+        // Using ::builder() or ::default() should do the same thing
+        let server_via_builder = Server::builder();
+        assert!(server_via_builder.tcp_nodelay);
+        assert_eq!(server_via_builder.tcp_keepalive, None);
+        assert_eq!(server_via_builder.tcp_keepalive_interval, None);
+        assert_eq!(server_via_builder.tcp_keepalive_retries, None);
+        let server_via_default = Server::default();
+        assert!(server_via_default.tcp_nodelay);
+        assert_eq!(server_via_default.tcp_keepalive, None);
+        assert_eq!(server_via_default.tcp_keepalive_interval, None);
+        assert_eq!(server_via_default.tcp_keepalive_retries, None);
+
+        // overriding should be possible
+        let server_via_builder = Server::builder()
+            .tcp_nodelay(false)
+            .tcp_keepalive(Some(EXAMPLE_TCP_KEEPALIVE))
+            .tcp_keepalive_interval(Some(EXAMPLE_TCP_KEEPALIVE_INTERVAL))
+            .tcp_keepalive_retries(Some(EXAMPLE_TCP_KEEPALIVE_RETRIES));
+        assert!(!server_via_builder.tcp_nodelay);
+        assert_eq!(
+            server_via_builder.tcp_keepalive,
+            Some(EXAMPLE_TCP_KEEPALIVE)
+        );
+        assert_eq!(
+            server_via_builder.tcp_keepalive_interval,
+            Some(EXAMPLE_TCP_KEEPALIVE_INTERVAL)
+        );
+        assert_eq!(
+            server_via_builder.tcp_keepalive_retries,
+            Some(EXAMPLE_TCP_KEEPALIVE_RETRIES)
+        );
     }
 }

@@ -185,14 +185,14 @@ serde_json = "1.0"
 rand = "0.8"
 
 [build-dependencies]
-tonic-build = "*"
+tonic-prost-build = "*"
 ```
 
 Create a `build.rs` file at the root of your crate:
 
 ```rust
 fn main() {
-    tonic_build::compile_protos("proto/route_guide.proto")
+    tonic_prost_build::compile_protos("proto/route_guide.proto")
         .unwrap_or_else(|e| panic!("Failed to compile protos {:?}", e));
 }
 ```
@@ -769,7 +769,7 @@ $ cargo run --bin routeguide-client
 ## Appendix
 
 <a name="tonic-build"></a>
-### tonic_build configuration
+### tonic_prost_build configuration
 
 Tonic's default code generation configuration is convenient for self contained examples and small
 projects. However, there are some cases when we need a slightly different workflow. For example:
@@ -782,7 +782,7 @@ files in the default location.
 More generally, whenever we want to keep our `.proto` definitions in a central place and generate
 code for different crates or different languages, the default configuration is not enough.
 
-Luckily, `tonic_build` can be configured to fit whatever workflow we need. Here are just two
+Luckily, `tonic_prost_build` can be configured to fit whatever workflow we need. Here are just two
 possibilities:
 
 1)  We can keep our `.proto` definitions in a separate crate and generate our code on demand, as
@@ -792,7 +792,7 @@ opposed to at build time, placing the resulting modules wherever we need them.
 
 ```rust
 fn main() {
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_client(false)
         .out_dir("another_crate/src/pb")
         .compile_protos(&["path/my_proto.proto"], &["path"])
