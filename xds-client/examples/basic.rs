@@ -5,28 +5,35 @@
 //! - How to create an `XdsClient` with tonic transport and prost codec
 //! - How to watch for resources and handle events
 //!
+//! # Configuration (environment variables)
+//!
+//! - `XDS_SERVER` — URI of the xDS management server (default: `http://localhost:18000`)
+//! - `XDS_LISTENERS` — Comma-separated listener names to watch (required)
+//! - `XDS_CA_CERT` — Path to PEM-encoded CA certificate (enables TLS)
+//! - `XDS_CLIENT_CERT` — Path to PEM-encoded client certificate (for mTLS, requires `XDS_CA_CERT`)
+//! - `XDS_CLIENT_KEY` — Path to PEM-encoded client key (for mTLS, requires `XDS_CLIENT_CERT`)
+//!
 //! # Usage
 //!
 //! ```sh
 //! # Basic usage
-//! cargo run -p xds-client --example basic -- -l my-listener
+//! XDS_LISTENERS=my-listener cargo run -p xds-client --example basic
 //!
 //! # Multiple listeners
-//! cargo run -p xds-client --example basic -- -l listener-1 -l listener-2
+//! XDS_LISTENERS=listener-1,listener-2 cargo run -p xds-client --example basic
 //!
 //! # Custom server
-//! cargo run -p xds-client --example basic -- -s http://xds.example.com:18000 -l foo
+//! XDS_SERVER=http://xds.example.com:18000 XDS_LISTENERS=foo cargo run -p xds-client --example basic
 //!
 //! # With TLS
-//! cargo run -p xds-client --example basic -- \
-//!   --ca-cert /path/to/ca.pem \
-//!   --client-cert /path/to/client.pem \
-//!   --client-key /path/to/client.key \
-//!   -l my-listener
+//! XDS_CA_CERT=/path/to/ca.pem \
+//!   XDS_CLIENT_CERT=/path/to/client.pem \
+//!   XDS_CLIENT_KEY=/path/to/client.key \
+//!   XDS_LISTENERS=my-listener \
+//!   cargo run -p xds-client --example basic
 //! ```
 
 use bytes::Bytes;
-use clap::Parser;
 use envoy_types::pb::envoy::config::listener::v3::Listener as ListenerProto;
 use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
     http_connection_manager::RouteSpecifier, HttpConnectionManager,
@@ -40,30 +47,47 @@ use xds_client::{
     TokioRuntime, TonicTransport, TonicTransportBuilder, TransportBuilder, XdsClient,
 };
 
-/// Example demonstrating xds-client usage.
-#[derive(Parser, Debug)]
-#[command(name = "basic")]
-#[command(about = "xds-client example - watch Listener resources")]
 struct Args {
-    /// URI of the xDS management server.
-    #[arg(short, long, default_value = "http://localhost:18000")]
     server: String,
-
-    /// Path to PEM-encoded CA certificate for TLS (enables TLS when set).
-    #[arg(long)]
     ca_cert: Option<String>,
-
-    /// Path to PEM-encoded client certificate for mTLS.
-    #[arg(long, requires = "ca_cert")]
     client_cert: Option<String>,
-
-    /// Path to PEM-encoded client key for mTLS.
-    #[arg(long, requires = "client_cert")]
     client_key: Option<String>,
-
-    /// Listener names to watch (pass multiple: -l foo -l bar).
-    #[arg(short, long = "listener", required = true)]
     listeners: Vec<String>,
+}
+
+fn parse_args() -> Args {
+    let server =
+        std::env::var("XDS_SERVER").unwrap_or_else(|_| "http://localhost:18000".to_string());
+
+    let listeners: Vec<String> = std::env::var("XDS_LISTENERS")
+        .expect("XDS_LISTENERS env var is required (comma-separated listener names)")
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect();
+
+    if listeners.is_empty() {
+        panic!("XDS_LISTENERS must contain at least one listener name");
+    }
+
+    let ca_cert = std::env::var("XDS_CA_CERT").ok();
+    let client_cert = std::env::var("XDS_CLIENT_CERT").ok();
+    let client_key = std::env::var("XDS_CLIENT_KEY").ok();
+
+    if client_cert.is_some() && ca_cert.is_none() {
+        panic!("XDS_CLIENT_CERT requires XDS_CA_CERT to be set");
+    }
+    if client_key.is_some() && client_cert.is_none() {
+        panic!("XDS_CLIENT_KEY requires XDS_CLIENT_CERT to be set");
+    }
+
+    Args {
+        server,
+        ca_cert,
+        client_cert,
+        client_key,
+        listeners,
+    }
 }
 
 /// A simplified Listener resource for gRPC xDS.
@@ -135,12 +159,7 @@ impl Resource for Listener {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let args = Args::parse();
-
-    if args.client_cert.is_some() != args.client_key.is_some() {
-        eprintln!("Error: --client-cert and --client-key must be provided together");
-        std::process::exit(1);
-    }
+    let args = parse_args();
 
     println!("xds-client Example\n");
     println!("Connecting to xDS server: {}", args.server);
