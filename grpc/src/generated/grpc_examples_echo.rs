@@ -92,6 +92,14 @@ pub mod echo_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        /// Get the inner reference
+        pub fn get_inner(&self) -> &tonic::client::Grpc<T> {
+            &self.inner
+        }
+        /// Get the inner mutable reference
+        pub fn get_inner_mut(&mut self) -> &mut tonic::client::Grpc<T> {
+            &mut self.inner
+        }
         /// UnaryEcho is unary echo.
         pub async fn unary_echo(
             &mut self,
