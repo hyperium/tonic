@@ -114,7 +114,7 @@ impl TransportBuilder for TlsTransportBuilder {
     type Transport = TonicTransport;
 
     async fn build(&self, server: &ServerConfig) -> XdsResult<Self::Transport> {
-        let channel = Channel::from_shared(server.uri.clone())
+        let channel = Channel::from_shared(server.uri().to_string())
             .map_err(|e| xds_client::Error::Connection(e.to_string()))?
             .tls_config(self.tls_config.clone())
             .map_err(|e| xds_client::Error::Connection(e.to_string()))?

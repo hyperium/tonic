@@ -80,7 +80,7 @@ impl sealed::Sealed for tonic::TonicAdsStream {}
 ///     type Transport = MyTransport;
 ///
 ///     async fn build(&self, server: &ServerConfig) -> Result<Self::Transport> {
-///         // Create transport connected to server.uri
+///         // Create transport connected to server.uri()
 ///     }
 /// }
 /// ```

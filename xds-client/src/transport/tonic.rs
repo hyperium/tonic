@@ -159,7 +159,7 @@ impl TransportBuilder for TonicTransportBuilder {
     type Transport = TonicTransport;
 
     async fn build(&self, server: &ServerConfig) -> Result<Self::Transport> {
-        let channel = Channel::from_shared(server.uri.clone())
+        let channel = Channel::from_shared(server.uri().to_string())
             .map_err(|e| Error::Connection(e.to_string()))?
             .connect()
             .await

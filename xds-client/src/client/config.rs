@@ -9,8 +9,7 @@ use crate::message::Node;
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct ServerConfig {
-    /// URI of the management server (e.g., "https://xds.example.com:443").
-    pub uri: String,
+    uri: String,
     // Future extensions per gRFC:
     // - `ignore_resource_deletion: bool` (gRFC A53)
     // - Server features / capabilities
@@ -22,6 +21,11 @@ impl ServerConfig {
     pub fn new(uri: impl Into<String>) -> Self {
         Self { uri: uri.into() }
     }
+
+    /// Returns the URI of the management server.
+    pub fn uri(&self) -> &str {
+        &self.uri
+    }
 }
 
 /// Default timeout for initial resource response (30 seconds per gRFC A57).
@@ -32,19 +36,19 @@ pub const DEFAULT_RESOURCE_INITIAL_TIMEOUT: Duration = Duration::from_secs(30);
 #[non_exhaustive]
 pub struct ClientConfig {
     /// Node identification sent to the xDS server.
-    pub node: Node,
+    pub(crate) node: Node,
 
     /// Retry policy for connection attempts.
     ///
     /// Controls the backoff behavior when reconnecting to the xDS server.
-    pub retry_policy: RetryPolicy,
+    pub(crate) retry_policy: RetryPolicy,
 
     /// Priority-ordered list of xDS management servers.
     ///
     /// The client will attempt to connect to servers in order, falling back
     /// to the next server if the current one is unavailable (per gRFC A71).
     /// Index 0 has the highest priority.
-    pub servers: Vec<ServerConfig>,
+    pub(crate) servers: Vec<ServerConfig>,
 
     /// Timeout for initial resource response (gRFC A57).
     ///
@@ -52,7 +56,7 @@ pub struct ClientConfig {
     /// is registered, watchers receive a `ResourceDoesNotExist` error.
     ///
     /// Default: 30 seconds. Set to `None` to disable the timeout.
-    pub resource_initial_timeout: Option<Duration>,
+    pub(crate) resource_initial_timeout: Option<Duration>,
     // Future extensions:
     // - `authorities: HashMap<String, AuthorityConfig>` for xDS federation (gRFC A47)
     // - Locality / zone information for locality-aware routing
