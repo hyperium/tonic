@@ -36,7 +36,7 @@
 /// where:
 /// * An `async` function captures a reference to a type that is `!Sync`.
 /// * A variable is dropped before an `.await` point, but the compiler's liveness
-///     analysis incorrectly believes it is held across the await.
+///   analysis incorrectly believes it is held across the await.
 /// * Complex control flow confuses the auto-trait deduction for `Send`.
 ///
 /// These scenarios often result in obscure error messages when trying to spawn

@@ -77,8 +77,10 @@ where
         ),
         String,
     > {
-        let (stream, sec_info) =
-            SendFuture::send(self.connect(authority, source, info, runtime)).await?;
+        let (stream, sec_info) = self
+            .connect(authority, source, info, runtime)
+            .send()
+            .await?;
 
         let boxed_stream: BoxEndpoint = Box::new(stream);
 

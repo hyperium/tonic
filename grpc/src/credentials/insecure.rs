@@ -132,3 +132,69 @@ impl ServerChannelCredentials for InsecureServerChannelCredentials {
         &INFO
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::sync::Arc;
+
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    use crate::credentials::client::{
+        ClientConnectionSecurityContext, ClientHandshakeInfo, Sealed as ClientSealed,
+    };
+    use crate::credentials::common::{Authority, SecurityLevel};
+    use crate::credentials::{ClientChannelCredential, InsecureClientChannelCredentials};
+    use crate::rt::GrpcEndpoint;
+    use crate::rt::{self, TcpOptions};
+
+    #[tokio::test]
+    async fn test_insecure_client_credentials() {
+        let creds = InsecureClientChannelCredentials::new();
+
+        let info = creds.info();
+        assert_eq!(info.security_protocol, "insecure");
+
+        let addr = "127.0.0.1:0";
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+        let authority = Authority {
+            host: "localhost",
+            port: Some(server_addr.port()),
+        };
+
+        let runtime: Arc<dyn rt::Runtime> = Arc::new(rt::tokio::TokioRuntime {});
+        let endpoint = runtime
+            .tcp_stream(server_addr, TcpOptions::default())
+            .await
+            .unwrap();
+        let handshake_info = ClientHandshakeInfo::default();
+
+        let (mut endpoint, security_info) = creds
+            .connect(&authority, endpoint, handshake_info, runtime)
+            .await
+            .unwrap();
+
+        // Verify security info.
+        assert_eq!(security_info.security_protocol, "insecure");
+        assert_eq!(security_info.security_level, SecurityLevel::NoSecurity);
+
+        // Verify data transfer.
+        let (mut server_stream, _) = listener.accept().await.unwrap();
+        assert_eq!(
+            endpoint.get_local_address(),
+            &server_stream.peer_addr().unwrap().to_string()
+        );
+        let test_data = b"hello grpc";
+        server_stream.write_all(test_data).await.unwrap();
+
+        let mut buf = vec![0u8; test_data.len()];
+        endpoint.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, test_data);
+
+        // Validate arbitrary authority.
+        assert!(security_info
+            .security_context
+            .validate_authority(&authority));
+    }
+}
