@@ -138,13 +138,17 @@ mod test {
     use std::sync::Arc;
 
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
+    use tokio::net::{TcpListener, TcpStream};
 
     use crate::credentials::client::{
         ClientConnectionSecurityContext, ClientHandshakeInfo, Sealed as ClientSealed,
     };
     use crate::credentials::common::{Authority, SecurityLevel};
-    use crate::credentials::{ClientChannelCredential, InsecureClientChannelCredentials};
+    use crate::credentials::server::Sealed as ServerSealed;
+    use crate::credentials::{
+        ClientChannelCredential, InsecureClientChannelCredentials,
+        InsecureServerChannelCredentials, ServerChannelCredentials,
+    };
     use crate::rt::GrpcEndpoint;
     use crate::rt::{self, TcpOptions};
 
@@ -196,5 +200,41 @@ mod test {
         assert!(security_info
             .security_context
             .validate_authority(&authority));
+    }
+
+    #[tokio::test]
+    async fn test_insecure_server_credentials() {
+        let creds = InsecureServerChannelCredentials::new();
+
+        let info = creds.info();
+        assert_eq!(info.security_protocol, "insecure");
+
+        let addr = "127.0.0.1:0";
+        let runtime: Arc<dyn rt::Runtime> = Arc::new(rt::tokio::TokioRuntime {});
+        let mut listener = runtime.listen_tcp(addr.parse().unwrap()).await.unwrap();
+        let server_addr = listener.local_addr().clone();
+
+        let client_handle = tokio::spawn(async move {
+            let mut stream = TcpStream::connect(server_addr).await.unwrap();
+            let data = b"hello grpc";
+            stream.write_all(data).await.unwrap();
+
+            // Keep the connection alive for a bit so server can read.
+            let mut buf = vec![0u8; 1];
+            let _ = stream.read(&mut buf).await;
+        });
+
+        let (server_stream, _) = listener.accept().await.unwrap();
+
+        let (mut endpoint, security_info) = creds.accept(server_stream, runtime).await.unwrap();
+
+        assert_eq!(security_info.security_protocol, "insecure");
+        assert_eq!(security_info.security_level, SecurityLevel::NoSecurity);
+
+        let mut buf = vec![0u8; 10];
+        endpoint.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf[..], b"hello grpc");
+
+        client_handle.abort();
     }
 }

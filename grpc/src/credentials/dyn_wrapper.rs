@@ -142,7 +142,9 @@ mod tests {
     use super::*;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::{Authority, SecurityLevel};
-    use crate::credentials::insecure::InsecureClientChannelCredentials;
+    use crate::credentials::insecure::{
+        InsecureClientChannelCredentials, InsecureServerChannelCredentials,
+    };
     use crate::rt::tokio::TokioRuntime;
     use crate::rt::TcpOptions;
     use std::sync::Arc;
@@ -195,5 +197,45 @@ mod tests {
         assert!(security_info
             .security_context
             .validate_authority(&authority));
+    }
+
+    #[tokio::test]
+    async fn test_dyn_server_credential_dispatch() {
+        let creds = InsecureServerChannelCredentials::new();
+        let dyn_creds: Box<dyn DynServerChannelCredentials> = Box::new(creds);
+
+        let info = dyn_creds.info();
+        assert_eq!(info.security_protocol, "insecure");
+
+        let addr = "127.0.0.1:0";
+        let runtime: Arc<dyn Runtime> = Arc::new(TokioRuntime {});
+        let mut listener = runtime.listen_tcp(addr.parse().unwrap()).await.unwrap();
+        let server_addr = listener.local_addr().clone();
+
+        let client_handle = tokio::spawn(async move {
+            let mut stream = tokio::net::TcpStream::connect(server_addr).await.unwrap();
+            let data = b"hello dynamic grpc server";
+            stream.write_all(data).await.unwrap();
+
+            // Keep the connection alive for a bit so server can read
+            let mut buf = vec![0u8; 1];
+            let _ = stream.read(&mut buf).await;
+        });
+
+        let (server_stream, _) = listener.accept().await.unwrap();
+
+        let result = dyn_creds.accept(server_stream, runtime).await;
+
+        assert!(result.is_ok());
+        let (mut endpoint, security_info) = result.unwrap();
+
+        assert_eq!(security_info.security_protocol, "insecure");
+        assert_eq!(security_info.security_level, SecurityLevel::NoSecurity);
+
+        let mut buf = vec![0u8; 25];
+        endpoint.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf[..], b"hello dynamic grpc server");
+
+        client_handle.abort();
     }
 }
