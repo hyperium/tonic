@@ -115,11 +115,7 @@ impl Runtime for TokioRuntime {
                     .map_err(|err| err.to_string())?;
             }
             let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioTcpStream {
-                peer_addr: stream
-                    .peer_addr()
-                    .map_err(|err| err.to_string())?
-                    .to_string()
-                    .into_boxed_str(),
+                peer_addr: target.to_string().into_boxed_str(),
                 local_addr: stream
                     .local_addr()
                     .map_err(|err| err.to_string())?
