@@ -199,7 +199,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     for name in &args.listeners {
         println!("Watching for Listener: '{name}'");
 
-        let mut watcher = client.watch::<Listener>(name);
+        let mut watcher = client.watch::<Listener>(name).await;
         let tx = event_tx.clone();
 
         tokio::spawn(async move {

@@ -45,7 +45,7 @@ where
     /// This spawns a background task that manages the ADS stream.
     /// The task runs until all `XdsClient` handles are dropped.
     pub fn build(self) -> XdsClient {
-        let (command_tx, command_rx) = mpsc::unbounded_channel();
+        let (command_tx, command_rx) = mpsc::channel(COMMAND_CHANNEL_BUFFER_SIZE);
 
         let worker = AdsWorker::new(
             self.transport_builder,
@@ -73,8 +73,15 @@ where
 #[derive(Clone, Debug)]
 pub struct XdsClient {
     /// Channel to send commands to the worker.
-    command_tx: mpsc::UnboundedSender<WorkerCommand>,
+    command_tx: mpsc::Sender<WorkerCommand>,
 }
+
+/// Buffer size for the command channel between [`XdsClient`] handles and the worker.
+///
+/// Commands are lightweight (watch/unwatch/timer), so a modest buffer suffices.
+/// The channel provides backpressure if the worker is temporarily busy processing
+/// a response.
+const COMMAND_CHANNEL_BUFFER_SIZE: usize = 64;
 
 /// Default buffer size for watcher event channels.
 ///
@@ -110,14 +117,14 @@ impl XdsClient {
     /// # Example
     ///
     /// ```ignore
-    /// let mut watcher = client.watch::<Listener>("my-listener");
+    /// let mut watcher = client.watch::<Listener>("my-listener").await;
     /// while let Some(event) = watcher.next().await {
     ///     match event {
-    ///         ResourceEvent::ResourceChanged { resource, done } => {
+    ///         ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
     ///             println!("Listener changed: {}", resource.name());
     ///             // Signal is sent automatically when done is dropped
     ///         }
-    ///         ResourceEvent::ResourceError { error, done } => {
+    ///         ResourceEvent::ResourceChanged { result: Err(error), .. } => {
     ///             println!("Error watching listener: {}", error);
     ///         }
     ///         ResourceEvent::AmbientError { error, .. } => {
@@ -126,7 +133,7 @@ impl XdsClient {
     ///     }
     /// }
     /// ```
-    pub fn watch<T: Resource>(&self, name: impl Into<String>) -> ResourceWatcher<T> {
+    pub async fn watch<T: Resource>(&self, name: impl Into<String>) -> ResourceWatcher<T> {
         let name = name.into();
         let watcher_id = WatcherId::new();
         let (event_tx, event_rx) = mpsc::channel(WATCHER_CHANNEL_BUFFER_SIZE);
@@ -146,14 +153,17 @@ impl XdsClient {
             }
         });
 
-        let _ = self.command_tx.send(WorkerCommand::Watch {
-            type_url: T::TYPE_URL.as_str(),
-            name,
-            watcher_id,
-            event_tx,
-            decoder,
-            all_resources_required_in_sotw: T::ALL_RESOURCES_REQUIRED_IN_SOTW,
-        });
+        let _ = self
+            .command_tx
+            .send(WorkerCommand::Watch {
+                type_url: T::TYPE_URL.as_str(),
+                name,
+                watcher_id,
+                event_tx,
+                decoder,
+                all_resources_required_in_sotw: T::ALL_RESOURCES_REQUIRED_IN_SOTW,
+            })
+            .await;
 
         ResourceWatcher::new(event_rx, watcher_id, self.command_tx.clone())
     }

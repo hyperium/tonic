@@ -334,9 +334,9 @@ pub(crate) struct AdsWorker<TB, C, R> {
     /// Timeout for initial resource response (gRFC A57). None = disabled.
     resource_initial_timeout: Option<Duration>,
     /// Sender for timer callback commands.
-    command_tx: mpsc::UnboundedSender<WorkerCommand>,
+    command_tx: mpsc::Sender<WorkerCommand>,
     /// Receiver for commands from XdsClient.
-    command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
+    command_rx: mpsc::Receiver<WorkerCommand>,
     /// Per-type_url state.
     type_states: HashMap<String, TypeState>,
     /// Cancellation handles for resource timers (gRFC A57).
@@ -356,8 +356,8 @@ where
         codec: C,
         runtime: R,
         config: ClientConfig,
-        command_tx: mpsc::UnboundedSender<WorkerCommand>,
-        command_rx: mpsc::UnboundedReceiver<WorkerCommand>,
+        command_tx: mpsc::Sender<WorkerCommand>,
+        command_rx: mpsc::Receiver<WorkerCommand>,
     ) -> Self {
         Self {
             transport_builder,
@@ -984,7 +984,7 @@ where
                     let _ = command_tx.send(WorkerCommand::ResourceTimerExpired {
                         type_url: type_url_owned,
                         name,
-                    });
+                    }).await;
                 }
                 _ = cancel_rx => {}
             }

@@ -26,7 +26,7 @@ use crate::resource::{DecodedResource, Resource};
 /// match event {
 ///     ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
 ///         // Process the new resource, possibly add cascading watches.
-///         client.watch::<RouteConfiguration>(&resource.route_name());
+///         client.watch::<RouteConfiguration>(&resource.route_name()).await;
 ///         // Signal is sent automatically when done is dropped
 ///     }
 ///     ResourceEvent::ResourceChanged { result: Err(error), done } => {
@@ -117,7 +117,7 @@ pub struct ResourceWatcher<T: Resource> {
     /// Unique identifier for this watcher.
     watcher_id: WatcherId,
     /// Channel to send commands to the worker (for unwatch on drop).
-    command_tx: mpsc::UnboundedSender<WorkerCommand>,
+    command_tx: mpsc::Sender<WorkerCommand>,
     /// Marker for the resource type.
     _marker: PhantomData<T>,
 }
@@ -127,7 +127,7 @@ impl<T: Resource> ResourceWatcher<T> {
     pub(crate) fn new(
         event_rx: mpsc::Receiver<ResourceEvent<DecodedResource>>,
         watcher_id: WatcherId,
-        command_tx: mpsc::UnboundedSender<WorkerCommand>,
+        command_tx: mpsc::Sender<WorkerCommand>,
     ) -> Self {
         Self {
             event_rx,
@@ -192,7 +192,9 @@ impl<T: Resource> ResourceWatcher<T> {
 
 impl<T: Resource> Drop for ResourceWatcher<T> {
     fn drop(&mut self) {
-        let _ = self.command_tx.send(WorkerCommand::Unwatch {
+        // Best-effort: if the channel is full or closed, the worker will
+        // detect the closed event channel and clean up the watcher eventually.
+        let _ = self.command_tx.try_send(WorkerCommand::Unwatch {
             watcher_id: self.watcher_id,
         });
     }
