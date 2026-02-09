@@ -31,19 +31,22 @@ use crate::attributes::avl::Avl;
 
 mod avl;
 
+/// Ensures only types that support comparison can be inserted into the
+/// Attributes struct. This allows the use of value-based equality rather than
+/// relying on pointer comparisons.
 trait AttributeTrait: Any + Send + Sync + Debug {
-    fn as_any(&self) -> &dyn Any;
+    fn any_ref(&self) -> &dyn Any;
     fn dyn_eq(&self, other: &dyn AttributeTrait) -> bool;
     fn dyn_cmp(&self, other: &dyn AttributeTrait) -> Ordering;
 }
 
 impl<T: Any + Send + Sync + Eq + Ord + Debug> AttributeTrait for T {
-    fn as_any(&self) -> &dyn Any {
+    fn any_ref(&self) -> &dyn Any {
         self
     }
 
     fn dyn_eq(&self, other: &dyn AttributeTrait) -> bool {
-        if let Some(other) = other.as_any().downcast_ref::<T>() {
+        if let Some(other) = other.any_ref().downcast_ref::<T>() {
             self == other
         } else {
             false
@@ -51,11 +54,12 @@ impl<T: Any + Send + Sync + Eq + Ord + Debug> AttributeTrait for T {
     }
 
     fn dyn_cmp(&self, other: &dyn AttributeTrait) -> Ordering {
-        if let Some(other) = other.as_any().downcast_ref::<T>() {
+        if let Some(other) = other.any_ref().downcast_ref::<T>() {
             self.cmp(other)
         } else {
-            // Fallback for safety, though Avl structure guarantees same-type comparison
-            TypeId::of::<T>().cmp(&other.as_any().type_id())
+            // Fallback for safety, though Avl structure guarantees same-type
+            // comparison.
+            TypeId::of::<T>().cmp(&other.any_ref().type_id())
         }
     }
 }
@@ -115,7 +119,7 @@ impl Attributes {
     /// Gets a reference to a value of type T.
     pub fn get<T: 'static>(&self) -> Option<&T> {
         let id = TypeId::of::<T>();
-        self.map.get(&id).and_then(|v| v.0.as_any().downcast_ref())
+        self.map.get(&id).and_then(|v| v.0.any_ref().downcast_ref())
     }
 
     /// Removes a value of type T from the attributes.
