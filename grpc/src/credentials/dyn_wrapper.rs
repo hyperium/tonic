@@ -35,7 +35,11 @@ use crate::credentials::{ClientChannelCredential, ProtocolInfo, ServerChannelCre
 use crate::rt::{GrpcEndpoint, Runtime};
 use crate::send_future::SendFuture;
 
-impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {}
+impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {
+    fn validate_authority(&self, authority: &Authority) -> bool {
+        (**self).validate_authority(authority)
+    }
+}
 type BoxEndpoint = Box<dyn GrpcEndpoint + 'static>;
 
 // Bridge trait for type erasure.
@@ -130,5 +134,66 @@ where
 
     fn info(&self) -> &ProtocolInfo {
         self.info()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::credentials::client::ClientHandshakeInfo;
+    use crate::credentials::common::{Authority, SecurityLevel};
+    use crate::credentials::insecure::InsecureClientChannelCredentials;
+    use crate::rt::tokio::TokioRuntime;
+    use crate::rt::TcpOptions;
+    use std::sync::Arc;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tokio::net::TcpListener;
+
+    #[tokio::test]
+    async fn test_dyn_client_credential_dispatch() {
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+
+        let creds = InsecureClientChannelCredentials::new();
+        let dyn_creds: Box<dyn DynClientChannelCredential> = Box::new(creds);
+
+        let authority = Authority {
+            host: "localhost",
+            port: Some(addr.port()),
+        };
+
+        let runtime = Arc::new(TokioRuntime {});
+        let source = runtime
+            .tcp_stream(addr, TcpOptions::default())
+            .await
+            .unwrap();
+        let info = ClientHandshakeInfo::default();
+
+        let result = dyn_creds.connect(&authority, source, info, runtime).await;
+
+        assert!(result.is_ok());
+        let (mut endpoint, security_info) = result.unwrap();
+
+        assert!(!endpoint.get_local_address().is_empty());
+        assert_eq!(security_info.security_protocol, "insecure");
+        assert_eq!(security_info.security_level, SecurityLevel::NoSecurity);
+
+        // Verify data transfer.
+        let (mut server_stream, _) = listener.accept().await.unwrap();
+        assert_eq!(
+            endpoint.get_local_address(),
+            &server_stream.peer_addr().unwrap().to_string()
+        );
+        let test_data = b"hello dynamic grpc";
+        server_stream.write_all(test_data).await.unwrap();
+
+        let mut buf = vec![0u8; test_data.len()];
+        endpoint.read_exact(&mut buf).await.unwrap();
+        assert_eq!(buf, test_data);
+
+        // Validate arbitrary authority.
+        assert!(security_info
+            .security_context
+            .validate_authority(&authority));
     }
 }
