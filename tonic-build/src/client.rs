@@ -130,6 +130,16 @@ pub(crate) fn generate_internal<T: Service>(
                     self
                 }
 
+                /// Get the inner reference
+                pub fn get_inner(&self) -> &tonic::client::Grpc<T> {
+                    &self.inner
+                }
+
+                /// Get the inner mutable reference
+                pub fn get_inner_mut(&mut self) -> &mut tonic::client::Grpc<T> {
+                    &mut self.inner
+                }
+
                 #methods
             }
         }
