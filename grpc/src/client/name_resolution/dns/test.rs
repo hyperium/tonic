@@ -299,6 +299,13 @@ impl rt::Runtime for FakeRuntime {
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::GrpcEndpoint>, String>> + Send>> {
         self.inner.tcp_stream(target, opts)
     }
+
+    fn listen_tcp(
+        &self,
+        _addr: std::net::SocketAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::TcpListener>, String>> + Send>> {
+        unimplemented!()
+    }
 }
 
 #[tokio::test]

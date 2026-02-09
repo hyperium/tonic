@@ -58,6 +58,9 @@ pub trait Runtime: Send + Sync + Debug {
         target: SocketAddr,
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>>;
+
+    /// Create a new listener for the given address.
+    fn listen_tcp(&self, addr: SocketAddr) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -122,6 +125,24 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
     }
 }
 
+/// A trait representing a TCP listener capable of accepting incoming
+/// connections.
+pub trait TcpListener: Send + Sync {
+    /// Accepts a new incoming connection.
+    ///
+    /// Returns a future that resolves to a result containing the new
+    /// `GrpcEndpoint` and the remote peer's `SocketAddr`, or an error string
+    /// if acceptance fails.
+    fn accept(
+        &mut self,
+    ) -> Pin<
+        Box<dyn Future<Output = Result<(Box<dyn GrpcEndpoint>, SocketAddr), String>> + Send + '_>,
+    >;
+
+    /// Returns the local socket address this listener is bound to.
+    fn local_addr(&self) -> &SocketAddr;
+}
+
 /// A fake runtime to satisfy the compiler when no runtime is enabled. This will
 ///
 /// # Panics
@@ -148,6 +169,13 @@ impl Runtime for NoOpRuntime {
         target: SocketAddr,
         opts: TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
+        unimplemented!()
+    }
+
+    fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpListener>, String>> + Send>> {
         unimplemented!()
     }
 }
