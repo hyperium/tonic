@@ -1,6 +1,6 @@
 //! Client interface through which the user can watch and receive updates for xDS resources.
 
-use futures::channel::mpsc;
+use tokio::sync::mpsc;
 
 use crate::client::config::ClientConfig;
 use crate::client::watch::ResourceWatcher;
@@ -45,7 +45,7 @@ where
     /// This spawns a background task that manages the ADS stream.
     /// The task runs until all `XdsClient` handles are dropped.
     pub fn build(self) -> XdsClient {
-        let (command_tx, command_rx) = mpsc::unbounded();
+        let (command_tx, command_rx) = mpsc::unbounded_channel();
 
         let worker = AdsWorker::new(
             self.transport_builder,
@@ -146,7 +146,7 @@ impl XdsClient {
             }
         });
 
-        let _ = self.command_tx.unbounded_send(WorkerCommand::Watch {
+        let _ = self.command_tx.send(WorkerCommand::Watch {
             type_url: T::TYPE_URL.as_str(),
             name,
             watcher_id,

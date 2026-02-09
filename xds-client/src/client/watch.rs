@@ -3,8 +3,7 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use futures::channel::{mpsc, oneshot};
-use futures::StreamExt;
+use tokio::sync::{mpsc, oneshot};
 
 use crate::client::worker::{WatcherId, WorkerCommand};
 use crate::error::Error;
@@ -164,7 +163,7 @@ impl<T: Resource> ResourceWatcher<T> {
     /// }
     /// ```
     pub async fn next(&mut self) -> Option<ResourceEvent<T>> {
-        let event = self.event_rx.next().await?;
+        let event = self.event_rx.recv().await?;
 
         Some(match event {
             ResourceEvent::ResourceChanged { result, done } => {
@@ -193,7 +192,7 @@ impl<T: Resource> ResourceWatcher<T> {
 
 impl<T: Resource> Drop for ResourceWatcher<T> {
     fn drop(&mut self) {
-        let _ = self.command_tx.unbounded_send(WorkerCommand::Unwatch {
+        let _ = self.command_tx.send(WorkerCommand::Unwatch {
             watcher_id: self.watcher_id,
         });
     }

@@ -12,8 +12,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use bytes::Bytes;
-use futures::channel::{mpsc, oneshot};
-use futures::{FutureExt, SinkExt, StreamExt};
+use tokio::sync::{mpsc, oneshot};
 
 use crate::client::config::{ClientConfig, ServerConfig};
 use crate::client::retry::Backoff;
@@ -385,7 +384,7 @@ where
             // This prevents deadlock with servers that require a message before
             // sending response headers - we need something to send.
             while self.type_states.is_empty() {
-                match self.command_rx.next().await {
+                match self.command_rx.recv().await {
                     Some(cmd) => {
                         let _ = self
                             .handle_command::<<TB::Transport as Transport>::Stream>(None, cmd)
@@ -482,8 +481,8 @@ where
     /// Returns `Err` if an error occurred and the worker should reconnect.
     async fn run_connected<S: TransportStream>(&mut self, mut stream: S) -> Result<()> {
         loop {
-            futures::select! {
-                result = stream.recv().fuse() => {
+            tokio::select! {
+                result = stream.recv() => {
                     match result {
                         Ok(Some(bytes)) => {
                             self.handle_response(&mut stream, bytes).await?;
@@ -494,7 +493,7 @@ where
                     }
                 }
 
-                cmd = self.command_rx.next() => {
+                cmd = self.command_rx.recv() => {
                     match cmd {
                         Some(cmd) => {
                             self.handle_command(Some(&mut stream), cmd).await?;
@@ -560,7 +559,7 @@ where
         type_url: &'static str,
         name: String,
         watcher_id: WatcherId,
-        mut event_tx: mpsc::Sender<ResourceEvent<DecodedResource>>,
+        event_tx: mpsc::Sender<ResourceEvent<DecodedResource>>,
         decoder: DecoderFn,
         all_resources_required_in_sotw: bool,
     ) -> bool {
@@ -736,8 +735,10 @@ where
             .await;
         processing_done_futures.extend(deleted_futures);
 
-        // Wait for all watchers to finish processing concurrently.
-        let _ = futures::future::join_all(processing_done_futures).await;
+        // Wait for all watchers to finish processing.
+        for rx in processing_done_futures {
+            let _ = rx.await;
+        }
 
         let has_errors = !top_level_errors.is_empty() || !per_resource_errors.is_empty();
         if !has_errors {
@@ -807,7 +808,7 @@ where
             let resource_name = resource.name().to_string();
             let resource = Arc::new(resource);
 
-            for (_watcher_id, mut event_tx, subscription) in watcher_info.clone() {
+            for (_watcher_id, event_tx, subscription) in watcher_info.clone() {
                 if subscription.matches(&resource_name) {
                     let (done, rx) = ProcessingDone::channel();
                     let event = ResourceEvent::ResourceChanged {
@@ -844,7 +845,7 @@ where
         self.resource_timers
             .remove(&(type_url.to_string(), resource_name.to_string()));
 
-        for mut event_tx in type_state.matching_watchers(resource_name) {
+        for event_tx in type_state.matching_watchers(resource_name) {
             let (done, _rx) = ProcessingDone::channel();
             let event = ResourceEvent::ResourceChanged {
                 result: Err(Error::Validation(error.to_string())),
@@ -889,7 +890,7 @@ where
                 .cache
                 .insert(name.clone(), CachedResource::does_not_exist());
 
-            for mut event_tx in type_state.matching_watchers(&name) {
+            for event_tx in type_state.matching_watchers(&name) {
                 let (done, rx) = ProcessingDone::channel();
                 let event = ResourceEvent::ResourceChanged {
                     result: Err(Error::ResourceDoesNotExist),
@@ -978,14 +979,14 @@ where
         let runtime = self.runtime.clone();
 
         self.runtime.spawn(async move {
-            futures::select! {
-                _ = runtime.sleep(timeout).fuse() => {
-                    let _ = command_tx.unbounded_send(WorkerCommand::ResourceTimerExpired {
+            tokio::select! {
+                _ = runtime.sleep(timeout) => {
+                    let _ = command_tx.send(WorkerCommand::ResourceTimerExpired {
                         type_url: type_url_owned,
                         name,
                     });
                 }
-                _ = cancel_rx.fuse() => {}
+                _ = cancel_rx => {}
             }
         });
 
@@ -1019,7 +1020,7 @@ where
             .cache
             .insert(name.to_string(), CachedResource::does_not_exist());
 
-        for mut event_tx in type_state.matching_watchers(name) {
+        for event_tx in type_state.matching_watchers(name) {
             let (done, _rx) = ProcessingDone::channel();
             let event = ResourceEvent::ResourceChanged {
                 result: Err(Error::ResourceDoesNotExist),
