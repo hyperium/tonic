@@ -19,26 +19,26 @@
 //!
 //! // Create node and configuration
 //! let node = Node::new("grpc", "1.0").with_id("my-node");
-//! let config = ClientConfig::new(node);
+//! let config = ClientConfig::new(node, "https://xds.example.com:443");
 //!
 //! // Build client with transport, codec, and runtime
 //! let client = XdsClient::builder(config, transport, codec, runtime).build();
 //!
 //! // Watch for Listener resources
-//! let mut watcher = client.watch::<Listener>("my-listener");
+//! let mut watcher = client.watch::<Listener>("my-listener").await;
 //! while let Some(event) = watcher.next().await {
 //!     match event {
-//!         ResourceEvent::ResourceChanged { resource, done } => {
+//!         ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
 //!             // Process the resource, possibly add cascading watches.
-//!             client.watch::<RouteConfiguration>(&resource.route_name());
-//!             done.complete();
+//!             client.watch::<RouteConfiguration>(&resource.route_name()).await;
+//!             // Signal is sent automatically when done is dropped
 //!         }
-//!         ResourceEvent::ResourceError { error, done } => {
-//!             eprintln!("Error: {}", error);
-//!             done.complete();
+//!         ResourceEvent::ResourceChanged { result: Err(error), .. } => {
+//!             // Resource was invalidated (validation error or deleted)
+//!             eprintln!("Resource invalidated: {}", error);
 //!         }
 //!         ResourceEvent::AmbientError { error, .. } => {
-//!             // Can also rely on auto-signal on drop
+//!             // Non-fatal error, continue using cached resource
 //!             eprintln!("Ambient error: {}", error);
 //!         }
 //!     }

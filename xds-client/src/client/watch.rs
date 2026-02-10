@@ -148,7 +148,7 @@ impl<T: Resource> ResourceWatcher<T> {
     ///     match event {
     ///         ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
     ///             // Process the new resource, possibly add cascading watches.
-    ///             client.watch::<RouteConfiguration>(&resource.route_name());
+    ///             client.watch::<RouteConfiguration>(&resource.route_name()).await;
     ///             // Signal is sent automatically when done is dropped
     ///         }
     ///         ResourceEvent::ResourceChanged { result: Err(error), done } => {
