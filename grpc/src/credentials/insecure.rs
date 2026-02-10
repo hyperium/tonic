@@ -38,12 +38,14 @@ use crate::rt::{GrpcEndpoint, Runtime};
 /// This credential type does not perform any encryption or authentication. It
 /// simply passes the raw underlying transport as the output.
 #[derive(Debug, Clone, Default)]
-pub struct InsecureClientChannelCredentials;
+pub struct InsecureClientChannelCredentials {
+    _private: (),
+}
 
 impl InsecureClientChannelCredentials {
     /// Creates a new instance of `InsecureChannelCredentials`.
     pub fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 }
 
@@ -97,11 +99,13 @@ impl ClientChannelCredential for InsecureClientChannelCredentials {
 
 /// An implementation of [`ServerChannelCredentials`] for insecure connections.
 #[derive(Debug, Clone, Default)]
-pub struct InsecureServerChannelCredentials;
+pub struct InsecureServerChannelCredentials {
+    _private: (),
+}
 
 impl InsecureServerChannelCredentials {
     pub fn new() -> Self {
-        Self
+        Self { _private: () }
     }
 }
 

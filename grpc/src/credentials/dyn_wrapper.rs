@@ -83,7 +83,7 @@ where
     > {
         let (stream, sec_info) = self
             .connect(authority, source, info, runtime)
-            .send()
+            .make_send()
             .await?;
 
         let boxed_stream: BoxEndpoint = Box::new(stream);
@@ -127,7 +127,7 @@ where
         source: BoxEndpoint,
         runtime: Arc<dyn Runtime>,
     ) -> Result<(BoxEndpoint, ServerConnectionSecurityInfo), String> {
-        let (stream, sec_info) = SendFuture::send(self.accept(source, runtime)).await?;
+        let (stream, sec_info) = SendFuture::make_send(self.accept(source, runtime)).await?;
         let boxed_stream: Box<dyn GrpcEndpoint> = Box::new(stream);
         Ok((boxed_stream, sec_info))
     }

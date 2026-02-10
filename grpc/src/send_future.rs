@@ -95,11 +95,12 @@
 /// [`Future`]: core::future::Future
 /// [`Send`]: core::marker::Send
 pub trait SendFuture: core::future::Future {
-    /// Consumes the future and returns it as an opaque type that is guaranteed to be [`Send`].
+    /// Consumes the future and returns it as an opaque type that is guaranteed
+    /// to be [`Send`].
     ///
     /// This is a zero-cost abstraction (it simply returns `self`) used primarily
     /// to help the compiler resolve auto-traits or to produce better error diagnostics.
-    fn send(self) -> impl core::future::Future<Output = Self::Output> + Send
+    fn make_send(self) -> impl core::future::Future<Output = Self::Output> + Send
     where
         Self: Sized + Send,
     {
