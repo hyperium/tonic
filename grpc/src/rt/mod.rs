@@ -91,7 +91,7 @@ pub struct TcpOptions {
     pub(crate) keepalive: Option<Duration>,
 }
 
-mod endpoint {
+pub(crate) mod endpoint {
     /// This trait is sealed since we may need to change the read and write
     /// methods to align closely with the gRPC C++ implementations. For example,
     /// the read method may be responsible for allocating the buffer and
