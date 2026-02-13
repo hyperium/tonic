@@ -1,5 +1,5 @@
 use interop::client::{InteropTest, InteropTestUnimplemented};
-use interop::{client_prost, client_protobuf};
+use interop::client_prost;
 use std::{str::FromStr, time::Duration};
 use tonic::transport::Endpoint;
 use tonic::transport::{Certificate, ClientTlsConfig};
@@ -14,7 +14,6 @@ struct Opts {
 #[derive(Debug)]
 enum Codec {
     Prost,
-    Protobuf,
 }
 
 impl FromStr for Codec {
@@ -23,7 +22,6 @@ impl FromStr for Codec {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "prost" => Ok(Codec::Prost),
-            "protobuf" => Ok(Codec::Protobuf),
             _ => Err(format!("Invalid codec: {}", s)),
         }
     }
@@ -76,10 +74,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Codec::Prost => (
             Box::new(client_prost::TestClient::new(channel.clone())),
             Box::new(client_prost::UnimplementedClient::new(channel)),
-        ),
-        Codec::Protobuf => (
-            Box::new(client_protobuf::TestClient::new(channel.clone())),
-            Box::new(client_protobuf::UnimplementedClient::new(channel)),
         ),
     };
 

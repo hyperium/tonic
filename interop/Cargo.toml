@@ -26,15 +26,6 @@ tonic = {path = "../tonic", features = ["tls-ring"]}
 tonic-prost = {path = "../tonic-prost"}
 tower = "0.5"
 tracing-subscriber = {version = "0.3"}
-grpc = {path = "../grpc"}
-# TODO: Remove the direct protobuf dependency after updating to version 4.32,
-# which includes https://github.com/protocolbuffers/protobuf/pull/22764.
-# We also need the protobuf-codegen crate to support configuring the path
-# to the protobuf crate used in the generated message code, instead of
-# defaulting to `::protobuf`.
-protobuf = { version = "4.32.0-release" }
-tonic-protobuf = {path = "../tonic-protobuf"}
 
 [build-dependencies]
 tonic-prost-build = {path = "../tonic-prost-build"}
-tonic-protobuf-build = {path = "../tonic-protobuf-build"}
