@@ -98,6 +98,8 @@ pub struct Server<L = Identity> {
     init_connection_window_size: Option<u32>,
     max_concurrent_streams: Option<u32>,
     tcp_keepalive: Option<Duration>,
+    tcp_keepalive_interval: Option<Duration>,
+    tcp_keepalive_retries: Option<u32>,
     tcp_nodelay: bool,
     http2_keepalive_interval: Option<Duration>,
     http2_keepalive_timeout: Duration,
@@ -124,7 +126,9 @@ impl Default for Server<Identity> {
             init_connection_window_size: None,
             max_concurrent_streams: None,
             tcp_keepalive: None,
-            tcp_nodelay: false,
+            tcp_keepalive_interval: None,
+            tcp_keepalive_retries: None,
+            tcp_nodelay: true,
             http2_keepalive_interval: None,
             http2_keepalive_timeout: DEFAULT_HTTP2_KEEPALIVE_TIMEOUT,
             http2_adaptive_window: None,
@@ -150,11 +154,7 @@ pub struct Router<L = Identity> {
 impl Server {
     /// Create a new server builder that can configure a [`Server`].
     pub fn builder() -> Self {
-        Server {
-            tcp_nodelay: true,
-            accept_http1: false,
-            ..Default::default()
-        }
+        Self::default()
     }
 }
 
@@ -359,7 +359,7 @@ impl<L> Server<L> {
     /// specified will be the time to remain idle before sending TCP keepalive
     /// probes.
     ///
-    /// Important: This setting is only respected when not using `serve_with_incoming`.
+    /// Important: This setting is ignored when using `serve_with_incoming`.
     ///
     /// Default is no keepalive (`None`)
     ///
@@ -371,7 +371,46 @@ impl<L> Server<L> {
         }
     }
 
+    /// Set the value of `TCP_KEEPINTVL` option for accepted connections.
+    ///
+    /// This option specifies the time interval between subsequent keepalive probes.
+    /// This setting only takes effect if [`tcp_keepalive`](Self::tcp_keepalive) is also set.
+    ///
+    /// Important: This setting is ignored when using `serve_with_incoming`.
+    ///
+    /// Default is `None` (system default).
+    ///
+    /// Note: This option is only available on some platforms (Linux, macOS, Windows, etc.).
+    #[must_use]
+    pub fn tcp_keepalive_interval(self, tcp_keepalive_interval: Option<Duration>) -> Self {
+        Server {
+            tcp_keepalive_interval,
+            ..self
+        }
+    }
+
+    /// Set the value of `TCP_KEEPCNT` option for accepted connections.
+    ///
+    /// This option specifies the maximum number of keepalive probes that should be sent
+    /// before dropping the connection.
+    /// This setting only takes effect if [`tcp_keepalive`](Self::tcp_keepalive) is also set.
+    ///
+    /// Important: This setting is ignored when using `serve_with_incoming`.
+    ///
+    /// Default is `None` (system default).
+    ///
+    /// Note: This option is only available on some platforms (Linux, macOS, Windows, etc.).
+    #[must_use]
+    pub fn tcp_keepalive_retries(self, tcp_keepalive_retries: Option<u32>) -> Self {
+        Server {
+            tcp_keepalive_retries,
+            ..self
+        }
+    }
+
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
+    ///
+    /// Important: This setting is ignored when using `serve_with_incoming`.
     #[must_use]
     pub fn tcp_nodelay(self, enabled: bool) -> Self {
         Server {
@@ -563,6 +602,8 @@ impl<L> Server<L> {
             init_connection_window_size: self.init_connection_window_size,
             max_concurrent_streams: self.max_concurrent_streams,
             tcp_keepalive: self.tcp_keepalive,
+            tcp_keepalive_interval: self.tcp_keepalive_interval,
+            tcp_keepalive_retries: self.tcp_keepalive_retries,
             tcp_nodelay: self.tcp_nodelay,
             http2_keepalive_interval: self.http2_keepalive_interval,
             http2_keepalive_timeout: self.http2_keepalive_timeout,
@@ -580,7 +621,9 @@ impl<L> Server<L> {
         Ok(TcpIncoming::bind(addr)
             .map_err(super::Error::from_source)?
             .with_nodelay(Some(self.tcp_nodelay))
-            .with_keepalive(self.tcp_keepalive))
+            .with_keepalive(self.tcp_keepalive)
+            .with_keepalive_interval(self.tcp_keepalive_interval)
+            .with_keepalive_retries(self.tcp_keepalive_retries))
     }
 
     /// Serve the service.
@@ -621,6 +664,8 @@ impl<L> Server<L> {
     }
 
     /// Serve the service on the provided incoming stream.
+    ///
+    /// The `tcp_nodelay` and `tcp_keepalive` settings are ignored when using this method.
     pub async fn serve_with_incoming<S, I, IO, IE, ResBody>(
         self,
         svc: S,
@@ -1168,5 +1213,51 @@ where
             }),
             None => Poll::Pending,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use crate::transport::Server;
+
+    #[test]
+    fn server_tcp_defaults() {
+        const EXAMPLE_TCP_KEEPALIVE: Duration = Duration::from_secs(10);
+        const EXAMPLE_TCP_KEEPALIVE_INTERVAL: Duration = Duration::from_secs(5);
+        const EXAMPLE_TCP_KEEPALIVE_RETRIES: u32 = 3;
+
+        // Using ::builder() or ::default() should do the same thing
+        let server_via_builder = Server::builder();
+        assert!(server_via_builder.tcp_nodelay);
+        assert_eq!(server_via_builder.tcp_keepalive, None);
+        assert_eq!(server_via_builder.tcp_keepalive_interval, None);
+        assert_eq!(server_via_builder.tcp_keepalive_retries, None);
+        let server_via_default = Server::default();
+        assert!(server_via_default.tcp_nodelay);
+        assert_eq!(server_via_default.tcp_keepalive, None);
+        assert_eq!(server_via_default.tcp_keepalive_interval, None);
+        assert_eq!(server_via_default.tcp_keepalive_retries, None);
+
+        // overriding should be possible
+        let server_via_builder = Server::builder()
+            .tcp_nodelay(false)
+            .tcp_keepalive(Some(EXAMPLE_TCP_KEEPALIVE))
+            .tcp_keepalive_interval(Some(EXAMPLE_TCP_KEEPALIVE_INTERVAL))
+            .tcp_keepalive_retries(Some(EXAMPLE_TCP_KEEPALIVE_RETRIES));
+        assert!(!server_via_builder.tcp_nodelay);
+        assert_eq!(
+            server_via_builder.tcp_keepalive,
+            Some(EXAMPLE_TCP_KEEPALIVE)
+        );
+        assert_eq!(
+            server_via_builder.tcp_keepalive_interval,
+            Some(EXAMPLE_TCP_KEEPALIVE_INTERVAL)
+        );
+        assert_eq!(
+            server_via_builder.tcp_keepalive_retries,
+            Some(EXAMPLE_TCP_KEEPALIVE_RETRIES)
+        );
     }
 }
