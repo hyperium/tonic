@@ -32,12 +32,12 @@ pub use insecure::{InsecureChannelCredentials, InsecureServerCredentials};
 /// Defines the common interface for all live gRPC wire protocols and supported
 /// transport security protocols (e.g., TLS, ALTS).
 pub trait ChannelCredentials: client::ChannelCredsInternal + Sync + 'static {
-    //// Provides the ProtocolInfo of this ClientChannelCredential.
+    //// Provides the ProtocolInfo of these credentials.
     fn info(&self) -> &ProtocolInfo;
 }
 
 pub trait ServerCredentials: server::ServerCredsInternal + Sync + 'static {
-    //// Provides the ProtocolInfo of this ServerChannelCredentials.
+    //// Provides the ProtocolInfo of this credentials.
     fn info(&self) -> &ProtocolInfo;
 }
 

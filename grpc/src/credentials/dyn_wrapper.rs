@@ -84,7 +84,7 @@ where
 
 // Bridge trait for type erasure.
 #[async_trait]
-pub(crate) trait DynServerChannelCredentials: Send + Sync {
+pub(crate) trait DynServerCredentials: Send + Sync {
     async fn accept(
         &self,
         source: BoxEndpoint,
@@ -95,7 +95,7 @@ pub(crate) trait DynServerChannelCredentials: Send + Sync {
 }
 
 #[async_trait]
-impl<T> DynServerChannelCredentials for T
+impl<T> DynServerCredentials for T
 where
     T: ServerCredentials,
     T::Output<BoxEndpoint>: GrpcEndpoint,

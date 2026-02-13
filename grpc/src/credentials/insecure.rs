@@ -32,7 +32,7 @@ use crate::credentials::server::{self, ServerConnectionSecurityInfo};
 use crate::credentials::{ChannelCredentials, ProtocolInfo, ServerCredentials};
 use crate::rt::{GrpcEndpoint, GrpcRuntime};
 
-/// An implementation of [`ClientChannelCredential`] for insecure connections.
+/// An implementation of [`ChannelCredentials`] for insecure connections.
 ///
 /// This credential type does not perform any encryption or authentication. It
 /// simply passes the raw underlying transport as the output.
@@ -88,7 +88,7 @@ impl ChannelCredentials for InsecureChannelCredentials {
     }
 }
 
-/// An implementation of [`ServerChannelCredentials`] for insecure connections.
+/// An implementation of [`ServerCredentials`] for insecure connections.
 #[derive(Debug, Clone, Default)]
 pub struct InsecureServerCredentials {
     _private: (),
