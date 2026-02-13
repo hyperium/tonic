@@ -247,6 +247,8 @@ pub(crate) fn compress(
     let capacity = ((len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
+    println!("Compressing with encoding: {:?}", settings.encoding);
+
     #[cfg(any(
         feature = "gzip",
         feature = "deflate",
@@ -330,6 +332,8 @@ pub(crate) fn decompress(
         feature = "snappy"
     ))]
     let mut out_writer = out_buf.writer();
+
+    println!("Decompressing with encoding: {:?}", settings.encoding);
 
     match settings.encoding {
         #[cfg(feature = "gzip")]
