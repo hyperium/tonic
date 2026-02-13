@@ -287,7 +287,6 @@ pub(crate) fn compress(
         #[cfg(feature = "lz4")]
         CompressionEncoding::Lz4 => {
             {
-                println!("Compressing with lz4");
                 let lz4_encoder = lz4_flex::frame::FrameEncoder::new(&mut out_writer);
                 let mut auto_finish_encoder = lz4_encoder.auto_finish();
                 auto_finish_encoder.write_all(&decompressed_buf[0..len])?;
