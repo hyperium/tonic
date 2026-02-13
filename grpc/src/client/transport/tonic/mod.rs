@@ -5,7 +5,7 @@ use crate::client::transport::TransportOptions;
 use crate::codec::BytesCodec;
 use crate::rt::hyper_wrapper::{HyperCompatExec, HyperCompatTimer, HyperStream};
 use crate::rt::BoxedTaskHandle;
-use crate::rt::Runtime;
+use crate::rt::GrpcRuntime;
 use crate::rt::TcpOptions;
 use crate::service::Message;
 use crate::service::Request as GrpcRequest;
@@ -21,7 +21,7 @@ use hyper::client::conn::http2::SendRequest;
 use std::any::Any;
 use std::task::{Context, Poll};
 use std::time::Instant;
-use std::{error::Error, future::Future, net::SocketAddr, pin::Pin, str::FromStr, sync::Arc};
+use std::{error::Error, future::Future, net::SocketAddr, pin::Pin, str::FromStr};
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
@@ -127,7 +127,7 @@ impl Transport for TransportBuilder {
     async fn connect(
         &self,
         address: String,
-        runtime: Arc<dyn Runtime>,
+        runtime: GrpcRuntime,
         opts: &TransportOptions,
     ) -> Result<ConnectedTransport, String> {
         let runtime = runtime.clone();

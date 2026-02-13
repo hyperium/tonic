@@ -1,6 +1,6 @@
-use crate::{rt::Runtime, service::Service};
+use crate::{rt::GrpcRuntime, service::Service};
 use std::time::Instant;
-use std::{sync::Arc, time::Duration};
+use std::time::Duration;
 
 mod registry;
 
@@ -43,7 +43,7 @@ pub(crate) trait Transport: Send + Sync {
     async fn connect(
         &self,
         address: String,
-        runtime: Arc<dyn Runtime>,
+        runtime: GrpcRuntime,
         opts: &TransportOptions,
     ) -> Result<ConnectedTransport, String>;
 }

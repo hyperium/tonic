@@ -27,16 +27,16 @@ pub(crate) mod dyn_wrapper;
 mod insecure;
 pub(crate) mod server;
 
-pub use insecure::{InsecureClientChannelCredentials, InsecureServerChannelCredentials};
+pub use insecure::{InsecureChannelCredentials, InsecureServerCredentials};
 
 /// Defines the common interface for all live gRPC wire protocols and supported
 /// transport security protocols (e.g., TLS, ALTS).
-pub trait ClientChannelCredential: client::Sealed + Sync {
+pub trait ChannelCredentials: client::ChannelCredsInternal + Sync + 'static {
     //// Provides the ProtocolInfo of this ClientChannelCredential.
     fn info(&self) -> &ProtocolInfo;
 }
 
-pub trait ServerChannelCredentials: server::Sealed + Sync {
+pub trait ServerCredentials: server::ServerCredsInternal + Sync + 'static {
     //// Provides the ProtocolInfo of this ServerChannelCredentials.
     fn info(&self) -> &ProtocolInfo;
 }
@@ -60,15 +60,39 @@ pub(crate) mod common {
         /// This is the standard level for secure transports like TLS.
         PrivacyAndIntegrity,
     }
+
     /// Represents the value passed as the `:authority` pseudo-header, typically
     /// in the form `host:port`.
     pub struct Authority<'a> {
-        pub(crate) host: &'a str,
-        pub(crate) port: Option<u16>,
+        host: &'a str,
+        port: Option<u16>,
+    }
+
+    impl<'a> Authority<'a> {
+        pub fn new(host: &'a str, port: Option<u16>) -> Self {
+            Self { host, port }
+        }
+
+        pub fn host(&self) -> &'a str {
+            self.host
+        }
+
+        pub fn port(&self) -> Option<u16> {
+            self.port
+        }
     }
 }
 
-#[non_exhaustive]
 pub struct ProtocolInfo {
-    pub(crate) security_protocol: &'static str,
+    security_protocol: &'static str,
+}
+
+impl ProtocolInfo {
+    pub(crate) const fn new(security_protocol: &'static str) -> Self {
+        Self { security_protocol }
+    }
+
+    pub fn security_protocol(&self) -> &'static str {
+        self.security_protocol
+    }
 }

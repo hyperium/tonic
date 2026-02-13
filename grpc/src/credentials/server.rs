@@ -22,14 +22,12 @@
  *
  */
 
-use std::sync::Arc;
-
 use crate::attributes::Attributes;
 use crate::credentials::common::SecurityLevel;
-use crate::rt::{GrpcEndpoint, Runtime};
+use crate::rt::{GrpcEndpoint, GrpcRuntime};
 
 #[trait_variant::make(Send)]
-pub trait Sealed {
+pub trait ServerCredsInternal {
     type Output<I>;
     /// Performs the server-side authentication handshake.
     ///
@@ -40,18 +38,52 @@ pub trait Sealed {
     ///
     /// A tuple containing:
     /// 1. The authenticated endpoint (ready for reading/writing frames).
-    async fn accept<Input: GrpcEndpoint + 'static>(
+    async fn accept<Input: GrpcEndpoint>(
         &self,
         source: Input,
-        runtime: Arc<dyn Runtime>,
-    ) -> Result<(Self::Output<Input>, ServerConnectionSecurityInfo), String>;
+        runtime: GrpcRuntime,
+    ) -> Result<HandshakeOutput<Self::Output<Input>>, String>;
+}
+
+pub struct HandshakeOutput<T> {
+    pub endpoint: T,
+    pub security: ServerConnectionSecurityInfo,
 }
 
 /// Represents the security state of an established server-side connection.
-#[non_exhaustive]
 pub struct ServerConnectionSecurityInfo {
-    pub(crate) security_protocol: &'static str,
-    pub(crate) security_level: SecurityLevel,
+    security_protocol: &'static str,
+    security_level: SecurityLevel,
     /// Stores extra data derived from the underlying protocol.
-    pub(crate) attributes: Attributes,
+    attributes: Attributes,
+}
+
+impl ServerConnectionSecurityInfo {
+    /// Creates a new instance of `ServerConnectionSecurityInfo`.
+    pub fn new(
+        security_protocol: &'static str,
+        security_level: SecurityLevel,
+        attributes: Attributes,
+    ) -> Self {
+        Self {
+            security_protocol,
+            security_level,
+            attributes,
+        }
+    }
+
+    /// Returns the security protocol used.
+    pub fn security_protocol(&self) -> &'static str {
+        self.security_protocol
+    }
+
+    /// Returns the security level of the connection.
+    pub fn security_level(&self) -> SecurityLevel {
+        self.security_level
+    }
+
+    /// Returns the attributes associated with the connection.
+    pub fn attributes(&self) -> &Attributes {
+        &self.attributes
+    }
 }
