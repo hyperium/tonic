@@ -9,13 +9,13 @@ members = [
   "tonic-reflection",
   "tonic-prost",
   "tonic-prost-build",
-  "tonic-web", # Non-published crates
+  "tonic-web",
   "examples",
   "codegen",
   "grpc",
   "xds-client",
   "tonic-xds",
-  "interop", # Tests
+  "interop",
   "tests/disable_comments",
   "tests/wellknown",
   "tests/wellknown-compiled",
