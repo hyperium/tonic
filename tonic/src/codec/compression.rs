@@ -288,13 +288,15 @@ pub(crate) fn compress(
         CompressionEncoding::Lz4 => {
             let mut lz4_encoder = lz4_flex::frame::FrameEncoder::new(&mut out_writer);
             lz4_encoder.write_all(&decompressed_buf[0..len])?;
-            lz4_encoder.flush()?;
+            lz4_encoder.finish()?;
         }
         #[cfg(feature = "snappy")]
         CompressionEncoding::Snappy => {
-            let mut snappy_encoder = snap::write::FrameEncoder::new(&mut out_writer);
-            snappy_encoder.write_all(&decompressed_buf[0..len])?;
-            snappy_encoder.flush()?;
+            {
+                let mut snappy_encoder = snap::write::FrameEncoder::new(&mut out_writer);
+                snappy_encoder.write_all(&decompressed_buf[0..len])?;
+                // snappy_encoder is dropped here, flushing the final frame
+            }
         }
     }
 
