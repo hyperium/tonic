@@ -1,4 +1,5 @@
 use std::{
+    io::ErrorKind,
     net::{SocketAddr, TcpListener as StdTcpListener},
     pin::Pin,
     task::{Context, Poll},
@@ -148,14 +149,18 @@ fn set_accepted_socket_options(
 ) {
     if let Some(nodelay) = nodelay {
         if let Err(e) = stream.set_nodelay(nodelay) {
-            warn!("error trying to set TCP_NODELAY: {e}");
+            if e.kind() != ErrorKind::ConnectionReset {
+                warn!("error trying to set TCP_NODELAY: {e}");
+            }
         }
     }
 
     if let Some(keepalive) = keepalive {
         let sock_ref = socket2::SockRef::from(&stream);
         if let Err(e) = sock_ref.set_tcp_keepalive(keepalive) {
-            warn!("error trying to set TCP_KEEPALIVE: {e}");
+            if e.kind() != ErrorKind::ConnectionReset {
+                warn!("error trying to set TCP_KEEPALIVE: {e}");
+            }
         }
     }
 }
