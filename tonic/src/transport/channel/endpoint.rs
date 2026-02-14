@@ -585,6 +585,10 @@ impl Endpoint {
     pub fn get_tcp_keepalive_retries(&self) -> Option<u32> {
         self.tcp_keepalive_retries
     }
+
+    pub(crate) fn get_origin(&self) -> &Uri {
+        self.origin.as_ref().unwrap_or(self.uri())
+    }
 }
 
 impl From<Uri> for Endpoint {
