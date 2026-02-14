@@ -38,26 +38,33 @@ use tokio::sync::{mpsc, watch, Notify};
 use serde_json::json;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
-use crate::attributes::Attributes;
 use crate::rt;
 use crate::service::{Request, Response, Service};
-use crate::{client::ConnectivityState, rt::Runtime};
-use crate::{credentials::Credentials, rt::default_runtime};
+use crate::{attributes::Attributes, client::name_resolution::default_target};
+use crate::{
+    client::name_resolution::{
+        self, global_registry, Address, MisconfiguredBuilder, ResolverBuilder, ResolverUpdate,
+        Target,
+    },
+    credentials::Credentials,
+    rt::default_runtime,
+};
 
-use super::name_resolution::{self, global_registry, Address, ResolverUpdate};
 use super::service_config::ServiceConfig;
 use super::transport::{TransportRegistry, GLOBAL_TRANSPORT_REGISTRY};
 use super::{
     load_balancing::{
         self, pick_first, ExternalSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-        ParsedJsonLbConfig, PickResult, Picker, Subchannel, SubchannelState, WorkScheduler,
-        GLOBAL_LB_REGISTRY,
+        ParsedJsonLbConfig, PickResult, Picker, Subchannel, SubchannelState,
+        WorkScheduler as LbWorkScheduler, GLOBAL_LB_REGISTRY,
     },
     subchannel::{
         InternalSubchannel, InternalSubchannelPool, NopBackoff, SubchannelKey,
         SubchannelStateWatcher,
     },
 };
+
+use crate::{client::ConnectivityState, rt::Runtime};
 
 #[non_exhaustive]
 pub struct ChannelOptions {
@@ -181,10 +188,11 @@ impl Channel {
 // PersistentChannel is not IDLE.  Every channel is IDLE at creation, or after
 // some configurable timeout elapses without any any RPC activity.
 struct PersistentChannel {
-    target: Url,
+    target: Target,
     options: ChannelOptions,
     active_channel: Mutex<Option<Arc<ActiveChannel>>>,
     runtime: Arc<dyn Runtime>,
+    resolver_builder: Arc<dyn ResolverBuilder>,
 }
 
 impl PersistentChannel {
@@ -196,11 +204,30 @@ impl PersistentChannel {
         runtime: Arc<dyn rt::Runtime>,
         options: ChannelOptions,
     ) -> Self {
+        fn default_builder(error: String) -> Arc<dyn ResolverBuilder> {
+            Arc::new(MisconfiguredBuilder { error }) as Arc<dyn ResolverBuilder>
+        }
+
+        let (resolver_builder, t) = match Target::from_str(target) {
+            Ok(target) => match global_registry().get(target.scheme()) {
+                Some(builder) => (builder.clone(), target),
+                None => (
+                    default_builder(format!("No resolver found for scheme: {}", target.scheme())),
+                    target,
+                ),
+            },
+            Err(e) => (
+                default_builder(format!("Failed to parse target URI: {}", target)),
+                default_target(),
+            ),
+        };
+
         Self {
-            target: Url::from_str(target).unwrap(), // TODO handle err
+            target: t,
             active_channel: Mutex::default(),
             options,
             runtime,
+            resolver_builder,
         }
     }
 
@@ -235,6 +262,7 @@ impl PersistentChannel {
                 self.target.clone(),
                 &self.options,
                 self.runtime.clone(),
+                self.resolver_builder.clone(),
             ));
         }
 
@@ -251,7 +279,12 @@ struct ActiveChannel {
 }
 
 impl ActiveChannel {
-    fn new(target: Url, options: &ChannelOptions, runtime: Arc<dyn Runtime>) -> Arc<Self> {
+    fn new(
+        target: Target,
+        options: &ChannelOptions,
+        runtime: Arc<dyn Runtime>,
+        rb: Arc<dyn ResolverBuilder>,
+    ) -> Arc<Self> {
         let (tx, mut rx) = mpsc::unbounded_channel::<WorkQueueItem>();
         let transport_registry = GLOBAL_TRANSPORT_REGISTRY.clone();
 
@@ -269,9 +302,6 @@ impl ActiveChannel {
 
         let resolver_helper = Box::new(tx.clone());
 
-        // TODO(arjan-bal): Return error here instead of panicking.
-        let rb = global_registry().get(target.scheme()).unwrap();
-        let target = name_resolution::Target::from(target);
         let authority = target.authority_host_port();
         let authority = if authority.is_empty() {
             rb.default_authority(&target).to_owned()
@@ -465,7 +495,7 @@ pub(super) struct GracefulSwitchBalancer {
     runtime: Arc<dyn Runtime>,
 }
 
-impl WorkScheduler for GracefulSwitchBalancer {
+impl LbWorkScheduler for GracefulSwitchBalancer {
     fn schedule_work(&self) {
         if mem::replace(&mut *self.pending.lock().unwrap(), true) {
             // Already had a pending call scheduled.
