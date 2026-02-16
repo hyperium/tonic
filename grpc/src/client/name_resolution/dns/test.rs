@@ -40,7 +40,7 @@ use crate::{
         },
         service_config::ServiceConfig,
     },
-    rt::{self, tokio::TokioRuntime},
+    rt::{self, tokio::TokioRuntime, GrpcRuntime},
 };
 
 use super::{DnsOptions, ParseResult};
@@ -201,7 +201,7 @@ pub(crate) async fn dns_basic() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -230,7 +230,7 @@ pub(crate) async fn invalid_target() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -326,7 +326,7 @@ pub(crate) async fn dns_lookup_error() {
     };
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(runtime),
+        runtime: GrpcRuntime::new(runtime),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -360,7 +360,7 @@ pub(crate) async fn dns_lookup_timeout() {
     let dns_client = runtime.dns.clone();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(runtime),
+        runtime: GrpcRuntime::new(runtime),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -394,7 +394,7 @@ pub(crate) async fn rate_limit() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_client = opts
@@ -444,7 +444,7 @@ pub(crate) async fn re_resolution_after_success() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -488,7 +488,7 @@ pub(crate) async fn backoff_on_error() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {

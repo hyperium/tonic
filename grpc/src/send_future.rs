@@ -45,7 +45,7 @@
 ///
 /// # The Solution
 ///
-/// The `send()` method acts as an identity function (a no-op at runtime) but
+/// The `make_send()` method acts as an identity function (a no-op at runtime) but
 /// performs two critical compile-time tasks:
 ///
 /// 1.  **Explicit Assertion:** It requires `Self` to implement `Send` at the
@@ -57,49 +57,19 @@
 ///     trait solver "lock in" the `Send` guarantee and disregard phantom lifetime
 ///     issues that might otherwise propagate.
 ///
-/// # Example
-///
-/// ```rust,no_run
-/// use core::future::Future;
-///
-/// // Assume this trait is in scope
-/// pub trait SendFuture: Future {
-///     fn send(self) -> impl Future<Output = Self::Output> + Send
-///     where
-///         Self: Sized + Send,
-///     {
-///         self
-///     }
-/// }
-///
-/// impl<T: Future> SendFuture for T {}
-///
-/// async fn complex_logic() {
-///     // ... logic that confuses the compiler's Send analysis ...
-/// }
-///
-/// fn spawn_task() {
-///     let future = complex_logic();
-///
-///     // By calling .send(), we explicitly ask the compiler to verify
-///     // the Send bound right here.
-///     let send_future = future.send();
-///
-///     // tokio::spawn(send_future);
-/// }
-/// ```
-///
 /// [#64552]: https://github.com/rust-lang/rust/issues/64552
 /// [#102211]: https://github.com/rust-lang/rust/issues/102211
 /// [#96865]: https://github.com/rust-lang/rust/issues/96865
 /// [`Future`]: core::future::Future
 /// [`Send`]: core::marker::Send
 pub trait SendFuture: core::future::Future {
-    /// Consumes the future and returns it as an opaque type that is guaranteed to be [`Send`].
+    /// Consumes the future and returns it as an opaque type that is guaranteed
+    /// to be [`Send`].
     ///
     /// This is a zero-cost abstraction (it simply returns `self`) used primarily
-    /// to help the compiler resolve auto-traits or to produce better error diagnostics.
-    fn send(self) -> impl core::future::Future<Output = Self::Output> + Send
+    /// to help the compiler resolve auto-traits or to produce better error
+    /// diagnostics.
+    fn make_send(self) -> impl core::future::Future<Output = Self::Output> + Send
     where
         Self: Sized + Send,
     {

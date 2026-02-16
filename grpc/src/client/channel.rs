@@ -40,9 +40,9 @@ use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
 use crate::rt::{default_runtime, GrpcEndpoint};
 use crate::service::{Request, Response, Service};
-use crate::{attributes::Attributes, credentials::ClientChannelCredential};
-use crate::{client::ConnectivityState, rt::Runtime};
-use crate::{credentials::dyn_wrapper::DynClientChannelCredential, rt};
+use crate::{attributes::Attributes, credentials::ChannelCredentials};
+use crate::{client::ConnectivityState, rt::GrpcRuntime};
+use crate::{credentials::dyn_wrapper::DynChannelCredentials, rt};
 
 use super::name_resolution::{self, global_registry, Address, ResolverUpdate};
 use super::service_config::ServiceConfig;
@@ -138,14 +138,14 @@ impl Channel {
     // TODO: should this return a Result instead?
     pub fn new<C>(target: &str, credentials: C, options: ChannelOptions) -> Self
     where
-        C: ClientChannelCredential + 'static,
+        C: ChannelCredentials,
         C::Output<Box<dyn GrpcEndpoint>>: GrpcEndpoint + 'static,
     {
         pick_first::reg();
         Self {
             inner: Arc::new(PersistentChannel::new(
                 target,
-                Box::new(credentials) as Box<dyn DynClientChannelCredential>,
+                Box::new(credentials) as Box<dyn DynChannelCredentials>,
                 default_runtime(),
                 options,
             )),
@@ -184,7 +184,7 @@ struct PersistentChannel {
     target: Url,
     options: ChannelOptions,
     active_channel: Mutex<Option<Arc<ActiveChannel>>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
 }
 
 impl PersistentChannel {
@@ -192,8 +192,8 @@ impl PersistentChannel {
     // ChannelOption contain only optional parameters.
     fn new(
         target: &str,
-        _credentials: Box<dyn DynClientChannelCredential>,
-        runtime: Arc<dyn rt::Runtime>,
+        _credentials: Box<dyn DynChannelCredentials>,
+        runtime: GrpcRuntime,
         options: ChannelOptions,
     ) -> Self {
         Self {
@@ -247,11 +247,11 @@ struct ActiveChannel {
     abort_handle: Box<dyn rt::TaskHandle>,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
 }
 
 impl ActiveChannel {
-    fn new(target: Url, options: &ChannelOptions, runtime: Arc<dyn Runtime>) -> Arc<Self> {
+    fn new(target: Url, options: &ChannelOptions, runtime: GrpcRuntime) -> Arc<Self> {
         let (tx, mut rx) = mpsc::unbounded_channel::<WorkQueueItem>();
         let transport_registry = GLOBAL_TRANSPORT_REGISTRY.clone();
 
@@ -363,7 +363,7 @@ pub(crate) struct InternalChannelController {
     wqtx: WorkQueueTx,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
 }
 
 impl InternalChannelController {
@@ -373,7 +373,7 @@ impl InternalChannelController {
         wqtx: WorkQueueTx,
         picker: Arc<Watcher<Arc<dyn Picker>>>,
         connectivity_state: Arc<Watcher<ConnectivityState>>,
-        runtime: Arc<dyn Runtime>,
+        runtime: GrpcRuntime,
     ) -> Self {
         let lb = Arc::new(GracefulSwitchBalancer::new(wqtx.clone(), runtime.clone()));
 
@@ -462,7 +462,7 @@ pub(super) struct GracefulSwitchBalancer {
     policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,
     work_scheduler: WorkQueueTx,
     pending: Mutex<bool>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
 }
 
 impl WorkScheduler for GracefulSwitchBalancer {
@@ -487,7 +487,7 @@ impl WorkScheduler for GracefulSwitchBalancer {
 }
 
 impl GracefulSwitchBalancer {
-    fn new(work_scheduler: WorkQueueTx, runtime: Arc<dyn Runtime>) -> Self {
+    fn new(work_scheduler: WorkQueueTx, runtime: GrpcRuntime) -> Self {
         Self {
             policy_builder: Mutex::default(),
             policy: Mutex::default(), // new(None::<Box<dyn LbPolicy>>),

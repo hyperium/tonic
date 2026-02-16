@@ -29,8 +29,8 @@ pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]
 pub(crate) mod tokio;
 
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
-pub(crate) type BoxedTaskHandle = Box<dyn TaskHandle>;
+pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+pub type BoxedTaskHandle = Box<dyn TaskHandle>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -94,7 +94,7 @@ pub struct TcpOptions {
     pub(crate) keepalive: Option<Duration>,
 }
 
-mod endpoint {
+pub(crate) mod endpoint {
     /// This trait is sealed since we may need to change the read and write
     /// methods to align closely with the gRPC C++ implementations. For example,
     /// the read method may be responsible for allocating the buffer and
@@ -106,7 +106,7 @@ mod endpoint {
 }
 
 /// GrpcEndpoint is a generic stream-oriented network connection.
-pub trait GrpcEndpoint: endpoint::Sealed + Send + Unpin {
+pub trait GrpcEndpoint: endpoint::Sealed + Send + Unpin + 'static {
     /// Returns the local address that this stream is bound to.
     fn get_local_address(&self) -> &str;
 
@@ -180,11 +180,47 @@ impl Runtime for NoOpRuntime {
     }
 }
 
-pub(crate) fn default_runtime() -> Arc<dyn Runtime> {
+pub(crate) fn default_runtime() -> GrpcRuntime {
     #[cfg(feature = "_runtime-tokio")]
     {
-        return Arc::new(tokio::TokioRuntime {});
+        return GrpcRuntime::new(tokio::TokioRuntime {});
     }
     #[allow(unreachable_code)]
-    Arc::new(NoOpRuntime::default())
+    GrpcRuntime::new(NoOpRuntime::default())
+}
+
+#[derive(Clone, Debug)]
+pub struct GrpcRuntime {
+    inner: Arc<dyn Runtime>,
+}
+
+impl GrpcRuntime {
+    pub fn new<T: Runtime + 'static>(runtime: T) -> Self {
+        GrpcRuntime {
+            inner: Arc::new(runtime),
+        }
+    }
+
+    pub fn spawn(
+        &self,
+        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
+    ) -> BoxedTaskHandle {
+        self.inner.spawn(task)
+    }
+
+    pub fn get_dns_resolver(&self, opts: ResolverOptions) -> Result<Box<dyn DnsResolver>, String> {
+        self.inner.get_dns_resolver(opts)
+    }
+
+    pub fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
+        self.inner.sleep(duration)
+    }
+
+    pub fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
+        self.inner.tcp_stream(target, opts)
+    }
 }

@@ -1,6 +1,6 @@
 use std::any::Any;
 
-use grpc::credentials::InsecureClientChannelCredentials;
+use grpc::credentials::InsecureChannelCredentials;
 use grpc::service::{Message, Request, Response, Service};
 use grpc::{client::ChannelOptions, inmemory};
 use tokio_stream::StreamExt;
@@ -49,7 +49,7 @@ async fn main() {
     let chan_opts = ChannelOptions::default();
     let chan = grpc::client::Channel::new(
         lis.target().as_str(),
-        InsecureClientChannelCredentials::new(),
+        InsecureChannelCredentials::new(),
         chan_opts,
     );
 

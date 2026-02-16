@@ -1,14 +1,14 @@
-use super::{GrpcEndpoint, Runtime};
+use super::{GrpcEndpoint, GrpcRuntime};
 use hyper::rt::{Executor, Timer};
 use pin_project_lite::pin_project;
 use std::task::{Context, Poll};
-use std::{future::Future, io, pin::Pin, sync::Arc, time::Instant};
+use std::{future::Future, io, pin::Pin, time::Instant};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// Adapts a runtime to a hyper compatible executor.
 #[derive(Clone)]
 pub(crate) struct HyperCompatExec {
-    pub(crate) inner: Arc<dyn Runtime>,
+    pub(crate) inner: GrpcRuntime,
 }
 
 impl<F> Executor<F> for HyperCompatExec
@@ -42,7 +42,7 @@ impl hyper::rt::Sleep for HyperCompatSleep {}
 
 /// Adapts a runtime to a hyper compatible timer.
 pub(crate) struct HyperCompatTimer {
-    pub(crate) inner: Arc<dyn Runtime>,
+    pub(crate) inner: GrpcRuntime,
 }
 
 impl Timer for HyperCompatTimer {

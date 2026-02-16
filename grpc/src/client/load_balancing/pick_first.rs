@@ -8,7 +8,7 @@ use crate::{
         name_resolution::{Address, ResolverUpdate},
         ConnectivityState,
     },
-    rt::Runtime,
+    rt::GrpcRuntime,
     service::Request,
 };
 
@@ -46,7 +46,7 @@ struct PickFirstPolicy {
     work_scheduler: Arc<dyn WorkScheduler>,
     subchannel: Option<Arc<dyn Subchannel>>,
     next_addresses: Vec<Address>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
 }
 
 impl LbPolicy for PickFirstPolicy {

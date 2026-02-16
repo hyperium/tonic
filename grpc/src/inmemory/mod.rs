@@ -10,7 +10,7 @@ use crate::{
         },
         transport::{self, ConnectedTransport, TransportOptions, GLOBAL_TRANSPORT_REGISTRY},
     },
-    rt::Runtime,
+    rt::GrpcRuntime,
     server,
     service::{Request, Response, Service},
 };
@@ -100,7 +100,7 @@ impl transport::Transport for ClientTransport {
     async fn connect(
         &self,
         address: String,
-        _: Arc<dyn Runtime>,
+        _: GrpcRuntime,
         _: &TransportOptions,
     ) -> Result<ConnectedTransport, String> {
         let lis = LISTENERS

@@ -22,81 +22,59 @@
  *
  */
 
-use std::sync::Arc;
-
 use tonic::async_trait;
 
 use crate::credentials::client::{
-    ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
+    ClientConnectionSecurityContext, ClientHandshakeInfo, HandshakeOutput,
 };
 use crate::credentials::common::Authority;
-use crate::credentials::server::ServerConnectionSecurityInfo;
-use crate::credentials::{ClientChannelCredential, ProtocolInfo, ServerChannelCredentials};
-use crate::rt::{GrpcEndpoint, Runtime};
+use crate::credentials::server::HandshakeOutput as ServerHandshakeOutput;
+use crate::credentials::{ChannelCredentials, ProtocolInfo, ServerCredentials};
+use crate::rt::{GrpcEndpoint, GrpcRuntime};
 use crate::send_future::SendFuture;
 
-impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {
-    fn validate_authority(&self, authority: &Authority) -> bool {
-        (**self).validate_authority(authority)
-    }
-}
-type BoxEndpoint = Box<dyn GrpcEndpoint + 'static>;
+type BoxEndpoint = Box<dyn GrpcEndpoint>;
 
 // Bridge trait for type erasure.
 #[async_trait]
-pub(crate) trait DynClientChannelCredential: Send + Sync {
+pub(crate) trait DynChannelCredentials: Send + Sync {
     async fn connect(
         &self,
         authority: &Authority,
         source: BoxEndpoint,
         info: ClientHandshakeInfo,
-        runtime: Arc<dyn Runtime>,
-    ) -> Result<
-        (
-            Box<dyn GrpcEndpoint>,
-            ClientConnectionSecurityInfo<Box<dyn ClientConnectionSecurityContext>>,
-        ),
-        String,
-    >;
+        runtime: GrpcRuntime,
+    ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>;
 
     fn info(&self) -> &ProtocolInfo;
 }
 
 #[async_trait]
-impl<T> DynClientChannelCredential for T
+impl<T> DynChannelCredentials for T
 where
-    T: ClientChannelCredential,
-    T::Output<BoxEndpoint>: GrpcEndpoint + 'static,
+    T: ChannelCredentials,
+    T::Output<BoxEndpoint>: GrpcEndpoint,
 {
     async fn connect(
         &self,
         authority: &Authority,
         source: BoxEndpoint,
         info: ClientHandshakeInfo,
-        runtime: Arc<dyn Runtime>,
-    ) -> Result<
-        (
-            BoxEndpoint,
-            ClientConnectionSecurityInfo<Box<dyn ClientConnectionSecurityContext>>,
-        ),
-        String,
-    > {
-        let (stream, sec_info) = self
+        runtime: GrpcRuntime,
+    ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>
+    {
+        let output = self
             .connect(authority, source, info, runtime)
-            .send()
+            .make_send()
             .await?;
 
-        let boxed_stream: BoxEndpoint = Box::new(stream);
+        let stream = output.endpoint;
+        let sec_info = output.security;
 
-        let sec_info = ClientConnectionSecurityInfo {
-            security_protocol: sec_info.security_protocol,
-            security_level: sec_info.security_level,
-            security_context: Box::new(sec_info.security_context)
-                as Box<dyn ClientConnectionSecurityContext>,
-            attributes: sec_info.attributes,
-        };
-
-        Ok((boxed_stream, sec_info))
+        Ok(HandshakeOutput {
+            endpoint: Box::new(stream),
+            security: sec_info.into_boxed(),
+        })
     }
 
     fn info(&self) -> &ProtocolInfo {
@@ -106,30 +84,32 @@ where
 
 // Bridge trait for type erasure.
 #[async_trait]
-pub(crate) trait DynServerChannelCredentials: Send + Sync {
+pub(crate) trait DynServerCredentials: Send + Sync {
     async fn accept(
         &self,
         source: BoxEndpoint,
-        runtime: Arc<dyn Runtime>,
-    ) -> Result<(BoxEndpoint, ServerConnectionSecurityInfo), String>;
+        runtime: GrpcRuntime,
+    ) -> Result<ServerHandshakeOutput<BoxEndpoint>, String>;
 
     fn info(&self) -> &ProtocolInfo;
 }
 
 #[async_trait]
-impl<T> DynServerChannelCredentials for T
+impl<T> DynServerCredentials for T
 where
-    T: ServerChannelCredentials,
-    T::Output<BoxEndpoint>: GrpcEndpoint + 'static,
+    T: ServerCredentials,
+    T::Output<BoxEndpoint>: GrpcEndpoint,
 {
     async fn accept(
         &self,
         source: BoxEndpoint,
-        runtime: Arc<dyn Runtime>,
-    ) -> Result<(BoxEndpoint, ServerConnectionSecurityInfo), String> {
-        let (stream, sec_info) = SendFuture::send(self.accept(source, runtime)).await?;
-        let boxed_stream: Box<dyn GrpcEndpoint> = Box::new(stream);
-        Ok((boxed_stream, sec_info))
+        runtime: GrpcRuntime,
+    ) -> Result<ServerHandshakeOutput<BoxEndpoint>, String> {
+        let output = SendFuture::make_send(self.accept(source, runtime)).await?;
+        Ok(ServerHandshakeOutput {
+            endpoint: Box::new(output.endpoint),
+            security: output.security,
+        })
     }
 
     fn info(&self) -> &ProtocolInfo {
@@ -142,12 +122,8 @@ mod tests {
     use super::*;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::{Authority, SecurityLevel};
-    use crate::credentials::insecure::{
-        InsecureClientChannelCredentials, InsecureServerChannelCredentials,
-    };
-    use crate::rt::tokio::TokioRuntime;
+    use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::rt::TcpOptions;
-    use std::sync::Arc;
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -156,15 +132,12 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let creds = InsecureClientChannelCredentials::new();
-        let dyn_creds: Box<dyn DynClientChannelCredential> = Box::new(creds);
+        let creds = InsecureChannelCredentials::new();
+        let dyn_creds: Box<dyn DynChannelCredentials> = Box::new(creds);
 
-        let authority = Authority {
-            host: "localhost",
-            port: Some(addr.port()),
-        };
+        let authority = Authority::new("localhost".to_string(), Some(addr.port()));
 
-        let runtime = Arc::new(TokioRuntime {});
+        let runtime = crate::rt::default_runtime();
         let source = runtime
             .tcp_stream(addr, TcpOptions::default())
             .await
@@ -174,11 +147,13 @@ mod tests {
         let result = dyn_creds.connect(&authority, source, info, runtime).await;
 
         assert!(result.is_ok());
-        let (mut endpoint, security_info) = result.unwrap();
+        let output = result.unwrap();
+        let mut endpoint = output.endpoint;
+        let security_info = output.security;
 
         assert!(!endpoint.get_local_address().is_empty());
-        assert_eq!(security_info.security_protocol, "insecure");
-        assert_eq!(security_info.security_level, SecurityLevel::NoSecurity);
+        assert_eq!(security_info.security_protocol(), "insecure");
+        assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         // Verify data transfer.
         let (mut server_stream, _) = listener.accept().await.unwrap();

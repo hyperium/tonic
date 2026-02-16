@@ -5,7 +5,7 @@ use crate::client::load_balancing::{
 };
 use crate::client::name_resolution::ResolverUpdate;
 use crate::client::ConnectivityState;
-use crate::rt::Runtime;
+use crate::rt::GrpcRuntime;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -104,7 +104,7 @@ enum ChildKind {
 
 impl GracefulSwitchPolicy {
     /// Creates a new Graceful Switch policy.
-    pub fn new(runtime: Arc<dyn Runtime>, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+    pub fn new(runtime: GrpcRuntime, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         GracefulSwitchPolicy {
             child_manager: ChildManager::new(runtime, work_scheduler),
             last_update: None,

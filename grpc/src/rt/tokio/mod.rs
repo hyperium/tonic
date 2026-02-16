@@ -37,9 +37,7 @@ use tokio::{
 
 use crate::rt::endpoint;
 
-use super::{
-    BoxedTaskHandle, DnsResolver, GrpcEndpoint, ResolverOptions, Runtime, Sleep, TaskHandle,
-};
+use super::{BoxedTaskHandle, DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
@@ -103,7 +101,7 @@ impl Runtime for TokioRuntime {
         &self,
         target: SocketAddr,
         opts: super::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::GrpcEndpoint>, String>> + Send>> {
         Box::pin(async move {
             let stream = TcpStream::connect(target)
                 .await
@@ -116,7 +114,7 @@ impl Runtime for TokioRuntime {
                     .set_tcp_keepalive(&ka)
                     .map_err(|err| err.to_string())?;
             }
-            let stream: Box<dyn GrpcEndpoint> = Box::new(TokioTcpStream {
+            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioTcpStream {
                 peer_addr: target.to_string().into_boxed_str(),
                 local_addr: stream
                     .local_addr()
@@ -210,7 +208,7 @@ impl AsyncWrite for TokioTcpStream {
 
 impl endpoint::Sealed for TokioTcpStream {}
 
-impl GrpcEndpoint for TokioTcpStream {
+impl super::GrpcEndpoint for TokioTcpStream {
     fn get_local_address(&self) -> &str {
         &self.local_addr
     }

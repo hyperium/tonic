@@ -7,7 +7,7 @@ use super::{
 };
 use crate::{
     client::{channel::WorkQueueItem, transport::TransportOptions},
-    rt::{BoxedTaskHandle, Runtime},
+    rt::{BoxedTaskHandle, GrpcRuntime},
     service::{Request, Response, Service},
 };
 use core::panic;
@@ -175,7 +175,7 @@ pub(crate) struct InternalSubchannel {
     unregister_fn: Option<Box<dyn FnOnce(SubchannelKey) + Send + Sync>>,
     state_machine_event_sender: mpsc::UnboundedSender<SubchannelStateMachineEvent>,
     inner: Mutex<InnerSubchannel>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
 }
 
 struct InnerSubchannel {
@@ -227,7 +227,7 @@ impl InternalSubchannel {
         transport: Arc<dyn Transport>,
         backoff: Arc<dyn Backoff>,
         unregister_fn: Box<dyn FnOnce(SubchannelKey) + Send + Sync>,
-        runtime: Arc<dyn Runtime>,
+        runtime: GrpcRuntime,
     ) -> Arc<InternalSubchannel> {
         println!("creating new internal subchannel for: {:?}", &key);
         let (tx, mut rx) = mpsc::unbounded_channel::<SubchannelStateMachineEvent>();
