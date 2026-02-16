@@ -14,7 +14,7 @@ allowed_external_types = [
 ]
 
 [features]
-default = ["dns", "_runtime-tokio"]
+default = ["dns", "_runtime-tokio", "tls-rustls"]
 dns = ["dep:hickory-resolver", "_runtime-tokio"]
 # The following feature is used to ensure all modules use the runtime
 # abstraction instead of using tokio directly.
@@ -30,6 +30,14 @@ _runtime-tokio = [
 # Used for testing with udeps as it wants this feature to exist
 # to be able to do its checks.
 tower = ["_runtime-tokio"]
+tls-rustls = [
+    "dep:rustls",
+    "dep:rustls-pemfile",
+    "dep:rustls-pki-types",
+    "dep:tokio-rustls",
+    "dep:rustls-platform-verifier",
+    "dep:rustls-webpki",
+]
 
 [dependencies]
 bytes = "1.10.1"
@@ -40,10 +48,22 @@ hyper = { version = "1.6.0", features = ["client", "http2"] }
 parking_lot = "0.12.4"
 pin-project-lite = "0.2.16"
 rand = "0.9"
+rustls = { version = "0.23", optional = true, default-features = false, features = [
+    "tls12",
+    "logging",
+    "std",
+] }
+rustls-pemfile = { version = "2.1", optional = true, default-features = false, features = [
+    "std",
+] }
+rustls-pki-types = { version = "1.8", optional = true, default-features = false }
+rustls-platform-verifier = { version = "0.6", optional = true, default-features = false }
+rustls-webpki = { version = "0.102", optional = true, default-features = false }
 serde = { version = "1.0.219", features = ["derive"] }
 serde_json = "1.0.140"
 socket2 = { version = "0.6", optional = true }
 tokio = { version = "1.37.0", features = ["sync", "macros"] }
+tokio-rustls = { version = "0.26", optional = true, default-features = false }
 tokio-stream = { version = "0.1.17", default-features = false }
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
     "codegen",
@@ -61,6 +81,7 @@ url = "2.5.0"
 async-stream = "0.3.6"
 hickory-server = "0.25.2"
 prost = "0.14.0"
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
     "server",
     "router",
