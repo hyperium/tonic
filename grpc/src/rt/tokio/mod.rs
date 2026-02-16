@@ -31,6 +31,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 
+use crate::rt::TcpOptions;
+
 use super::{
     endpoint, BoxedTaskHandle, DnsResolver, GrpcEndpoint, ResolverOptions, Runtime, Sleep,
     TaskHandle,
@@ -131,6 +133,7 @@ impl Runtime for TokioRuntime {
     fn listen_tcp(
         &self,
         addr: SocketAddr,
+        _opts: TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::TcpListener>, String>> + Send>> {
         Box::pin(async move {
             let listener = tokio::net::TcpListener::bind(addr)

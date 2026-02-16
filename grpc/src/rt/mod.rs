@@ -60,7 +60,11 @@ pub trait Runtime: Send + Sync + Debug {
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>>;
 
     /// Create a new listener for the given address.
-    fn listen_tcp(&self, addr: SocketAddr) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
+    fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -175,6 +179,7 @@ impl Runtime for NoOpRuntime {
     fn listen_tcp(
         &self,
         addr: SocketAddr,
+        _opts: TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpListener>, String>> + Send>> {
         unimplemented!()
     }
@@ -227,7 +232,8 @@ impl GrpcRuntime {
     pub fn listen_tcp(
         &self,
         addr: SocketAddr,
+        opts: TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpListener>, String>> + Send>> {
-        self.inner.listen_tcp(addr)
+        self.inner.listen_tcp(addr, opts)
     }
 }

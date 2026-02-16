@@ -202,7 +202,10 @@ mod test {
 
         let addr = "127.0.0.1:0";
         let runtime = rt::default_runtime();
-        let mut listener = runtime.listen_tcp(addr.parse().unwrap()).await.unwrap();
+        let mut listener = runtime
+            .listen_tcp(addr.parse().unwrap(), TcpOptions::default())
+            .await
+            .unwrap();
         let server_addr = listener.local_addr().clone();
 
         let client_handle = tokio::spawn(async move {
