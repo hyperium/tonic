@@ -123,7 +123,8 @@ mod tests {
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::{Authority, SecurityLevel};
     use crate::credentials::insecure::InsecureChannelCredentials;
-    use crate::rt::TcpOptions;
+    use crate::credentials::InsecureServerCredentials;
+    use crate::rt::{self, TcpOptions};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::TcpListener;
 
@@ -170,20 +171,20 @@ mod tests {
 
         // Validate arbitrary authority.
         assert!(security_info
-            .security_context
+            .security_context()
             .validate_authority(&authority));
     }
 
     #[tokio::test]
     async fn test_dyn_server_credential_dispatch() {
-        let creds = InsecureServerChannelCredentials::new();
-        let dyn_creds: Box<dyn DynServerChannelCredentials> = Box::new(creds);
+        let creds = InsecureServerCredentials::new();
+        let dyn_creds: Box<dyn DynServerCredentials> = Box::new(creds);
 
         let info = dyn_creds.info();
         assert_eq!(info.security_protocol, "insecure");
 
         let addr = "127.0.0.1:0";
-        let runtime: Arc<dyn Runtime> = Arc::new(TokioRuntime {});
+        let runtime = rt::default_runtime();
         let mut listener = runtime.listen_tcp(addr.parse().unwrap()).await.unwrap();
         let server_addr = listener.local_addr().clone();
 
@@ -202,10 +203,12 @@ mod tests {
         let result = dyn_creds.accept(server_stream, runtime).await;
 
         assert!(result.is_ok());
-        let (mut endpoint, security_info) = result.unwrap();
+        let output = result.unwrap();
+        let mut endpoint = output.endpoint;
+        let security_info = output.security;
 
-        assert_eq!(security_info.security_protocol, "insecure");
-        assert_eq!(security_info.security_level, SecurityLevel::NoSecurity);
+        assert_eq!(security_info.security_protocol(), "insecure");
+        assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         let mut buf = vec![0u8; 25];
         endpoint.read_exact(&mut buf).await.unwrap();

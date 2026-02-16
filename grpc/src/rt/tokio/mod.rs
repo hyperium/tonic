@@ -22,22 +22,19 @@
  *
  */
 
-use std::{
-    future::Future,
-    net::{IpAddr, SocketAddr},
-    pin::Pin,
-    time::Duration,
+use std::future::Future;
+use std::net::{IpAddr, SocketAddr};
+use std::pin::Pin;
+use std::time::Duration;
+
+use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::net::TcpStream;
+use tokio::task::JoinHandle;
+
+use super::{
+    endpoint, BoxedTaskHandle, DnsResolver, GrpcEndpoint, ResolverOptions, Runtime, Sleep,
+    TaskHandle,
 };
-
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-    task::JoinHandle,
-};
-
-use crate::rt::endpoint;
-
-use super::{BoxedTaskHandle, DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;

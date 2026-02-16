@@ -223,4 +223,11 @@ impl GrpcRuntime {
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
         self.inner.tcp_stream(target, opts)
     }
+
+    pub fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpListener>, String>> + Send>> {
+        self.inner.listen_tcp(addr)
+    }
 }

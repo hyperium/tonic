@@ -129,13 +129,17 @@ impl ServerCredentials for InsecureServerCredentials {
 #[cfg(test)]
 mod test {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::TcpListener;
+    use tokio::net::{TcpListener, TcpStream};
 
     use crate::credentials::client::{
         ChannelCredsInternal as ClientSealed, ClientConnectionSecurityContext, ClientHandshakeInfo,
     };
     use crate::credentials::common::{Authority, SecurityLevel};
-    use crate::credentials::{ChannelCredentials, InsecureChannelCredentials};
+    use crate::credentials::server::ServerCredsInternal;
+    use crate::credentials::{
+        ChannelCredentials, InsecureChannelCredentials, InsecureServerCredentials,
+        ServerCredentials,
+    };
     use crate::rt::GrpcEndpoint;
     use crate::rt::{self, TcpOptions};
 
@@ -185,19 +189,19 @@ mod test {
 
         // Validate arbitrary authority.
         assert!(security_info
-            .security_context
+            .security_context()
             .validate_authority(&authority));
     }
 
     #[tokio::test]
     async fn test_insecure_server_credentials() {
-        let creds = InsecureServerChannelCredentials::new();
+        let creds = InsecureServerCredentials::new();
 
         let info = creds.info();
         assert_eq!(info.security_protocol, "insecure");
 
         let addr = "127.0.0.1:0";
-        let runtime: Arc<dyn rt::Runtime> = Arc::new(rt::tokio::TokioRuntime {});
+        let runtime = rt::default_runtime();
         let mut listener = runtime.listen_tcp(addr.parse().unwrap()).await.unwrap();
         let server_addr = listener.local_addr().clone();
 
@@ -213,10 +217,12 @@ mod test {
 
         let (server_stream, _) = listener.accept().await.unwrap();
 
-        let (mut endpoint, security_info) = creds.accept(server_stream, runtime).await.unwrap();
+        let output = creds.accept(server_stream, runtime).await.unwrap();
+        let mut endpoint = output.endpoint;
+        let security_info = output.security;
 
-        assert_eq!(security_info.security_protocol, "insecure");
-        assert_eq!(security_info.security_level, SecurityLevel::NoSecurity);
+        assert_eq!(security_info.security_protocol(), "insecure");
+        assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         let mut buf = vec![0u8; 10];
         endpoint.read_exact(&mut buf).await.unwrap();
