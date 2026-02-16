@@ -63,18 +63,18 @@ pub(crate) mod common {
 
     /// Represents the value passed as the `:authority` pseudo-header, typically
     /// in the form `host:port`.
-    pub struct Authority<'a> {
-        host: &'a str,
+    pub struct Authority {
+        host: String,
         port: Option<u16>,
     }
 
-    impl<'a> Authority<'a> {
-        pub fn new(host: &'a str, port: Option<u16>) -> Self {
+    impl Authority {
+        pub fn new(host: String, port: Option<u16>) -> Self {
             Self { host, port }
         }
 
-        pub fn host(&self) -> &'a str {
-            self.host
+        pub fn host(&self) -> &str {
+            &self.host
         }
 
         pub fn port(&self) -> Option<u16> {

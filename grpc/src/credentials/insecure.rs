@@ -64,7 +64,7 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
 
     async fn connect<Input: GrpcEndpoint + 'static>(
         &self,
-        _authority: &Authority<'_>,
+        _authority: &Authority,
         source: Input,
         _info: ClientHandshakeInfo,
         _runtime: GrpcRuntime,
@@ -149,7 +149,7 @@ mod test {
         let addr = "127.0.0.1:0";
         let listener = TcpListener::bind(addr).await.unwrap();
         let server_addr = listener.local_addr().unwrap();
-        let authority = Authority::new("localhost", Some(server_addr.port()));
+        let authority = Authority::new("localhost".to_string(), Some(server_addr.port()));
 
         let runtime = rt::default_runtime();
         let endpoint = runtime

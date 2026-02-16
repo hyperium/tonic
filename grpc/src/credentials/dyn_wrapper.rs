@@ -135,7 +135,7 @@ mod tests {
         let creds = InsecureChannelCredentials::new();
         let dyn_creds: Box<dyn DynChannelCredentials> = Box::new(creds);
 
-        let authority = Authority::new("localhost", Some(addr.port()));
+        let authority = Authority::new("localhost".to_string(), Some(addr.port()));
 
         let runtime = crate::rt::default_runtime();
         let source = runtime
