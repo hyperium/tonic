@@ -11,7 +11,7 @@ license = "MIT"
 name = "tonic-web"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.14.3"
+version = "0.14.4"
 rust-version = { workspace = true }
 
 [dependencies]
