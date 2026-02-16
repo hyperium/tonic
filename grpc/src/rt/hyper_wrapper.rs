@@ -1,14 +1,14 @@
-use super::{Runtime, TcpStream};
+use super::{GrpcEndpoint, GrpcRuntime};
 use hyper::rt::{Executor, Timer};
 use pin_project_lite::pin_project;
 use std::task::{Context, Poll};
-use std::{future::Future, io, pin::Pin, sync::Arc, time::Instant};
+use std::{future::Future, io, pin::Pin, time::Instant};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 
 /// Adapts a runtime to a hyper compatible executor.
 #[derive(Clone)]
 pub(crate) struct HyperCompatExec {
-    pub(crate) inner: Arc<dyn Runtime>,
+    pub(crate) inner: GrpcRuntime,
 }
 
 impl<F> Executor<F> for HyperCompatExec
@@ -42,7 +42,7 @@ impl hyper::rt::Sleep for HyperCompatSleep {}
 
 /// Adapts a runtime to a hyper compatible timer.
 pub(crate) struct HyperCompatTimer {
-    pub(crate) inner: Arc<dyn Runtime>,
+    pub(crate) inner: GrpcRuntime,
 }
 
 impl Timer for HyperCompatTimer {
@@ -62,17 +62,17 @@ impl Timer for HyperCompatTimer {
 // https://github.com/hyperium/hyper/blob/v1.6.0/benches/support/tokiort.rs
 
 pin_project! {
-    /// A wrapper to make any `TcpStream` compatible with Hyper. It implements
+    /// A wrapper to make any `GrpcEndpoint` compatible with Hyper. It implements
     /// Tokio's async IO traits.
     pub(crate) struct HyperStream {
         #[pin]
-        inner: Box<dyn TcpStream>,
+        inner: Box<dyn GrpcEndpoint>,
     }
 }
 
 impl HyperStream {
     /// Creates a new `HyperStream` from a type implementing `TcpStream`.
-    pub fn new(stream: Box<dyn TcpStream>) -> Self {
+    pub fn new(stream: Box<dyn GrpcEndpoint>) -> Self {
         Self { inner: stream }
     }
 }

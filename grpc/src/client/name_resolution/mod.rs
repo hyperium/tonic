@@ -30,7 +30,7 @@
 use core::fmt;
 
 use super::service_config::ServiceConfig;
-use crate::{attributes::Attributes, byte_str::ByteStr, rt::Runtime};
+use crate::{attributes::Attributes, byte_str::ByteStr, rt::GrpcRuntime};
 use std::{
     fmt::{Display, Formatter},
     hash::Hash,
@@ -176,7 +176,7 @@ pub(crate) struct ResolverOptions {
     pub authority: String,
 
     /// The runtime which provides utilities to do async work.
-    pub runtime: Arc<dyn Runtime>,
+    pub runtime: GrpcRuntime,
 
     /// A hook into the channel's work scheduler that allows the Resolver to
     /// request the ability to perform operations on the ChannelController.

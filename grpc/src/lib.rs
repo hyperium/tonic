@@ -37,13 +37,14 @@ pub mod inmemory;
 mod macros;
 mod status;
 pub use status::{ServerStatus, Status, StatusCode};
-pub mod rt;
 pub mod server;
 pub mod service;
 
 pub(crate) mod attributes;
 pub(crate) mod byte_str;
 pub(crate) mod codec;
+pub(crate) mod rt;
+pub(crate) mod send_future;
 #[cfg(test)]
 pub(crate) mod echo_pb {
     include!(concat!(

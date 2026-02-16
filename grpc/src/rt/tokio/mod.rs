@@ -35,6 +35,8 @@ use tokio::{
     task::JoinHandle,
 };
 
+use crate::rt::endpoint;
+
 use super::{BoxedTaskHandle, DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
 
 #[cfg(feature = "dns")]
@@ -99,7 +101,7 @@ impl Runtime for TokioRuntime {
         &self,
         target: SocketAddr,
         opts: super::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::TcpStream>, String>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::GrpcEndpoint>, String>> + Send>> {
         Box::pin(async move {
             let stream = TcpStream::connect(target)
                 .await
@@ -112,7 +114,15 @@ impl Runtime for TokioRuntime {
                     .set_tcp_keepalive(&ka)
                     .map_err(|err| err.to_string())?;
             }
-            let stream: Box<dyn super::TcpStream> = Box::new(TokioTcpStream { inner: stream });
+            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioTcpStream {
+                peer_addr: target.to_string().into_boxed_str(),
+                local_addr: stream
+                    .local_addr()
+                    .map_err(|err| err.to_string())?
+                    .to_string()
+                    .into_boxed_str(),
+                inner: stream,
+            });
             Ok(stream)
         })
     }
@@ -129,6 +139,8 @@ impl TokioDefaultDnsResolver {
 
 struct TokioTcpStream {
     inner: TcpStream,
+    peer_addr: Box<str>,
+    local_addr: Box<str>,
 }
 
 impl AsyncRead for TokioTcpStream {
@@ -150,6 +162,18 @@ impl AsyncWrite for TokioTcpStream {
         Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
+    }
+
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -165,7 +189,17 @@ impl AsyncWrite for TokioTcpStream {
     }
 }
 
-impl super::TcpStream for TokioTcpStream {}
+impl endpoint::Sealed for TokioTcpStream {}
+
+impl super::GrpcEndpoint for TokioTcpStream {
+    fn get_local_address(&self) -> &str {
+        &self.local_addr
+    }
+
+    fn get_peer_address(&self) -> &str {
+        &self.peer_addr
+    }
+}
 
 #[cfg(test)]
 mod tests {
