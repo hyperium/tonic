@@ -318,7 +318,7 @@ pub(crate) async fn dns_lookup_error() {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
-        inner: TokioRuntime {},
+        inner: TokioRuntime::default(),
         dns: FakeDns {
             latency: Duration::from_secs(0),
             lookup_result: Err("test_error".to_string()),
@@ -351,7 +351,7 @@ pub(crate) async fn dns_lookup_timeout() {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
-        inner: TokioRuntime {},
+        inner: TokioRuntime::default(),
         dns: FakeDns {
             latency: Duration::from_secs(20),
             lookup_result: Ok(Vec::new()),

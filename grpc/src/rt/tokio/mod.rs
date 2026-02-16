@@ -41,7 +41,9 @@ mod hickory_resolver;
 
 /// A DNS resolver that uses tokio::net::lookup_host for resolution. It only
 /// supports host lookups.
-struct TokioDefaultDnsResolver {}
+struct TokioDefaultDnsResolver {
+    _priv: (),
+}
 
 #[tonic::async_trait]
 impl DnsResolver for TokioDefaultDnsResolver {
@@ -63,8 +65,10 @@ impl DnsResolver for TokioDefaultDnsResolver {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TokioRuntime {}
+#[derive(Debug, Default)]
+pub(crate) struct TokioRuntime {
+    _priv: (),
+}
 
 impl TaskHandle for JoinHandle<()> {
     fn abort(&self) {
@@ -147,7 +151,7 @@ impl TokioDefaultDnsResolver {
         if opts.server_addr.is_some() {
             return Err("Custom DNS server are not supported, enable optional feature 'dns' to enable support.".to_string());
         }
-        Ok(TokioDefaultDnsResolver {})
+        Ok(TokioDefaultDnsResolver { _priv: () })
     }
 }
 
@@ -254,7 +258,7 @@ mod tests {
 
     #[tokio::test]
     async fn lookup_hostname() {
-        let runtime = TokioRuntime {};
+        let runtime = TokioRuntime::default();
 
         let dns = runtime
             .get_dns_resolver(ResolverOptions::default())
