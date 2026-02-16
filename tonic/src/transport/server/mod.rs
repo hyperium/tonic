@@ -1280,8 +1280,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::time::Duration;
     use crate::transport::Server;
+    use std::time::Duration;
 
     #[tokio::test(start_paused = true)]
     async fn test_connection_timeout_no_max_age() {
@@ -1327,7 +1327,7 @@ mod tests {
 
         let action = future.await;
         assert!(matches!(action, TimeoutAction::ForcefulShutdown));
-    }    
+    }
 
     #[test]
     fn server_tcp_defaults() {
