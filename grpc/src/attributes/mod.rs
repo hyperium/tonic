@@ -25,11 +25,10 @@
 use std::any::{Any, TypeId};
 use std::cmp::Ordering;
 use std::fmt::Debug;
-use std::sync::Arc;
 
-use crate::attributes::avl::Avl;
+use crate::attributes::linked_list::LinkedList;
 
-mod avl;
+mod linked_list;
 
 /// Ensures only types that support comparison can be inserted into the
 /// Attributes struct. This allows the use of value-based equality rather than
@@ -57,15 +56,15 @@ impl<T: Any + Send + Sync + Eq + Ord + Debug> AttributeTrait for T {
         if let Some(other) = other.any_ref().downcast_ref::<T>() {
             self.cmp(other)
         } else {
-            // Fallback for safety, though Avl structure guarantees same-type
+            // Fallback for safety, though map structure guarantees same-type
             // comparison.
             TypeId::of::<T>().cmp(&other.any_ref().type_id())
         }
     }
 }
 
-#[derive(Clone, Debug)]
-struct AttributeValue(Arc<dyn AttributeTrait>);
+#[derive(Debug)]
+struct AttributeValue(Box<dyn AttributeTrait>);
 
 impl PartialEq for AttributeValue {
     fn eq(&self, other: &Self) -> bool {
@@ -96,9 +95,14 @@ impl Ord for AttributeValue {
 /// This means two `Attributes` maps are equal if they contain the same set of
 /// values, compared by value (via `Eq` trait).
 /// Stored types must implement `Any + Send + Sync + Eq + Ord + Debug`.
-#[derive(Clone, Default, Debug, PartialEq, Eq, PartialOrd, Ord)]
+///
+/// # Warning
+///
+/// This collection is intended to store a small number of values (few hundreds)
+/// and is optimized for memory usage. It is **not** optimized for query speed.
+#[derive(Clone, Default, Debug)]
 pub struct Attributes {
-    map: Avl<TypeId, AttributeValue>,
+    map: LinkedList<TypeId, AttributeValue>,
 }
 
 impl Attributes {
@@ -112,7 +116,7 @@ impl Attributes {
     pub fn add<T: Send + Sync + Eq + Ord + Debug + 'static>(&self, value: T) -> Self {
         let id = TypeId::of::<T>();
         Attributes {
-            map: self.map.add(id, AttributeValue(Arc::new(value))),
+            map: self.map.add(id, AttributeValue(Box::new(value))),
         }
     }
 
@@ -127,20 +131,36 @@ impl Attributes {
     pub fn remove<T: 'static>(&self) -> Self {
         let id = TypeId::of::<T>();
         Attributes {
-            map: self.map.remove(&id),
+            map: self.map.remove(id),
         }
     }
+}
 
-    /// Inserts all values from another Attributes object into this one.
-    /// Returns a new Attributes object with the values added.
-    /// If a value of the same type already exists, it is replaced by the value
-    /// from `other`.
-    pub fn union(&self, other: &Attributes) -> Self {
-        let mut new_map = self.map.clone();
-        for (k, v) in other.map.iter() {
-            new_map = new_map.add(*k, v.clone());
-        }
-        Attributes { map: new_map }
+impl PartialEq for Attributes {
+    fn eq(&self, other: &Self) -> bool {
+        let mut v1: Vec<_> = self.map.iter().collect();
+        let mut v2: Vec<_> = other.map.iter().collect();
+        v1.sort();
+        v2.sort();
+        v1 == v2
+    }
+}
+
+impl Eq for Attributes {}
+
+impl PartialOrd for Attributes {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for Attributes {
+    fn cmp(&self, other: &Self) -> Ordering {
+        let mut v1: Vec<_> = self.map.iter().collect();
+        let mut v2: Vec<_> = other.map.iter().collect();
+        v1.sort();
+        v2.sort();
+        v1.cmp(&v2)
     }
 }
 
@@ -170,22 +190,6 @@ mod tests {
         assert_eq!(attrs.get::<i32>(), Some(&42));
         assert_eq!(attrs.get::<String>(), Some(&"hello".to_string()));
         assert_eq!(attrs.get::<bool>(), None);
-    }
-
-    #[test]
-    fn test_union() {
-        let a1 = Attributes::new().add(10i32).add(20u32);
-        let a2 = Attributes::new().add(30i64).add(40i32); // 40i32 should overwrite 10i32
-
-        let a3 = a1.union(&a2);
-
-        assert_eq!(a3.get::<i32>(), Some(&40));
-        assert_eq!(a3.get::<u32>(), Some(&20));
-        assert_eq!(a3.get::<i64>(), Some(&30));
-
-        // Original maps should be unchanged
-        assert_eq!(a1.get::<i32>(), Some(&10));
-        assert_eq!(a2.get::<i32>(), Some(&40));
     }
 
     #[test]
@@ -219,5 +223,47 @@ mod tests {
 
         assert_eq!(a1.get::<i32>(), Some(&10));
         assert_eq!(a2.get::<i32>(), Some(&20));
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    struct Priority {
+        weight: u64,
+        name: String,
+    }
+
+    #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+    struct Config {
+        retries: u32,
+        timeout_ms: u64,
+    }
+
+    #[test]
+    fn test_custom_structs() {
+        let p = Priority {
+            weight: 123,
+            name: "alice".into(),
+        };
+        let config = Config {
+            retries: 3,
+            timeout_ms: 1000,
+        };
+
+        let attrs = Attributes::new().add(p.clone()).add(config.clone());
+
+        assert_eq!(attrs.get::<Priority>(), Some(&p));
+        assert_eq!(attrs.get::<Config>(), Some(&config));
+
+        // Test overwrite
+        let p2 = Priority {
+            weight: 456,
+            name: "bob".into(),
+        };
+        let attrs2 = attrs.add(p2.clone());
+
+        assert_eq!(attrs2.get::<Priority>(), Some(&p2));
+        assert_eq!(attrs2.get::<Config>(), Some(&config));
+
+        // original should be unchanged
+        assert_eq!(attrs.get::<Priority>(), Some(&p));
     }
 }
