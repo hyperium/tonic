@@ -1327,6 +1327,7 @@ mod tests {
 
         let action = future.await;
         assert!(matches!(action, TimeoutAction::ForcefulShutdown));
+    }    
 
     #[test]
     fn server_tcp_defaults() {
