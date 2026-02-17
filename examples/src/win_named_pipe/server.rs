@@ -1,7 +1,11 @@
 #![cfg_attr(not(windows), allow(unused_imports))]
 
 #[cfg(windows)]
-use tonic::transport::server::NamedPipeIncoming;
+use std::io;
+#[cfg(windows)]
+use std::pin::Pin;
+#[cfg(windows)]
+use std::task::{Context, Poll};
 #[cfg(windows)]
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 #[cfg(windows)]
@@ -9,11 +13,7 @@ use tokio::net::windows::named_pipe::NamedPipeServer;
 #[cfg(windows)]
 use tokio_stream::StreamExt;
 #[cfg(windows)]
-use std::io;
-#[cfg(windows)]
-use std::pin::Pin;
-#[cfg(windows)]
-use std::task::{Context, Poll};
+use tonic::transport::server::NamedPipeIncoming;
 use tonic::{transport::Server, Request, Response, Status};
 
 pub mod hello_world {

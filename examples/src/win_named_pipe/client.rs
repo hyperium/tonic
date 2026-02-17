@@ -12,7 +12,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Named pipe URI follows [RFC-3986](https://datatracker.ietf.org/doc/html/rfc3986)
     // which is aligned with [the gRPC naming convention]
 
-     let pipe_name = r"\\.\pipe\tonic\helloworld";
+    let pipe_name = r"\\.\pipe\tonic\helloworld";
     let mut client = GreeterClient::connect(pipe_name).await?;
     let request = tonic::Request::new(HelloRequest {
         name: "Tonic".into(),
