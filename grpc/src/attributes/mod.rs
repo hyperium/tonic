@@ -126,9 +126,15 @@ impl Attributes {
         self.map.get(&id).and_then(|v| v.0.any_ref().downcast_ref())
     }
 
-    /// Removes a value of type T from the attributes.
-    /// Returns a new Attributes object with the value removed.
-    pub fn remove<T: 'static>(&self) -> Self {
+    /// Removes the value of type `T` from the attributes.
+    ///
+    /// Returns a new `Attributes` instance without the specified type.
+    ///
+    /// Note: This method is currently private. While gRPC C++ and Java support
+    /// this functionality, it may be unnecessary in Rust if scoped attributes
+    /// are stored separately. It can be made public in the future should a
+    /// compelling use case arise.
+    fn remove<T: 'static>(&self) -> Self {
         let id = TypeId::of::<T>();
         Attributes {
             map: self.map.remove(id),
