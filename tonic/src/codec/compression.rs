@@ -237,6 +237,8 @@ pub(crate) fn compress(
     let capacity = ((len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
+    let before_compress_len = out_buf.len();
+
     #[cfg(any(
         feature = "gzip",
         feature = "zstd",
@@ -284,6 +286,14 @@ pub(crate) fn compress(
     }
 
     decompressed_buf.advance(len);
+
+    let after_compress_len = out_buf.len();
+
+    println!(
+        "Compressed {len} bytes into {} bytes with {:?}",
+        after_compress_len - before_compress_len,
+        settings.encoding
+    );
 
     Ok(())
 }
