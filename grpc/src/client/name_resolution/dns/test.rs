@@ -40,7 +40,7 @@ use crate::{
         },
         service_config::ServiceConfig,
     },
-    rt::{self, tokio::TokioRuntime, GrpcRuntime},
+    rt::{self, tokio::TokioRuntime, BoxFuture, GrpcRuntime, TcpOptions},
 };
 
 use super::{DnsOptions, ParseResult};
@@ -299,6 +299,14 @@ impl rt::Runtime for FakeRuntime {
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::GrpcEndpoint>, String>> + Send>> {
         self.inner.tcp_stream(target, opts)
     }
+
+    fn listen_tcp(
+        &self,
+        _addr: std::net::SocketAddr,
+        _opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn rt::TcpListener>, String>> {
+        unimplemented!()
+    }
 }
 
 #[tokio::test]
@@ -311,7 +319,7 @@ pub(crate) async fn dns_lookup_error() {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
-        inner: TokioRuntime {},
+        inner: TokioRuntime::default(),
         dns: FakeDns {
             latency: Duration::from_secs(0),
             lookup_result: Err("test_error".to_string()),
@@ -344,7 +352,7 @@ pub(crate) async fn dns_lookup_timeout() {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
-        inner: TokioRuntime {},
+        inner: TokioRuntime::default(),
         dns: FakeDns {
             latency: Duration::from_secs(20),
             lookup_result: Ok(Vec::new()),
