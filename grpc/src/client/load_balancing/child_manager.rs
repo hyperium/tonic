@@ -41,7 +41,7 @@ use crate::client::load_balancing::{
 };
 use crate::client::name_resolution::{Address, ResolverUpdate};
 use crate::client::ConnectivityState;
-use crate::rt::Runtime;
+use crate::rt::GrpcRuntime;
 
 use super::{Subchannel, SubchannelState};
 
@@ -51,7 +51,7 @@ pub(crate) struct ChildManager<T: Debug> {
     subchannel_to_child_idx: HashMap<WeakSubchannel, usize>,
     children: Vec<Child<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
     updated: bool, // Set when any child updates its picker; cleared when accessed.
     work_scheduler: Arc<dyn WorkScheduler>,
 }
@@ -88,7 +88,7 @@ where
 {
     /// Creates a new ChildManager LB policy.  shard_update is called whenever a
     /// resolver_update operation occurs.
-    pub fn new(runtime: Arc<dyn Runtime>, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+    pub fn new(runtime: GrpcRuntime, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         Self {
             subchannel_to_child_idx: Default::default(),
             children: Default::default(),

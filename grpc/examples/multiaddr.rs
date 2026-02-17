@@ -1,5 +1,6 @@
 use std::any::Any;
 
+use grpc::credentials::InsecureChannelCredentials;
 use grpc::service::{Message, Request, Response, Service};
 use grpc::{client::ChannelOptions, inmemory};
 use tokio_stream::StreamExt;
@@ -70,7 +71,11 @@ async fn main() {
     let target = String::from("inmemory:///dummy");
     println!("Creating channel for {target}");
     let chan_opts = ChannelOptions::default();
-    let chan = grpc::client::Channel::new(target.as_str(), None, chan_opts);
+    let chan = grpc::client::Channel::new(
+        target.as_str(),
+        InsecureChannelCredentials::new(),
+        chan_opts,
+    );
 
     let outbound = async_stream::stream! {
         yield Box::new(MyReqMessage("My Request 1".to_string())) as Box<dyn Message>;

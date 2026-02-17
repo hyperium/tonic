@@ -1,10 +1,10 @@
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::TransportOptions;
 use crate::echo_pb::echo_server::{Echo, EchoServer};
 use crate::echo_pb::{EchoRequest, EchoResponse};
 use crate::service::Message;
 use crate::service::Request as GrpcRequest;
-use crate::{client::transport::TransportOptions, rt::tokio::TokioRuntime};
 use bytes::Bytes;
 use std::any::Any;
 use std::{pin::Pin, sync::Arc, time::Duration};
@@ -45,7 +45,7 @@ pub(crate) async fn tonic_transport_rpc() {
         .unwrap();
     let config = Arc::new(TransportOptions::default());
     let mut connected_transport = builder
-        .connect(addr.to_string(), Arc::new(TokioRuntime {}), &config)
+        .connect(addr.to_string(), crate::rt::default_runtime(), &config)
         .await
         .unwrap();
     let conn = connected_transport.service;
