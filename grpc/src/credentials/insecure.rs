@@ -75,7 +75,7 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
                 "insecure",
                 SecurityLevel::NoSecurity,
                 InsecureConnectionSecurityContext,
-                Attributes,
+                Attributes::new(),
             ),
         })
     }
@@ -113,7 +113,7 @@ impl server::ServerCredsInternal for InsecureServerCredentials {
             security: ServerConnectionSecurityInfo::new(
                 "insecure",
                 SecurityLevel::NoSecurity,
-                Attributes,
+                Attributes::new(),
             ),
         })
     }
