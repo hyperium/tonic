@@ -31,6 +31,8 @@ pub(crate) mod tokio;
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 pub type BoxedTaskHandle = Box<dyn TaskHandle>;
+pub type BoxEndpoint = Box<dyn GrpcEndpoint>;
+pub type ScopedBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -137,11 +139,7 @@ pub trait TcpListener: Send + Sync {
     /// Returns a future that resolves to a result containing the new
     /// `GrpcEndpoint` and the remote peer's `SocketAddr`, or an error string
     /// if acceptance fails.
-    fn accept(
-        &mut self,
-    ) -> Pin<
-        Box<dyn Future<Output = Result<(Box<dyn GrpcEndpoint>, SocketAddr), String>> + Send + '_>,
-    >;
+    fn accept(&mut self) -> ScopedBoxFuture<'_, Result<(BoxEndpoint, SocketAddr), String>>;
 
     /// Returns the local socket address this listener is bound to.
     fn local_addr(&self) -> &SocketAddr;
@@ -180,7 +178,7 @@ impl Runtime for NoOpRuntime {
         &self,
         addr: SocketAddr,
         _opts: TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpListener>, String>> + Send>> {
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
         unimplemented!()
     }
 }
@@ -233,7 +231,7 @@ impl GrpcRuntime {
         &self,
         addr: SocketAddr,
         opts: TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpListener>, String>> + Send>> {
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
         self.inner.listen_tcp(addr, opts)
     }
 }

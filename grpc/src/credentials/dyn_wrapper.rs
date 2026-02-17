@@ -189,7 +189,7 @@ mod tests {
             .listen_tcp(addr.parse().unwrap(), TcpOptions::default())
             .await
             .unwrap();
-        let server_addr = listener.local_addr().clone();
+        let server_addr = *listener.local_addr();
 
         let client_handle = tokio::spawn(async move {
             let mut stream = tokio::net::TcpStream::connect(server_addr).await.unwrap();

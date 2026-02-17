@@ -40,7 +40,7 @@ use crate::{
         },
         service_config::ServiceConfig,
     },
-    rt::{self, tokio::TokioRuntime, GrpcRuntime, TcpOptions},
+    rt::{self, tokio::TokioRuntime, BoxFuture, GrpcRuntime, TcpOptions},
 };
 
 use super::{DnsOptions, ParseResult};
@@ -304,7 +304,7 @@ impl rt::Runtime for FakeRuntime {
         &self,
         _addr: std::net::SocketAddr,
         _opts: TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::TcpListener>, String>> + Send>> {
+    ) -> BoxFuture<Result<Box<dyn rt::TcpListener>, String>> {
         unimplemented!()
     }
 }
