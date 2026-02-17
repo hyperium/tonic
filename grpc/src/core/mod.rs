@@ -26,15 +26,14 @@
 //! servers.  Note that most gRPC applications should not need these types
 //! unless they are implementing custom interceptors.
 
-use bytes::Bytes;
+use bytes::Buf;
 use std::any::TypeId;
-use std::collections::VecDeque;
 
 use crate::Status;
 
 #[allow(unused)]
 pub trait SendMessage: Send + Sync {
-    fn encode(&self) -> Result<VecDeque<Bytes>, String>;
+    fn encode(&self) -> Result<Box<dyn Buf + Send>, String>;
 
     #[doc(hidden)]
     unsafe fn _ptr_for(&self, id: TypeId) -> Option<*const ()> {
@@ -44,7 +43,7 @@ pub trait SendMessage: Send + Sync {
 
 #[allow(unused)]
 pub trait RecvMessage: Send + Sync {
-    fn decode(&mut self, data: &mut VecDeque<Bytes>) -> Result<(), String>;
+    fn decode(&mut self, data: &mut dyn Buf) -> Result<(), String>;
 
     #[doc(hidden)]
     unsafe fn _ptr_for(&mut self, id: TypeId) -> Option<*mut ()> {

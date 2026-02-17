@@ -8,6 +8,7 @@ rust-version = "1.86"
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
+    "bytes::*",
     "tonic::*",
     "futures_core::stream::Stream",
     "tokio::sync::oneshot::Sender",

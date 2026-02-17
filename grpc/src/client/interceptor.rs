@@ -244,8 +244,8 @@ mod test {
     use crate::core::Trailers;
     use crate::Status;
     use crate::StatusCode;
+    use bytes::Buf;
     use bytes::Bytes;
-    use std::collections::VecDeque;
     use std::future::Future;
     use std::sync::Arc;
     use tokio::pin;
@@ -373,8 +373,8 @@ mod test {
         let (invoker, mut controller) = MockInvoker::new();
         let chan = invoker.with_interceptor(ReusableFanOut);
         let (mut tx, mut rx) = chan.invoke("".to_string(), CallOptions::default());
-        let one = VecDeque::from(vec![Bytes::from(vec![1])]);
-        let two = VecDeque::from(vec![Bytes::from(vec![2])]);
+        let one = Bytes::from(vec![1]);
+        let two = Bytes::from(vec![2]);
         tx.send(&ByteSendMsg::new(&one), SendOptions::default())
             .await
             .unwrap();
@@ -416,8 +416,8 @@ mod test {
         let (invoker, mut controller) = MockInvoker::new();
         let chan = invoker.with_interceptor(ReusableFanOut);
         let (mut tx, mut rx) = chan.invoke("".to_string(), CallOptions::default());
-        let one = VecDeque::from(vec![Bytes::from(vec![1])]);
-        let two = VecDeque::from(vec![Bytes::from(vec![2])]);
+        let one = Bytes::from(vec![1]);
+        let two = Bytes::from(vec![2]);
         tx.send(&ByteSendMsg::new(&one), SendOptions::default())
             .await
             .unwrap();
@@ -466,7 +466,7 @@ mod test {
         let (invoker, mut controller) = MockInvoker::new();
         let chan = invoker.with_interceptor(ReusableFanOut);
         let (mut tx, mut rx) = chan.invoke("".to_string(), CallOptions::default());
-        let one = VecDeque::from(vec![Bytes::from(vec![1])]);
+        let one = Bytes::from(vec![1]);
         tx.send(&ByteSendMsg::new(&one), SendOptions::default())
             .await
             .unwrap();
@@ -496,13 +496,13 @@ mod test {
     #[derive(Clone)]
     struct MockInvoker {
         resp_tx: broadcast::Sender<ClientResponseStreamItem>,
-        req_tx: mpsc::Sender<(VecDeque<Bytes>, SendOptions)>,
+        req_tx: mpsc::Sender<(Bytes, SendOptions)>,
     }
     /// A controller used to control the behavior of its paired MockInvoker's
     /// SendStream and RecvStream.
     struct MockInvokerController {
         resp_tx: broadcast::Sender<ClientResponseStreamItem>,
-        req_rx: mpsc::Receiver<(VecDeque<Bytes>, SendOptions)>,
+        req_rx: mpsc::Receiver<(Bytes, SendOptions)>,
     }
     impl MockInvoker {
         fn new() -> (Self, MockInvokerController) {
@@ -521,7 +521,7 @@ mod test {
     }
 
     impl MockInvokerController {
-        async fn recv_req(&mut self) -> (VecDeque<Bytes>, SendOptions) {
+        async fn recv_req(&mut self) -> (Bytes, SendOptions) {
             self.req_rx.recv().await.unwrap()
         }
         async fn send_resp(&mut self, item: ClientResponseStreamItem) {
@@ -545,11 +545,12 @@ mod test {
         }
     }
 
-    struct MockSendStream(mpsc::Sender<(VecDeque<Bytes>, SendOptions)>);
+    struct MockSendStream(mpsc::Sender<(Bytes, SendOptions)>);
     impl SendStream for MockSendStream {
         async fn send(&mut self, item: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+            let mut data = item.encode().unwrap();
             self.0
-                .send((item.encode().unwrap(), options))
+                .send((data.copy_to_bytes(data.remaining()), options))
                 .await
                 .map_err(|_| ())
         }
@@ -593,7 +594,7 @@ mod test {
         // Set when the stream is committed; SendStream will not wait for a new
         // stream after a send failure when set.
         committed: bool,
-        data: Vec<(VecDeque<Bytes>, SendOptions)>, // cached send operations
+        data: Vec<(Bytes, SendOptions)>, // cached send operations
         // Allows the sender to wait for a new stream.
         notify: Arc<Notify>,
     }
@@ -624,7 +625,10 @@ mod test {
                 }
                 if res.is_ok() {
                     // Success; cache this message.
-                    cache.data.push((msg.encode().unwrap(), options));
+                    let mut data = msg.encode().unwrap();
+                    cache
+                        .data
+                        .push((data.copy_to_bytes(data.remaining()), options));
                     return res;
                 }
                 if cache.send_stream.is_none() {
@@ -719,7 +723,7 @@ mod test {
 
     async fn replay_sends<S, F>(
         send_stream: &mut S,
-        cached_sends: &Vec<(VecDeque<Bytes>, SendOptions)>,
+        cached_sends: &Vec<(Bytes, SendOptions)>,
         recv_state: &mut RecvStreamState<F>,
     ) -> bool
     where
@@ -794,7 +798,7 @@ mod test {
     }
 
     struct ByteRecvMsg {
-        data: Option<VecDeque<Bytes>>,
+        data: Option<Bytes>,
     }
     impl ByteRecvMsg {
         fn new() -> Self {
@@ -802,23 +806,23 @@ mod test {
         }
     }
     impl RecvMessage for ByteRecvMsg {
-        fn decode(&mut self, data: &mut VecDeque<Bytes>) -> Result<(), String> {
-            self.data = Some(data.clone());
+        fn decode(&mut self, data: &mut dyn Buf) -> Result<(), String> {
+            self.data = Some(data.copy_to_bytes(data.remaining()));
             Ok(())
         }
     }
 
     struct ByteSendMsg<'a> {
-        data: &'a VecDeque<Bytes>,
+        data: &'a Bytes,
     }
     impl<'a> ByteSendMsg<'a> {
-        fn new(data: &'a VecDeque<Bytes>) -> Self {
+        fn new(data: &'a Bytes) -> Self {
             Self { data }
         }
     }
     impl<'a> SendMessage for ByteSendMsg<'a> {
-        fn encode(&self) -> Result<VecDeque<Bytes>, String> {
-            Ok(self.data.clone())
+        fn encode(&self) -> Result<Box<dyn Buf + Send>, String> {
+            Ok(Box::new(self.data.clone()))
         }
     }
 

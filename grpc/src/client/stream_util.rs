@@ -140,11 +140,10 @@ where
 
 #[cfg(test)]
 mod test {
-    use std::collections::VecDeque;
     use std::mem::discriminant;
     use std::vec;
 
-    use bytes::Bytes;
+    use bytes::Buf;
     use tokio::sync::mpsc::Receiver;
     use tokio::sync::mpsc::Sender;
 
@@ -426,7 +425,7 @@ mod test {
     struct NopRecvMessage;
 
     impl RecvMessage for NopRecvMessage {
-        fn decode(&mut self, data: &mut VecDeque<Bytes>) -> Result<(), String> {
+        fn decode(&mut self, data: &mut dyn Buf) -> Result<(), String> {
             Ok(())
         }
     }
