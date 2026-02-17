@@ -40,7 +40,10 @@ impl Greeter for MyGreeter {
                 .extensions()
                 .get::<PipeConnectInfo>()
                 .expect("connect info missing");
-            println!("Got a request {request:?} with info {conn_info:?}");
+            println!(
+                "Got a request {request:?} on pipe {} (connection {})",
+                conn_info.pipe_name, conn_info.connection_id
+            );
         }
         let reply = hello_world::HelloReply {
             message: format!("Hello {}!", request.into_inner().name),
