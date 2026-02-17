@@ -34,7 +34,7 @@ pub struct QuotaViolation {
 
     /// The future value of the quota check value when a quota check rollout is
     /// in progress.
-    pub futura_quota_value: Option<i64>,
+    pub future_quota_value: Option<i64>,
 }
 
 impl QuotaViolation {
@@ -58,7 +58,7 @@ impl From<pb::quota_failure::Violation> for QuotaViolation {
             quota_id: value.quota_id,
             quota_dimensions: value.quota_dimensions,
             quota_value: value.quota_value,
-            futura_quota_value: value.future_quota_value,
+            future_quota_value: value.future_quota_value,
         }
     }
 }
@@ -73,7 +73,7 @@ impl From<QuotaViolation> for pb::quota_failure::Violation {
             quota_id: value.quota_id,
             quota_dimensions: value.quota_dimensions,
             quota_value: value.quota_value,
-            future_quota_value: value.futura_quota_value,
+            future_quota_value: value.future_quota_value,
         }
     }
 }
@@ -203,7 +203,7 @@ mod tests {
 
         let formatted = format!("{quota_failure:?}");
 
-        let expected_filled = "QuotaFailure { violations: [QuotaViolation { subject: \"clientip:<ip address>\", description: \"description a\", api_service: \"\", quota_metric: \"\", quota_id: \"\", quota_dimensions: {}, quota_value: 0, futura_quota_value: None }, QuotaViolation { subject: \"project:<project id>\", description: \"description b\", api_service: \"\", quota_metric: \"\", quota_id: \"\", quota_dimensions: {}, quota_value: 0, futura_quota_value: None }] }";
+        let expected_filled = "QuotaFailure { violations: [QuotaViolation { subject: \"clientip:<ip address>\", description: \"description a\", api_service: \"\", quota_metric: \"\", quota_id: \"\", quota_dimensions: {}, quota_value: 0, future_quota_value: None }, QuotaViolation { subject: \"project:<project id>\", description: \"description b\", api_service: \"\", quota_metric: \"\", quota_id: \"\", quota_dimensions: {}, quota_value: 0, future_quota_value: None }] }";
 
         assert!(
             formatted.eq(expected_filled),
