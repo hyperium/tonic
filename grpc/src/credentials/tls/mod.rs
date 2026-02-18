@@ -32,6 +32,7 @@ use crate::credentials::ProtocolInfo;
 
 pub mod client;
 mod key_log;
+pub mod server;
 mod tls_stream;
 
 /// Represents a X509 certificate chain.
@@ -77,6 +78,8 @@ pub struct Identity {
     cert: Vec<u8>,
     key: Vec<u8>,
 }
+
+pub type IdentityList = Vec<Identity>;
 
 impl Identity {
     /// Parse a PEM encoded certificate and private key.
