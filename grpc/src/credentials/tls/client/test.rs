@@ -30,7 +30,7 @@ use crate::credentials::common::Authority;
 use crate::credentials::tls::{RootCertificates, StaticProvider};
 use crate::rt::{self, TcpOptions};
 use rustls::crypto::ring;
-use rustls::ServerConfig;
+use rustls::{HandshakeKind, ServerConfig};
 use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -379,6 +379,86 @@ async fn test_mtls_handshake_with_identitiy() {
     let _ = server_task.await;
 }
 
+async fn check_client_resumption_disabled(
+    versions: Vec<&'static rustls::SupportedProtocolVersion>,
+) {
+    init_provider();
+
+    // Server setup: Support resumption
+    let certs = load_certs("server.pem");
+    let key = load_private_key("server.key");
+    let provider = ring::default_provider();
+    let mut server_config = ServerConfig::builder_with_provider(Arc::new(provider))
+        .with_protocol_versions(&versions)
+        .expect("invalid versions")
+        .with_no_client_auth()
+        .with_single_cert(certs, key)
+        .unwrap();
+    server_config.alpn_protocols = vec![b"h2".to_vec()];
+    // Enable stateful resumption
+    server_config.session_storage = rustls::server::ServerSessionMemoryCache::new(32);
+    // Enable stateless resumption (TLS 1.3 tickets)
+    server_config.send_tls13_tickets = 1;
+
+    let (addr, server_task) = setup_server_multi_connection(server_config, 2).await;
+
+    // Client setup
+    let root_certs = load_root_certs("ca.pem");
+    let root_provider = StaticProvider::new(root_certs);
+    let config = ClientTlsConfig::new().with_root_certificates_provider(root_provider);
+
+    let creds = RustlsClientTlsCredendials::new(config).unwrap();
+
+    for i in 0..2 {
+        let runtime = rt::default_runtime();
+        let endpoint = runtime
+            .tcp_stream(addr, TcpOptions::default())
+            .await
+            .unwrap();
+        let authority = Authority::new("localhost".to_string(), Some(addr.port()));
+
+        let result = creds
+            .connect(
+                &authority,
+                endpoint,
+                ClientHandshakeInfo::default(),
+                runtime,
+            )
+            .await
+            .expect("Handshake failed");
+
+        let mut tls_stream = result.endpoint;
+
+        let connection = match &tls_stream.inner {
+            tokio_rustls::TlsStream::Client(conn) => conn.get_ref().1,
+            _ => panic!("Expected client stream"),
+        };
+
+        assert_eq!(
+            connection.handshake_kind(),
+            Some(HandshakeKind::Full),
+            "Expected full handshake on attempt {}",
+            i
+        );
+
+        let mut buf = Vec::new();
+        let _ = tls_stream.read_to_end(&mut buf).await;
+        assert_eq!(buf, b"Hello world");
+    }
+
+    let _ = server_task.await;
+}
+
+#[tokio::test]
+async fn test_tls_resumption_disabled_tls13() {
+    check_client_resumption_disabled(vec![&rustls::version::TLS13]).await;
+}
+
+#[tokio::test]
+async fn test_tls_resumption_disabled_tls12() {
+    check_client_resumption_disabled(vec![&rustls::version::TLS12]).await;
+}
+
 fn load_identity(cert_file: &str, key_file: &str) -> Identity {
     let cert = std::fs::read(test_certs_path().join(cert_file)).expect("cannot read cert file");
     let key = std::fs::read(test_certs_path().join(key_file)).expect("cannot read key file");
@@ -458,21 +538,32 @@ fn default_server_config() -> ServerConfig {
 }
 
 async fn setup_server(config: ServerConfig) -> (SocketAddr, JoinHandle<()>) {
+    setup_server_multi_connection(config, 1).await
+}
+
+async fn setup_server_multi_connection(
+    config: ServerConfig,
+    count: usize,
+) -> (SocketAddr, JoinHandle<()>) {
     let acceptor = TlsAcceptor::from(Arc::new(config));
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
 
     let task = tokio::spawn(async move {
-        let (stream, _) = listener.accept().await.unwrap();
-        match acceptor.accept(stream).await {
-            Ok(mut stream) => {
-                let _ = stream.write_all(b"Hello world").await;
-                let _ = stream.shutdown().await;
-            }
-            Err(err) => {
-                // Handshake failed, expected in some cases
-                println!("TLS handshake failed: {}", err)
-            }
+        for _ in 0..count {
+            let (stream, _) = listener.accept().await.unwrap();
+            let acceptor = acceptor.clone();
+            tokio::spawn(async move {
+                match acceptor.accept(stream).await {
+                    Ok(mut stream) => {
+                        let _ = stream.write_all(b"Hello world").await;
+                        let _ = stream.shutdown().await;
+                    }
+                    Err(err) => {
+                        println!("TLS handshake failed: {}", err)
+                    }
+                }
+            });
         }
     });
     (addr, task)

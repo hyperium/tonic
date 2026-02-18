@@ -74,7 +74,7 @@ impl AsRef<[u8]> for RootCertificates {
 /// Represents a private key and X509 certificate chain.
 #[derive(Debug, Clone)]
 pub struct Identity {
-    cert: Vec<u8>,
+    certs: Vec<u8>,
     key: Vec<u8>,
 }
 
@@ -85,7 +85,7 @@ impl Identity {
     pub fn from_pem(cert: impl AsRef<[u8]>, key: impl AsRef<[u8]>) -> Self {
         let cert = cert.as_ref().into();
         let key = key.as_ref().into();
-        Self { cert, key }
+        Self { certs: cert, key }
     }
 }
 
