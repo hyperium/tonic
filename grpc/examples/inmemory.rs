@@ -24,11 +24,16 @@
 
 use std::any::Any;
 
-use grpc::credentials::InsecureChannelCredentials;
-use grpc::service::{Message, Request, Response, Service};
-use grpc::{client::ChannelOptions, inmemory};
 use tokio_stream::StreamExt;
 use tonic::async_trait;
+
+use grpc::client::ChannelOptions;
+use grpc::credentials::InsecureChannelCredentials;
+use grpc::inmemory;
+use grpc::service::Message;
+use grpc::service::Request;
+use grpc::service::Response;
+use grpc::service::Service;
 
 struct Handler {}
 

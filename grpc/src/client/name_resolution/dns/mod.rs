@@ -25,29 +25,35 @@
 //! This module implements a DNS resolver to be installed as the default resolver
 //! in grpc.
 
-use std::{
-    net::{IpAddr, SocketAddr},
-    sync::{
-        atomic::{AtomicU64, Ordering},
-        Arc,
-    },
-    time::{Duration, SystemTime},
-};
+use std::net::IpAddr;
+use std::net::SocketAddr;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::time::Duration;
+use std::time::SystemTime;
 
 use parking_lot::Mutex;
 use tokio::sync::Notify;
 use url::Host;
 
-use crate::{
-    byte_str::ByteStr,
-    client::name_resolution::{global_registry, ChannelController, ResolverBuilder, Target},
-    rt::{self, BoxedTaskHandle},
-};
-
-use super::{
-    backoff::{BackoffConfig, ExponentialBackoff, DEFAULT_EXPONENTIAL_CONFIG},
-    Address, Endpoint, NopResolver, Resolver, ResolverOptions, ResolverUpdate, TCP_IP_NETWORK_TYPE,
-};
+use crate::byte_str::ByteStr;
+use crate::client::name_resolution::backoff::BackoffConfig;
+use crate::client::name_resolution::backoff::ExponentialBackoff;
+use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
+use crate::client::name_resolution::global_registry;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ChannelController;
+use crate::client::name_resolution::Endpoint;
+use crate::client::name_resolution::NopResolver;
+use crate::client::name_resolution::Resolver;
+use crate::client::name_resolution::ResolverBuilder;
+use crate::client::name_resolution::ResolverOptions;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::Target;
+use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::rt::BoxedTaskHandle;
+use crate::rt::{self};
 
 #[cfg(test)]
 mod test;

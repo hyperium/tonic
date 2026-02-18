@@ -22,11 +22,14 @@
  *
  */
 
-use bytes::{Buf, BufMut, Bytes};
-use tonic::{
-    codec::{Codec, Decoder, EncodeBuf, Encoder},
-    Status,
-};
+use bytes::Buf;
+use bytes::BufMut;
+use bytes::Bytes;
+use tonic::codec::Codec;
+use tonic::codec::Decoder;
+use tonic::codec::EncodeBuf;
+use tonic::codec::Encoder;
+use tonic::Status;
 
 /// An adapter for sending and receiving messages as bytes using tonic.
 /// Coding/decoding is handled within gRPC.

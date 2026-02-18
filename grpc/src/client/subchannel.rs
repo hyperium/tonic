@@ -22,28 +22,36 @@
  *
  */
 
-use super::{
-    channel::{InternalChannelController, WorkQueueTx},
-    load_balancing::{ExternalSubchannel, SubchannelState},
-    name_resolution::Address,
-    transport::Transport,
-    ConnectivityState,
-};
-use crate::{
-    client::{channel::WorkQueueItem, transport::TransportOptions},
-    rt::{BoxedTaskHandle, GrpcRuntime},
-    service::{Request, Response, Service},
-};
 use core::panic;
-use std::time::{Duration, Instant};
-use std::{
-    collections::BTreeMap,
-    error::Error,
-    fmt::{Debug, Display},
-    sync::{Arc, Mutex, RwLock, Weak},
-};
-use tokio::sync::{mpsc, oneshot};
+use std::collections::BTreeMap;
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::RwLock;
+use std::sync::Weak;
+use std::time::Duration;
+use std::time::Instant;
+
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tonic::async_trait;
+
+use crate::client::channel::InternalChannelController;
+use crate::client::channel::WorkQueueItem;
+use crate::client::channel::WorkQueueTx;
+use crate::client::load_balancing::ExternalSubchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::name_resolution::Address;
+use crate::client::transport::Transport;
+use crate::client::transport::TransportOptions;
+use crate::client::ConnectivityState;
+use crate::rt::BoxedTaskHandle;
+use crate::rt::GrpcRuntime;
+use crate::service::Request;
+use crate::service::Response;
+use crate::service::Service;
 
 type SharedService = Arc<dyn Service>;
 

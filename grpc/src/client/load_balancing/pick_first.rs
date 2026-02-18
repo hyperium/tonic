@@ -22,24 +22,29 @@
  *
  */
 
-use std::{error::Error, sync::Arc, time::Duration};
+use std::error::Error;
+use std::sync::Arc;
+use std::time::Duration;
 
 use tonic::metadata::MetadataMap;
 
-use crate::{
-    client::{
-        load_balancing::{LbPolicy, LbPolicyBuilder, LbState},
-        name_resolution::{Address, ResolverUpdate},
-        ConnectivityState,
-    },
-    rt::GrpcRuntime,
-    service::Request,
-};
-
-use super::{
-    ChannelController, LbConfig, LbPolicyOptions, Pick, PickResult, Picker, Subchannel,
-    SubchannelState, WorkScheduler,
-};
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::LbConfig;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::Pick;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::ConnectivityState;
+use crate::rt::GrpcRuntime;
+use crate::service::Request;
 
 pub(crate) static POLICY_NAME: &str = "pick_first";
 

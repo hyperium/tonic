@@ -27,7 +27,9 @@ use std::sync::Arc;
 use tokio::sync::oneshot;
 use tonic::async_trait;
 
-use crate::service::{Request, Response, Service};
+use crate::service::Request;
+use crate::service::Response;
+use crate::service::Service;
 
 pub struct Server {
     handler: Option<Arc<dyn Service>>,
