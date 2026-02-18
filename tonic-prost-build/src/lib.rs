@@ -795,6 +795,19 @@ impl Builder {
             config.service_generator(Box::new(service_generator));
         };
 
+        if self.emit_rerun_if_changed {
+            for path in protos.iter() {
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
+
+            for path in includes.iter() {
+                // Cargo will watch the **entire** directory recursively. If we
+                // could figure out which files are imported by our protos we
+                // could specify only those files instead.
+                println!("cargo:rerun-if-changed={}", path.as_ref().display())
+            }
+        }
+
         config.compile_protos(protos, includes)?;
 
         Ok(())
