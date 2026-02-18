@@ -150,7 +150,7 @@ impl RustlsClientTlsCredendials {
         let mut client_config = if let Some(mut identity_provider) = config.identity_provider.take()
         {
             let identity = identity_provider.borrow_and_update();
-            let certs = parse_certs(&identity.cert)?;
+            let certs = parse_certs(&identity.certs)?;
             let key = parse_key(&identity.key)?;
             builder
                 .with_client_auth_cert(certs, key)
@@ -172,7 +172,7 @@ impl RustlsClientTlsCredendials {
 
     // Test-only constructor that enables injecting a custom crypto provider.
     #[cfg(test)]
-    pub(crate) fn new_for_test(
+    pub fn new_for_test(
         config: ClientTlsConfig,
         provider: CryptoProvider,
     ) -> Result<RustlsClientTlsCredendials, String> {
