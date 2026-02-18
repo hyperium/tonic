@@ -24,13 +24,14 @@
 
 use crate::client::CallOptions;
 use crate::client::Invoke;
+use crate::client::InvokeOnce;
 use crate::client::RecvStream;
 use crate::client::SendStream;
 
 /// A trait which allows intercepting an RPC invoke operation.  The trait is
-/// generic on I which should either be implemented as Invoke (for interceptors
-/// that only need to call next once) or InvokeFactory (for interceptors that
-/// need to call next multiple times).
+/// generic on I which should either be implemented as InvokeOnce (for
+/// interceptors that only need to call next once) or Invoke[+Clone+'static]
+/// (for interceptors that need to call next multiple times).
 pub trait Intercept<I>: Send + Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
@@ -39,6 +40,22 @@ pub trait Intercept<I>: Send + Sync {
     /// next to create and start a call whose streams are optionally wrapped
     /// before being returned.
     fn intercept(
+        &self,
+        method: String,
+        options: CallOptions,
+        next: I,
+    ) -> (Self::SendStream, Self::RecvStream);
+}
+
+/// Like Intercept, but not reusable.
+pub trait InterceptOnce<I>: Send + Sync {
+    type SendStream: SendStream + 'static;
+    type RecvStream: RecvStream + 'static;
+
+    /// Intercepts the start of a call.  Implementations should generally use
+    /// next to create and start a call whose streams are optionally wrapped
+    /// before being returned.
+    fn intercept_once(
         self,
         method: String,
         options: CallOptions,
@@ -46,60 +63,35 @@ pub trait Intercept<I>: Send + Sync {
     ) -> (Self::SendStream, Self::RecvStream);
 }
 
-/// A trait that is automatically implemented for any types that implement
-/// Invoke on their receivers and match the other supertrait bounds.
-pub trait InvokeFactory: Send + Sync + Clone + 'static {
-    type SendStream: SendStream + 'static;
-    type RecvStream: RecvStream + 'static;
-
-    fn invoke(&self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream);
-}
-
-impl<T, SS, RS> InvokeFactory for T
-where
-    T: Send + Sync + Clone + 'static,
-    for<'a> &'a T: Invoke<SendStream = SS, RecvStream = RS>,
-    SS: SendStream + 'static,
-    RS: RecvStream + 'static,
-{
-    type SendStream = SS;
-    type RecvStream = RS;
-
-    fn invoke(&self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream) {
-        Invoke::invoke(self, method, options)
-    }
-}
-
-/// Wraps an interceptor whose referece implements Intercept, and implements
-/// Intercept on the owned value instead, allowing it to be paired with a
-/// non-reusable Invoke implementation.
+/// Wraps an interceptor that implements Intercept, and implements InterceptOnce
+/// instead, allowing it to be paired with a non-reusable Invoke implementation
+/// inside an `Intercepted` struct.
 #[derive(Clone)]
 pub struct IntoOnce<T>(pub T);
 
-impl<I, T: Send + Sync, SS, RS> Intercept<I> for IntoOnce<T>
+impl<I, T: Send + Sync, SS, RS> InterceptOnce<I> for IntoOnce<T>
 where
-    I: Invoke,
+    I: InvokeOnce,
     SS: SendStream + 'static,
     RS: RecvStream + 'static,
-    for<'a> &'a T: Intercept<I, SendStream = SS, RecvStream = RS>,
+    T: Intercept<I, SendStream = SS, RecvStream = RS>,
 {
     type SendStream = SS;
     type RecvStream = RS;
 
-    fn intercept(
+    fn intercept_once(
         self,
         method: String,
         options: CallOptions,
         next: I,
     ) -> (Self::SendStream, Self::RecvStream) {
-        (&self.0).intercept(method, options, next)
+        self.0.intercept(method, options, next)
     }
 }
 
-/// Wraps `Invoke` and an `Intercept` impls and implements `Invoke` for the
-/// combination, either on its value if the combination may only be used once,
-/// or on its reference if the combination is reusable -- i.e. `Inv` is an
-/// `InvokeFactory` and Int is `Intercept<InvokeFactory>`.
+/// Wraps `Invoke` and `Intercept` impls and implements `Invoke` for the
+/// combination.  Or wraps `InvokeOnce` and `InterceptOnce<InvokeOnce>` impls
+/// and implements `InvokeOnce` for the combination.
 #[derive(Clone, Copy)]
 pub struct Intercepted<Inv, Int> {
     invoke: Inv,
@@ -112,36 +104,39 @@ impl<Inv, Int> Intercepted<Inv, Int> {
     }
 }
 
-impl<Inv, Int> Invoke for Intercepted<Inv, Int>
+impl<Inv, Int> InvokeOnce for Intercepted<Inv, Int>
 where
-    Inv: Invoke,
-    Int: Intercept<Inv>,
+    Inv: InvokeOnce,
+    Int: InterceptOnce<Inv>,
 {
     type SendStream = Int::SendStream;
     type RecvStream = Int::RecvStream;
 
-    fn invoke(self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream) {
-        self.intercept.intercept(method, options, self.invoke)
+    fn invoke_once(
+        self,
+        method: String,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        self.intercept.intercept_once(method, options, self.invoke)
     }
 }
 
-impl<'a, Inv, Int> Invoke for &'a Intercepted<Inv, Int>
+impl<Inv, Int, SS, RS> Invoke for Intercepted<Inv, Int>
 where
     Inv: Send + Sync,
-    Int: Send + Sync,
-    &'a Int: Intercept<&'a Inv>,
+    for<'a> Int: Send + Sync + Intercept<&'a Inv, SendStream = SS, RecvStream = RS>,
+    SS: SendStream + 'static,
+    RS: RecvStream + 'static,
 {
-    type SendStream = <&'a Int as Intercept<&'a Inv>>::SendStream;
-    type RecvStream = <&'a Int as Intercept<&'a Inv>>::RecvStream;
+    type SendStream = SS;
+    type RecvStream = RS;
 
-    fn invoke(self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream) {
-        // Delegate to the reference
-        (&self.intercept).intercept(method, options, &self.invoke)
+    fn invoke(&self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream) {
+        self.intercept.intercept(method, options, &self.invoke)
     }
 }
 
-/// Combines an `InvokeFactory` with a single-use `Intercept<InvokeFactory>` to
-/// implement `Invoke`.
+/// Combines an `Invoke` with an `InterceptOnce` to implement `InvokeOnce`.
 pub struct InterceptedOnce<Inv, Int> {
     invoke: Inv,
     intercept: Int,
@@ -153,62 +148,65 @@ impl<Inv, Int> InterceptedOnce<Inv, Int> {
     }
 }
 
-impl<Inv, Int, SS, RS> Invoke for InterceptedOnce<Inv, Int>
+impl<Inv, Int, SS, RS> InvokeOnce for InterceptedOnce<Inv, Int>
 where
-    Inv: InvokeFactory,
-    for<'a> Int: Intercept<&'a Inv, SendStream = SS, RecvStream = RS>,
+    Inv: Send + Sync,
+    for<'a> Int: InterceptOnce<&'a Inv, SendStream = SS, RecvStream = RS>,
     SS: SendStream + 'static,
     RS: RecvStream + 'static,
 {
     type SendStream = SS;
     type RecvStream = RS;
 
-    fn invoke(self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream) {
-        self.intercept.intercept(method, options, &self.invoke)
+    fn invoke_once(
+        self,
+        method: String,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        self.intercept.intercept_once(method, options, &self.invoke)
     }
 }
 
-/// Implements methods for combining InvokeFactory implementations with
-/// interceptors.  Blanket implemented on any InvokeFactory.
-pub trait InvokeFactoryExt: Sized
-where
-    for<'a> &'a Self: Invoke,
-{
+/// Implements methods for combining `Invoke` implementations with either
+/// `Intercept` or `InterceptOnce` interceptors.  Blanket implemented on any
+/// `Invoke`.
+pub trait InvokeExt: Invoke + Sized {
     fn with_interceptor<Int>(self, interceptor: Int) -> Intercepted<Self, Int>
     where
-        for<'a> &'a Int: Intercept<&'a Self>,
+        for<'a> Int: Intercept<&'a Self>,
     {
         Intercepted::new(self, interceptor)
     }
 
     fn with_once_interceptor<Int>(self, interceptor: Int) -> InterceptedOnce<Self, Int>
     where
-        for<'a> Int: Intercept<&'a Self>,
+        for<'a> Int: InterceptOnce<&'a Self>,
     {
         InterceptedOnce::new(self, interceptor)
     }
 }
 
-/// Implements methods for combining Invoke implementations with interceptors.
-/// Blanket implemented on any Invoke.
-pub trait InvokeExt: Invoke + Sized {
+/// Implements methods for combining `InvokeOnce` implementations with
+/// `Intercept<InvokeOnce>` or `InterceptOnce<InvokeOnce>` interceptors.
+/// Blanket implemented on any `InvokeOnce`.
+pub trait InvokeOnceExt: InvokeOnce + Sized {
     fn with_interceptor<Int>(self, interceptor: Int) -> Intercepted<Self, IntoOnce<Int>>
     where
-        for<'a> &'a Int: Intercept<Self>,
+        for<'a> Int: Intercept<Self>,
     {
         Intercepted::new(self, IntoOnce(interceptor))
     }
 
     fn with_once_interceptor<Int>(self, interceptor: Int) -> Intercepted<Self, Int>
     where
-        Int: Intercept<Self>,
+        Int: InterceptOnce<Self>,
     {
         Intercepted::new(self, interceptor)
     }
 }
 
-impl<T: Sized> InvokeFactoryExt for T where for<'a> &'a Self: Invoke {}
 impl<T: Invoke + Sized> InvokeExt for T {}
+impl<T: InvokeOnce + Sized> InvokeOnceExt for T {}
 
 // Tests for Intercepted and InterceptedOnce and examples of the four types of
 // interceptors, how they are implemented, and how they are combined with
@@ -217,16 +215,16 @@ impl<T: Invoke + Sized> InvokeExt for T {}
 // The four different kinds of interceptors are:
 //
 // 1. Reusable: uses `next` once.
-//    impl Intercept<Invoke> on &MyInterceptor
+//    impl Intercept<InvokeOnce>
 //
 // 2. ResuableFanOut: uses `next` multiple times.
-//    impl Intercept<&InvokeFactory> on &MyInterceptor
+//    impl Intercept<&Invoke [+ Clone + 'static if needed]>
 //
 // 3. Oneshot: uses `next` once.
-//    impl InterceptOnce<Invoke> on MyInterceptor
+//    impl InterceptOnce<InvokeOnce>
 //
 // 4. OneshotFanOut: uses `next` multiple times.
-//    impl InterceptOnce<&InvokeFactory> on MyInterceptor
+//    impl InterceptOnce<&Invoke [+ Clone + 'static if needed]>
 //
 // Examples of each of these are defined below.
 #[cfg(test)]
@@ -256,29 +254,31 @@ mod test {
     use tokio::sync::Notify;
     use tokio::task;
 
+    #[derive(Clone)]
     struct Reusable;
-    impl<I: Invoke> Intercept<I> for &Reusable {
+    impl<I: InvokeOnce> Intercept<I> for Reusable {
         type SendStream = NopStream;
         type RecvStream = I::RecvStream;
 
         fn intercept(
-            self,
+            &self,
             method: String,
             args: CallOptions,
             next: I,
         ) -> (Self::SendStream, Self::RecvStream) {
-            let (_, rx) = next.invoke(method, args);
+            let (_, rx) = next.invoke_once(method, args);
             (NopStream, rx)
         }
     }
 
+    #[derive(Clone)]
     struct ReusableFanOut;
-    impl<I: InvokeFactory> Intercept<&I> for &ReusableFanOut {
+    impl<I: Invoke + Clone + 'static> Intercept<&I> for ReusableFanOut {
         type SendStream = RetrySendStream<I::SendStream>;
         type RecvStream = RetryRecvStream<I>;
 
         fn intercept(
-            self,
+            &self,
             method: String,
             args: CallOptions,
             next: &I,
@@ -287,27 +287,27 @@ mod test {
         }
     }
     struct Oneshot;
-    impl<I: Invoke> Intercept<I> for Oneshot {
+    impl<I: InvokeOnce> InterceptOnce<I> for Oneshot {
         type SendStream = I::SendStream;
         type RecvStream = NopStream;
 
-        fn intercept(
+        fn intercept_once(
             self,
             method: String,
             args: CallOptions,
             next: I,
         ) -> (Self::SendStream, Self::RecvStream) {
-            let (tx, _) = next.invoke(method, args);
+            let (tx, _) = next.invoke_once(method, args);
             (tx, NopStream)
         }
     }
 
     struct OneshotFanOut;
-    impl<I: InvokeFactory> Intercept<&I> for OneshotFanOut {
+    impl<I: Invoke + Clone> InterceptOnce<&I> for OneshotFanOut {
         type SendStream = I::SendStream;
         type RecvStream = I::RecvStream;
 
-        fn intercept(
+        fn intercept_once(
             self,
             method: String,
             args: CallOptions,
@@ -332,7 +332,7 @@ mod test {
         // One-shot Invoke with resuable Intercept.
         {
             let i = NopOnceInvoker.with_interceptor(Reusable);
-            i.invoke("".to_string(), CallOptions::default());
+            i.invoke_once("".to_string(), CallOptions::default());
         }
 
         // Reusable Invoke with resuable fan-out Intercept.
@@ -348,19 +348,19 @@ mod test {
         // Reusable Invoke with one-shot Intercept.
         {
             let i = NopInvoker.with_once_interceptor(Oneshot);
-            i.invoke("".to_string(), CallOptions::default());
+            i.invoke_once("".to_string(), CallOptions::default());
         }
 
         // One-shot Invoke with one-shot Intercept.
         {
             let i = NopOnceInvoker.with_once_interceptor(Oneshot);
-            i.invoke("".to_string(), CallOptions::default());
+            i.invoke_once("".to_string(), CallOptions::default());
         }
 
         // Reusable Invoke with one-shot fan-out Intercept.
         {
             let i = NopInvoker.with_once_interceptor(OneshotFanOut);
-            i.invoke("".to_string(), CallOptions::default());
+            i.invoke_once("".to_string(), CallOptions::default());
         }
 
         // One-shot Invoke with one-shot fan-out Intercept is illegal.
@@ -529,12 +529,12 @@ mod test {
         }
     }
 
-    impl Invoke for &MockInvoker {
+    impl Invoke for MockInvoker {
         type SendStream = MockSendStream;
         type RecvStream = MockRecvStream;
 
         fn invoke(
-            self,
+            &self,
             method: String,
             options: CallOptions,
         ) -> (Self::SendStream, Self::RecvStream) {
@@ -562,12 +562,12 @@ mod test {
         }
     }
 
-    fn start_retry_streams<I: InvokeFactory>(
+    fn start_retry_streams<I: Invoke + Clone>(
         invoker: &I,
         method: String,
         options: CallOptions,
     ) -> (RetrySendStream<I::SendStream>, RetryRecvStream<I>) {
-        let invoker = invoker.clone(); // Get an owned InvokeFactory.
+        let invoker = invoker.clone(); // Get an owned Invoker.
         let (send_stream, recv_stream) = invoker.invoke(method.clone(), options.clone());
 
         let cache = Cache::new();
@@ -648,7 +648,7 @@ mod test {
         }
     }
 
-    pub struct RetryRecvStream<I: InvokeFactory> {
+    pub struct RetryRecvStream<I: Invoke> {
         invoker: I, // the invoker to use to retry calls
         method: String,
         options: CallOptions,
@@ -671,7 +671,7 @@ mod test {
 
     const MAX_ATTEMPTS: usize = 3;
 
-    impl<I: InvokeFactory> RecvStream for RetryRecvStream<I> {
+    impl<I: Invoke> RecvStream for RetryRecvStream<I> {
         async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
             let mut recv_resp = self.recv_stream.next(msg).await;
 
@@ -829,12 +829,12 @@ mod test {
     #[derive(Clone)]
     struct NopInvoker;
 
-    impl Invoke for &NopInvoker {
+    impl Invoke for NopInvoker {
         type SendStream = NopStream;
         type RecvStream = NopStream;
 
         fn invoke(
-            self,
+            &self,
             method: String,
             options: CallOptions,
         ) -> (Self::SendStream, Self::RecvStream) {
@@ -844,11 +844,11 @@ mod test {
 
     struct NopOnceInvoker;
 
-    impl Invoke for NopOnceInvoker {
+    impl InvokeOnce for NopOnceInvoker {
         type SendStream = NopStream;
         type RecvStream = NopStream;
 
-        fn invoke(
+        fn invoke_once(
             self,
             method: String,
             options: CallOptions,

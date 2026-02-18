@@ -24,7 +24,7 @@
 
 use crate::client::interceptor::Intercept;
 use crate::client::CallOptions;
-use crate::client::Invoke;
+use crate::client::InvokeOnce;
 use crate::client::RecvStream;
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
@@ -51,17 +51,17 @@ impl ResponseValidator {
     }
 }
 
-impl<I: Invoke> Intercept<I> for &ResponseValidator {
+impl<I: InvokeOnce> Intercept<I> for ResponseValidator {
     type SendStream = I::SendStream;
     type RecvStream = RecvStreamValidator<I::RecvStream>;
 
     fn intercept(
-        self,
+        &self,
         method: String,
         options: CallOptions,
         next: I,
     ) -> (Self::SendStream, Self::RecvStream) {
-        let (tx, rx) = next.invoke(method, options);
+        let (tx, rx) = next.invoke_once(method, options);
         (tx, RecvStreamValidator::new(rx, self.unary))
     }
 }
@@ -172,8 +172,9 @@ mod test {
     use tokio::sync::mpsc::Sender;
 
     use super::*;
-    use crate::client::interceptor::InvokeExt as _;
+    use crate::client::interceptor::InvokeOnceExt as _;
     use crate::client::CallOptions;
+    use crate::client::InvokeOnce;
     use crate::client::RecvStream;
     use crate::client::SendOptions;
     use crate::client::SendStream;
@@ -411,7 +412,7 @@ mod test {
     ) {
         let (channel, tx) = MockRecvStream::new();
         let channel = channel.with_interceptor(ResponseValidator::new(unary));
-        let (_, recv_stream) = channel.invoke("method".to_string(), CallOptions::default());
+        let (_, recv_stream) = channel.invoke_once("method".to_string(), CallOptions::default());
 
         let mut validator = RecvStreamValidator::new(recv_stream, unary);
         // Send all but the last item, verifying it is returned by the
@@ -460,11 +461,11 @@ mod test {
         rx: Receiver<ClientResponseStreamItem>,
     }
 
-    impl Invoke for MockRecvStream {
+    impl InvokeOnce for MockRecvStream {
         type SendStream = NopSendStream;
         type RecvStream = Self;
 
-        fn invoke(
+        fn invoke_once(
             self,
             method: String,
             options: CallOptions,
