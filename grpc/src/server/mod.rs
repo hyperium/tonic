@@ -79,7 +79,7 @@ pub trait Handle: Send + Sync {
     async fn handle(
         &self,
         headers: RequestHeaders,
-        tx: &impl SendStream,
+        tx: &mut impl SendStream,
         rx: impl RecvStream + 'static,
     );
 }
