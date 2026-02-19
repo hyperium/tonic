@@ -22,8 +22,9 @@
  *
  */
 
-use rand::Rng;
 use std::time::Duration;
+
+use rand::Rng;
 
 #[derive(Clone)]
 pub(crate) struct BackoffConfig {
@@ -114,9 +115,9 @@ impl ExponentialBackoff {
 mod tests {
     use std::time::Duration;
 
-    use crate::client::name_resolution::backoff::{
-        BackoffConfig, ExponentialBackoff, DEFAULT_EXPONENTIAL_CONFIG,
-    };
+    use crate::client::name_resolution::backoff::BackoffConfig;
+    use crate::client::name_resolution::backoff::ExponentialBackoff;
+    use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
 
     // Epsilon for floating point comparisons if needed, though Duration
     // comparisons are often better.

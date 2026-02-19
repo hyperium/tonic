@@ -25,10 +25,11 @@
 use std::fmt::Display;
 
 pub mod channel;
-pub mod service_config;
-mod subchannel;
 pub use channel::Channel;
 pub use channel::ChannelOptions;
+
+pub mod service_config;
+mod subchannel;
 
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
