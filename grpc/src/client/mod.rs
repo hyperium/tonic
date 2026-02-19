@@ -25,6 +25,8 @@
 use std::fmt::Display;
 use std::time::Instant;
 
+use tonic::async_trait;
+
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
@@ -155,6 +157,24 @@ pub trait SendStream: Send {
     async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
 }
 
+#[async_trait]
+pub trait DynSendStream: Send {
+    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
+}
+
+#[async_trait]
+impl<T: SendStream> DynSendStream for T {
+    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        self.send(msg, options).await
+    }
+}
+
+impl SendStream for Box<dyn DynSendStream> {
+    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        (**self).dyn_send(msg, options).await
+    }
+}
+
 /// Contains settings to configure a send operation on a SendStream.
 ///
 /// Most applications will not need this type directly, and will use the
@@ -185,4 +205,22 @@ pub trait RecvStream: Send {
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the RecvStream are undefined and data may be lost.
     async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
+}
+
+#[async_trait]
+pub trait DynRecvStream: Send {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
+}
+
+#[async_trait]
+impl<T: RecvStream> DynRecvStream for T {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        self.next(msg).await
+    }
+}
+
+impl RecvStream for Box<dyn DynRecvStream> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        (**self).dyn_next(msg).await
+    }
 }
