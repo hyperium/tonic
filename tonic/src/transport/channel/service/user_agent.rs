@@ -39,20 +39,10 @@ where
     }
 
     fn call(&mut self, mut req: Request<ReqBody>) -> Self::Future {
-        if let Ok(Some(user_agent)) = req
-            .headers_mut()
-            .try_insert(USER_AGENT, self.user_agent.clone())
-        {
-            // The User-Agent header has already been set on the request. Let's
-            // append our user agent to the end.
-            let mut buf = Vec::new();
-            buf.extend(user_agent.as_bytes());
-            buf.push(b' ');
-            buf.extend(self.user_agent.as_bytes());
-            req.headers_mut().insert(
-                USER_AGENT,
-                HeaderValue::from_bytes(&buf).expect("user-agent should be valid"),
-            );
+        // Only set user-agent if not already present on the request.
+        if !req.headers().contains_key(USER_AGENT) {
+            req.headers_mut()
+                .insert(USER_AGENT, self.user_agent.clone());
         }
 
         self.inner.call(req)
@@ -126,12 +116,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn appends_default_user_agent_to_request_user_agent() {
+    async fn preserves_request_user_agent_with_default() {
         let mut req = Request::default();
         req.headers_mut()
             .insert(USER_AGENT, HeaderValue::from_static("request-ua/x.y"));
 
-        let expected_user_agent = format!("request-ua/x.y {TONIC_USER_AGENT}");
+        let expected_user_agent = "request-ua/x.y".to_string();
         let mut ua = UserAgent::new(
             TestSvc {
                 expected_user_agent,
@@ -142,12 +132,12 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn appends_custom_user_agent_to_request_user_agent() {
+    async fn preserves_request_user_agent_with_custom() {
         let mut req = Request::default();
         req.headers_mut()
             .insert(USER_AGENT, HeaderValue::from_static("request-ua/x.y"));
 
-        let expected_user_agent = format!("request-ua/x.y Greeter 1.1 {TONIC_USER_AGENT}");
+        let expected_user_agent = "request-ua/x.y".to_string();
         let mut ua = UserAgent::new(
             TestSvc {
                 expected_user_agent,
