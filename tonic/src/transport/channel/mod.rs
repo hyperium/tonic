@@ -1,6 +1,7 @@
 //! Client implementation and builder.
 
 mod endpoint;
+mod named_pipe_connector;
 pub(crate) mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;

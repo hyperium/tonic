@@ -20,7 +20,7 @@ pub(crate) enum Kind {
     #[cfg(feature = "channel")]
     InvalidUserAgent,
     #[cfg(all(feature = "_tls-any", feature = "channel"))]
-    InvalidTlsConfigForUds,
+    InvalidTlsConfigForNonTcp,
 }
 
 impl Error {
@@ -57,7 +57,9 @@ impl Error {
             #[cfg(feature = "channel")]
             Kind::InvalidUserAgent => "user agent is not a valid header value",
             #[cfg(all(feature = "_tls-any", feature = "channel"))]
-            Kind::InvalidTlsConfigForUds => "cannot apply TLS config for unix domain socket",
+            Kind::InvalidTlsConfigForNonTcp => {
+                "cannot apply TLS config for unix domain socket or named pipe"
+            }
         }
     }
 }

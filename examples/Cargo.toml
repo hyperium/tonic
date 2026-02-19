@@ -251,6 +251,13 @@ path = "src/codec_buffers/server.rs"
 name = "codec-buffers-client"
 path = "src/codec_buffers/client.rs"
 
+[[bin]]
+name = "win-named-pipe-client"
+path = "src/win_named_pipe/client.rs"
+
+[[bin]]
+name = "win-named-pipe-server"
+path = "src/win_named_pipe/server.rs"
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls-ring"]
