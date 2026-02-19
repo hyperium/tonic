@@ -22,10 +22,15 @@
  *
  */
 
-use std::{any::Any, fmt::Debug, pin::Pin};
+use std::any::Any;
+use std::fmt::Debug;
+use std::pin::Pin;
 
 use tokio_stream::Stream;
-use tonic::{async_trait, Request as TonicRequest, Response as TonicResponse, Status};
+use tonic::async_trait;
+use tonic::Request as TonicRequest;
+use tonic::Response as TonicResponse;
+use tonic::Status;
 
 pub type Request = TonicRequest<Pin<Box<dyn Stream<Item = Box<dyn Message>> + Send + Sync>>>;
 pub type Response =

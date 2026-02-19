@@ -22,18 +22,31 @@
  *
  */
 
-use crate::client::load_balancing::child_manager::{ChildManager, ChildUpdate};
+use std::error::Error;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+use std::sync::Arc;
+use std::sync::Once;
+
+use crate::client::load_balancing::child_manager::ChildManager;
+use crate::client::load_balancing::child_manager::ChildUpdate;
 use crate::client::load_balancing::pick_first;
-use crate::client::load_balancing::{
-    ChannelController, FailingPicker, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions,
-    LbState, PickResult, Picker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
-};
-use crate::client::name_resolution::{Endpoint, ResolverUpdate};
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::FailingPicker;
+use crate::client::load_balancing::LbConfig;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+use crate::client::name_resolution::Endpoint;
+use crate::client::name_resolution::ResolverUpdate;
 use crate::client::ConnectivityState;
 use crate::service::Request;
-use std::error::Error;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Once};
 
 pub(crate) static POLICY_NAME: &str = "round_robin";
 static START: Once = Once::new();
@@ -233,15 +246,29 @@ impl Picker for RoundRobinPicker {
 #[cfg(test)]
 mod test {
     use crate::client::load_balancing::child_manager::ChildManager;
-    use crate::client::load_balancing::round_robin::{self, RoundRobinPolicy};
-    use crate::client::load_balancing::test_utils::{
-        self, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent, TestWorkScheduler,
-    };
-    use crate::client::load_balancing::{
-        pick_first, ChannelController, FailingPicker, LbPolicy, LbState, Pick, PickResult, Picker,
-        QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
-    };
-    use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
+    use crate::client::load_balancing::pick_first;
+    use crate::client::load_balancing::round_robin::RoundRobinPolicy;
+    use crate::client::load_balancing::round_robin::{self};
+    use crate::client::load_balancing::test_utils::StubPolicyData;
+    use crate::client::load_balancing::test_utils::StubPolicyFuncs;
+    use crate::client::load_balancing::test_utils::TestChannelController;
+    use crate::client::load_balancing::test_utils::TestEvent;
+    use crate::client::load_balancing::test_utils::TestWorkScheduler;
+    use crate::client::load_balancing::test_utils::{self};
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::FailingPicker;
+    use crate::client::load_balancing::LbPolicy;
+    use crate::client::load_balancing::LbState;
+    use crate::client::load_balancing::Pick;
+    use crate::client::load_balancing::PickResult;
+    use crate::client::load_balancing::Picker;
+    use crate::client::load_balancing::QueuingPicker;
+    use crate::client::load_balancing::Subchannel;
+    use crate::client::load_balancing::SubchannelState;
+    use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+    use crate::client::name_resolution::Address;
+    use crate::client::name_resolution::Endpoint;
+    use crate::client::name_resolution::ResolverUpdate;
     use crate::client::ConnectivityState;
     use crate::rt::default_runtime;
     use crate::service::Request;

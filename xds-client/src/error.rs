@@ -22,6 +22,16 @@ pub enum Error {
     #[cfg(feature = "codegen-prost")]
     #[error("decode error: {0}")]
     Decode(#[from] prost::DecodeError),
+
+    /// Resource validation failed.
+    #[error("resource validation failed: {0}")]
+    Validation(String),
+
+    /// Resource does not exist.
+    ///
+    /// This indicates the resource has been deleted or was never created.
+    #[error("resource does not exist")]
+    ResourceDoesNotExist,
 }
 
 /// Result type alias for xDS client operations.

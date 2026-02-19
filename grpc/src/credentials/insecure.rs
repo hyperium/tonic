@@ -23,14 +23,20 @@
  */
 
 use crate::attributes::Attributes;
-use crate::credentials::client::{
-    self, ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
-    HandshakeOutput,
-};
-use crate::credentials::common::{Authority, SecurityLevel};
-use crate::credentials::server::{self, ServerConnectionSecurityInfo};
-use crate::credentials::{ChannelCredentials, ProtocolInfo, ServerCredentials};
-use crate::rt::{GrpcEndpoint, GrpcRuntime};
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityInfo;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::client::HandshakeOutput;
+use crate::credentials::client::{self};
+use crate::credentials::common::Authority;
+use crate::credentials::common::SecurityLevel;
+use crate::credentials::server::ServerConnectionSecurityInfo;
+use crate::credentials::server::{self};
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::ServerCredentials;
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 
 /// An implementation of [`ChannelCredentials`] for insecure connections.
 ///
@@ -128,20 +134,24 @@ impl ServerCredentials for InsecureServerCredentials {
 
 #[cfg(test)]
 mod test {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::{TcpListener, TcpStream};
+    use tokio::io::AsyncReadExt;
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpListener;
+    use tokio::net::TcpStream;
 
-    use crate::credentials::client::{
-        ChannelCredsInternal as ClientSealed, ClientConnectionSecurityContext, ClientHandshakeInfo,
-    };
-    use crate::credentials::common::{Authority, SecurityLevel};
+    use crate::credentials::client::ChannelCredsInternal as ClientSealed;
+    use crate::credentials::client::ClientConnectionSecurityContext;
+    use crate::credentials::client::ClientHandshakeInfo;
+    use crate::credentials::common::Authority;
+    use crate::credentials::common::SecurityLevel;
     use crate::credentials::server::ServerCredsInternal;
-    use crate::credentials::{
-        ChannelCredentials, InsecureChannelCredentials, InsecureServerCredentials,
-        ServerCredentials,
-    };
+    use crate::credentials::ChannelCredentials;
+    use crate::credentials::InsecureChannelCredentials;
+    use crate::credentials::InsecureServerCredentials;
+    use crate::credentials::ServerCredentials;
     use crate::rt::GrpcEndpoint;
-    use crate::rt::{self, TcpOptions};
+    use crate::rt::TcpOptions;
+    use crate::rt::{self};
 
     #[tokio::test]
     async fn test_insecure_client_credentials() {

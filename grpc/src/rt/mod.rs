@@ -23,7 +23,11 @@
  */
 
 use std::fmt::Debug;
-use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]

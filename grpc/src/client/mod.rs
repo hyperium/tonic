@@ -25,6 +25,8 @@
 use std::fmt::Display;
 use std::time::Instant;
 
+use tonic::metadata::MetadataMap;
+
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::SendMessage;
@@ -33,13 +35,13 @@ pub mod channel;
 pub mod interceptor;
 pub mod service_config;
 pub mod stream_util;
-mod subchannel;
+
 pub use channel::Channel;
 pub use channel::ChannelOptions;
-use tonic::metadata::MetadataMap;
 
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
+mod subchannel;
 pub(crate) mod transport;
 
 /// A representation of the current state of a gRPC channel, also used for the

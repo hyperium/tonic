@@ -27,7 +27,8 @@ pub(crate) mod dyn_wrapper;
 mod insecure;
 pub(crate) mod server;
 
-pub use insecure::{InsecureChannelCredentials, InsecureServerCredentials};
+pub use insecure::InsecureChannelCredentials;
+pub use insecure::InsecureServerCredentials;
 
 /// Defines the common interface for all live gRPC wire protocols and supported
 /// transport security protocols (e.g., TLS, ALTS).
