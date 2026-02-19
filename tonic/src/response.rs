@@ -61,6 +61,16 @@ impl<T> Response<T> {
         (self.metadata, self.message, self.extensions)
     }
 
+    /// Create a new gRPC response from massage and metadata.
+    pub fn with_metadata(message: T, metadata: MetadataMap) -> Self {
+        Self::from_parts(metadata, message, Extensions::new())
+    }
+
+    /// Create a new gRPC response from message and extensions.
+    pub fn with_extensions(message: T, extensions: Extensions) -> Self {
+        Self::from_parts(MetadataMap::new(), message, extensions)
+    }
+
     /// Create a new gRPC response from metadata, message and extensions.
     pub fn from_parts(metadata: MetadataMap, message: T, extensions: Extensions) -> Self {
         Self {
