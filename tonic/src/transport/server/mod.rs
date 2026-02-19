@@ -147,7 +147,7 @@ impl Default for Server<Identity> {
 
 /// A stack based [`Service`] router.
 #[cfg(feature = "router")]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Router<L = Identity> {
     server: Server<L>,
     routes: Routes,
