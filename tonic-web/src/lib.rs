@@ -80,7 +80,8 @@ mod client;
 mod layer;
 mod service;
 
-type BoxError = Box<dyn std::error::Error + Send + Sync>;
+/// Alias for a type-erased error type.
+pub type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 pub(crate) mod util {
     pub(crate) mod base64 {
