@@ -135,6 +135,14 @@ pub mod health_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        /// Get the inner reference
+        pub fn get_inner(&self) -> &tonic::client::Grpc<T> {
+            &self.inner
+        }
+        /// Get the inner mutable reference
+        pub fn get_inner_mut(&mut self) -> &mut tonic::client::Grpc<T> {
+            &mut self.inner
+        }
         /// If the requested service is unknown, the call will fail with status
         /// NOT_FOUND.
         pub async fn check(

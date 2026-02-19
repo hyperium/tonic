@@ -318,6 +318,16 @@ impl<T> Grpc<T> {
         self.create_response(decoder, response)
     }
 
+    /// Get the inner reference
+    pub fn get_inner(&self) -> &T {
+        &self.inner
+    }
+
+    /// Get the inner mutable reference
+    pub fn get_inner_mut(&mut self) -> &mut T {
+        &mut self.inner
+    }
+
     // Keeping this code in a separate function from Self::streaming lets functions that return the
     // same output share the generated binary code
     fn create_response<M2>(

@@ -224,6 +224,14 @@ pub mod server_reflection_client {
             self.inner = self.inner.max_encoding_message_size(limit);
             self
         }
+        /// Get the inner reference
+        pub fn get_inner(&self) -> &tonic::client::Grpc<T> {
+            &self.inner
+        }
+        /// Get the inner mutable reference
+        pub fn get_inner_mut(&mut self) -> &mut tonic::client::Grpc<T> {
+            &mut self.inner
+        }
         /// The reflection service is structured as a bidirectional stream, ensuring
         /// all related requests go to a single server.
         pub async fn server_reflection_info(
