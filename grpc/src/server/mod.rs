@@ -78,8 +78,7 @@ pub trait Handle: Send + Sync {
     /// sent to another task, meaning the RPC must end before handle returns.
     async fn handle(
         &self,
-        _method: String,
-        _headers: RequestHeaders,
+        headers: RequestHeaders,
         tx: &impl SendStream,
         rx: impl RecvStream + 'static,
     );

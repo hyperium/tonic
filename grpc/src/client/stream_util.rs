@@ -30,6 +30,7 @@ use crate::client::RecvStream;
 use crate::client::interceptor::Intercept;
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
+use crate::core::RequestHeaders;
 use crate::core::ResponseStreamItem;
 use crate::core::Trailers;
 
@@ -57,11 +58,11 @@ impl<I: InvokeOnce> Intercept<I> for ResponseValidator {
 
     fn intercept(
         &self,
-        method: String,
+        headers: RequestHeaders,
         options: CallOptions,
         next: I,
     ) -> (Self::SendStream, Self::RecvStream) {
-        let (tx, rx) = next.invoke_once(method, options);
+        let (tx, rx) = next.invoke_once(headers, options);
         (tx, RecvStreamValidator::new(rx, self.unary))
     }
 }
@@ -207,11 +208,11 @@ mod test {
         let scenarios = [
             vec![ResponseStreamItem::StreamClosed],
             vec![
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
                 ResponseStreamItem::StreamClosed,
             ],
             vec![
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
                 ResponseStreamItem::Message(()),
                 ResponseStreamItem::StreamClosed,
             ],
@@ -234,13 +235,13 @@ mod test {
     async fn test_validator_headers_repeated() {
         let scenarios = [
             vec![
-                ResponseStreamItem::Headers(ResponseHeaders {}),
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
             ],
             vec![
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
                 ResponseStreamItem::Message(()),
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
             ],
         ];
 
@@ -263,7 +264,7 @@ mod test {
                 status: Status::new(StatusCode::Ok, ""),
             })],
             vec![
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
                 ResponseStreamItem::Trailers(Trailers {
                     status: Status::new(StatusCode::Ok, ""),
                 }),
@@ -285,7 +286,7 @@ mod test {
     #[tokio::test]
     async fn test_validator_unary_multiple_messages() {
         let scenarios = [vec![
-            ResponseStreamItem::Headers(ResponseHeaders {}),
+            ResponseStreamItem::Headers(ResponseHeaders::default()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
         ]];
@@ -305,7 +306,7 @@ mod test {
     #[tokio::test]
     async fn test_validator_successful_stream() {
         let scenarios = [vec![
-            ResponseStreamItem::Headers(ResponseHeaders {}),
+            ResponseStreamItem::Headers(ResponseHeaders::default()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
@@ -329,7 +330,7 @@ mod test {
     #[tokio::test]
     async fn test_validator_erroring_stream() {
         let scenarios = [vec![
-            ResponseStreamItem::Headers(ResponseHeaders {}),
+            ResponseStreamItem::Headers(ResponseHeaders::default()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
@@ -353,7 +354,7 @@ mod test {
     #[tokio::test]
     async fn test_validator_successful_unary() {
         let scenarios = [vec![
-            ResponseStreamItem::Headers(ResponseHeaders {}),
+            ResponseStreamItem::Headers(ResponseHeaders::default()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Trailers(Trailers {
                 status: Status::new(StatusCode::Ok, ""),
@@ -379,13 +380,13 @@ mod test {
                 status: Status::new(StatusCode::Aborted, "some err"),
             })],
             vec![
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
                 ResponseStreamItem::Trailers(Trailers {
                     status: Status::new(StatusCode::Aborted, "some err"),
                 }),
             ],
             vec![
-                ResponseStreamItem::Headers(ResponseHeaders {}),
+                ResponseStreamItem::Headers(ResponseHeaders::default()),
                 ResponseStreamItem::Message(()),
                 ResponseStreamItem::Trailers(Trailers {
                     status: Status::new(StatusCode::Aborted, "some err"),
@@ -412,7 +413,8 @@ mod test {
     ) {
         let (channel, tx) = MockRecvStream::new();
         let channel = channel.with_interceptor(ResponseValidator::new(unary));
-        let (_, recv_stream) = channel.invoke_once("method".to_string(), CallOptions::default());
+        let (_, recv_stream) =
+            channel.invoke_once(RequestHeaders::default(), CallOptions::default());
 
         let mut validator = RecvStreamValidator::new(recv_stream, unary);
         // Send all but the last item, verifying it is returned by the
@@ -467,8 +469,8 @@ mod test {
 
         fn invoke_once(
             self,
-            method: String,
-            options: CallOptions,
+            _headers: RequestHeaders,
+            _options: CallOptions,
         ) -> (Self::SendStream, Self::RecvStream) {
             (NopSendStream, self)
         }

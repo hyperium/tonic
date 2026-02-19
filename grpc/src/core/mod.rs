@@ -26,8 +26,10 @@
 //! servers.  Note that most gRPC applications should not need these types
 //! unless they are implementing custom interceptors.
 
-use bytes::Buf;
 use std::any::TypeId;
+
+use bytes::Buf;
+use tonic::metadata::MetadataMap;
 
 use crate::Status;
 
@@ -133,13 +135,19 @@ pub type ServerResponseStreamItem<'a> = ResponseStreamItem<&'a dyn SendMessage>;
 
 /// Contains all information transmitted in the response headers of an RPC.
 #[non_exhaustive]
-#[derive(Debug, Clone)]
-pub struct ResponseHeaders {}
+#[derive(Debug, Clone, Default)]
+pub struct ResponseHeaders {
+    pub metadata: MetadataMap,
+}
 
 /// Contains all information transmitted in the request headers of an RPC.
-#[non_exhaustive]
-#[derive(Debug, Clone)]
-pub struct RequestHeaders {}
+#[derive(Debug, Clone, Default)]
+pub struct RequestHeaders {
+    /// The full (e.g. "/Service/Method") method name specified for the call.
+    pub method_name: String,
+    /// The application-specified metadata for the call.
+    pub metadata: MetadataMap,
+}
 
 /// Contains all information transmitted in the response trailers of an RPC.
 /// gRPC does not support request trailers.
