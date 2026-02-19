@@ -25,10 +25,9 @@
 use std::fmt::Display;
 use std::time::Instant;
 
-use tonic::metadata::MetadataMap;
-
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
+use crate::core::RequestHeaders;
 use crate::core::SendMessage;
 
 pub mod channel;
@@ -83,8 +82,6 @@ impl Display for ConnectivityState {
 pub struct CallOptions {
     /// The deadline for the call.  If unset, the call may run indefinitely.
     deadline: Option<Instant>,
-    /// The application-specified metadata for the call.
-    metadata: MetadataMap,
 }
 
 /// A trait which may be implemented by types to perform RPCs (Remote Procedure
@@ -105,7 +102,11 @@ pub trait Invoke: Send + Sync {
     /// locally-erroring stream immediately instead.  However, SendStream and
     /// RecvStream are asynchronous, and may block their first operations until
     /// quota is available, a connection is ready, etc.
-    fn invoke(&self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream);
+    fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream);
 }
 
 // Like `Invoke`, but not reusable.  It is blanket implemented on references to
@@ -116,7 +117,7 @@ pub trait InvokeOnce: Send + Sync {
 
     fn invoke_once(
         self,
-        method: String,
+        headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream);
 }
@@ -127,10 +128,10 @@ impl<T: Invoke> InvokeOnce for &T {
 
     fn invoke_once(
         self,
-        method: String,
+        headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
-        self.invoke(method, options)
+        self.invoke(headers, options)
     }
 }
 
