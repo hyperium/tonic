@@ -7,7 +7,7 @@ Health Checking module of `tonic` gRPC implementation.
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "healthcheck"]
-license = "MIT"
+license = "MIT AND Apache-2.0"
 name = "tonic-health"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"

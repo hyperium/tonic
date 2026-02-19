@@ -86,6 +86,7 @@ project.
 ## License
 
 This project is licensed under the [MIT license](LICENSE).
+This project redistributes contents which are licensed under the [Apache License Version 2.0](LICENSE.grpc).
 
 ### Contribution
 
