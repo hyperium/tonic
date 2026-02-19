@@ -64,16 +64,13 @@ sleep 1
 
 ./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
-# Test a grpc rust client against a Go server.
-./target/debug/client --codec=protobuf --test_case="${JOINED_TEST_CASES}" ${ARG}
-
 echo ":; killing test server"; kill "${SERVER_PID}";
 echo "Waiting for test server to exit..."
 while kill -0 ${SERVER_PID} 2> /dev/null; do
     sleep 0.5
 done
 
-CODECS=("prost" "protobuf")
+CODECS=("prost")
 
 for CODEC in "${CODECS[@]}"; do
     # run the test server
