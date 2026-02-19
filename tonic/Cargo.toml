@@ -99,7 +99,7 @@ bencher = "0.1.5"
 quickcheck = "1.0"
 quickcheck_macros = "1.0"
 static_assertions = "1.0"
-tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
+tokio = {version = "1.0", features = ["rt-multi-thread", "macros", "test-util"]}
 tower = {version = "0.5", features = ["load-shed", "timeout"]}
 
 [lints]

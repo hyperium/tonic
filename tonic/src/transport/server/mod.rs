@@ -111,6 +111,7 @@ pub struct Server<L = Identity> {
     accept_http1: bool,
     service_builder: ServiceBuilder<L>,
     max_connection_age: Option<Duration>,
+    max_connection_age_grace: Option<Duration>,
 }
 
 impl Default for Server<Identity> {
@@ -139,13 +140,14 @@ impl Default for Server<Identity> {
             accept_http1: false,
             service_builder: Default::default(),
             max_connection_age: None,
+            max_connection_age_grace: None,
         }
     }
 }
 
 /// A stack based [`Service`] router.
 #[cfg(feature = "router")]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Router<L = Identity> {
     server: Server<L>,
     routes: Routes,
@@ -282,6 +284,36 @@ impl<L> Server<L> {
     pub fn max_connection_age(self, max_connection_age: Duration) -> Self {
         Server {
             max_connection_age: Some(max_connection_age),
+            ..self
+        }
+    }
+
+    /// Sets the maximum duration that a connection may continue to exist
+    /// **after** the graceful shutdown period (`max_connection_age`) has elapsed.
+    ///
+    /// This timeout only takes effect *after* a connection has exceeded its
+    /// configured `max_connection_age`. Once that happens, the server will begin
+    /// graceful shutdown for the connection. If the connection does not close
+    /// gracefully within the `max_connection_age_grace` duration, the server will then
+    /// forcefully terminate it.
+    ///
+    /// If no `max_connection_age` is configured, this forced shutdown timeout will
+    /// **never trigger**, because the server will not know when to begin the
+    /// graceful shutdown phase.
+    ///
+    /// Default is no limit (`None`).
+    ///
+    /// ```
+    /// # use tonic::transport::Server;
+    /// # use tower_service::Service;
+    /// # use std::time::Duration;
+    /// # let builder = Server::builder();
+    /// builder.max_connection_age_grace(Duration::from_secs(60));
+    /// ```
+    #[must_use]
+    pub fn max_connection_age_grace(self, max_connection_age_grace: Duration) -> Self {
+        Server {
+            max_connection_age_grace: Some(max_connection_age_grace),
             ..self
         }
     }
@@ -614,6 +646,7 @@ impl<L> Server<L> {
             max_frame_size: self.max_frame_size,
             accept_http1: self.accept_http1,
             max_connection_age: self.max_connection_age,
+            max_connection_age_grace: self.max_connection_age_grace,
         }
     }
 
@@ -746,6 +779,7 @@ impl<L> Server<L> {
         let http2_max_pending_accept_reset_streams = self.http2_max_pending_accept_reset_streams;
         let http2_max_local_error_reset_streams = self.http2_max_local_error_reset_streams;
         let max_connection_age = self.max_connection_age;
+        let max_connection_age_grace = self.max_connection_age_grace;
 
         let svc = self.service_builder.service(svc);
 
@@ -825,7 +859,7 @@ impl<L> Server<L> {
                     let hyper_io = TokioIo::new(io);
                     let hyper_svc = TowerToHyperService::new(req_svc.map_request(|req: Request<Incoming>| req.map(Body::new)));
 
-                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age);
+                    serve_connection(hyper_io, hyper_svc, server.clone(), graceful.then(|| signal_rx.clone()), max_connection_age, max_connection_age_grace);
                 }
             }
         }
@@ -846,6 +880,29 @@ impl<L> Server<L> {
     }
 }
 
+enum TimeoutAction {
+    GracefulShutdown,
+    ForcefulShutdown,
+}
+
+async fn connection_timeout_future(
+    max_connection_age: Option<Duration>,
+    max_connection_age_grace: Option<Duration>,
+) -> TimeoutAction {
+    if let Some(age) = max_connection_age {
+        tokio::time::sleep(age).await;
+
+        if let Some(grace) = max_connection_age_grace {
+            tokio::time::sleep(grace).await;
+            TimeoutAction::ForcefulShutdown
+        } else {
+            TimeoutAction::GracefulShutdown
+        }
+    } else {
+        future::pending().await
+    }
+}
+
 // This is moved to its own function as a way to get around
 // https://github.com/rust-lang/rust/issues/102211
 fn serve_connection<B, IO, S, E>(
@@ -854,6 +911,7 @@ fn serve_connection<B, IO, S, E>(
     builder: ConnectionBuilder<E>,
     mut watcher: Option<tokio::sync::watch::Receiver<()>>,
     max_connection_age: Option<Duration>,
+    max_connection_age_grace: Option<Duration>,
 ) where
     B: http_body::Body + Send + 'static,
     B::Data: Send,
@@ -872,7 +930,10 @@ fn serve_connection<B, IO, S, E>(
 
             let mut conn = pin!(builder.serve_connection(hyper_io, hyper_svc));
 
-            let mut sleep = pin!(sleep_or_pending(max_connection_age));
+            let mut connection_timeout = pin!(connection_timeout_future(
+                max_connection_age,
+                max_connection_age_grace,
+            ));
 
             loop {
                 tokio::select! {
@@ -882,13 +943,20 @@ fn serve_connection<B, IO, S, E>(
                         }
                         break;
                     },
-                    _ = &mut sleep  => {
-                        conn.as_mut().graceful_shutdown();
-                        sleep.set(sleep_or_pending(None));
+                    timeout_action = &mut connection_timeout => {
+                        match timeout_action {
+                            TimeoutAction::GracefulShutdown => {
+                                conn.as_mut().graceful_shutdown();
+                            },
+                            TimeoutAction::ForcefulShutdown => {
+                                debug!("forcefully closed connection");
+                                break;
+                            }
+                        }
                     },
                     _ = &mut sig => {
                         conn.as_mut().graceful_shutdown();
-                    }
+                    },
                 }
             }
         }
@@ -896,13 +964,6 @@ fn serve_connection<B, IO, S, E>(
         drop(watcher);
         trace!("connection closed");
     });
-}
-
-async fn sleep_or_pending(wait_for: Option<Duration>) {
-    match wait_for {
-        Some(wait) => tokio::time::sleep(wait).await,
-        None => future::pending().await,
-    };
 }
 
 #[cfg(feature = "router")]
@@ -1218,9 +1279,55 @@ where
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use crate::transport::Server;
     use std::time::Duration;
 
-    use crate::transport::Server;
+    #[tokio::test(start_paused = true)]
+    async fn test_connection_timeout_no_max_age() {
+        let future = connection_timeout_future(None, None);
+
+        tokio::select! {
+            _ = future => {
+                panic!("timeout future should never complete when max_connection_age is None");
+            }
+            _ = tokio::time::sleep(Duration::from_secs(1000)) => {
+            }
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_connection_timeout_with_max_connection_age() {
+        let future = connection_timeout_future(Some(Duration::from_secs(10)), None);
+
+        let action = future.await;
+        assert!(matches!(action, TimeoutAction::GracefulShutdown));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_connection_timeout_with_max_connection_age_grace() {
+        let mut future = pin!(connection_timeout_future(
+            Some(Duration::from_secs(10)),
+            Some(Duration::from_secs(5)),
+        ));
+
+        tokio::select! {
+            _ = &mut future => {
+                panic!("should not complete before max_connection_age");
+            }
+            _ = tokio::time::sleep(Duration::from_secs(9)) => {}
+        }
+
+        tokio::select! {
+            _ = &mut future => {
+                panic!("should not complete before max_connection_age_grace");
+            }
+            _ = tokio::time::sleep(Duration::from_secs(4)) => {}
+        }
+
+        let action = future.await;
+        assert!(matches!(action, TimeoutAction::ForcefulShutdown));
+    }
 
     #[test]
     fn server_tcp_defaults() {
