@@ -22,9 +22,13 @@
  *
  */
 
-use super::Transport;
-use std::sync::{Arc, LazyLock, Mutex};
-use std::{collections::HashMap, fmt::Debug};
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+
+use crate::client::transport::Transport;
 
 /// A registry to store and retrieve transports.  Transports are indexed by
 /// the address type they are intended to handle.

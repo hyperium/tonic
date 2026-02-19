@@ -22,12 +22,12 @@
  *
  */
 
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock, Mutex},
-};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::Mutex;
 
-use super::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyBuilder;
 
 /// A registry to store and retrieve LB policies.  LB policies are indexed by
 /// their names.

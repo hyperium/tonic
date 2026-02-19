@@ -22,9 +22,11 @@
  *
  */
 
-use crate::{rt::GrpcRuntime, service::Service};
 use std::time::Duration;
 use std::time::Instant;
+
+use crate::rt::GrpcRuntime;
+use crate::service::Service;
 
 mod registry;
 

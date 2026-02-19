@@ -22,28 +22,38 @@
  *
  */
 
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{self};
 use url::Host;
 
-use crate::{
-    client::{
-        name_resolution::{
-            backoff::{BackoffConfig, DEFAULT_EXPONENTIAL_CONFIG},
-            dns::{
-                get_min_resolution_interval, get_resolving_timeout, parse_endpoint_and_authority,
-                reg, DnsResolver, HostPort,
-            },
-            global_registry, ChannelController, Resolver, ResolverOptions, ResolverUpdate, Target,
-            WorkScheduler,
-        },
-        service_config::ServiceConfig,
-    },
-    rt::{self, tokio::TokioRuntime, BoxFuture, GrpcRuntime, TcpOptions},
-};
-
-use super::{DnsOptions, ParseResult};
+use crate::client::name_resolution::backoff::BackoffConfig;
+use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
+use crate::client::name_resolution::dns::get_min_resolution_interval;
+use crate::client::name_resolution::dns::get_resolving_timeout;
+use crate::client::name_resolution::dns::parse_endpoint_and_authority;
+use crate::client::name_resolution::dns::reg;
+use crate::client::name_resolution::dns::DnsOptions;
+use crate::client::name_resolution::dns::DnsResolver;
+use crate::client::name_resolution::dns::HostPort;
+use crate::client::name_resolution::dns::ParseResult;
+use crate::client::name_resolution::global_registry;
+use crate::client::name_resolution::ChannelController;
+use crate::client::name_resolution::Resolver;
+use crate::client::name_resolution::ResolverOptions;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::Target;
+use crate::client::name_resolution::WorkScheduler;
+use crate::client::service_config::ServiceConfig;
+use crate::rt::tokio::TokioRuntime;
+use crate::rt::BoxFuture;
+use crate::rt::GrpcRuntime;
+use crate::rt::TcpOptions;
+use crate::rt::{self};
 
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 

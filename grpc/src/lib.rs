@@ -36,7 +36,9 @@ pub mod credentials;
 pub mod inmemory;
 mod macros;
 mod status;
-pub use status::{ServerStatus, Status, StatusCode};
+pub use status::ServerStatus;
+pub use status::Status;
+pub use status::StatusCode;
 pub mod server;
 pub mod service;
 

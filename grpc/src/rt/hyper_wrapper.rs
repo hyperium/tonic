@@ -22,12 +22,22 @@
  *
  */
 
-use super::{GrpcEndpoint, GrpcRuntime};
-use hyper::rt::{Executor, Timer};
+use std::future::Future;
+use std::io;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use std::time::Instant;
+
+use hyper::rt::Executor;
+use hyper::rt::Timer;
 use pin_project_lite::pin_project;
-use std::task::{Context, Poll};
-use std::{future::Future, io, pin::Pin, time::Instant};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::io::ReadBuf;
+
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 
 /// Adapts a runtime to a hyper compatible executor.
 #[derive(Clone)]
