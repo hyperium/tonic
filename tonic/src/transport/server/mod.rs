@@ -4,6 +4,8 @@ mod conn;
 mod display_error_stack;
 mod incoming;
 mod io_stream;
+#[cfg(windows)]
+mod named_pipe;
 mod service;
 #[cfg(feature = "_tls-any")]
 mod tls;
@@ -34,6 +36,8 @@ pub use conn::TlsConnectInfo;
 #[cfg(feature = "_tls-any")]
 use self::service::TlsAcceptor;
 
+#[cfg(windows)]
+pub use named_pipe::NamedPipeIncoming;
 #[cfg(unix)]
 pub use unix::UdsConnectInfo;
 

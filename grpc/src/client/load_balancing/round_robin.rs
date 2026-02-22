@@ -145,7 +145,7 @@ impl RoundRobinPolicy {
             .child_manager
             .resolver_update(resolver_update, None, channel_controller);
         self.update_picker(channel_controller);
-        return Err(err.into());
+        Err(err.into())
     }
 }
 
