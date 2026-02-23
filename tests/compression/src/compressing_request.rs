@@ -6,6 +6,8 @@ util::parametrized_tests! {
     client_enabled_server_enabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -31,6 +33,8 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
             let expected = match self.encoding {
                 CompressionEncoding::Gzip => "gzip",
                 CompressionEncoding::Zstd => "zstd",
+                CompressionEncoding::Lz4 => "lz4",
+                CompressionEncoding::Snappy => "snappy",
                 _ => panic!("unexpected encoding {:?}", self.encoding),
             };
             assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);
@@ -81,6 +85,8 @@ util::parametrized_tests! {
     client_enabled_server_enabled_multi_encoding,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -89,12 +95,14 @@ async fn client_enabled_server_enabled_multi_encoding(encoding: CompressionEncod
 
     let svc = test_server::TestServer::new(Svc::default())
         .accept_compressed(CompressionEncoding::Gzip)
-        .accept_compressed(CompressionEncoding::Zstd);
+        .accept_compressed(CompressionEncoding::Zstd)
+        .accept_compressed(CompressionEncoding::Lz4)
+        .accept_compressed(CompressionEncoding::Snappy);
 
     let request_bytes_counter = Arc::new(AtomicUsize::new(0));
 
     fn assert_right_encoding<B>(req: http::Request<B>) -> http::Request<B> {
-        let supported_encodings = ["gzip", "zstd"];
+        let supported_encodings = ["gzip", "zstd", "lz4", "snappy"];
         let req_encoding = req.headers().get("grpc-encoding").unwrap();
         assert!(supported_encodings.iter().any(|e| e == req_encoding));
 
@@ -141,6 +149,8 @@ parametrized_tests! {
     client_enabled_server_disabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -171,6 +181,8 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Lz4 => "lz4",
+        CompressionEncoding::Snappy => "snappy",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(
@@ -190,6 +202,8 @@ parametrized_tests! {
     client_mark_compressed_without_header_server_enabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]

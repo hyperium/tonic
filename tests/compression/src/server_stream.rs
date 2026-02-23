@@ -6,6 +6,8 @@ util::parametrized_tests! {
     client_enabled_server_enabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -45,6 +47,8 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
     let expected = match encoding {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
+        CompressionEncoding::Lz4 => "lz4",
+        CompressionEncoding::Snappy => "snappy",
         _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
@@ -70,6 +74,8 @@ util::parametrized_tests! {
     client_disabled_server_enabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -121,6 +127,8 @@ util::parametrized_tests! {
     client_enabled_server_disabled,
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
