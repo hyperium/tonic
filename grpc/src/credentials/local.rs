@@ -96,7 +96,7 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
     type ContextType = LocalConnectionSecurityContext;
     type Output<I> = I;
 
-    async fn connect<Input: GrpcEndpoint + 'static>(
+    async fn connect<Input: GrpcEndpoint>(
         &self,
         _authority: &Authority,
         source: Input,
@@ -139,7 +139,7 @@ impl LocalServerCredentials {
 impl server::ServerCredsInternal for LocalServerCredentials {
     type Output<I> = I;
 
-    async fn accept<Input: GrpcEndpoint + 'static>(
+    async fn accept<Input: GrpcEndpoint>(
         &self,
         source: Input,
         _runtime: GrpcRuntime,
