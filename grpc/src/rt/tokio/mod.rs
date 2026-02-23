@@ -33,6 +33,7 @@ use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 
+use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::rt::endpoint;
 use crate::rt::BoxEndpoint;
 use crate::rt::BoxFuture;
@@ -227,6 +228,10 @@ impl super::GrpcEndpoint for TokioTcpStream {
 
     fn get_peer_address(&self) -> &str {
         &self.peer_addr
+    }
+
+    fn get_network_type(&self) -> &'static str {
+        TCP_IP_NETWORK_TYPE
     }
 }
 
