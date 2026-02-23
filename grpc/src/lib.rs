@@ -32,18 +32,22 @@
 #![allow(dead_code, unused_variables)]
 
 pub mod client;
+pub mod core;
 pub mod credentials;
 pub mod inmemory;
 mod macros;
 mod status;
-pub use status::{ServerStatus, Status, StatusCode};
-pub mod rt;
+pub use status::ServerStatus;
+pub use status::Status;
+pub use status::StatusCode;
 pub mod server;
 pub mod service;
 
 pub(crate) mod attributes;
 pub(crate) mod byte_str;
 pub(crate) mod codec;
+pub(crate) mod rt;
+pub(crate) mod send_future;
 #[cfg(test)]
 pub(crate) mod echo_pb {
     include!(concat!(

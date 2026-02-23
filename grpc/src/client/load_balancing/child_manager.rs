@@ -29,21 +29,29 @@
 // policy in use.  Complete tests must be written before it can be used in
 // production.
 
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::mem;
+use std::sync::Arc;
 use std::sync::Mutex;
-use std::{collections::HashMap, hash::Hash, mem, sync::Arc};
 
-use crate::client::load_balancing::{
-    ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-    WeakSubchannel, WorkScheduler,
-};
-use crate::client::name_resolution::{Address, ResolverUpdate};
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::LbConfig;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WeakSubchannel;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
 use crate::client::ConnectivityState;
-use crate::rt::Runtime;
-
-use super::{Subchannel, SubchannelState};
+use crate::rt::GrpcRuntime;
 
 // An LbPolicy implementation that manages multiple children.
 #[derive(Debug)]
@@ -51,7 +59,7 @@ pub(crate) struct ChildManager<T: Debug> {
     subchannel_to_child_idx: HashMap<WeakSubchannel, usize>,
     children: Vec<Child<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
     updated: bool, // Set when any child updates its picker; cleared when accessed.
     work_scheduler: Arc<dyn WorkScheduler>,
 }
@@ -88,7 +96,7 @@ where
 {
     /// Creates a new ChildManager LB policy.  shard_update is called whenever a
     /// resolver_update operation occurs.
-    pub fn new(runtime: Arc<dyn Runtime>, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+    pub fn new(runtime: GrpcRuntime, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         Self {
             subchannel_to_child_idx: Default::default(),
             children: Default::default(),
@@ -468,15 +476,23 @@ impl ChildWorkScheduler {
 
 #[cfg(test)]
 mod test {
-    use crate::client::load_balancing::child_manager::{ChildManager, ChildUpdate};
-    use crate::client::load_balancing::test_utils::{
-        self, StubPolicyFuncs, TestChannelController, TestEvent, TestWorkScheduler,
-    };
-    use crate::client::load_balancing::{
-        ChannelController, LbPolicyBuilder, LbState, QueuingPicker, Subchannel, SubchannelState,
-        GLOBAL_LB_REGISTRY,
-    };
-    use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
+    use crate::client::load_balancing::child_manager::ChildManager;
+    use crate::client::load_balancing::child_manager::ChildUpdate;
+    use crate::client::load_balancing::test_utils::StubPolicyFuncs;
+    use crate::client::load_balancing::test_utils::TestChannelController;
+    use crate::client::load_balancing::test_utils::TestEvent;
+    use crate::client::load_balancing::test_utils::TestWorkScheduler;
+    use crate::client::load_balancing::test_utils::{self};
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::LbPolicyBuilder;
+    use crate::client::load_balancing::LbState;
+    use crate::client::load_balancing::QueuingPicker;
+    use crate::client::load_balancing::Subchannel;
+    use crate::client::load_balancing::SubchannelState;
+    use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+    use crate::client::name_resolution::Address;
+    use crate::client::name_resolution::Endpoint;
+    use crate::client::name_resolution::ResolverUpdate;
     use crate::client::service_config::LbConfig;
     use crate::client::ConnectivityState;
     use crate::rt::default_runtime;

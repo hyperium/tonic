@@ -1,14 +1,48 @@
-use super::{Runtime, TcpStream};
-use hyper::rt::{Executor, Timer};
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
+use std::future::Future;
+use std::io;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
+use std::time::Instant;
+
+use hyper::rt::Executor;
+use hyper::rt::Timer;
 use pin_project_lite::pin_project;
-use std::task::{Context, Poll};
-use std::{future::Future, io, pin::Pin, sync::Arc, time::Instant};
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::io::ReadBuf;
+
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 
 /// Adapts a runtime to a hyper compatible executor.
 #[derive(Clone)]
 pub(crate) struct HyperCompatExec {
-    pub(crate) inner: Arc<dyn Runtime>,
+    pub(crate) inner: GrpcRuntime,
 }
 
 impl<F> Executor<F> for HyperCompatExec
@@ -42,7 +76,7 @@ impl hyper::rt::Sleep for HyperCompatSleep {}
 
 /// Adapts a runtime to a hyper compatible timer.
 pub(crate) struct HyperCompatTimer {
-    pub(crate) inner: Arc<dyn Runtime>,
+    pub(crate) inner: GrpcRuntime,
 }
 
 impl Timer for HyperCompatTimer {
@@ -62,17 +96,17 @@ impl Timer for HyperCompatTimer {
 // https://github.com/hyperium/hyper/blob/v1.6.0/benches/support/tokiort.rs
 
 pin_project! {
-    /// A wrapper to make any `TcpStream` compatible with Hyper. It implements
+    /// A wrapper to make any `GrpcEndpoint` compatible with Hyper. It implements
     /// Tokio's async IO traits.
     pub(crate) struct HyperStream {
         #[pin]
-        inner: Box<dyn TcpStream>,
+        inner: Box<dyn GrpcEndpoint>,
     }
 }
 
 impl HyperStream {
     /// Creates a new `HyperStream` from a type implementing `TcpStream`.
-    pub fn new(stream: Box<dyn TcpStream>) -> Self {
+    pub fn new(stream: Box<dyn GrpcEndpoint>) -> Self {
         Self { inner: stream }
     }
 }

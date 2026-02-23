@@ -1,16 +1,37 @@
-use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
-use crate::client::transport::ConnectedTransport;
-use crate::client::transport::Transport;
-use crate::client::transport::TransportOptions;
-use crate::codec::BytesCodec;
-use crate::rt::hyper_wrapper::{HyperCompatExec, HyperCompatTimer, HyperStream};
-use crate::rt::BoxedTaskHandle;
-use crate::rt::Runtime;
-use crate::rt::TcpOptions;
-use crate::service::Message;
-use crate::service::Request as GrpcRequest;
-use crate::service::Response as GrpcResponse;
-use crate::{client::name_resolution::TCP_IP_NETWORK_TYPE, service::Service};
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
+use std::any::Any;
+use std::error::Error;
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::str::FromStr;
+use std::task::Context;
+use std::task::Poll;
+use std::time::Instant;
+
 use bytes::Bytes;
 use http::uri::PathAndQuery;
 use http::Request as HttpRequest;
@@ -18,22 +39,41 @@ use http::Response as HttpResponse;
 use http::Uri;
 use hyper::client::conn::http2::Builder;
 use hyper::client::conn::http2::SendRequest;
-use std::any::Any;
-use std::task::{Context, Poll};
-use std::time::Instant;
-use std::{error::Error, future::Future, net::SocketAddr, pin::Pin, str::FromStr, sync::Arc};
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
+use tonic::async_trait;
+use tonic::body::Body;
+use tonic::client::Grpc;
 use tonic::client::GrpcService;
 use tonic::Request as TonicRequest;
 use tonic::Response as TonicResponse;
+use tonic::Status;
 use tonic::Streaming;
-use tonic::{async_trait, body::Body, client::Grpc, Status};
-use tower::buffer::{future::ResponseFuture as BufferResponseFuture, Buffer};
-use tower::limit::{ConcurrencyLimitLayer, RateLimitLayer};
-use tower::{util::BoxService, ServiceBuilder};
+use tower::buffer::future::ResponseFuture as BufferResponseFuture;
+use tower::buffer::Buffer;
+use tower::limit::ConcurrencyLimitLayer;
+use tower::limit::RateLimitLayer;
+use tower::util::BoxService;
+use tower::ServiceBuilder;
 use tower_service::Service as TowerService;
+
+use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::ConnectedTransport;
+use crate::client::transport::Transport;
+use crate::client::transport::TransportOptions;
+use crate::codec::BytesCodec;
+use crate::rt::hyper_wrapper::HyperCompatExec;
+use crate::rt::hyper_wrapper::HyperCompatTimer;
+use crate::rt::hyper_wrapper::HyperStream;
+use crate::rt::BoxedTaskHandle;
+use crate::rt::GrpcRuntime;
+use crate::rt::TcpOptions;
+use crate::service::Message;
+use crate::service::Request as GrpcRequest;
+use crate::service::Response as GrpcResponse;
+use crate::service::Service;
 
 #[cfg(test)]
 mod test;
@@ -127,7 +167,7 @@ impl Transport for TransportBuilder {
     async fn connect(
         &self,
         address: String,
-        runtime: Arc<dyn Runtime>,
+        runtime: GrpcRuntime,
         opts: &TransportOptions,
     ) -> Result<ConnectedTransport, String> {
         let runtime = runtime.clone();

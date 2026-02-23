@@ -1,15 +1,46 @@
-use crate::client::load_balancing::child_manager::{ChildManager, ChildUpdate};
-use crate::client::load_balancing::{
-    ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbState, ParsedJsonLbConfig,
-    Subchannel, SubchannelState, WorkScheduler, GLOBAL_LB_REGISTRY,
-};
-use crate::client::name_resolution::ResolverUpdate;
-use crate::client::ConnectivityState;
-use crate::rt::Runtime;
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
 
 use std::collections::HashMap;
 use std::error::Error;
 use std::sync::Arc;
+
+use crate::client::load_balancing::child_manager::ChildManager;
+use crate::client::load_balancing::child_manager::ChildUpdate;
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::LbConfig;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::ParsedJsonLbConfig;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::ConnectivityState;
+use crate::rt::GrpcRuntime;
 
 #[derive(Debug, Clone)]
 struct GracefulSwitchLbConfig {
@@ -104,7 +135,7 @@ enum ChildKind {
 
 impl GracefulSwitchPolicy {
     /// Creates a new Graceful Switch policy.
-    pub fn new(runtime: Arc<dyn Runtime>, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+    pub fn new(runtime: GrpcRuntime, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         GracefulSwitchPolicy {
             child_manager: ChildManager::new(runtime, work_scheduler),
             last_update: None,
@@ -222,23 +253,35 @@ impl GracefulSwitchPolicy {
 #[cfg(test)]
 mod test {
     use crate::client::load_balancing::graceful_switch::GracefulSwitchPolicy;
-    use crate::client::load_balancing::test_utils::{
-        self, reg_stub_policy, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent,
-        TestSubchannel, TestWorkScheduler,
-    };
-    use crate::client::load_balancing::{
-        ChannelController, LbPolicy, ParsedJsonLbConfig, PickResult, Picker, Subchannel,
-        SubchannelState,
-    };
-    use crate::client::load_balancing::{LbState, Pick};
-    use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
+    use crate::client::load_balancing::test_utils::reg_stub_policy;
+    use crate::client::load_balancing::test_utils::StubPolicyData;
+    use crate::client::load_balancing::test_utils::StubPolicyFuncs;
+    use crate::client::load_balancing::test_utils::TestChannelController;
+    use crate::client::load_balancing::test_utils::TestEvent;
+    use crate::client::load_balancing::test_utils::TestSubchannel;
+    use crate::client::load_balancing::test_utils::TestWorkScheduler;
+    use crate::client::load_balancing::test_utils::{self};
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::LbPolicy;
+    use crate::client::load_balancing::LbState;
+    use crate::client::load_balancing::ParsedJsonLbConfig;
+    use crate::client::load_balancing::Pick;
+    use crate::client::load_balancing::PickResult;
+    use crate::client::load_balancing::Picker;
+    use crate::client::load_balancing::Subchannel;
+    use crate::client::load_balancing::SubchannelState;
+    use crate::client::name_resolution::Address;
+    use crate::client::name_resolution::Endpoint;
+    use crate::client::name_resolution::ResolverUpdate;
     use crate::client::ConnectivityState;
     use crate::rt::default_runtime;
     use crate::service::Request;
+    use std::panic;
+    use std::sync::Arc;
     use std::time::Duration;
-    use std::{panic, sync::Arc};
     use tokio::select;
-    use tokio::sync::mpsc::{self, UnboundedReceiver};
+    use tokio::sync::mpsc::UnboundedReceiver;
+    use tokio::sync::mpsc::{self};
     use tonic::metadata::MetadataMap;
 
     const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);

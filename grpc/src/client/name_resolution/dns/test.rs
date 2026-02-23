@@ -22,28 +22,38 @@
  *
  */
 
-use std::{future::Future, pin::Pin, sync::Arc, time::Duration};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
-use tokio::sync::mpsc::{self, UnboundedSender};
+use tokio::sync::mpsc::UnboundedSender;
+use tokio::sync::mpsc::{self};
 use url::Host;
 
-use crate::{
-    client::{
-        name_resolution::{
-            backoff::{BackoffConfig, DEFAULT_EXPONENTIAL_CONFIG},
-            dns::{
-                get_min_resolution_interval, get_resolving_timeout, parse_endpoint_and_authority,
-                reg, DnsResolver, HostPort,
-            },
-            global_registry, ChannelController, Resolver, ResolverOptions, ResolverUpdate, Target,
-            WorkScheduler,
-        },
-        service_config::ServiceConfig,
-    },
-    rt::{self, tokio::TokioRuntime},
-};
-
-use super::{DnsOptions, ParseResult};
+use crate::client::name_resolution::backoff::BackoffConfig;
+use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
+use crate::client::name_resolution::dns::get_min_resolution_interval;
+use crate::client::name_resolution::dns::get_resolving_timeout;
+use crate::client::name_resolution::dns::parse_endpoint_and_authority;
+use crate::client::name_resolution::dns::reg;
+use crate::client::name_resolution::dns::DnsOptions;
+use crate::client::name_resolution::dns::DnsResolver;
+use crate::client::name_resolution::dns::HostPort;
+use crate::client::name_resolution::dns::ParseResult;
+use crate::client::name_resolution::global_registry;
+use crate::client::name_resolution::ChannelController;
+use crate::client::name_resolution::Resolver;
+use crate::client::name_resolution::ResolverOptions;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::Target;
+use crate::client::name_resolution::WorkScheduler;
+use crate::client::service_config::ServiceConfig;
+use crate::rt::tokio::TokioRuntime;
+use crate::rt::BoxFuture;
+use crate::rt::GrpcRuntime;
+use crate::rt::TcpOptions;
+use crate::rt::{self};
 
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 
@@ -201,7 +211,7 @@ pub(crate) async fn dns_basic() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -230,7 +240,7 @@ pub(crate) async fn invalid_target() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -296,8 +306,16 @@ impl rt::Runtime for FakeRuntime {
         &self,
         target: std::net::SocketAddr,
         opts: rt::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::TcpStream>, String>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::GrpcEndpoint>, String>> + Send>> {
         self.inner.tcp_stream(target, opts)
+    }
+
+    fn listen_tcp(
+        &self,
+        _addr: std::net::SocketAddr,
+        _opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn rt::TcpListener>, String>> {
+        unimplemented!()
     }
 }
 
@@ -311,7 +329,7 @@ pub(crate) async fn dns_lookup_error() {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
-        inner: TokioRuntime {},
+        inner: TokioRuntime::default(),
         dns: FakeDns {
             latency: Duration::from_secs(0),
             lookup_result: Err("test_error".to_string()),
@@ -319,7 +337,7 @@ pub(crate) async fn dns_lookup_error() {
     };
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(runtime),
+        runtime: GrpcRuntime::new(runtime),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -344,7 +362,7 @@ pub(crate) async fn dns_lookup_timeout() {
         work_tx: work_tx.clone(),
     });
     let runtime = FakeRuntime {
-        inner: TokioRuntime {},
+        inner: TokioRuntime::default(),
         dns: FakeDns {
             latency: Duration::from_secs(20),
             lookup_result: Ok(Vec::new()),
@@ -353,7 +371,7 @@ pub(crate) async fn dns_lookup_timeout() {
     let dns_client = runtime.dns.clone();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(runtime),
+        runtime: GrpcRuntime::new(runtime),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -387,7 +405,7 @@ pub(crate) async fn rate_limit() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_client = opts
@@ -437,7 +455,7 @@ pub(crate) async fn re_resolution_after_success() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -481,7 +499,7 @@ pub(crate) async fn backoff_on_error() {
     });
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: Arc::new(TokioRuntime {}),
+        runtime: rt::default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {

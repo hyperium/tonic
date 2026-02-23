@@ -28,21 +28,23 @@
 //! network addresses (typically IP addresses) used by the channel to connect to
 //! a service.
 use core::fmt;
+use std::fmt::Display;
+use std::fmt::Formatter;
+use std::hash::Hash;
+use std::str::FromStr;
+use std::sync::Arc;
 
-use super::service_config::ServiceConfig;
-use crate::{attributes::Attributes, byte_str::ByteStr, rt::Runtime};
-use std::{
-    fmt::{Display, Formatter},
-    hash::Hash,
-    str::FromStr,
-    sync::Arc,
-};
+use url::Url;
+
+use crate::attributes::Attributes;
+use crate::byte_str::ByteStr;
+use crate::client::service_config::ServiceConfig;
+use crate::rt::GrpcRuntime;
 
 mod backoff;
 mod dns;
 mod registry;
 pub(crate) use registry::global_registry;
-use url::Url;
 
 /// Target represents a target for gRPC, as specified in:
 /// https://github.com/grpc/grpc/blob/master/doc/naming.md.
@@ -176,7 +178,7 @@ pub(crate) struct ResolverOptions {
     pub authority: String,
 
     /// The runtime which provides utilities to do async work.
-    pub runtime: Arc<dyn Runtime>,
+    pub runtime: GrpcRuntime,
 
     /// A hook into the channel's work scheduler that allows the Resolver to
     /// request the ability to perform operations on the ChannelController.

@@ -22,27 +22,38 @@
  *
  */
 
-use std::{
-    future::Future,
-    net::{IpAddr, SocketAddr},
-    pin::Pin,
-    time::Duration,
-};
+use std::future::Future;
+use std::net::IpAddr;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::time::Duration;
 
-use tokio::{
-    io::{AsyncRead, AsyncWrite},
-    net::TcpStream,
-    task::JoinHandle,
-};
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::net::TcpStream;
+use tokio::task::JoinHandle;
 
-use super::{BoxedTaskHandle, DnsResolver, ResolverOptions, Runtime, Sleep, TaskHandle};
+use crate::rt::endpoint;
+use crate::rt::BoxEndpoint;
+use crate::rt::BoxFuture;
+use crate::rt::BoxedTaskHandle;
+use crate::rt::DnsResolver;
+use crate::rt::GrpcEndpoint;
+use crate::rt::ResolverOptions;
+use crate::rt::Runtime;
+use crate::rt::ScopedBoxFuture;
+use crate::rt::Sleep;
+use crate::rt::TaskHandle;
+use crate::rt::TcpOptions;
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
 
 /// A DNS resolver that uses tokio::net::lookup_host for resolution. It only
 /// supports host lookups.
-struct TokioDefaultDnsResolver {}
+struct TokioDefaultDnsResolver {
+    _priv: (),
+}
 
 #[tonic::async_trait]
 impl DnsResolver for TokioDefaultDnsResolver {
@@ -64,8 +75,10 @@ impl DnsResolver for TokioDefaultDnsResolver {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TokioRuntime {}
+#[derive(Debug, Default)]
+pub(crate) struct TokioRuntime {
+    _priv: (),
+}
 
 impl TaskHandle for JoinHandle<()> {
     fn abort(&self) {
@@ -99,7 +112,7 @@ impl Runtime for TokioRuntime {
         &self,
         target: SocketAddr,
         opts: super::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::TcpStream>, String>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::GrpcEndpoint>, String>> + Send>> {
         Box::pin(async move {
             let stream = TcpStream::connect(target)
                 .await
@@ -112,8 +125,34 @@ impl Runtime for TokioRuntime {
                     .set_tcp_keepalive(&ka)
                     .map_err(|err| err.to_string())?;
             }
-            let stream: Box<dyn super::TcpStream> = Box::new(TokioTcpStream { inner: stream });
+            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioTcpStream {
+                peer_addr: target.to_string().into_boxed_str(),
+                local_addr: stream
+                    .local_addr()
+                    .map_err(|err| err.to_string())?
+                    .to_string()
+                    .into_boxed_str(),
+                inner: stream,
+            });
             Ok(stream)
+        })
+    }
+
+    fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        _opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn super::TcpListener>, String>> {
+        Box::pin(async move {
+            let listener = tokio::net::TcpListener::bind(addr)
+                .await
+                .map_err(|err| err.to_string())?;
+            let local_addr = listener.local_addr().map_err(|e| e.to_string())?;
+            let listener = TokioListener {
+                inner: listener,
+                local_addr,
+            };
+            Ok(Box::new(listener) as Box<dyn super::TcpListener>)
         })
     }
 }
@@ -123,12 +162,14 @@ impl TokioDefaultDnsResolver {
         if opts.server_addr.is_some() {
             return Err("Custom DNS server are not supported, enable optional feature 'dns' to enable support.".to_string());
         }
-        Ok(TokioDefaultDnsResolver {})
+        Ok(TokioDefaultDnsResolver { _priv: () })
     }
 }
 
 struct TokioTcpStream {
     inner: TcpStream,
+    peer_addr: Box<str>,
+    local_addr: Box<str>,
 }
 
 impl AsyncRead for TokioTcpStream {
@@ -150,6 +191,18 @@ impl AsyncWrite for TokioTcpStream {
         Pin::new(&mut self.inner).poll_write(cx, buf)
     }
 
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored()
+    }
+
     fn poll_flush(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -165,15 +218,58 @@ impl AsyncWrite for TokioTcpStream {
     }
 }
 
-impl super::TcpStream for TokioTcpStream {}
+impl endpoint::Sealed for TokioTcpStream {}
+
+impl super::GrpcEndpoint for TokioTcpStream {
+    fn get_local_address(&self) -> &str {
+        &self.local_addr
+    }
+
+    fn get_peer_address(&self) -> &str {
+        &self.peer_addr
+    }
+}
+
+struct TokioListener {
+    inner: tokio::net::TcpListener,
+    local_addr: SocketAddr,
+}
+
+impl super::TcpListener for TokioListener {
+    fn accept(&mut self) -> ScopedBoxFuture<'_, Result<(BoxEndpoint, SocketAddr), String>> {
+        Box::pin(async move {
+            let (stream, addr) = self.inner.accept().await.map_err(|e| e.to_string())?;
+            Ok((
+                Box::new(TokioTcpStream {
+                    local_addr: stream
+                        .local_addr()
+                        .map_err(|err| err.to_string())?
+                        .to_string()
+                        .into_boxed_str(),
+                    peer_addr: addr.to_string().into_boxed_str(),
+                    inner: stream,
+                }) as Box<dyn GrpcEndpoint>,
+                addr,
+            ))
+        })
+    }
+
+    fn local_addr(&self) -> &SocketAddr {
+        &self.local_addr
+    }
+}
 
 #[cfg(test)]
 mod tests {
-    use super::{DnsResolver, ResolverOptions, Runtime, TokioDefaultDnsResolver, TokioRuntime};
+    use super::DnsResolver;
+    use super::ResolverOptions;
+    use super::Runtime;
+    use super::TokioDefaultDnsResolver;
+    use super::TokioRuntime;
 
     #[tokio::test]
     async fn lookup_hostname() {
-        let runtime = TokioRuntime {};
+        let runtime = TokioRuntime::default();
 
         let dns = runtime
             .get_dns_resolver(ResolverOptions::default())

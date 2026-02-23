@@ -22,16 +22,21 @@
  *
  */
 
-use ::tokio::io::{AsyncRead, AsyncWrite};
 use std::fmt::Debug;
-use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]
 pub(crate) mod tokio;
 
-type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
-pub(crate) type BoxedTaskHandle = Box<dyn TaskHandle>;
+pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
+pub type BoxedTaskHandle = Box<dyn TaskHandle>;
+pub type BoxEndpoint = Box<dyn GrpcEndpoint>;
+pub type ScopedBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -40,7 +45,7 @@ pub(crate) type BoxedTaskHandle = Box<dyn TaskHandle>;
 /// time-based operations such as sleeping. It provides a uniform interface
 /// that can be implemented for various async runtimes, enabling pluggable
 /// and testable infrastructure.
-pub(super) trait Runtime: Send + Sync + Debug {
+pub trait Runtime: Send + Sync + Debug {
     /// Spawns the given asynchronous task to run in the background.
     fn spawn(&self, task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>) -> BoxedTaskHandle;
 
@@ -58,20 +63,27 @@ pub(super) trait Runtime: Send + Sync + Debug {
         &self,
         target: SocketAddr,
         opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpStream>, String>>;
+    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>>;
+
+    /// Create a new listener for the given address.
+    fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
 }
 
 /// A future that resolves after a specified duration.
-pub(super) trait Sleep: Send + Sync + Future<Output = ()> {}
+pub trait Sleep: Send + Sync + Future<Output = ()> {}
 
-pub(super) trait TaskHandle: Send + Sync {
+pub trait TaskHandle: Send + Sync {
     /// Abort the associated task.
     fn abort(&self);
 }
 
 /// A trait for asynchronous DNS resolution.
 #[tonic::async_trait]
-pub(super) trait DnsResolver: Send + Sync {
+pub trait DnsResolver: Send + Sync {
     /// Resolve an address
     async fn lookup_host_name(&self, name: &str) -> Result<Vec<std::net::IpAddr>, String>;
     /// Perform a TXT record lookup. If a txt record contains multiple strings,
@@ -80,19 +92,62 @@ pub(super) trait DnsResolver: Send + Sync {
 }
 
 #[derive(Default)]
-pub(super) struct ResolverOptions {
+pub struct ResolverOptions {
     /// The address of the DNS server in "IP:port" format. If None, the
     /// system's default DNS server will be used.
     pub(super) server_addr: Option<std::net::SocketAddr>,
 }
 
 #[derive(Default)]
-pub(crate) struct TcpOptions {
+pub struct TcpOptions {
     pub(crate) enable_nodelay: bool,
     pub(crate) keepalive: Option<Duration>,
 }
 
-pub(crate) trait TcpStream: AsyncRead + AsyncWrite + Send + Unpin {}
+pub(crate) mod endpoint {
+    /// This trait is sealed since we may need to change the read and write
+    /// methods to align closely with the gRPC C++ implementations. For example,
+    /// the read method may be responsible for allocating the buffer and
+    /// returning it to enable in-place decryption. Since the libraries used
+    /// for http2 and channel credentials use AsyncRead, designing such an API
+    /// today would require adapters which would incur an extra copy, affecting
+    /// performance.
+    pub trait Sealed: tokio::io::AsyncRead + tokio::io::AsyncWrite {}
+}
+
+/// GrpcEndpoint is a generic stream-oriented network connection.
+pub trait GrpcEndpoint: endpoint::Sealed + Send + Unpin + 'static {
+    /// Returns the local address that this stream is bound to.
+    fn get_local_address(&self) -> &str;
+
+    /// Returns the remote address that this stream is connected to.
+    fn get_peer_address(&self) -> &str;
+}
+
+impl endpoint::Sealed for Box<dyn GrpcEndpoint> {}
+impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
+    fn get_local_address(&self) -> &str {
+        (**self).get_local_address()
+    }
+
+    fn get_peer_address(&self) -> &str {
+        (**self).get_peer_address()
+    }
+}
+
+/// A trait representing a TCP listener capable of accepting incoming
+/// connections.
+pub trait TcpListener: Send + Sync {
+    /// Accepts a new incoming connection.
+    ///
+    /// Returns a future that resolves to a result containing the new
+    /// `GrpcEndpoint` and the remote peer's `SocketAddr`, or an error string
+    /// if acceptance fails.
+    fn accept(&mut self) -> ScopedBoxFuture<'_, Result<(BoxEndpoint, SocketAddr), String>>;
+
+    /// Returns the local socket address this listener is bound to.
+    fn local_addr(&self) -> &SocketAddr;
+}
 
 /// A fake runtime to satisfy the compiler when no runtime is enabled. This will
 ///
@@ -119,16 +174,68 @@ impl Runtime for NoOpRuntime {
         &self,
         target: SocketAddr,
         opts: TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn TcpStream>, String>> + Send>> {
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
+        unimplemented!()
+    }
+
+    fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        _opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
         unimplemented!()
     }
 }
 
-pub(crate) fn default_runtime() -> Arc<dyn Runtime> {
+pub(crate) fn default_runtime() -> GrpcRuntime {
     #[cfg(feature = "_runtime-tokio")]
     {
-        return Arc::new(tokio::TokioRuntime {});
+        return GrpcRuntime::new(tokio::TokioRuntime::default());
     }
     #[allow(unreachable_code)]
-    Arc::new(NoOpRuntime::default())
+    GrpcRuntime::new(NoOpRuntime::default())
+}
+
+#[derive(Clone, Debug)]
+pub struct GrpcRuntime {
+    inner: Arc<dyn Runtime>,
+}
+
+impl GrpcRuntime {
+    pub fn new<T: Runtime + 'static>(runtime: T) -> Self {
+        GrpcRuntime {
+            inner: Arc::new(runtime),
+        }
+    }
+
+    pub fn spawn(
+        &self,
+        task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
+    ) -> BoxedTaskHandle {
+        self.inner.spawn(task)
+    }
+
+    pub fn get_dns_resolver(&self, opts: ResolverOptions) -> Result<Box<dyn DnsResolver>, String> {
+        self.inner.get_dns_resolver(opts)
+    }
+
+    pub fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
+        self.inner.sleep(duration)
+    }
+
+    pub fn tcp_stream(
+        &self,
+        target: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
+        self.inner.tcp_stream(target, opts)
+    }
+
+    pub fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
+        self.inner.listen_tcp(addr, opts)
+    }
 }
