@@ -85,7 +85,7 @@ pub trait Handle: Send + Sync {
 }
 
 #[async_trait]
-pub trait DynHandle: Send + Sync {
+trait DynHandle: Send + Sync {
     async fn dyn_handle(
         &self,
         headers: RequestHeaders,
@@ -126,7 +126,7 @@ pub trait SendStream {
 }
 
 #[async_trait]
-pub trait DynSendStream: Send {
+trait DynSendStream: Send {
     async fn dyn_send<'a>(
         &mut self,
         item: ServerResponseStreamItem<'a>,
@@ -191,7 +191,7 @@ pub trait RecvStream {
 }
 
 #[async_trait]
-pub trait DynRecvStream: Send {
+trait DynRecvStream: Send {
     async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()>;
 }
 

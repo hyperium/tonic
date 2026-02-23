@@ -141,6 +141,7 @@ pub struct ResponseHeaders {
 }
 
 /// Contains all information transmitted in the request headers of an RPC.
+#[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub struct RequestHeaders {
     /// The full (e.g. "/Service/Method") method name specified for the call.

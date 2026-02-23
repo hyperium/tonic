@@ -158,7 +158,7 @@ pub trait SendStream: Send {
 }
 
 #[async_trait]
-pub trait DynSendStream: Send {
+trait DynSendStream: Send {
     async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
 }
 
@@ -208,7 +208,7 @@ pub trait RecvStream: Send {
 }
 
 #[async_trait]
-pub trait DynRecvStream: Send {
+trait DynRecvStream: Send {
     async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
 }
 
