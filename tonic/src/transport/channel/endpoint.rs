@@ -1,34 +1,46 @@
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 use super::service::TlsConnector;
 use super::service::{self, Executor, SharedExec};
+use super::uds_connector::UdsConnector;
 use super::Channel;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 use super::ClientTlsConfig;
+#[cfg(feature = "_tls-any")]
+use crate::transport::error;
 use crate::transport::Error;
 use bytes::Bytes;
 use http::{uri::Uri, HeaderValue};
 use hyper::rt;
 use hyper_util::client::legacy::connect::HttpConnector;
-use std::{fmt, future::Future, pin::Pin, str::FromStr, time::Duration};
+use std::{fmt, future::Future, net::IpAddr, pin::Pin, str, str::FromStr, time::Duration};
 use tower_service::Service;
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub(crate) enum EndpointType {
+    Uri(Uri),
+    Uds(String),
+}
 
 /// Channel builder.
 ///
 /// This struct is used to build and configure HTTP/2 channels.
 #[derive(Clone)]
 pub struct Endpoint {
-    pub(crate) uri: Uri,
+    pub(crate) uri: EndpointType,
+    fallback_uri: Uri,
     pub(crate) origin: Option<Uri>,
     pub(crate) user_agent: Option<HeaderValue>,
     pub(crate) timeout: Option<Duration>,
     pub(crate) concurrency_limit: Option<usize>,
     pub(crate) rate_limit: Option<(u64, Duration)>,
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "_tls-any")]
     pub(crate) tls: Option<TlsConnector>,
     pub(crate) buffer_size: Option<usize>,
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
     pub(crate) tcp_keepalive: Option<Duration>,
+    pub(crate) tcp_keepalive_interval: Option<Duration>,
+    pub(crate) tcp_keepalive_retries: Option<u32>,
     pub(crate) tcp_nodelay: bool,
     pub(crate) http2_keep_alive_interval: Option<Duration>,
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
@@ -36,6 +48,7 @@ pub struct Endpoint {
     pub(crate) http2_max_header_list_size: Option<u32>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
+    pub(crate) local_address: Option<IpAddr>,
     pub(crate) executor: SharedExec,
 }
 
@@ -46,15 +59,74 @@ impl Endpoint {
     pub fn new<D>(dst: D) -> Result<Self, Error>
     where
         D: TryInto<Self>,
-        D::Error: Into<crate::Error>,
+        D::Error: Into<crate::BoxError>,
     {
         let me = dst.try_into().map_err(|e| Error::from_source(e.into()))?;
-        #[cfg(feature = "tls")]
-        if me.uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
-            return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
+        #[cfg(feature = "_tls-any")]
+        if let EndpointType::Uri(uri) = &me.uri {
+            if me.tls.is_none() && uri.scheme() == Some(&http::uri::Scheme::HTTPS) {
+                return me.tls_config(ClientTlsConfig::new().with_enabled_roots());
+            }
         }
-
         Ok(me)
+    }
+
+    fn new_uri(uri: Uri) -> Self {
+        Self {
+            uri: EndpointType::Uri(uri.clone()),
+            fallback_uri: uri,
+            origin: None,
+            user_agent: None,
+            concurrency_limit: None,
+            rate_limit: None,
+            timeout: None,
+            #[cfg(feature = "_tls-any")]
+            tls: None,
+            buffer_size: None,
+            init_stream_window_size: None,
+            init_connection_window_size: None,
+            tcp_keepalive: None,
+            tcp_keepalive_interval: None,
+            tcp_keepalive_retries: None,
+            tcp_nodelay: true,
+            http2_keep_alive_interval: None,
+            http2_keep_alive_timeout: None,
+            http2_keep_alive_while_idle: None,
+            http2_max_header_list_size: None,
+            connect_timeout: None,
+            http2_adaptive_window: None,
+            executor: SharedExec::tokio(),
+            local_address: None,
+        }
+    }
+
+    fn new_uds(uds_filepath: &str) -> Self {
+        Self {
+            uri: EndpointType::Uds(uds_filepath.to_string()),
+            fallback_uri: Uri::from_static("http://tonic"),
+            origin: None,
+            user_agent: None,
+            concurrency_limit: None,
+            rate_limit: None,
+            timeout: None,
+            #[cfg(feature = "_tls-any")]
+            tls: None,
+            buffer_size: None,
+            init_stream_window_size: None,
+            init_connection_window_size: None,
+            tcp_keepalive: None,
+            tcp_keepalive_interval: None,
+            tcp_keepalive_retries: None,
+            tcp_nodelay: true,
+            http2_keep_alive_interval: None,
+            http2_keep_alive_timeout: None,
+            http2_keep_alive_while_idle: None,
+            http2_max_header_list_size: None,
+            connect_timeout: None,
+            http2_adaptive_window: None,
+            executor: SharedExec::tokio(),
+            local_address: None,
+        }
     }
 
     /// Convert an `Endpoint` from a static string.
@@ -68,8 +140,16 @@ impl Endpoint {
     /// Endpoint::from_static("https://example.com");
     /// ```
     pub fn from_static(s: &'static str) -> Self {
-        let uri = Uri::from_static(s);
-        Self::from(uri)
+        if s.starts_with("unix:") {
+            let uds_filepath = s
+                .strip_prefix("unix://")
+                .or_else(|| s.strip_prefix("unix:"))
+                .expect("Invalid unix domain socket URI");
+            Self::new_uds(uds_filepath)
+        } else {
+            let uri = Uri::from_static(s);
+            Self::new_uri(uri)
+        }
     }
 
     /// Convert an `Endpoint` from shared bytes.
@@ -79,8 +159,19 @@ impl Endpoint {
     /// Endpoint::from_shared("https://example.com".to_string());
     /// ```
     pub fn from_shared(s: impl Into<Bytes>) -> Result<Self, Error> {
-        let uri = Uri::from_maybe_shared(s.into()).map_err(|e| Error::new_invalid_uri().with(e))?;
-        Ok(Self::from(uri))
+        let s = str::from_utf8(&s.into())
+            .map_err(|e| Error::new_invalid_uri().with(e))?
+            .to_string();
+        if s.starts_with("unix:") {
+            let uds_filepath = s
+                .strip_prefix("unix://")
+                .or_else(|| s.strip_prefix("unix:"))
+                .ok_or(Error::new_invalid_uri())?;
+            Ok(Self::new_uds(uds_filepath))
+        } else {
+            let uri = Uri::from_maybe_shared(s).map_err(|e| Error::new_invalid_uri().with(e))?;
+            Ok(Self::from(uri))
+        }
     }
 
     /// Set a custom user-agent header.
@@ -173,10 +264,34 @@ impl Endpoint {
     /// probes.
     ///
     /// Default is no keepalive (`None`)
-    ///
     pub fn tcp_keepalive(self, tcp_keepalive: Option<Duration>) -> Self {
         Endpoint {
             tcp_keepalive,
+            ..self
+        }
+    }
+
+    /// Set the duration between two successive TCP keepalive retransmissions,
+    /// if acknowledgement to the previous keepalive transmission is not received.
+    ///
+    /// This is only used if `tcp_keepalive` is not None.
+    ///
+    /// Defaults to None, which is the system default.
+    pub fn tcp_keepalive_interval(self, tcp_keepalive_interval: Option<Duration>) -> Self {
+        Endpoint {
+            tcp_keepalive_interval,
+            ..self
+        }
+    }
+
+    /// Set the number of retransmissions to be carried out before declaring that remote end is not available.
+    ///
+    /// This is only used if `tcp_keepalive` is not None.
+    ///
+    /// Defaults to None, which is the system default.
+    pub fn tcp_keepalive_retries(self, tcp_keepalive_retries: Option<u32>) -> Self {
+        Endpoint {
+            tcp_keepalive_retries,
             ..self
         }
     }
@@ -244,16 +359,19 @@ impl Endpoint {
     }
 
     /// Configures TLS for the endpoint.
-    #[cfg(feature = "tls")]
+    #[cfg(feature = "_tls-any")]
     pub fn tls_config(self, tls_config: ClientTlsConfig) -> Result<Self, Error> {
-        Ok(Endpoint {
-            tls: Some(
-                tls_config
-                    .into_tls_connector(&self.uri)
-                    .map_err(Error::from_source)?,
-            ),
-            ..self
-        })
+        match &self.uri {
+            EndpointType::Uri(uri) => Ok(Endpoint {
+                tls: Some(
+                    tls_config
+                        .into_tls_connector(uri)
+                        .map_err(Error::from_source)?,
+                ),
+                ..self
+            }),
+            EndpointType::Uds(_) => Err(Error::new(error::Kind::InvalidTlsConfigForUds)),
+        }
     }
 
     /// Set the value of `TCP_NODELAY` option for accepted connections. Enabled by default.
@@ -320,22 +438,45 @@ impl Endpoint {
     pub(crate) fn connector<C>(&self, c: C) -> service::Connector<C> {
         service::Connector::new(
             c,
-            #[cfg(feature = "tls")]
+            #[cfg(feature = "_tls-any")]
             self.tls.clone(),
         )
     }
 
-    /// Create a channel from this config.
-    pub async fn connect(&self) -> Result<Channel, Error> {
+    /// Set the local address.
+    ///
+    /// This sets the IP address the client will use. By default we let hyper select the IP address.
+    pub fn local_address(self, addr: Option<IpAddr>) -> Self {
+        Endpoint {
+            local_address: addr,
+            ..self
+        }
+    }
+
+    pub(crate) fn http_connector(&self) -> service::Connector<HttpConnector> {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
         http.set_keepalive(self.tcp_keepalive);
+        http.set_keepalive_interval(self.tcp_keepalive_interval);
+        http.set_keepalive_retries(self.tcp_keepalive_retries);
         http.set_connect_timeout(self.connect_timeout);
+        http.set_local_address(self.local_address);
+        self.connector(http)
+    }
 
-        let connector = self.connector(http);
+    pub(crate) fn uds_connector(&self, uds_filepath: &str) -> service::Connector<UdsConnector> {
+        self.connector(UdsConnector::new(uds_filepath))
+    }
 
-        Channel::connect(connector, self.clone()).await
+    /// Create a channel from this config.
+    pub async fn connect(&self) -> Result<Channel, Error> {
+        match &self.uri {
+            EndpointType::Uri(_) => Channel::connect(self.http_connector(), self.clone()).await,
+            EndpointType::Uds(uds_filepath) => {
+                Channel::connect(self.uds_connector(uds_filepath.as_str()), self.clone()).await
+            }
+        }
     }
 
     /// Create a channel from this config.
@@ -343,15 +484,12 @@ impl Endpoint {
     /// The channel returned by this method does not attempt to connect to the endpoint until first
     /// use.
     pub fn connect_lazy(&self) -> Channel {
-        let mut http = HttpConnector::new();
-        http.enforce_http(false);
-        http.set_nodelay(self.tcp_nodelay);
-        http.set_keepalive(self.tcp_keepalive);
-        http.set_connect_timeout(self.connect_timeout);
-
-        let connector = self.connector(http);
-
-        Channel::new(connector, self.clone())
+        match &self.uri {
+            EndpointType::Uri(_) => Channel::new(self.http_connector(), self.clone()),
+            EndpointType::Uds(uds_filepath) => {
+                Channel::new(self.uds_connector(uds_filepath.as_str()), self.clone())
+            }
+        }
     }
 
     /// Connect with a custom connector.
@@ -366,7 +504,7 @@ impl Endpoint {
         C: Service<Uri> + Send + 'static,
         C::Response: rt::Read + rt::Write + Send + Unpin,
         C::Future: Send,
-        crate::Error: From<C::Error> + Send,
+        crate::BoxError: From<C::Error> + Send,
     {
         let connector = self.connector(connector);
 
@@ -391,7 +529,7 @@ impl Endpoint {
         C: Service<Uri> + Send + 'static,
         C::Response: rt::Read + rt::Write + Send + Unpin,
         C::Future: Send,
-        crate::Error: From<C::Error> + Send,
+        crate::BoxError: From<C::Error> + Send,
     {
         let connector = self.connector(connector);
         if let Some(connect_timeout) = self.connect_timeout {
@@ -413,34 +551,45 @@ impl Endpoint {
     /// assert_eq!(endpoint.uri(), &Uri::from_static("https://example.com"));
     /// ```
     pub fn uri(&self) -> &Uri {
-        &self.uri
+        match &self.uri {
+            EndpointType::Uri(uri) => uri,
+            EndpointType::Uds(_) => &self.fallback_uri,
+        }
+    }
+
+    /// Get the value of `TCP_NODELAY` option for accepted connections.
+    pub fn get_tcp_nodelay(&self) -> bool {
+        self.tcp_nodelay
+    }
+
+    /// Get the connect timeout.
+    pub fn get_connect_timeout(&self) -> Option<Duration> {
+        self.connect_timeout
+    }
+
+    /// Get whether TCP keepalive messages are enabled on accepted connections.
+    ///
+    /// If `None` is specified, keepalive is disabled, otherwise the duration
+    /// specified will be the time to remain idle before sending TCP keepalive
+    /// probes.
+    pub fn get_tcp_keepalive(&self) -> Option<Duration> {
+        self.tcp_keepalive
+    }
+
+    /// Get whether TCP keepalive interval.
+    pub fn get_tcp_keepalive_interval(&self) -> Option<Duration> {
+        self.tcp_keepalive_interval
+    }
+
+    /// Get whether TCP keepalive retries.
+    pub fn get_tcp_keepalive_retries(&self) -> Option<u32> {
+        self.tcp_keepalive_retries
     }
 }
 
 impl From<Uri> for Endpoint {
     fn from(uri: Uri) -> Self {
-        Self {
-            uri,
-            origin: None,
-            user_agent: None,
-            concurrency_limit: None,
-            rate_limit: None,
-            timeout: None,
-            #[cfg(feature = "tls")]
-            tls: None,
-            buffer_size: None,
-            init_stream_window_size: None,
-            init_connection_window_size: None,
-            tcp_keepalive: None,
-            tcp_nodelay: true,
-            http2_keep_alive_interval: None,
-            http2_keep_alive_timeout: None,
-            http2_keep_alive_while_idle: None,
-            http2_max_header_list_size: None,
-            connect_timeout: None,
-            http2_adaptive_window: None,
-            executor: SharedExec::tokio(),
-        }
+        Self::new_uri(uri)
     }
 }
 

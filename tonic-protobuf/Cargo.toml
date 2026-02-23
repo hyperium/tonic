@@ -1,0 +1,18 @@
+[package]
+name = "tonic-protobuf"
+version = "0.14.0"
+edition = "2021"
+authors = ["gRPC Authors"]
+license = "MIT"
+publish = false
+
+[dependencies]
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
+bytes = "1"
+protobuf = { version = "4.33.0-release" }
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    "tonic::*",
+    "protobuf::codegen_traits::Message",
+]

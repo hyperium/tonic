@@ -6,11 +6,11 @@ use std::{
     task::{Context, Poll},
     time::Duration,
 };
-use tokio::sync::oneshot;
+use tokio::{net::TcpListener, sync::oneshot};
 use tonic::{
-    body::BoxBody,
+    body::Body,
     server::NamedService,
-    transport::{Endpoint, Server},
+    transport::{server::TcpIncoming, Endpoint, Server},
     Request, Response, Status,
 };
 use tower_service::Service;
@@ -39,17 +39,22 @@ async fn setting_extension_from_interceptor() {
 
     let (tx, rx) = oneshot::channel::<()>();
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1323".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1323")
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
         .connect()
         .await
         .unwrap();
@@ -83,17 +88,22 @@ async fn setting_extension_from_tower() {
 
     let (tx, rx) = oneshot::channel::<()>();
 
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let incoming = TcpIncoming::from(listener).with_nodelay(Some(true));
+
     let jh = tokio::spawn(async move {
         Server::builder()
             .add_service(svc)
-            .serve_with_shutdown("127.0.0.1:1324".parse().unwrap(), async { drop(rx.await) })
+            .serve_with_incoming_shutdown(incoming, async { drop(rx.await) })
             .await
             .unwrap();
     });
 
     tokio::time::sleep(Duration::from_millis(100)).await;
 
-    let channel = Endpoint::from_static("http://127.0.0.1:1324")
+    let channel = Endpoint::from_shared(format!("http://{addr}"))
+        .unwrap()
         .connect()
         .await
         .unwrap();
@@ -112,9 +122,9 @@ struct InterceptedService<S> {
     inner: S,
 }
 
-impl<S> Service<http::Request<BoxBody>> for InterceptedService<S>
+impl<S> Service<http::Request<Body>> for InterceptedService<S>
 where
-    S: Service<http::Request<BoxBody>, Response = http::Response<BoxBody>>
+    S: Service<http::Request<Body>, Response = http::Response<Body>>
         + NamedService
         + Clone
         + Send
@@ -129,7 +139,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, mut req: http::Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, mut req: http::Request<Body>) -> Self::Future {
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 

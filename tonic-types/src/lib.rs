@@ -25,7 +25,7 @@
 //!
 //! # Examples
 //!
-//! The examples bellow cover a basic use case of the [gRPC Richer Error Model].
+//! The examples below cover a basic use case of the [gRPC Richer Error Model].
 //! More complete server and client implementations are provided in the
 //! **Richer Error example**, located in the main repo [examples] directory.
 //!
@@ -140,17 +140,9 @@
 //! [error_details.proto]: https://github.com/googleapis/googleapis/blob/master/google/rpc/error_details.proto
 //! [Richer Error example]: https://github.com/hyperium/tonic/tree/master/examples/src/richer-error
 
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-types/0.12.3")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 
 mod generated {
@@ -158,9 +150,10 @@ mod generated {
     #![allow(rustdoc::invalid_html_tags)]
     #[rustfmt::skip]
     pub mod google_rpc;
+    #[rustfmt::skip]
+    pub mod types_fds;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/types.bin");
+    pub use types_fds::FILE_DESCRIPTOR_SET;
 
     #[cfg(test)]
     mod tests {

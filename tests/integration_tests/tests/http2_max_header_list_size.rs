@@ -34,10 +34,10 @@ async fn test_http_max_header_list_size_and_long_errors() {
     let addr = format!("http://{}", listener.local_addr().unwrap());
 
     let jh = tokio::spawn(async move {
-        let (nodelay, keepalive) = (true, Some(Duration::from_secs(1)));
-        let listener =
-            tonic::transport::server::TcpIncoming::from_listener(listener, nodelay, keepalive)
-                .unwrap();
+        let (nodelay, keepalive) = (Some(true), Some(Duration::from_secs(1)));
+        let listener = tonic::transport::server::TcpIncoming::from(listener)
+            .with_nodelay(nodelay)
+            .with_keepalive(keepalive);
         Server::builder()
             .http2_max_pending_accept_reset_streams(Some(0))
             .add_service(svc)

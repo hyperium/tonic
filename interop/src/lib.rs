@@ -1,12 +1,19 @@
 #![recursion_limit = "256"]
 
 pub mod client;
-pub mod server;
+pub mod client_prost;
+pub mod client_protobuf;
+pub mod server_prost;
+pub mod server_protobuf;
 
 pub mod pb {
     #![allow(dead_code)]
     #![allow(unused_imports)]
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
+}
+
+pub mod grpc_pb {
+    grpc::include_proto!("test");
 }
 
 use std::{default, fmt, iter};
@@ -18,14 +25,14 @@ pub fn trace_init() {
 pub fn client_payload(size: usize) -> pb::Payload {
     pb::Payload {
         r#type: default::Default::default(),
-        body: iter::repeat(0u8).take(size).collect(),
+        body: iter::repeat_n(0u8, size).collect(),
     }
 }
 
 pub fn server_payload(size: usize) -> pb::Payload {
     pb::Payload {
         r#type: default::Default::default(),
-        body: iter::repeat(0u8).take(size).collect(),
+        body: iter::repeat_n(0u8, size).collect(),
     }
 }
 
@@ -47,6 +54,38 @@ fn response_length(response: &pb::StreamingOutputCallResponse) -> i32 {
 
 fn response_lengths(responses: &[pb::StreamingOutputCallResponse]) -> Vec<i32> {
     responses.iter().map(&response_length).collect()
+}
+
+mod grpc_utils {
+    use super::grpc_pb;
+    use protobuf::proto;
+    use std::iter;
+
+    pub(crate) fn client_payload(size: usize) -> grpc_pb::Payload {
+        proto!(grpc_pb::Payload {
+            body: iter::repeat_n(0u8, size).collect::<Vec<_>>(),
+        })
+    }
+
+    impl grpc_pb::ResponseParameters {
+        pub(crate) fn with_size(size: i32) -> Self {
+            proto!(grpc_pb::ResponseParameters { size: size })
+        }
+    }
+
+    pub(crate) fn response_length(response: &grpc_pb::StreamingOutputCallResponse) -> i32 {
+        response.payload().body().len() as i32
+    }
+
+    pub(crate) fn response_lengths(responses: &[grpc_pb::StreamingOutputCallResponse]) -> Vec<i32> {
+        responses.iter().map(&response_length).collect()
+    }
+
+    pub(crate) fn server_payload(size: usize) -> grpc_pb::Payload {
+        proto!(grpc_pb::Payload {
+            body: iter::repeat_n(0u8, size).collect::<Vec<_>>(),
+        })
+    }
 }
 
 #[derive(Debug)]

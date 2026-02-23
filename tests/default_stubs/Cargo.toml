@@ -3,17 +3,15 @@ authors = ["Jordan Singh <me@jordansingh.com>"]
 edition = "2021"
 license = "MIT"
 name = "default_stubs"
-publish = false
-version = "0.1.0"
 
 [dependencies]
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
 tokio-stream = {version = "0.1", features = ["net"]}
-prost = "0.13"
 tonic = {path = "../../tonic"}
+tonic-prost = {path = "../../tonic-prost"}
+
+[dev-dependencies]
+tempfile = "3.20"
 
 [build-dependencies]
-tonic-build = {path = "../../tonic-build" }
-
-[package.metadata.cargo-machete]
-ignored = ["prost"]
+tonic-prost-build = {path = "../../tonic-prost-build" }

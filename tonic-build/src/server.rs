@@ -32,6 +32,7 @@ pub(crate) fn generate_internal<T: Service>(
     let server_service = quote::format_ident!("{}Server", service.name());
     let server_trait = quote::format_ident!("{}", service.name());
     let server_mod = quote::format_ident!("{}_server", naive_snake_case(service.name()));
+    let trait_attributes = attributes.for_trait(service.name());
     let generated_trait = generate_trait(
         service,
         emit_package,
@@ -41,6 +42,7 @@ pub(crate) fn generate_internal<T: Service>(
         disable_comments,
         use_arc_self,
         generate_default_stubs,
+        trait_attributes,
     );
     let package = if emit_package { service.package() } else { "" };
     // Transport based implementations
@@ -152,7 +154,7 @@ pub(crate) fn generate_internal<T: Service>(
                     B: Body + std::marker::Send + 'static,
                     B::Error: Into<StdError> + std::marker::Send + 'static,
             {
-                type Response = http::Response<tonic::body::BoxBody>;
+                type Response = http::Response<tonic::body::Body>;
                 type Error = std::convert::Infallible;
                 type Future = BoxFuture<Self::Response, Self::Error>;
 
@@ -165,7 +167,7 @@ pub(crate) fn generate_internal<T: Service>(
                         #methods
 
                         _ => Box::pin(async move {
-                            let mut response = http::Response::new(empty_body());
+                            let mut response = http::Response::new(tonic::body::Body::default());
                             let headers = response.headers_mut();
                             headers.insert(tonic::Status::GRPC_STATUS, (tonic::Code::Unimplemented as i32).into());
                             headers.insert(http::header::CONTENT_TYPE, tonic::metadata::GRPC_CONTENT_TYPE);
@@ -203,6 +205,7 @@ fn generate_trait<T: Service>(
     disable_comments: &HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    trait_attributes: Vec<syn::Attribute>,
 ) -> TokenStream {
     let methods = generate_trait_methods(
         service,
@@ -220,6 +223,7 @@ fn generate_trait<T: Service>(
 
     quote! {
         #trait_doc
+        #(#trait_attributes)*
         #[async_trait]
         pub trait #server_trait : std::marker::Send + std::marker::Sync + 'static {
             #methods

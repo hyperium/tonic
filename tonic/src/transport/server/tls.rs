@@ -1,4 +1,4 @@
-use std::fmt;
+use std::{fmt, time::Duration};
 
 use super::service::TlsAcceptor;
 use crate::transport::tls::{Certificate, Identity};
@@ -9,6 +9,9 @@ pub struct ServerTlsConfig {
     identity: Option<Identity>,
     client_ca_root: Option<Certificate>,
     client_auth_optional: bool,
+    ignore_client_order: bool,
+    use_key_log: bool,
+    timeout: Option<Duration>,
 }
 
 impl fmt::Debug for ServerTlsConfig {
@@ -20,11 +23,7 @@ impl fmt::Debug for ServerTlsConfig {
 impl ServerTlsConfig {
     /// Creates a new `ServerTlsConfig`.
     pub fn new() -> Self {
-        ServerTlsConfig {
-            identity: None,
-            client_ca_root: None,
-            client_auth_optional: false,
-        }
+        ServerTlsConfig::default()
     }
 
     /// Sets the [`Identity`] of the server.
@@ -56,11 +55,41 @@ impl ServerTlsConfig {
         }
     }
 
-    pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::Error> {
+    /// Sets whether the server's cipher preferences are followed instead of the client's.
+    ///
+    /// # Default
+    /// By default, this option is set to `false`.
+    pub fn ignore_client_order(self, ignore_client_order: bool) -> Self {
+        ServerTlsConfig {
+            ignore_client_order,
+            ..self
+        }
+    }
+
+    /// Use key log as specified by the `SSLKEYLOGFILE` environment variable.
+    pub fn use_key_log(self) -> Self {
+        ServerTlsConfig {
+            use_key_log: true,
+            ..self
+        }
+    }
+
+    /// Sets the timeout for the TLS handshake.
+    pub fn timeout(self, timeout: Duration) -> Self {
+        ServerTlsConfig {
+            timeout: Some(timeout),
+            ..self
+        }
+    }
+
+    pub(crate) fn tls_acceptor(&self) -> Result<TlsAcceptor, crate::BoxError> {
         TlsAcceptor::new(
-            self.identity.clone().unwrap(),
-            self.client_ca_root.clone(),
+            self.identity.as_ref().unwrap(),
+            self.client_ca_root.as_ref(),
             self.client_auth_optional,
+            self.ignore_client_order,
+            self.use_key_log,
+            self.timeout,
         )
     }
 }

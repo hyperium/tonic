@@ -1,6 +1,6 @@
 use super::*;
 use bytes::{Buf, Bytes};
-use http_body::{Body, Frame};
+use http_body::{Body as HttpBody, Frame};
 use http_body_util::BodyExt as _;
 use hyper_util::rt::TokioIo;
 use pin_project::pin_project;
@@ -13,7 +13,7 @@ use std::{
     task::{ready, Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
-use tonic::body::BoxBody;
+use tonic::body::Body;
 use tonic::codec::CompressionEncoding;
 use tonic::transport::{server::Connected, Channel};
 use tower_http::map_request_body::MapRequestBodyLayer;
@@ -42,9 +42,9 @@ pub struct CountBytesBody<B> {
     pub counter: Arc<AtomicUsize>,
 }
 
-impl<B> Body for CountBytesBody<B>
+impl<B> HttpBody for CountBytesBody<B>
 where
-    B: Body<Data = Bytes>,
+    B: HttpBody<Data = Bytes>,
 {
     type Data = B::Data;
     type Error = B::Error;
@@ -95,7 +95,7 @@ impl<T> ChannelBody<T> {
     }
 }
 
-impl<T> Body for ChannelBody<T>
+impl<T> HttpBody for ChannelBody<T>
 where
     T: Buf,
 {
@@ -114,8 +114,8 @@ where
 #[allow(dead_code)]
 pub fn measure_request_body_size_layer(
     bytes_sent_counter: Arc<AtomicUsize>,
-) -> MapRequestBodyLayer<impl Fn(BoxBody) -> BoxBody + Clone> {
-    MapRequestBodyLayer::new(move |mut body: BoxBody| {
+) -> MapRequestBodyLayer<impl Fn(Body) -> Body + Clone> {
+    MapRequestBodyLayer::new(move |mut body: Body| {
         let (tx, new_body) = ChannelBody::new();
 
         let bytes_sent_counter = bytes_sent_counter.clone();
@@ -128,7 +128,7 @@ pub fn measure_request_body_size_layer(
             }
         });
 
-        new_body.boxed_unsync()
+        Body::new(new_body)
     })
 }
 
@@ -157,12 +157,13 @@ impl AssertRightEncoding {
         Self { encoding }
     }
 
-    pub fn call<B: Body>(self, req: http::Request<B>) -> http::Request<B> {
+    pub fn call<B: HttpBody>(self, req: http::Request<B>) -> http::Request<B> {
         let expected = match self.encoding {
             CompressionEncoding::Gzip => "gzip",
             CompressionEncoding::Zstd => "zstd",
             CompressionEncoding::Lz4 => "lz4",
             CompressionEncoding::Snappy => "snappy",
+            CompressionEncoding::Deflate => "deflate",
             _ => panic!("unexpected encoding {:?}", self.encoding),
         };
         assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);

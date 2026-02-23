@@ -112,12 +112,13 @@ name = "helloworld-client"
 path = "src/client.rs"
 
 [dependencies]
-tonic = "0.12"
-prost = "0.13"
+tonic = "*"
+prost = "0.14"
+tonic-prost = "*"
 tokio = { version = "1.0", features = ["macros", "rt-multi-thread"] }
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-prost-build = "*"
 ```
 
 We include `tonic-build` as a useful way to incorporate the generation of our client and server gRPC code into the build process of our application. We will setup this build process now:
@@ -128,7 +129,7 @@ At the root of your project (not /src), create a `build.rs` file and add the fol
 
 ```rust
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_build::compile_protos("proto/helloworld.proto")?;
+    tonic_prost_build::compile_protos("proto/helloworld.proto")?;
     Ok(())
 }
 ```
@@ -239,7 +240,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 You should now be able to run your HelloWorld gRPC server using the command `cargo run --bin helloworld-server`. This uses the [[bin]] we defined earlier in our `Cargo.toml` to run specifically the server. 
 
-If you have a gRPC GUI client such as [Bloom RPC] you should be able to send requests to the server and get back greetings!
+If you have a gRPC GUI client such as [Postman] you should be able to send requests to the server and get back greetings!
 
 Or if you use [grpcurl] then you can simply try send requests like this:
 ```
@@ -252,7 +253,7 @@ And receiving responses like this:
 }
 ```
 
-[bloom rpc]: https://github.com/uw-labs/bloomrpc
+[postman]: https://www.postman.com/
 [grpcurl]: https://github.com/fullstorydev/grpcurl
 
 ## Writing our Client

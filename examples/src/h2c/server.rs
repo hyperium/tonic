@@ -36,7 +36,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr: SocketAddr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
-    println!("GreeterServer listening on {}", addr);
+    println!("GreeterServer listening on {addr}");
 
     let incoming = TcpListener::bind(addr).await?;
     let svc = Routes::new(GreeterServer::new(greeter)).prepare();
@@ -57,7 +57,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 });
             }
             Err(e) => {
-                eprintln!("Error accepting connection: {}", e);
+                eprintln!("Error accepting connection: {e}");
             }
         }
     }
@@ -69,7 +69,7 @@ mod h2c {
     use http::{Request, Response};
     use hyper::body::Incoming;
     use hyper_util::{rt::TokioExecutor, service::TowerToHyperService};
-    use tonic::body::{empty_body, BoxBody};
+    use tonic::body::Body;
     use tower::{Service, ServiceExt};
 
     #[derive(Clone)]
@@ -81,12 +81,11 @@ mod h2c {
 
     impl<S> Service<Request<Incoming>> for H2c<S>
     where
-        S: Service<Request<BoxBody>, Response = Response<BoxBody>> + Clone + Send + 'static,
-        S::Future: Send + 'static,
-        S::Error: Into<BoxError> + Sync + Send + 'static,
-        S::Response: Send + 'static,
+        S: Service<Request<Body>, Response = Response<Body>> + Clone + Send + 'static,
+        S::Future: Send,
+        S::Error: Into<BoxError> + 'static,
     {
-        type Response = hyper::Response<BoxBody>;
+        type Response = hyper::Response<Body>;
         type Error = hyper::Error;
         type Future =
             Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -99,11 +98,11 @@ mod h2c {
         }
 
         fn call(&mut self, req: hyper::Request<Incoming>) -> Self::Future {
-            let mut req = req.map(tonic::body::boxed);
+            let mut req = req.map(Body::new);
             let svc = self
                 .s
                 .clone()
-                .map_request(|req: Request<_>| req.map(tonic::body::boxed));
+                .map_request(|req: Request<_>| req.map(Body::new));
             Box::pin(async move {
                 tokio::spawn(async move {
                     let upgraded_io = hyper::upgrade::on(&mut req).await.unwrap();
@@ -114,7 +113,7 @@ mod h2c {
                         .unwrap();
                 });
 
-                let mut res = hyper::Response::new(empty_body());
+                let mut res = hyper::Response::new(Body::default());
                 *res.status_mut() = http::StatusCode::SWITCHING_PROTOCOLS;
                 res.headers_mut().insert(
                     hyper::header::UPGRADE,

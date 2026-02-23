@@ -28,10 +28,10 @@ impl<S> GrpcTimeout<S> {
 impl<S, ReqBody> Service<Request<ReqBody>> for GrpcTimeout<S>
 where
     S: Service<Request<ReqBody>>,
-    S::Error: Into<crate::Error>,
+    S::Error: Into<crate::BoxError>,
 {
     type Response = S::Response;
-    type Error = crate::Error;
+    type Error = crate::BoxError;
     type Future = ResponseFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -73,15 +73,15 @@ pub(crate) struct ResponseFuture<F> {
 impl<F, Res, E> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<Res, E>>,
-    E: Into<crate::Error>,
+    E: Into<crate::BoxError>,
 {
-    type Output = Result<Res, crate::Error>;
+    type Output = Result<Res, crate::BoxError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.project();
 
-        if let Poll::Ready(result) = this.inner.poll(cx) {
-            return Poll::Ready(result.map_err(Into::into));
+        if let ready @ Poll::Ready(_) = this.inner.poll(cx) {
+            return ready.map_err(Into::into);
         }
 
         if let Some(sleep) = this.sleep.as_pin_mut() {
@@ -103,47 +103,46 @@ const SECONDS_IN_MINUTE: u64 = 60;
 fn try_parse_grpc_timeout(
     headers: &HeaderMap<HeaderValue>,
 ) -> Result<Option<Duration>, &HeaderValue> {
-    match headers.get(GRPC_TIMEOUT_HEADER) {
-        Some(val) => {
-            let (timeout_value, timeout_unit) = val
-                .to_str()
-                .map_err(|_| val)
-                .and_then(|s| if s.is_empty() { Err(val) } else { Ok(s) })?
-                // `HeaderValue::to_str` only returns `Ok` if the header contains ASCII so this
-                // `split_at` will never panic from trying to split in the middle of a character.
-                // See https://docs.rs/http/0.2.4/http/header/struct.HeaderValue.html#method.to_str
-                //
-                // `len - 1` also wont panic since we just checked `s.is_empty`.
-                .split_at(val.len() - 1);
+    let Some(val) = headers.get(GRPC_TIMEOUT_HEADER) else {
+        return Ok(None);
+    };
 
-            // gRPC spec specifies `TimeoutValue` will be at most 8 digits
-            // Caping this at 8 digits also prevents integer overflow from ever occurring
-            if timeout_value.len() > 8 {
-                return Err(val);
-            }
+    let (timeout_value, timeout_unit) = val
+        .to_str()
+        .map_err(|_| val)
+        .and_then(|s| if s.is_empty() { Err(val) } else { Ok(s) })?
+        // `HeaderValue::to_str` only returns `Ok` if the header contains ASCII so this
+        // `split_at` will never panic from trying to split in the middle of a character.
+        // See https://docs.rs/http/1/http/header/struct.HeaderValue.html#method.to_str
+        //
+        // `len - 1` also wont panic since we just checked `s.is_empty`.
+        .split_at(val.len() - 1);
 
-            let timeout_value: u64 = timeout_value.parse().map_err(|_| val)?;
-
-            let duration = match timeout_unit {
-                // Hours
-                "H" => Duration::from_secs(timeout_value * SECONDS_IN_HOUR),
-                // Minutes
-                "M" => Duration::from_secs(timeout_value * SECONDS_IN_MINUTE),
-                // Seconds
-                "S" => Duration::from_secs(timeout_value),
-                // Milliseconds
-                "m" => Duration::from_millis(timeout_value),
-                // Microseconds
-                "u" => Duration::from_micros(timeout_value),
-                // Nanoseconds
-                "n" => Duration::from_nanos(timeout_value),
-                _ => return Err(val),
-            };
-
-            Ok(Some(duration))
-        }
-        None => Ok(None),
+    // gRPC spec specifies `TimeoutValue` will be at most 8 digits
+    // Caping this at 8 digits also prevents integer overflow from ever occurring
+    if timeout_value.len() > 8 {
+        return Err(val);
     }
+
+    let timeout_value: u64 = timeout_value.parse().map_err(|_| val)?;
+
+    let duration = match timeout_unit {
+        // Hours
+        "H" => Duration::from_secs(timeout_value * SECONDS_IN_HOUR),
+        // Minutes
+        "M" => Duration::from_secs(timeout_value * SECONDS_IN_MINUTE),
+        // Seconds
+        "S" => Duration::from_secs(timeout_value),
+        // Milliseconds
+        "m" => Duration::from_millis(timeout_value),
+        // Microseconds
+        "u" => Duration::from_micros(timeout_value),
+        // Nanoseconds
+        "n" => Duration::from_nanos(timeout_value),
+        _ => return Err(val),
+    };
+
+    Ok(Some(duration))
 }
 
 #[cfg(test)]

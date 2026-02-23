@@ -2,12 +2,7 @@
 //!
 //! See [`Interceptor`] for more details.
 
-use crate::{
-    body::{boxed, BoxBody},
-    request::SanitizeHeaders,
-    Status,
-};
-use bytes::Bytes;
+use crate::{request::SanitizeHeaders, Status};
 use pin_project::pin_project;
 use std::{
     fmt,
@@ -57,33 +52,31 @@ where
     }
 }
 
-/// Create a new interceptor layer.
-///
-/// See [`Interceptor`] for more details.
-pub fn interceptor<F>(f: F) -> InterceptorLayer<F>
-where
-    F: Interceptor,
-{
-    InterceptorLayer { f }
-}
-
 /// A gRPC interceptor that can be used as a [`Layer`],
-/// created by calling [`interceptor`].
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Debug, Clone, Copy)]
-pub struct InterceptorLayer<F> {
-    f: F,
+pub struct InterceptorLayer<I> {
+    interceptor: I,
 }
 
-impl<S, F> Layer<S> for InterceptorLayer<F>
+impl<I> InterceptorLayer<I> {
+    /// Create a new interceptor layer.
+    ///
+    /// See [`Interceptor`] for more details.
+    pub fn new(interceptor: I) -> Self {
+        Self { interceptor }
+    }
+}
+
+impl<S, I> Layer<S> for InterceptorLayer<I>
 where
-    F: Interceptor + Clone,
+    I: Clone,
 {
-    type Service = InterceptedService<S, F>;
+    type Service = InterceptedService<S, I>;
 
     fn layer(&self, service: S) -> Self::Service {
-        InterceptedService::new(service, self.f.clone())
+        InterceptedService::new(service, self.interceptor.clone())
     }
 }
 
@@ -91,44 +84,40 @@ where
 ///
 /// See [`Interceptor`] for more details.
 #[derive(Clone, Copy)]
-pub struct InterceptedService<S, F> {
+pub struct InterceptedService<S, I> {
     inner: S,
-    f: F,
+    interceptor: I,
 }
 
-impl<S, F> InterceptedService<S, F> {
+impl<S, I> InterceptedService<S, I> {
     /// Create a new `InterceptedService` that wraps `S` and intercepts each request with the
     /// function `F`.
-    pub fn new(service: S, f: F) -> Self
-    where
-        F: Interceptor,
-    {
-        Self { inner: service, f }
+    pub fn new(service: S, interceptor: I) -> Self {
+        Self {
+            inner: service,
+            interceptor,
+        }
     }
 }
 
-impl<S, F> fmt::Debug for InterceptedService<S, F>
+impl<S, I> fmt::Debug for InterceptedService<S, I>
 where
     S: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("InterceptedService")
             .field("inner", &self.inner)
-            .field("f", &format_args!("{}", std::any::type_name::<F>()))
+            .field("f", &format_args!("{}", std::any::type_name::<I>()))
             .finish()
     }
 }
 
-impl<S, F, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, F>
+impl<S, I, ReqBody, ResBody> Service<http::Request<ReqBody>> for InterceptedService<S, I>
 where
-    ResBody: Default + http_body::Body<Data = Bytes> + Send + 'static,
-    F: Interceptor,
     S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>>,
-    S::Error: Into<crate::Error>,
-    ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
-    ResBody::Error: Into<crate::Error>,
+    I: Interceptor,
 {
-    type Response = http::Response<BoxBody>;
+    type Response = http::Response<ResponseBody<ResBody>>;
     type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
@@ -150,7 +139,7 @@ where
         let (metadata, extensions, msg) = req.into_parts();
 
         match self
-            .f
+            .interceptor
             .call(crate::Request::from_parts(metadata, extensions, ()))
         {
             Ok(req) => {
@@ -165,7 +154,7 @@ where
 }
 
 // required to use `InterceptedService` with `Router`
-impl<S, F> crate::server::NamedService for InterceptedService<S, F>
+impl<S, I> crate::server::NamedService for InterceptedService<S, I>
 where
     S: crate::server::NamedService,
 {
@@ -204,26 +193,75 @@ enum Kind<F> {
 impl<F, E, B> Future for ResponseFuture<F>
 where
     F: Future<Output = Result<http::Response<B>, E>>,
-    E: Into<crate::Error>,
-    B: Default + http_body::Body<Data = Bytes> + Send + 'static,
-    B::Error: Into<crate::Error>,
 {
-    type Output = Result<http::Response<BoxBody>, E>;
+    type Output = Result<http::Response<ResponseBody<B>>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         match self.project().kind.project() {
-            KindProj::Future(future) => future
-                .poll(cx)
-                .map(|result| result.map(|res| res.map(boxed))),
+            KindProj::Future(future) => future.poll(cx).map_ok(|res| res.map(ResponseBody::wrap)),
             KindProj::Status(status) => {
-                let response = status
-                    .take()
-                    .unwrap()
-                    .into_http()
-                    .map(|_| B::default())
-                    .map(boxed);
+                let (parts, ()) = status.take().unwrap().into_http::<()>().into_parts();
+                let response = http::Response::from_parts(parts, ResponseBody::<B>::empty());
                 Poll::Ready(Ok(response))
             }
+        }
+    }
+}
+
+/// Response body for [`InterceptedService`].
+#[pin_project]
+#[derive(Debug)]
+pub struct ResponseBody<B> {
+    #[pin]
+    kind: ResponseBodyKind<B>,
+}
+
+#[pin_project(project = ResponseBodyKindProj)]
+#[derive(Debug)]
+enum ResponseBodyKind<B> {
+    Empty,
+    Wrap(#[pin] B),
+}
+
+impl<B> ResponseBody<B> {
+    fn new(kind: ResponseBodyKind<B>) -> Self {
+        Self { kind }
+    }
+
+    fn empty() -> Self {
+        Self::new(ResponseBodyKind::Empty)
+    }
+
+    fn wrap(body: B) -> Self {
+        Self::new(ResponseBodyKind::Wrap(body))
+    }
+}
+
+impl<B: http_body::Body> http_body::Body for ResponseBody<B> {
+    type Data = B::Data;
+    type Error = B::Error;
+
+    fn poll_frame(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
+        match self.project().kind.project() {
+            ResponseBodyKindProj::Empty => Poll::Ready(None),
+            ResponseBodyKindProj::Wrap(body) => body.poll_frame(cx),
+        }
+    }
+
+    fn size_hint(&self) -> http_body::SizeHint {
+        match &self.kind {
+            ResponseBodyKind::Empty => http_body::SizeHint::with_exact(0),
+            ResponseBodyKind::Wrap(body) => body.size_hint(),
+        }
+    }
+
+    fn is_end_stream(&self) -> bool {
+        match &self.kind {
+            ResponseBodyKind::Empty => true,
+            ResponseBodyKind::Wrap(body) => body.is_end_stream(),
         }
     }
 }
@@ -231,28 +269,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use http_body::Frame;
-    use http_body_util::Empty;
     use tower::ServiceExt;
-
-    #[derive(Debug, Default)]
-    struct TestBody;
-
-    impl http_body::Body for TestBody {
-        type Data = Bytes;
-        type Error = Status;
-
-        fn poll_frame(
-            self: Pin<&mut Self>,
-            _cx: &mut Context<'_>,
-        ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
-            Poll::Ready(None)
-        }
-    }
 
     #[tokio::test]
     async fn doesnt_remove_headers_from_requests() {
-        let svc = tower::service_fn(|request: http::Request<TestBody>| async move {
+        let svc = tower::service_fn(|request: http::Request<()>| async move {
             assert_eq!(
                 request
                     .headers()
@@ -261,7 +282,7 @@ mod tests {
                 "test-tonic"
             );
 
-            Ok::<_, Status>(http::Response::new(TestBody))
+            Ok::<_, Status>(http::Response::new(()))
         });
 
         let svc = InterceptedService::new(svc, |request: crate::Request<()>| {
@@ -278,7 +299,7 @@ mod tests {
 
         let request = http::Request::builder()
             .header("user-agent", "test-tonic")
-            .body(TestBody)
+            .body(())
             .unwrap();
 
         svc.oneshot(request).await.unwrap();
@@ -287,17 +308,17 @@ mod tests {
     #[tokio::test]
     async fn handles_intercepted_status_as_response() {
         let message = "Blocked by the interceptor";
-        let expected = Status::permission_denied(message).into_http();
+        let expected = Status::permission_denied(message).into_http::<()>();
 
-        let svc = tower::service_fn(|_: http::Request<TestBody>| async {
-            Ok::<_, Status>(http::Response::new(TestBody))
+        let svc = tower::service_fn(|_: http::Request<()>| async {
+            Ok::<_, Status>(http::Response::new(()))
         });
 
         let svc = InterceptedService::new(svc, |_: crate::Request<()>| {
             Err(Status::permission_denied(message))
         });
 
-        let request = http::Request::builder().body(TestBody).unwrap();
+        let request = http::Request::builder().body(()).unwrap();
         let response = svc.oneshot(request).await.unwrap();
 
         assert_eq!(expected.status(), response.status());
@@ -307,17 +328,17 @@ mod tests {
 
     #[tokio::test]
     async fn doesnt_change_http_method() {
-        let svc = tower::service_fn(|request: http::Request<Empty<()>>| async move {
+        let svc = tower::service_fn(|request: http::Request<()>| async move {
             assert_eq!(request.method(), http::Method::OPTIONS);
 
-            Ok::<_, hyper::Error>(hyper::Response::new(Empty::new()))
+            Ok::<_, hyper::Error>(hyper::Response::new(()))
         });
 
         let svc = InterceptedService::new(svc, Ok);
 
         let request = http::Request::builder()
             .method(http::Method::OPTIONS)
-            .body(Empty::new())
+            .body(())
             .unwrap();
 
         svc.oneshot(request).await.unwrap();

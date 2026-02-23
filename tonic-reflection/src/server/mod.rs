@@ -11,8 +11,6 @@ use tonic::Status;
 
 /// v1 interface for the gRPC Reflection Service server.
 pub mod v1;
-/// Deprecated; access these via `v1` instead.
-pub use v1::{ServerReflection, ServerReflectionServer}; // For backwards compatibility
 /// v1alpha interface for the gRPC Reflection Service server.
 pub mod v1alpha;
 
@@ -73,12 +71,6 @@ impl<'b> Builder<'b> {
         self.use_all_service_names = false;
         self.service_names.push(name.into());
         self
-    }
-
-    /// Build a v1 gRPC Reflection Service to be served via Tonic.
-    #[deprecated(since = "0.12.2", note = "use `build_v1()` instead")]
-    pub fn build(self) -> Result<v1::ServerReflectionServer<impl v1::ServerReflection>, Error> {
-        self.build_v1()
     }
 
     /// Build a v1 gRPC Reflection Service to be served via Tonic.
@@ -259,7 +251,7 @@ impl ReflectionServiceState {
 
     fn symbol_by_name(&self, symbol: &str) -> Result<Vec<u8>, Status> {
         match self.symbols.get(symbol) {
-            None => Err(Status::not_found(format!("symbol '{}' not found", symbol))),
+            None => Err(Status::not_found(format!("symbol '{symbol}' not found"))),
             Some(fd) => {
                 let mut encoded_fd = Vec::new();
                 if fd.clone().encode(&mut encoded_fd).is_err() {
@@ -273,7 +265,7 @@ impl ReflectionServiceState {
 
     fn file_by_filename(&self, filename: &str) -> Result<Vec<u8>, Status> {
         match self.files.get(filename) {
-            None => Err(Status::not_found(format!("file '{}' not found", filename))),
+            None => Err(Status::not_found(format!("file '{filename}' not found"))),
             Some(fd) => {
                 let mut encoded_fd = Vec::new();
                 if fd.clone().encode(&mut encoded_fd).is_err() {
@@ -293,14 +285,13 @@ fn extract_name(
 ) -> Result<String, Error> {
     match maybe_name {
         None => Err(Error::InvalidFileDescriptorSet(format!(
-            "missing {} name",
-            name_type
+            "missing {name_type} name"
         ))),
         Some(name) => {
             if prefix.is_empty() {
                 Ok(name.to_string())
             } else {
-                Ok(format!("{}.{}", prefix, name))
+                Ok(format!("{prefix}.{name}"))
             }
         }
     }
@@ -328,7 +319,7 @@ impl Display for Error {
         match self {
             Error::DecodeError(_) => f.write_str("error decoding FileDescriptorSet from buffer"),
             Error::InvalidFileDescriptorSet(s) => {
-                write!(f, "invalid FileDescriptorSet - {}", s)
+                write!(f, "invalid FileDescriptorSet - {s}")
             }
         }
     }

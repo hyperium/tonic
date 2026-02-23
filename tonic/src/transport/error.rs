@@ -19,6 +19,8 @@ pub(crate) enum Kind {
     InvalidUri,
     #[cfg(feature = "channel")]
     InvalidUserAgent,
+    #[cfg(all(feature = "_tls-any", feature = "channel"))]
+    InvalidTlsConfigForUds,
 }
 
 impl Error {
@@ -33,7 +35,7 @@ impl Error {
         self
     }
 
-    pub(crate) fn from_source(source: impl Into<crate::Error>) -> Self {
+    pub(crate) fn from_source(source: impl Into<crate::BoxError>) -> Self {
         Error::new(Kind::Transport).with(source)
     }
 
@@ -54,6 +56,8 @@ impl Error {
             Kind::InvalidUri => "invalid URI",
             #[cfg(feature = "channel")]
             Kind::InvalidUserAgent => "user agent is not a valid header value",
+            #[cfg(all(feature = "_tls-any", feature = "channel"))]
+            Kind::InvalidTlsConfigForUds => "cannot apply TLS config for unix domain socket",
         }
     }
 }

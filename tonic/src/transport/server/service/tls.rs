@@ -1,6 +1,7 @@
-use std::{fmt, io::Cursor, sync::Arc};
+use std::{fmt, sync::Arc, time::Duration};
 
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::time;
 use tokio_rustls::{
     rustls::{server::WebPkiClientVerifier, RootCertStore, ServerConfig},
     server::TlsStream,
@@ -8,28 +9,34 @@ use tokio_rustls::{
 };
 
 use crate::transport::{
-    service::tls::{add_certs_from_pem, load_identity, ALPN_H2},
+    service::tls::{
+        convert_certificate_to_pki_types, convert_identity_to_pki_types, TlsError, ALPN_H2,
+    },
     Certificate, Identity,
 };
 
 #[derive(Clone)]
 pub(crate) struct TlsAcceptor {
     inner: Arc<ServerConfig>,
+    timeout: Option<Duration>,
 }
 
 impl TlsAcceptor {
     pub(crate) fn new(
-        identity: Identity,
-        client_ca_root: Option<Certificate>,
+        identity: &Identity,
+        client_ca_root: Option<&Certificate>,
         client_auth_optional: bool,
-    ) -> Result<Self, crate::Error> {
+        ignore_client_order: bool,
+        use_key_log: bool,
+        timeout: Option<Duration>,
+    ) -> Result<Self, crate::BoxError> {
         let builder = ServerConfig::builder();
 
         let builder = match client_ca_root {
             None => builder.with_no_client_auth(),
             Some(cert) => {
                 let mut roots = RootCertStore::empty();
-                add_certs_from_pem(&mut Cursor::new(cert), &mut roots)?;
+                roots.add_parsable_certificates(convert_certificate_to_pki_types(cert)?);
                 let verifier = if client_auth_optional {
                     WebPkiClientVerifier::builder(roots.into()).allow_unauthenticated()
                 } else {
@@ -40,21 +47,34 @@ impl TlsAcceptor {
             }
         };
 
-        let (cert, key) = load_identity(identity)?;
+        let (cert, key) = convert_identity_to_pki_types(identity)?;
         let mut config = builder.with_single_cert(cert, key)?;
+        config.ignore_client_order = ignore_client_order;
+
+        if use_key_log {
+            config.key_log = Arc::new(tokio_rustls::rustls::KeyLogFile::new());
+        }
 
         config.alpn_protocols.push(ALPN_H2.into());
         Ok(Self {
             inner: Arc::new(config),
+            timeout,
         })
     }
 
-    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<TlsStream<IO>, crate::Error>
+    pub(crate) async fn accept<IO>(&self, io: IO) -> Result<TlsStream<IO>, crate::BoxError>
     where
         IO: AsyncRead + AsyncWrite + Unpin,
     {
         let acceptor = RustlsAcceptor::from(self.inner.clone());
-        acceptor.accept(io).await.map_err(Into::into)
+        let accept_fut = acceptor.accept(io);
+        match self.timeout {
+            Some(timeout) => time::timeout(timeout, accept_fut)
+                .await
+                .map_err(|_| TlsError::HandshakeTimeout)?,
+            None => accept_fut.await,
+        }
+        .map_err(Into::into)
     }
 }
 

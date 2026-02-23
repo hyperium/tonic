@@ -1,3 +1,8 @@
+//! Generic code generation for gRPC services.
+//!
+//! This module provides the generic infrastructure for generating
+//! client and server code from service definitions.
+
 use std::collections::HashSet;
 
 use proc_macro2::TokenStream;
@@ -46,7 +51,7 @@ impl CodeGenBuilder {
         self
     }
 
-    /// Enable compiling well knonw types, this will force codegen to not
+    /// Enable compiling well known types, this will force codegen to not
     /// use the well known types from `prost-types`.
     pub fn compile_well_known_types(&mut self, enable: bool) -> &mut Self {
         self.compile_well_known_types = enable;

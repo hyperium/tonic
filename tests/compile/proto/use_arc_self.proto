@@ -1,0 +1,12 @@
+syntax = "proto3";
+
+package use_arc_self;
+
+service Test {
+  rpc TestRequest(SomeData) returns (SomeData);
+}
+
+message SomeData {
+  // include a bunch of data so there actually is something to compress
+  bytes data = 1;
+}

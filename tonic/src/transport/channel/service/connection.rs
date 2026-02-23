@@ -1,6 +1,6 @@
 use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
 use crate::{
-    body::{boxed, BoxBody},
+    body::Body,
     transport::{channel::BoxFuture, service::GrpcTimeout, Endpoint},
 };
 use http::{Request, Response, Uri};
@@ -21,14 +21,14 @@ use tower::{
 use tower_service::Service;
 
 pub(crate) struct Connection {
-    inner: BoxService<Request<BoxBody>, Response<BoxBody>, crate::Error>,
+    inner: BoxService<Request<Body>, Response<Body>, crate::BoxError>,
 }
 
 impl Connection {
     fn new<C>(connector: C, endpoint: Endpoint, is_lazy: bool) -> Self
     where
         C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::Error> + Send,
+        C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
@@ -57,7 +57,7 @@ impl Connection {
 
         let stack = ServiceBuilder::new()
             .layer_fn(|s| {
-                let origin = endpoint.origin.as_ref().unwrap_or(&endpoint.uri).clone();
+                let origin = endpoint.origin.as_ref().unwrap_or(endpoint.uri()).clone();
 
                 AddOrigin::new(s, origin)
             })
@@ -70,17 +70,20 @@ impl Connection {
         let make_service =
             MakeSendRequestService::new(connector, endpoint.executor.clone(), settings);
 
-        let conn = Reconnect::new(make_service, endpoint.uri.clone(), is_lazy);
+        let conn = Reconnect::new(make_service, endpoint.uri().clone(), is_lazy);
 
         Self {
             inner: BoxService::new(stack.layer(conn)),
         }
     }
 
-    pub(crate) async fn connect<C>(connector: C, endpoint: Endpoint) -> Result<Self, crate::Error>
+    pub(crate) async fn connect<C>(
+        connector: C,
+        endpoint: Endpoint,
+    ) -> Result<Self, crate::BoxError>
     where
         C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::Error> + Send,
+        C::Error: Into<crate::BoxError> + Send,
         C::Future: Unpin + Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
@@ -90,7 +93,7 @@ impl Connection {
     pub(crate) fn lazy<C>(connector: C, endpoint: Endpoint) -> Self
     where
         C: Service<Uri> + Send + 'static,
-        C::Error: Into<crate::Error> + Send,
+        C::Error: Into<crate::BoxError> + Send,
         C::Future: Send,
         C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
@@ -98,16 +101,16 @@ impl Connection {
     }
 }
 
-impl Service<Request<BoxBody>> for Connection {
-    type Response = Response<BoxBody>;
-    type Error = crate::Error;
+impl Service<Request<Body>> for Connection {
+    type Response = Response<Body>;
+    type Error = crate::BoxError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         Service::poll_ready(&mut self.inner, cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
         self.inner.call(req)
     }
 }
@@ -127,28 +130,28 @@ impl fmt::Debug for Connection {
 }
 
 struct SendRequest {
-    inner: hyper::client::conn::http2::SendRequest<BoxBody>,
+    inner: hyper::client::conn::http2::SendRequest<Body>,
 }
 
-impl From<hyper::client::conn::http2::SendRequest<BoxBody>> for SendRequest {
-    fn from(inner: hyper::client::conn::http2::SendRequest<BoxBody>) -> Self {
+impl From<hyper::client::conn::http2::SendRequest<Body>> for SendRequest {
+    fn from(inner: hyper::client::conn::http2::SendRequest<Body>) -> Self {
         Self { inner }
     }
 }
 
-impl tower::Service<Request<BoxBody>> for SendRequest {
-    type Response = Response<BoxBody>;
-    type Error = crate::Error;
+impl tower::Service<Request<Body>> for SendRequest {
+    type Response = Response<Body>;
+    type Error = crate::BoxError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx).map_err(Into::into)
     }
 
-    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
         let fut = self.inner.send_request(req);
 
-        Box::pin(async move { fut.await.map_err(Into::into).map(|res| res.map(boxed)) })
+        Box::pin(async move { fut.await.map_err(Into::into).map(|res| res.map(Body::new)) })
     }
 }
 
@@ -171,12 +174,12 @@ impl<C> MakeSendRequestService<C> {
 impl<C> tower::Service<Uri> for MakeSendRequestService<C>
 where
     C: Service<Uri> + Send + 'static,
-    C::Error: Into<crate::Error> + Send,
+    C::Error: Into<crate::BoxError> + Send,
     C::Future: Send,
     C::Response: rt::Read + rt::Write + Unpin + Send,
 {
     type Response = SendRequest;
-    type Error = crate::Error;
+    type Error = crate::BoxError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {

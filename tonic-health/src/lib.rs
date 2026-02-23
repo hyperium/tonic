@@ -6,20 +6,12 @@
 //!
 //! [here]: https://github.com/hyperium/tonic/blob/master/examples/src/health/server.rs
 
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-health/0.12.3")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use std::fmt::{Display, Formatter};
 
@@ -28,9 +20,10 @@ mod generated {
     #![allow(missing_docs)]
     #[rustfmt::skip]
     pub mod grpc_health_v1;
+    #[rustfmt::skip]
+    pub mod grpc_health_v1_fds;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET: &[u8] = include_bytes!("generated/grpc_health_v1.bin");
+    pub use grpc_health_v1_fds::FILE_DESCRIPTOR_SET;
 
     #[cfg(test)]
     mod tests {

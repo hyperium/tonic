@@ -21,7 +21,6 @@
 //! # #[cfg(feature = "rustls")]
 //! # use tonic::transport::{Channel, Certificate, ClientTlsConfig};
 //! # use std::time::Duration;
-//! # use tonic::body::BoxBody;
 //! # use tonic::client::GrpcService;;
 //! # use http::Request;
 //! # #[cfg(feature = "rustls")]
@@ -49,20 +48,20 @@
 //! # use std::convert::Infallible;
 //! # #[cfg(feature = "rustls")]
 //! # use tonic::transport::{Server, Identity, ServerTlsConfig};
-//! # use tonic::body::BoxBody;
+//! # use tonic::body::Body;
 //! # use tower::Service;
 //! # #[cfg(feature = "rustls")]
 //! # async fn do_thing() -> Result<(), Box<dyn std::error::Error>> {
 //! # #[derive(Clone)]
 //! # pub struct Svc;
-//! # impl Service<hyper::Request<BoxBody>> for Svc {
-//! #   type Response = hyper::Response<BoxBody>;
+//! # impl Service<hyper::Request<Body>> for Svc {
+//! #   type Response = hyper::Response<Body>;
 //! #   type Error = Infallible;
 //! #   type Future = std::future::Ready<Result<Self::Response, Self::Error>>;
 //! #   fn poll_ready(&mut self, _cx: &mut std::task::Context<'_>) -> std::task::Poll<Result<(), Self::Error>> {
 //! #       Ok(()).into()
 //! #  }
-//! #   fn call(&mut self, _req: hyper::Request<BoxBody>) -> Self::Future {
+//! #   fn call(&mut self, _req: hyper::Request<Body>) -> Self::Future {
 //! #       unimplemented!()
 //! #   }
 //! # }
@@ -96,7 +95,7 @@ pub mod server;
 
 mod error;
 mod service;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 mod tls;
 
 #[doc(inline)]
@@ -106,18 +105,16 @@ pub use self::error::Error;
 #[doc(inline)]
 #[cfg(feature = "server")]
 pub use self::server::Server;
-/// Deprecated. Please use [`crate::status::TimeoutExpired`] instead.
-pub use crate::status::TimeoutExpired;
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 pub use self::tls::Certificate;
 pub use hyper::{body::Body, Uri};
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
 
-#[cfg(all(feature = "channel", feature = "tls"))]
+#[cfg(all(feature = "channel", feature = "_tls-any"))]
 pub use self::channel::ClientTlsConfig;
-#[cfg(all(feature = "server", feature = "tls"))]
+#[cfg(all(feature = "server", feature = "_tls-any"))]
 pub use self::server::ServerTlsConfig;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 pub use self::tls::Identity;

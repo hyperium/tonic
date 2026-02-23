@@ -1,9 +1,8 @@
 use std::{
     pin::Pin,
     task::{Context, Poll},
-    time::Duration,
 };
-use tonic::{body::BoxBody, transport::Server, Request, Response, Status};
+use tonic::{transport::Server, Request, Response, Status};
 use tower::{Layer, Service};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
@@ -36,18 +35,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let greeter = MyGreeter::default();
 
-    println!("GreeterServer listening on {}", addr);
+    println!("GreeterServer listening on {addr}");
 
     let svc = GreeterServer::new(greeter);
 
     // The stack of middleware that our service will be wrapped in
     let layer = tower::ServiceBuilder::new()
-        // Apply middleware from tower
-        .timeout(Duration::from_secs(30))
         // Apply our own middleware
         .layer(MyMiddlewareLayer::default())
         // Interceptors can be also be applied as middleware
-        .layer(tonic::service::interceptor(intercept))
+        .layer(tonic::service::InterceptorLayer::new(intercept))
         .into_inner();
 
     Server::builder()
@@ -83,13 +80,11 @@ struct MyMiddleware<S> {
 
 type BoxFuture<'a, T> = Pin<Box<dyn std::future::Future<Output = T> + Send + 'a>>;
 
-impl<S> Service<hyper::Request<BoxBody>> for MyMiddleware<S>
+impl<S, ReqBody, ResBody> Service<http::Request<ReqBody>> for MyMiddleware<S>
 where
-    S: Service<hyper::Request<BoxBody>, Response = hyper::Response<BoxBody>>
-        + Clone
-        + Send
-        + 'static,
+    S: Service<http::Request<ReqBody>, Response = http::Response<ResBody>> + Clone + Send + 'static,
     S::Future: Send + 'static,
+    ReqBody: Send + 'static,
 {
     type Response = S::Response;
     type Error = S::Error;
@@ -99,10 +94,8 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: hyper::Request<BoxBody>) -> Self::Future {
-        // This is necessary because tonic internally uses `tower::buffer::Buffer`.
-        // See https://github.com/tower-rs/tower/issues/547#issuecomment-767629149
-        // for details on why this is necessary
+    fn call(&mut self, req: http::Request<ReqBody>) -> Self::Future {
+        // See: https://docs.rs/tower/latest/tower/trait.Service.html#be-careful-when-cloning-inner-services
         let clone = self.inner.clone();
         let mut inner = std::mem::replace(&mut self.inner, clone);
 

@@ -1,15 +1,15 @@
 use crate::metadata::{MetadataMap, MetadataValue};
 #[cfg(feature = "server")]
 use crate::transport::server::TcpConnectInfo;
-#[cfg(all(feature = "server", feature = "tls"))]
+#[cfg(all(feature = "server", feature = "_tls-any"))]
 use crate::transport::server::TlsConnectInfo;
 use http::Extensions;
 #[cfg(feature = "server")]
 use std::net::SocketAddr;
-#[cfg(all(feature = "server", feature = "tls"))]
+#[cfg(all(feature = "server", feature = "_tls-any"))]
 use std::sync::Arc;
 use std::time::Duration;
-#[cfg(all(feature = "server", feature = "tls"))]
+#[cfg(all(feature = "server", feature = "_tls-any"))]
 use tokio_rustls::rustls::pki_types::CertificateDer;
 use tokio_stream::Stream;
 
@@ -218,7 +218,7 @@ impl<T> Request<T> {
             .get::<TcpConnectInfo>()
             .and_then(|i| i.local_addr());
 
-        #[cfg(feature = "tls")]
+        #[cfg(feature = "_tls-any")]
         let addr = addr.or_else(|| {
             self.extensions()
                 .get::<TlsConnectInfo<TcpConnectInfo>>()
@@ -240,7 +240,7 @@ impl<T> Request<T> {
             .get::<TcpConnectInfo>()
             .and_then(|i| i.remote_addr());
 
-        #[cfg(feature = "tls")]
+        #[cfg(feature = "_tls-any")]
         let addr = addr.or_else(|| {
             self.extensions()
                 .get::<TlsConnectInfo<TcpConnectInfo>>()
@@ -256,7 +256,7 @@ impl<T> Request<T> {
     /// and is mostly used for mTLS. This currently only returns
     /// `Some` on the server side of the `transport` server with
     /// TLS enabled connections.
-    #[cfg(all(feature = "server", feature = "tls"))]
+    #[cfg(all(feature = "server", feature = "_tls-any"))]
     pub fn peer_certs(&self) -> Option<Arc<Vec<CertificateDer<'static>>>> {
         self.extensions()
             .get::<TlsConnectInfo<TcpConnectInfo>>()
@@ -308,20 +308,20 @@ impl<T> Request<T> {
     /// Extensions can be set in interceptors:
     ///
     /// ```no_run
-    /// use tonic::{Request, service::interceptor};
+    /// use tonic::{Request, Status};
     ///
     /// #[derive(Clone)] // Extensions must be Clone
     /// struct MyExtension {
     ///     some_piece_of_data: String,
     /// }
     ///
-    /// interceptor(|mut request: Request<()>| {
+    /// fn intercept(mut request: Request<()>) -> Result<Request<()>, Status> {
     ///     request.extensions_mut().insert(MyExtension {
     ///         some_piece_of_data: "foo".to_string(),
     ///     });
     ///
     ///     Ok(request)
-    /// });
+    /// }
     /// ```
     ///
     /// And picked up by RPCs:
@@ -408,7 +408,7 @@ fn duration_to_grpc_timeout(duration: Duration) -> String {
         if value > max_size {
             None
         } else {
-            Some(format!("{}{}", value, unit))
+            Some(format!("{value}{unit}"))
         }
     }
 
@@ -460,6 +460,25 @@ mod tests {
             SanitizeHeaders::Yes,
         );
         assert!(http_request.headers().is_empty());
+    }
+
+    #[test]
+    fn preserves_user_agent() {
+        let mut r = Request::new(1);
+
+        r.metadata_mut().insert(
+            MetadataKey::from_static("user-agent"),
+            MetadataValue::from_static("Custom/1.2.3"),
+        );
+
+        let http_request = r.into_http(
+            Uri::default(),
+            http::Method::POST,
+            http::Version::HTTP_2,
+            SanitizeHeaders::Yes,
+        );
+        let user_agent = http_request.headers().get("user-agent").unwrap();
+        assert_eq!(user_agent, "Custom/1.2.3");
     }
 
     #[test]

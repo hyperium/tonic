@@ -4,13 +4,11 @@ use crate::pb::health_server::{Health, HealthServer};
 use crate::pb::{HealthCheckRequest, HealthCheckResponse};
 use crate::ServingStatus;
 use std::collections::HashMap;
-use std::pin::Pin;
+use std::fmt;
 use std::sync::Arc;
 use tokio::sync::{watch, RwLock};
 use tokio_stream::Stream;
-#[cfg(feature = "transport")]
-use tonic::server::NamedService;
-use tonic::{Request, Response, Status};
+use tonic::{server::NamedService, Request, Response, Status};
 
 /// Creates a `HealthReporter` and a linked `HealthServer` pair. Together,
 /// these types can be used to serve the gRPC Health Checking service.
@@ -39,7 +37,8 @@ pub struct HealthReporter {
 }
 
 impl HealthReporter {
-    fn new() -> Self {
+    /// Create a new HealthReporter with an initial service (named ""), corresponding to overall server health
+    pub fn new() -> Self {
         // According to the gRPC Health Check specification, the empty service "" corresponds to the overall server health
         let server_status = ("".to_string(), watch::channel(ServingStatus::Serving));
 
@@ -50,8 +49,7 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `Serving`. This notifies any watchers
     /// if there is a change in status.
-    #[cfg(feature = "transport")]
-    pub async fn set_serving<S>(&mut self)
+    pub async fn set_serving<S>(&self)
     where
         S: NamedService,
     {
@@ -62,8 +60,7 @@ impl HealthReporter {
 
     /// Sets the status of the service implemented by `S` to `NotServing`. This notifies any watchers
     /// if there is a change in status.
-    #[cfg(feature = "transport")]
-    pub async fn set_not_serving<S>(&mut self)
+    pub async fn set_not_serving<S>(&self)
     where
         S: NamedService,
     {
@@ -74,7 +71,7 @@ impl HealthReporter {
 
     /// Sets the status of the service with `service_name` to `status`. This notifies any watchers
     /// if there is a change in status.
-    pub async fn set_service_status<S>(&mut self, service_name: S, status: ServingStatus)
+    pub async fn set_service_status<S>(&self, service_name: S, status: ServingStatus)
     where
         S: AsRef<str>,
     {
@@ -101,6 +98,12 @@ impl HealthReporter {
     }
 }
 
+impl Default for HealthReporter {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 /// A service providing implementations of gRPC health checking protocol.
 #[derive(Debug)]
 pub struct HealthService {
@@ -110,6 +113,11 @@ pub struct HealthService {
 impl HealthService {
     fn new(services: Arc<RwLock<HashMap<String, StatusPair>>>) -> Self {
         HealthService { statuses: services }
+    }
+
+    /// Create a HealthService, carrying across the statuses from an existing HealthReporter
+    pub fn from_health_reporter(health_reporter: HealthReporter) -> Self {
+        Self::new(health_reporter.statuses)
     }
 
     async fn service_health(&self, service_name: &str) -> Option<ServingStatus> {
@@ -125,42 +133,64 @@ impl Health for HealthService {
         request: Request<HealthCheckRequest>,
     ) -> Result<Response<HealthCheckResponse>, Status> {
         let service_name = request.get_ref().service.as_str();
-        let status = self.service_health(service_name).await;
+        let Some(status) = self.service_health(service_name).await else {
+            return Err(Status::not_found("service not registered"));
+        };
 
-        match status {
-            None => Err(Status::not_found("service not registered")),
-            Some(status) => Ok(Response::new(HealthCheckResponse {
-                status: crate::pb::health_check_response::ServingStatus::from(status) as i32,
-            })),
-        }
+        Ok(Response::new(HealthCheckResponse::new(status)))
     }
 
-    type WatchStream =
-        Pin<Box<dyn Stream<Item = Result<HealthCheckResponse, Status>> + Send + 'static>>;
+    type WatchStream = WatchStream;
 
     async fn watch(
         &self,
         request: Request<HealthCheckRequest>,
     ) -> Result<Response<Self::WatchStream>, Status> {
         let service_name = request.get_ref().service.as_str();
-        let mut status_rx = match self.statuses.read().await.get(service_name) {
+        let status_rx = match self.statuses.read().await.get(service_name) {
+            Some((_tx, rx)) => rx.clone(),
             None => return Err(Status::not_found("service not registered")),
-            Some(pair) => pair.1.clone(),
         };
 
-        let output = async_stream::try_stream! {
-            // yield the current value
-            let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
-            yield HealthCheckResponse { status };
+        Ok(Response::new(WatchStream::new(status_rx)))
+    }
+}
 
-            #[allow(clippy::redundant_pattern_matching)]
-            while let Ok(_) = status_rx.changed().await {
-                let status = crate::pb::health_check_response::ServingStatus::from(*status_rx.borrow()) as i32;
-                yield HealthCheckResponse { status };
-            }
-        };
+/// A watch stream for the health service.
+pub struct WatchStream {
+    inner: tokio_stream::wrappers::WatchStream<ServingStatus>,
+}
 
-        Ok(Response::new(Box::pin(output) as Self::WatchStream))
+impl WatchStream {
+    fn new(status_rx: watch::Receiver<ServingStatus>) -> Self {
+        let inner = tokio_stream::wrappers::WatchStream::new(status_rx);
+        Self { inner }
+    }
+}
+
+impl Stream for WatchStream {
+    type Item = Result<HealthCheckResponse, Status>;
+
+    fn poll_next(
+        mut self: std::pin::Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Option<Self::Item>> {
+        std::pin::Pin::new(&mut self.inner)
+            .poll_next(cx)
+            .map(|opt| opt.map(|status| Ok(HealthCheckResponse::new(status))))
+    }
+}
+
+impl fmt::Debug for WatchStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WatchStream").finish()
+    }
+}
+
+impl HealthCheckResponse {
+    fn new(status: ServingStatus) -> Self {
+        let status = crate::pb::health_check_response::ServingStatus::from(status) as i32;
+        Self { status }
     }
 }
 
@@ -202,7 +232,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_service_check() {
-        let (mut reporter, service) = make_test_service().await;
+        let (reporter, service) = make_test_service().await;
 
         // Overall server health
         let resp = service

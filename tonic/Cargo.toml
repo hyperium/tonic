@@ -2,10 +2,6 @@
 name = "tonic"
 # When releasing to crates.io:
 # - Remove path dependencies
-# - Update html_root_url.
-# - Update doc url
-#   - Cargo.toml
-#   - README.md
 # - Update CHANGELOG.md.
 # - Create "v0.11.x" git tag.
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
@@ -13,43 +9,44 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-documentation = "https://docs.rs/tonic/0.12.3"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"
 readme = "../README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.12.3"
+version = "0.14.3"
+rust-version = {workspace = true}
+exclude = ["benches-disabled"]
 
 [features]
 codegen = ["dep:async-trait"]
 gzip = ["dep:flate2"]
+deflate = ["dep:flate2"]
 zstd = ["dep:zstd"]
 lz4 = ["dep:lz4_flex"]
 snappy = ["dep:snap"]
-default = ["transport", "codegen", "prost"]
-prost = ["dep:prost"]
-tls = ["dep:rustls-pemfile", "dep:tokio-rustls", "dep:tokio", "tokio?/rt", "tokio?/macros"]
-tls-roots = ["tls-native-roots"] # Deprecated. Please use `tls-native-roots` instead.
-tls-native-roots = ["tls", "channel", "dep:rustls-native-certs"]
-tls-webpki-roots = ["tls", "channel", "dep:webpki-roots"]
+default = ["router", "transport", "codegen"]
+_tls-any = ["dep:tokio", "tokio?/rt", "tokio?/macros", "tls-connect-info"] # Internal. Please choose one of `tls-ring` or `tls-aws-lc`
+tls-ring = ["_tls-any", "tokio-rustls/ring"]
+tls-aws-lc = ["_tls-any", "tokio-rustls/aws-lc-rs"]
+tls-native-roots = ["_tls-any", "channel", "dep:rustls-native-certs"]
+tls-webpki-roots = ["_tls-any","channel", "dep:webpki-roots"]
+tls-connect-info = ["dep:tokio-rustls"]
 router = ["dep:axum", "dep:tower", "tower?/util"]
 server = [
-  "router",
-  "dep:async-stream",
   "dep:h2",
   "dep:hyper", "hyper?/server",
   "dep:hyper-util", "hyper-util?/service", "hyper-util?/server-auto",
   "dep:socket2",
   "dep:tokio", "tokio?/macros", "tokio?/net", "tokio?/time",
   "tokio-stream/net",
-  "dep:tower", "tower?/util", "tower?/limit",
+  "dep:tower", "tower?/util", "tower?/limit", "tower?/load-shed",
 ]
 channel = [
   "dep:hyper", "hyper?/client",
   "dep:hyper-util", "hyper-util?/client-legacy",
-  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit", "tower?/util",
+  "dep:tower", "tower?/balance", "tower?/buffer", "tower?/discover", "tower?/limit", "tower?/load-shed", "tower?/util",
   "dep:tokio", "tokio?/time",
   "dep:hyper-timeout",
 ]
@@ -62,7 +59,7 @@ transport = ["server", "channel"]
 [dependencies]
 base64 = "0.22"
 bytes = "1.0"
-http = "1"
+http = "1.1.0"
 tracing = "0.1"
 
 http-body = "1"
@@ -73,27 +70,23 @@ tower-layer = "0.3"
 tower-service = "0.3"
 tokio-stream = {version = "0.1.16", default-features = false}
 
-# prost
-prost = {version = "0.13", default-features = false, features = ["std"], optional = true}
 
 # codegen
 async-trait = {version = "0.1.13", optional = true}
 
 # transport
-async-stream = {version = "0.3", optional = true}
 h2 = {version = "0.4", optional = true}
 hyper = {version = "1", features = ["http1", "http2"], optional = true}
-hyper-util = { version = "0.1.4", features = ["tokio"], optional = true }
-socket2 = { version = "0.5", optional = true, features = ["all"] }
+hyper-util = { version = "0.1.11", features = ["tokio"], optional = true }
+socket2 = { version = "0.6", optional = true, features = ["all"] }
 tokio = {version = "1", default-features = false, optional = true}
-tower = {version = "0.4.7", default-features = false, optional = true}
-axum = {version = "0.7", default-features = false, optional = true}
+tower = {version = "0.5", default-features = false, optional = true}
+axum = {version = "0.8", default-features = false, optional = true}
 
 # rustls
-rustls-pemfile = { version = "2.0", optional = true }
 rustls-native-certs = { version = "0.8", optional = true }
-tokio-rustls = { version = "0.26", default-features = false, features = ["logging", "tls12", "ring"], optional = true }
-webpki-roots = { version = "0.26", optional = true }
+tokio-rustls = { version = "0.26.1", default-features = false, features = ["logging", "tls12"], optional = true }
+webpki-roots = { version = "1", optional = true }
 
 # compression
 flate2 = {version = "1.0", optional = true}
@@ -104,19 +97,21 @@ snap = { version = "1", optional = true }
 
 # channel
 hyper-timeout = {version = "0.5", optional = true}
+sync_wrapper = "1.0.2"
 
 [dev-dependencies]
 bencher = "0.1.5"
 quickcheck = "1.0"
 quickcheck_macros = "1.0"
-rand = "0.8"
 static_assertions = "1.0"
-tokio = {version = "1.0", features = ["rt", "macros"]}
-tower = {version = "0.4.7", features = ["full"]}
+tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
+tower = {version = "0.5", features = ["load-shed", "timeout"]}
+
+[lints]
+workspace = true
 
 [package.metadata.docs.rs]
 all-features = true
-rustdoc-args = ["--cfg", "docsrs"]
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
@@ -134,11 +129,10 @@ allowed_external_types = [
 
   "async_trait::async_trait",
   "axum_core::body::Body",
+  "axum_core::response::into_response::IntoResponse",
   "axum::routing::Router",
   "futures_core::stream::Stream",
   "h2::error::Error",
-  "http_body_util::combinators::box_body::UnsyncBoxBody",
-  "tower::discover::Change",
   "tower_service::Service",
   "tower_layer::Layer",
   "tower_layer::stack::Stack",

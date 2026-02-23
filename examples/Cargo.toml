@@ -3,8 +3,6 @@ authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 edition = "2021"
 license = "MIT"
 name = "examples"
-publish = false
-version = "0.1.0"
 
 [[bin]]
 name = "helloworld-server"
@@ -51,12 +49,10 @@ path = "src/load_balance/server.rs"
 [[bin]]
 name = "dynamic-load-balance-client"
 path = "src/dynamic_load_balance/client.rs"
-required-features = ["dynamic-load-balance"]
 
 [[bin]]
 name = "dynamic-load-balance-server"
 path = "src/dynamic_load_balance/server.rs"
-required-features = ["dynamic-load-balance"]
 
 [[bin]]
 name = "tls-client"
@@ -99,16 +95,6 @@ path = "src/tower/client.rs"
 required-features = ["tower"]
 
 [[bin]]
-name = "timeout-server"
-path = "src/timeout/server.rs"
-required-features = ["timeout"]
-
-[[bin]]
-name = "timeout-client"
-path = "src/timeout/client.rs"
-required-features = ["timeout"]
-
-[[bin]]
 name = "multiplex-server"
 path = "src/multiplex/server.rs"
 
@@ -132,8 +118,13 @@ path = "src/tracing/server.rs"
 required-features = ["tracing"]
 
 [[bin]]
-name = "uds-client"
-path = "src/uds/client.rs"
+name = "uds-client-standard"
+path = "src/uds/client_standard.rs"
+required-features = ["uds"]
+
+[[bin]]
+name = "uds-client-with-connector"
+path = "src/uds/client_with_connector.rs"
 required-features = ["uds"]
 
 [[bin]]
@@ -262,36 +253,35 @@ path = "src/codec_buffers/client.rs"
 
 
 [features]
-gcp = ["dep:prost-types", "tonic/tls"]
-routeguide = ["dep:async-stream", "tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
+gcp = ["dep:prost-types", "tonic/tls-ring"]
+routeguide = ["dep:async-stream", "dep:tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
 reflection = ["dep:tonic-reflection"]
-autoreload = ["tokio-stream/net", "dep:listenfd"]
+autoreload = ["dep:tokio-stream", "tokio-stream?/net", "dep:listenfd"]
 health = ["dep:tonic-health"]
-grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:hyper-util", "dep:tracing-subscriber", "dep:tower"]
+grpc-web = ["dep:tonic-web", "dep:bytes", "dep:http", "dep:hyper", "dep:hyper-util", "dep:tracing-subscriber", "dep:tower", "dep:tower-http", "tower-http?/cors"]
 tracing = ["dep:tracing", "dep:tracing-subscriber"]
-uds = ["tokio-stream/net", "dep:tower", "dep:hyper", "dep:hyper-util"]
-streaming = ["tokio-stream", "dep:h2"]
-mock = ["tokio-stream", "dep:tower", "dep:hyper-util"]
-tower = ["dep:hyper", "dep:hyper-util", "dep:tower", "tower?/timeout", "dep:http"]
+uds = ["dep:tokio-stream", "tokio-stream?/net", "dep:tower", "dep:hyper", "dep:hyper-util"]
+streaming = ["dep:tokio-stream", "dep:h2"]
+mock = ["dep:tokio-stream", "dep:tower", "dep:hyper-util"]
 json-codec = ["dep:serde", "dep:serde_json", "dep:bytes"]
 compression = ["tonic/gzip"]
-tls = ["tonic/tls"]
-tls-rustls = ["dep:http", "dep:hyper", "dep:hyper-util", "dep:hyper-rustls", "dep:tower", "tower-http/util", "tower-http/add-extension", "dep:rustls-pemfile", "dep:tokio-rustls", "dep:pin-project", "dep:http-body-util"]
-dynamic-load-balance = ["dep:tower"]
-timeout = ["tokio/time", "dep:tower", "tower?/timeout"]
-tls-client-auth = ["tonic/tls"]
+tls = ["tonic/tls-ring"]
+tls-rustls = ["dep:http", "dep:hyper", "dep:hyper-util", "dep:hyper-rustls", "dep:tower", "tower-http/util", "tower-http/add-extension", "dep:tokio-rustls"]
+tls-client-auth = ["tonic/tls-ring"]
 types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "tower", "json-codec", "compression", "tls", "tls-rustls", "dynamic-load-balance", "timeout", "tls-client-auth", "types", "cancellation", "h2c"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c"]
+tower = ["dep:tower", "dep:http"]
 default = ["full"]
 
 [dependencies]
 # Common dependencies
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros"] }
-prost = "0.13"
+prost = "0.14"
 tonic = { path = "../tonic" }
+tonic-prost = { path = "../tonic-prost" }
 # Optional dependencies
 tonic-web = { path = "../tonic-web", optional = true }
 tonic-health = { path = "../tonic-health", optional = true }
@@ -300,26 +290,22 @@ tonic-types = { path = "../tonic-types", optional = true }
 async-stream = { version = "0.3", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 tokio-util = { version = "0.7.8", optional = true }
-tower = { version = "0.4", optional = true }
-rand = { version = "0.8", optional = true }
+tower = { version = "0.5", optional = true }
+rand = { version = "0.9", optional = true }
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 tracing = { version = "0.1.16", optional = true }
 tracing-subscriber = { version = "0.3", features = ["tracing-log", "fmt"], optional = true }
-prost-types = { version = "0.13", optional = true }
+prost-types = { version = "0.14", optional = true }
 http = { version = "1", optional = true }
-http-body = { version = "1", optional = true }
-http-body-util = { version = "0.1", optional = true }
 hyper = { version = "1", optional = true }
 hyper-util = { version = "0.1.4", optional = true }
 listenfd = { version = "1.0", optional = true }
 bytes = { version = "1", optional = true }
 h2 = { version = "0.4", optional = true }
-tokio-rustls = { version = "0.26", optional = true, features = ["ring", "tls12"], default-features = false }
+tokio-rustls = { version = "0.26.1", optional = true, features = ["ring", "tls12"], default-features = false }
 hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
-rustls-pemfile = { version = "2.0.0", optional = true }
-tower-http = { version = "0.5", optional = true }
-pin-project = { version = "1.0.11", optional = true }
+tower-http = { version = "0.6", optional = true }
 
 [build-dependencies]
-tonic-build = { path = "../tonic-build", features = ["prost"] }
+tonic-prost-build = { path = "../tonic-prost-build" }

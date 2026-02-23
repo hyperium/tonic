@@ -174,8 +174,8 @@ Edit `Cargo.toml` and add all the dependencies we'll need for this example:
 
 ```toml
 [dependencies]
-tonic = "0.12"
-prost = "0.13"
+tonic = "*"
+prost = "0.14"
 tokio = { version = "1.0", features = ["rt-multi-thread", "macros", "sync", "time"] }
 tokio-stream = "0.1"
 
@@ -185,14 +185,14 @@ serde_json = "1.0"
 rand = "0.8"
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-prost-build = "*"
 ```
 
 Create a `build.rs` file at the root of your crate:
 
 ```rust
 fn main() {
-    tonic_build::compile_protos("proto/route_guide.proto")
+    tonic_prost_build::compile_protos("proto/route_guide.proto")
         .unwrap_or_else(|e| panic!("Failed to compile protos {:?}", e));
 }
 ```
@@ -335,27 +335,6 @@ the corresponding `data` module to load and deserialize it in
 **Note:** If you are following along, you'll need to change the data file's path  from
 `examples/data/route_guide_db.json` to `data/route_guide_db.json`.
 
-Next, we need to implement `Hash` and `Eq` for `Point`, so we can use point values as map keys:
-
-```rust
-use std::hash::{Hasher, Hash};
-```
-
-```rust
-impl Hash for Point {
-    fn hash<H>(&self, state: &mut H)
-    where
-        H: Hasher,
-    {
-        self.latitude.hash(state);
-        self.longitude.hash(state);
-    }
-}
-
-impl Eq for Point {}
-
-```
-
 Lastly, we need implement two helper functions: `in_range` and `calc_distance`. We'll use them
 when performing feature lookups. You can find them in
 [examples/src/routeguide/server.rs][in-range-fn].
@@ -401,7 +380,7 @@ async fn list_features(
     &self,
     request: Request<Rectangle>,
 ) -> Result<Response<Self::ListFeaturesStream>, Status> {
-    let (mut tx, rx) = mpsc::channel(4);
+    let (tx, rx) = mpsc::channel(4);
     let features = self.features.clone();
 
     tokio::spawn(async move {
@@ -668,7 +647,7 @@ async fn print_features(client: &mut RouteGuideClient<Channel>) -> Result<(), Bo
         .into_inner();
 
     while let Some(feature) = stream.message().await? {
-        println!("NOTE = {:?}", feature);
+        println!("FEATURE = {:?}", feature);
     }
 
     Ok(())
@@ -693,8 +672,8 @@ use rand::Rng;
 
 ```rust
 async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), Box<dyn Error>> {
-    let mut rng = rand::thread_rng();
-    let point_count: i32 = rng.gen_range(2..100);
+    let mut rng = rand::rng();
+    let point_count: i32 = rng.random_range(2..100);
 
     let mut points = vec![];
     for _ in 0..=point_count {
@@ -715,8 +694,8 @@ async fn run_record_route(client: &mut RouteGuideClient<Channel>) -> Result<(), 
 
 ```rust
 fn random_point(rng: &mut ThreadRng) -> Point {
-    let latitude = (rng.gen_range(0..180) - 90) * 10_000_000;
-    let longitude = (rng.gen_range(0..360) - 180) * 10_000_000;
+    let latitude = (rng.random_range(0..180) - 90) * 10_000_000;
+    let longitude = (rng.random_range(0..360) - 180) * 10_000_000;
     Point {
         latitude,
         longitude,
@@ -790,7 +769,7 @@ $ cargo run --bin routeguide-client
 ## Appendix
 
 <a name="tonic-build"></a>
-### tonic_build configuration
+### tonic_prost_build configuration
 
 Tonic's default code generation configuration is convenient for self contained examples and small
 projects. However, there are some cases when we need a slightly different workflow. For example:
@@ -803,7 +782,7 @@ files in the default location.
 More generally, whenever we want to keep our `.proto` definitions in a central place and generate
 code for different crates or different languages, the default configuration is not enough.
 
-Luckily, `tonic_build` can be configured to fit whatever workflow we need. Here are just two
+Luckily, `tonic_prost_build` can be configured to fit whatever workflow we need. Here are just two
 possibilities:
 
 1)  We can keep our `.proto` definitions in a separate crate and generate our code on demand, as
@@ -813,7 +792,7 @@ opposed to at build time, placing the resulting modules wherever we need them.
 
 ```rust
 fn main() {
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_client(false)
         .out_dir("another_crate/src/pb")
         .compile_protos(&["path/my_proto.proto"], &["path"])

@@ -30,10 +30,10 @@ impl<T, ReqBody> Service<Request<ReqBody>> for AddOrigin<T>
 where
     T: Service<Request<ReqBody>>,
     T::Future: Send + 'static,
-    T::Error: Into<crate::Error>,
+    T::Error: Into<crate::BoxError>,
 {
     type Response = T::Response;
-    type Error = crate::Error;
+    type Error = crate::BoxError;
     type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
@@ -53,7 +53,7 @@ where
         head.uri = {
             // Split the request URI into parts.
             let mut uri: http::uri::Parts = head.uri.into();
-            // Update the URI parts, setting hte scheme and authority
+            // Update the URI parts, setting the scheme and authority
             uri.scheme = self.scheme.clone();
             uri.authority = self.authority.clone();
 

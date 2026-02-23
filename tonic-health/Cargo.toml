@@ -4,7 +4,6 @@ categories = ["network-programming", "asynchronous"]
 description = """
 Health Checking module of `tonic` gRPC implementation.
 """
-documentation = "https://docs.rs/tonic-health/0.12.3"
 edition = "2021"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "healthcheck"]
@@ -12,23 +11,22 @@ license = "MIT"
 name = "tonic-health"
 readme = "README.md"
 repository = "https://github.com/hyperium/tonic"
-version = "0.12.3"
-
-[features]
-default = ["transport"]
-transport = []
+version = "0.14.3"
+rust-version = { workspace = true }
 
 [dependencies]
-async-stream = "0.3"
-prost = "0.13"
+prost = "0.14"
 tokio = {version = "1.0", features = ["sync"]}
-tokio-stream = "0.1"
-tonic = { version = "0.12", path = "../tonic", default-features = false, features = ["codegen", "prost"] }
+tokio-stream = {version = "0.1", default-features = false, features = ["sync"]}
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
+tonic-prost = { version = "0.14.0", path = "../tonic-prost", default-features = false }
 
 [dev-dependencies]
 tokio = {version = "1.0", features = ["rt-multi-thread", "macros"]}
-tokio-stream = "0.1"
-prost-types = "0.13"
+prost-types = "0.14.0"
+
+[lints]
+workspace = true
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
@@ -43,6 +41,5 @@ allowed_external_types = [
   "prost::*",
 
   "futures_core::stream::Stream",
-  "http_body_util::combinators::box_body::UnsyncBoxBody",
   "tower_service::Service",
 ]

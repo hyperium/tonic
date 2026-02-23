@@ -2,15 +2,13 @@
 name = "deprecated_methods"
 edition = "2021"
 license = "MIT"
-publish = false
-version = "0.1.0"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-prost = "0.13"
+prost = "0.14"
 tonic = { path = "../../tonic" }
+tonic-prost = { path = "../../tonic-prost" }
 
 [build-dependencies]
-prost-build = "0.13"
-tonic-build = { path = "../../tonic-build" }
+tonic-prost-build = { path = "../../tonic-prost-build" }

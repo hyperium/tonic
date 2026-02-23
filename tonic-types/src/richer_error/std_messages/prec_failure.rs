@@ -170,7 +170,7 @@ mod tests {
     #[test]
     fn gen_prec_failure() {
         let mut prec_failure = PreconditionFailure::new(Vec::new());
-        let formatted = format!("{:?}", prec_failure);
+        let formatted = format!("{prec_failure:?}");
 
         let expected = "PreconditionFailure { violations: [] }";
 
@@ -188,7 +188,7 @@ mod tests {
             .add_violation("TOS", "example.local", "Terms of service not accepted")
             .add_violation("FNF", "example.local", "File not found");
 
-        let formatted = format!("{:?}", prec_failure);
+        let formatted = format!("{prec_failure:?}");
 
         let expected_filled = "PreconditionFailure { violations: [PreconditionViolation { type: \"TOS\", subject: \"example.local\", description: \"Terms of service not accepted\" }, PreconditionViolation { type: \"FNF\", subject: \"example.local\", description: \"File not found\" }] }";
 
@@ -204,7 +204,7 @@ mod tests {
 
         let gen_any = prec_failure.into_any();
 
-        let formatted = format!("{:?}", gen_any);
+        let formatted = format!("{gen_any:?}");
 
         let expected = "Any { type_url: \"type.googleapis.com/google.rpc.PreconditionFailure\", value: [10, 51, 10, 3, 84, 79, 83, 18, 13, 101, 120, 97, 109, 112, 108, 101, 46, 108, 111, 99, 97, 108, 26, 29, 84, 101, 114, 109, 115, 32, 111, 102, 32, 115, 101, 114, 118, 105, 99, 101, 32, 110, 111, 116, 32, 97, 99, 99, 101, 112, 116, 101, 100, 10, 36, 10, 3, 70, 78, 70, 18, 13, 101, 120, 97, 109, 112, 108, 101, 46, 108, 111, 99, 97, 108, 26, 14, 70, 105, 108, 101, 32, 110, 111, 116, 32, 102, 111, 117, 110, 100] }";
 
@@ -214,11 +214,11 @@ mod tests {
         );
 
         let br_details = match PreconditionFailure::from_any(gen_any) {
-            Err(error) => panic!("Error generating PreconditionFailure from Any: {:?}", error),
+            Err(error) => panic!("Error generating PreconditionFailure from Any: {error:?}"),
             Ok(from_any) => from_any,
         };
 
-        let formatted = format!("{:?}", br_details);
+        let formatted = format!("{br_details:?}");
 
         assert!(
             formatted.eq(expected_filled),

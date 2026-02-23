@@ -1,5 +1,5 @@
 use crate::metadata::MetadataMap;
-use crate::{body::BoxBody, metadata::GRPC_CONTENT_TYPE};
+use crate::metadata::GRPC_CONTENT_TYPE;
 use base64::Engine as _;
 use bytes::Bytes;
 use http::{
@@ -14,6 +14,7 @@ const ENCODING_SET: &AsciiSet = &CONTROLS
     .add(b' ')
     .add(b'"')
     .add(b'#')
+    .add(b'%')
     .add(b'<')
     .add(b'>')
     .add(b'`')
@@ -34,7 +35,11 @@ const ENCODING_SET: &AsciiSet = &CONTROLS
 /// assert_eq!(status1.code(), status2.code());
 /// ```
 #[derive(Clone)]
-pub struct Status {
+pub struct Status(Box<StatusInner>);
+
+/// Box the contents of Status to avoid large error variants
+#[derive(Clone)]
+struct StatusInner {
     /// The gRPC status code, found in the `grpc-status` header.
     code: Code,
     /// A relevant error message, found in the `grpc-message` header.
@@ -47,6 +52,12 @@ pub struct Status {
     metadata: MetadataMap,
     /// Optional underlying error.
     source: Option<Arc<dyn Error + Send + Sync + 'static>>,
+}
+
+impl StatusInner {
+    fn into_status(self) -> Status {
+        Status(Box::new(self))
+    }
 }
 
 /// gRPC status codes used by [`Status`].
@@ -159,13 +170,14 @@ impl std::fmt::Display for Code {
 impl Status {
     /// Create a new `Status` with the associated code and message.
     pub fn new(code: Code, message: impl Into<String>) -> Status {
-        Status {
+        StatusInner {
             code,
             message: message.into(),
             details: Bytes::new(),
             metadata: MetadataMap::new(),
             source: None,
         }
+        .into_status()
     }
 
     /// The operation completed successfully.
@@ -261,7 +273,7 @@ impl Status {
     ///
     /// Unlike `InvalidArgument`, this error indicates a problem that may be
     /// fixed if the system state changes. For example, a 32-bit file system will
-    /// generate `InvalidArgument if asked to read at an offset that is not in the
+    /// generate `InvalidArgument` if asked to read at an offset that is not in the
     /// range [0,2^32-1], but it will generate `OutOfRange` if asked to read from
     /// an offset past the current file size.
     ///
@@ -317,7 +329,7 @@ impl Status {
     pub fn from_error(err: Box<dyn Error + Send + Sync + 'static>) -> Status {
         Status::try_from_error(err).unwrap_or_else(|err| {
             let mut status = Status::new(Code::Unknown, err.to_string());
-            status.source = Some(err.into());
+            status.0.source = Some(err.into());
             status
         })
     }
@@ -347,8 +359,20 @@ impl Status {
             Err(err) => err,
         };
 
+        // If the load shed middleware is enabled, respond to
+        // service overloaded with an appropriate grpc status.
+        #[cfg(feature = "server")]
+        let err = match err.downcast::<tower::load_shed::error::Overloaded>() {
+            Ok(_) => {
+                return Ok(Status::resource_exhausted(
+                    "Too many active requests for the connection",
+                ));
+            }
+            Err(err) => err,
+        };
+
         if let Some(mut status) = find_status_in_source_chain(&*err) {
-            status.source = Some(err.into());
+            status.0.source = Some(err.into());
             return Ok(status);
         }
 
@@ -360,8 +384,8 @@ impl Status {
     fn from_h2_error(err: Box<h2::Error>) -> Status {
         let code = Self::code_from_h2(&err);
 
-        let mut status = Self::new(code, format!("h2 protocol error: {}", err));
-        status.source = Some(Arc::new(*err));
+        let mut status = Self::new(code, format!("h2 protocol error: {err}"));
+        status.0.source = Some(Arc::new(*err));
         status
     }
 
@@ -388,7 +412,7 @@ impl Status {
     #[cfg(feature = "server")]
     fn to_h2_error(&self) -> h2::Error {
         // conservatively transform to h2 error codes...
-        let reason = match self.code {
+        let reason = match self.code() {
             Code::Cancelled => h2::Reason::CANCEL,
             _ => h2::Reason::INTERNAL_ERROR,
         };
@@ -420,7 +444,7 @@ impl Status {
         #[cfg(feature = "server")]
         if let Some(h2_err) = err.source().and_then(|e| e.downcast_ref::<h2::Error>()) {
             let code = Status::code_from_h2(h2_err);
-            let status = Self::new(code, format!("h2 protocol error: {}", err));
+            let status = Self::new(code, format!("h2 protocol error: {err}"));
 
             return Some(status);
         }
@@ -438,92 +462,90 @@ impl Status {
 
     /// Extract a `Status` from a hyper `HeaderMap`.
     pub fn from_header_map(header_map: &HeaderMap) -> Option<Status> {
-        header_map.get(Self::GRPC_STATUS).map(|code| {
-            let code = Code::from_bytes(code.as_ref());
-            let error_message = header_map
-                .get(Self::GRPC_MESSAGE)
-                .map(|header| {
-                    percent_decode(header.as_bytes())
-                        .decode_utf8()
-                        .map(|cow| cow.to_string())
-                })
-                .unwrap_or_else(|| Ok(String::new()));
+        let code = Code::from_bytes(header_map.get(Self::GRPC_STATUS)?.as_ref());
 
-            let details = header_map
-                .get(Self::GRPC_STATUS_DETAILS)
-                .map(|h| {
-                    crate::util::base64::STANDARD
-                        .decode(h.as_bytes())
-                        .expect("Invalid status header, expected base64 encoded value")
-                })
-                .map(Bytes::from)
-                .unwrap_or_default();
+        let error_message = match header_map.get(Self::GRPC_MESSAGE) {
+            Some(header) => percent_decode(header.as_bytes())
+                .decode_utf8()
+                .map(|cow| cow.to_string()),
+            None => Ok(String::new()),
+        };
 
-            let mut other_headers = header_map.clone();
-            other_headers.remove(Self::GRPC_STATUS);
-            other_headers.remove(Self::GRPC_MESSAGE);
-            other_headers.remove(Self::GRPC_STATUS_DETAILS);
+        let details = match header_map.get(Self::GRPC_STATUS_DETAILS) {
+            Some(header) => crate::util::base64::STANDARD
+                .decode(header.as_bytes())
+                .expect("Invalid status header, expected base64 encoded value")
+                .into(),
+            None => Bytes::new(),
+        };
 
-            match error_message {
-                Ok(message) => Status {
-                    code,
-                    message,
-                    details,
-                    metadata: MetadataMap::from_headers(other_headers),
-                    source: None,
-                },
-                Err(err) => {
-                    warn!("Error deserializing status message header: {}", err);
-                    Status {
-                        code: Code::Unknown,
-                        message: format!("Error deserializing status message header: {}", err),
-                        details,
-                        metadata: MetadataMap::from_headers(other_headers),
-                        source: None,
-                    }
-                }
+        let other_headers = {
+            let mut header_map = header_map.clone();
+            header_map.remove(Self::GRPC_STATUS);
+            header_map.remove(Self::GRPC_MESSAGE);
+            header_map.remove(Self::GRPC_STATUS_DETAILS);
+            header_map
+        };
+
+        let (code, message) = match error_message {
+            Ok(message) => (code, message),
+            Err(e) => {
+                let error_message = format!("Error deserializing status message header: {e}");
+                warn!(error_message);
+                (Code::Unknown, error_message)
             }
-        })
+        };
+
+        Some(
+            StatusInner {
+                code,
+                message,
+                details,
+                metadata: MetadataMap::from_headers(other_headers),
+                source: None,
+            }
+            .into_status(),
+        )
     }
 
     /// Get the gRPC `Code` of this `Status`.
     pub fn code(&self) -> Code {
-        self.code
+        self.0.code
     }
 
     /// Get the text error message of this `Status`.
     pub fn message(&self) -> &str {
-        &self.message
+        &self.0.message
     }
 
     /// Get the opaque error details of this `Status`.
     pub fn details(&self) -> &[u8] {
-        &self.details
+        &self.0.details
     }
 
     /// Get a reference to the custom metadata.
     pub fn metadata(&self) -> &MetadataMap {
-        &self.metadata
+        &self.0.metadata
     }
 
     /// Get a mutable reference to the custom metadata.
     pub fn metadata_mut(&mut self) -> &mut MetadataMap {
-        &mut self.metadata
+        &mut self.0.metadata
     }
 
     pub(crate) fn to_header_map(&self) -> Result<HeaderMap, Self> {
-        let mut header_map = HeaderMap::with_capacity(3 + self.metadata.len());
+        let mut header_map = HeaderMap::with_capacity(3 + self.0.metadata.len());
         self.add_header(&mut header_map)?;
         Ok(header_map)
     }
 
     /// Add headers from this `Status` into `header_map`.
     pub fn add_header(&self, header_map: &mut HeaderMap) -> Result<(), Self> {
-        header_map.extend(self.metadata.clone().into_sanitized_headers());
+        header_map.extend(self.0.metadata.clone().into_sanitized_headers());
 
-        header_map.insert(Self::GRPC_STATUS, self.code.to_header_value());
+        header_map.insert(Self::GRPC_STATUS, self.0.code.to_header_value());
 
-        if !self.message.is_empty() {
+        if !self.0.message.is_empty() {
             let to_write = Bytes::copy_from_slice(
                 Cow::from(percent_encode(self.message().as_bytes(), ENCODING_SET)).as_bytes(),
             );
@@ -534,8 +556,8 @@ impl Status {
             );
         }
 
-        if !self.details.is_empty() {
-            let details = crate::util::base64::STANDARD_NO_PAD.encode(&self.details[..]);
+        if !self.0.details.is_empty() {
+            let details = crate::util::base64::STANDARD_NO_PAD.encode(&self.0.details[..]);
 
             header_map.insert(
                 Self::GRPC_STATUS_DETAILS,
@@ -563,28 +585,30 @@ impl Status {
         details: Bytes,
         metadata: MetadataMap,
     ) -> Status {
-        Status {
+        StatusInner {
             code,
             message: message.into(),
             details,
             metadata,
             source: None,
         }
+        .into_status()
     }
 
     /// Add a source error to this status.
     pub fn set_source(&mut self, source: Arc<dyn Error + Send + Sync + 'static>) -> &mut Status {
-        self.source = Some(source);
+        self.0.source = Some(source);
         self
     }
 
     /// Build an `http::Response` from the given `Status`.
-    pub fn into_http(self) -> http::Response<BoxBody> {
-        let mut response = http::Response::new(crate::body::empty_body());
+    pub fn into_http<B: Default>(self) -> http::Response<B> {
+        let mut response = http::Response::new(B::default());
         response
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
         self.add_header(response.headers_mut()).unwrap();
+        response.extensions_mut().insert(self);
         response
     }
 
@@ -601,15 +625,18 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
 
     while let Some(err) = source {
         if let Some(status) = err.downcast_ref::<Status>() {
-            return Some(Status {
-                code: status.code,
-                message: status.message.clone(),
-                details: status.details.clone(),
-                metadata: status.metadata.clone(),
-                // Since `Status` is not `Clone`, any `source` on the original Status
-                // cannot be cloned so must remain with the original `Status`.
-                source: None,
-            });
+            return Some(
+                StatusInner {
+                    code: status.0.code,
+                    message: status.0.message.clone(),
+                    details: status.0.details.clone(),
+                    metadata: status.0.metadata.clone(),
+                    // Since `Status` is not `Clone`, any `source` on the original Status
+                    // cannot be cloned so must remain with the original `Status`.
+                    source: None,
+                }
+                .into_status(),
+            );
         }
 
         if let Some(timeout) = err.downcast_ref::<TimeoutExpired>() {
@@ -640,6 +667,12 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
 }
 
 impl fmt::Debug for Status {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl fmt::Debug for StatusInner {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // A manual impl to reduce the noise of frequently empty fields.
         let mut builder = f.debug_struct("Status");
@@ -715,20 +748,24 @@ impl From<std::io::Error> for Status {
 
 impl fmt::Display for Status {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "status: {:?}, message: {:?}, details: {:?}, metadata: {:?}",
-            self.code(),
-            self.message(),
-            self.details(),
-            self.metadata(),
-        )
+        write!(f, "code: '{}'", self.code())?;
+
+        if !self.message().is_empty() {
+            write!(f, ", message: {:?}", self.message())?;
+        }
+        // We intentionally omit `self.details` since it's binary data, not fit for human eyes.
+        // Additionally, `self.metadata` contains low-level details that only belong in the `Debug`
+        // impl.
+        if let Some(source) = self.source() {
+            write!(f, ", source: {source:?}")?;
+        }
+        Ok(())
     }
 }
 
 impl Error for Status {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
-        self.source.as_ref().map(|err| (&**err) as _)
+        self.0.source.as_ref().map(|err| (&**err) as _)
     }
 }
 
@@ -783,8 +820,28 @@ impl Code {
     /// Get the `Code` that represents the integer, if known.
     ///
     /// If not known, returns `Code::Unknown` (surprise!).
-    pub fn from_i32(i: i32) -> Code {
-        Code::from(i)
+    pub const fn from_i32(i: i32) -> Code {
+        match i {
+            0 => Code::Ok,
+            1 => Code::Cancelled,
+            2 => Code::Unknown,
+            3 => Code::InvalidArgument,
+            4 => Code::DeadlineExceeded,
+            5 => Code::NotFound,
+            6 => Code::AlreadyExists,
+            7 => Code::PermissionDenied,
+            8 => Code::ResourceExhausted,
+            9 => Code::FailedPrecondition,
+            10 => Code::Aborted,
+            11 => Code::OutOfRange,
+            12 => Code::Unimplemented,
+            13 => Code::Internal,
+            14 => Code::Unavailable,
+            15 => Code::DataLoss,
+            16 => Code::Unauthenticated,
+
+            _ => Code::Unknown,
+        }
     }
 
     /// Convert the string representation of a `Code` (as stored, for example, in the `grpc-status`
@@ -849,27 +906,7 @@ impl Code {
 
 impl From<i32> for Code {
     fn from(i: i32) -> Self {
-        match i {
-            0 => Code::Ok,
-            1 => Code::Cancelled,
-            2 => Code::Unknown,
-            3 => Code::InvalidArgument,
-            4 => Code::DeadlineExceeded,
-            5 => Code::NotFound,
-            6 => Code::AlreadyExists,
-            7 => Code::PermissionDenied,
-            8 => Code::ResourceExhausted,
-            9 => Code::FailedPrecondition,
-            10 => Code::Aborted,
-            11 => Code::OutOfRange,
-            12 => Code::Unimplemented,
-            13 => Code::Internal,
-            14 => Code::Unavailable,
-            15 => Code::DataLoss,
-            16 => Code::Unauthenticated,
-
-            _ => Code::Unknown,
-        }
+        Code::from_i32(i)
     }
 }
 
@@ -883,10 +920,10 @@ impl From<Code> for i32 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Error;
+    use crate::BoxError;
 
     #[derive(Debug)]
-    struct Nested(Error);
+    struct Nested(BoxError);
 
     impl fmt::Display for Nested {
         fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -911,7 +948,7 @@ mod tests {
 
     #[test]
     fn from_error_unknown() {
-        let orig: Error = "peek-a-boo".into();
+        let orig: BoxError = "peek-a-boo".into();
         let found = Status::from_error(orig);
 
         assert_eq!(found.code(), Code::Unknown);
@@ -1021,8 +1058,8 @@ mod tests {
 /// Timeouts can be configured either with [`Endpoint::timeout`], [`Server::timeout`], or by
 /// setting the [`grpc-timeout` metadata value][spec].
 ///
-/// [`Endpoint::timeout`]: crate::transport::server::Server::timeout
-/// [`Server::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Endpoint::timeout`]: crate::transport::channel::Endpoint::timeout
+/// [`Server::timeout`]: crate::transport::server::Server::timeout
 /// [spec]: https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md
 #[derive(Debug)]
 pub struct TimeoutExpired(pub ());

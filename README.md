@@ -1,7 +1,12 @@
 ![](https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-banner.svg?sanitize=true)
 
+
 A rust implementation of [gRPC], a high performance, open source, general
 RPC framework that puts mobile and HTTP/2 first.
+
+> **Note**: tonic's [master](https://github.com/hyperium/tonic) branch is
+> currently preparing breaking changes. For the most recently *released* code,
+> look to the [0.14.x branch](https://github.com/hyperium/tonic/tree/v0.14.x).
 
 [`tonic`] is a gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility. This library was created to have first class support of async/await and to act as a core building block for production systems written in Rust.
 
@@ -10,7 +15,7 @@ RPC framework that puts mobile and HTTP/2 first.
 [![Crates.io](https://img.shields.io/crates/l/tonic)](LICENSE)
 
 
-[Examples] | [Website] | [Docs] | [Chat]
+[Examples] | [Website] | [Docs] | [Chat][discord]
 
 ## Overview
 
@@ -33,86 +38,42 @@ contains the tools to build clients and servers from [`protobuf`] definitions.
 
 ## Getting Started
 
+- The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, perfect for first time users!
+- The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its features.
+
 Examples can be found in [`examples`] and for more complex scenarios [`interop`]
 may be a good resource as it shows examples of many of the gRPC features.
 
-If you're using [rust-analyzer] we recommend you set `"rust-analyzer.cargo.buildScripts.enable": true` to correctly load
-the generated code.
-
-For IntelliJ IDEA users, please refer to [this](https://github.com/intellij-rust/intellij-rust/pull/8056) and enable
-`org.rust.cargo.evaluate.build.scripts`
-[experimental feature](https://plugins.jetbrains.com/plugin/8182-rust/docs/rust-faq.html#experimental-features).
-
 ### Rust Version
 
-`tonic`'s MSRV is `1.71.1`.
-
-```bash
-$ rustup update
-$ cargo build
-```
+`tonic`'s MSRV is `1.75`.
 
 ### Dependencies
 
-In order to build `tonic` >= 0.8.0, you need the `protoc` Protocol Buffers compiler, along with Protocol Buffers resource files.
+[`tonic-build`] uses `protoc` [Protocol Buffers compiler] in some APIs which compile Protocol Buffers resource files such as [`tonic_build::compile_protos()`].
 
-#### Ubuntu
-
-```bash
-sudo apt update && sudo apt upgrade -y
-sudo apt install -y protobuf-compiler libprotobuf-dev
-```
-
-#### Alpine Linux
-
-```sh
-sudo apk add protoc protobuf-dev
-```
-
-#### macOS
-
-Assuming [Homebrew](https://brew.sh/) is already installed. (If not, see instructions for installing Homebrew on [the Homebrew website](https://brew.sh/).)
-
-```zsh
-brew install protobuf
-```
-
-#### Windows
-
-- Download the latest version of `protoc-xx.y-win64.zip` from [HERE](https://github.com/protocolbuffers/protobuf/releases/latest)
-- Extract the file `bin\protoc.exe` and put it somewhere in the `PATH`
-- Verify installation by opening a command prompt and enter `protoc --version`
-
-### Tutorials
-
-- The [`helloworld`][helloworld-tutorial] tutorial provides a basic example of using `tonic`, perfect for first time users!
-- The [`routeguide`][routeguide-tutorial] tutorial provides a complete example of using `tonic` and all its
-features.
+[Protocol Buffers compiler]: https://protobuf.dev/downloads/
+[`tonic_build::compile_protos()`]: https://docs.rs/tonic-build/latest/tonic_build/fn.compile_protos.html
 
 ## Getting Help
 
 First, see if the answer to your question can be found in the API documentation.
 If the answer is not there, there is an active community in
-the [Tonic Discord channel][chat]. We would be happy to try to answer your
+the [Tonic Discord channel][discord]. We would be happy to try to answer your
 question. If that doesn't work, try opening an [issue] with the question.
 
-[chat]: https://discord.gg/6yGkFeN
-[issue]: https://github.com/hyperium/tonic/issues/new
+[issue]: https://github.com/hyperium/tonic/issues/new/choose
 
 ## Project Layout
 
-- [`tonic`](https://github.com/hyperium/tonic/tree/master/tonic): Generic gRPC and HTTP/2 client/server
-implementation.
-- [`tonic-build`](https://github.com/hyperium/tonic/tree/master/tonic-build): [`prost`] based service codegen.
-- [`tonic-types`](https://github.com/hyperium/tonic/tree/master/tonic-types): [`prost`] based grpc utility types
-  including support for gRPC Well Known Types.
-- [`tonic-health`](https://github.com/hyperium/tonic/tree/master/tonic-health): Implementation of the standard [gRPC
-health checking service][healthcheck]. Also serves as an example of both unary and response streaming.
-- [`tonic-reflection`](https://github.com/hyperium/tonic/tree/master/tonic-reflection): A tonic based gRPC
-reflection implementation.
-- [`examples`](https://github.com/hyperium/tonic/tree/master/examples): Example gRPC implementations showing off
-tls, load balancing and bi-directional streaming.
-- [`interop`](https://github.com/hyperium/tonic/tree/master/interop): Interop tests implementation.
+- [`tonic`]: Generic gRPC and HTTP/2 client/server implementation.
+- [`tonic-build`]: [`prost`] based service codegen.
+- [`tonic-types`]: [`prost`] based grpc utility types including support for gRPC Well Known Types.
+- [`tonic-health`]: Implementation of the standard [gRPC health checking service][healthcheck].
+  Also serves as an example of both unary and response streaming.
+- [`tonic-reflection`]: A tonic based gRPC reflection implementation.
+- [`examples`]: Example gRPC implementations showing off tls, load balancing and bi-directional streaming.
+- [`interop`]: Interop tests implementation.
 
 ## Contributing
 
@@ -134,19 +95,23 @@ terms or conditions.
 
 
 [gRPC]: https://grpc.io
-[`tonic`]: https://github.com/hyperium/tonic
+[`tonic`]: ./tonic
+[`tonic-build`]: ./tonic-build
+[`tonic-types`]: ./tonic-types
+[`tonic-health`]: ./tonic-health
+[`tonic-reflection`]: ./tonic-reflection
+[`examples`]: ./examples
+[`interop`]: ./interop
 [`tokio`]: https://github.com/tokio-rs/tokio
 [`hyper`]: https://github.com/hyperium/hyper
 [`prost`]: https://github.com/tokio-rs/prost
-[`protobuf`]: https://developers.google.com/protocol-buffers
+[`protobuf`]: https://protobuf.dev/
 [`rustls`]: https://github.com/rustls/rustls
-[`examples`]: https://github.com/hyperium/tonic/tree/master/examples
 [`interop`]: https://github.com/hyperium/tonic/tree/master/interop
 [Examples]: https://github.com/hyperium/tonic/tree/master/examples
 [Website]: https://github.com/hyperium/tonic
 [Docs]: https://docs.rs/tonic
-[Chat]: https://discord.gg/6yGkFeN
+[discord]: https://discord.gg/6yGkFeN
 [routeguide-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/routeguide-tutorial.md
 [helloworld-tutorial]: https://github.com/hyperium/tonic/blob/master/examples/helloworld-tutorial.md
-[healthcheck]: https://github.com/grpc/grpc/blob/master/doc/health-checking.md
-[rust-analyzer]: https://rust-analyzer.github.io
+[healthcheck]: https://grpc.io/docs/guides/health-checking/

@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let channel = ServiceBuilder::new()
         // Interceptors can be also be applied as middleware
-        .layer(tonic::service::interceptor(intercept))
+        .layer(tonic::service::InterceptorLayer::new(intercept))
         .layer_fn(AuthSvc::new)
         .service(channel);
 
@@ -27,14 +27,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let response = client.say_hello(request).await?;
 
-    println!("RESPONSE={:?}", response);
+    println!("RESPONSE={response:?}");
 
     Ok(())
 }
 
 // An interceptor function.
 fn intercept(req: Request<()>) -> Result<Request<()>, Status> {
-    println!("received {:?}", req);
+    println!("received {req:?}");
     Ok(req)
 }
 
@@ -43,7 +43,7 @@ mod service {
     use std::future::Future;
     use std::pin::Pin;
     use std::task::{Context, Poll};
-    use tonic::body::BoxBody;
+    use tonic::body::Body;
     use tonic::transport::Channel;
     use tower::Service;
 
@@ -57,8 +57,8 @@ mod service {
         }
     }
 
-    impl Service<Request<BoxBody>> for AuthSvc {
-        type Response = Response<BoxBody>;
+    impl Service<Request<Body>> for AuthSvc {
+        type Response = Response<Body>;
         type Error = Box<dyn std::error::Error + Send + Sync>;
         #[allow(clippy::type_complexity)]
         type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
@@ -67,10 +67,8 @@ mod service {
             self.inner.poll_ready(cx).map_err(Into::into)
         }
 
-        fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
-            // This is necessary because tonic internally uses `tower::buffer::Buffer`.
-            // See https://github.com/tower-rs/tower/issues/547#issuecomment-767629149
-            // for details on why this is necessary
+        fn call(&mut self, req: Request<Body>) -> Self::Future {
+            // See: https://docs.rs/tower/latest/tower/trait.Service.html#be-careful-when-cloning-inner-services
             let clone = self.inner.clone();
             let mut inner = std::mem::replace(&mut self.inner, clone);
 

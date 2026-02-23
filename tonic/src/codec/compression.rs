@@ -2,9 +2,11 @@ use crate::{metadata::MetadataValue, Status};
 use bytes::{Buf, BufMut, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};
-use std::fmt;
+#[cfg(feature = "deflate")]
+use flate2::read::{ZlibDecoder, ZlibEncoder};
 #[cfg(any(feature = "snappy", feature = "lz4"))]
 use std::io::Write;
+use std::{borrow::Cow, fmt};
 #[cfg(feature = "zstd")]
 use zstd::stream::read::{Decoder, Encoder};
 
@@ -16,7 +18,7 @@ pub(crate) const ACCEPT_ENCODING_HEADER: &str = "grpc-accept-encoding";
 /// Represents an ordered list of compression encodings that are enabled.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct EnabledCompressionEncodings {
-    inner: [Option<CompressionEncoding>; 4],
+    inner: [Option<CompressionEncoding>; 5],
 }
 
 impl EnabledCompressionEncodings {
@@ -87,6 +89,9 @@ pub enum CompressionEncoding {
     #[cfg(feature = "gzip")]
     Gzip,
     #[allow(missing_docs)]
+    #[cfg(feature = "deflate")]
+    Deflate,
+    #[allow(missing_docs)]
     #[cfg(feature = "zstd")]
     Zstd,
     #[allow(missing_docs)]
@@ -101,6 +106,8 @@ impl CompressionEncoding {
     pub(crate) const ENCODINGS: &'static [CompressionEncoding] = &[
         #[cfg(feature = "gzip")]
         CompressionEncoding::Gzip,
+        #[cfg(feature = "deflate")]
+        CompressionEncoding::Deflate,
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd,
         #[cfg(feature = "lz4")]
@@ -124,6 +131,8 @@ impl CompressionEncoding {
         split_by_comma(header_value_str).find_map(|value| match value {
             #[cfg(feature = "gzip")]
             "gzip" => Some(CompressionEncoding::Gzip),
+            #[cfg(feature = "deflate")]
+            "deflate" => Some(CompressionEncoding::Deflate),
             #[cfg(feature = "zstd")]
             "zstd" => Some(CompressionEncoding::Zstd),
             #[cfg(feature = "lz4")]
@@ -148,6 +157,10 @@ impl CompressionEncoding {
             b"gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
                 Ok(Some(CompressionEncoding::Gzip))
             }
+            #[cfg(feature = "deflate")]
+            b"deflate" if enabled_encodings.is_enabled(CompressionEncoding::Deflate) => {
+                Ok(Some(CompressionEncoding::Deflate))
+            }
             #[cfg(feature = "zstd")]
             b"zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
                 Ok(Some(CompressionEncoding::Zstd))
@@ -162,19 +175,13 @@ impl CompressionEncoding {
             }
             b"identity" => Ok(None),
             other => {
-                // NOTE: Workaround for lifetime limitation. Resolved at Rust 1.79.
-                // https://blog.rust-lang.org/2024/06/13/Rust-1.79.0.html#extending-automatic-temporary-lifetime-extension
-                let other_debug_string;
+                let other = match std::str::from_utf8(other) {
+                    Ok(s) => Cow::Borrowed(s),
+                    Err(_) => Cow::Owned(format!("{other:?}")),
+                };
 
                 let mut status = Status::unimplemented(format!(
-                    "Content is compressed with `{}` which isn't supported",
-                    match std::str::from_utf8(other) {
-                        Ok(s) => s,
-                        Err(_) => {
-                            other_debug_string = format!("{other:?}");
-                            &other_debug_string
-                        }
-                    }
+                    "Content is compressed with `{other}` which isn't supported"
                 ));
 
                 let header_value = enabled_encodings
@@ -194,6 +201,8 @@ impl CompressionEncoding {
         match self {
             #[cfg(feature = "gzip")]
             CompressionEncoding::Gzip => "gzip",
+            #[cfg(feature = "deflate")]
+            CompressionEncoding::Deflate => "deflate",
             #[cfg(feature = "zstd")]
             CompressionEncoding::Zstd => "zstd",
             #[cfg(feature = "lz4")]
@@ -205,6 +214,7 @@ impl CompressionEncoding {
 
     #[cfg(any(
         feature = "gzip",
+        feature = "deflate",
         feature = "zstd",
         feature = "lz4",
         feature = "snappy"
@@ -239,6 +249,7 @@ pub(crate) fn compress(
 
     #[cfg(any(
         feature = "gzip",
+        feature = "deflate",
         feature = "zstd",
         feature = "lz4",
         feature = "snappy"
@@ -254,6 +265,15 @@ pub(crate) fn compress(
                 flate2::Compression::new(6),
             );
             std::io::copy(&mut gzip_encoder, &mut out_writer)?;
+        }
+        #[cfg(feature = "deflate")]
+        CompressionEncoding::Deflate => {
+            let mut deflate_encoder = ZlibEncoder::new(
+                &decompressed_buf[0..len],
+                // FIXME: support customizing the compression level
+                flate2::Compression::new(6),
+            );
+            std::io::copy(&mut deflate_encoder, &mut out_writer)?;
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
@@ -293,17 +313,19 @@ pub(crate) fn compress(
 pub(crate) fn decompress(
     settings: CompressionSettings,
     compressed_buf: &mut BytesMut,
-    out_buf: &mut BytesMut,
+    mut out_buf: bytes::buf::Limit<&mut BytesMut>,
     len: usize,
 ) -> Result<(), std::io::Error> {
     let buffer_growth_interval = settings.buffer_growth_interval;
     let estimate_decompressed_len = len * 2;
-    let capacity =
-        ((estimate_decompressed_len / buffer_growth_interval) + 1) * buffer_growth_interval;
-    out_buf.reserve(capacity);
+    let capacity = std::cmp::min(
+        bytes::buf::Limit::limit(&out_buf),
+        ((estimate_decompressed_len / buffer_growth_interval) + 1) * buffer_growth_interval,
+    );
 
     #[cfg(any(
         feature = "gzip",
+        feature = "deflate",
         feature = "zstd",
         feature = "lz4",
         feature = "snappy"
@@ -315,6 +337,11 @@ pub(crate) fn decompress(
         CompressionEncoding::Gzip => {
             let mut gzip_decoder = GzDecoder::new(&compressed_buf[0..len]);
             std::io::copy(&mut gzip_decoder, &mut out_writer)?;
+        }
+        #[cfg(feature = "deflate")]
+        CompressionEncoding::Deflate => {
+            let mut deflate_decoder = ZlibDecoder::new(&compressed_buf[0..len]);
+            std::io::copy(&mut deflate_decoder, &mut out_writer)?;
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
@@ -338,6 +365,7 @@ pub(crate) fn decompress(
     Ok(())
 }
 
+/// Controls compression behavior for individual messages within a stream.
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 pub enum SingleMessageCompressionOverride {
     /// Inherit whatever compression is already configured. If the stream is compressed this
@@ -352,6 +380,13 @@ pub enum SingleMessageCompressionOverride {
 
 #[cfg(test)]
 mod tests {
+    #[cfg(any(
+        feature = "gzip",
+        feature = "deflate",
+        feature = "zstd",
+        feature = "lz4",
+        feature = "snappy"
+    ))]
     use http::HeaderValue;
 
     use super::*;
@@ -369,13 +404,13 @@ mod tests {
         const GZIP: HeaderValue = HeaderValue::from_static("gzip,identity");
 
         let encodings = EnabledCompressionEncodings {
-            inner: [Some(CompressionEncoding::Gzip), None, None, None],
+            inner: [Some(CompressionEncoding::Gzip), None, None, None, None],
         };
 
         assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), GZIP);
 
         let encodings = EnabledCompressionEncodings {
-            inner: [None, Some(CompressionEncoding::Gzip), None, None],
+            inner: [None, Some(CompressionEncoding::Gzip), None, None, None],
         };
 
         assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), GZIP);
@@ -387,13 +422,13 @@ mod tests {
         const ZSTD: HeaderValue = HeaderValue::from_static("zstd,identity");
 
         let encodings = EnabledCompressionEncodings {
-            inner: [Some(CompressionEncoding::Zstd), None, None, None],
+            inner: [Some(CompressionEncoding::Zstd), None, None, None, None],
         };
 
         assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), ZSTD);
 
         let encodings = EnabledCompressionEncodings {
-            inner: [None, Some(CompressionEncoding::Zstd), None, None],
+            inner: [None, Some(CompressionEncoding::Zstd), None, None, None],
         };
 
         assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), ZSTD);
@@ -405,7 +440,7 @@ mod tests {
         const SNAPPY: HeaderValue = HeaderValue::from_static("snappy,identity");
 
         let encodings = EnabledCompressionEncodings {
-            inner: [Some(CompressionEncoding::Snappy), None, None, None],
+            inner: [Some(CompressionEncoding::Snappy), None, None, None, None],
         };
 
         assert_eq!(
@@ -414,7 +449,7 @@ mod tests {
         );
 
         let encodings = EnabledCompressionEncodings {
-            inner: [None, Some(CompressionEncoding::Snappy), None, None],
+            inner: [None, Some(CompressionEncoding::Snappy), None, None, None],
         };
 
         assert_eq!(
@@ -429,13 +464,13 @@ mod tests {
         const LZ4: HeaderValue = HeaderValue::from_static("lz4,identity");
 
         let encodings = EnabledCompressionEncodings {
-            inner: [Some(CompressionEncoding::Lz4), None, None, None],
+            inner: [Some(CompressionEncoding::Lz4), None, None, None, None],
         };
 
         assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), LZ4);
 
         let encodings = EnabledCompressionEncodings {
-            inner: [None, Some(CompressionEncoding::Lz4), None, None],
+            inner: [None, Some(CompressionEncoding::Lz4), None, None, None],
         };
 
         assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), LZ4);
@@ -444,6 +479,7 @@ mod tests {
     #[test]
     #[cfg(all(
         feature = "gzip",
+        feature = "deflate",
         feature = "zstd",
         feature = "snappy",
         feature = "lz4"
@@ -452,6 +488,7 @@ mod tests {
         let encodings = EnabledCompressionEncodings {
             inner: [
                 Some(CompressionEncoding::Gzip),
+                Some(CompressionEncoding::Deflate),
                 Some(CompressionEncoding::Zstd),
                 Some(CompressionEncoding::Snappy),
                 Some(CompressionEncoding::Lz4),
@@ -460,12 +497,13 @@ mod tests {
 
         assert_eq!(
             encodings.into_accept_encoding_header_value().unwrap(),
-            HeaderValue::from_static("gzip,zstd,snappy,lz4,identity"),
+            HeaderValue::from_static("gzip,deflate,zstd,snappy,lz4,identity"),
         );
 
         let encodings = EnabledCompressionEncodings {
             inner: [
                 Some(CompressionEncoding::Zstd),
+                Some(CompressionEncoding::Deflate),
                 Some(CompressionEncoding::Gzip),
                 Some(CompressionEncoding::Snappy),
                 Some(CompressionEncoding::Lz4),
@@ -474,7 +512,7 @@ mod tests {
 
         assert_eq!(
             encodings.into_accept_encoding_header_value().unwrap(),
-            HeaderValue::from_static("zstd,gzip,snappy,lz4,identity"),
+            HeaderValue::from_static("zstd,deflate,gzip,snappy,lz4,identity"),
         );
     }
 }

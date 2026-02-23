@@ -166,10 +166,7 @@ async fn response_stream_limit() {
                 if let Some(client) = client {
                     Ok(TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))
@@ -248,14 +245,11 @@ fn assert_test_case(case: TestCase) {
         (Some(_), Ok(())) => panic!("Expected failure, but got success"),
         (Some(code), Err(status)) => {
             if status.code() != code {
-                panic!(
-                    "Expected failure, got failure but wrong code, got: {:?}",
-                    status
-                )
+                panic!("Expected failure, got failure but wrong code, got: {status:?}")
             }
         }
 
-        (None, Err(status)) => panic!("Expected success, but got failure, got: {:?}", status),
+        (None, Err(status)) => panic!("Expected success, but got failure, got: {status:?}"),
 
         _ => (),
     }
@@ -335,10 +329,7 @@ async fn max_message_run(case: &TestCase) -> Result<(), Status> {
                 if let Some(client) = client {
                     Ok(TokioIo::new(client))
                 } else {
-                    Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        "Client already taken",
-                    ))
+                    Err(std::io::Error::other("Client already taken"))
                 }
             }
         }))

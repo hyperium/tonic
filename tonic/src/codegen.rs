@@ -19,5 +19,3 @@ pub use http_body::Body;
 pub type BoxFuture<T, E> = self::Pin<Box<dyn self::Future<Output = Result<T, E>> + Send + 'static>>;
 pub type BoxStream<T> =
     self::Pin<Box<dyn tokio_stream::Stream<Item = Result<T, crate::Status>> + Send + 'static>>;
-
-pub use crate::body::empty_body;

@@ -1,0 +1,52 @@
+[package]
+name = "xds-client"
+description = "An xDS client implementation in Rust"
+version = "0.1.0-alpha.1"
+edition = "2021"
+homepage = "https://github.com/hyperium/tonic"
+repository = "https://github.com/hyperium/tonic"
+license = "MIT"
+rust-version = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+bytes = "1.11.0"
+thiserror = "2"
+futures-channel = "0.3"
+
+# Optional dependencies for tonic transport
+tonic = { version = "0.14", optional = true }
+tokio = { version = "1", features = ["rt", "time", "sync"], optional = true }
+tokio-stream = { version = "0.1", optional = true }
+http = { version = "1", optional = true }
+
+# Optional dependencies for prost codec
+envoy-types = { version = "0.7", optional = true }
+prost = { version = "0.14", optional = true }
+
+[features]
+default = ["transport-tonic", "codegen-prost"]
+transport-tonic = [
+    "rt-tokio",
+    "dep:tonic",
+    "dep:tokio",
+    "dep:tokio-stream",
+    "dep:http",
+]
+rt-tokio = ["dep:tokio"]
+codegen-prost = ["dep:envoy-types", "dep:prost"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+async-stream = "0.3"
+envoy-types = "0.7"
+prost = "0.14"
+
+[package.metadata.cargo_check_external_types]
+allowed_external_types = [
+    # major released
+    "bytes::*",
+]

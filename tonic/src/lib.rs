@@ -24,15 +24,21 @@
 //! - `router`: Enables the [`axum`] based service router. Enabled by default.
 //! - `codegen`: Enables all the required exports and optional dependencies required
 //!   for [`tonic-build`]. Enabled by default.
-//! - `tls`: Enables the [`rustls`] based TLS options for the `transport` feature. Not
-//!   enabled by default.
-//! - `tls-roots`: Deprecated. An alias to `tls-native-roots` feature.
+//! - `tls-ring`: Enables the [`rustls`] based TLS options for the `transport` feature using
+//!   the [`ring`] libcrypto provider. Not enabled by default.
+//! - `tls-aws-lc`: Enables the [`rustls`] based TLS options for the `transport` feature using
+//!   the [`aws-lc-rs`] libcrypto provider. Not enabled by default.
 //! - `tls-native-roots`: Adds system trust roots to [`rustls`]-based gRPC clients using the
 //!   [`rustls-native-certs`] crate. Not enabled by default.
 //! - `tls-webpki-roots`: Add the standard trust roots from the [`webpki-roots`] crate to
 //!   `rustls`-based gRPC clients. Not enabled by default.
-//! - `prost`: Enables the [`prost`] based gRPC [`Codec`] implementation. Enabled by default.
+//! - `tls-connect-info`: Adds additional implementations of [`Connected`]
+//!   on common TLS connectors. Not enabled by default, unless any of the other `tls-*`
+//!   features are enabled. This feature is useful for when trying to use a custom
+//!   TLS connector with `connect_with_connector` without enabling any `tls-*` features.
 //! - `gzip`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
+//!   Not enabled by default.
+//! - `deflate`: Enables compressing requests, responses, and streams. Depends on [`flate2`].
 //!   Not enabled by default.
 //! - `zstd`: Enables compressing requests, responses, and streams. Depends on [`zstd`].
 //!   Not enabled by default.
@@ -67,14 +73,16 @@
 //! [gRPC]: https://grpc.io
 //! [`tonic`]: https://github.com/hyperium/tonic
 //! [`tokio`]: https://docs.rs/tokio
-//! [`prost`]: https://docs.rs/prost
 //! [`hyper`]: https://docs.rs/hyper
 //! [`tower`]: https://docs.rs/tower
 //! [`tonic-build`]: https://docs.rs/tonic-build
+//! [`ring`]: https://docs.rs/ring
+//! [`aws-lc-rs`]: https://docs.rs/aws-lc-rs
 //! [`tonic-examples`]: https://github.com/hyperium/tonic/tree/master/examples
 //! [`Codec`]: codec/trait.Codec.html
 //! [`Channel`]: transport/struct.Channel.html
 //! [`Server`]: transport/struct.Server.html
+//! [`Connected`]: transport/server/trait.Connected.html
 //! [`rustls`]: https://docs.rs/rustls
 //! [`client`]: client/index.html
 //! [`transport`]: transport/index.html
@@ -84,20 +92,12 @@
 //! [`zstd`]: https://docs.rs/zstd
 
 #![recursion_limit = "256"]
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
-#![deny(rustdoc::broken_intra_doc_links)]
 #![doc(
     html_logo_url = "https://raw.githubusercontent.com/tokio-rs/website/master/public/img/icons/tonic.svg"
 )]
-#![doc(html_root_url = "https://docs.rs/tonic/0.12.3")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 pub mod body;
 pub mod client;
@@ -128,7 +128,7 @@ pub use request::{IntoRequest, IntoStreamingRequest, Request};
 pub use response::Response;
 pub use status::{Code, ConnectError, Status, TimeoutExpired};
 
-pub(crate) type Error = Box<dyn std::error::Error + Send + Sync>;
+pub(crate) type BoxError = Box<dyn std::error::Error + Send + Sync>;
 
 #[doc(hidden)]
 #[cfg(feature = "codegen")]

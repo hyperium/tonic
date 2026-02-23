@@ -11,6 +11,7 @@ mod connection;
 pub(super) use self::connection::Connection;
 
 mod discover;
+pub use self::discover::Change;
 pub(super) use self::discover::DynamicServiceStream;
 
 mod io;
@@ -22,7 +23,7 @@ pub(crate) use self::connector::Connector;
 mod executor;
 pub(super) use self::executor::{Executor, SharedExec};
 
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 mod tls;
-#[cfg(feature = "tls")]
+#[cfg(feature = "_tls-any")]
 pub(super) use self::tls::TlsConnector;

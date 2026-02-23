@@ -1,21 +1,17 @@
+use core::fmt;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{ready, Context, Poll};
 
 use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
-use http_body_util::BodyExt;
 use pin_project::pin_project;
 use tonic::metadata::GRPC_CONTENT_TYPE;
-use tonic::{
-    body::{empty_body, BoxBody},
-    server::NamedService,
-};
+use tonic::{body::Body, server::NamedService};
 use tower_service::Service;
 use tracing::{debug, trace};
 
 use crate::call::content_types::is_grpc_web;
 use crate::call::{Encoding, GrpcWebCall};
-use crate::BoxError;
 
 /// Service implementing the grpc-web protocol.
 #[derive(Debug, Clone)]
@@ -47,31 +43,15 @@ impl<S> GrpcWebService<S> {
     }
 }
 
-impl<S> GrpcWebService<S>
+impl<S, ReqBody, ResBody> Service<Request<ReqBody>> for GrpcWebService<S>
 where
-    S: Service<Request<BoxBody>, Response = Response<BoxBody>> + Send + 'static,
+    S: Service<Request<Body>, Response = Response<ResBody>>,
+    ReqBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    ReqBody::Error: Into<crate::BoxError> + fmt::Display,
+    ResBody: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    ResBody::Error: Into<crate::BoxError> + fmt::Display,
 {
-    fn response(&self, status: StatusCode) -> ResponseFuture<S::Future> {
-        ResponseFuture {
-            case: Case::ImmediateResponse {
-                res: Some(
-                    Response::builder()
-                        .status(status)
-                        .body(empty_body())
-                        .unwrap(),
-                ),
-            },
-        }
-    }
-}
-
-impl<S> Service<Request<BoxBody>> for GrpcWebService<S>
-where
-    S: Service<Request<BoxBody>, Response = Response<BoxBody>> + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<BoxError> + Send,
-{
-    type Response = S::Response;
+    type Response = Response<Body>;
     type Error = S::Error;
     type Future = ResponseFuture<S::Future>;
 
@@ -79,7 +59,7 @@ where
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, req: Request<BoxBody>) -> Self::Future {
+    fn call(&mut self, req: Request<ReqBody>) -> Self::Future {
         match RequestKind::new(req.headers(), req.method(), req.version()) {
             // A valid grpc-web request, regardless of HTTP version.
             //
@@ -110,7 +90,10 @@ where
             // This is not a valid grpc-web request, return HTTP 405.
             RequestKind::GrpcWeb { .. } => {
                 debug!(kind = "simple", error="method not allowed", method = ?req.method());
-                self.response(StatusCode::METHOD_NOT_ALLOWED)
+
+                ResponseFuture {
+                    case: Case::immediate(StatusCode::METHOD_NOT_ALLOWED),
+                }
             }
 
             // All http/2 requests that are not grpc-web are passed through to the inner service,
@@ -119,7 +102,7 @@ where
                 debug!(kind = "other h2", content_type = ?req.headers().get(header::CONTENT_TYPE));
                 ResponseFuture {
                     case: Case::Other {
-                        future: self.inner.call(req),
+                        future: self.inner.call(req.map(Body::new)),
                     },
                 }
             }
@@ -127,14 +110,16 @@ where
             // Return HTTP 400 for all other requests.
             RequestKind::Other(_) => {
                 debug!(kind = "other h1", content_type = ?req.headers().get(header::CONTENT_TYPE));
-                self.response(StatusCode::BAD_REQUEST)
+
+                ResponseFuture {
+                    case: Case::immediate(StatusCode::BAD_REQUEST),
+                }
             }
         }
     }
 }
 
 /// Response future for the [`GrpcWebService`].
-#[allow(missing_debug_implementations)]
 #[pin_project]
 #[must_use = "futures do nothing unless polled"]
 pub struct ResponseFuture<F> {
@@ -154,34 +139,55 @@ enum Case<F> {
         future: F,
     },
     ImmediateResponse {
-        res: Option<Response<BoxBody>>,
+        res: Option<http::response::Parts>,
     },
 }
 
-impl<F, E> Future for ResponseFuture<F>
+impl<F> Case<F> {
+    fn immediate(status: StatusCode) -> Self {
+        let (res, ()) = Response::builder()
+            .status(status)
+            .body(())
+            .unwrap()
+            .into_parts();
+        Self::ImmediateResponse { res: Some(res) }
+    }
+}
+
+impl<F, B, E> Future for ResponseFuture<F>
 where
-    F: Future<Output = Result<Response<BoxBody>, E>> + Send + 'static,
-    E: Into<BoxError> + Send,
+    F: Future<Output = Result<Response<B>, E>>,
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::BoxError> + fmt::Display,
 {
-    type Output = Result<Response<BoxBody>, E>;
+    type Output = Result<Response<Body>, E>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let mut this = self.project();
+        let this = self.project();
 
-        match this.case.as_mut().project() {
+        match this.case.project() {
             CaseProj::GrpcWeb { future, accept } => {
                 let res = ready!(future.poll(cx))?;
 
                 Poll::Ready(Ok(coerce_response(res, *accept)))
             }
-            CaseProj::Other { future } => future.poll(cx),
-            CaseProj::ImmediateResponse { res } => Poll::Ready(Ok(res.take().unwrap())),
+            CaseProj::Other { future } => future.poll(cx).map_ok(|res| res.map(Body::new)),
+            CaseProj::ImmediateResponse { res } => {
+                let res = Response::from_parts(res.take().unwrap(), Body::empty());
+                Poll::Ready(Ok(res))
+            }
         }
     }
 }
 
 impl<S: NamedService> NamedService for GrpcWebService<S> {
     const NAME: &'static str = S::NAME;
+}
+
+impl<F> fmt::Debug for ResponseFuture<F> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ResponseFuture").finish()
+    }
 }
 
 impl<'a> RequestKind<'a> {
@@ -201,7 +207,11 @@ impl<'a> RequestKind<'a> {
 // Mutating request headers to conform to a gRPC request is not really
 // necessary for us at this point. We could remove most of these except
 // maybe for inserting `header::TE`, which tonic should check?
-fn coerce_request(mut req: Request<BoxBody>, encoding: Encoding) -> Request<BoxBody> {
+fn coerce_request<B>(mut req: Request<B>, encoding: Encoding) -> Request<Body>
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::BoxError> + fmt::Display,
+{
     req.headers_mut().remove(header::CONTENT_LENGTH);
 
     req.headers_mut()
@@ -215,13 +225,17 @@ fn coerce_request(mut req: Request<BoxBody>, encoding: Encoding) -> Request<BoxB
         HeaderValue::from_static("identity,deflate,gzip"),
     );
 
-    req.map(|b| GrpcWebCall::request(b, encoding).boxed_unsync())
+    req.map(|b| Body::new(GrpcWebCall::request(b, encoding)))
 }
 
-fn coerce_response(res: Response<BoxBody>, encoding: Encoding) -> Response<BoxBody> {
+fn coerce_response<B>(res: Response<B>, encoding: Encoding) -> Response<Body>
+where
+    B: http_body::Body<Data = bytes::Bytes> + Send + 'static,
+    B::Error: Into<crate::BoxError> + fmt::Display,
+{
     let mut res = res
         .map(|b| GrpcWebCall::response(b, encoding))
-        .map(BoxBody::new);
+        .map(Body::new);
 
     res.headers_mut().insert(
         header::CONTENT_TYPE,
@@ -238,23 +252,24 @@ mod tests {
     use http::header::{
         ACCESS_CONTROL_REQUEST_HEADERS, ACCESS_CONTROL_REQUEST_METHOD, CONTENT_TYPE, ORIGIN,
     };
+    use tower_layer::Layer as _;
 
     type BoxFuture<T, E> = Pin<Box<dyn Future<Output = Result<T, E>> + Send>>;
 
     #[derive(Debug, Clone)]
     struct Svc;
 
-    impl tower_service::Service<Request<BoxBody>> for Svc {
-        type Response = Response<BoxBody>;
-        type Error = String;
+    impl<B> tower_service::Service<Request<B>> for Svc {
+        type Response = Response<Body>;
+        type Error = std::convert::Infallible;
         type Future = BoxFuture<Self::Response, Self::Error>;
 
         fn poll_ready(&mut self, _: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
         }
 
-        fn call(&mut self, _: Request<BoxBody>) -> Self::Future {
-            Box::pin(async { Ok(Response::new(empty_body())) })
+        fn call(&mut self, _: Request<B>) -> Self::Future {
+            Box::pin(async { Ok(Response::new(Body::default())) })
         }
     }
 
@@ -262,22 +277,33 @@ mod tests {
         const NAME: &'static str = "test";
     }
 
+    fn enable<S>(service: S) -> tower_http::cors::Cors<GrpcWebService<S>>
+    where
+        S: Service<http::Request<Body>, Response = http::Response<Body>>,
+    {
+        tower_layer::Stack::new(
+            crate::GrpcWebLayer::new(),
+            tower_http::cors::CorsLayer::new(),
+        )
+        .layer(service)
+    }
+
     mod grpc_web {
         use super::*;
         use tower_layer::Layer;
 
-        fn request() -> Request<BoxBody> {
+        fn request() -> Request<Body> {
             Request::builder()
                 .method(Method::POST)
                 .header(CONTENT_TYPE, GRPC_WEB)
                 .header(ORIGIN, "http://example.com")
-                .body(empty_body())
+                .body(Body::default())
                 .unwrap()
         }
 
         #[tokio::test]
         async fn default_cors_config() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::OK);
@@ -292,8 +318,19 @@ mod tests {
         }
 
         #[tokio::test]
+        async fn web_layer_with_axum() {
+            let mut svc = axum::routing::Router::new()
+                .route("/", axum::routing::post_service(Svc))
+                .layer(crate::GrpcWebLayer::new());
+
+            let res = svc.call(request()).await.unwrap();
+
+            assert_eq!(res.status(), StatusCode::OK);
+        }
+
+        #[tokio::test]
         async fn without_origin() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             let mut req = request();
             req.headers_mut().remove(ORIGIN);
@@ -305,7 +342,7 @@ mod tests {
 
         #[tokio::test]
         async fn only_post_and_options_allowed() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             for method in &[
                 Method::GET,
@@ -322,15 +359,14 @@ mod tests {
                 assert_eq!(
                     res.status(),
                     StatusCode::METHOD_NOT_ALLOWED,
-                    "{} should not be allowed",
-                    method
+                    "{method} should not be allowed"
                 );
             }
         }
 
         #[tokio::test]
         async fn grpc_web_content_types() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             for ct in &[GRPC_WEB_TEXT, GRPC_WEB_PROTO, GRPC_WEB_TEXT_PROTO, GRPC_WEB] {
                 let mut req = request();
@@ -347,19 +383,19 @@ mod tests {
     mod options {
         use super::*;
 
-        fn request() -> Request<BoxBody> {
+        fn request() -> Request<Body> {
             Request::builder()
                 .method(Method::OPTIONS)
                 .header(ORIGIN, "http://example.com")
                 .header(ACCESS_CONTROL_REQUEST_HEADERS, "x-grpc-web")
                 .header(ACCESS_CONTROL_REQUEST_METHOD, "POST")
-                .body(empty_body())
+                .body(Body::default())
                 .unwrap()
         }
 
         #[tokio::test]
         async fn valid_grpc_web_preflight() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::OK);
@@ -369,17 +405,17 @@ mod tests {
     mod grpc {
         use super::*;
 
-        fn request() -> Request<BoxBody> {
+        fn request() -> Request<Body> {
             Request::builder()
                 .version(Version::HTTP_2)
                 .header(CONTENT_TYPE, GRPC_CONTENT_TYPE)
-                .body(empty_body())
+                .body(Body::default())
                 .unwrap()
         }
 
         #[tokio::test]
         async fn h2_is_ok() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             let req = request();
             let res = svc.call(req).await.unwrap();
@@ -389,11 +425,11 @@ mod tests {
 
         #[tokio::test]
         async fn h1_is_err() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             let req = Request::builder()
                 .header(CONTENT_TYPE, GRPC_CONTENT_TYPE)
-                .body(empty_body())
+                .body(Body::default())
                 .unwrap();
 
             let res = svc.call(req).await.unwrap();
@@ -402,13 +438,13 @@ mod tests {
 
         #[tokio::test]
         async fn content_type_variants() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
 
             for variant in &["grpc", "grpc+proto", "grpc+thrift", "grpc+foo"] {
                 let mut req = request();
                 req.headers_mut().insert(
                     CONTENT_TYPE,
-                    HeaderValue::from_maybe_shared(format!("application/{}", variant)).unwrap(),
+                    HeaderValue::from_maybe_shared(format!("application/{variant}")).unwrap(),
                 );
 
                 let res = svc.call(req).await.unwrap();
@@ -421,16 +457,16 @@ mod tests {
     mod other {
         use super::*;
 
-        fn request() -> Request<BoxBody> {
+        fn request() -> Request<Body> {
             Request::builder()
                 .header(CONTENT_TYPE, "application/text")
-                .body(empty_body())
+                .body(Body::default())
                 .unwrap()
         }
 
         #[tokio::test]
         async fn h1_is_err() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let res = svc.call(request()).await.unwrap();
 
             assert_eq!(res.status(), StatusCode::BAD_REQUEST)
@@ -438,7 +474,7 @@ mod tests {
 
         #[tokio::test]
         async fn h2_is_ok() {
-            let mut svc = crate::enable(Svc);
+            let mut svc = enable(Svc);
             let mut req = request();
             *req.version_mut() = Version::HTTP_2;
 

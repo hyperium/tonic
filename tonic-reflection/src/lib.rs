@@ -1,19 +1,11 @@
 //! A `tonic` based gRPC Server Reflection implementation.
 
-#![warn(
-    missing_debug_implementations,
-    missing_docs,
-    rust_2018_idioms,
-    unreachable_pub
-)]
 #![doc(
     html_logo_url = "https://github.com/hyperium/tonic/raw/master/.github/assets/tonic-docs.png"
 )]
-#![deny(rustdoc::broken_intra_doc_links)]
-#![doc(html_root_url = "https://docs.rs/tonic-reflection/0.12.3")]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod generated {
     #![allow(unreachable_pub)]
@@ -26,12 +18,14 @@ mod generated {
     #[rustfmt::skip]
     pub mod grpc_reflection_v1;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET_V1ALPHA: &[u8] =
-        include_bytes!("generated/reflection_v1alpha1.bin");
+    #[rustfmt::skip]
+    pub mod reflection_v1_fds;
 
-    /// Byte encoded FILE_DESCRIPTOR_SET.
-    pub const FILE_DESCRIPTOR_SET_V1: &[u8] = include_bytes!("generated/reflection_v1.bin");
+    #[rustfmt::skip]
+    pub mod reflection_v1alpha1_fds;
+
+    pub use reflection_v1_fds::FILE_DESCRIPTOR_SET as FILE_DESCRIPTOR_SET_V1;
+    pub use reflection_v1alpha1_fds::FILE_DESCRIPTOR_SET as FILE_DESCRIPTOR_SET_V1ALPHA;
 
     #[cfg(test)]
     mod tests {
