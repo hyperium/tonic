@@ -15,27 +15,30 @@
 //! # Example
 //!
 //! ```ignore
-//! use xds_client::{XdsClient, ClientConfig, Resource};
+//! use xds_client::{XdsClient, ClientConfig, Node, ResourceEvent};
 //!
-//! let config = ClientConfig::new("http://localhost:10000", "my-node");
-//! let client = XdsClient::builder(config)
-//!     .build(transport, runtime)
-//!     .await?;
+//! // Create node and configuration
+//! let node = Node::new("grpc", "1.0").with_id("my-node");
+//! let config = ClientConfig::new(node, "https://xds.example.com:443");
 //!
-//! let mut watcher = client.watch::<Listener>("my-listener");
+//! // Build client with transport, codec, and runtime
+//! let client = XdsClient::builder(config, transport, codec, runtime).build();
+//!
+//! // Watch for Listener resources
+//! let mut watcher = client.watch::<Listener>("my-listener").await;
 //! while let Some(event) = watcher.next().await {
 //!     match event {
-//!         ResourceEvent::ResourceChanged { resource, done } => {
+//!         ResourceEvent::ResourceChanged { result: Ok(resource), done } => {
 //!             // Process the resource, possibly add cascading watches.
-//!             client.watch::<RouteConfiguration>(&resource.route_name());
-//!             done.complete();
+//!             client.watch::<RouteConfiguration>(&resource.route_name()).await;
+//!             // Signal is sent automatically when done is dropped
 //!         }
-//!         ResourceEvent::ResourceError { error, done } => {
-//!             eprintln!("Error: {}", error);
-//!             done.complete();
+//!         ResourceEvent::ResourceChanged { result: Err(error), .. } => {
+//!             // Resource was invalidated (validation error or deleted)
+//!             eprintln!("Resource invalidated: {}", error);
 //!         }
 //!         ResourceEvent::AmbientError { error, .. } => {
-//!             // Can also rely on auto-signal on drop
+//!             // Non-fatal error, continue using cached resource
 //!             eprintln!("Ambient error: {}", error);
 //!         }
 //!     }
@@ -56,16 +59,16 @@ pub mod resource;
 pub mod runtime;
 pub mod transport;
 
-pub use client::config::ClientConfig;
+pub use client::config::{ClientConfig, ServerConfig};
+pub use client::retry::{Backoff, RetryPolicy};
 pub use client::watch::{ProcessingDone, ResourceEvent, ResourceWatcher};
-pub use client::worker::AdsWorker;
 pub use client::{XdsClient, XdsClientBuilder};
 pub use codec::XdsCodec;
 pub use error::{Error, Result};
 pub use message::{DiscoveryRequest, DiscoveryResponse, ErrorDetail, Locality, Node, ResourceAny};
-pub use resource::Resource;
+pub use resource::{DecodeResult, DecodedResource, Resource};
 pub use runtime::Runtime;
-pub use transport::{Transport, TransportStream};
+pub use transport::{Transport, TransportBuilder, TransportStream};
 
 // Tokio runtime
 #[cfg(feature = "rt-tokio")]
@@ -73,7 +76,7 @@ pub use runtime::tokio::TokioRuntime;
 
 // Tonic transport
 #[cfg(feature = "transport-tonic")]
-pub use transport::tonic::TonicTransport;
+pub use transport::tonic::{TonicTransport, TonicTransportBuilder};
 
 // Prost codec
 #[cfg(feature = "codegen-prost")]
