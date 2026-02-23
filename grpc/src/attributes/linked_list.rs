@@ -30,18 +30,10 @@ use std::sync::Arc;
 /// Each node represents an operation (insertion or deletion) and points to the
 /// previous state of the list.
 #[derive(Clone, Debug)]
-enum Node<K, V> {
-    /// Represents an insertion of a key-value pair.
-    Entry {
-        key: K,
-        value: V,
-        next: Option<Arc<Node<K, V>>>,
-    },
-    /// Represents a deletion of a key.
-    Deletion {
-        key: K,
-        next: Option<Arc<Node<K, V>>>,
-    },
+struct Node<K, V> {
+    key: K,
+    value: V,
+    next: Option<Arc<Node<K, V>>>,
 }
 
 /// A persistent linked list that behaves like a map.
@@ -91,22 +83,9 @@ impl<K, V> LinkedList<K, V> {
     /// old one, effectively updating the value.
     pub fn add(&self, key: K, value: V) -> Self {
         LinkedList {
-            head: Some(Arc::new(Node::Entry {
+            head: Some(Arc::new(Node {
                 key,
                 value,
-                next: self.head.clone(),
-            })),
-        }
-    }
-
-    /// Removes a key from the list.
-    ///
-    /// This operation adds a deletion marker to the front of the list, which will
-    /// prevent the key from being yielded during iteration.
-    pub fn remove(&self, key: K) -> Self {
-        LinkedList {
-            head: Some(Arc::new(Node::Deletion {
-                key,
                 next: self.head.clone(),
             })),
         }
@@ -131,24 +110,10 @@ impl<K: Eq, V> LinkedList<K, V> {
     pub fn get(&self, key: &K) -> Option<&V> {
         let mut current = self.head.as_ref();
         while let Some(node) = current {
-            match &**node {
-                Node::Entry {
-                    key: k,
-                    value,
-                    next,
-                } => {
-                    if k == key {
-                        return Some(value);
-                    }
-                    current = next.as_ref();
-                }
-                Node::Deletion { key: k, next } => {
-                    if k == key {
-                        return None;
-                    }
-                    current = next.as_ref();
-                }
+            if &node.key == key {
+                return Some(&node.value);
             }
+            current = node.next.as_ref();
         }
         None
     }
@@ -180,17 +145,9 @@ impl<'a, K: Ord, V> Iterator for Iter<'a, K, V> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let node = self.current?;
-            match &**node {
-                Node::Entry { key, value, next } => {
-                    self.current = next.as_ref();
-                    if self.seen.insert(key) {
-                        return Some((key, value));
-                    }
-                }
-                Node::Deletion { key, next } => {
-                    self.seen.insert(key);
-                    self.current = next.as_ref();
-                }
+            self.current = node.next.as_ref();
+            if self.seen.insert(&node.key) {
+                return Some((&node.key, &node.value));
             }
         }
     }
@@ -208,14 +165,6 @@ mod tests {
     }
 
     #[test]
-    fn test_remove() {
-        let l = LinkedList::new().add(1, "a").add(2, "b").add(3, "c");
-        let l2 = l.remove(2);
-        let v: Vec<_> = l2.iter().map(|(k, v)| (*k, *v)).collect();
-        assert_eq!(v, vec![(3, "c"), (1, "a")]);
-    }
-
-    #[test]
     fn test_persistence() {
         let l1 = LinkedList::new().add(1, "a");
         let l2 = l1.add(2, "b");
@@ -227,24 +176,6 @@ mod tests {
         // l2 should have both
         let v2: Vec<_> = l2.iter().map(|(k, v)| (*k, *v)).collect();
         assert_eq!(v2, vec![(2, "b"), (1, "a")]);
-    }
-
-    #[test]
-    fn test_reinsertion() {
-        let l = LinkedList::new().add(1, "a");
-        let l = l.remove(1);
-        let l = l.add(1, "b");
-
-        let v: Vec<_> = l.iter().map(|(k, v)| (*k, *v)).collect();
-        assert_eq!(v, vec![(1, "b")]);
-    }
-
-    #[test]
-    fn test_multiple_removals() {
-        let l = LinkedList::new().add(1, "a").add(1, "b"); // Second add shadows first
-        let l = l.remove(1);
-        let v: Vec<_> = l.iter().map(|(k, v)| (*k, *v)).collect();
-        assert!(v.is_empty());
     }
 
     #[test]

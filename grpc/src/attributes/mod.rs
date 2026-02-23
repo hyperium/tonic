@@ -22,7 +22,8 @@
  *
  */
 
-use std::any::{Any, TypeId};
+use std::any::Any;
+use std::any::TypeId;
 use std::cmp::Ordering;
 use std::fmt::Debug;
 
@@ -125,27 +126,15 @@ impl Attributes {
         let id = TypeId::of::<T>();
         self.map.get(&id).and_then(|v| v.0.any_ref().downcast_ref())
     }
-
-    /// Removes the value of type `T` from the attributes.
-    ///
-    /// Returns a new `Attributes` instance without the specified type.
-    ///
-    /// Note: This method is currently private. While gRPC C++ and Java support
-    /// this functionality, it may be unnecessary in Rust if scoped attributes
-    /// are stored separately. It can be made public in the future should a
-    /// compelling use case arise.
-    fn remove<T: 'static>(&self) -> Self {
-        let id = TypeId::of::<T>();
-        Attributes {
-            map: self.map.remove(id),
-        }
-    }
 }
 
 impl PartialEq for Attributes {
     fn eq(&self, other: &Self) -> bool {
         let mut v1: Vec<_> = self.map.iter().collect();
         let mut v2: Vec<_> = other.map.iter().collect();
+        if v1.len() != v2.len() {
+            return false;
+        }
         v1.sort();
         v2.sort();
         v1 == v2
@@ -196,18 +185,6 @@ mod tests {
         assert_eq!(attrs.get::<i32>(), Some(&42));
         assert_eq!(attrs.get::<String>(), Some(&"hello".to_string()));
         assert_eq!(attrs.get::<bool>(), None);
-    }
-
-    #[test]
-    fn test_remove() {
-        let attrs = Attributes::new().add(10i32).add(20u32);
-        let attrs2 = attrs.remove::<i32>();
-
-        assert_eq!(attrs.get::<i32>(), Some(&10));
-        assert_eq!(attrs.get::<u32>(), Some(&20));
-
-        assert_eq!(attrs2.get::<i32>(), None);
-        assert_eq!(attrs2.get::<u32>(), Some(&20));
     }
 
     #[test]
