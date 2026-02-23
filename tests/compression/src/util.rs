@@ -7,15 +7,15 @@ use pin_project::pin_project;
 use std::{
     pin::Pin,
     sync::{
-        atomic::{AtomicUsize, Ordering::SeqCst},
         Arc,
+        atomic::{AtomicUsize, Ordering::SeqCst},
     },
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tonic::body::Body;
 use tonic::codec::CompressionEncoding;
-use tonic::transport::{server::Connected, Channel};
+use tonic::transport::{Channel, server::Connected};
 use tower_http::map_request_body::MapRequestBodyLayer;
 
 macro_rules! parametrized_tests {
@@ -162,6 +162,8 @@ impl AssertRightEncoding {
             CompressionEncoding::Gzip => "gzip",
             CompressionEncoding::Zstd => "zstd",
             CompressionEncoding::Deflate => "deflate",
+            CompressionEncoding::Lz4 => "lz4",
+            CompressionEncoding::Snappy => "snappy",
             _ => panic!("unexpected encoding {:?}", self.encoding),
         };
         assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);

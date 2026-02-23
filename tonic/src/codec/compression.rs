@@ -247,8 +247,6 @@ pub(crate) fn compress(
     let capacity = ((len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
-    let before_compress_len = out_buf.len();
-
     #[cfg(any(
         feature = "gzip",
         feature = "deflate",
@@ -306,14 +304,6 @@ pub(crate) fn compress(
     }
 
     decompressed_buf.advance(len);
-
-    let after_compress_len = out_buf.len();
-
-    println!(
-        "Compressed {len} bytes into {} bytes with {:?}",
-        after_compress_len - before_compress_len,
-        settings.encoding
-    );
 
     Ok(())
 }
@@ -520,7 +510,7 @@ mod tests {
         feature = "snappy",
         feature = "lz4"
     ))]
-    fn convert_gzip_and_zstd_into_header_value() {
+    fn convert_gzip_zstd_snappy_and_lz4_into_header_value() {
         let encodings = EnabledCompressionEncodings {
             inner: [
                 Some(CompressionEncoding::Gzip),

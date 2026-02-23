@@ -6,6 +6,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    snappy: CompressionEncoding::Snappy,
+    lz4: CompressionEncoding::Lz4,
 }
 
 #[allow(dead_code)]
@@ -38,6 +40,8 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
                 CompressionEncoding::Gzip => "gzip",
                 CompressionEncoding::Zstd => "zstd",
                 CompressionEncoding::Deflate => "deflate",
+                CompressionEncoding::Lz4 => "lz4",
+                CompressionEncoding::Snappy => "snappy",
                 _ => panic!("unexpected encoding {:?}", self.encoding),
             };
             assert_eq!(
@@ -88,7 +92,9 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {encoding:?}"),
+        CompressionEncoding::Lz4 => "lz4",
+        CompressionEncoding::Snappy => "snappy",
+        _ => panic!("unexpected encoding {:?}", encoding),
     };
 
     for _ in 0..3 {
@@ -104,6 +110,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -180,7 +188,9 @@ async fn client_enabled_server_disabled_multi_encoding() {
     let mut client = test_client::TestClient::new(mock_io_channel(client).await)
         .accept_compressed(CompressionEncoding::Gzip)
         .accept_compressed(CompressionEncoding::Zstd)
-        .accept_compressed(CompressionEncoding::Deflate);
+        .accept_compressed(CompressionEncoding::Deflate)
+        .accept_compressed(CompressionEncoding::Lz4)
+        .accept_compressed(CompressionEncoding::Snappy);
 
     let res = client.compress_output_unary(()).await.unwrap();
 
@@ -195,6 +205,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -266,6 +278,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -310,6 +324,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -353,7 +369,9 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {encoding:?}"),
+        CompressionEncoding::Lz4 => "lz4",
+        CompressionEncoding::Snappy => "snappy",
+        _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
@@ -366,6 +384,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -411,7 +431,9 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {encoding:?}"),
+        CompressionEncoding::Lz4 => "lz4",
+        CompressionEncoding::Snappy => "snappy",
+        _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
@@ -437,6 +459,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[allow(dead_code)]
@@ -482,7 +506,9 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
-        _ => panic!("unexpected encoding {encoding:?}"),
+        CompressionEncoding::Lz4 => "lz4",
+        CompressionEncoding::Snappy => "snappy",
+        _ => panic!("unexpected encoding {:?}", encoding),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
     let bytes_sent = response_bytes_counter.load(SeqCst);
@@ -494,6 +520,8 @@ util::parametrized_tests! {
     zstd: CompressionEncoding::Zstd,
     gzip: CompressionEncoding::Gzip,
     deflate: CompressionEncoding::Deflate,
+    lz4: CompressionEncoding::Lz4,
+    snappy: CompressionEncoding::Snappy,
 }
 
 #[cfg(test)]
@@ -536,6 +564,8 @@ async fn limit_decoded_message_size(encoding: CompressionEncoding) {
         CompressionEncoding::Gzip => "gzip",
         CompressionEncoding::Zstd => "zstd",
         CompressionEncoding::Deflate => "deflate",
+        CompressionEncoding::Lz4 => "lz4",
+        CompressionEncoding::Snappy => "snappy",
         _ => panic!("unexpected encoding {encoding:?}"),
     };
 
