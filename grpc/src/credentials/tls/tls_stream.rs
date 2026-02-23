@@ -22,19 +22,21 @@
  *
  */
 
-use std::{
-    io::IoSlice,
-    pin::Pin,
-    task::{Context, Poll},
-};
+use std::io::IoSlice;
+use std::pin::Pin;
+use std::task::Context;
+use std::task::Poll;
 
-use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
+use tokio::io::ReadBuf;
 use tokio_rustls::TlsStream as RustlsStream;
 
-use crate::rt::{endpoint, GrpcEndpoint};
+use crate::rt::endpoint;
+use crate::rt::GrpcEndpoint;
 
 pub struct TlsStream<T> {
-    pub(crate) inner: RustlsStream<T>,
+    inner: RustlsStream<T>,
 }
 
 impl<T> AsyncRead for TlsStream<T>
@@ -109,5 +111,15 @@ where
             RustlsStream::Client(s) => s.get_ref().0.get_peer_address(),
             RustlsStream::Server(s) => s.get_ref().0.get_peer_address(),
         }
+    }
+}
+
+impl<T> TlsStream<T> {
+    pub fn new(inner: RustlsStream<T>) -> Self {
+        Self { inner }
+    }
+
+    pub fn inner(&self) -> &RustlsStream<T> {
+        &self.inner
     }
 }

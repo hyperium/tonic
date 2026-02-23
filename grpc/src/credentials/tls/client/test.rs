@@ -22,24 +22,31 @@
  *
  */
 
-use super::*;
-use crate::credentials::client::{
-    ChannelCredsInternal, ClientConnectionSecurityContext, ClientHandshakeInfo,
-};
-use crate::credentials::common::Authority;
-use crate::credentials::tls::{RootCertificates, StaticProvider};
-use crate::rt::{self, TcpOptions};
-use rustls::crypto::ring;
-use rustls::{HandshakeKind, ServerConfig};
-use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Once;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+use rustls::crypto::ring;
+use rustls::HandshakeKind;
+use rustls::ServerConfig;
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::PrivateKeyDer;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
+
+use super::*;
+use crate::credentials::client::ChannelCredsInternal;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::common::Authority;
+use crate::credentials::tls::RootCertificates;
+use crate::credentials::tls::StaticProvider;
+use crate::rt;
+use crate::rt::TcpOptions;
 
 static INIT: Once = Once::new();
 
@@ -52,7 +59,7 @@ fn init_provider() {
 #[tokio::test]
 async fn test_tls_handshake() {
     init_provider();
-    run_handshake_test(vec![b"h2".to_vec()], true).await;
+    run_handshake_test(vec![ALPN_PROTO_STR_H2.to_vec()], true).await;
 }
 
 #[tokio::test]
@@ -82,7 +89,7 @@ async fn test_tls_cipher_suites_secure() {
         .clone();
 
     // This should succeed as default provider usually has secure suites.
-    let creds = RustlsClientTlsCredendials::new_for_test(config, provider);
+    let creds = RustlsClientTlsCredendials::new_impl(config, provider);
     assert!(
         creds.is_ok(),
         "Failed to create creds with secure provider: {:?}",
@@ -116,7 +123,7 @@ async fn test_tls_cipher_suites_insecure() {
         ),
     });
 
-    let creds = RustlsClientTlsCredendials::new_for_test(config, provider);
+    let creds = RustlsClientTlsCredendials::new_impl(config, provider);
     assert!(creds.is_err());
     assert_eq!(
         creds.err().unwrap(),
@@ -394,7 +401,7 @@ async fn check_client_resumption_disabled(
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .unwrap();
-    server_config.alpn_protocols = vec![b"h2".to_vec()];
+    server_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
     // Enable stateful resumption
     server_config.session_storage = rustls::server::ServerSessionMemoryCache::new(32);
     // Enable stateless resumption (TLS 1.3 tickets)
@@ -429,7 +436,7 @@ async fn check_client_resumption_disabled(
 
         let mut tls_stream = result.endpoint;
 
-        let connection = match &tls_stream.inner {
+        let connection = match tls_stream.inner() {
             tokio_rustls::TlsStream::Client(conn) => conn.get_ref().1,
             _ => panic!("Expected client stream"),
         };
@@ -485,7 +492,7 @@ fn mtls_server_config() -> ServerConfig {
         .with_client_cert_verifier(verifier)
         .with_single_cert(certs, key)
         .unwrap();
-    server_config.alpn_protocols = vec![b"h2".to_vec()];
+    server_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
     server_config
 }
 
@@ -533,7 +540,7 @@ fn default_server_config() -> ServerConfig {
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .unwrap();
-    server_config.alpn_protocols = vec![b"h2".to_vec()];
+    server_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
     server_config
 }
 

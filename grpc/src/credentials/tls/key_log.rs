@@ -15,8 +15,10 @@
 // Note: This file has been modified by gRPC authors on 11th Feb 2026.
 // - Add ability to write logs to arbitrary path.
 
-use core::fmt::{Debug, Formatter};
-use std::fs::{File, OpenOptions};
+use core::fmt::Debug;
+use core::fmt::Formatter;
+use std::fs::File;
+use std::fs::OpenOptions;
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
