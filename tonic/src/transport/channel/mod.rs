@@ -117,6 +117,42 @@ impl Channel {
         channel
     }
 
+    /// Balance a list of [`Endpoint`] with specific connectors.
+    ///
+    /// This creates a [`Channel`] that will load balance across all the
+    /// provided endpoints.
+    ///
+    /// This allows you to build a balance [`Channel`] that that uses a non-HTTP transport to connect to the endpoints.
+    ///
+    /// # Example
+    /// ```rust
+    /// use hyper_util::client::legacy::connect::HttpConnector;
+    /// use tonic::transport::{Endpoint, Channel};
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let endpoint = Endpoint::from_static("127.0.0.1:3000");
+    /// // This connector can be any kind of connector including https
+    /// let connector = HttpConnector::new();
+    /// let channel = Channel::balance_list_with_connectors([(connector, endpoint)].into_iter());
+    /// # }
+    /// ```
+    pub fn balance_list_with_connectors<C>(list: impl Iterator<Item = (C, Endpoint)>) -> Self
+    where
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::BoxError> + Send,
+        C::Future: Send,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+    {
+        let (channel, tx) = Self::balance_channel_with_connectors(DEFAULT_BUFFER_SIZE);
+        list.for_each(|(connector, endpoint)| {
+            tx.try_send(Change::Insert(endpoint.uri.clone(), (connector, endpoint)))
+                .unwrap();
+        });
+
+        channel
+    }
+
     /// Balance a list of [`Endpoint`]'s.
     ///
     /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
@@ -125,6 +161,40 @@ impl Channel {
         K: Hash + Eq + Send + Clone + 'static,
     {
         Self::balance_channel_with_executor(capacity, SharedExec::tokio())
+    }
+
+    /// Balance a list of [`Endpoint`]s with specific connectors.
+    ///
+    /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
+    ///
+    /// This allows you to build a balance [`Channel`] that that uses a non-HTTP transport to connect to the endpoints.
+    ///
+    /// # Example
+    /// ```rust
+    /// use hyper_util::client::legacy::connect::HttpConnector;
+    /// use tonic::transport::{Endpoint, Channel, channel::Change};
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let endpoint = Endpoint::from_static("127.0.0.1:3000");
+    /// // This connector can be any kind of connector including https
+    /// let connector = HttpConnector::new();
+    /// let (channel, rx) = Channel::balance_channel_with_connectors(10);
+    /// let change = Change::Insert("1", (connector, endpoint));
+    /// let res = rx.send(change).await;
+    /// # };
+    /// ```
+    pub fn balance_channel_with_connectors<K, C>(
+        capacity: usize,
+    ) -> (Self, Sender<Change<K, (C, Endpoint)>>)
+    where
+        K: Hash + Eq + Send + Clone + 'static,
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::BoxError> + Send,
+        C::Future: Send,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
+    {
+        Self::balance_channel_with_executor_and_connectors(capacity, SharedExec::tokio())
     }
 
     /// Balance a list of [`Endpoint`]'s.
@@ -139,6 +209,48 @@ impl Channel {
     where
         K: Hash + Eq + Send + Clone + 'static,
         E: Executor<Pin<Box<dyn Future<Output = ()> + Send>>> + Send + Sync + 'static,
+    {
+        let (tx, rx) = channel(capacity);
+        let list = DynamicServiceStream::new(rx);
+        (Self::balance(list, DEFAULT_BUFFER_SIZE, executor), tx)
+    }
+
+    /// Balance a list of [`Endpoint`]s with specific connectors.
+    ///
+    /// This creates a [`Channel`] that will listen to a stream of change events and will add or remove provided endpoints.
+    ///
+    /// The [`Channel`] will use the given executor to spawn async tasks.
+    ///
+    /// This allows you to build a balance [`Channel`] that that uses a non-HTTP transport to connect to the endpoints.
+    ///
+    /// # Example
+    /// ```rust
+    /// use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
+    /// use tonic::transport::{Endpoint, Channel, channel::Change};
+    ///
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// let endpoint = Endpoint::from_static("127.0.0.1:3000");
+    /// // This connector can be any kind of connector including https
+    /// let connector = HttpConnector::new();
+    /// // This can be any kind of executor
+    /// let executor = TokioExecutor::new();
+    /// let (channel, rx) = Channel::balance_channel_with_executor_and_connectors(10, executor);
+    /// let change = Change::Insert("1", (connector, endpoint));
+    /// let res = rx.send(change).await;
+    /// # };
+    /// ```
+    pub fn balance_channel_with_executor_and_connectors<K, E, C>(
+        capacity: usize,
+        executor: E,
+    ) -> (Self, Sender<Change<K, (C, Endpoint)>>)
+    where
+        K: Hash + Eq + Send + Clone + 'static,
+        E: Executor<Pin<Box<dyn Future<Output = ()> + Send>>> + Send + Sync + 'static,
+        C: Service<Uri> + Send + 'static,
+        C::Error: Into<crate::BoxError> + Send,
+        C::Future: Send,
+        C::Response: rt::Read + rt::Write + Unpin + Send + 'static,
     {
         let (tx, rx) = channel(capacity);
         let list = DynamicServiceStream::new(rx);
