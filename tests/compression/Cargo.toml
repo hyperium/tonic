@@ -15,7 +15,7 @@ pin-project = "1.0"
 prost = "0.14"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net"]}
 tokio-stream = "0.1"
-tonic = {path = "../../tonic", features = ["gzip", "deflate", "zstd"]}
+tonic = {path = "../../tonic", features = ["gzip", "deflate", "zstd", "lz4", "snappy"]}
 tonic-prost = {path = "../../tonic-prost"}
 tower = "0.5"
 tower-http = {version = "0.6", features = ["map-response-body", "map-request-body"]}

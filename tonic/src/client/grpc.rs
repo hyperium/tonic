@@ -404,7 +404,13 @@ impl GrpcConfig {
             .headers_mut()
             .insert(CONTENT_TYPE, GRPC_CONTENT_TYPE);
 
-        #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
+        #[cfg(any(
+            feature = "gzip",
+            feature = "deflate",
+            feature = "zstd",
+            feature = "lz4",
+            feature = "snappy"
+        ))]
         if let Some(encoding) = self.send_compression_encodings {
             request.headers_mut().insert(
                 crate::codec::compression::ENCODING_HEADER,

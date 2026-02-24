@@ -162,6 +162,8 @@ impl AssertRightEncoding {
             CompressionEncoding::Gzip => "gzip",
             CompressionEncoding::Zstd => "zstd",
             CompressionEncoding::Deflate => "deflate",
+            CompressionEncoding::Lz4 => "lz4",
+            CompressionEncoding::Snappy => "snappy",
             _ => panic!("unexpected encoding {:?}", self.encoding),
         };
         assert_eq!(req.headers().get("grpc-encoding").unwrap(), expected);
