@@ -13,8 +13,6 @@ members = [
   "examples",
   "codegen",
   "grpc",
-  "xds-client",
-  "tonic-xds",
   "interop",
   "tests/disable_comments",
   "tests/wellknown",

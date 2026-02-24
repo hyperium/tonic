@@ -1,4 +1,4 @@
-use crate::{metadata::MetadataValue, Status};
+use crate::{Status, metadata::MetadataValue};
 use bytes::{Buf, BufMut, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};
@@ -322,6 +322,8 @@ pub(crate) fn decompress(
         bytes::buf::Limit::limit(&out_buf),
         ((estimate_decompressed_len / buffer_growth_interval) + 1) * buffer_growth_interval,
     );
+
+    out_buf.get_mut().reserve(capacity);
 
     #[cfg(any(
         feature = "gzip",
