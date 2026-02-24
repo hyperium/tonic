@@ -104,9 +104,7 @@ where
     /// containing the error message.
     fn error(&mut self, s: impl Into<String>) -> ClientResponseStreamItem {
         self.state = RecvStreamState::Done;
-        ResponseStreamItem::Trailers(Trailers {
-            status: Status::new(StatusCode::Internal, s),
-        })
+        ResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Internal, s)))
     }
 }
 
@@ -146,7 +144,7 @@ where
             ResponseStreamItem::Trailers(t) => {
                 if self.unary_response
                     && !matches!(self.state, RecvStreamState::AwaitingTrailers)
-                    && t.status.code() == StatusCode::Ok
+                    && t.status().code() == StatusCode::Ok
                 {
                     return self.error("unary stream received zero messages");
                 }
@@ -193,9 +191,10 @@ mod test {
         for scenario in scenarios {
             validate_scenario(
                 &scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Internal, "received messages without headers"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Internal,
+                    "received messages without headers",
+                ))),
                 false,
             )
             .await;
@@ -221,9 +220,10 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Internal, "ended without trailers"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Internal,
+                    "ended without trailers",
+                ))),
                 false,
             )
             .await;
@@ -248,9 +248,10 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Internal, "received multiple headers"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Internal,
+                    "received multiple headers",
+                ))),
                 false,
             )
             .await;
@@ -260,23 +261,23 @@ mod test {
     #[tokio::test]
     async fn test_validator_unary_ok_without_message() {
         let scenarios = [
-            vec![ResponseStreamItem::Trailers(Trailers {
-                status: Status::new(StatusCode::Ok, ""),
-            })],
+            vec![ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                StatusCode::Ok,
+                "",
+            )))],
             vec![
                 ResponseStreamItem::Headers(ResponseHeaders::default()),
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Ok, ""),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
             ],
         ];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Internal, "received zero messages"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Internal,
+                    "received zero messages",
+                ))),
                 true,
             )
             .await;
@@ -294,9 +295,10 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Internal, "received multiple messages"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Internal,
+                    "received multiple messages",
+                ))),
                 true,
             )
             .await;
@@ -310,17 +312,13 @@ mod test {
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
-            ResponseStreamItem::Trailers(Trailers {
-                status: Status::new(StatusCode::Ok, ""),
-            }),
+            ResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
         ]];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Ok, ""),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
                 false,
             )
             .await;
@@ -334,17 +332,19 @@ mod test {
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
             ResponseStreamItem::Message(()),
-            ResponseStreamItem::Trailers(Trailers {
-                status: Status::new(StatusCode::Aborted, "some err"),
-            }),
+            ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                StatusCode::Aborted,
+                "some err",
+            ))),
         ]];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Aborted, "some err"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Aborted,
+                    "some err",
+                ))),
                 false,
             )
             .await;
@@ -356,17 +356,13 @@ mod test {
         let scenarios = [vec![
             ResponseStreamItem::Headers(ResponseHeaders::default()),
             ResponseStreamItem::Message(()),
-            ResponseStreamItem::Trailers(Trailers {
-                status: Status::new(StatusCode::Ok, ""),
-            }),
+            ResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
         ]];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Ok, ""),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
                 true,
             )
             .await;
@@ -376,30 +372,34 @@ mod test {
     #[tokio::test]
     async fn test_validator_erroring_unary() {
         let scenarios = [
-            vec![ResponseStreamItem::Trailers(Trailers {
-                status: Status::new(StatusCode::Aborted, "some err"),
-            })],
+            vec![ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                StatusCode::Aborted,
+                "some err",
+            )))],
             vec![
                 ResponseStreamItem::Headers(ResponseHeaders::default()),
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Aborted, "some err"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Aborted,
+                    "some err",
+                ))),
             ],
             vec![
                 ResponseStreamItem::Headers(ResponseHeaders::default()),
                 ResponseStreamItem::Message(()),
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Aborted, "some err"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Aborted,
+                    "some err",
+                ))),
             ],
         ];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ResponseStreamItem::Trailers(Trailers {
-                    status: Status::new(StatusCode::Aborted, "some err"),
-                }),
+                ResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Aborted,
+                    "some err",
+                ))),
                 true,
             )
             .await;
@@ -435,9 +435,12 @@ mod test {
                 unreachable!(); // per matches check above
             };
             // Assert the codes match.
-            assert_eq!(got_t.status.code(), expect_t.status.code());
+            assert_eq!(got_t.status().code(), expect_t.status().code());
             // Assert the status received contains the expected status error message.
-            assert!(got_t.status.message().contains(expect_t.status.message()));
+            assert!(got_t
+                .status()
+                .message()
+                .contains(expect_t.status().message()));
         }
     }
 

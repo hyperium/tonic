@@ -134,26 +134,118 @@ pub type ClientResponseStreamItem = ResponseStreamItem<()>;
 pub type ServerResponseStreamItem<'a> = ResponseStreamItem<&'a dyn SendMessage>;
 
 /// Contains all information transmitted in the response headers of an RPC.
-#[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub struct ResponseHeaders {
-    pub metadata: MetadataMap,
+    metadata: MetadataMap,
+}
+
+impl ResponseHeaders {
+    /// Returns a default ResponseHeaders instance.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Replaces the metadata of self with `metadata`.
+    pub fn with_metadata(mut self, metadata: MetadataMap) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    /// Returns a reference to the metadata in these headers.
+    pub fn metadata(&self) -> &MetadataMap {
+        &self.metadata
+    }
+
+    /// Returns a mutable reference to the metadata in these headers.
+    pub fn metadata_mut(&mut self) -> &mut MetadataMap {
+        &mut self.metadata
+    }
 }
 
 /// Contains all information transmitted in the request headers of an RPC.
-#[non_exhaustive]
 #[derive(Debug, Clone, Default)]
 pub struct RequestHeaders {
     /// The full (e.g. "/Service/Method") method name specified for the call.
-    pub method_name: String,
+    method_name: String,
     /// The application-specified metadata for the call.
-    pub metadata: MetadataMap,
+    metadata: MetadataMap,
+}
+
+impl RequestHeaders {
+    /// Returns a default RequestHeaders instance.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Replaces the method name of self with `method_name`.
+    pub fn with_method_name(mut self, method_name: impl Into<String>) -> Self {
+        self.method_name = method_name.into();
+        self
+    }
+
+    /// Replaces the metadata of self with `metadata`.
+    pub fn with_metadata(mut self, metadata: MetadataMap) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    /// Returns the full (e.g. "/Service/Method") method name for these headers.
+    pub fn method_name(&self) -> &String {
+        &self.method_name
+    }
+
+    /// Returns a reference to the metadata in these headers.
+    pub fn metadata(&self) -> &MetadataMap {
+        &self.metadata
+    }
+
+    /// Returns a mutable reference to the metadata in these headers.
+    pub fn metadata_mut(&mut self) -> &mut MetadataMap {
+        &mut self.metadata
+    }
 }
 
 /// Contains all information transmitted in the response trailers of an RPC.
 /// gRPC does not support request trailers.
-#[non_exhaustive]
 #[derive(Debug, Clone)]
 pub struct Trailers {
-    pub status: Status,
+    status: Status,
+    metadata: MetadataMap,
+}
+
+impl Trailers {
+    /// Returns a default RequestHeaders instance.
+    pub fn new(status: Status) -> Self {
+        Self {
+            status,
+            metadata: MetadataMap::default(),
+        }
+    }
+
+    /// Replaces the status of self with `status`.
+    pub fn with_status(mut self, status: Status) -> Self {
+        self.status = status;
+        self
+    }
+
+    /// Returns a reference to the status contained in these trailers.
+    pub fn status(&self) -> &Status {
+        &self.status
+    }
+
+    /// Replaces the metadata of self with `metadata`.
+    pub fn with_metadata(mut self, metadata: MetadataMap) -> Self {
+        self.metadata = metadata;
+        self
+    }
+
+    /// Returns a mutable reference to the metadata in these trailers.
+    pub fn metadata_mut(&mut self) -> &mut MetadataMap {
+        &mut self.metadata
+    }
+
+    /// Returns a reference to the metadata in these trailers.
+    pub fn metadata(&self) -> &MetadataMap {
+        &self.metadata
+    }
 }
