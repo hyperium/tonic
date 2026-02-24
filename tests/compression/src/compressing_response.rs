@@ -94,7 +94,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         CompressionEncoding::Deflate => "deflate",
         CompressionEncoding::Lz4 => "lz4",
         CompressionEncoding::Snappy => "snappy",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
 
     for _ in 0..3 {
@@ -371,7 +371,7 @@ async fn disabling_compression_on_single_response(encoding: CompressionEncoding)
         CompressionEncoding::Deflate => "deflate",
         CompressionEncoding::Lz4 => "lz4",
         CompressionEncoding::Snappy => "snappy",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
@@ -433,7 +433,7 @@ async fn disabling_compression_on_response_but_keeping_compression_on_stream(
         CompressionEncoding::Deflate => "deflate",
         CompressionEncoding::Lz4 => "lz4",
         CompressionEncoding::Snappy => "snappy",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
@@ -508,7 +508,7 @@ async fn disabling_compression_on_response_from_client_stream(encoding: Compress
         CompressionEncoding::Deflate => "deflate",
         CompressionEncoding::Lz4 => "lz4",
         CompressionEncoding::Snappy => "snappy",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
     let bytes_sent = response_bytes_counter.load(SeqCst);

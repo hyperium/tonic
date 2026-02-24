@@ -171,7 +171,7 @@ async fn client_enabled_server_disabled(encoding: CompressionEncoding) {
         CompressionEncoding::Deflate => "deflate",
         CompressionEncoding::Lz4 => "lz4",
         CompressionEncoding::Snappy => "snappy",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(
         status.message(),
@@ -229,7 +229,7 @@ async fn compressing_response_from_client_stream(encoding: CompressionEncoding) 
         CompressionEncoding::Deflate => "deflate",
         CompressionEncoding::Lz4 => "lz4",
         CompressionEncoding::Snappy => "snappy",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
     let bytes_sent = response_bytes_counter.load(SeqCst);

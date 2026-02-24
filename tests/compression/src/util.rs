@@ -7,15 +7,15 @@ use pin_project::pin_project;
 use std::{
     pin::Pin,
     sync::{
-        Arc,
         atomic::{AtomicUsize, Ordering::SeqCst},
+        Arc,
     },
-    task::{Context, Poll, ready},
+    task::{ready, Context, Poll},
 };
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf};
 use tonic::body::Body;
 use tonic::codec::CompressionEncoding;
-use tonic::transport::{Channel, server::Connected};
+use tonic::transport::{server::Connected, Channel};
 use tower_http::map_request_body::MapRequestBodyLayer;
 
 macro_rules! parametrized_tests {

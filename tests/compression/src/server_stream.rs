@@ -1,6 +1,6 @@
 use super::*;
-use tonic::Streaming;
 use tonic::codec::CompressionEncoding;
+use tonic::Streaming;
 
 util::parametrized_tests! {
     client_enabled_server_enabled,
@@ -51,7 +51,7 @@ async fn client_enabled_server_enabled(encoding: CompressionEncoding) {
         CompressionEncoding::Deflate => "deflate",
         CompressionEncoding::Lz4 => "lz4",
         CompressionEncoding::Snappy => "snappy",
-        _ => panic!("unexpected encoding {:?}", encoding),
+        _ => panic!("unexpected encoding {encoding:?}"),
     };
     assert_eq!(res.metadata().get("grpc-encoding").unwrap(), expected);
 
