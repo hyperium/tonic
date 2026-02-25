@@ -27,20 +27,22 @@ use std::str::FromStr;
 
 use crate::attributes::Attributes;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
-use crate::credentials::client::{self};
 use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
+use crate::credentials::server;
 use crate::credentials::server::ServerConnectionSecurityInfo;
-use crate::credentials::server::{self};
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::ServerCredentials;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
+
+pub const PROTOCOL_NAME: &str = "local";
 
 /// An implementation of [`ChannelCredentials`] for connections on the same
 /// machine.
@@ -108,7 +110,7 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
         Ok(HandshakeOutput {
             endpoint: source,
             security: ClientConnectionSecurityInfo::new(
-                "local",
+                PROTOCOL_NAME,
                 security_level,
                 LocalConnectionSecurityContext,
                 Attributes,
@@ -119,7 +121,7 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
 
 impl ChannelCredentials for LocalChannelCredentials {
     fn info(&self) -> &ProtocolInfo {
-        static INFO: ProtocolInfo = ProtocolInfo::new("local");
+        static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
     }
 }
@@ -148,14 +150,14 @@ impl server::ServerCredsInternal for LocalServerCredentials {
             security_level_for_endpoint(source.get_peer_address(), source.get_network_type())?;
         Ok(server::HandshakeOutput {
             endpoint: source,
-            security: ServerConnectionSecurityInfo::new("local", security_level, Attributes),
+            security: ServerConnectionSecurityInfo::new(PROTOCOL_NAME, security_level, Attributes),
         })
     }
 }
 
 impl ServerCredentials for LocalServerCredentials {
     fn info(&self) -> &ProtocolInfo {
-        static INFO: ProtocolInfo = ProtocolInfo::new("local");
+        static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
     }
 }
@@ -176,9 +178,9 @@ mod test {
     use crate::credentials::server::ServerCredsInternal;
     use crate::credentials::ChannelCredentials;
     use crate::credentials::ServerCredentials;
+    use crate::rt;
     use crate::rt::GrpcEndpoint;
     use crate::rt::TcpOptions;
-    use crate::rt::{self};
 
     #[test]
     fn test_security_level_for_endpoint_success() {
