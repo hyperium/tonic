@@ -12,8 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 //
-// Note: This file has been modified by gRPC authors on 11th Feb 2026.
-// - Add ability to write logs to arbitrary path.
+// Note: This file contains modifications by the gRPC authors; see revision history for details.
 
 use core::fmt::Debug;
 use core::fmt::Formatter;

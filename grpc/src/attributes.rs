@@ -26,3 +26,9 @@
 /// pluggable components.
 #[derive(Debug, Default, Clone, PartialEq, PartialOrd, Eq, Ord)]
 pub struct Attributes;
+
+impl Attributes {
+    pub fn new() -> Attributes {
+        Attributes {}
+    }
+}

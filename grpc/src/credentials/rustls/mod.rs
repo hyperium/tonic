@@ -28,12 +28,10 @@ use rustls::crypto::CryptoProvider;
 use rustls::pki_types::PrivateKeyDer;
 use rustls_pki_types::CertificateDer;
 use tokio::sync::watch;
-use tokio::sync::watch::Receiver;
 
 use crate::credentials::ProtocolInfo;
 
 pub mod client;
-mod key_log;
 mod tls_stream;
 
 const ALPN_PROTO_STR_H2: &[u8; 2] = b"h2";
@@ -121,11 +119,11 @@ impl<T> StaticProvider<T> {
 }
 
 impl<T> provider::ProviderInternal<T> for StaticProvider<T> {
-    fn get_receiver(self) -> Receiver<T> {
+    fn get_receiver(self) -> watch::Receiver<T> {
         // We drop the sender (_) immediately.
         // This ensures the receiver sees the initial value but knows
         // no future updates will arrive.
-        let (_, rx) = watch::channel(self.inner);
+        let (_tx, rx) = watch::channel(self.inner);
         rx
     }
 }

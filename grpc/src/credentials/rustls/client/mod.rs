@@ -41,20 +41,20 @@ use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
-use crate::credentials::tls::key_log::KeyLogFile;
-use crate::credentials::tls::parse_certs;
-use crate::credentials::tls::parse_key;
-use crate::credentials::tls::sanitize_crypto_provider;
-use crate::credentials::tls::tls_stream::TlsStream;
-use crate::credentials::tls::Identity;
-use crate::credentials::tls::Provider;
-use crate::credentials::tls::RootCertificates;
-use crate::credentials::tls::ALPN_PROTO_STR_H2;
-use crate::credentials::tls::TLS_PROTO_INFO;
+use crate::credentials::rustls::parse_certs;
+use crate::credentials::rustls::parse_key;
+use crate::credentials::rustls::sanitize_crypto_provider;
+use crate::credentials::rustls::tls_stream::TlsStream;
+use crate::credentials::rustls::Identity;
+use crate::credentials::rustls::Provider;
+use crate::credentials::rustls::RootCertificates;
+use crate::credentials::rustls::ALPN_PROTO_STR_H2;
+use crate::credentials::rustls::TLS_PROTO_INFO;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
+use crate::vendored::key_log::KeyLogFile;
 
 #[cfg(test)]
 mod test;
@@ -107,7 +107,7 @@ impl ClientTlsConfig {
     ///
     /// This should be used **only for debugging purposes**. It should never be
     /// used in a production environment due to security concerns.
-    pub fn with_key_log_path(mut self, path: impl Into<PathBuf>) -> Self {
+    pub fn insecure_with_key_log_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.key_log_path = Some(path.into());
         self
     }
@@ -132,9 +132,9 @@ impl RustlsClientTlsCredendials {
             p.as_ref().clone()
         } else {
             return Err(
-            "No crypto provider installed. Enable `tls-aws-lc` feature or install one manually."
-                .to_string(),
-        );
+                "No crypto provider installed. Enable `tls-aws-lc` feature in rustls or install one manually."
+                .to_string()
+            );
         };
 
         Self::new_impl(config, provider)
@@ -233,7 +233,7 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
             .await
             .map_err(|e| e.to_string())?;
 
-        let (_, connection) = tls_stream.get_ref();
+        let (_io, connection) = tls_stream.get_ref();
         if let Some(negotiated) = connection.alpn_protocol() {
             if negotiated != ALPN_PROTO_STR_H2 {
                 return Err("Server negotiated unexpected ALPN protocol".into());
@@ -253,7 +253,7 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
             ClientTlsSecContext {
                 verified_peer_cert: peer_cert,
             },
-            Attributes {},
+            Attributes::new(),
         );
         let ep = TlsStream::new(RustlsStream::Client(tls_stream));
         Ok(HandshakeOutput {
