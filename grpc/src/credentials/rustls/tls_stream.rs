@@ -112,6 +112,13 @@ where
             RustlsStream::Server(s) => s.get_ref().0.get_peer_address(),
         }
     }
+
+    fn get_network_type(&self) -> &'static str {
+        match &self.inner {
+            RustlsStream::Client(s) => s.get_ref().0.get_network_type(),
+            RustlsStream::Server(s) => s.get_ref().0.get_network_type(),
+        }
+    }
 }
 
 impl<T> TlsStream<T> {
