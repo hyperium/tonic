@@ -22,4 +22,5 @@
  *
  */
 
+#[cfg(feature = "tls-rustls")]
 pub mod key_log;
