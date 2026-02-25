@@ -504,7 +504,7 @@ impl Builder {
     /// Passed directly to `prost_build::Config.btree_map`.
     pub fn btree_map<P: AsRef<str>>(mut self, path: P) -> Self {
         match &mut self.btree_map {
-            Some(ref mut paths) => paths.push(path.as_ref().to_string()),
+            Some(paths) => paths.push(path.as_ref().to_string()),
             None => self.btree_map = Some(vec![path.as_ref().to_string()]),
         }
         self
@@ -515,7 +515,7 @@ impl Builder {
     /// Passed directly to `prost_build::Config.bytes`.
     pub fn bytes<P: AsRef<str>>(mut self, path: P) -> Self {
         match &mut self.bytes {
-            Some(ref mut paths) => paths.push(path.as_ref().to_string()),
+            Some(paths) => paths.push(path.as_ref().to_string()),
             None => self.bytes = Some(vec![path.as_ref().to_string()]),
         }
         self

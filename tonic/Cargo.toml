@@ -9,7 +9,7 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A gRPC over HTTP/2 implementation focused on high performance, interoperability, and flexibility.
 """
-edition = "2021"
+edition = "2024"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "async", "futures", "protobuf"]
 license = "MIT"

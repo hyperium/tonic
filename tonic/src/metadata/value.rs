@@ -84,12 +84,12 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     /// This function does NOT validate that illegal bytes are not contained
     /// within the buffer.
     #[inline]
-    pub unsafe fn from_shared_unchecked(src: Bytes) -> Self {
+    pub unsafe fn from_shared_unchecked(src: Bytes) -> Self { unsafe {
         MetadataValue {
             inner: HeaderValue::from_maybe_shared_unchecked(src),
             phantom: PhantomData,
         }
-    }
+    }}
 
     /// Returns true if the `MetadataValue` has a length of zero bytes.
     ///

@@ -47,7 +47,7 @@ impl pb::ResponseParameters {
 
 fn response_length(response: &pb::StreamingOutputCallResponse) -> i32 {
     match &response.payload {
-        Some(ref payload) => payload.body.len() as i32,
+        Some(payload) => payload.body.len() as i32,
         None => 0,
     }
 }

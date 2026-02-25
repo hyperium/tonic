@@ -77,9 +77,9 @@ unsafe impl BufMut for EncodeBuf<'_> {
     }
 
     #[inline]
-    unsafe fn advance_mut(&mut self, cnt: usize) {
+    unsafe fn advance_mut(&mut self, cnt: usize) { unsafe {
         self.buf.advance_mut(cnt)
-    }
+    }}
 
     #[inline]
     fn chunk_mut(&mut self) -> &mut UninitSlice {
