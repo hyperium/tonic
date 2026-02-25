@@ -25,10 +25,13 @@
 pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
 mod insecure;
+mod local;
 pub(crate) mod server;
 
 pub use insecure::InsecureChannelCredentials;
 pub use insecure::InsecureServerCredentials;
+pub use local::LocalChannelCredentials;
+pub use local::LocalServerCredentials;
 
 /// Defines the common interface for all live gRPC wire protocols and supported
 /// transport security protocols (e.g., TLS, ALTS).
