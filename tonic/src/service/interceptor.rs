@@ -2,7 +2,7 @@
 //!
 //! See [`Interceptor`] for more details.
 
-use crate::{request::SanitizeHeaders, Status};
+use crate::{Status, request::SanitizeHeaders};
 use pin_project::pin_project;
 use std::{
     fmt,

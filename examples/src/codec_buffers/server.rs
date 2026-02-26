@@ -5,7 +5,7 @@
 //! The generated code assumes that a module `crate::common` exists which defines
 //! `SmallBufferCodec`, and `SmallBufferCodec` must have a Default implementation.
 
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
 pub mod common;
 
@@ -13,8 +13,8 @@ pub mod small_buf {
     include!(concat!(env!("OUT_DIR"), "/smallbuf/helloworld.rs"));
 }
 use small_buf::{
-    greeter_server::{Greeter, GreeterServer},
     HelloReply, HelloRequest,
+    greeter_server::{Greeter, GreeterServer},
 };
 
 #[derive(Default)]

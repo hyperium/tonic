@@ -31,7 +31,7 @@
 
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use std::{
     collections::HashSet,
     ffi::OsString,
@@ -45,7 +45,7 @@ mod tests;
 
 // Re-export core build functionality from tonic-build
 pub use tonic_build::{
-    manual, Attributes as TonicAttributes, Method as TonicMethod, Service as TonicService,
+    Attributes as TonicAttributes, Method as TonicMethod, Service as TonicService, manual,
 };
 
 // Re-export prost types that users might need

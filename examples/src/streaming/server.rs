@@ -4,8 +4,8 @@ pub mod pb {
 
 use std::{error::Error, io::ErrorKind, net::ToSocketAddrs, pin::Pin, time::Duration};
 use tokio::sync::mpsc;
-use tokio_stream::{wrappers::ReceiverStream, Stream, StreamExt};
-use tonic::{transport::Server, Request, Response, Status, Streaming};
+use tokio_stream::{Stream, StreamExt, wrappers::ReceiverStream};
+use tonic::{Request, Response, Status, Streaming, transport::Server};
 
 use pb::{EchoRequest, EchoResponse};
 

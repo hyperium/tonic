@@ -34,16 +34,16 @@ use std::sync::Arc;
 use std::sync::Mutex;
 use std::sync::Weak;
 
-use tonic::metadata::MetadataMap;
 use tonic::Status;
+use tonic::metadata::MetadataMap;
 
+use crate::client::ConnectivityState;
 use crate::client::channel::InternalChannelController;
 use crate::client::channel::WorkQueueItem;
 use crate::client::channel::WorkQueueTx;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::client::subchannel::InternalSubchannel;
-use crate::client::ConnectivityState;
 use crate::rt::GrpcRuntime;
 use crate::service::Request;
 use crate::service::Response;

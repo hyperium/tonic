@@ -1,4 +1,4 @@
-use hello_world::{greeter_client::GreeterClient, HelloRequest};
+use hello_world::{HelloRequest, greeter_client::GreeterClient};
 use hyper_util::rt::TokioExecutor;
 use tonic_web::GrpcWebClientLayer;
 

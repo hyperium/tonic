@@ -12,7 +12,7 @@ pub use self::layered::{LayerExt, Layered};
 #[cfg(feature = "router")]
 pub use self::router::{Routes, RoutesBuilder};
 #[cfg(feature = "router")]
-pub use axum::{body::Body as AxumBody, Router as AxumRouter};
+pub use axum::{Router as AxumRouter, body::Body as AxumBody};
 
 pub mod recover_error;
 pub use self::recover_error::{RecoverError, RecoverErrorLayer};

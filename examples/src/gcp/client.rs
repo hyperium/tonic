@@ -2,11 +2,11 @@ pub mod api {
     tonic::include_proto!("google.pubsub.v1");
 }
 
-use api::{publisher_client::PublisherClient, ListTopicsRequest};
+use api::{ListTopicsRequest, publisher_client::PublisherClient};
 use tonic::{
+    Request,
     metadata::MetadataValue,
     transport::{Certificate, Channel, ClientTlsConfig},
-    Request,
 };
 
 const ENDPOINT: &str = "https://pubsub.googleapis.com";

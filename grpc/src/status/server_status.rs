@@ -22,8 +22,8 @@
  *
  */
 
-use crate::status::status_code::StatusCode;
 use crate::status::Status;
+use crate::status::status_code::StatusCode;
 
 /// Represents a gRPC status on the server.
 ///

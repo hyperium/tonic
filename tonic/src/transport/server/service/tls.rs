@@ -3,16 +3,16 @@ use std::{fmt, sync::Arc, time::Duration};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time;
 use tokio_rustls::{
-    rustls::{server::WebPkiClientVerifier, RootCertStore, ServerConfig},
-    server::TlsStream,
     TlsAcceptor as RustlsAcceptor,
+    rustls::{RootCertStore, ServerConfig, server::WebPkiClientVerifier},
+    server::TlsStream,
 };
 
 use crate::transport::{
-    service::tls::{
-        convert_certificate_to_pki_types, convert_identity_to_pki_types, TlsError, ALPN_H2,
-    },
     Certificate, Identity,
+    service::tls::{
+        ALPN_H2, TlsError, convert_certificate_to_pki_types, convert_identity_to_pki_types,
+    },
 };
 
 #[derive(Clone)]

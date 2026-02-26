@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::body::Body as TonicBody;
 use tower::{
-    balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load, BoxError, Service,
+    BoxError, Service, balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load,
 };
 
 type RespFut<Resp> = BoxFuture<Result<Resp, BoxError>>;

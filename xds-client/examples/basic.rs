@@ -36,7 +36,7 @@
 use bytes::Bytes;
 use envoy_types::pb::envoy::config::listener::v3::Listener as ListenerProto;
 use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
-    http_connection_manager::RouteSpecifier, HttpConnectionManager,
+    HttpConnectionManager, http_connection_manager::RouteSpecifier,
 };
 use prost::Message;
 use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};

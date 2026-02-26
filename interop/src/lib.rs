@@ -108,7 +108,7 @@ impl TestAssertion {
 
 impl fmt::Display for TestAssertion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use console::{style, Emoji};
+        use console::{Emoji, style};
         match *self {
             TestAssertion::Passed { ref description } => write!(
                 f,

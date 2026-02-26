@@ -3,8 +3,8 @@
 use std::net::SocketAddr;
 
 use tokio::sync::oneshot;
-use tokio_stream::{wrappers::TcpListenerStream, StreamExt};
-use tonic::{transport::Server, Request};
+use tokio_stream::{StreamExt, wrappers::TcpListenerStream};
+use tonic::{Request, transport::Server};
 
 use tonic_reflection::pb::{v1, v1alpha};
 use tonic_reflection::server::Builder;

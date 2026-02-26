@@ -30,8 +30,8 @@ use std::sync::Arc;
 
 use serde::Deserialize;
 use serde::Serialize;
-use tokio::sync::mpsc;
 use tokio::sync::Notify;
+use tokio::sync::mpsc;
 
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::ForwardingSubchannel;

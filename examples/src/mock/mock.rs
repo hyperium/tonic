@@ -1,7 +1,7 @@
 use hyper_util::rt::TokioIo;
 use tonic::{
-    transport::{Endpoint, Server, Uri},
     Request, Response, Status,
+    transport::{Endpoint, Server, Uri},
 };
 use tower::service_fn;
 
@@ -10,9 +10,9 @@ pub mod hello_world {
 }
 
 use hello_world::{
+    HelloReply, HelloRequest,
     greeter_client::GreeterClient,
     greeter_server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
 };
 
 #[tokio::main]

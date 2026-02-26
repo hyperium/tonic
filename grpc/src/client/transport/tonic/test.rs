@@ -29,27 +29,27 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use tokio::net::TcpListener;
+use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tokio::sync::Notify;
 use tokio::time::timeout;
-use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
-use tonic::async_trait;
-use tonic::transport::Server;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request;
 use tonic::Response;
 use tonic::Status;
+use tonic::async_trait;
+use tonic::transport::Server;
 use tonic_prost::prost::Message as ProstMessage;
 
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
-use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::TransportOptions;
-use crate::echo_pb::echo_server::Echo;
-use crate::echo_pb::echo_server::EchoServer;
+use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
+use crate::echo_pb::echo_server::Echo;
+use crate::echo_pb::echo_server::EchoServer;
 use crate::service::Message;
 use crate::service::Request as GrpcRequest;
 

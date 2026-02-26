@@ -231,17 +231,17 @@ impl TransportStream for TonicAdsStream {
 mod tests {
     use super::*;
     use envoy_types::pb::envoy::service::discovery::v3::{
+        DeltaDiscoveryRequest, DeltaDiscoveryResponse, DiscoveryRequest, DiscoveryResponse,
         aggregated_discovery_service_server::{
             AggregatedDiscoveryService, AggregatedDiscoveryServiceServer,
         },
-        DeltaDiscoveryRequest, DeltaDiscoveryResponse, DiscoveryRequest, DiscoveryResponse,
     };
     use prost::Message;
     use std::net::SocketAddr;
     use std::pin::Pin;
     use tokio::net::TcpListener;
-    use tokio_stream::wrappers::TcpListenerStream;
     use tokio_stream::Stream;
+    use tokio_stream::wrappers::TcpListenerStream;
     use tonic::{Request, Response, Status};
 
     /// Mock ADS server that echoes back a response for each request.

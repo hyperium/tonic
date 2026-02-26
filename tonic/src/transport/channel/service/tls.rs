@@ -5,17 +5,16 @@ use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time;
 use tokio_rustls::{
-    rustls::{
-        crypto,
-        pki_types::{ServerName, TrustAnchor},
-        ClientConfig, ConfigBuilder, RootCertStore, WantsVerifier,
-    },
     TlsConnector as RustlsConnector,
+    rustls::{
+        ClientConfig, ConfigBuilder, RootCertStore, WantsVerifier, crypto,
+        pki_types::{ServerName, TrustAnchor},
+    },
 };
 
 use super::io::BoxedIo;
 use crate::transport::service::tls::{
-    convert_certificate_to_pki_types, convert_identity_to_pki_types, TlsError, ALPN_H2,
+    ALPN_H2, TlsError, convert_certificate_to_pki_types, convert_identity_to_pki_types,
 };
 use crate::transport::tls::{Certificate, Identity};
 

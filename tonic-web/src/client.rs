@@ -4,13 +4,13 @@ use pin_project::pin_project;
 use std::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 use tower_layer::Layer;
 use tower_service::Service;
 use tracing::debug;
 
-use crate::call::content_types::GRPC_WEB;
 use crate::call::GrpcWebCall;
+use crate::call::content_types::GRPC_WEB;
 
 /// Layer implementing the grpc-web protocol for clients.
 #[derive(Debug, Default, Clone)]

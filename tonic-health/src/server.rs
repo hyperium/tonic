@@ -1,14 +1,14 @@
 //! Contains all healthcheck based server utilities.
 
+use crate::ServingStatus;
 use crate::pb::health_server::{Health, HealthServer};
 use crate::pb::{HealthCheckRequest, HealthCheckResponse};
-use crate::ServingStatus;
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
-use tokio::sync::{watch, RwLock};
+use tokio::sync::{RwLock, watch};
 use tokio_stream::Stream;
-use tonic::{server::NamedService, Request, Response, Status};
+use tonic::{Request, Response, Status, server::NamedService};
 
 /// Creates a `HealthReporter` and a linked `HealthServer` pair. Together,
 /// these types can be used to serve the gRPC Health Checking service.
@@ -196,10 +196,10 @@ impl HealthCheckResponse {
 
 #[cfg(test)]
 mod tests {
-    use crate::pb::health_server::Health;
-    use crate::pb::HealthCheckRequest;
-    use crate::server::{HealthReporter, HealthService};
     use crate::ServingStatus;
+    use crate::pb::HealthCheckRequest;
+    use crate::pb::health_server::Health;
+    use crate::server::{HealthReporter, HealthService};
     use tokio::sync::watch;
     use tokio_stream::StreamExt;
     use tonic::{Code, Request, Status};
