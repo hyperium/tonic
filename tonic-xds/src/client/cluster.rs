@@ -220,9 +220,7 @@ where
         <D::Service as Service<Req>>::Error: Into<BoxError>,
         <D::Service as Service<Req>>::Future: Send + 'static,
     {
-        
-        self
-            .registry
+        self.registry
             .entry(key.to_string())
             .or_insert_with(|| {
                 let name = key.to_string();

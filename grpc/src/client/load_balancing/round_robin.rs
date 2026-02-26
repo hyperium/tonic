@@ -667,7 +667,6 @@ mod test {
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
         want_error: String,
     ) -> Arc<dyn Picker> {
-        
         (match rx_events.recv().await.unwrap() {
             TestEvent::UpdatePicker(update) => {
                 assert!(update.connectivity_state == ConnectivityState::TransientFailure);

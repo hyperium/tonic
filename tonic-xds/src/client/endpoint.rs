@@ -107,7 +107,7 @@ where
         // -1 when the inner future completes
         Box::pin(async move {
             let _in_flight_guard = in_flight;
-            
+
             fut.await
         })
     }
