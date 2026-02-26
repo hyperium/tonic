@@ -321,7 +321,7 @@ mod test {
     }
 
     impl TestSubchannelList {
-        fn new(addresses: &Vec<Address>, channel_controller: &mut dyn ChannelController) -> Self {
+        fn new(addresses: &[Address], channel_controller: &mut dyn ChannelController) -> Self {
             TestSubchannelList {
                 subchannels: addresses
                     .iter()
