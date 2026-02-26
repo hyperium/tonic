@@ -7,14 +7,7 @@ pub mod server_prost;
 pub mod server_protobuf;
 
 pub mod pb {
-    #![allow(
-        dead_code,
-        unused_imports,
-        clippy::clone_on_copy,
-        clippy::useless_conversion,
-        clippy::unnecessary_fallible_conversions,
-        clippy::derivable_impls
-    )]
+    #![allow(dead_code, unused_imports)]
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
 }
 
