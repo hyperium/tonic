@@ -220,7 +220,8 @@ where
         <D::Service as Service<Req>>::Error: Into<BoxError>,
         <D::Service as Service<Req>>::Future: Send + 'static,
     {
-        let client = self
+        
+        self
             .registry
             .entry(key.to_string())
             .or_insert_with(|| {
@@ -228,8 +229,7 @@ where
                 let discover = discover_fn();
                 Arc::new(ClusterClient::new(name, discover))
             })
-            .clone();
-        client
+            .clone()
     }
 }
 

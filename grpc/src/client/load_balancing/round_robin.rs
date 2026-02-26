@@ -145,7 +145,7 @@ impl RoundRobinPolicy {
             .child_manager
             .resolver_update(resolver_update, None, channel_controller);
         self.update_picker(channel_controller);
-        return Err(err.into());
+        Err(err.into())
     }
 }
 
@@ -324,7 +324,7 @@ mod test {
         fn new(addresses: &Vec<Address>, channel_controller: &mut dyn ChannelController) -> Self {
             TestSubchannelList {
                 subchannels: addresses
-                    .into_iter()
+                    .iter()
                     .map(|a| channel_controller.new_subchannel(a))
                     .collect(),
             }
@@ -667,7 +667,8 @@ mod test {
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
         want_error: String,
     ) -> Arc<dyn Picker> {
-        let picker = match rx_events.recv().await.unwrap() {
+        
+        (match rx_events.recv().await.unwrap() {
             TestEvent::UpdatePicker(update) => {
                 assert!(update.connectivity_state == ConnectivityState::TransientFailure);
                 let req = test_utils::new_request();
@@ -683,8 +684,7 @@ mod test {
                 }
             }
             other => panic!("unexpected event {:?}", other),
-        };
-        picker
+        }) as _
     }
 
     // Verifies that the LB policy requests re-resolution.
