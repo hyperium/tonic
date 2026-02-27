@@ -26,6 +26,8 @@ pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
 mod insecure;
 mod local;
+#[cfg(feature = "tls-rustls")]
+pub mod rustls;
 pub(crate) mod server;
 
 pub use insecure::InsecureChannelCredentials;
