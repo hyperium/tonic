@@ -78,11 +78,32 @@ pub trait Handle: Send + Sync {
     /// sent to another task, meaning the RPC must end before handle returns.
     async fn handle(
         &self,
-        _method: String,
-        _headers: RequestHeaders,
-        tx: &impl SendStream,
+        headers: RequestHeaders,
+        tx: &mut impl SendStream,
         rx: impl RecvStream + 'static,
     );
+}
+
+#[async_trait]
+trait DynHandle: Send + Sync {
+    async fn dyn_handle(
+        &self,
+        headers: RequestHeaders,
+        tx: &mut dyn DynSendStream,
+        rx: Box<dyn DynRecvStream>,
+    );
+}
+
+#[async_trait]
+impl<T: Handle> DynHandle for T {
+    async fn dyn_handle(
+        &self,
+        headers: RequestHeaders,
+        mut tx: &mut dyn DynSendStream,
+        rx: Box<dyn DynRecvStream>,
+    ) {
+        self.handle(headers, &mut tx, rx).await
+    }
 }
 
 /// Represents the sending side of a server stream.  See `ResponseStream`
@@ -97,11 +118,51 @@ pub trait SendStream {
     /// This method is not intended to be cancellation safe.  If the returned
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the SendStream are undefined and data may be lost.
-    async fn send(
+    async fn send<'a>(
         &mut self,
-        item: ServerResponseStreamItem,
+        item: ServerResponseStreamItem<'a>,
         options: SendOptions,
     ) -> Result<(), ()>;
+}
+
+#[async_trait]
+trait DynSendStream: Send {
+    async fn dyn_send<'a>(
+        &mut self,
+        item: ServerResponseStreamItem<'a>,
+        options: SendOptions,
+    ) -> Result<(), ()>;
+}
+
+#[async_trait]
+impl<T: SendStream> DynSendStream for T {
+    async fn dyn_send<'a>(
+        &mut self,
+        item: ServerResponseStreamItem<'a>,
+        options: SendOptions,
+    ) -> Result<(), ()> {
+        self.send(item, options).await
+    }
+}
+
+impl SendStream for &mut dyn DynSendStream {
+    async fn send<'a>(
+        &mut self,
+        item: ServerResponseStreamItem<'a>,
+        options: SendOptions,
+    ) -> Result<(), ()> {
+        (**self).dyn_send(item, options).await
+    }
+}
+
+impl SendStream for Box<dyn DynSendStream> {
+    async fn send<'a>(
+        &mut self,
+        item: ServerResponseStreamItem<'a>,
+        options: SendOptions,
+    ) -> Result<(), ()> {
+        (**self).dyn_send(item, options).await
+    }
 }
 
 /// Contains settings to configure a send operation on a SendStream.
@@ -127,4 +188,22 @@ pub trait RecvStream {
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the RecvStream are undefined and data may be lost.
     async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()>;
+}
+
+#[async_trait]
+trait DynRecvStream: Send {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()>;
+}
+
+#[async_trait]
+impl<T: RecvStream> DynRecvStream for T {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
+        self.next(msg).await
+    }
+}
+
+impl RecvStream for Box<dyn DynRecvStream> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
+        (**self).dyn_next(msg).await
+    }
 }

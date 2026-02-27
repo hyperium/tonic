@@ -25,10 +25,11 @@
 use std::fmt::Display;
 use std::time::Instant;
 
-use tonic::metadata::MetadataMap;
+use tonic::async_trait;
 
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
+use crate::core::RequestHeaders;
 use crate::core::SendMessage;
 
 pub mod channel;
@@ -83,8 +84,6 @@ impl Display for ConnectivityState {
 pub struct CallOptions {
     /// The deadline for the call.  If unset, the call may run indefinitely.
     deadline: Option<Instant>,
-    /// The application-specified metadata for the call.
-    metadata: MetadataMap,
 }
 
 /// A trait which may be implemented by types to perform RPCs (Remote Procedure
@@ -105,7 +104,11 @@ pub trait Invoke: Send + Sync {
     /// locally-erroring stream immediately instead.  However, SendStream and
     /// RecvStream are asynchronous, and may block their first operations until
     /// quota is available, a connection is ready, etc.
-    fn invoke(&self, method: String, options: CallOptions) -> (Self::SendStream, Self::RecvStream);
+    fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream);
 }
 
 // Like `Invoke`, but not reusable.  It is blanket implemented on references to
@@ -116,7 +119,7 @@ pub trait InvokeOnce: Send + Sync {
 
     fn invoke_once(
         self,
-        method: String,
+        headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream);
 }
@@ -127,10 +130,10 @@ impl<T: Invoke> InvokeOnce for &T {
 
     fn invoke_once(
         self,
-        method: String,
+        headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
-        self.invoke(method, options)
+        self.invoke(headers, options)
     }
 }
 
@@ -152,6 +155,24 @@ pub trait SendStream: Send {
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the SendStream are undefined and data may be lost.
     async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
+}
+
+#[async_trait]
+trait DynSendStream: Send {
+    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
+}
+
+#[async_trait]
+impl<T: SendStream> DynSendStream for T {
+    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        self.send(msg, options).await
+    }
+}
+
+impl SendStream for Box<dyn DynSendStream> {
+    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        (**self).dyn_send(msg, options).await
+    }
 }
 
 /// Contains settings to configure a send operation on a SendStream.
@@ -184,4 +205,22 @@ pub trait RecvStream: Send {
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the RecvStream are undefined and data may be lost.
     async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
+}
+
+#[async_trait]
+trait DynRecvStream: Send {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
+}
+
+#[async_trait]
+impl<T: RecvStream> DynRecvStream for T {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        self.next(msg).await
+    }
+}
+
+impl RecvStream for Box<dyn DynRecvStream> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        (**self).dyn_next(msg).await
+    }
 }
