@@ -27,26 +27,22 @@ use std::sync::Arc;
 
 /// A node in the persistent linked list.
 ///
-/// Each node represents an operation (insertion or deletion) and points to the
-/// previous state of the list.
+/// Each node points to the previous state of the list.
 #[derive(Clone, Debug)]
 struct Node<K, V> {
     key: K,
     value: V,
-    next: Option<Arc<Node<K, V>>>,
+    parent: Option<Arc<Node<K, V>>>,
 }
 
 /// A persistent linked list that behaves like a map.
 ///
-/// This list is persistent, meaning that modifying it (adding or removing items)
-/// returns a new version of the list, while preserving the old version. It uses
-/// structural sharing to minimize memory usage.
+/// This list is persistent, meaning that modifying it returns a new version of
+/// the list, while preserving the old version. It uses structural sharing to
+/// minimize memory usage.
 ///
 /// The list supports shadowing: adding a key that already exists will effectively
 /// update the value for that key in the new version of the list.
-///
-/// Deletions are handled by adding a "deletion marker" node to the front of the
-/// list, which hides the key during iteration.
 ///
 /// # Warning
 ///
@@ -72,7 +68,7 @@ impl<K, V> Default for LinkedList<K, V> {
 }
 
 impl<K, V> LinkedList<K, V> {
-    /// Creates a new, empty persistent linked list.
+    /// Creates a new, empty list.
     pub fn new() -> Self {
         Self::default()
     }
@@ -86,7 +82,7 @@ impl<K, V> LinkedList<K, V> {
             head: Some(Arc::new(Node {
                 key,
                 value,
-                next: self.head.clone(),
+                parent: self.head.clone(),
             })),
         }
     }
@@ -113,7 +109,7 @@ impl<K: Eq, V> LinkedList<K, V> {
             if &node.key == key {
                 return Some(&node.value);
             }
-            current = node.next.as_ref();
+            current = node.parent.as_ref();
         }
         None
     }
@@ -145,7 +141,7 @@ impl<'a, K: Ord, V> Iterator for Iter<'a, K, V> {
     fn next(&mut self) -> Option<Self::Item> {
         loop {
             let node = self.current?;
-            self.current = node.next.as_ref();
+            self.current = node.parent.as_ref();
             if self.seen.insert(&node.key) {
                 return Some((&node.key, &node.value));
             }
