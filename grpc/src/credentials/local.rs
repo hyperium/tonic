@@ -113,7 +113,7 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
                 PROTOCOL_NAME,
                 security_level,
                 LocalConnectionSecurityContext,
-                Attributes,
+                Attributes::new(),
             ),
         })
     }
@@ -150,7 +150,11 @@ impl server::ServerCredsInternal for LocalServerCredentials {
             security_level_for_endpoint(source.get_peer_address(), source.get_network_type())?;
         Ok(server::HandshakeOutput {
             endpoint: source,
-            security: ServerConnectionSecurityInfo::new(PROTOCOL_NAME, security_level, Attributes),
+            security: ServerConnectionSecurityInfo::new(
+                PROTOCOL_NAME,
+                security_level,
+                Attributes::new(),
+            ),
         })
     }
 }
