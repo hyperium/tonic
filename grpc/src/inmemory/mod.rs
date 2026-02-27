@@ -23,18 +23,17 @@
  */
 
 use std::collections::HashMap;
-use std::sync::atomic::AtomicU32;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::Mutex;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
 
+use tokio::sync::Mutex as AsyncMutex;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tokio::sync::Mutex as AsyncMutex;
 use tonic::async_trait;
 
-use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ChannelController;
 use crate::client::name_resolution::Endpoint;
@@ -42,10 +41,11 @@ use crate::client::name_resolution::Resolver;
 use crate::client::name_resolution::ResolverBuilder;
 use crate::client::name_resolution::ResolverOptions;
 use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::{self};
 use crate::client::transport::ConnectedTransport;
-use crate::client::transport::TransportOptions;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::TransportOptions;
 use crate::client::transport::{self};
 use crate::rt::GrpcRuntime;
 use crate::server;

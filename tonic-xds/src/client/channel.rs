@@ -1,14 +1,14 @@
+use crate::XdsUri;
 use crate::client::endpoint::{EndpointAddress, EndpointChannel};
 use crate::client::lb::XdsLbService;
 use crate::client::route::XdsRoutingService;
 use crate::common::async_util::BoxFuture;
-use crate::XdsUri;
 use http::Request;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::{body::Body as TonicBody, client::GrpcService, transport::channel::Channel};
-use tower::{load::Load, util::BoxCloneService, BoxError, Service};
+use tower::{BoxError, Service, load::Load, util::BoxCloneService};
 
 #[cfg(test)]
 use {

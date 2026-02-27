@@ -169,7 +169,7 @@ mod generated {
 
 /// Useful protobuf types
 pub mod pb {
-    pub use crate::generated::{google_rpc::*, FILE_DESCRIPTOR_SET};
+    pub use crate::generated::{FILE_DESCRIPTOR_SET, google_rpc::*};
 }
 
 pub use pb::Status;

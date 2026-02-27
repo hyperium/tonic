@@ -23,16 +23,15 @@
  */
 
 use std::error::Error;
-use std::sync::atomic::AtomicUsize;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::sync::Once;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
 
-use crate::client::load_balancing::child_manager::ChildManager;
-use crate::client::load_balancing::child_manager::ChildUpdate;
-use crate::client::load_balancing::pick_first;
+use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
+use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
 use crate::client::load_balancing::LbConfig;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
@@ -42,10 +41,11 @@ use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::Subchannel;
 use crate::client::load_balancing::SubchannelState;
-use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+use crate::client::load_balancing::child_manager::ChildManager;
+use crate::client::load_balancing::child_manager::ChildUpdate;
+use crate::client::load_balancing::pick_first;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
-use crate::client::ConnectivityState;
 use crate::service::Request;
 
 pub(crate) static POLICY_NAME: &str = "round_robin";
@@ -145,7 +145,7 @@ impl RoundRobinPolicy {
             .child_manager
             .resolver_update(resolver_update, None, channel_controller);
         self.update_picker(channel_controller);
-        return Err(err.into());
+        Err(err.into())
     }
 }
 
@@ -245,6 +245,18 @@ impl Picker for RoundRobinPicker {
 
 #[cfg(test)]
 mod test {
+    use crate::client::ConnectivityState;
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::FailingPicker;
+    use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+    use crate::client::load_balancing::LbPolicy;
+    use crate::client::load_balancing::LbState;
+    use crate::client::load_balancing::Pick;
+    use crate::client::load_balancing::PickResult;
+    use crate::client::load_balancing::Picker;
+    use crate::client::load_balancing::QueuingPicker;
+    use crate::client::load_balancing::Subchannel;
+    use crate::client::load_balancing::SubchannelState;
     use crate::client::load_balancing::child_manager::ChildManager;
     use crate::client::load_balancing::pick_first;
     use crate::client::load_balancing::round_robin::RoundRobinPolicy;
@@ -255,21 +267,9 @@ mod test {
     use crate::client::load_balancing::test_utils::TestEvent;
     use crate::client::load_balancing::test_utils::TestWorkScheduler;
     use crate::client::load_balancing::test_utils::{self};
-    use crate::client::load_balancing::ChannelController;
-    use crate::client::load_balancing::FailingPicker;
-    use crate::client::load_balancing::LbPolicy;
-    use crate::client::load_balancing::LbState;
-    use crate::client::load_balancing::Pick;
-    use crate::client::load_balancing::PickResult;
-    use crate::client::load_balancing::Picker;
-    use crate::client::load_balancing::QueuingPicker;
-    use crate::client::load_balancing::Subchannel;
-    use crate::client::load_balancing::SubchannelState;
-    use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
     use crate::client::name_resolution::Address;
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverUpdate;
-    use crate::client::ConnectivityState;
     use crate::rt::default_runtime;
     use crate::service::Request;
     use std::collections::HashSet;
@@ -321,10 +321,10 @@ mod test {
     }
 
     impl TestSubchannelList {
-        fn new(addresses: &Vec<Address>, channel_controller: &mut dyn ChannelController) -> Self {
+        fn new(addresses: &[Address], channel_controller: &mut dyn ChannelController) -> Self {
             TestSubchannelList {
                 subchannels: addresses
-                    .into_iter()
+                    .iter()
                     .map(|a| channel_controller.new_subchannel(a))
                     .collect(),
             }
@@ -667,7 +667,7 @@ mod test {
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
         want_error: String,
     ) -> Arc<dyn Picker> {
-        let picker = match rx_events.recv().await.unwrap() {
+        (match rx_events.recv().await.unwrap() {
             TestEvent::UpdatePicker(update) => {
                 assert!(update.connectivity_state == ConnectivityState::TransientFailure);
                 let req = test_utils::new_request();
@@ -683,8 +683,7 @@ mod test {
                 }
             }
             other => panic!("unexpected event {:?}", other),
-        };
-        picker
+        }) as _
     }
 
     // Verifies that the LB policy requests re-resolution.

@@ -1,7 +1,7 @@
 use super::{AddOrigin, Reconnect, SharedExec, UserAgent};
 use crate::{
     body::Body,
-    transport::{channel::BoxFuture, service::GrpcTimeout, Endpoint},
+    transport::{Endpoint, channel::BoxFuture, service::GrpcTimeout},
 };
 use http::{Request, Response, Uri};
 use hyper::rt;
@@ -13,10 +13,10 @@ use std::{
 };
 use tower::load::Load;
 use tower::{
+    ServiceBuilder, ServiceExt,
     layer::Layer,
     limit::{concurrency::ConcurrencyLimitLayer, rate::RateLimitLayer},
     util::BoxService,
-    ServiceBuilder, ServiceExt,
 };
 use tower_service::Service;
 

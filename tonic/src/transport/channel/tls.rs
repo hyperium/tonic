@@ -1,7 +1,7 @@
 use super::service::TlsConnector;
 use crate::transport::{
-    tls::{Certificate, Identity},
     Error,
+    tls::{Certificate, Identity},
 };
 use http::Uri;
 use std::time::Duration;

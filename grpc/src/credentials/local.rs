@@ -27,6 +27,9 @@ use std::str::FromStr;
 
 use crate::attributes::Attributes;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::ServerCredentials;
 use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
@@ -36,9 +39,6 @@ use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
 use crate::credentials::server;
 use crate::credentials::server::ServerConnectionSecurityInfo;
-use crate::credentials::ChannelCredentials;
-use crate::credentials::ProtocolInfo;
-use crate::credentials::ServerCredentials;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -170,14 +170,14 @@ mod test {
     use tokio::net::TcpStream;
 
     use super::*;
+    use crate::credentials::ChannelCredentials;
+    use crate::credentials::ServerCredentials;
     use crate::credentials::client::ChannelCredsInternal as ClientSealed;
     use crate::credentials::client::ClientConnectionSecurityContext;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::Authority;
     use crate::credentials::common::SecurityLevel;
     use crate::credentials::server::ServerCredsInternal;
-    use crate::credentials::ChannelCredentials;
-    use crate::credentials::ServerCredentials;
     use crate::rt;
     use crate::rt::GrpcEndpoint;
     use crate::rt::TcpOptions;
@@ -246,9 +246,11 @@ mod test {
         assert_eq!(buf, test_data);
 
         // Validate arbitrary authority.
-        assert!(security_info
-            .security_context()
-            .validate_authority(&authority));
+        assert!(
+            security_info
+                .security_context()
+                .validate_authority(&authority)
+        );
     }
 
     #[tokio::test]

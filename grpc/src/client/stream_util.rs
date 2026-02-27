@@ -22,16 +22,16 @@
  *
  */
 
-use crate::client::interceptor::Intercept;
+use crate::Status;
+use crate::StatusCode;
 use crate::client::CallOptions;
 use crate::client::InvokeOnce;
 use crate::client::RecvStream;
+use crate::client::interceptor::Intercept;
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::ResponseStreamItem;
 use crate::core::Trailers;
-use crate::Status;
-use crate::StatusCode;
 
 /// An interceptor that enforces proper gRPC semantics on the response stream.
 #[derive(Clone)]
@@ -172,12 +172,12 @@ mod test {
     use tokio::sync::mpsc::Sender;
 
     use super::*;
-    use crate::client::interceptor::InvokeOnceExt as _;
     use crate::client::CallOptions;
     use crate::client::InvokeOnce;
     use crate::client::RecvStream;
     use crate::client::SendOptions;
     use crate::client::SendStream;
+    use crate::client::interceptor::InvokeOnceExt as _;
     use crate::core::ClientResponseStreamItem;
     use crate::core::RecvMessage;
     use crate::core::ResponseHeaders;

@@ -1,13 +1,13 @@
 use crate::client::{InteropTest, InteropTestUnimplemented};
 use crate::{
-    pb::test_service_client::*, pb::unimplemented_service_client::*, pb::*, test_assert,
-    TestAssertion,
+    TestAssertion, pb::test_service_client::*, pb::unimplemented_service_client::*, pb::*,
+    test_assert,
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tonic::async_trait;
 use tonic::transport::Channel;
-use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
+use tonic::{Code, Request, Response, Status, metadata::MetadataValue};
 
 pub type TestClient = TestServiceClient<Channel>;
 pub type UnimplementedClient = UnimplementedServiceClient<Channel>;

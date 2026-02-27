@@ -1,4 +1,4 @@
-use http::{header::USER_AGENT, HeaderValue, Request};
+use http::{HeaderValue, Request, header::USER_AGENT};
 use std::task::{Context, Poll};
 use tower_service::Service;
 

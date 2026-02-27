@@ -4,7 +4,7 @@ pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
 
-use hello_world::{greeter_client::GreeterClient, HelloRequest};
+use hello_world::{HelloRequest, greeter_client::GreeterClient};
 use hyper_util::rt::TokioIo;
 #[cfg(unix)]
 use tokio::net::UnixStream;

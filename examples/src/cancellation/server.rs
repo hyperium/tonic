@@ -1,14 +1,14 @@
 use std::future::Future;
 
 use tokio_util::sync::CancellationToken;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};
 use hello_world::{HelloReply, HelloRequest};
 
 use tokio::select;
-use tokio::time::sleep;
 use tokio::time::Duration;
+use tokio::time::sleep;
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");

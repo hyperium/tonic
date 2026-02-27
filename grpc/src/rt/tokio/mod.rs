@@ -34,7 +34,6 @@ use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
-use crate::rt::endpoint;
 use crate::rt::BoxEndpoint;
 use crate::rt::BoxFuture;
 use crate::rt::BoxedTaskHandle;
@@ -46,6 +45,7 @@ use crate::rt::ScopedBoxFuture;
 use crate::rt::Sleep;
 use crate::rt::TaskHandle;
 use crate::rt::TcpOptions;
+use crate::rt::endpoint;
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;

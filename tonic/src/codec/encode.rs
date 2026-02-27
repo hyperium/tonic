@@ -1,7 +1,7 @@
 use super::compression::{
-    compress, CompressionEncoding, CompressionSettings, SingleMessageCompressionOverride,
+    CompressionEncoding, CompressionSettings, SingleMessageCompressionOverride, compress,
 };
-use super::{BufferSettings, EncodeBuf, Encoder, DEFAULT_MAX_SEND_MESSAGE_SIZE, HEADER_SIZE};
+use super::{BufferSettings, DEFAULT_MAX_SEND_MESSAGE_SIZE, EncodeBuf, Encoder, HEADER_SIZE};
 use crate::Status;
 use bytes::{BufMut, Bytes, BytesMut};
 use http::HeaderMap;
@@ -9,9 +9,9 @@ use http_body::{Body, Frame};
 use pin_project::pin_project;
 use std::{
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
 };
-use tokio_stream::{adapters::Fuse, Stream, StreamExt};
+use tokio_stream::{Stream, StreamExt, adapters::Fuse};
 
 /// Combinator for efficient encoding of messages into reasonably sized buffers.
 /// EncodedBytes encodes ready messages from its delegate stream into a BytesMut,

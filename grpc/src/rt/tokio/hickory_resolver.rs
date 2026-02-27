@@ -24,12 +24,12 @@
 
 use std::net::IpAddr;
 
+use hickory_resolver::TokioResolver;
 use hickory_resolver::config::LookupIpStrategy;
 use hickory_resolver::config::NameServerConfigGroup;
 use hickory_resolver::config::ResolverConfig;
 use hickory_resolver::config::ResolverOpts;
 use hickory_resolver::name_server::TokioConnectionProvider;
-use hickory_resolver::TokioResolver;
 
 use crate::rt::ResolverOptions;
 use crate::rt::{self};
@@ -100,22 +100,22 @@ mod tests {
     use std::sync::Arc;
 
     use hickory_resolver::Name;
+    use hickory_server::ServerFuture;
     use hickory_server::authority::Catalog;
     use hickory_server::authority::ZoneType;
-    use hickory_server::proto::rr::rdata::A;
-    use hickory_server::proto::rr::rdata::TXT;
     use hickory_server::proto::rr::LowerName;
     use hickory_server::proto::rr::RData;
     use hickory_server::proto::rr::Record;
+    use hickory_server::proto::rr::rdata::A;
+    use hickory_server::proto::rr::rdata::TXT;
     use hickory_server::store::in_memory::InMemoryAuthority;
-    use hickory_server::ServerFuture;
     use tokio::net::UdpSocket;
     use tokio::sync::oneshot;
     use tokio::task::JoinHandle;
 
-    use crate::rt::tokio::TokioDefaultDnsResolver;
     use crate::rt::DnsResolver;
     use crate::rt::ResolverOptions;
+    use crate::rt::tokio::TokioDefaultDnsResolver;
 
     #[tokio::test]
     async fn compare_hickory_and_default() {

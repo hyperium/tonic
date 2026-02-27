@@ -1,15 +1,15 @@
-#[cfg(feature = "_tls-any")]
-use super::service::TlsConnector;
-use super::service::{self, Executor, SharedExec};
-use super::uds_connector::UdsConnector;
 use super::Channel;
 #[cfg(feature = "_tls-any")]
 use super::ClientTlsConfig;
 #[cfg(feature = "_tls-any")]
-use crate::transport::error;
+use super::service::TlsConnector;
+use super::service::{self, Executor, SharedExec};
+use super::uds_connector::UdsConnector;
 use crate::transport::Error;
+#[cfg(feature = "_tls-any")]
+use crate::transport::error;
 use bytes::Bytes;
-use http::{uri::Uri, HeaderValue};
+use http::{HeaderValue, uri::Uri};
 use hyper::rt;
 use hyper_util::client::legacy::connect::HttpConnector;
 use std::{fmt, future::Future, net::IpAddr, pin::Pin, str, str::FromStr, time::Duration};

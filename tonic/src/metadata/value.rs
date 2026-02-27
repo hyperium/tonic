@@ -85,9 +85,11 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     /// within the buffer.
     #[inline]
     pub unsafe fn from_shared_unchecked(src: Bytes) -> Self {
-        MetadataValue {
-            inner: HeaderValue::from_maybe_shared_unchecked(src),
-            phantom: PhantomData,
+        unsafe {
+            MetadataValue {
+                inner: HeaderValue::from_maybe_shared_unchecked(src),
+                phantom: PhantomData,
+            }
         }
     }
 

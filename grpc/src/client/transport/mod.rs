@@ -36,8 +36,8 @@ mod registry;
 mod tonic;
 
 use ::tonic::async_trait;
-pub(crate) use registry::TransportRegistry;
 pub(crate) use registry::GLOBAL_TRANSPORT_REGISTRY;
+pub(crate) use registry::TransportRegistry;
 use tokio::sync::oneshot;
 
 pub(crate) struct ConnectedTransport {
