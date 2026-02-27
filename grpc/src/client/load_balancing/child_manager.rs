@@ -568,7 +568,7 @@ mod test {
             child_policy_builder: builder.clone(),
             child_update: Some((
                 ResolverUpdate {
-                    attributes: crate::attributes::Attributes,
+                    attributes: crate::attributes::Attributes::default(),
                     endpoints: Ok(vec![e.clone()]),
                     service_config: Ok(None),
                     resolution_note: None,

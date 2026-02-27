@@ -114,7 +114,7 @@ pub struct ChannelOptions {
 impl Default for ChannelOptions {
     fn default() -> Self {
         Self {
-            transport_options: Attributes {},
+            transport_options: Attributes::default(),
             override_authority: None,
             connection_backoff: None,
             default_service_config: None,
