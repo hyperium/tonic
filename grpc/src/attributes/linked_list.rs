@@ -49,7 +49,7 @@ struct Node<K, V> {
 /// This list is intended to store a small number of values (few hundreds) and
 /// is optimized for memory usage. It is **not** optimized for query speed.
 #[derive(Debug)]
-pub struct LinkedList<K, V> {
+pub(crate) struct LinkedList<K, V> {
     head: Option<Arc<Node<K, V>>>,
 }
 
@@ -69,7 +69,7 @@ impl<K, V> Default for LinkedList<K, V> {
 
 impl<K, V> LinkedList<K, V> {
     /// Creates a new, empty list.
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         Self::default()
     }
 
@@ -77,7 +77,7 @@ impl<K, V> LinkedList<K, V> {
     ///
     /// If the key already exists in the list, this new entry will shadow the
     /// old one, effectively updating the value.
-    pub fn add(&self, key: K, value: V) -> Self {
+    pub(crate) fn add(&self, key: K, value: V) -> Self {
         LinkedList {
             head: Some(Arc::new(Node {
                 key,
@@ -103,7 +103,7 @@ impl<K: Eq, V> LinkedList<K, V> {
     ///
     /// The value associated with the key, or `None` if the key is not present or
     /// has been removed.
-    pub fn get(&self, key: &K) -> Option<&V> {
+    pub(crate) fn get(&self, key: &K) -> Option<&V> {
         let mut current = self.head.as_ref();
         while let Some(node) = current {
             if &node.key == key {
@@ -121,7 +121,7 @@ impl<K: Ord, V> LinkedList<K, V> {
     /// The iterator yields unique keys. If a key has been added multiple times,
     /// only the most recent value is returned. Keys that have been removed are
     /// skipped.
-    pub fn iter(&self) -> Iter<'_, K, V> {
+    pub(crate) fn iter(&self) -> Iter<'_, K, V> {
         Iter {
             current: self.head.as_ref(),
             seen: BTreeSet::new(),

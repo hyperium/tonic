@@ -65,11 +65,13 @@ impl<T: Any + Send + Sync + Eq + Ord + Debug> AttributeTrait for T {
 }
 
 #[derive(Debug)]
-struct AttributeValue(Box<dyn AttributeTrait>);
+struct AttributeValue {
+    inner: Box<dyn AttributeTrait>,
+}
 
 impl PartialEq for AttributeValue {
     fn eq(&self, other: &Self) -> bool {
-        self.0.dyn_eq(other.0.as_ref())
+        self.inner.dyn_eq(other.inner.as_ref())
     }
 }
 
@@ -83,7 +85,7 @@ impl PartialOrd for AttributeValue {
 
 impl Ord for AttributeValue {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.0.dyn_cmp(other.0.as_ref())
+        self.inner.dyn_cmp(other.inner.as_ref())
     }
 }
 
@@ -103,7 +105,7 @@ impl Ord for AttributeValue {
 /// and is optimized for memory usage. It is **not** optimized for query speed.
 #[derive(Clone, Default, Debug)]
 pub struct Attributes {
-    map: LinkedList<TypeId, AttributeValue>,
+    elements: LinkedList<TypeId, AttributeValue>,
 }
 
 impl Attributes {
@@ -117,21 +119,28 @@ impl Attributes {
     pub fn add<T: Send + Sync + Eq + Ord + Debug + 'static>(&self, value: T) -> Self {
         let id = TypeId::of::<T>();
         Attributes {
-            map: self.map.add(id, AttributeValue(Box::new(value))),
+            elements: self.elements.add(
+                id,
+                AttributeValue {
+                    inner: Box::new(value),
+                },
+            ),
         }
     }
 
     /// Gets a reference to a value of type T.
     pub fn get<T: 'static>(&self) -> Option<&T> {
         let id = TypeId::of::<T>();
-        self.map.get(&id).and_then(|v| v.0.any_ref().downcast_ref())
+        self.elements
+            .get(&id)
+            .and_then(|v| v.inner.any_ref().downcast_ref())
     }
 }
 
 impl PartialEq for Attributes {
     fn eq(&self, other: &Self) -> bool {
-        let mut v1: Vec<_> = self.map.iter().collect();
-        let mut v2: Vec<_> = other.map.iter().collect();
+        let mut v1: Vec<_> = self.elements.iter().collect();
+        let mut v2: Vec<_> = other.elements.iter().collect();
         if v1.len() != v2.len() {
             return false;
         }
@@ -151,8 +160,8 @@ impl PartialOrd for Attributes {
 
 impl Ord for Attributes {
     fn cmp(&self, other: &Self) -> Ordering {
-        let mut v1: Vec<_> = self.map.iter().collect();
-        let mut v2: Vec<_> = other.map.iter().collect();
+        let mut v1: Vec<_> = self.elements.iter().collect();
+        let mut v2: Vec<_> = other.elements.iter().collect();
         v1.sort();
         v2.sort();
         v1.cmp(&v2)
