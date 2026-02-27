@@ -47,7 +47,6 @@ mod rt;
 mod send_future;
 pub mod server;
 pub mod service;
-mod vendored;
 #[cfg(test)]
 mod echo_pb {
     include!(concat!(

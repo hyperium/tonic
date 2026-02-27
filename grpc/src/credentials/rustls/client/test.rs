@@ -27,9 +27,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Once;
 
-use rustls::crypto::ring;
 use rustls::HandshakeKind;
 use rustls::ServerConfig;
+use rustls::crypto::ring;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::PrivateKeyDer;
 use tempfile::NamedTempFile;
@@ -43,12 +43,12 @@ use crate::credentials::client::ChannelCredsInternal;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::common::Authority;
-use crate::credentials::rustls::client::ClientTlsConfig;
-use crate::credentials::rustls::client::RustlsClientTlsCredendials;
+use crate::credentials::rustls::ALPN_PROTO_STR_H2;
 use crate::credentials::rustls::Identity;
 use crate::credentials::rustls::RootCertificates;
 use crate::credentials::rustls::StaticProvider;
-use crate::credentials::rustls::ALPN_PROTO_STR_H2;
+use crate::credentials::rustls::client::ClientTlsConfig;
+use crate::credentials::rustls::client::RustlsClientTlsCredendials;
 use crate::rt;
 use crate::rt::TcpOptions;
 

@@ -32,6 +32,7 @@ use tokio::sync::watch;
 use crate::credentials::ProtocolInfo;
 
 pub mod client;
+mod key_log;
 mod tls_stream;
 
 const ALPN_PROTO_STR_H2: &[u8; 2] = b"h2";

@@ -32,8 +32,8 @@ use tokio::io::AsyncWrite;
 use tokio::io::ReadBuf;
 use tokio_rustls::TlsStream as RustlsStream;
 
-use crate::rt::endpoint;
 use crate::rt::GrpcEndpoint;
+use crate::rt::endpoint;
 
 pub struct TlsStream<T> {
     inner: RustlsStream<T>,

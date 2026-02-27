@@ -34,6 +34,8 @@ use tokio_rustls::TlsConnector;
 use tokio_rustls::TlsStream as RustlsStream;
 
 use crate::attributes::Attributes;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
 use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
@@ -41,20 +43,18 @@ use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
+use crate::credentials::rustls::ALPN_PROTO_STR_H2;
+use crate::credentials::rustls::Identity;
+use crate::credentials::rustls::Provider;
+use crate::credentials::rustls::RootCertificates;
+use crate::credentials::rustls::TLS_PROTO_INFO;
+use crate::credentials::rustls::key_log::KeyLogFile;
 use crate::credentials::rustls::parse_certs;
 use crate::credentials::rustls::parse_key;
 use crate::credentials::rustls::sanitize_crypto_provider;
 use crate::credentials::rustls::tls_stream::TlsStream;
-use crate::credentials::rustls::Identity;
-use crate::credentials::rustls::Provider;
-use crate::credentials::rustls::RootCertificates;
-use crate::credentials::rustls::ALPN_PROTO_STR_H2;
-use crate::credentials::rustls::TLS_PROTO_INFO;
-use crate::credentials::ChannelCredentials;
-use crate::credentials::ProtocolInfo;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
-use crate::vendored::key_log::KeyLogFile;
 
 #[cfg(test)]
 mod test;
