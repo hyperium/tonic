@@ -91,6 +91,7 @@ pub struct CallOptions {
 ///
 /// Most applications will not use this type directly, and will instead use the
 /// generated APIs (e.g.  protobuf) to perform RPCs instead.
+#[trait_variant::make(Send)]
 pub trait Invoke: Send + Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
@@ -104,7 +105,7 @@ pub trait Invoke: Send + Sync {
     /// locally-erroring stream immediately instead.  However, SendStream and
     /// RecvStream are asynchronous, and may block their first operations until
     /// quota is available, a connection is ready, etc.
-    fn invoke(
+    async fn invoke(
         &self,
         headers: RequestHeaders,
         options: CallOptions,
@@ -113,11 +114,12 @@ pub trait Invoke: Send + Sync {
 
 // Like `Invoke`, but not reusable.  It is blanket implemented on references to
 // `Invoke`s.
+#[trait_variant::make(Send)]
 pub trait InvokeOnce: Send + Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
 
-    fn invoke_once(
+    async fn invoke_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
@@ -128,12 +130,12 @@ impl<T: Invoke> InvokeOnce for &T {
     type SendStream = T::SendStream;
     type RecvStream = T::RecvStream;
 
-    fn invoke_once(
+    async fn invoke_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
-        self.invoke(headers, options)
+        self.invoke(headers, options).await
     }
 }
 
