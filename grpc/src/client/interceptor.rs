@@ -230,6 +230,8 @@ impl<T: InvokeOnce + Sized> InvokeOnceExt for T {}
 #[cfg(test)]
 mod test {
     use super::*;
+    use crate::Status;
+    use crate::StatusCode;
     use crate::client::CallOptions;
     use crate::client::Invoke;
     use crate::client::RecvStream;
@@ -240,18 +242,16 @@ mod test {
     use crate::core::ResponseHeaders;
     use crate::core::SendMessage;
     use crate::core::Trailers;
-    use crate::Status;
-    use crate::StatusCode;
     use bytes::Buf;
     use bytes::Bytes;
     use std::future::Future;
     use std::sync::Arc;
     use tokio::pin;
     use tokio::select;
-    use tokio::sync::broadcast;
-    use tokio::sync::mpsc;
     use tokio::sync::Mutex;
     use tokio::sync::Notify;
+    use tokio::sync::broadcast;
+    use tokio::sync::mpsc;
     use tokio::task;
 
     #[derive(Clone)]

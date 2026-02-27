@@ -1,5 +1,5 @@
-use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
+use hello_world::greeter_client::GreeterClient;
 use http::Uri;
 use hyper_util::client::legacy::Client;
 use hyper_util::rt::TokioExecutor;
@@ -36,7 +36,7 @@ mod h2c {
 
     use hyper::body::Incoming;
     use hyper_util::{
-        client::legacy::{connect::HttpConnector, Client},
+        client::legacy::{Client, connect::HttpConnector},
         rt::TokioExecutor,
     };
     use tonic::body::Body;

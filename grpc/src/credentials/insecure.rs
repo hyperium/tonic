@@ -23,6 +23,9 @@
  */
 
 use crate::attributes::Attributes;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::ServerCredentials;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
@@ -32,9 +35,6 @@ use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
 use crate::credentials::server::ServerConnectionSecurityInfo;
 use crate::credentials::server::{self};
-use crate::credentials::ChannelCredentials;
-use crate::credentials::ProtocolInfo;
-use crate::credentials::ServerCredentials;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -81,7 +81,7 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
                 "insecure",
                 SecurityLevel::NoSecurity,
                 InsecureConnectionSecurityContext,
-                Attributes,
+                Attributes::new(),
             ),
         })
     }
@@ -119,7 +119,7 @@ impl server::ServerCredsInternal for InsecureServerCredentials {
             security: ServerConnectionSecurityInfo::new(
                 "insecure",
                 SecurityLevel::NoSecurity,
-                Attributes,
+                Attributes::new(),
             ),
         })
     }
@@ -139,16 +139,16 @@ mod test {
     use tokio::net::TcpListener;
     use tokio::net::TcpStream;
 
+    use crate::credentials::ChannelCredentials;
+    use crate::credentials::InsecureChannelCredentials;
+    use crate::credentials::InsecureServerCredentials;
+    use crate::credentials::ServerCredentials;
     use crate::credentials::client::ChannelCredsInternal as ClientSealed;
     use crate::credentials::client::ClientConnectionSecurityContext;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::Authority;
     use crate::credentials::common::SecurityLevel;
     use crate::credentials::server::ServerCredsInternal;
-    use crate::credentials::ChannelCredentials;
-    use crate::credentials::InsecureChannelCredentials;
-    use crate::credentials::InsecureServerCredentials;
-    use crate::credentials::ServerCredentials;
     use crate::rt::GrpcEndpoint;
     use crate::rt::TcpOptions;
     use crate::rt::{self};
@@ -198,9 +198,11 @@ mod test {
         assert_eq!(buf, test_data);
 
         // Validate arbitrary authority.
-        assert!(security_info
-            .security_context()
-            .validate_authority(&authority));
+        assert!(
+            security_info
+                .security_context()
+                .validate_authority(&authority)
+        );
     }
 
     #[tokio::test]

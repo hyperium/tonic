@@ -3,7 +3,7 @@ pub mod pb {
 }
 
 use pb::{EchoRequest, EchoResponse};
-use tonic::{metadata::MetadataValue, transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, metadata::MetadataValue, transport::Server};
 
 type EchoResult<T> = Result<Response<T>, Status>;
 

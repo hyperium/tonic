@@ -1,10 +1,10 @@
 use std::fmt;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use http::{header, HeaderMap, HeaderName, HeaderValue};
+use http::{HeaderMap, HeaderName, HeaderValue, header};
 use http_body::{Body, Frame, SizeHint};
 use pin_project::pin_project;
 use tokio_stream::Stream;
@@ -16,7 +16,7 @@ use self::content_types::*;
 const GRPC_HEADER_SIZE: usize = 1 + 4;
 
 pub(crate) mod content_types {
-    use http::{header::CONTENT_TYPE, HeaderMap};
+    use http::{HeaderMap, header::CONTENT_TYPE};
 
     pub(crate) const GRPC_WEB: &str = "application/grpc-web";
     pub(crate) const GRPC_WEB_PROTO: &str = "application/grpc-web+proto";
@@ -186,10 +186,10 @@ where
                     Some(Ok(frame)) if frame.is_trailers() => {
                         return Poll::Ready(Some(Err(internal_error(
                             "malformed base64 request has unencoded trailers",
-                        ))))
+                        ))));
                     }
                     Some(Ok(_)) => {
-                        return Poll::Ready(Some(Err(internal_error("unexpected frame type"))))
+                        return Poll::Ready(Some(Err(internal_error("unexpected frame type"))));
                     }
                     Some(Err(e)) => return Poll::Ready(Some(Err(internal_error(e)))),
                     None => {
@@ -199,7 +199,7 @@ where
                             Poll::Ready(Some(Ok(Frame::trailers(trailers))))
                         } else {
                             Poll::Ready(None)
-                        }
+                        };
                     }
                 }
             },

@@ -7,9 +7,9 @@ pub mod pb {
 
 use hyper::Uri;
 use hyper_util::{client::legacy::connect::HttpConnector, rt::TokioExecutor};
-use pb::{echo_client::EchoClient, EchoRequest};
+use pb::{EchoRequest, echo_client::EchoClient};
 use tokio_rustls::rustls::{
-    pki_types::{pem::PemObject as _, CertificateDer},
+    pki_types::{CertificateDer, pem::PemObject as _},
     {ClientConfig, RootCertStore},
 };
 

@@ -1,11 +1,11 @@
 use std::error::Error;
 use std::time::Duration;
 
-use rand::rngs::ThreadRng;
 use rand::Rng;
+use rand::rngs::ThreadRng;
 use tokio::time;
-use tonic::transport::Channel;
 use tonic::Request;
+use tonic::transport::Channel;
 
 use routeguide::route_guide_client::RouteGuideClient;
 use routeguide::{Point, Rectangle, RouteNote};

@@ -38,6 +38,7 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tonic::async_trait;
 
+use crate::client::ConnectivityState;
 use crate::client::channel::InternalChannelController;
 use crate::client::channel::WorkQueueItem;
 use crate::client::channel::WorkQueueTx;
@@ -46,7 +47,6 @@ use crate::client::load_balancing::SubchannelState;
 use crate::client::name_resolution::Address;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
-use crate::client::ConnectivityState;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 use crate::service::Request;

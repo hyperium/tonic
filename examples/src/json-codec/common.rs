@@ -6,8 +6,8 @@ use bytes::{Buf, BufMut};
 use serde::{Deserialize, Serialize};
 use std::marker::PhantomData;
 use tonic::{
-    codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
     Status,
+    codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
 };
 
 #[derive(Debug, Deserialize, Serialize)]

@@ -31,7 +31,7 @@
 
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use std::{
     collections::HashSet,
     ffi::OsString,
@@ -45,7 +45,7 @@ mod tests;
 
 // Re-export core build functionality from tonic-build
 pub use tonic_build::{
-    manual, Attributes as TonicAttributes, Method as TonicMethod, Service as TonicService,
+    Attributes as TonicAttributes, Method as TonicMethod, Service as TonicService, manual,
 };
 
 // Re-export prost types that users might need
@@ -504,7 +504,7 @@ impl Builder {
     /// Passed directly to `prost_build::Config.btree_map`.
     pub fn btree_map<P: AsRef<str>>(mut self, path: P) -> Self {
         match &mut self.btree_map {
-            Some(ref mut paths) => paths.push(path.as_ref().to_string()),
+            Some(paths) => paths.push(path.as_ref().to_string()),
             None => self.btree_map = Some(vec![path.as_ref().to_string()]),
         }
         self
@@ -515,7 +515,7 @@ impl Builder {
     /// Passed directly to `prost_build::Config.bytes`.
     pub fn bytes<P: AsRef<str>>(mut self, path: P) -> Self {
         match &mut self.bytes {
-            Some(ref mut paths) => paths.push(path.as_ref().to_string()),
+            Some(paths) => paths.push(path.as_ref().to_string()),
             None => self.bytes = Some(vec![path.as_ref().to_string()]),
         }
         self

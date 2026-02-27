@@ -108,7 +108,7 @@ pub use self::server::Server;
 
 #[cfg(feature = "_tls-any")]
 pub use self::tls::Certificate;
-pub use hyper::{body::Body, Uri};
+pub use hyper::{Uri, body::Body};
 #[cfg(feature = "_tls-any")]
 pub use tokio_rustls::rustls::pki_types::CertificateDer;
 

@@ -7,7 +7,7 @@ use std::{
 
 use socket2::TcpKeepalive;
 use tokio::net::{TcpListener, TcpStream};
-use tokio_stream::{wrappers::TcpListenerStream, Stream};
+use tokio_stream::{Stream, wrappers::TcpListenerStream};
 use tracing::warn;
 
 /// Binds a socket address for a [Router](super::Router)

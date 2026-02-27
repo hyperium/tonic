@@ -7,8 +7,8 @@ pub(crate) mod base64 {
     use base64::{
         alphabet,
         engine::{
-            general_purpose::{GeneralPurpose, GeneralPurposeConfig},
             DecodePaddingMode,
+            general_purpose::{GeneralPurpose, GeneralPurposeConfig},
         },
     };
 

@@ -1,10 +1,10 @@
 [package]
 name = "grpc"
 version = "0.9.0-alpha.1"
-edition = "2021"
+edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
-rust-version = "1.86"
+rust-version = { workspace = true }
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
