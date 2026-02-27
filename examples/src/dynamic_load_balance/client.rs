@@ -2,10 +2,10 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.unaryecho");
 }
 
-use pb::{echo_client::EchoClient, EchoRequest};
-use tonic::transport::channel::Change;
+use pb::{EchoRequest, echo_client::EchoClient};
 use tonic::transport::Channel;
 use tonic::transport::Endpoint;
+use tonic::transport::channel::Change;
 
 use std::sync::Arc;
 

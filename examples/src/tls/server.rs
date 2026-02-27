@@ -4,11 +4,11 @@ pub mod pb {
 
 use pb::{EchoRequest, EchoResponse};
 use tonic::{
-    transport::{
-        server::{TcpConnectInfo, TlsConnectInfo},
-        Identity, Server, ServerTlsConfig,
-    },
     Request, Response, Status,
+    transport::{
+        Identity, Server, ServerTlsConfig,
+        server::{TcpConnectInfo, TlsConnectInfo},
+    },
 };
 
 type EchoResult<T> = Result<Response<T>, Status>;

@@ -1,4 +1,4 @@
-use crate::{body::Body, server::NamedService, Status};
+use crate::{Status, body::Body, server::NamedService};
 use http::{Request, Response};
 use std::{
     convert::Infallible,

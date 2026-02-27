@@ -3,7 +3,7 @@ use prost_types::Any;
 
 use crate::richer_error::FromAnyRef;
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::{FromAny, IntoAny, pb};
 
 /// Used to encode/decode the `LocalizedMessage` standard error message
 /// described in [error_details.proto]. Provides a localized error message
@@ -109,8 +109,7 @@ mod tests {
 
         let formatted = format!("{gen_any:?}");
 
-        let expected =
-            "Any { type_url: \"type.googleapis.com/google.rpc.LocalizedMessage\", value: [10, 5, 101, 110, 45, 85, 83, 18, 20, 109, 101, 115, 115, 97, 103, 101, 32, 102, 111, 114, 32, 116, 104, 101, 32, 117, 115, 101, 114] }";
+        let expected = "Any { type_url: \"type.googleapis.com/google.rpc.LocalizedMessage\", value: [10, 5, 101, 110, 45, 85, 83, 18, 20, 109, 101, 115, 115, 97, 103, 101, 32, 102, 111, 114, 32, 116, 104, 101, 32, 117, 115, 101, 114] }";
 
         assert!(
             formatted.eq(expected),

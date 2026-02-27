@@ -1,8 +1,8 @@
 use crate::common::async_util::BoxFuture;
 use std::net::SocketAddr;
-use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicU64, atomic::Ordering};
 use std::task::{Context, Poll};
-use tower::{load::Load, Service};
+use tower::{Service, load::Load};
 
 /// Represents the host part of an endpoint address
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -107,8 +107,8 @@ where
         // -1 when the inner future completes
         Box::pin(async move {
             let _in_flight_guard = in_flight;
-            let res = fut.await;
-            res
+
+            fut.await
         })
     }
 }

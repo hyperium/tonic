@@ -8,7 +8,7 @@ use std::result::Result as StdResult;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_stream::StreamExt;
-use tonic::{body::Body, server::NamedService, Code, Request, Response, Status};
+use tonic::{Code, Request, Response, Status, body::Body, server::NamedService};
 use tower::Service;
 
 pub use pb::test_service_server::TestServiceServer;

@@ -1,25 +1,57 @@
-use super::{
-    channel::{InternalChannelController, WorkQueueTx},
-    load_balancing::{ExternalSubchannel, SubchannelState},
-    name_resolution::Address,
-    transport::Transport,
-    ConnectivityState,
-};
-use crate::{
-    client::{channel::WorkQueueItem, transport::TransportOptions},
-    rt::{BoxedTaskHandle, GrpcRuntime},
-    service::{Request, Response, Service},
-};
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
 use core::panic;
-use std::time::{Duration, Instant};
-use std::{
-    collections::BTreeMap,
-    error::Error,
-    fmt::{Debug, Display},
-    sync::{Arc, Mutex, RwLock, Weak},
-};
-use tokio::sync::{mpsc, oneshot};
+use std::collections::BTreeMap;
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::RwLock;
+use std::sync::Weak;
+use std::time::Duration;
+use std::time::Instant;
+
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tonic::async_trait;
+
+use crate::client::ConnectivityState;
+use crate::client::channel::InternalChannelController;
+use crate::client::channel::WorkQueueItem;
+use crate::client::channel::WorkQueueTx;
+use crate::client::load_balancing::ExternalSubchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::name_resolution::Address;
+use crate::client::transport::Transport;
+use crate::client::transport::TransportOptions;
+use crate::rt::BoxedTaskHandle;
+use crate::rt::GrpcRuntime;
+use crate::service::Request;
+use crate::service::Response;
+use crate::service::Service;
 
 type SharedService = Arc<dyn Service>;
 

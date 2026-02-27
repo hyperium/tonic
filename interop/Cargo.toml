@@ -1,8 +1,9 @@
 [package]
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 name = "interop"
+rust-version = { workspace = true }
 
 [[bin]]
 name = "client"

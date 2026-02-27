@@ -1,10 +1,11 @@
 [package]
 name = "tonic-protobuf-build"
 version = "0.14.0"
-edition = "2021"
+edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
 publish = false
+rust-version = { workspace = true }
 
 [dependencies]
 prettyplease = "0.2.35"

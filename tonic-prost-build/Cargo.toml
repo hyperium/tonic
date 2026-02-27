@@ -1,8 +1,8 @@
 [package]
 name = "tonic-prost-build"
-version = "0.14.4"
+version = "0.14.5"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/hyperium/tonic"
 homepage = "https://github.com/hyperium/tonic"
@@ -10,6 +10,7 @@ description = "Prost build integration for tonic"
 readme = "README.md"
 categories = ["development-tools::build-utils", "network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "prost", "protobuf", "tonic"]
+rust-version = { workspace = true }
 
 [features]
 default = ["transport", "cleanup-markdown"]

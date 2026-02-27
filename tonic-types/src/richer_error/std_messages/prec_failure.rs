@@ -3,7 +3,7 @@ use prost_types::Any;
 
 use crate::richer_error::FromAnyRef;
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::{FromAny, IntoAny, pb};
 
 /// Used at the `violations` field of the [`PreconditionFailure`] struct.
 /// Describes a single precondition failure.

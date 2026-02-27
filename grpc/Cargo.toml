@@ -1,13 +1,14 @@
 [package]
 name = "grpc"
 version = "0.9.0-alpha.1"
-edition = "2021"
+edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
-rust-version = "1.86"
+rust-version = { workspace = true }
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
+    "bytes::*",
     "tonic::*",
     "futures_core::stream::Stream",
     "tokio::sync::oneshot::Sender",
@@ -54,7 +55,7 @@ tower = { version = "0.5.2", features = [
     "buffer",
 ], optional = true }
 tower-service = "0.3.3"
-trait-variant = "0.1"
+trait-variant = "0.1.2"
 url = "2.5.0"
 
 [dev-dependencies]

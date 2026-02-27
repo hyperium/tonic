@@ -23,7 +23,11 @@
  */
 
 use std::fmt::Debug;
-use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
+use std::future::Future;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]
@@ -31,6 +35,8 @@ pub(crate) mod tokio;
 
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 pub type BoxedTaskHandle = Box<dyn TaskHandle>;
+pub type BoxEndpoint = Box<dyn GrpcEndpoint>;
+pub type ScopedBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -58,6 +64,13 @@ pub trait Runtime: Send + Sync + Debug {
         target: SocketAddr,
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>>;
+
+    /// Create a new listener for the given address.
+    fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -109,6 +122,8 @@ pub trait GrpcEndpoint: endpoint::Sealed + Send + Unpin + 'static {
 
     /// Returns the remote address that this stream is connected to.
     fn get_peer_address(&self) -> &str;
+
+    fn get_network_type(&self) -> &'static str;
 }
 
 impl endpoint::Sealed for Box<dyn GrpcEndpoint> {}
@@ -120,6 +135,24 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
     fn get_peer_address(&self) -> &str {
         (**self).get_peer_address()
     }
+
+    fn get_network_type(&self) -> &'static str {
+        (**self).get_network_type()
+    }
+}
+
+/// A trait representing a TCP listener capable of accepting incoming
+/// connections.
+pub trait TcpListener: Send + Sync {
+    /// Accepts a new incoming connection.
+    ///
+    /// Returns a future that resolves to a result containing the new
+    /// `GrpcEndpoint` and the remote peer's `SocketAddr`, or an error string
+    /// if acceptance fails.
+    fn accept(&mut self) -> ScopedBoxFuture<'_, Result<(BoxEndpoint, SocketAddr), String>>;
+
+    /// Returns the local socket address this listener is bound to.
+    fn local_addr(&self) -> &SocketAddr;
 }
 
 /// A fake runtime to satisfy the compiler when no runtime is enabled. This will
@@ -150,12 +183,20 @@ impl Runtime for NoOpRuntime {
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
         unimplemented!()
     }
+
+    fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        _opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
+        unimplemented!()
+    }
 }
 
 pub(crate) fn default_runtime() -> GrpcRuntime {
     #[cfg(feature = "_runtime-tokio")]
     {
-        return GrpcRuntime::new(tokio::TokioRuntime {});
+        return GrpcRuntime::new(tokio::TokioRuntime::default());
     }
     #[allow(unreachable_code)]
     GrpcRuntime::new(NoOpRuntime::default())
@@ -194,5 +235,13 @@ impl GrpcRuntime {
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
         self.inner.tcp_stream(target, opts)
+    }
+
+    pub fn listen_tcp(
+        &self,
+        addr: SocketAddr,
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
+        self.inner.listen_tcp(addr, opts)
     }
 }

@@ -6,7 +6,7 @@ use http::Request;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::ServiceExt;
-use tower::{load::Load, BoxError, Service};
+use tower::{BoxError, Service, load::Load};
 
 /// Errors that can occur during load balancing.
 #[derive(Debug, Clone, thiserror::Error)]

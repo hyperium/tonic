@@ -9,7 +9,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio_stream::StreamExt;
 use tonic::codegen::BoxStream;
-use tonic::{body::Body, server::NamedService, Code, Request, Response, Status};
+use tonic::{Code, Request, Response, Status, body::Body, server::NamedService};
 use tonic_protobuf::protobuf::proto;
 use tower::Service;
 

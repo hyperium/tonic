@@ -23,41 +23,59 @@
  */
 
 use core::panic;
-use std::{
-    any::Any,
-    error::Error,
-    mem,
-    str::FromStr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-    vec,
-};
-
-use tokio::sync::{mpsc, watch, Notify};
+use std::any::Any;
+use std::error::Error;
+use std::mem;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
+use std::time::Instant;
+use std::vec;
 
 use serde_json::json;
+use tokio::sync::Notify;
+use tokio::sync::mpsc;
+use tokio::sync::watch;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
-use crate::rt::{default_runtime, GrpcEndpoint};
-use crate::service::{Request, Response, Service};
-use crate::{attributes::Attributes, credentials::ChannelCredentials};
-use crate::{client::ConnectivityState, rt::GrpcRuntime};
-use crate::{credentials::dyn_wrapper::DynChannelCredentials, rt};
-
-use super::name_resolution::{self, global_registry, Address, ResolverUpdate};
-use super::service_config::ServiceConfig;
-use super::transport::{TransportRegistry, GLOBAL_TRANSPORT_REGISTRY};
-use super::{
-    load_balancing::{
-        self, pick_first, ExternalSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-        ParsedJsonLbConfig, PickResult, Picker, Subchannel, SubchannelState, WorkScheduler,
-        GLOBAL_LB_REGISTRY,
-    },
-    subchannel::{
-        InternalSubchannel, InternalSubchannelPool, NopBackoff, SubchannelKey,
-        SubchannelStateWatcher,
-    },
-};
+use crate::attributes::Attributes;
+use crate::client::ConnectivityState;
+use crate::client::load_balancing::ExternalSubchannel;
+use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::ParsedJsonLbConfig;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::pick_first;
+use crate::client::load_balancing::{self};
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::global_registry;
+use crate::client::name_resolution::{self};
+use crate::client::service_config::ServiceConfig;
+use crate::client::subchannel::InternalSubchannel;
+use crate::client::subchannel::InternalSubchannelPool;
+use crate::client::subchannel::NopBackoff;
+use crate::client::subchannel::SubchannelKey;
+use crate::client::subchannel::SubchannelStateWatcher;
+use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::TransportRegistry;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::dyn_wrapper::DynChannelCredentials;
+use crate::rt;
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
+use crate::rt::default_runtime;
+use crate::service::Request;
+use crate::service::Response;
+use crate::service::Service;
 
 #[non_exhaustive]
 pub struct ChannelOptions {
@@ -319,7 +337,9 @@ impl ActiveChannel {
                         {
                             return sc.isc.as_ref().unwrap().call(method, request).await;
                         } else {
-                            panic!("picked subchannel is not an implementation provided by the channel");
+                            panic!(
+                                "picked subchannel is not an implementation provided by the channel"
+                            );
                         }
                     }
                     PickResult::Queue => {
