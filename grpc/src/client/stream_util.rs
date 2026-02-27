@@ -437,10 +437,12 @@ mod test {
             // Assert the codes match.
             assert_eq!(got_t.status().code(), expect_t.status().code());
             // Assert the status received contains the expected status error message.
-            assert!(got_t
-                .status()
-                .message()
-                .contains(expect_t.status().message()));
+            assert!(
+                got_t
+                    .status()
+                    .message()
+                    .contains(expect_t.status().message())
+            );
         }
     }
 
