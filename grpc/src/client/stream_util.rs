@@ -179,6 +179,7 @@ mod test {
     use crate::client::interceptor::InvokeOnceExt as _;
     use crate::core::ClientResponseStreamItem;
     use crate::core::RecvMessage;
+    use crate::core::RequestHeaders;
     use crate::core::ResponseHeaders;
     use crate::core::SendMessage;
     use crate::core::Trailers;

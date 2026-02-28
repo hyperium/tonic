@@ -29,6 +29,8 @@ use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
 
+use crate::client::DynInvoke;
+
 pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]
 pub(crate) mod tokio;
@@ -37,6 +39,7 @@ pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 pub type BoxedTaskHandle = Box<dyn TaskHandle>;
 pub type BoxEndpoint = Box<dyn GrpcEndpoint>;
 pub type ScopedBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
+pub type SharedService = Arc<dyn DynInvoke>;
 
 /// An abstraction over an asynchronous runtime.
 ///

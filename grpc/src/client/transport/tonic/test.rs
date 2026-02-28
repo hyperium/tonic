@@ -22,7 +22,6 @@
  *
  */
 
-use std::any::Any;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,13 +30,11 @@ use bytes::Buf;
 use bytes::Bytes;
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
-use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
-use tonic::Request;
 use tonic::Response;
 use tonic::Status;
 use tonic::async_trait;
@@ -62,8 +59,8 @@ use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
 use crate::echo_pb::echo_server::EchoServer;
-use crate::service::Message;
-use crate::service::Request as GrpcRequest;
+use crate::rt::GrpcRuntime;
+use crate::rt::tokio::TokioRuntime;
 
 const DEFAULT_TEST_DURATION: Duration = Duration::from_secs(10);
 const DEFAULT_TEST_SHORT_DURATION: Duration = Duration::from_millis(10);
@@ -93,67 +90,71 @@ pub(crate) async fn tonic_transport_rpc() {
         .get_transport(TCP_IP_NETWORK_TYPE)
         .unwrap();
     let config = Arc::new(TransportOptions::default());
-    let mut connected_transport = builder
-        .connect(addr.to_string(), crate::rt::default_runtime(), &config)
-        .await
-        .unwrap();
-    let conn = connected_transport.service;
-
-    let (tx, rx) = mpsc::channel::<Box<dyn Message>>(1);
-
-    // Convert the mpsc receiver into a Stream
-    let outbound: GrpcRequest =
-        Request::new(Box::pin(tokio_stream::wrappers::ReceiverStream::new(rx)));
-
-    let mut inbound = conn
-        .call(
-            "/grpc.examples.echo.Echo/BidirectionalStreamingEcho".to_string(),
-            outbound,
+    let (conn, mut disconnection_listener) = builder
+        .dyn_connect(
+            addr.to_string(),
+            GrpcRuntime::new(TokioRuntime::default()),
+            &config,
         )
         .await
-        .into_inner();
+        .unwrap();
+
+    let (mut tx, mut rx) = conn
+        .dyn_invoke(
+            RequestHeaders::new()
+                .with_method_name("/grpc.examples.echo.Echo/BidirectionalStreamingEcho"),
+            CallOptions::default(),
+        )
+        .await;
 
     // Spawn a sender task
     let client_handle = tokio::spawn(async move {
+        let mut dummy_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
+        match rx.next(&mut dummy_msg).await {
+            ClientResponseStreamItem::Headers(_) => {
+                println!("Got headers");
+            }
+            item => panic!("Expected headers, got {:?}", item),
+        }
+
         for i in 0..5 {
             let message = format!("message {i}");
             let request = EchoRequest {
                 message: message.clone(),
             };
 
-            let bytes = Bytes::from(request.encode_to_vec());
+            let req = WrappedEchoRequest(request);
 
-            println!("Sent request: {request:?}");
-            assert!(tx.send(Box::new(bytes)).await.is_ok(), "Receiver dropped");
+            println!("Sent request: {:?}", req.0);
+            assert!(
+                tx.send(&req, SendOptions::default()).await.is_ok(),
+                "Receiver dropped"
+            );
 
             // Wait for the reply
-            let resp = inbound
-                .next()
-                .await
-                .expect("server unexpectedly closed the stream!")
-                .expect("server returned error");
-
-            let bytes = (resp as Box<dyn Any>).downcast::<Bytes>().unwrap();
-            let echo_response = EchoResponse::decode(bytes).unwrap();
-            println!("Got response: {echo_response:?}");
-            assert_eq!(echo_response.message, message);
+            let mut recv_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
+            match rx.next(&mut recv_msg).await {
+                ClientResponseStreamItem::Message(()) => {
+                    let echo_response = recv_msg.0;
+                    println!("Got response: {echo_response:?}");
+                    assert_eq!(echo_response.message, message);
+                }
+                item => panic!("Expected message, got {:?}", item),
+            }
         }
     });
 
     client_handle.await.unwrap();
     // The connection should break only after the server is stopped.
     assert_eq!(
-        connected_transport.disconnection_listener.try_recv(),
+        disconnection_listener.try_recv(),
         Err(oneshot::error::TryRecvError::Empty),
     );
     shutdown_notify.notify_waiters();
-    let res = timeout(
-        DEFAULT_TEST_DURATION,
-        connected_transport.disconnection_listener,
-    )
-    .await
-    .unwrap()
-    .unwrap();
+    let res = timeout(DEFAULT_TEST_DURATION, disconnection_listener)
+        .await
+        .unwrap()
+        .unwrap();
     assert_eq!(res, Ok(()));
     server_handle.await.unwrap();
 }
