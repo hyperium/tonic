@@ -27,8 +27,18 @@ use std::sync::Arc;
 
 /// An in-memory representation of a service config, usually provided to gRPC as
 /// a JSON object.
+// TODO: this shouldn't be public; users should set with JSON instead.
 #[derive(Debug, Default, Clone)]
-pub(crate) struct ServiceConfig;
+pub struct ServiceConfig {
+    pub load_balancing_policy: Option<LbPolicyType>,
+}
+
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub enum LbPolicyType {
+    #[default]
+    PickFirst,
+    RoundRobin,
+}
 
 /// A convenience wrapper for an LB policy's configuration object.
 #[derive(Debug, Clone)]

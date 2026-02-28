@@ -43,10 +43,11 @@ use crate::client::channel::WorkQueueItem;
 use crate::client::channel::WorkQueueTx;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
+use crate::client::service_config::LbConfig;
 use crate::client::subchannel::InternalSubchannel;
+use crate::client::subchannel::SubchannelStateWatcher;
 use crate::core::RequestHeaders;
 use crate::rt::GrpcRuntime;
-use crate::service::Response;
 
 pub(crate) mod child_manager;
 pub(crate) mod graceful_switch;
@@ -57,8 +58,6 @@ pub(crate) mod round_robin;
 pub(crate) mod test_utils;
 
 pub(crate) mod registry;
-use super::service_config::LbConfig;
-use super::subchannel::SubchannelStateWatcher;
 pub(crate) use registry::GLOBAL_LB_REGISTRY;
 
 /// A collection of data configured on the channel that is constructing this
@@ -350,7 +349,7 @@ impl LbState {
 }
 
 /// Type alias for the completion callback function.
-pub(crate) type CompletionCallback = Box<dyn Fn(&Response) + Send + Sync>;
+pub(crate) type CompletionCallback = Box<dyn Fn() + Send + Sync>;
 
 /// A collection of data used by the channel for routing a request.
 pub(crate) struct Pick {

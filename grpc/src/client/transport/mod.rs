@@ -25,7 +25,8 @@
 use std::time::Duration;
 use std::time::Instant;
 
-use crate::client::subchannel::SharedServiceTrait;
+use crate::client::DynInvoke;
+use crate::client::Invoke;
 use crate::rt::GrpcRuntime;
 
 mod registry;
@@ -39,11 +40,6 @@ use ::tonic::async_trait;
 pub(crate) use registry::GLOBAL_TRANSPORT_REGISTRY;
 pub(crate) use registry::TransportRegistry;
 use tokio::sync::oneshot;
-
-pub(crate) struct ConnectedTransport {
-    pub service: Box<dyn SharedServiceTrait>,
-    pub disconnection_listener: oneshot::Receiver<Result<(), String>>,
-}
 
 // TODO: The following options are specific to HTTP/2. We should
 // instead pass an `Attribute` like struct to the connect method instead which
@@ -64,12 +60,37 @@ pub(crate) struct TransportOptions {
     pub(crate) connect_deadline: Option<Instant>,
 }
 
-#[async_trait]
+#[trait_variant::make(Send)]
 pub(crate) trait Transport: Send + Sync {
+    type Service: Invoke + 'static;
+
     async fn connect(
         &self,
         address: String,
         runtime: GrpcRuntime,
         opts: &TransportOptions,
-    ) -> Result<ConnectedTransport, String>;
+    ) -> Result<(Self::Service, oneshot::Receiver<Result<(), String>>), String>;
+}
+
+#[async_trait]
+pub(crate) trait DynTransport: Send + Sync {
+    async fn dyn_connect(
+        &self,
+        address: String,
+        runtime: GrpcRuntime,
+        opts: &TransportOptions,
+    ) -> Result<(Box<dyn DynInvoke>, oneshot::Receiver<Result<(), String>>), String>;
+}
+
+#[async_trait]
+impl<T: Transport> DynTransport for T {
+    async fn dyn_connect(
+        &self,
+        address: String,
+        runtime: GrpcRuntime,
+        opts: &TransportOptions,
+    ) -> Result<(Box<dyn DynInvoke>, oneshot::Receiver<Result<(), String>>), String> {
+        let (i, rx) = self.connect(address, runtime, opts).await?;
+        Ok((Box::new(i), rx))
+    }
 }

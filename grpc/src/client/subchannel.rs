@@ -49,22 +49,13 @@ use crate::client::channel::WorkQueueTx;
 use crate::client::load_balancing::ExternalSubchannel;
 use crate::client::load_balancing::SubchannelState;
 use crate::client::name_resolution::Address;
-use crate::client::transport::Transport;
+use crate::client::transport::DynTransport;
 use crate::client::transport::TransportOptions;
 use crate::core::RequestHeaders;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
-use crate::service::Request;
-use crate::service::Response;
-use crate::service::Service;
 
-// A temporary trait comprised of the old Service trait and the new DynInvoke
-// trait.
-pub(crate) trait SharedServiceTrait: DynInvoke + Service {}
-
-type SharedService = Arc<dyn SharedServiceTrait>;
-
-impl<T: DynInvoke + Service> SharedServiceTrait for T {}
+type SharedInvoke = Arc<dyn DynInvoke>;
 
 pub trait Backoff: Send + Sync {
     fn backoff_until(&self) -> Instant;
@@ -97,7 +88,7 @@ struct InternalSubchannelConnectingState {
 
 struct InternalSubchannelReadyState {
     abort_handle: Option<BoxedTaskHandle>,
-    svc: SharedService,
+    svc: SharedInvoke,
 }
 
 struct InternalSubchannelTransientFailureState {
@@ -106,7 +97,7 @@ struct InternalSubchannelTransientFailureState {
 }
 
 impl InternalSubchannelState {
-    fn connected_transport(&self) -> Option<SharedService> {
+    fn connected_transport(&self) -> Option<SharedInvoke> {
         match self {
             Self::Ready(st) => Some(st.svc.clone()),
             _ => None,
@@ -213,7 +204,7 @@ impl Drop for InternalSubchannelState {
 
 pub(crate) struct InternalSubchannel {
     key: SubchannelKey,
-    transport: Arc<dyn Transport>,
+    transport: Arc<dyn DynTransport>,
     backoff: Arc<dyn Backoff>,
     unregister_fn: Option<Box<dyn FnOnce(SubchannelKey) + Send + Sync>>,
     state_machine_event_sender: mpsc::UnboundedSender<SubchannelStateMachineEvent>,
@@ -226,21 +217,6 @@ struct InnerSubchannel {
     watchers: Vec<Arc<SubchannelStateWatcher>>, // TODO(easwars): Revisit the choice for this data structure.
     backoff_task: Option<BoxedTaskHandle>,
     disconnect_task: Option<BoxedTaskHandle>,
-}
-
-#[async_trait]
-impl Service for InternalSubchannel {
-    async fn call(&self, method: String, request: Request) -> Response {
-        let svc = self.inner.lock().unwrap().state.connected_transport();
-        if svc.is_none() {
-            // TODO(easwars): Change the signature of this method to return a
-            // Result<Response, Error>
-            panic!("todo: handle !ready");
-        }
-
-        let svc = svc.unwrap().clone();
-        return svc.call(method, request).await;
-    }
 }
 
 #[async_trait]
@@ -260,7 +236,7 @@ impl DynInvoke for InternalSubchannel {
 
 enum SubchannelStateMachineEvent {
     ConnectionRequested,
-    ConnectionSucceeded(SharedService, oneshot::Receiver<Result<(), String>>),
+    ConnectionSucceeded(SharedInvoke, oneshot::Receiver<Result<(), String>>),
     ConnectionTimedOut,
     ConnectionFailed(String),
     ConnectionTerminated,
@@ -282,7 +258,7 @@ impl Debug for SubchannelStateMachineEvent {
 impl InternalSubchannel {
     pub(super) fn new(
         key: SubchannelKey,
-        transport: Arc<dyn Transport>,
+        transport: Arc<dyn DynTransport>,
         backoff: Arc<dyn Backoff>,
         unregister_fn: Box<dyn FnOnce(SubchannelKey) + Send + Sync>,
         runtime: GrpcRuntime,
@@ -412,10 +388,10 @@ impl InternalSubchannel {
                 _ = runtime.sleep(min_connect_timeout) => {
                     let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionTimedOut);
                 }
-                result = transport.connect(address.to_string().clone(), runtime, &transport_opts) => {
+                result = transport.dyn_connect(address.to_string().clone(), runtime, &transport_opts) => {
                     match result {
                         Ok(s) => {
-                            let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionSucceeded(Arc::from(s.service), s.disconnection_listener));
+                            let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionSucceeded(Arc::from(s.0), s.1));
                         }
                         Err(e) => {
                             let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionFailed(e));
@@ -430,7 +406,7 @@ impl InternalSubchannel {
         });
     }
 
-    fn move_to_ready(&self, svc: SharedService, closed_rx: oneshot::Receiver<Result<(), String>>) {
+    fn move_to_ready(&self, svc: SharedInvoke, closed_rx: oneshot::Receiver<Result<(), String>>) {
         let svc2 = svc.clone();
         {
             let mut inner = self.inner.lock().unwrap();

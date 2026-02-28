@@ -56,8 +56,9 @@ pub(crate) mod transport;
 ///
 /// Channels may re-enter the Idle state if they are unused for longer than
 /// their configured idleness timeout.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum ConnectivityState {
+    #[default]
     Idle,
     Connecting,
     Ready,

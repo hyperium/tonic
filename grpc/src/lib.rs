@@ -35,18 +35,21 @@ pub mod client;
 pub mod core;
 pub mod credentials;
 pub mod inmemory;
+pub mod server;
+
+mod codec;
 mod macros;
 mod status;
+
 pub use status::ServerStatus;
 pub use status::Status;
 pub use status::StatusCode;
-mod attributes;
-mod byte_str;
-mod codec;
-mod rt;
-mod send_future;
-pub mod server;
-pub mod service;
+
+pub(crate) mod attributes;
+pub(crate) mod byte_str;
+pub(crate) mod rt;
+pub(crate) mod send_future;
+
 #[cfg(test)]
 mod echo_pb {
     include!(concat!(
