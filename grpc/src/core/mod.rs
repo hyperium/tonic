@@ -35,7 +35,7 @@ use crate::Status;
 
 #[allow(unused)]
 pub trait SendMessage: Send + Sync {
-    fn encode(&self) -> Result<Box<dyn Buf + Send>, String>;
+    fn encode(&self) -> Result<Box<dyn Buf + Send + Sync>, String>;
 
     #[doc(hidden)]
     unsafe fn _ptr_for(&self, id: TypeId) -> Option<*const ()> {

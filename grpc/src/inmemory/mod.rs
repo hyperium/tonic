@@ -34,6 +34,10 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tonic::async_trait;
 
+use crate::client::CallOptions;
+use crate::client::DynRecvStream;
+use crate::client::DynSendStream;
+use crate::client::Invoke;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ChannelController;
 use crate::client::name_resolution::Endpoint;
@@ -47,6 +51,7 @@ use crate::client::transport::ConnectedTransport;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::{self};
+use crate::core::RequestHeaders;
 use crate::rt::GrpcRuntime;
 use crate::server;
 use crate::service::Request;
@@ -108,6 +113,18 @@ impl Service for Arc<Listener> {
         let (s, r) = oneshot::channel();
         self.s.send(Some((method, request, s))).await.unwrap();
         r.await.unwrap()
+    }
+}
+
+impl Invoke for Arc<Listener> {
+    type SendStream = Box<dyn DynSendStream>;
+    type RecvStream = Box<dyn DynRecvStream>;
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        todo!()
     }
 }
 

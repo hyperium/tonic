@@ -40,7 +40,12 @@ use tokio::sync::watch;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
 use crate::attributes::Attributes;
+use crate::client::CallOptions;
 use crate::client::ConnectivityState;
+use crate::client::DynInvoke;
+use crate::client::DynRecvStream;
+use crate::client::DynSendStream;
+use crate::client::Invoke;
 use crate::client::load_balancing::ExternalSubchannel;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
 use crate::client::load_balancing::LbPolicy;
@@ -67,6 +72,7 @@ use crate::client::subchannel::SubchannelKey;
 use crate::client::subchannel::SubchannelStateWatcher;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::TransportRegistry;
+use crate::core::RequestHeaders;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt;
@@ -191,6 +197,20 @@ impl Channel {
     pub async fn call(&self, method: String, request: Request) -> Response {
         let ac = self.inner.get_active_channel();
         ac.call(method, request).await
+    }
+}
+
+impl Invoke for Channel {
+    type SendStream = Box<dyn DynSendStream>;
+    type RecvStream = Box<dyn DynRecvStream>;
+
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        let ac = self.inner.get_active_channel();
+        ac.invoke(headers, options).await
     }
 }
 
@@ -328,7 +348,11 @@ impl ActiveChannel {
         let mut i = self.picker.iter();
         loop {
             if let Some(p) = i.next().await {
-                let result = &p.pick(&request);
+                let result = &p.pick(
+                    &RequestHeaders::new()
+                        .with_method_name(&method)
+                        .with_metadata(request.metadata().clone()),
+                );
                 // TODO: handle picker errors (queue or fail RPC)
                 match result {
                     PickResult::Pick(pr) => {
@@ -350,6 +374,51 @@ impl ActiveChannel {
                     }
                     PickResult::Drop(status) => {
                         panic!("dropped pick: {}", status);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl Invoke for Arc<ActiveChannel> {
+    type SendStream = Box<dyn DynSendStream>;
+    type RecvStream = Box<dyn DynRecvStream>;
+
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        let mut i = self.picker.iter();
+        loop {
+            if let Some(p) = i.next().await {
+                let result = &p.pick(&headers);
+                match result {
+                    PickResult::Pick(pr) => {
+                        if let Some(sc) = (pr.subchannel.as_ref() as &dyn Any)
+                            .downcast_ref::<ExternalSubchannel>()
+                        {
+                            return sc
+                                .isc
+                                .as_ref()
+                                .unwrap()
+                                .dyn_invoke(headers, options.clone())
+                                .await;
+                        } else {
+                            panic!(
+                                "picked subchannel is not an implementation provided by the channel"
+                            );
+                        }
+                    }
+                    PickResult::Queue => {
+                        // Continue and retry the RPC with the next picker.
+                    }
+                    PickResult::Fail(status) => {
+                        todo!("failed pick: {:?}", status);
+                    }
+                    PickResult::Drop(status) => {
+                        todo!("dropped pick: {:?}", status);
                     }
                 }
             }

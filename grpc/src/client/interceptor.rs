@@ -33,6 +33,7 @@ use crate::core::RequestHeaders;
 /// generic on I which should either be implemented as InvokeOnce (for
 /// interceptors that only need to call next once) or Invoke[+Clone+'static]
 /// (for interceptors that need to call next multiple times).
+#[trait_variant::make(Send)]
 pub trait Intercept<I>: Send + Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
@@ -40,7 +41,7 @@ pub trait Intercept<I>: Send + Sync {
     /// Intercepts the start of a call.  Implementations should generally use
     /// next to create and start a call whose streams are optionally wrapped
     /// before being returned.
-    fn intercept(
+    async fn intercept(
         &self,
         headers: RequestHeaders,
         options: CallOptions,
@@ -49,6 +50,7 @@ pub trait Intercept<I>: Send + Sync {
 }
 
 /// Like Intercept, but not reusable.
+#[trait_variant::make(Send)]
 pub trait InterceptOnce<I>: Send + Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
@@ -56,7 +58,7 @@ pub trait InterceptOnce<I>: Send + Sync {
     /// Intercepts the start of a call.  Implementations should generally use
     /// next to create and start a call whose streams are optionally wrapped
     /// before being returned.
-    fn intercept_once(
+    async fn intercept_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
@@ -80,13 +82,13 @@ where
     type SendStream = SS;
     type RecvStream = RS;
 
-    fn intercept_once(
+    async fn intercept_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
         next: I,
     ) -> (Self::SendStream, Self::RecvStream) {
-        self.0.intercept(headers, options, next)
+        self.0.intercept(headers, options, next).await
     }
 }
 
@@ -113,12 +115,14 @@ where
     type SendStream = Int::SendStream;
     type RecvStream = Int::RecvStream;
 
-    fn invoke_once(
+    async fn invoke_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
-        self.intercept.intercept_once(headers, options, self.invoke)
+        self.intercept
+            .intercept_once(headers, options, self.invoke)
+            .await
     }
 }
 
@@ -132,12 +136,14 @@ where
     type SendStream = SS;
     type RecvStream = RS;
 
-    fn invoke(
+    async fn invoke(
         &self,
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
-        self.intercept.intercept(headers, options, &self.invoke)
+        self.intercept
+            .intercept(headers, options, &self.invoke)
+            .await
     }
 }
 
@@ -163,13 +169,14 @@ where
     type SendStream = SS;
     type RecvStream = RS;
 
-    fn invoke_once(
+    async fn invoke_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
         self.intercept
             .intercept_once(headers, options, &self.invoke)
+            .await
     }
 }
 
@@ -268,13 +275,13 @@ mod test {
         type SendStream = NopStream;
         type RecvStream = I::RecvStream;
 
-        fn intercept(
+        async fn intercept(
             &self,
             headers: RequestHeaders,
             args: CallOptions,
             next: I,
         ) -> (Self::SendStream, Self::RecvStream) {
-            let (_, rx) = next.invoke_once(headers, args);
+            let (_, rx) = next.invoke_once(headers, args).await;
             (NopStream, rx)
         }
     }
@@ -285,13 +292,13 @@ mod test {
         type SendStream = RetrySendStream<I::SendStream>;
         type RecvStream = RetryRecvStream<I>;
 
-        fn intercept(
+        async fn intercept(
             &self,
             headers: RequestHeaders,
             args: CallOptions,
             next: &I,
         ) -> (Self::SendStream, Self::RecvStream) {
-            start_retry_streams(next, headers, args)
+            start_retry_streams(next, headers, args).await
         }
     }
     struct Oneshot;
@@ -299,13 +306,13 @@ mod test {
         type SendStream = I::SendStream;
         type RecvStream = NopStream;
 
-        fn intercept_once(
+        async fn intercept_once(
             self,
             headers: RequestHeaders,
             args: CallOptions,
             next: I,
         ) -> (Self::SendStream, Self::RecvStream) {
-            let (tx, _) = next.invoke_once(headers, args);
+            let (tx, _) = next.invoke_once(headers, args).await;
             (tx, NopStream)
         }
     }
@@ -315,40 +322,45 @@ mod test {
         type SendStream = I::SendStream;
         type RecvStream = I::RecvStream;
 
-        fn intercept_once(
+        async fn intercept_once(
             self,
             headers: RequestHeaders,
             args: CallOptions,
             next: &I,
         ) -> (Self::SendStream, Self::RecvStream) {
-            let (_, _) = next.invoke(headers.clone(), args.clone());
-            next.invoke(headers, args)
+            let (_, _) = next.invoke(headers.clone(), args.clone()).await;
+            next.invoke(headers, args).await
         }
     }
 
     // Tests all 6 valid scenarios combining an invoker with an interceptor.
-    #[test]
-    fn test_interceptor_creation() {
+    #[tokio::test]
+    async fn test_interceptor_creation() {
         // Reusable Invoke with resuable Intercept.
         {
             let i = NopInvoker.with_interceptor(Reusable);
-            i.invoke(RequestHeaders::default(), CallOptions::default());
+            i.invoke(RequestHeaders::default(), CallOptions::default())
+                .await;
             // Since Invoke is implemented on &Intercepted, it is reusable.
-            i.invoke(RequestHeaders::default(), CallOptions::default());
+            i.invoke(RequestHeaders::default(), CallOptions::default())
+                .await;
         }
 
         // One-shot Invoke with resuable Intercept.
         {
             let i = NopOnceInvoker.with_interceptor(Reusable);
-            i.invoke_once(RequestHeaders::default(), CallOptions::default());
+            i.invoke_once(RequestHeaders::default(), CallOptions::default())
+                .await;
         }
 
         // Reusable Invoke with resuable fan-out Intercept.
         {
             let i = NopInvoker.with_interceptor(ReusableFanOut);
-            i.invoke(RequestHeaders::default(), CallOptions::default());
+            i.invoke(RequestHeaders::default(), CallOptions::default())
+                .await;
             // Since Invoke is implemented on &Intercepted, it is reusable.
-            i.invoke(RequestHeaders::default(), CallOptions::default());
+            i.invoke(RequestHeaders::default(), CallOptions::default())
+                .await;
         }
 
         // One-shot Invoke with fan-out Intercept is illegal.
@@ -356,19 +368,22 @@ mod test {
         // Reusable Invoke with one-shot Intercept.
         {
             let i = NopInvoker.with_once_interceptor(Oneshot);
-            i.invoke_once(RequestHeaders::default(), CallOptions::default());
+            i.invoke_once(RequestHeaders::default(), CallOptions::default())
+                .await;
         }
 
         // One-shot Invoke with one-shot Intercept.
         {
             let i = NopOnceInvoker.with_once_interceptor(Oneshot);
-            i.invoke_once(RequestHeaders::default(), CallOptions::default());
+            i.invoke_once(RequestHeaders::default(), CallOptions::default())
+                .await;
         }
 
         // Reusable Invoke with one-shot fan-out Intercept.
         {
             let i = NopInvoker.with_once_interceptor(OneshotFanOut);
-            i.invoke_once(RequestHeaders::default(), CallOptions::default());
+            i.invoke_once(RequestHeaders::default(), CallOptions::default())
+                .await;
         }
 
         // One-shot Invoke with one-shot fan-out Intercept is illegal.
@@ -380,7 +395,9 @@ mod test {
     async fn test_retry_interceptor_succeeds() {
         let (invoker, mut controller) = MockInvoker::new();
         let chan = invoker.with_interceptor(ReusableFanOut);
-        let (mut tx, mut rx) = chan.invoke(RequestHeaders::default(), CallOptions::default());
+        let (mut tx, mut rx) = chan
+            .invoke(RequestHeaders::default(), CallOptions::default())
+            .await;
         let one = Bytes::from(vec![1]);
         let two = Bytes::from(vec![2]);
         tx.send(&ByteSendMsg::new(&one), SendOptions::default())
@@ -423,7 +440,9 @@ mod test {
     async fn test_retry_interceptor_fails() {
         let (invoker, mut controller) = MockInvoker::new();
         let chan = invoker.with_interceptor(ReusableFanOut);
-        let (mut tx, mut rx) = chan.invoke(RequestHeaders::default(), CallOptions::default());
+        let (mut tx, mut rx) = chan
+            .invoke(RequestHeaders::default(), CallOptions::default())
+            .await;
         let one = Bytes::from(vec![1]);
         let two = Bytes::from(vec![2]);
         tx.send(&ByteSendMsg::new(&one), SendOptions::default())
@@ -473,7 +492,9 @@ mod test {
     async fn test_retry_interceptor_commit_on_headers() {
         let (invoker, mut controller) = MockInvoker::new();
         let chan = invoker.with_interceptor(ReusableFanOut);
-        let (mut tx, mut rx) = chan.invoke(RequestHeaders::default(), CallOptions::default());
+        let (mut tx, mut rx) = chan
+            .invoke(RequestHeaders::default(), CallOptions::default())
+            .await;
         let one = Bytes::from(vec![1]);
         tx.send(&ByteSendMsg::new(&one), SendOptions::default())
             .await
@@ -541,7 +562,7 @@ mod test {
         type SendStream = MockSendStream;
         type RecvStream = MockRecvStream;
 
-        fn invoke(
+        async fn invoke(
             &self,
             headers: RequestHeaders,
             options: CallOptions,
@@ -570,13 +591,13 @@ mod test {
         }
     }
 
-    fn start_retry_streams<I: Invoke + Clone>(
+    async fn start_retry_streams<I: Invoke + Clone>(
         invoker: &I,
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (RetrySendStream<I::SendStream>, RetryRecvStream<I>) {
         let invoker = invoker.clone(); // Get an owned Invoker.
-        let (send_stream, recv_stream) = invoker.invoke(headers.clone(), options.clone());
+        let (send_stream, recv_stream) = invoker.invoke(headers.clone(), options.clone()).await;
 
         let cache = Cache::new();
 
@@ -703,7 +724,8 @@ mod test {
                 // Retry the whole stream.
                 let (mut send_stream, recv_stream) = self
                     .invoker
-                    .invoke(self.headers.clone(), self.options.clone());
+                    .invoke(self.headers.clone(), self.options.clone())
+                    .await;
                 self.recv_stream = recv_stream;
 
                 // Run the current recv operation in parallel with replaying
@@ -829,7 +851,7 @@ mod test {
         }
     }
     impl<'a> SendMessage for ByteSendMsg<'a> {
-        fn encode(&self) -> Result<Box<dyn Buf + Send>, String> {
+        fn encode(&self) -> Result<Box<dyn Buf + Send + Sync>, String> {
             Ok(Box::new(self.data.clone()))
         }
     }
@@ -841,7 +863,7 @@ mod test {
         type SendStream = NopStream;
         type RecvStream = NopStream;
 
-        fn invoke(
+        async fn invoke(
             &self,
             headers: RequestHeaders,
             options: CallOptions,
@@ -856,7 +878,7 @@ mod test {
         type SendStream = NopStream;
         type RecvStream = NopStream;
 
-        fn invoke_once(
+        async fn invoke_once(
             self,
             headers: RequestHeaders,
             options: CallOptions,

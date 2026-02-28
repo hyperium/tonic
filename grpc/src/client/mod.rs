@@ -91,6 +91,7 @@ pub struct CallOptions {
 ///
 /// Most applications will not use this type directly, and will instead use the
 /// generated APIs (e.g.  protobuf) to perform RPCs instead.
+#[trait_variant::make(Send)]
 pub trait Invoke: Send + Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
@@ -104,20 +105,42 @@ pub trait Invoke: Send + Sync {
     /// locally-erroring stream immediately instead.  However, SendStream and
     /// RecvStream are asynchronous, and may block their first operations until
     /// quota is available, a connection is ready, etc.
-    fn invoke(
+    async fn invoke(
         &self,
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream);
 }
 
+#[async_trait]
+pub trait DynInvoke: Send + Sync {
+    async fn dyn_invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>);
+}
+
+#[async_trait]
+impl<T: Invoke> DynInvoke for T {
+    async fn dyn_invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
+        let (tx, rx) = self.invoke(headers, options).await;
+        (Box::new(tx), Box::new(rx))
+    }
+}
+
 // Like `Invoke`, but not reusable.  It is blanket implemented on references to
 // `Invoke`s.
+#[trait_variant::make(Send)]
 pub trait InvokeOnce: Send + Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
 
-    fn invoke_once(
+    async fn invoke_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
@@ -128,12 +151,12 @@ impl<T: Invoke> InvokeOnce for &T {
     type SendStream = T::SendStream;
     type RecvStream = T::RecvStream;
 
-    fn invoke_once(
+    async fn invoke_once(
         self,
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
-        self.invoke(headers, options)
+        self.invoke(headers, options).await
     }
 }
 
@@ -158,7 +181,7 @@ pub trait SendStream: Send {
 }
 
 #[async_trait]
-trait DynSendStream: Send {
+pub trait DynSendStream: Send {
     async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
 }
 
@@ -208,7 +231,7 @@ pub trait RecvStream: Send {
 }
 
 #[async_trait]
-trait DynRecvStream: Send {
+pub trait DynRecvStream: Send {
     async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
 }
 
