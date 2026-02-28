@@ -32,6 +32,8 @@ use std::task::Context;
 use std::task::Poll;
 use std::time::Instant;
 
+use bytes::Buf;
+use bytes::BufMut as _;
 use bytes::Bytes;
 use http::Request as HttpRequest;
 use http::Response as HttpResponse;
@@ -39,17 +41,23 @@ use http::Uri;
 use http::uri::PathAndQuery;
 use hyper::client::conn::http2::Builder;
 use hyper::client::conn::http2::SendRequest;
+use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
+use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request as TonicRequest;
 use tonic::Response as TonicResponse;
-use tonic::Status;
+use tonic::Status as TonicStatus;
 use tonic::Streaming;
 use tonic::async_trait;
 use tonic::body::Body;
 use tonic::client::Grpc;
 use tonic::client::GrpcService;
+use tonic::codec::Codec;
+use tonic::codec::Decoder;
+use tonic::codec::EncodeBuf;
+use tonic::codec::Encoder;
 use tower::ServiceBuilder;
 use tower::buffer::Buffer;
 use tower::buffer::future::ResponseFuture as BufferResponseFuture;
@@ -58,12 +66,25 @@ use tower::limit::RateLimitLayer;
 use tower::util::BoxService;
 use tower_service::Service as TowerService;
 
+use crate::Status;
+use crate::StatusCode;
+use crate::client::CallOptions;
+use crate::client::Invoke;
+use crate::client::RecvStream;
+use crate::client::SendOptions;
+use crate::client::SendStream;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::client::transport::ConnectedTransport;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::codec::BytesCodec;
+use crate::core::ClientResponseStreamItem;
+use crate::core::RecvMessage;
+use crate::core::RequestHeaders;
+use crate::core::ResponseHeaders;
+use crate::core::SendMessage;
+use crate::core::Trailers;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 use crate::rt::TcpOptions;
@@ -82,7 +103,7 @@ const DEFAULT_BUFFER_SIZE: usize = 1024;
 pub(crate) type BoxError = Box<dyn Error + Send + Sync>;
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
-type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, Status>> + Send>>;
+type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, TonicStatus>> + Send>>;
 
 pub(crate) fn reg() {
     GLOBAL_TRANSPORT_REGISTRY.add_transport(TCP_IP_NETWORK_TYPE, TransportBuilder {});
@@ -93,6 +114,7 @@ struct TransportBuilder {}
 struct TonicTransport {
     grpc: Grpc<TonicService>,
     task_handle: BoxedTaskHandle,
+    runtime: GrpcRuntime,
 }
 
 impl Drop for TonicTransport {
@@ -105,7 +127,7 @@ impl Drop for TonicTransport {
 impl Service for TonicTransport {
     async fn call(&self, method: String, request: GrpcRequest) -> GrpcResponse {
         let Ok(path) = PathAndQuery::from_maybe_shared(method) else {
-            let err = Status::internal("Failed to parse path");
+            let err = TonicStatus::internal("Failed to parse path");
             return create_error_response(err);
         };
         let mut grpc = self.grpc.clone();
@@ -113,7 +135,7 @@ impl Service for TonicTransport {
             // TODO: Figure out the exact situations under which the service
             // may return an error and re-evaluate the status code returned
             // below.
-            let err = Status::unknown(format!("Service was not ready: {e}"));
+            let err = TonicStatus::unknown(format!("Service was not ready: {e}"));
             return create_error_response(err);
         };
         let request = convert_request(request);
@@ -122,8 +144,160 @@ impl Service for TonicTransport {
     }
 }
 
+impl Invoke for TonicTransport {
+    type SendStream = TonicSendStream;
+    type RecvStream = TonicRecvStream;
+
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        let (req_tx, req_rx) = mpsc::channel(1);
+        let request_stream = ReceiverStream::new(req_rx);
+        let mut request = TonicRequest::new(Box::pin(request_stream));
+        *request.metadata_mut() = headers.metadata().clone();
+
+        let Ok(path) = PathAndQuery::from_maybe_shared(headers.method_name().clone()) else {
+            return err_streams(Status::new(StatusCode::Internal, "invalid path"));
+        };
+
+        let mut grpc = self.grpc.clone();
+        if let Err(e) = grpc.ready().await {
+            return err_streams(Status::new(
+                StatusCode::Unavailable,
+                format!("Service was not ready: {e}"),
+            ));
+        }
+
+        // Note that Tonic's streaming call blocks until the server's headers
+        // are received.  We must return a working send (and, consequently,
+        // recv) stream before this to allow the application to write its
+        // request(s), so we need to spawn a task for this period of time, and
+        // then we send the response (headers, stream) to the TonicRecvStream
+        // when it is available.
+        let (resp_tx, resp_rx) = oneshot::channel();
+        self.runtime.spawn(Box::pin(async move {
+            let response = grpc.streaming(request, path, BufCodec {}).await;
+            let _ = resp_tx.send(response);
+        }));
+
+        (
+            TonicSendStream { sender: Ok(req_tx) },
+            TonicRecvStream {
+                receiver: None,
+                error: None,
+                response_rx: Some(resp_rx),
+            },
+        )
+    }
+}
+
+// Converts from a tonic status to a grpc-crate status.
+fn from_tonic_status(status: TonicStatus) -> Status {
+    Status::new(StatusCode::from(status.code() as i32), status.message())
+}
+
+struct TonicSendStream {
+    sender: Result<mpsc::Sender<Box<dyn Buf + Send + Sync>>, ()>,
+}
+
+impl SendStream for TonicSendStream {
+    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        if let Ok(tx) = &self.sender
+            && let Ok(buf) = msg.encode()
+            && tx.send(buf).await.is_ok()
+        {
+            if options.final_msg {
+                self.sender = Err(());
+            }
+            return Ok(());
+        }
+        Err(())
+    }
+}
+
+struct TonicRecvStream {
+    error: Option<Status>,
+    response_rx: Option<oneshot::Receiver<Result<tonic::Response<Streaming<Bytes>>, TonicStatus>>>,
+    receiver: Option<Streaming<Bytes>>,
+}
+
+impl RecvStream for TonicRecvStream {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        if let Some(error) = self.error.take() {
+            return ClientResponseStreamItem::Trailers(Trailers::new(error));
+        }
+
+        if let Some(rx) = self.response_rx.take() {
+            match rx.await {
+                Ok(Ok(response)) => {
+                    let (metadata, stream, _extensions) = response.into_parts();
+                    self.receiver = Some(stream);
+                    return ClientResponseStreamItem::Headers(
+                        ResponseHeaders::new().with_metadata(metadata),
+                    );
+                }
+                Ok(Err(status)) => {
+                    return ClientResponseStreamItem::Trailers(Trailers::new(from_tonic_status(
+                        status,
+                    )));
+                }
+                Err(_) => {
+                    return ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
+                        StatusCode::Unknown,
+                        "Task cancelled",
+                    )));
+                }
+            }
+        }
+
+        let Some(mut stream) = self.receiver.take() else {
+            return ClientResponseStreamItem::StreamClosed;
+        };
+
+        let Some(resp) = stream.next().await else {
+            return ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
+                StatusCode::Ok,
+                "",
+            )));
+        };
+
+        match resp {
+            Ok(mut buf) => match msg.decode(&mut buf) {
+                Ok(()) => {
+                    // More messages may remain in the stream; set receiver again.
+                    self.receiver = Some(stream);
+                    ClientResponseStreamItem::Message(())
+                }
+                // TODO: in this case, tonic believes the stream is still
+                // running, but our decoding failed -- do we need to terminate
+                // the request stream now even though the Streaming is dropped?
+                Err(e) => ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
+                    StatusCode::Internal,
+                    "error decoding response: {",
+                ))),
+            },
+            Err(status) => {
+                ClientResponseStreamItem::Trailers(Trailers::new(from_tonic_status(status)))
+            }
+        }
+    }
+}
+
+fn err_streams(status: Status) -> (TonicSendStream, TonicRecvStream) {
+    (
+        TonicSendStream { sender: Err(()) },
+        TonicRecvStream {
+            receiver: None,
+            response_rx: None,
+            error: Some(status),
+        },
+    )
+}
+
 /// Helper function to create an error response stream.
-fn create_error_response(status: Status) -> GrpcResponse {
+fn create_error_response(status: TonicStatus) -> GrpcResponse {
     let stream = tokio_stream::once(Err(status));
     TonicResponse::new(Box::pin(stream))
 }
@@ -144,7 +318,7 @@ fn convert_request(req: GrpcRequest) -> TonicRequest<Pin<Box<dyn Stream<Item = B
     TonicRequest::from_parts(metadata, extensions, bytes_stream as _)
 }
 
-fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, Status>) -> GrpcResponse {
+fn convert_response(res: Result<TonicResponse<Streaming<Bytes>>, TonicStatus>) -> GrpcResponse {
     let response = match res {
         Ok(s) => s,
         Err(e) => {
@@ -247,7 +421,11 @@ impl Transport for TransportBuilder {
             Uri::from_maybe_shared(format!("http://{}", &address)).map_err(|e| e.to_string())?; // TODO: err msg
         let grpc = Grpc::with_origin(TonicService { inner: service }, uri);
 
-        let service = TonicTransport { grpc, task_handle };
+        let service = TonicTransport {
+            grpc,
+            task_handle,
+            runtime,
+        };
         Ok(ConnectedTransport {
             service: Box::new(service),
             disconnection_listener: rx,
@@ -313,5 +491,61 @@ impl Future for ResponseFuture {
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         Pin::new(&mut self.inner).poll(cx)
+    }
+}
+
+pub(crate) struct BufCodec {}
+
+impl Codec for BufCodec {
+    type Encode = Box<dyn Buf + Send + Sync>;
+    type Decode = Bytes;
+    type Encoder = BufEncoder;
+    type Decoder = BytesDecoder;
+
+    fn encoder(&mut self) -> Self::Encoder {
+        BufEncoder {}
+    }
+
+    fn decoder(&mut self) -> Self::Decoder {
+        BytesDecoder {}
+    }
+}
+
+pub struct BytesEncoder {}
+
+impl Encoder for BytesEncoder {
+    type Item = Bytes;
+    type Error = TonicStatus;
+
+    fn encode(&mut self, item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
+        dst.put_slice(&item);
+        Ok(())
+    }
+}
+
+pub struct BufEncoder {}
+
+impl Encoder for BufEncoder {
+    type Item = Box<dyn Buf + Send + Sync>;
+    type Error = TonicStatus;
+
+    fn encode(&mut self, mut item: Self::Item, dst: &mut EncodeBuf<'_>) -> Result<(), Self::Error> {
+        dst.put(&mut *item);
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct BytesDecoder {}
+
+impl Decoder for BytesDecoder {
+    type Item = Bytes;
+    type Error = TonicStatus;
+
+    fn decode(
+        &mut self,
+        src: &mut tonic::codec::DecodeBuf<'_>,
+    ) -> Result<Option<Self::Item>, Self::Error> {
+        Ok(Some(src.copy_to_bytes(src.remaining())))
     }
 }
