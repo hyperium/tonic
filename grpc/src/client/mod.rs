@@ -112,6 +112,27 @@ pub trait Invoke: Send + Sync {
     ) -> (Self::SendStream, Self::RecvStream);
 }
 
+#[async_trait]
+pub trait DynInvoke: Send + Sync {
+    async fn dyn_invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>);
+}
+
+#[async_trait]
+impl<T: Invoke> DynInvoke for T {
+    async fn dyn_invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
+        let (tx, rx) = self.invoke(headers, options).await;
+        (Box::new(tx), Box::new(rx))
+    }
+}
+
 // Like `Invoke`, but not reusable.  It is blanket implemented on references to
 // `Invoke`s.
 #[trait_variant::make(Send)]
@@ -160,7 +181,7 @@ pub trait SendStream: Send {
 }
 
 #[async_trait]
-trait DynSendStream: Send {
+pub trait DynSendStream: Send {
     async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
 }
 
@@ -210,7 +231,7 @@ pub trait RecvStream: Send {
 }
 
 #[async_trait]
-trait DynRecvStream: Send {
+pub trait DynRecvStream: Send {
     async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
 }
 

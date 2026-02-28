@@ -38,7 +38,11 @@ use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tonic::async_trait;
 
+use crate::client::CallOptions;
 use crate::client::ConnectivityState;
+use crate::client::DynInvoke;
+use crate::client::DynRecvStream;
+use crate::client::DynSendStream;
 use crate::client::channel::InternalChannelController;
 use crate::client::channel::WorkQueueItem;
 use crate::client::channel::WorkQueueTx;
@@ -47,13 +51,20 @@ use crate::client::load_balancing::SubchannelState;
 use crate::client::name_resolution::Address;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
+use crate::core::RequestHeaders;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 use crate::service::Request;
 use crate::service::Response;
 use crate::service::Service;
 
-type SharedService = Arc<dyn Service>;
+// A temporary trait comprised of the old Service trait and the new DynInvoke
+// trait.
+pub(crate) trait SharedServiceTrait: DynInvoke + Service {}
+
+type SharedService = Arc<dyn SharedServiceTrait>;
+
+impl<T: DynInvoke + Service> SharedServiceTrait for T {}
 
 pub trait Backoff: Send + Sync {
     fn backoff_until(&self) -> Instant;
@@ -229,6 +240,21 @@ impl Service for InternalSubchannel {
 
         let svc = svc.unwrap().clone();
         return svc.call(method, request).await;
+    }
+}
+
+#[async_trait]
+impl DynInvoke for InternalSubchannel {
+    async fn dyn_invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
+        let svc = match &self.inner.lock().unwrap().state {
+            InternalSubchannelState::Ready(s) => s.svc.clone(),
+            _ => panic!("invoke called on non-READY subchannel"),
+        };
+        svc.dyn_invoke(headers, options).await
     }
 }
 

@@ -274,8 +274,8 @@ mod test {
     use crate::client::name_resolution::Address;
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverUpdate;
+    use crate::core::RequestHeaders;
     use crate::rt::default_runtime;
-    use crate::service::Request;
     use std::panic;
     use std::sync::Arc;
     use std::time::Duration;
@@ -318,7 +318,7 @@ mod test {
         }
     }
     impl Picker for TestPicker {
-        fn pick(&self, _req: &Request) -> PickResult {
+        fn pick(&self, _req: &RequestHeaders) -> PickResult {
             PickResult::Pick(Pick {
                 subchannel: Arc::new(TestSubchannel::new(
                     Address {
@@ -454,7 +454,7 @@ mod test {
         let TestEvent::UpdatePicker(update) = event else {
             panic!("unexpected event {:?}", event);
         };
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         println!("{:?}", update.connectivity_state);
 
         let pick = update.picker.pick(&req);

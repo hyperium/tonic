@@ -851,7 +851,7 @@ mod test {
         }
     }
     impl<'a> SendMessage for ByteSendMsg<'a> {
-        fn encode(&self) -> Result<Box<dyn Buf + Send>, String> {
+        fn encode(&self) -> Result<Box<dyn Buf + Send + Sync>, String> {
             Ok(Box::new(self.data.clone()))
         }
     }

@@ -44,3 +44,28 @@ pub enum StatusCode {
     DataLoss = 15,
     Unauthenticated = 16,
 }
+
+impl From<i32> for StatusCode {
+    fn from(i: i32) -> Self {
+        match i {
+            0 => StatusCode::Ok,
+            1 => StatusCode::Cancelled,
+            2 => StatusCode::Unknown,
+            3 => StatusCode::InvalidArgument,
+            4 => StatusCode::DeadlineExceeded,
+            5 => StatusCode::NotFound,
+            6 => StatusCode::AlreadyExists,
+            7 => StatusCode::PermissionDenied,
+            8 => StatusCode::ResourceExhausted,
+            9 => StatusCode::FailedPrecondition,
+            10 => StatusCode::Aborted,
+            11 => StatusCode::OutOfRange,
+            12 => StatusCode::Unimplemented,
+            13 => StatusCode::Internal,
+            14 => StatusCode::Unavailable,
+            15 => StatusCode::DataLoss,
+            16 => StatusCode::Unauthenticated,
+            _ => StatusCode::Unknown,
+        }
+    }
+}
