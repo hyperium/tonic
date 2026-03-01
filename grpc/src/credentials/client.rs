@@ -23,8 +23,13 @@
  */
 
 use crate::attributes::Attributes;
+use crate::credentials::call::CallCredentials;
+use crate::credentials::call::CompositeCallCredentials;
 use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
+use crate::credentials::insecure;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -53,6 +58,9 @@ pub trait ChannelCredsInternal {
         info: ClientHandshakeInfo,
         runtime: GrpcRuntime,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
+
+    /// Returns call credentials to be used for all RPCs made on a connection.
+    fn get_call_credentials(&self) -> Option<&CallCredentials>;
 }
 
 pub struct HandshakeOutput<T, C: ClientConnectionSecurityContext> {
@@ -158,5 +166,61 @@ impl ClientHandshakeInfo {
 
     pub fn attributes(&self) -> &Attributes {
         &self.attributes
+    }
+}
+
+/// A credential that combines [`ChannelCredentials`] with [`CallCredentials`].
+///
+/// This is used to attach per-call authentication (like OAuth2 tokens) to a
+/// secure channel (like TLS).
+pub struct CompositeChannelCredentials<T> {
+    channel_creds: T,
+    call_creds: CallCredentials,
+}
+
+impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
+    pub fn new(channel_creds: T, call_creds: CallCredentials) -> Result<Self, String> {
+        if channel_creds.info().security_protocol() == insecure::PROTOCOL_NAME {
+            return Err("using tokens on an insecure credentials is disallowed".to_string());
+        }
+
+        let combined_call_creds = if let Some(existing) = channel_creds.get_call_credentials() {
+            let composite_creds = CompositeCallCredentials::new(existing.clone(), call_creds);
+            composite_creds.into()
+        } else {
+            call_creds
+        };
+
+        Ok(Self {
+            channel_creds,
+            call_creds: combined_call_creds,
+        })
+    }
+}
+
+impl<T: ChannelCredentials> ChannelCredsInternal for CompositeChannelCredentials<T> {
+    type ContextType = T::ContextType;
+    type Output<I> = T::Output<I>;
+
+    async fn connect<Input: GrpcEndpoint>(
+        &self,
+        authority: &Authority,
+        source: Input,
+        info: ClientHandshakeInfo,
+        runtime: GrpcRuntime,
+    ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
+        self.channel_creds
+            .connect(authority, source, info, runtime)
+            .await
+    }
+
+    fn get_call_credentials(&self) -> Option<&CallCredentials> {
+        Some(&self.call_creds)
+    }
+}
+
+impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T> {
+    fn info(&self) -> &ProtocolInfo {
+        self.channel_creds.info()
     }
 }

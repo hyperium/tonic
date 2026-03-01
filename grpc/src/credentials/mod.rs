@@ -22,11 +22,13 @@
  *
  */
 
+mod call;
 pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
 mod insecure;
 pub(crate) mod server;
 
+pub use client::CompositeChannelCredentials;
 pub use insecure::InsecureChannelCredentials;
 pub use insecure::InsecureServerCredentials;
 
