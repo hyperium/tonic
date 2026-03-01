@@ -224,3 +224,107 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
         self.channel_creds.info()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::credentials::call::{CallCredentialsProvider, CallDetails, ChannelSecurityInfo};
+    use crate::credentials::insecure::InsecureChannelCredentials;
+    use crate::credentials::local::LocalChannelCredentials;
+    use crate::rt;
+    use crate::rt::TcpOptions;
+    use tonic::metadata::MetadataMap;
+    use tonic::metadata::MetadataValue;
+    use tonic::async_trait;
+    use tonic::Status;
+    use tokio::net::TcpListener;
+
+    #[derive(Debug)]
+    struct MockCallCredentials {
+        key: &'static str,
+        value: &'static str,
+        min_security_level: SecurityLevel,
+    }
+
+    #[async_trait]
+    impl CallCredentialsProvider for MockCallCredentials {
+        async fn get_metadata(
+            &self,
+            _call_details: &CallDetails,
+            _auth_info: &ChannelSecurityInfo,
+            metadata: &mut MetadataMap,
+        ) -> Result<(), Status> {
+            metadata.insert(
+                self.key.parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>().unwrap(),
+                MetadataValue::try_from(self.value).unwrap(),
+            );
+            Ok(())
+        }
+
+        fn minimum_channel_security_level(&self) -> SecurityLevel {
+            self.min_security_level
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multiple_composition() {
+        let channel_creds = LocalChannelCredentials::new();
+        let call_creds1 = CallCredentials::from(MockCallCredentials {
+            key: "auth1",
+            value: "val1",
+            min_security_level: SecurityLevel::IntegrityOnly,
+        });
+        let call_creds2 = CallCredentials::from(MockCallCredentials {
+            key: "auth2",
+            value: "val2",
+            min_security_level: SecurityLevel::PrivacyAndIntegrity,
+        });
+
+        // First composition.
+        let composite1 = CompositeChannelCredentials::new(channel_creds, call_creds1).unwrap();
+
+        // Second composition (using the first composite as base).
+        let composite2 = CompositeChannelCredentials::new(composite1, call_creds2).unwrap();
+
+        // Verify call credentials
+        let combined_call_creds = composite2.get_call_credentials().unwrap();
+        let call_details = CallDetails::new("service".to_string(), "method".to_string());
+        let auth_info = ChannelSecurityInfo::new("local", SecurityLevel::NoSecurity, Attributes::new());
+        let mut metadata = MetadataMap::new();
+
+        combined_call_creds.get_metadata(&call_details, &auth_info, &mut metadata).await.unwrap();
+
+        assert_eq!(metadata.get("auth1").unwrap(), "val1");
+        assert_eq!(metadata.get("auth2").unwrap(), "val2");
+
+        // Verify min security level is the max of both.
+        assert_eq!(
+            combined_call_creds.minimum_channel_security_level(),
+            SecurityLevel::PrivacyAndIntegrity
+        );
+
+        // Verify security level
+        let addr = "127.0.0.1:0";
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+        let authority = Authority::new("localhost".to_string(), Some(server_addr.port()));
+        let runtime = rt::default_runtime();
+        let endpoint = runtime.tcp_stream(server_addr, TcpOptions::default()).await.unwrap();
+
+        let output = composite2.connect(&authority, endpoint, ClientHandshakeInfo::default(), runtime).await.unwrap();
+        assert_eq!(output.security.security_level(), SecurityLevel::NoSecurity);
+        assert_eq!(output.security.security_protocol(), "local");
+    }
+
+    #[test]
+    fn test_composite_channel_credentials_insecure() {
+        let channel_creds = InsecureChannelCredentials::new();
+        let call_creds = CallCredentials::from(MockCallCredentials {
+            key: "auth",
+            value: "val",
+            min_security_level: SecurityLevel::NoSecurity,
+        });
+        let result = CompositeChannelCredentials::new(channel_creds, call_creds);
+        assert!(result.is_err());
+    }
+}

@@ -30,6 +30,7 @@ use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::ServerCredentials;
+use crate::credentials::call::CallCredentials;
 use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
@@ -116,6 +117,10 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
                 Attributes::new(),
             ),
         })
+    }
+
+    fn get_call_credentials(&self) -> Option<&CallCredentials> {
+        None
     }
 }
 

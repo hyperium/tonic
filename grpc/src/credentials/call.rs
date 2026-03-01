@@ -25,9 +25,9 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
+use tonic::Status;
 use tonic::async_trait;
 use tonic::metadata::MetadataMap;
-use tonic::Status;
 
 use crate::attributes::Attributes;
 use crate::credentials::common::SecurityLevel;
@@ -69,7 +69,7 @@ pub struct ChannelSecurityInfo {
 }
 
 impl ChannelSecurityInfo {
-    pub fn new(
+    pub(crate) fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
         attributes: Attributes,
@@ -259,8 +259,11 @@ mod tests {
             service_url: "url".to_string(),
             method_name: "method".to_string(),
         };
-        let auth_info =
-            ChannelSecurityInfo::new("test", SecurityLevel::PrivacyAndIntegrity, Attributes);
+        let auth_info = ChannelSecurityInfo::new(
+            "test",
+            SecurityLevel::PrivacyAndIntegrity,
+            Attributes::new(),
+        );
         let mut metadata = MetadataMap::new();
 
         composite
