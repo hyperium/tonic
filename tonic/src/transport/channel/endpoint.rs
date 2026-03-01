@@ -49,6 +49,8 @@ pub struct Endpoint {
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
     pub(crate) local_address: Option<IpAddr>,
+    pub(crate) proxy_uri: Option<Uri>,
+    pub(crate) proxy_from_env: bool,
     pub(crate) executor: SharedExec,
 }
 
@@ -97,6 +99,8 @@ impl Endpoint {
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
             local_address: None,
+            proxy_uri: None,
+            proxy_from_env: false,
         }
     }
 
@@ -126,6 +130,8 @@ impl Endpoint {
             http2_adaptive_window: None,
             executor: SharedExec::tokio(),
             local_address: None,
+            proxy_uri: None,
+            proxy_from_env: false,
         }
     }
 
@@ -453,7 +459,45 @@ impl Endpoint {
         }
     }
 
-    pub(crate) fn http_connector(&self) -> service::Connector<HttpConnector> {
+    /// Set a custom proxy URI for HTTP connections.
+    ///
+    /// This allows you to specify a proxy server that will be used for HTTP connections.
+    /// The proxy URI should be in the format `http://hostname:port` or `https://hostname:port`.
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # let mut builder = Endpoint::from_static("https://example.com");
+    /// builder.proxy_uri("http://proxy.example.com:8080".parse().expect("valid proxy URI"));
+    /// ```
+    pub fn proxy_uri(self, proxy_uri: Uri) -> Self {
+        Endpoint {
+            proxy_uri: Some(proxy_uri),
+            ..self
+        }
+    }
+
+    /// Enable automatic proxy detection from environment variables.
+    ///
+    /// When enabled, this will check the standard HTTP proxy environment variables:
+    /// - `http_proxy` or `HTTP_PROXY` for HTTP connections
+    /// - `https_proxy` or `HTTPS_PROXY` for HTTPS connections  
+    /// - `no_proxy` or `NO_PROXY` for bypassing proxy for specific hosts
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # let mut builder = Endpoint::from_static("https://example.com");
+    /// builder.proxy_from_env(true);
+    /// ```
+    pub fn proxy_from_env(self, enabled: bool) -> Self {
+        Endpoint {
+            proxy_from_env: enabled,
+            ..self
+        }
+    }
+
+    pub(crate) fn http_connector(
+        &self,
+    ) -> service::Connector<super::proxy_connector::ProxyConnector> {
         let mut http = HttpConnector::new();
         http.enforce_http(false);
         http.set_nodelay(self.tcp_nodelay);
@@ -462,7 +506,15 @@ impl Endpoint {
         http.set_keepalive_retries(self.tcp_keepalive_retries);
         http.set_connect_timeout(self.connect_timeout);
         http.set_local_address(self.local_address);
-        self.connector(http)
+
+        let proxy_connector = super::proxy_connector::ProxyConnector::new(
+            http,
+            self.proxy_uri.clone(),
+            self.proxy_from_env,
+            &self.fallback_uri,
+        );
+
+        self.connector(proxy_connector)
     }
 
     pub(crate) fn uds_connector(&self, uds_filepath: &str) -> service::Connector<UdsConnector> {
