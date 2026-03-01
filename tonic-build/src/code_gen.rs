@@ -19,6 +19,7 @@ pub struct CodeGenBuilder {
     disable_comments: HashSet<String>,
     use_arc_self: bool,
     generate_default_stubs: bool,
+    async_trait: bool,
 }
 
 impl CodeGenBuilder {
@@ -76,6 +77,12 @@ impl CodeGenBuilder {
         self
     }
 
+    /// Enable or disable the use of the `async_trait` crate for generated traits.
+    pub fn async_trait(&mut self, enable: bool) -> &mut Self {
+        self.async_trait = enable;
+        self
+    }
+
     /// Generate client code based on `Service`.
     ///
     /// This takes some `Service` and will generate a `TokenStream` that contains
@@ -106,6 +113,7 @@ impl CodeGenBuilder {
             &self.disable_comments,
             self.use_arc_self,
             self.generate_default_stubs,
+            self.async_trait,
         )
     }
 }
@@ -120,6 +128,7 @@ impl Default for CodeGenBuilder {
             disable_comments: HashSet::default(),
             use_arc_self: false,
             generate_default_stubs: false,
+            async_trait: true,
         }
     }
 }
