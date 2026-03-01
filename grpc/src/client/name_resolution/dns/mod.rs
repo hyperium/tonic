@@ -27,9 +27,9 @@
 
 use std::net::IpAddr;
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Duration;
 use std::time::SystemTime;
 
@@ -38,10 +38,6 @@ use tokio::sync::Notify;
 use url::Host;
 
 use crate::byte_str::ByteStr;
-use crate::client::name_resolution::backoff::BackoffConfig;
-use crate::client::name_resolution::backoff::ExponentialBackoff;
-use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
-use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ChannelController;
 use crate::client::name_resolution::Endpoint;
@@ -50,8 +46,12 @@ use crate::client::name_resolution::Resolver;
 use crate::client::name_resolution::ResolverBuilder;
 use crate::client::name_resolution::ResolverOptions;
 use crate::client::name_resolution::ResolverUpdate;
-use crate::client::name_resolution::Target;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::name_resolution::Target;
+use crate::client::name_resolution::backoff::BackoffConfig;
+use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
+use crate::client::name_resolution::backoff::ExponentialBackoff;
+use crate::client::name_resolution::global_registry;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::{self};
 
@@ -210,10 +210,10 @@ impl ResolverBuilder for Builder {
         let host = match endpoint.host {
             Host::Domain(d) => d,
             Host::Ipv4(ipv4) => {
-                return nop_resolver_for_ip(IpAddr::V4(ipv4), endpoint.port, options)
+                return nop_resolver_for_ip(IpAddr::V4(ipv4), endpoint.port, options);
             }
             Host::Ipv6(ipv6) => {
-                return nop_resolver_for_ip(IpAddr::V6(ipv6), endpoint.port, options)
+                return nop_resolver_for_ip(IpAddr::V6(ipv6), endpoint.port, options);
             }
         };
         let authority = parsed.authority;

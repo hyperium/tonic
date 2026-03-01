@@ -1,6 +1,6 @@
 #![allow(missing_docs)]
 
-use bencher::{benchmark_group, benchmark_main, Bencher};
+use bencher::{Bencher, benchmark_group, benchmark_main};
 use bytes::{Buf, BufMut, Bytes, BytesMut};
 use http_body::{Body, Frame, SizeHint};
 use std::{
@@ -8,7 +8,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tonic::{codec::DecodeBuf, codec::Decoder, Status, Streaming};
+use tonic::{Status, Streaming, codec::DecodeBuf, codec::Decoder};
 
 macro_rules! bench {
     ($name:ident, $message_size:expr, $chunk_size:expr, $message_count:expr) => {

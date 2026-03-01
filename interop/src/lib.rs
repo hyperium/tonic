@@ -7,12 +7,19 @@ pub mod server_prost;
 pub mod server_protobuf;
 
 pub mod pb {
-    #![allow(dead_code)]
-    #![allow(unused_imports)]
+    #![allow(dead_code, unused_imports)]
     include!(concat!(env!("OUT_DIR"), "/grpc.testing.rs"));
 }
 
 pub mod grpc_pb {
+    #![allow(
+        dead_code,
+        unused_imports,
+        clippy::clone_on_copy,
+        clippy::useless_conversion,
+        clippy::unnecessary_fallible_conversions,
+        clippy::derivable_impls
+    )]
     grpc::include_proto!("test");
 }
 
@@ -47,7 +54,7 @@ impl pb::ResponseParameters {
 
 fn response_length(response: &pb::StreamingOutputCallResponse) -> i32 {
     match &response.payload {
-        Some(ref payload) => payload.body.len() as i32,
+        Some(payload) => payload.body.len() as i32,
         None => 0,
     }
 }
@@ -108,7 +115,7 @@ impl TestAssertion {
 
 impl fmt::Display for TestAssertion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        use console::{style, Emoji};
+        use console::{Emoji, style};
         match *self {
             TestAssertion::Passed { ref description } => write!(
                 f,

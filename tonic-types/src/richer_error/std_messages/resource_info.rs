@@ -3,7 +3,7 @@ use prost_types::Any;
 
 use crate::richer_error::FromAnyRef;
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::{FromAny, IntoAny, pb};
 
 /// Used to encode/decode the `ResourceInfo` standard error message described
 /// in [error_details.proto]. Describes the resource that is being accessed.
@@ -124,8 +124,7 @@ mod tests {
 
         let formatted = format!("{gen_any:?}");
 
-        let expected =
-            "Any { type_url: \"type.googleapis.com/google.rpc.ResourceInfo\", value: [10, 13, 114, 101, 115, 111, 117, 114, 99, 101, 45, 116, 121, 112, 101, 18, 13, 114, 101, 115, 111, 117, 114, 99, 101, 45, 110, 97, 109, 101, 26, 5, 111, 119, 110, 101, 114, 34, 11, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110] }";
+        let expected = "Any { type_url: \"type.googleapis.com/google.rpc.ResourceInfo\", value: [10, 13, 114, 101, 115, 111, 117, 114, 99, 101, 45, 116, 121, 112, 101, 18, 13, 114, 101, 115, 111, 117, 114, 99, 101, 45, 110, 97, 109, 101, 26, 5, 111, 119, 110, 101, 114, 34, 11, 100, 101, 115, 99, 114, 105, 112, 116, 105, 111, 110] }";
 
         assert!(
             formatted.eq(expected),

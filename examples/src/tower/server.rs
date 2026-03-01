@@ -2,7 +2,7 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 use tower::{Layer, Service};
 
 use hello_world::greeter_server::{Greeter, GreeterServer};

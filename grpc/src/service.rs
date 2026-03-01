@@ -27,10 +27,10 @@ use std::fmt::Debug;
 use std::pin::Pin;
 
 use tokio_stream::Stream;
-use tonic::async_trait;
 use tonic::Request as TonicRequest;
 use tonic::Response as TonicResponse;
 use tonic::Status;
+use tonic::async_trait;
 
 pub type Request = TonicRequest<Pin<Box<dyn Stream<Item = Box<dyn Message>> + Send + Sync>>>;
 pub type Response =

@@ -122,6 +122,8 @@ pub trait GrpcEndpoint: endpoint::Sealed + Send + Unpin + 'static {
 
     /// Returns the remote address that this stream is connected to.
     fn get_peer_address(&self) -> &str;
+
+    fn get_network_type(&self) -> &'static str;
 }
 
 impl endpoint::Sealed for Box<dyn GrpcEndpoint> {}
@@ -132,6 +134,10 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
 
     fn get_peer_address(&self) -> &str {
         (**self).get_peer_address()
+    }
+
+    fn get_network_type(&self) -> &'static str {
+        (**self).get_network_type()
     }
 }
 

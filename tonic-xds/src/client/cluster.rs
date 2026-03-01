@@ -9,7 +9,7 @@ use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::body::Body as TonicBody;
 use tower::{
-    balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load, BoxError, Service,
+    BoxError, Service, balance::p2c::Balance, buffer::Buffer, discover::Discover, load::Load,
 };
 
 type RespFut<Resp> = BoxFuture<Result<Resp, BoxError>>;
@@ -220,16 +220,14 @@ where
         <D::Service as Service<Req>>::Error: Into<BoxError>,
         <D::Service as Service<Req>>::Future: Send + 'static,
     {
-        let client = self
-            .registry
+        self.registry
             .entry(key.to_string())
             .or_insert_with(|| {
                 let name = key.to_string();
                 let discover = discover_fn();
                 Arc::new(ClusterClient::new(name, discover))
             })
-            .clone();
-        client
+            .clone()
     }
 }
 

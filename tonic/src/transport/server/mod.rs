@@ -57,20 +57,20 @@ use std::{
     future::{self, Future},
     marker::PhantomData,
     net::SocketAddr,
-    pin::{pin, Pin},
+    pin::{Pin, pin},
     sync::Arc,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
     time::Duration,
 };
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_stream::Stream;
 use tower::{
-    layer::util::{Identity, Stack},
+    Service, ServiceBuilder, ServiceExt,
     layer::Layer,
+    layer::util::{Identity, Stack},
     limit::concurrency::ConcurrencyLimitLayer,
     load_shed::LoadShedLayer,
     util::BoxCloneService,
-    Service, ServiceBuilder, ServiceExt,
 };
 
 type BoxService = tower::util::BoxCloneService<Request<Body>, Response<Body>, crate::BoxError>;
@@ -1071,7 +1071,6 @@ impl<L> Router<L> {
         IO: AsyncRead + AsyncWrite + Connected + Unpin + Send + 'static,
         IE: Into<crate::BoxError>,
         L: Layer<Routes>,
-
         L::Service: Service<Request<Body>, Response = Response<ResBody>> + Clone + Send + 'static,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Future: Send,
         <<L as Layer<Routes>>::Service as Service<Request<Body>>>::Error:

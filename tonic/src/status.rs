@@ -1,12 +1,12 @@
-use crate::metadata::MetadataMap;
 use crate::metadata::GRPC_CONTENT_TYPE;
+use crate::metadata::MetadataMap;
 use base64::Engine as _;
 use bytes::Bytes;
 use http::{
-    header::{HeaderMap, HeaderValue},
     HeaderName,
+    header::{HeaderMap, HeaderValue},
 };
-use percent_encoding::{percent_decode, percent_encode, AsciiSet, CONTROLS};
+use percent_encoding::{AsciiSet, CONTROLS, percent_decode, percent_encode};
 use std::{borrow::Cow, error::Error, fmt, sync::Arc};
 use tracing::{debug, trace, warn};
 

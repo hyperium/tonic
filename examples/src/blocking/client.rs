@@ -4,7 +4,7 @@ pub mod hello_world {
     tonic::include_proto!("helloworld");
 }
 
-use hello_world::{greeter_client::GreeterClient, HelloReply, HelloRequest};
+use hello_world::{HelloReply, HelloRequest, greeter_client::GreeterClient};
 
 type StdError = Box<dyn std::error::Error + Send + Sync + 'static>;
 type Result<T, E = StdError> = ::std::result::Result<T, E>;

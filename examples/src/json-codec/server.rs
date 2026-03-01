@@ -4,7 +4,7 @@
 //! in the `examples/build.rs` file. As defined there, the generated code assumes that a module
 //! `crate::common` exists which defines `HelloRequest`, `HelloResponse`, and `JsonCodec`.
 
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
 pub mod common;
 use common::{HelloRequest, HelloResponse};

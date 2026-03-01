@@ -1,6 +1,6 @@
 use crate::common::async_util::BoxFuture;
 use std::pin::Pin;
-use tower::{discover::Change, BoxError};
+use tower::{BoxError, discover::Change};
 
 use crate::xds::route::{RouteDecision, RouteInput};
 

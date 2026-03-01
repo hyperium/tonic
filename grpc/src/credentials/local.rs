@@ -22,53 +22,80 @@
  *
  */
 
+use std::net::SocketAddr;
+use std::str::FromStr;
+
 use crate::attributes::Attributes;
+use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::ServerCredentials;
-use crate::credentials::call::CallCredentials;
+use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
-use crate::credentials::client::{self};
 use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
+use crate::credentials::server;
 use crate::credentials::server::ServerConnectionSecurityInfo;
-use crate::credentials::server::{self};
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
-/// An implementation of [`ChannelCredentials`] for insecure connections.
+pub const PROTOCOL_NAME: &str = "local";
+
+/// An implementation of [`ChannelCredentials`] for connections on the same
+/// machine.
 ///
 /// This credential type does not perform any encryption or authentication. It
 /// simply passes the raw underlying transport as the output.
 #[derive(Debug, Clone, Default)]
-pub struct InsecureChannelCredentials {
+pub struct LocalChannelCredentials {
     _private: (),
 }
 
-pub const PROTOCOL_NAME: &str = "insecure";
-
-impl InsecureChannelCredentials {
+impl LocalChannelCredentials {
     /// Creates a new instance of `InsecureChannelCredentials`.
     pub fn new() -> Self {
         Self { _private: () }
     }
 }
 
-/// An implementation of [`ClientConnectionSecurityContext`] for insecure connections.
+/// An implementation of [`ClientConnectionSecurityContext`] for local
+/// connections.
 #[derive(Debug, Clone)]
-pub struct InsecureConnectionSecurityContext;
+pub struct LocalConnectionSecurityContext;
 
-impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {
+impl ClientConnectionSecurityContext for LocalConnectionSecurityContext {
     fn validate_authority(&self, _authority: &Authority) -> bool {
         true
     }
 }
 
-impl client::ChannelCredsInternal for InsecureChannelCredentials {
-    type ContextType = InsecureConnectionSecurityContext;
+/// Returns the security level for a local connection.
+/// It returns an error if a connection is not local.
+/// Refer to L62: https://github.com/grpc/proposal/blob/master/L62-core-call-credential-security-level.md
+fn security_level_for_endpoint(
+    peer_addr: &str,
+    network_type: &str,
+) -> Result<SecurityLevel, String> {
+    if network_type == TCP_IP_NETWORK_TYPE
+        && SocketAddr::from_str(peer_addr)
+            .map_err(|e| e.to_string())?
+            .ip()
+            .is_loopback()
+    {
+        return Ok(SecurityLevel::NoSecurity);
+    }
+    // TODO: Add support for unix sockets.
+    Err(format!(
+        "local credentials rejected connection to non-local address {}",
+        peer_addr
+    ))
+}
+
+impl client::ChannelCredsInternal for LocalChannelCredentials {
+    type ContextType = LocalConnectionSecurityContext;
     type Output<I> = I;
 
     async fn connect<Input: GrpcEndpoint>(
@@ -78,42 +105,40 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
         _info: ClientHandshakeInfo,
         _runtime: GrpcRuntime,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
+        let security_level =
+            security_level_for_endpoint(source.get_peer_address(), source.get_network_type())?;
         Ok(HandshakeOutput {
             endpoint: source,
             security: ClientConnectionSecurityInfo::new(
                 PROTOCOL_NAME,
-                SecurityLevel::NoSecurity,
-                InsecureConnectionSecurityContext,
+                security_level,
+                LocalConnectionSecurityContext,
                 Attributes::new(),
             ),
         })
     }
-
-    fn get_call_credentials(&self) -> Option<&CallCredentials> {
-        None
-    }
 }
 
-impl ChannelCredentials for InsecureChannelCredentials {
+impl ChannelCredentials for LocalChannelCredentials {
     fn info(&self) -> &ProtocolInfo {
         static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
     }
 }
 
-/// An implementation of [`ServerCredentials`] for insecure connections.
+/// An implementation of [`ServerCredentials`] for local connections.
 #[derive(Debug, Clone, Default)]
-pub struct InsecureServerCredentials {
+pub struct LocalServerCredentials {
     _private: (),
 }
 
-impl InsecureServerCredentials {
+impl LocalServerCredentials {
     pub fn new() -> Self {
         Self { _private: () }
     }
 }
 
-impl server::ServerCredsInternal for InsecureServerCredentials {
+impl server::ServerCredsInternal for LocalServerCredentials {
     type Output<I> = I;
 
     async fn accept<Input: GrpcEndpoint>(
@@ -121,18 +146,20 @@ impl server::ServerCredsInternal for InsecureServerCredentials {
         source: Input,
         _runtime: GrpcRuntime,
     ) -> Result<server::HandshakeOutput<Self::Output<Input>>, String> {
+        let security_level =
+            security_level_for_endpoint(source.get_peer_address(), source.get_network_type())?;
         Ok(server::HandshakeOutput {
             endpoint: source,
             security: ServerConnectionSecurityInfo::new(
                 PROTOCOL_NAME,
-                SecurityLevel::NoSecurity,
+                security_level,
                 Attributes::new(),
             ),
         })
     }
 }
 
-impl ServerCredentials for InsecureServerCredentials {
+impl ServerCredentials for LocalServerCredentials {
     fn info(&self) -> &ProtocolInfo {
         static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
@@ -148,8 +175,6 @@ mod test {
 
     use super::*;
     use crate::credentials::ChannelCredentials;
-    use crate::credentials::InsecureChannelCredentials;
-    use crate::credentials::InsecureServerCredentials;
     use crate::credentials::ServerCredentials;
     use crate::credentials::client::ChannelCredsInternal as ClientSealed;
     use crate::credentials::client::ClientConnectionSecurityContext;
@@ -157,16 +182,35 @@ mod test {
     use crate::credentials::common::Authority;
     use crate::credentials::common::SecurityLevel;
     use crate::credentials::server::ServerCredsInternal;
+    use crate::rt;
     use crate::rt::GrpcEndpoint;
     use crate::rt::TcpOptions;
-    use crate::rt::{self};
+
+    #[test]
+    fn test_security_level_for_endpoint_success() {
+        assert_eq!(
+            security_level_for_endpoint("127.0.0.1:8080", TCP_IP_NETWORK_TYPE),
+            Ok(SecurityLevel::NoSecurity)
+        );
+        assert_eq!(
+            security_level_for_endpoint("[::1]:8080", TCP_IP_NETWORK_TYPE),
+            Ok(SecurityLevel::NoSecurity)
+        );
+    }
+
+    #[test]
+    fn test_security_level_for_endpoint_failure() {
+        assert!(security_level_for_endpoint("192.168.1.1:8080", TCP_IP_NETWORK_TYPE).is_err());
+        assert!(security_level_for_endpoint("127.0.0.1:8080", "unix").is_err());
+        assert!(security_level_for_endpoint("invalid", TCP_IP_NETWORK_TYPE).is_err());
+    }
 
     #[tokio::test]
-    async fn test_insecure_client_credentials() {
-        let creds = InsecureChannelCredentials::new();
+    async fn test_local_client_credentials() {
+        let creds = LocalChannelCredentials::new();
 
         let info = creds.info();
-        assert_eq!(info.security_protocol(), PROTOCOL_NAME);
+        assert_eq!(info.security_protocol(), "local");
 
         let addr = "127.0.0.1:0";
         let listener = TcpListener::bind(addr).await.unwrap();
@@ -189,7 +233,7 @@ mod test {
         let security_info = output.security;
 
         // Verify security info.
-        assert_eq!(security_info.security_protocol(), PROTOCOL_NAME);
+        assert_eq!(security_info.security_protocol(), "local");
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         // Verify data transfer.
@@ -214,11 +258,11 @@ mod test {
     }
 
     #[tokio::test]
-    async fn test_insecure_server_credentials() {
-        let creds = InsecureServerCredentials::new();
+    async fn test_local_server_credentials() {
+        let creds = LocalServerCredentials::new();
 
         let info = creds.info();
-        assert_eq!(info.security_protocol, PROTOCOL_NAME);
+        assert_eq!(info.security_protocol, "local");
 
         let addr = "127.0.0.1:0";
         let runtime = rt::default_runtime();
@@ -244,7 +288,7 @@ mod test {
         let mut endpoint = output.endpoint;
         let security_info = output.security;
 
-        assert_eq!(security_info.security_protocol(), PROTOCOL_NAME);
+        assert_eq!(security_info.security_protocol(), "local");
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         let mut buf = vec![0u8; 10];

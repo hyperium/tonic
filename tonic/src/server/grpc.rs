@@ -1,13 +1,13 @@
+use crate::codec::EncodeBody;
 use crate::codec::compression::{
     CompressionEncoding, EnabledCompressionEncodings, SingleMessageCompressionOverride,
 };
-use crate::codec::EncodeBody;
 use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
+    Request, Status,
     body::Body,
     codec::{Codec, Streaming},
     server::{ClientStreamingService, ServerStreamingService, StreamingService, UnaryService},
-    Request, Status,
 };
 use http_body::Body as HttpBody;
 use std::{fmt, pin::pin};

@@ -28,6 +28,7 @@ use std::time::Duration;
 
 use tonic::metadata::MetadataMap;
 
+use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::LbConfig;
 use crate::client::load_balancing::LbPolicy;
@@ -42,7 +43,6 @@ use crate::client::load_balancing::SubchannelState;
 use crate::client::load_balancing::WorkScheduler;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
-use crate::client::ConnectivityState;
 use crate::rt::GrpcRuntime;
 use crate::service::Request;
 
