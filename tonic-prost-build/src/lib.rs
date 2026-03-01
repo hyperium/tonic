@@ -196,9 +196,17 @@ impl tonic_build::Method for TonicBuildMethod {
         {
             // For well-known types, map to absolute paths that will work with super::
             match self.prost_method.input_type.as_str() {
-                ".google.protobuf.Empty" => quote!(()),
                 ".google.protobuf.Any" => quote!(::prost_types::Any),
+                ".google.protobuf.BoolValue" => quote!(bool),
+                ".google.protobuf.BytesValue" => quote!(::prost::bytes::Bytes),
+                ".google.protobuf.DoubleValue" => quote!(f64),
+                ".google.protobuf.Empty" => quote!(()),
+                ".google.protobuf.FloatValue" => quote!(f32),
+                ".google.protobuf.Int32Value" => quote!(i32),
+                ".google.protobuf.Int64Value" => quote!(i64),
                 ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
+                ".google.protobuf.UInt32Value" => quote!(u32),
+                ".google.protobuf.UInt64Value" => quote!(u64),
                 _ => {
                     // For other google types, assume they're in prost_types
                     let type_name = self
@@ -238,9 +246,17 @@ impl tonic_build::Method for TonicBuildMethod {
             if is_google_type(&self.prost_method.output_type) && !compile_well_known_types {
                 // For well-known types, map to absolute paths that will work with super::
                 match self.prost_method.output_type.as_str() {
-                    ".google.protobuf.Empty" => quote!(()),
                     ".google.protobuf.Any" => quote!(::prost_types::Any),
+                    ".google.protobuf.BoolValue" => quote!(bool),
+                    ".google.protobuf.BytesValue" => quote!(::prost::bytes::Bytes),
+                    ".google.protobuf.DoubleValue" => quote!(f64),
+                    ".google.protobuf.Empty" => quote!(()),
+                    ".google.protobuf.FloatValue" => quote!(f32),
+                    ".google.protobuf.Int32Value" => quote!(i32),
+                    ".google.protobuf.Int64Value" => quote!(i64),
                     ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
+                    ".google.protobuf.UInt32Value" => quote!(u32),
+                    ".google.protobuf.UInt64Value" => quote!(u64),
                     _ => {
                         // For other google types, assume they're in prost_types
                         let type_name = self
