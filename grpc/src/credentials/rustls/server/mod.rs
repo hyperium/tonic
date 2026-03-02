@@ -39,6 +39,7 @@ use crate::attributes::Attributes;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::ServerCredentials;
 use crate::credentials::common::SecurityLevel;
+use crate::credentials::rustls::ALPN_PROTO_STR_H2;
 use crate::credentials::rustls::IdentityList;
 use crate::credentials::rustls::Provider;
 use crate::credentials::rustls::RootCertificates;
@@ -198,7 +199,7 @@ impl ServerTlsConfig {
     ///
     /// This should be used **only for debugging purposes**. It should never be
     /// used in a production environment due to security concerns.
-    pub fn with_key_log_path(mut self, path: impl Into<PathBuf>) -> Self {
+    pub fn insecure_with_key_log_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.key_log_path = Some(path.into());
         self
     }
@@ -210,9 +211,9 @@ impl RustlsServerTlsCredendials {
             p.as_ref().clone()
         } else {
             return Err(
-            "No crypto provider installed. Enable `tls-aws-lc` feature or install one manually."
-                .to_string(),
-        );
+                "No crypto provider installed. Enable `tls-aws-lc` feature in rustls or install one manually."
+                .to_string()
+            );
         };
 
         Self::new_impl(config, provider)
@@ -281,7 +282,7 @@ impl RustlsServerTlsCredendials {
         let resolver = Arc::new(SniResolver { keys });
         let mut server_config = builder.with_cert_resolver(resolver);
 
-        server_config.alpn_protocols = vec![b"h2".to_vec()];
+        server_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
         if let Some(path) = config.key_log_path {
             server_config.key_log = Arc::new(KeyLogFile::new(&path));
         }
@@ -297,15 +298,6 @@ impl RustlsServerTlsCredendials {
         Ok(RustlsServerTlsCredendials {
             acceptor: TlsAcceptor::from(Arc::new(server_config)),
         })
-    }
-
-    // Test-only constructor that enables injecting a custom crypto provider.
-    #[cfg(test)]
-    pub fn new_for_test(
-        config: ServerTlsConfig,
-        provider: CryptoProvider,
-    ) -> Result<RustlsServerTlsCredendials, String> {
-        Self::new_impl(config, provider)
     }
 }
 
@@ -342,15 +334,15 @@ impl ServerCredsInternal for RustlsServerTlsCredendials {
             .await
             .map_err(|e| e.to_string())?;
 
-        let (_, conn) = tls_stream.get_ref();
-        if conn.alpn_protocol() != Some(b"h2") {
+        let (_io, conn) = tls_stream.get_ref();
+        if conn.alpn_protocol() != Some(ALPN_PROTO_STR_H2) {
             return Err("Client ignored ALPN requirements".into());
         }
 
         let auth_info = ServerConnectionSecurityInfo::new(
             "tls",
             SecurityLevel::PrivacyAndIntegrity,
-            Attributes::default(),
+            Attributes::new(),
         );
         let endpoint = TlsStream::new(RustlsStream::Server(tls_stream));
         Ok(HandshakeOutput {
