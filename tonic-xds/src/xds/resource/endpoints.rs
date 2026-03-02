@@ -49,6 +49,8 @@ impl From<i32> for HealthStatus {
     fn from(value: i32) -> Self {
         match EnvoyHealthStatus::try_from(value) {
             Ok(EnvoyHealthStatus::Healthy) => Self::Healthy,
+            // Envoy's health_check.proto defines TIMEOUT as "interpreted by Envoy as
+            // UNHEALTHY". Per gRFC A27, only HEALTHY and UNKNOWN are considered usable.
             Ok(EnvoyHealthStatus::Unhealthy) | Ok(EnvoyHealthStatus::Timeout) => Self::Unhealthy,
             Ok(EnvoyHealthStatus::Draining) => Self::Draining,
             _ => Self::Unknown,

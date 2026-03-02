@@ -32,6 +32,7 @@ bytes = "1"
 xds-client = { path = "../xds-client" }
 envoy-types = "0.7"
 prost = "0.14"
+regex = "1"
 
 [lints]
 workspace = true

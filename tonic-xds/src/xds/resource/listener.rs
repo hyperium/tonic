@@ -134,7 +134,9 @@ mod tests {
         let listener = make_rds_listener("test-listener", "route-config-1");
         let validated = ListenerResource::validate(listener).expect("should validate");
         assert_eq!(validated.name, "test-listener");
-        assert!(matches!(&validated.route_source, RouteSource::Rds(name) if name == "route-config-1"));
+        assert!(
+            matches!(&validated.route_source, RouteSource::Rds(name) if name == "route-config-1")
+        );
         assert_eq!(
             validated.cascade_route_config_name(),
             Some("route-config-1")
