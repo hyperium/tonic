@@ -1,21 +1,57 @@
-use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
 
-use crate::{
-    client::{
-        name_resolution::{
-            self, global_registry, Address, ChannelController, Endpoint, Resolver, ResolverBuilder,
-            ResolverOptions, ResolverUpdate,
-        },
-        transport::{self, ConnectedTransport, TransportOptions, GLOBAL_TRANSPORT_REGISTRY},
-    },
-    rt::GrpcRuntime,
-    server,
-    service::{Request, Response, Service},
-};
-use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
+use std::collections::HashMap;
+use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::sync::atomic::AtomicU32;
+use std::sync::atomic::Ordering;
+
+use tokio::sync::Mutex as AsyncMutex;
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tonic::async_trait;
+
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ChannelController;
+use crate::client::name_resolution::Endpoint;
+use crate::client::name_resolution::Resolver;
+use crate::client::name_resolution::ResolverBuilder;
+use crate::client::name_resolution::ResolverOptions;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::global_registry;
+use crate::client::name_resolution::{self};
+use crate::client::transport::ConnectedTransport;
+use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::TransportOptions;
+use crate::client::transport::{self};
+use crate::rt::GrpcRuntime;
+use crate::server;
+use crate::service::Request;
+use crate::service::Response;
+use crate::service::Service;
 
 pub struct Listener {
     id: String,

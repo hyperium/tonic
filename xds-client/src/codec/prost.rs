@@ -11,26 +11,30 @@ use prost::Message;
 pub struct ProstCodec;
 
 impl XdsCodec for ProstCodec {
-    fn encode_request(&self, request: &DiscoveryRequest) -> Result<Bytes> {
+    fn encode_request(&self, request: &DiscoveryRequest<'_>) -> Result<Bytes> {
         use envoy_types::pb::envoy::config::core::v3 as core;
         use envoy_types::pb::envoy::service::discovery::v3 as discovery;
         use envoy_types::pb::google::rpc::Status;
 
         let proto_request = discovery::DiscoveryRequest {
-            version_info: request.version_info.clone(),
-            node: request.node.as_ref().map(|n| core::Node {
-                id: n.id.clone(),
-                cluster: n.cluster.clone(),
-                locality: n.locality.as_ref().map(|l| core::Locality {
+            version_info: request.version_info.to_owned(),
+            node: Some(core::Node {
+                id: request.node.id.clone().unwrap_or_default(),
+                cluster: request.node.cluster.clone().unwrap_or_default(),
+                user_agent_name: request.node.user_agent_name.clone(),
+                user_agent_version_type: Some(core::node::UserAgentVersionType::UserAgentVersion(
+                    request.node.user_agent_version.clone(),
+                )),
+                locality: request.node.locality.as_ref().map(|l| core::Locality {
                     region: l.region.clone(),
                     zone: l.zone.clone(),
                     sub_zone: l.sub_zone.clone(),
                 }),
                 ..Default::default()
             }),
-            resource_names: request.resource_names.clone(),
-            type_url: request.type_url.clone(),
-            response_nonce: request.response_nonce.clone(),
+            resource_names: request.resource_names.to_vec(),
+            type_url: request.type_url.to_owned(),
+            response_nonce: request.response_nonce.to_owned(),
             error_detail: request.error_detail.as_ref().map(|e| Status {
                 code: e.code,
                 message: e.message.clone(),
@@ -71,10 +75,15 @@ mod tests {
     #[test]
     fn test_encode_request_minimal() {
         let codec = ProstCodec;
+        let node = Node::new("grpc", "1.0");
+        let resource_names = vec!["listener-1".to_string()];
         let request = DiscoveryRequest {
-            type_url: "type.googleapis.com/envoy.config.listener.v3.Listener".to_string(),
-            resource_names: vec!["listener-1".to_string()],
-            ..Default::default()
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.listener.v3.Listener",
+            resource_names: &resource_names,
+            response_nonce: "",
+            error_detail: None,
         };
 
         let bytes = codec.encode_request(&request).unwrap();
@@ -90,27 +99,40 @@ mod tests {
     #[test]
     fn test_encode_request_with_node() {
         let codec = ProstCodec;
+        let node = Node::new("grpc", "1.0")
+            .with_id("node-1")
+            .with_cluster("cluster-1")
+            .with_locality(Locality {
+                region: "us-west".to_string(),
+                zone: "us-west-1a".to_string(),
+                sub_zone: "rack-1".to_string(),
+            });
+        let resource_names: Vec<String> = Vec::new();
         let request = DiscoveryRequest {
-            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster".to_string(),
-            node: Some(Node {
-                id: "node-1".to_string(),
-                cluster: "cluster-1".to_string(),
-                locality: Some(Locality {
-                    region: "us-west".to_string(),
-                    zone: "us-west-1a".to_string(),
-                    sub_zone: "rack-1".to_string(),
-                }),
-            }),
-            ..Default::default()
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster",
+            resource_names: &resource_names,
+            response_nonce: "",
+            error_detail: None,
         };
 
         let bytes = codec.encode_request(&request).unwrap();
 
+        use envoy_types::pb::envoy::config::core::v3 as core;
         use envoy_types::pb::envoy::service::discovery::v3 as discovery;
         let decoded = discovery::DiscoveryRequest::decode(bytes).unwrap();
         let node = decoded.node.unwrap();
         assert_eq!(node.id, "node-1");
         assert_eq!(node.cluster, "cluster-1");
+        assert_eq!(node.user_agent_name, "grpc");
+        // Verify user_agent_version is properly encoded
+        match node.user_agent_version_type {
+            Some(core::node::UserAgentVersionType::UserAgentVersion(version)) => {
+                assert_eq!(version, "1.0");
+            }
+            _ => panic!("Expected UserAgentVersion to be set"),
+        }
         let locality = node.locality.unwrap();
         assert_eq!(locality.region, "us-west");
         assert_eq!(locality.zone, "us-west-1a");
@@ -158,16 +180,18 @@ mod tests {
 
         let codec = ProstCodec;
 
+        let node = Node::new("grpc", "1.0");
+        let resource_names = vec!["res-1".to_string(), "res-2".to_string()];
         let request = DiscoveryRequest {
-            version_info: "42".to_string(),
-            type_url: "type.googleapis.com/test.Resource".to_string(),
-            resource_names: vec!["res-1".to_string(), "res-2".to_string()],
-            response_nonce: "nonce-abc".to_string(),
+            version_info: "42",
+            node: &node,
+            type_url: "type.googleapis.com/test.Resource",
+            resource_names: &resource_names,
+            response_nonce: "nonce-abc",
             error_detail: Some(ErrorDetail {
                 code: 3, // INVALID_ARGUMENT
                 message: "validation failed".to_string(),
             }),
-            ..Default::default()
         };
 
         let request_bytes = codec.encode_request(&request).unwrap();

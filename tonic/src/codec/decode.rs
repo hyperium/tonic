@@ -1,6 +1,6 @@
-use super::compression::{decompress, CompressionEncoding, CompressionSettings};
-use super::{BufferSettings, DecodeBuf, Decoder, DEFAULT_MAX_RECV_MESSAGE_SIZE, HEADER_SIZE};
-use crate::{body::Body, metadata::MetadataMap, Code, Status};
+use super::compression::{CompressionEncoding, CompressionSettings, decompress};
+use super::{BufferSettings, DEFAULT_MAX_RECV_MESSAGE_SIZE, DecodeBuf, Decoder, HEADER_SIZE};
+use crate::{Code, Status, body::Body, metadata::MetadataMap};
 use bytes::{Buf, BufMut, BytesMut};
 use http::{HeaderMap, StatusCode};
 use http_body::Body as HttpBody;
@@ -165,7 +165,9 @@ impl StreamingInner {
                             // An ill-constructed message with its Compressed-Flag bit set but lacking a grpc-encoding
                             // entry different from identity in its metadata MUST fail with INTERNAL status,
                             // its associated description indicating the invalid Compressed-Flag condition.
-                            return Err(Status::internal( "protocol error: received message with compressed-flag but no grpc-encoding was specified"));
+                            return Err(Status::internal(
+                                "protocol error: received message with compressed-flag but no grpc-encoding was specified",
+                            ));
                         }
                     }
                 }
@@ -176,7 +178,9 @@ impl StreamingInner {
                             "protocol error: received message with invalid compression flag: {f} (valid flags are 0 and 1) while receiving response with status: {status}"
                         )
                     } else {
-                        format!("protocol error: received message with invalid compression flag: {f} (valid flags are 0 and 1), while sending request")
+                        format!(
+                            "protocol error: received message with invalid compression flag: {f} (valid flags are 0 and 1), while sending request"
+                        )
                     };
                     return Err(Status::internal(message));
                 }
@@ -187,11 +191,9 @@ impl StreamingInner {
                 .max_message_size
                 .unwrap_or(DEFAULT_MAX_RECV_MESSAGE_SIZE);
             if len > limit {
-                return Err(Status::out_of_range(
-                    format!(
-                        "Error, decoded message length too large: found {len} bytes, the limit is: {limit} bytes"
-                    ),
-                ));
+                return Err(Status::out_of_range(format!(
+                    "Error, decoded message length too large: found {len} bytes, the limit is: {limit} bytes"
+                )));
             }
 
             self.buf.reserve(len);

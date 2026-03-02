@@ -22,30 +22,39 @@
  *
  */
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls::server::{ClientHello, ProducesTickets, ResolvesServerCert};
+use rustls::server::ClientHello;
+use rustls::server::ProducesTickets;
+use rustls::server::ResolvesServerCert;
 use rustls::sign::CertifiedKey;
 use tokio::sync::watch::Receiver;
-use tokio_rustls::{TlsAcceptor, TlsStream as RustlsStream};
+use tokio_rustls::TlsAcceptor;
+use tokio_rustls::TlsStream as RustlsStream;
 use webpki::EndEntityCert;
 
 use crate::attributes::Attributes;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::ServerCredentials;
 use crate::credentials::common::SecurityLevel;
-use crate::credentials::server::{
-    HandshakeOutput, ServerConnectionSecurityInfo, ServerCredsInternal,
-};
-use crate::credentials::tls::key_log::KeyLogFile;
-use crate::credentials::tls::provider::ProviderInternal;
-use crate::credentials::tls::tls_stream::TlsStream;
-use crate::credentials::tls::StaticRootCertificatesProvider;
-use crate::credentials::tls::{
-    parse_certs, parse_key, sanitize_crypto_provider, IdentityList, Provider, RootCertificates,
-    TLS_PROTO_INFO,
-};
-use crate::credentials::{ProtocolInfo, ServerCredentials};
-use crate::rt::{GrpcEndpoint, GrpcRuntime};
+use crate::credentials::rustls::IdentityList;
+use crate::credentials::rustls::Provider;
+use crate::credentials::rustls::RootCertificates;
+use crate::credentials::rustls::StaticRootCertificatesProvider;
+use crate::credentials::rustls::TLS_PROTO_INFO;
+use crate::credentials::rustls::key_log::KeyLogFile;
+use crate::credentials::rustls::parse_certs;
+use crate::credentials::rustls::parse_key;
+use crate::credentials::rustls::provider::ProviderInternal;
+use crate::credentials::rustls::sanitize_crypto_provider;
+use crate::credentials::rustls::tls_stream::TlsStream;
+use crate::credentials::server::HandshakeOutput;
+use crate::credentials::server::ServerConnectionSecurityInfo;
+use crate::credentials::server::ServerCredsInternal;
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 
 #[cfg(test)]
 mod test;
@@ -343,9 +352,7 @@ impl ServerCredsInternal for RustlsServerTlsCredendials {
             SecurityLevel::PrivacyAndIntegrity,
             Attributes::default(),
         );
-        let endpoint = TlsStream {
-            inner: RustlsStream::Server(tls_stream),
-        };
+        let endpoint = TlsStream::new(RustlsStream::Server(tls_stream));
         Ok(HandshakeOutput {
             endpoint,
             security: auth_info,

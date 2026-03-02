@@ -18,7 +18,7 @@ pub mod prost;
 /// and their serialized wire format.
 pub trait XdsCodec: Send + Sync + 'static {
     /// Encode a [`DiscoveryRequest`] to bytes.
-    fn encode_request(&self, request: &DiscoveryRequest) -> Result<Bytes>;
+    fn encode_request(&self, request: &DiscoveryRequest<'_>) -> Result<Bytes>;
 
     /// Decode bytes into a [`DiscoveryResponse`].
     fn decode_response(&self, bytes: Bytes) -> Result<DiscoveryResponse>;

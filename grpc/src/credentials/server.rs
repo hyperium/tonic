@@ -24,7 +24,8 @@
 
 use crate::attributes::Attributes;
 use crate::credentials::common::SecurityLevel;
-use crate::rt::{GrpcEndpoint, GrpcRuntime};
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 
 #[trait_variant::make(Send)]
 pub trait ServerCredsInternal {

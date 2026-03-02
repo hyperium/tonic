@@ -4,11 +4,13 @@
 //! to send and receive raw bytes, allowing the xDS client layer to handle
 //! serialization/deserialization independently.
 
+use crate::client::config::ServerConfig;
 use crate::error::{Error, Result};
-use crate::transport::{Transport, TransportStream};
+use crate::transport::{Transport, TransportBuilder, TransportStream};
 use bytes::{Buf, BufMut, Bytes};
 use http::uri::PathAndQuery;
 use tokio::sync::mpsc;
+use tokio_stream::StreamExt as _;
 use tonic::client::Grpc;
 use tonic::codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
 use tonic::transport::Channel;
@@ -81,7 +83,33 @@ pub struct TonicTransport {
 }
 
 impl TonicTransport {
-    /// Connect to an xDS server.
+    /// Create a transport from an existing tonic [`Channel`].
+    ///
+    /// Use this when you need custom channel configuration (e.g., TLS, timeouts).
+    ///
+    /// # Example
+    ///
+    /// ```ignore
+    /// use tonic::transport::{Certificate, Channel, ClientTlsConfig};
+    ///
+    /// let tls = ClientTlsConfig::new()
+    ///     .ca_certificate(Certificate::from_pem(ca_cert))
+    ///     .domain_name("xds.example.com");
+    ///
+    /// let channel = Channel::from_static("https://xds.example.com:443")
+    ///     .tls_config(tls)?
+    ///     .connect()
+    ///     .await?;
+    ///
+    /// let transport = TonicTransport::from_channel(channel);
+    /// ```
+    pub fn from_channel(channel: Channel) -> Self {
+        Self { channel }
+    }
+
+    /// Connect to an xDS server with default settings.
+    ///
+    /// For custom configuration (TLS, timeouts, etc.), use [`from_channel`](Self::from_channel).
     pub async fn connect(uri: impl Into<String>) -> Result<Self> {
         let uri: String = uri.into();
         let channel = Channel::from_shared(uri)
@@ -93,10 +121,58 @@ impl TonicTransport {
     }
 }
 
+/// Builder for creating [`TonicTransport`] instances.
+///
+/// This implements [`TransportBuilder`] and can be used with [`XdsClientBuilder`]
+/// to enable server fallback support.
+///
+/// For connections requiring TLS or custom channel configuration, see the
+/// example in [`TonicTransport::from_channel`].
+///
+/// # Example
+///
+/// ```ignore
+/// use xds_client::{ClientConfig, Node, TonicTransportBuilder, XdsClient};
+///
+/// let transport_builder = TonicTransportBuilder::new();
+/// let config = ClientConfig::new(node, "http://xds.example.com:18000");
+/// let client = XdsClient::builder(config, transport_builder, codec, runtime).build();
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct TonicTransportBuilder {
+    // Future extensions:
+    // - TLS configuration (requires tonic TLS feature)
+    // - Connection timeout settings
+    // - Keep-alive configuration
+    // - Connection pooling settings
+    // - Per-server credential overrides (via ServerConfig.extensions)
+}
+
+impl TonicTransportBuilder {
+    /// Create a new transport builder with default settings.
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+impl TransportBuilder for TonicTransportBuilder {
+    type Transport = TonicTransport;
+
+    async fn build(&self, server: &ServerConfig) -> Result<Self::Transport> {
+        let channel = Channel::from_shared(server.uri().to_string())
+            .map_err(|e| Error::Connection(e.to_string()))?
+            .connect()
+            .await
+            .map_err(|e| Error::Connection(e.to_string()))?;
+
+        Ok(TonicTransport::from_channel(channel))
+    }
+}
+
 impl Transport for TonicTransport {
     type Stream = TonicAdsStream;
 
-    async fn new_stream(&self) -> Result<Self::Stream> {
+    async fn new_stream(&self, initial_requests: Vec<Bytes>) -> Result<Self::Stream> {
         let mut grpc = Grpc::new(self.channel.clone());
 
         grpc.ready()
@@ -104,7 +180,14 @@ impl Transport for TonicTransport {
             .map_err(|e| Error::Connection(e.to_string()))?;
 
         let (tx, rx) = mpsc::channel::<Bytes>(ADS_CHANNEL_BUFFER_SIZE);
-        let request_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+
+        // Create a stream that first yields initial requests, then reads from the channel.
+        // This ensures data is available immediately when the stream is polled,
+        // preventing deadlock with servers that don't send response headers
+        // until they receive the first request message.
+        let initial_stream = tokio_stream::iter(initial_requests);
+        let channel_stream = tokio_stream::wrappers::ReceiverStream::new(rx);
+        let request_stream = initial_stream.chain(channel_stream);
 
         let path = PathAndQuery::from_static(ADS_PATH);
 
@@ -148,18 +231,17 @@ impl TransportStream for TonicAdsStream {
 mod tests {
     use super::*;
     use envoy_types::pb::envoy::service::discovery::v3::{
+        DeltaDiscoveryRequest, DeltaDiscoveryResponse, DiscoveryRequest, DiscoveryResponse,
         aggregated_discovery_service_server::{
             AggregatedDiscoveryService, AggregatedDiscoveryServiceServer,
         },
-        DeltaDiscoveryRequest, DeltaDiscoveryResponse, DiscoveryRequest, DiscoveryResponse,
     };
     use prost::Message;
     use std::net::SocketAddr;
     use std::pin::Pin;
     use tokio::net::TcpListener;
-    use tokio_stream::wrappers::TcpListenerStream;
     use tokio_stream::Stream;
-    use tokio_stream::StreamExt as _;
+    use tokio_stream::wrappers::TcpListenerStream;
     use tonic::{Request, Response, Status};
 
     /// Mock ADS server that echoes back a response for each request.
@@ -228,16 +310,14 @@ mod tests {
 
         let transport = TonicTransport::connect(&uri).await.unwrap();
 
-        let mut stream = transport.new_stream().await.unwrap();
-
         let request = DiscoveryRequest {
             type_url: "type.googleapis.com/envoy.config.listener.v3.Listener".to_string(),
             resource_names: vec!["listener-1".to_string()],
             ..Default::default()
         };
-        let request_bytes = request.encode_to_vec().into();
+        let request_bytes: Bytes = request.encode_to_vec().into();
 
-        stream.send(request_bytes).await.unwrap();
+        let mut stream = transport.new_stream(vec![request_bytes]).await.unwrap();
 
         let response_bytes = stream.recv().await.unwrap().unwrap();
         let response = DiscoveryResponse::decode(response_bytes).unwrap();

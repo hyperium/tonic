@@ -22,28 +22,39 @@
  *
  */
 
-use std::{path::PathBuf, sync::Arc};
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use rustls::crypto::CryptoProvider;
-use rustls_pki_types::{CertificateDer, ServerName};
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::ServerName;
 use rustls_platform_verifier::BuilderVerifierExt;
 use tokio::sync::watch::Receiver;
-use tokio_rustls::{TlsConnector, TlsStream as RustlsStream};
+use tokio_rustls::TlsConnector;
+use tokio_rustls::TlsStream as RustlsStream;
 
 use crate::attributes::Attributes;
-use crate::credentials::client::{
-    self, ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
-    HandshakeOutput,
-};
-use crate::credentials::common::{Authority, SecurityLevel};
-use crate::credentials::tls::key_log::KeyLogFile;
-use crate::credentials::tls::tls_stream::TlsStream;
-use crate::credentials::tls::{
-    parse_certs, parse_key, sanitize_crypto_provider, Identity, Provider, RootCertificates,
-    TLS_PROTO_INFO,
-};
-use crate::credentials::{ChannelCredentials, ProtocolInfo};
-use crate::rt::{GrpcEndpoint, GrpcRuntime};
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::client;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityInfo;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::client::HandshakeOutput;
+use crate::credentials::common::Authority;
+use crate::credentials::common::SecurityLevel;
+use crate::credentials::rustls::ALPN_PROTO_STR_H2;
+use crate::credentials::rustls::Identity;
+use crate::credentials::rustls::Provider;
+use crate::credentials::rustls::RootCertificates;
+use crate::credentials::rustls::TLS_PROTO_INFO;
+use crate::credentials::rustls::key_log::KeyLogFile;
+use crate::credentials::rustls::parse_certs;
+use crate::credentials::rustls::parse_key;
+use crate::credentials::rustls::sanitize_crypto_provider;
+use crate::credentials::rustls::tls_stream::TlsStream;
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 
 #[cfg(test)]
 mod test;
@@ -96,9 +107,15 @@ impl ClientTlsConfig {
     ///
     /// This should be used **only for debugging purposes**. It should never be
     /// used in a production environment due to security concerns.
-    pub fn with_key_log_path(mut self, path: impl Into<PathBuf>) -> Self {
+    pub fn insecure_with_key_log_path(mut self, path: impl Into<PathBuf>) -> Self {
         self.key_log_path = Some(path.into());
         self
+    }
+}
+
+impl Default for ClientTlsConfig {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -115,9 +132,9 @@ impl RustlsClientTlsCredendials {
             p.as_ref().clone()
         } else {
             return Err(
-            "No crypto provider installed. Enable `tls-aws-lc` feature or install one manually."
-                .to_string(),
-        );
+                "No crypto provider installed. Enable `tls-aws-lc` feature in rustls or install one manually."
+                .to_string()
+            );
         };
 
         Self::new_impl(config, provider)
@@ -135,7 +152,7 @@ impl RustlsClientTlsCredendials {
         let builder = if let Some(mut roots_provider) = config.pem_roots_provider.take() {
             let mut root_store = rustls::RootCertStore::empty();
             let ca_pem = roots_provider.borrow_and_update();
-            let certs = parse_certs(ca_pem.as_ref())?;
+            let certs = parse_certs(ca_pem.get_ref())?;
             for cert in certs {
                 root_store.add(cert).map_err(|e| e.to_string())?;
             }
@@ -159,7 +176,7 @@ impl RustlsClientTlsCredendials {
             builder.with_no_client_auth()
         };
 
-        client_config.alpn_protocols = vec![b"h2".to_vec()];
+        client_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
         client_config.resumption = rustls::client::Resumption::disabled();
         if let Some(path) = config.key_log_path {
             client_config.key_log = Arc::new(KeyLogFile::new(&path))
@@ -168,15 +185,6 @@ impl RustlsClientTlsCredendials {
         Ok(RustlsClientTlsCredendials {
             connector: TlsConnector::from(Arc::new(client_config)),
         })
-    }
-
-    // Test-only constructor that enables injecting a custom crypto provider.
-    #[cfg(test)]
-    pub fn new_for_test(
-        config: ClientTlsConfig,
-        provider: CryptoProvider,
-    ) -> Result<RustlsClientTlsCredendials, String> {
-        Self::new_impl(config, provider)
     }
 }
 
@@ -225,9 +233,9 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
             .await
             .map_err(|e| e.to_string())?;
 
-        let (_, connection) = tls_stream.get_ref();
+        let (_io, connection) = tls_stream.get_ref();
         if let Some(negotiated) = connection.alpn_protocol() {
-            if negotiated != b"h2" {
+            if negotiated != ALPN_PROTO_STR_H2 {
                 return Err("Server negotiated unexpected ALPN protocol".into());
             }
         } else {
@@ -245,11 +253,9 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
             ClientTlsSecContext {
                 verified_peer_cert: peer_cert,
             },
-            Attributes {},
+            Attributes::new(),
         );
-        let ep = TlsStream {
-            inner: RustlsStream::Client(tls_stream),
-        };
+        let ep = TlsStream::new(RustlsStream::Client(tls_stream));
         Ok(HandshakeOutput {
             endpoint: ep,
             security: cs_info,

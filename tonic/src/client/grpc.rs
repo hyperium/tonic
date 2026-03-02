@@ -2,14 +2,14 @@ use crate::codec::EncodeBody;
 use crate::codec::{CompressionEncoding, EnabledCompressionEncodings};
 use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::{
+    Code, Request, Response, Status,
     body::Body,
     client::GrpcService,
     codec::{Codec, Decoder, Streaming},
     request::SanitizeHeaders,
-    Code, Request, Response, Status,
 };
 use http::{
-    header::{HeaderValue, CONTENT_TYPE, TE},
+    header::{CONTENT_TYPE, HeaderValue, TE},
     uri::{PathAndQuery, Uri},
 };
 use http_body::Body as HttpBody;

@@ -24,13 +24,16 @@
 
 use tonic::async_trait;
 
-use crate::credentials::client::{
-    ClientConnectionSecurityContext, ClientHandshakeInfo, HandshakeOutput,
-};
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::ServerCredentials;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
 use crate::credentials::server::HandshakeOutput as ServerHandshakeOutput;
-use crate::credentials::{ChannelCredentials, ProtocolInfo, ServerCredentials};
-use crate::rt::{GrpcEndpoint, GrpcRuntime};
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 use crate::send_future::SendFuture;
 
 type BoxEndpoint = Box<dyn GrpcEndpoint>;
@@ -120,12 +123,15 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::credentials::client::ClientHandshakeInfo;
-    use crate::credentials::common::{Authority, SecurityLevel};
-    use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::credentials::InsecureServerCredentials;
-    use crate::rt::{self, TcpOptions};
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use crate::credentials::client::ClientHandshakeInfo;
+    use crate::credentials::common::Authority;
+    use crate::credentials::common::SecurityLevel;
+    use crate::credentials::insecure::InsecureChannelCredentials;
+    use crate::rt::TcpOptions;
+    use crate::rt::{self};
+    use tokio::io::AsyncReadExt;
+    use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;
 
     #[tokio::test]
@@ -170,9 +176,11 @@ mod tests {
         assert_eq!(buf, test_data);
 
         // Validate arbitrary authority.
-        assert!(security_info
-            .security_context()
-            .validate_authority(&authority));
+        assert!(
+            security_info
+                .security_context()
+                .validate_authority(&authority)
+        );
     }
 
     #[tokio::test]

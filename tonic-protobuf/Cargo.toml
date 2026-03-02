@@ -1,10 +1,11 @@
 [package]
 name = "tonic-protobuf"
 version = "0.14.0"
-edition = "2021"
+edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
 publish = false
+rust-version = { workspace = true }
 
 [dependencies]
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }

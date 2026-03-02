@@ -7,9 +7,9 @@ use tonic::transport::{Channel, ClientTlsConfig, Endpoint, Server, ServerTlsConf
 use tonic::{Request, Response, Status};
 
 pub(crate) use crate::testutil::proto::helloworld::{
+    HelloReply, HelloRequest,
     greeter_client::GreeterClient,
     greeter_server::{Greeter, GreeterServer},
-    HelloReply, HelloRequest,
 };
 
 #[derive(Default)]

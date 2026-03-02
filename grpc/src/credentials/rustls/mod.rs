@@ -24,9 +24,10 @@
 
 use std::io::BufReader;
 
-use rustls::{crypto::CryptoProvider, pki_types::PrivateKeyDer};
+use rustls::crypto::CryptoProvider;
+use rustls::pki_types::PrivateKeyDer;
 use rustls_pki_types::CertificateDer;
-use tokio::sync::watch::{self, Receiver};
+use tokio::sync::watch;
 
 use crate::credentials::ProtocolInfo;
 
@@ -34,6 +35,8 @@ pub mod client;
 mod key_log;
 pub mod server;
 mod tls_stream;
+
+const ALPN_PROTO_STR_H2: &[u8; 2] = b"h2";
 
 /// Represents a X509 certificate chain.
 #[derive(Debug, Clone)]
@@ -53,22 +56,6 @@ impl RootCertificates {
     /// Get a immutable reference to underlying certificate
     fn get_ref(&self) -> &[u8] {
         self.pem.as_slice()
-    }
-
-    /// Get a mutable reference to underlying certificate
-    fn get_mut(&mut self) -> &mut [u8] {
-        self.pem.as_mut()
-    }
-
-    /// Consumes `self`, returning the underlying certificate
-    fn into_inner(self) -> Vec<u8> {
-        self.pem
-    }
-}
-
-impl AsRef<[u8]> for RootCertificates {
-    fn as_ref(&self) -> &[u8] {
-        self.pem.as_ref()
     }
 }
 
@@ -136,11 +123,11 @@ impl<T> StaticProvider<T> {
 }
 
 impl<T> provider::ProviderInternal<T> for StaticProvider<T> {
-    fn get_receiver(self) -> Receiver<T> {
+    fn get_receiver(self) -> watch::Receiver<T> {
         // We drop the sender (_) immediately.
         // This ensures the receiver sees the initial value but knows
         // no future updates will arrive.
-        let (_, rx) = watch::channel(self.inner);
+        let (_tx, rx) = watch::channel(self.inner);
         rx
     }
 }

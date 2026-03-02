@@ -22,24 +22,35 @@
  *
  */
 
-use super::*;
-use crate::credentials::client::{
-    ChannelCredsInternal, ClientConnectionSecurityContext, ClientHandshakeInfo,
-};
-use crate::credentials::common::Authority;
-use crate::credentials::tls::{RootCertificates, StaticProvider};
-use crate::rt::{self, TcpOptions};
-use rustls::crypto::ring;
-use rustls::{HandshakeKind, ServerConfig};
-use rustls_pki_types::{CertificateDer, PrivateKeyDer};
 use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::Arc;
 use std::sync::Once;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+use rustls::HandshakeKind;
+use rustls::ServerConfig;
+use rustls::crypto::ring;
+use rustls_pki_types::CertificateDer;
+use rustls_pki_types::PrivateKeyDer;
+use tempfile::NamedTempFile;
+use tokio::io::AsyncReadExt;
+use tokio::io::AsyncWriteExt;
 use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
+
+use crate::credentials::client::ChannelCredsInternal;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::common::Authority;
+use crate::credentials::rustls::ALPN_PROTO_STR_H2;
+use crate::credentials::rustls::Identity;
+use crate::credentials::rustls::RootCertificates;
+use crate::credentials::rustls::StaticProvider;
+use crate::credentials::rustls::client::ClientTlsConfig;
+use crate::credentials::rustls::client::RustlsClientTlsCredendials;
+use crate::rt;
+use crate::rt::TcpOptions;
 
 static INIT: Once = Once::new();
 
@@ -52,7 +63,7 @@ fn init_provider() {
 #[tokio::test]
 async fn test_tls_handshake() {
     init_provider();
-    run_handshake_test(vec![b"h2".to_vec()], true).await;
+    run_handshake_test(vec![ALPN_PROTO_STR_H2.to_vec()], true).await;
 }
 
 #[tokio::test]
@@ -70,6 +81,13 @@ async fn test_tls_handshake_bad_alpn() {
 }
 
 #[tokio::test]
+async fn test_tls_handshake_alpn_h1_and_h2() {
+    init_provider();
+    // Server provides HTTP/1.1 and H2 ALPN. Client requires "h2".
+    run_handshake_test(vec![b"http/1.1".to_vec(), b"h2".to_vec()], true).await;
+}
+
+#[tokio::test]
 async fn test_tls_cipher_suites_secure() {
     init_provider();
     let root_certs = load_root_certs("ca.pem");
@@ -82,7 +100,7 @@ async fn test_tls_cipher_suites_secure() {
         .clone();
 
     // This should succeed as default provider usually has secure suites.
-    let creds = RustlsClientTlsCredendials::new_for_test(config, provider);
+    let creds = RustlsClientTlsCredendials::new_impl(config, provider);
     assert!(
         creds.is_ok(),
         "Failed to create creds with secure provider: {:?}",
@@ -102,39 +120,33 @@ async fn test_tls_cipher_suites_insecure() {
         .as_ref()
         .clone();
 
-    // Remove all cipher suites that are considered secure by our policy
-    provider.cipher_suites.retain(|suite| !match suite {
-        rustls::SupportedCipherSuite::Tls13(_) => true,
-        rustls::SupportedCipherSuite::Tls12(suite) => matches!(
-            suite.common.suite,
-            rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
-                | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
-                | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
-                | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
-                | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
-                | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
-        ),
-    });
+    fn is_secure(suported_suite: &rustls::SupportedCipherSuite) -> bool {
+        match suported_suite {
+            rustls::SupportedCipherSuite::Tls13(_) => true,
+            rustls::SupportedCipherSuite::Tls12(suite) => matches!(
+                suite.common.suite,
+                rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256
+                    | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384
+                    | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256
+                    | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384
+                    | rustls::CipherSuite::TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+                    | rustls::CipherSuite::TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256
+            ),
+        }
+    }
 
-    let creds = RustlsClientTlsCredendials::new_for_test(config, provider);
-    assert!(creds.is_err());
-    assert_eq!(
-        creds.err().unwrap(),
-        "Crypto provider has no cipher suites matching the security policy (TLS1.3 or TLS1.2+ECDHE)"
-    );
+    // Remove all cipher suites that are considered secure by our policy
+    provider.cipher_suites.retain(|suite| !is_secure(suite));
+
+    let creds = RustlsClientTlsCredendials::new_impl(config, provider);
+    assert!(creds.err().unwrap().contains("no cipher suites matching"));
 }
 
 #[tokio::test]
 async fn test_tls_key_log() {
     init_provider();
 
-    let key_log_dir = std::env::temp_dir();
-    let key_log_path = key_log_dir.join("grpc_rust_key_log.txt");
-
-    // Ensure file doesn't exist
-    if key_log_path.exists() {
-        std::fs::remove_file(&key_log_path).unwrap();
-    }
+    let key_log_file = NamedTempFile::new().expect("failed to create a temporary file.");
 
     // Server setup
     let server_config = default_server_config();
@@ -145,7 +157,7 @@ async fn test_tls_key_log() {
     let root_provider = StaticProvider::new(root_certs);
     let config = ClientTlsConfig::new()
         .with_root_certificates_provider(root_provider)
-        .with_key_log_path(key_log_path.clone());
+        .insecure_with_key_log_path(key_log_file.path());
 
     let creds = RustlsClientTlsCredendials::new(config).unwrap();
 
@@ -172,9 +184,8 @@ async fn test_tls_key_log() {
 
     let _ = task.await;
 
-    // Verify key log file exists and has content
-    assert!(key_log_path.exists(), "Key log file was not created");
-    let content = std::fs::read_to_string(&key_log_path).unwrap();
+    // Verify key log file has content.
+    let content = std::fs::read_to_string(key_log_file.path()).unwrap();
     assert!(!content.is_empty(), "Key log file is empty");
     // CLIENT_HANDSHAKE_TRAFFIC_SECRET is standard for TLS 1.3
     assert!(
@@ -182,9 +193,6 @@ async fn test_tls_key_log() {
         "Key log missing expected content: {}",
         content
     );
-
-    // Cleanup
-    let _ = std::fs::remove_file(key_log_path);
 }
 
 #[tokio::test]
@@ -394,7 +402,7 @@ async fn check_client_resumption_disabled(
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .unwrap();
-    server_config.alpn_protocols = vec![b"h2".to_vec()];
+    server_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
     // Enable stateful resumption
     server_config.session_storage = rustls::server::ServerSessionMemoryCache::new(32);
     // Enable stateless resumption (TLS 1.3 tickets)
@@ -429,7 +437,7 @@ async fn check_client_resumption_disabled(
 
         let mut tls_stream = result.endpoint;
 
-        let connection = match &tls_stream.inner {
+        let connection = match tls_stream.inner() {
             tokio_rustls::TlsStream::Client(conn) => conn.get_ref().1,
             _ => panic!("Expected client stream"),
         };
@@ -485,7 +493,7 @@ fn mtls_server_config() -> ServerConfig {
         .with_client_cert_verifier(verifier)
         .with_single_cert(certs, key)
         .unwrap();
-    server_config.alpn_protocols = vec![b"h2".to_vec()];
+    server_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
     server_config
 }
 
@@ -533,7 +541,7 @@ fn default_server_config() -> ServerConfig {
         .with_no_client_auth()
         .with_single_cert(certs, key)
         .unwrap();
-    server_config.alpn_protocols = vec![b"h2".to_vec()];
+    server_config.alpn_protocols = vec![ALPN_PROTO_STR_H2.to_vec()];
     server_config
 }
 

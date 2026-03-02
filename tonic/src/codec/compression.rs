@@ -1,4 +1,4 @@
-use crate::{metadata::MetadataValue, Status};
+use crate::{Status, metadata::MetadataValue};
 use bytes::{Buf, BufMut, BytesMut};
 #[cfg(feature = "gzip")]
 use flate2::read::{GzDecoder, GzEncoder};

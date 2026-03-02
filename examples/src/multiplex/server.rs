@@ -1,4 +1,4 @@
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");
@@ -9,13 +9,13 @@ pub mod echo {
 }
 
 use hello_world::{
-    greeter_server::{Greeter, GreeterServer},
     HelloReply, HelloRequest,
+    greeter_server::{Greeter, GreeterServer},
 };
 
 use echo::{
-    echo_server::{Echo, EchoServer},
     EchoRequest, EchoResponse,
+    echo_server::{Echo, EchoServer},
 };
 
 #[tokio::main]

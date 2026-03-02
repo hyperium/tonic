@@ -23,28 +23,30 @@
  */
 
 use core::panic;
-use std::{
-    any::Any,
-    error::Error,
-    fmt::{Debug, Display},
-    hash::{Hash, Hasher},
-    ptr::addr_eq,
-    sync::{Arc, Mutex, Weak},
-};
-use tonic::{metadata::MetadataMap, Status};
+use std::any::Any;
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::ptr::addr_eq;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::Weak;
 
-use crate::{
-    client::channel::WorkQueueTx,
-    rt::GrpcRuntime,
-    service::{Request, Response},
-};
+use tonic::Status;
+use tonic::metadata::MetadataMap;
 
-use crate::client::{
-    channel::{InternalChannelController, WorkQueueItem},
-    name_resolution::{Address, ResolverUpdate},
-    subchannel::InternalSubchannel,
-    ConnectivityState,
-};
+use crate::client::ConnectivityState;
+use crate::client::channel::InternalChannelController;
+use crate::client::channel::WorkQueueItem;
+use crate::client::channel::WorkQueueTx;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::subchannel::InternalSubchannel;
+use crate::rt::GrpcRuntime;
+use crate::service::Request;
+use crate::service::Response;
 
 pub(crate) mod child_manager;
 pub(crate) mod graceful_switch;
@@ -55,7 +57,8 @@ pub(crate) mod round_robin;
 pub(crate) mod test_utils;
 
 pub(crate) mod registry;
-use super::{service_config::LbConfig, subchannel::SubchannelStateWatcher};
+use super::service_config::LbConfig;
+use super::subchannel::SubchannelStateWatcher;
 pub(crate) use registry::GLOBAL_LB_REGISTRY;
 
 /// A collection of data configured on the channel that is constructing this

@@ -23,20 +23,29 @@
  */
 
 use std::future::Future;
-use std::net::{IpAddr, SocketAddr};
+use std::net::IpAddr;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::time::Duration;
 
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::AsyncRead;
+use tokio::io::AsyncWrite;
 use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 
-use crate::rt::{BoxEndpoint, BoxFuture, ScopedBoxFuture, TcpOptions};
-
-use super::{
-    endpoint, BoxedTaskHandle, DnsResolver, GrpcEndpoint, ResolverOptions, Runtime, Sleep,
-    TaskHandle,
-};
+use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::rt::BoxEndpoint;
+use crate::rt::BoxFuture;
+use crate::rt::BoxedTaskHandle;
+use crate::rt::DnsResolver;
+use crate::rt::GrpcEndpoint;
+use crate::rt::ResolverOptions;
+use crate::rt::Runtime;
+use crate::rt::ScopedBoxFuture;
+use crate::rt::Sleep;
+use crate::rt::TaskHandle;
+use crate::rt::TcpOptions;
+use crate::rt::endpoint;
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
@@ -220,6 +229,10 @@ impl super::GrpcEndpoint for TokioTcpStream {
     fn get_peer_address(&self) -> &str {
         &self.peer_addr
     }
+
+    fn get_network_type(&self) -> &'static str {
+        TCP_IP_NETWORK_TYPE
+    }
 }
 
 struct TokioListener {
@@ -253,7 +266,11 @@ impl super::TcpListener for TokioListener {
 
 #[cfg(test)]
 mod tests {
-    use super::{DnsResolver, ResolverOptions, Runtime, TokioDefaultDnsResolver, TokioRuntime};
+    use super::DnsResolver;
+    use super::ResolverOptions;
+    use super::Runtime;
+    use super::TokioDefaultDnsResolver;
+    use super::TokioRuntime;
 
     #[tokio::test]
     async fn lookup_hostname() {
