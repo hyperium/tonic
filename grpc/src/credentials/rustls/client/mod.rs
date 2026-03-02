@@ -36,6 +36,7 @@ use tokio_rustls::TlsStream as RustlsStream;
 use crate::attributes::Attributes;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
+use crate::credentials::call::CallCredentials;
 use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
@@ -260,6 +261,10 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
             endpoint: ep,
             security: cs_info,
         })
+    }
+
+    fn get_call_credentials(&self) -> Option<&CallCredentials> {
+        None
     }
 }
 

@@ -38,8 +38,6 @@ use crate::credentials::common::SecurityLevel;
 /// `service_url` + "/" + `method_name`
 pub struct CallDetails {
     service_url: String,
-
-    /// The method name suffix (e.g., `Method` or `package.Service/Method`).
     method_name: String,
 }
 
@@ -51,6 +49,7 @@ impl CallDetails {
         }
     }
 
+    /// Returns the base URL of the service for this RPC call.
     pub fn service_url(&self) -> &str {
         &self.service_url
     }

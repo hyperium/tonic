@@ -23,13 +23,13 @@
  */
 
 use crate::attributes::Attributes;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::call::CompositeCallCredentials;
 use crate::credentials::common::Authority;
 use crate::credentials::common::SecurityLevel;
 use crate::credentials::insecure;
-use crate::credentials::ChannelCredentials;
-use crate::credentials::ProtocolInfo;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -233,11 +233,11 @@ mod tests {
     use crate::credentials::local::LocalChannelCredentials;
     use crate::rt;
     use crate::rt::TcpOptions;
+    use tokio::net::TcpListener;
+    use tonic::Status;
+    use tonic::async_trait;
     use tonic::metadata::MetadataMap;
     use tonic::metadata::MetadataValue;
-    use tonic::async_trait;
-    use tonic::Status;
-    use tokio::net::TcpListener;
 
     #[derive(Debug)]
     struct MockCallCredentials {
@@ -255,7 +255,9 @@ mod tests {
             metadata: &mut MetadataMap,
         ) -> Result<(), Status> {
             metadata.insert(
-                self.key.parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>().unwrap(),
+                self.key
+                    .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()
+                    .unwrap(),
                 MetadataValue::try_from(self.value).unwrap(),
             );
             Ok(())
@@ -289,10 +291,14 @@ mod tests {
         // Verify call credentials
         let combined_call_creds = composite2.get_call_credentials().unwrap();
         let call_details = CallDetails::new("service".to_string(), "method".to_string());
-        let auth_info = ChannelSecurityInfo::new("local", SecurityLevel::NoSecurity, Attributes::new());
+        let auth_info =
+            ChannelSecurityInfo::new("local", SecurityLevel::NoSecurity, Attributes::new());
         let mut metadata = MetadataMap::new();
 
-        combined_call_creds.get_metadata(&call_details, &auth_info, &mut metadata).await.unwrap();
+        combined_call_creds
+            .get_metadata(&call_details, &auth_info, &mut metadata)
+            .await
+            .unwrap();
 
         assert_eq!(metadata.get("auth1").unwrap(), "val1");
         assert_eq!(metadata.get("auth2").unwrap(), "val2");
@@ -309,9 +315,20 @@ mod tests {
         let server_addr = listener.local_addr().unwrap();
         let authority = Authority::new("localhost".to_string(), Some(server_addr.port()));
         let runtime = rt::default_runtime();
-        let endpoint = runtime.tcp_stream(server_addr, TcpOptions::default()).await.unwrap();
+        let endpoint = runtime
+            .tcp_stream(server_addr, TcpOptions::default())
+            .await
+            .unwrap();
 
-        let output = composite2.connect(&authority, endpoint, ClientHandshakeInfo::default(), runtime).await.unwrap();
+        let output = composite2
+            .connect(
+                &authority,
+                endpoint,
+                ClientHandshakeInfo::default(),
+                runtime,
+            )
+            .await
+            .unwrap();
         assert_eq!(output.security.security_level(), SecurityLevel::NoSecurity);
         assert_eq!(output.security.security_protocol(), "local");
     }
