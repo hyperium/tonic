@@ -22,7 +22,7 @@
  *
  */
 
-mod call;
+pub mod call;
 pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
 mod insecure;
