@@ -37,6 +37,7 @@ impl EndpointAddress {
     /// Creates a new `EndpointAddress` from a host string and port.
     ///
     /// Attempts to parse the host as an IP address; falls back to hostname.
+    #[allow(dead_code)]
     pub(crate) fn new(host: impl Into<String>, port: u16) -> Self {
         Self {
             host: EndpointHost::from(host.into()),

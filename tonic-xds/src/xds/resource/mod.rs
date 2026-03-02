@@ -1,3 +1,4 @@
+#![allow(dead_code, unused_imports)]
 //! xDS resource type implementations.
 //!
 //! Each module implements [`xds_client::Resource`] for one of the four resource types:
