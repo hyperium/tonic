@@ -11,4 +11,14 @@ service Admin {
   rpc StringCall(google.protobuf.StringValue) returns (google.protobuf.Empty);
   rpc AnyCall(google.protobuf.Any) returns (google.protobuf.Empty);
   rpc BoolCall(google.protobuf.BoolValue) returns (google.protobuf.BoolValue);
+  rpc BytesCall(google.protobuf.BytesValue) returns (google.protobuf.BytesValue);
+  rpc DoubleCall(google.protobuf.DoubleValue) returns (google.protobuf.DoubleValue);
+  rpc FloatCall(google.protobuf.FloatValue) returns (google.protobuf.FloatValue);
+  rpc Int32Call(google.protobuf.Int32Value) returns (google.protobuf.Int32Value);
+  rpc Int64Call(google.protobuf.Int64Value) returns (google.protobuf.Int64Value);
+  rpc UInt32Call(google.protobuf.UInt32Value) returns (google.protobuf.UInt32Value);
+  rpc UInt64Call(google.protobuf.UInt64Value) returns (google.protobuf.UInt64Value);
+  rpc StringRoundTrip(
+    google.protobuf.StringValue
+  ) returns (google.protobuf.StringValue);
 }
