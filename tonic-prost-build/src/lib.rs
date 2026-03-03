@@ -196,9 +196,17 @@ impl tonic_build::Method for TonicBuildMethod {
             if is_google_type(proto_type) && !compile_well_known_types {
                 if rust_type.starts_with('.') {
                     match proto_type {
+                        ".google.protobuf.BoolValue" => quote!(bool),
+                        ".google.protobuf.BytesValue" => quote!(::prost::alloc::vec::Vec<u8>),
+                        ".google.protobuf.DoubleValue" => quote!(f64),
                         ".google.protobuf.Empty" => quote!(()),
+                        ".google.protobuf.FloatValue" => quote!(f32),
+                        ".google.protobuf.Int32Value" => quote!(i32),
+                        ".google.protobuf.Int64Value" => quote!(i64),
                         ".google.protobuf.Any" => quote!(::prost_types::Any),
                         ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
+                        ".google.protobuf.UInt32Value" => quote!(u32),
+                        ".google.protobuf.UInt64Value" => quote!(u64),
                         _ => {
                             let type_name = proto_type
                                 .trim_start_matches(".google.protobuf.")

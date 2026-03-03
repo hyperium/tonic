@@ -90,6 +90,22 @@ fn test_request_response_name_wrapper_types_resolved_to_primitives() {
 }
 
 #[test]
+fn test_request_response_name_wrapper_types_legacy_dotted_paths() {
+    // Keep compatibility with dotted protobuf wrapper names if they appear.
+    // This ensures we never emit non-existent types like ::prost_types::BoolValue.
+    let method = create_test_method_with_proto_types(
+        ".google.protobuf.BoolValue".to_string(),
+        ".google.protobuf.UInt32Value".to_string(),
+        ".google.protobuf.BoolValue".to_string(),
+        ".google.protobuf.UInt32Value".to_string(),
+    );
+    let (request, response) = method.request_response_name("super", false);
+
+    assert_eq!(request.to_string(), "bool");
+    assert_eq!(response.to_string(), "u32");
+}
+
+#[test]
 fn test_request_response_name_google_types_compiled() {
     // Test Google well-known types when compile_well_known_types is true
     let test_cases = vec![
