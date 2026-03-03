@@ -138,11 +138,7 @@ impl CompiledRoute {
     fn match_headers(&self, headers: &http::HeaderMap) -> bool {
         self.header_matchers.iter().all(|m| {
             let result = m.matches(headers);
-            if m.invert_match {
-                !result
-            } else {
-                result
-            }
+            if m.invert_match { !result } else { result }
         })
     }
 }

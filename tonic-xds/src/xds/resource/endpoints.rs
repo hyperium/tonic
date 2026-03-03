@@ -2,10 +2,10 @@
 
 use bytes::Bytes;
 use envoy_types::pb::envoy::config::core::v3::{
-    address, socket_address, HealthStatus as EnvoyHealthStatus,
+    HealthStatus as EnvoyHealthStatus, address, socket_address,
 };
 use envoy_types::pb::envoy::config::endpoint::v3::{
-    lb_endpoint, ClusterLoadAssignment, LbEndpoint,
+    ClusterLoadAssignment, LbEndpoint, lb_endpoint,
 };
 use prost::Message;
 use xds_client::resource::TypeUrl;
@@ -130,7 +130,7 @@ fn validate_lb_endpoint(lb_ep: LbEndpoint) -> xds_client::Result<Option<Resolved
                 _ => {
                     return Err(Error::Validation(
                         "endpoint address missing numeric port".into(),
-                    ))
+                    ));
                 }
             };
             EndpointAddress::new(sa.address, port)
@@ -138,7 +138,7 @@ fn validate_lb_endpoint(lb_ep: LbEndpoint) -> xds_client::Result<Option<Resolved
         _ => {
             return Err(Error::Validation(
                 "only socket addresses are supported for gRPC endpoints".into(),
-            ))
+            ));
         }
     };
 
