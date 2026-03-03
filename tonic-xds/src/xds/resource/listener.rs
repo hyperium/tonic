@@ -3,7 +3,7 @@
 use bytes::Bytes;
 use envoy_types::pb::envoy::config::listener::v3::Listener;
 use envoy_types::pb::envoy::extensions::filters::network::http_connection_manager::v3::{
-    http_connection_manager::RouteSpecifier, HttpConnectionManager,
+    HttpConnectionManager, http_connection_manager::RouteSpecifier,
 };
 use prost::Message;
 use xds_client::resource::TypeUrl;
@@ -192,7 +192,7 @@ mod tests {
     fn test_validate_inline_route_config() {
         use envoy_types::pb::envoy::config::route::v3::route_match::PathSpecifier;
         use envoy_types::pb::envoy::config::route::v3::{
-            route::Action, RouteAction, RouteConfiguration, RouteMatch, VirtualHost,
+            RouteAction, RouteConfiguration, RouteMatch, VirtualHost, route::Action,
         };
 
         let route_config = RouteConfiguration {

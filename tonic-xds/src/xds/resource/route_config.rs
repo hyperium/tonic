@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use bytes::Bytes;
 use envoy_types::pb::envoy::config::route::v3::{
-    route, route_action, route_match, RouteConfiguration, RouteMatch,
+    RouteConfiguration, RouteMatch, route, route_action, route_match,
 };
 use prost::Message;
 use xds_client::resource::TypeUrl;
@@ -176,7 +176,7 @@ fn validate_route_match(rm: RouteMatch) -> xds_client::Result<RouteConfigMatch> 
         _ => {
             return Err(Error::Validation(
                 "unsupported path specifier variant".into(),
-            ))
+            ));
         }
     };
 
@@ -216,14 +216,14 @@ fn validate_header_matcher(
             _ => {
                 return Err(Error::Validation(
                     "unsupported StringMatcher pattern".into(),
-                ))
+                ));
             }
         },
         None => HeaderMatchSpecifierConfig::Present,
         _ => {
             return Err(Error::Validation(
                 "unsupported header match specifier".into(),
-            ))
+            ));
         }
     };
 
@@ -293,7 +293,7 @@ impl RouteConfigResource {
 mod tests {
     use super::*;
     use envoy_types::pb::envoy::config::route::v3::{
-        route::Action, route_action::ClusterSpecifier, RouteAction, VirtualHost,
+        RouteAction, VirtualHost, route::Action, route_action::ClusterSpecifier,
     };
 
     fn make_route(prefix: &str, cluster: &str) -> envoy_types::pb::envoy::config::route::v3::Route {
@@ -410,7 +410,7 @@ mod tests {
     #[test]
     fn test_cascade_weighted_clusters() {
         use envoy_types::pb::envoy::config::route::v3::{
-            weighted_cluster::ClusterWeight, WeightedCluster,
+            WeightedCluster, weighted_cluster::ClusterWeight,
         };
         use envoy_types::pb::google::protobuf::UInt32Value;
 

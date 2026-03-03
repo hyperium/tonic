@@ -1,7 +1,7 @@
 //! Validated Cluster resource (CDS).
 
 use bytes::Bytes;
-use envoy_types::pb::envoy::config::cluster::v3::{cluster, Cluster};
+use envoy_types::pb::envoy::config::cluster::v3::{Cluster, cluster};
 use prost::Message;
 use xds_client::resource::TypeUrl;
 use xds_client::{Error, Resource};
