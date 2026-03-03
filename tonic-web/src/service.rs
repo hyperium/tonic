@@ -1,9 +1,9 @@
 use core::fmt;
 use std::future::Future;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
-use http::{header, HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version};
+use http::{HeaderMap, HeaderValue, Method, Request, Response, StatusCode, Version, header};
 use pin_project::pin_project;
 use tonic::metadata::GRPC_CONTENT_TYPE;
 use tonic::{body::Body, server::NamedService};

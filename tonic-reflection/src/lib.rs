@@ -5,7 +5,7 @@
 )]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 mod generated {
     #![allow(unreachable_pub)]
@@ -49,14 +49,14 @@ pub mod pb {
     /// Generated protobuf types from the `grpc.reflection.v1` package.
     pub mod v1 {
         pub use crate::generated::{
-            grpc_reflection_v1::*, FILE_DESCRIPTOR_SET_V1 as FILE_DESCRIPTOR_SET,
+            FILE_DESCRIPTOR_SET_V1 as FILE_DESCRIPTOR_SET, grpc_reflection_v1::*,
         };
     }
 
     /// Generated protobuf types from the `grpc.reflection.v1alpha` package.
     pub mod v1alpha {
         pub use crate::generated::{
-            grpc_reflection_v1alpha::*, FILE_DESCRIPTOR_SET_V1ALPHA as FILE_DESCRIPTOR_SET,
+            FILE_DESCRIPTOR_SET_V1ALPHA as FILE_DESCRIPTOR_SET, grpc_reflection_v1alpha::*,
         };
     }
 }

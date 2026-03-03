@@ -1,7 +1,7 @@
 use prost::Message;
 use std::marker::PhantomData;
-use tonic::codec::{BufferSettings, Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
 use tonic::Status;
+use tonic::codec::{BufferSettings, Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
 
 /// A [`Codec`] that implements `application/grpc+proto` via the prost library.
 #[derive(Debug, Clone)]
@@ -154,7 +154,7 @@ mod tests {
     use http_body_util::BodyExt as _;
     use std::pin::pin;
     use tonic::codec::SingleMessageCompressionOverride;
-    use tonic::codec::{EncodeBody, Streaming, HEADER_SIZE};
+    use tonic::codec::{EncodeBody, HEADER_SIZE, Streaming};
 
     const LEN: usize = 10000;
     // The maximum uncompressed size in bytes for a message. Set to 2MB.

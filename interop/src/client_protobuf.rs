@@ -24,14 +24,14 @@
 
 use crate::client::{InteropTest, InteropTestUnimplemented};
 use crate::{
-    grpc_pb::test_service_client::*, grpc_pb::unimplemented_service_client::*, grpc_pb::*,
-    test_assert, TestAssertion,
+    TestAssertion, grpc_pb::test_service_client::*, grpc_pb::unimplemented_service_client::*,
+    grpc_pb::*, test_assert,
 };
 use tokio::sync::mpsc;
 use tokio_stream::StreamExt;
 use tonic::async_trait;
 use tonic::transport::Channel;
-use tonic::{metadata::MetadataValue, Code, Request, Response, Status};
+use tonic::{Code, Request, Response, Status, metadata::MetadataValue};
 use tonic_protobuf::protobuf::__internal::MatcherEq;
 use tonic_protobuf::protobuf::proto;
 

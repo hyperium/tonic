@@ -22,19 +22,32 @@
  *
  */
 
-use crate::client::load_balancing::{
-    ChannelController, ForwardingSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-    ParsedJsonLbConfig, Subchannel, SubchannelState, WorkScheduler,
-};
-use crate::client::name_resolution::{Address, ResolverUpdate};
-use crate::client::service_config::LbConfig;
-use crate::service::{Message, Request};
-use serde::{Deserialize, Serialize};
 use std::any::Any;
 use std::error::Error;
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::{fmt::Debug, sync::Arc};
-use tokio::sync::{mpsc, Notify};
+use std::sync::Arc;
+
+use serde::Deserialize;
+use serde::Serialize;
+use tokio::sync::Notify;
+use tokio::sync::mpsc;
+
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::ForwardingSubchannel;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::ParsedJsonLbConfig;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::service_config::LbConfig;
+use crate::service::Message;
+use crate::service::Request;
 
 #[derive(Debug)]
 pub(crate) struct EmptyMessage {}
