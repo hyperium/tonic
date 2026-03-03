@@ -195,47 +195,30 @@ impl tonic_build::Method for TonicBuildMethod {
         let convert_type = |proto_type: &str, rust_type: &str| -> TokenStream {
             if is_google_type(proto_type) && !compile_well_known_types {
                 if rust_type.starts_with('.') {
-                    match proto_type {
-                        ".google.protobuf.BoolValue" => quote!(bool),
-                        ".google.protobuf.BytesValue" => quote!(::prost::alloc::vec::Vec<u8>),
-                        ".google.protobuf.DoubleValue" => quote!(f64),
-                        ".google.protobuf.Empty" => quote!(()),
-                        ".google.protobuf.FloatValue" => quote!(f32),
-                        ".google.protobuf.Int32Value" => quote!(i32),
-                        ".google.protobuf.Int64Value" => quote!(i64),
-                        ".google.protobuf.Any" => quote!(::prost_types::Any),
-                        ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
-                        ".google.protobuf.UInt32Value" => quote!(u32),
-                        ".google.protobuf.UInt64Value" => quote!(u64),
-                        _ => {
-                            let type_name = proto_type
-                                .trim_start_matches(".google.protobuf.")
-                                .to_string();
-                            syn::parse_str::<syn::Path>(&format!("::prost_types::{type_name}"))
-                                .unwrap()
-                                .to_token_stream()
-                        }
-                    }
-                } else {
-                    rust_type.parse::<TokenStream>().unwrap()
+                    return map_dotted_google_type(proto_type);
                 }
-            } else if rust_type.starts_with("::")
+                return rust_type.parse::<TokenStream>().unwrap();
+            }
+
+            if rust_type.starts_with("::")
                 || NON_PATH_TYPE_ALLOWLIST
                     .iter()
                     .any(|ty| rust_type.ends_with(ty))
             {
-                rust_type.parse::<TokenStream>().unwrap()
-            } else if rust_type.starts_with("crate::") {
-                syn::parse_str::<syn::Path>(rust_type)
-                    .unwrap()
-                    .to_token_stream()
-            } else {
-                let rust_type = rust_type.replace('.', "::");
-                let rust_type = rust_type.trim_start_matches("::");
-                syn::parse_str::<syn::Path>(&format!("{proto_path}::{rust_type}"))
-                    .unwrap()
-                    .to_token_stream()
+                return rust_type.parse::<TokenStream>().unwrap();
             }
+
+            if rust_type.starts_with("crate::") {
+                return syn::parse_str::<syn::Path>(rust_type)
+                    .unwrap()
+                    .to_token_stream();
+            }
+
+            let rust_type = rust_type.replace('.', "::");
+            let rust_type = rust_type.trim_start_matches("::");
+            syn::parse_str::<syn::Path>(&format!("{proto_path}::{rust_type}"))
+                .unwrap()
+                .to_token_stream()
         };
 
         let request = convert_type(
@@ -261,6 +244,30 @@ impl tonic_build::Method for TonicBuildMethod {
 
 fn is_google_type(ty: &str) -> bool {
     ty.starts_with(".google.protobuf")
+}
+
+fn map_dotted_google_type(proto_type: &str) -> TokenStream {
+    match proto_type {
+        ".google.protobuf.BoolValue" => quote!(bool),
+        ".google.protobuf.BytesValue" => quote!(::prost::alloc::vec::Vec<u8>),
+        ".google.protobuf.DoubleValue" => quote!(f64),
+        ".google.protobuf.Empty" => quote!(()),
+        ".google.protobuf.FloatValue" => quote!(f32),
+        ".google.protobuf.Int32Value" => quote!(i32),
+        ".google.protobuf.Int64Value" => quote!(i64),
+        ".google.protobuf.Any" => quote!(::prost_types::Any),
+        ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
+        ".google.protobuf.UInt32Value" => quote!(u32),
+        ".google.protobuf.UInt64Value" => quote!(u64),
+        _ => {
+            let type_name = proto_type
+                .trim_start_matches(".google.protobuf.")
+                .to_string();
+            syn::parse_str::<syn::Path>(&format!("::prost_types::{type_name}"))
+                .unwrap()
+                .to_token_stream()
+        }
+    }
 }
 
 /// Service generator that is compatible with prost-build
