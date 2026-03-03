@@ -10,4 +10,5 @@ service Admin {
   rpc EmptyCall(google.protobuf.Empty) returns (google.protobuf.Empty);
   rpc StringCall(google.protobuf.StringValue) returns (google.protobuf.Empty);
   rpc AnyCall(google.protobuf.Any) returns (google.protobuf.Empty);
+  rpc BoolCall(google.protobuf.BoolValue) returns (google.protobuf.BoolValue);
 }

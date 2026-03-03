@@ -192,41 +192,37 @@ impl tonic_build::Method for TonicBuildMethod {
         proto_path: &str,
         compile_well_known_types: bool,
     ) -> (TokenStream, TokenStream) {
-        let request = if is_google_type(&self.prost_method.input_type) && !compile_well_known_types
-        {
-            // For well-known types, map to absolute paths that will work with super::
-            match self.prost_method.input_type.as_str() {
-                ".google.protobuf.Empty" => quote!(()),
-                ".google.protobuf.Any" => quote!(::prost_types::Any),
-                ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
-                _ => {
-                    // For other google types, assume they're in prost_types
-                    let type_name = self
-                        .prost_method
-                        .input_type
-                        .trim_start_matches(".google.protobuf.")
-                        .to_string();
-                    syn::parse_str::<syn::Path>(&format!("::prost_types::{type_name}"))
-                        .unwrap()
-                        .to_token_stream()
+        let convert_type = |proto_type: &str, rust_type: &str| -> TokenStream {
+            if is_google_type(proto_type) && !compile_well_known_types {
+                if rust_type.starts_with('.') {
+                    match proto_type {
+                        ".google.protobuf.Empty" => quote!(()),
+                        ".google.protobuf.Any" => quote!(::prost_types::Any),
+                        ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
+                        _ => {
+                            let type_name = proto_type
+                                .trim_start_matches(".google.protobuf.")
+                                .to_string();
+                            syn::parse_str::<syn::Path>(&format!("::prost_types::{type_name}"))
+                                .unwrap()
+                                .to_token_stream()
+                        }
+                    }
+                } else {
+                    rust_type.parse::<TokenStream>().unwrap()
                 }
-            }
-        } else if NON_PATH_TYPE_ALLOWLIST
-            .iter()
-            .any(|ty| self.prost_method.input_type.ends_with(ty))
-        {
-            self.prost_method.input_type.parse::<TokenStream>().unwrap()
-        } else {
-            // Check if this is an extern type that starts with :: or crate::
-            if self.prost_method.input_type.starts_with("::")
-                || self.prost_method.input_type.starts_with("crate::")
+            } else if rust_type.starts_with("::")
+                || NON_PATH_TYPE_ALLOWLIST
+                    .iter()
+                    .any(|ty| rust_type.ends_with(ty))
             {
-                // This is an extern type, use it directly
-                self.prost_method.input_type.parse::<TokenStream>().unwrap()
+                rust_type.parse::<TokenStream>().unwrap()
+            } else if rust_type.starts_with("crate::") {
+                syn::parse_str::<syn::Path>(rust_type)
+                    .unwrap()
+                    .to_token_stream()
             } else {
-                // Replace dots with double colons for the type name
-                let rust_type = self.prost_method.input_type.replace('.', "::");
-                // Remove leading :: if present
+                let rust_type = rust_type.replace('.', "::");
                 let rust_type = rust_type.trim_start_matches("::");
                 syn::parse_str::<syn::Path>(&format!("{proto_path}::{rust_type}"))
                     .unwrap()
@@ -234,53 +230,14 @@ impl tonic_build::Method for TonicBuildMethod {
             }
         };
 
-        let response =
-            if is_google_type(&self.prost_method.output_type) && !compile_well_known_types {
-                // For well-known types, map to absolute paths that will work with super::
-                match self.prost_method.output_type.as_str() {
-                    ".google.protobuf.Empty" => quote!(()),
-                    ".google.protobuf.Any" => quote!(::prost_types::Any),
-                    ".google.protobuf.StringValue" => quote!(::prost::alloc::string::String),
-                    _ => {
-                        // For other google types, assume they're in prost_types
-                        let type_name = self
-                            .prost_method
-                            .output_type
-                            .trim_start_matches(".google.protobuf.")
-                            .to_string();
-                        syn::parse_str::<syn::Path>(&format!("::prost_types::{type_name}"))
-                            .unwrap()
-                            .to_token_stream()
-                    }
-                }
-            } else if NON_PATH_TYPE_ALLOWLIST
-                .iter()
-                .any(|ty| self.prost_method.output_type.ends_with(ty))
-            {
-                self.prost_method
-                    .output_type
-                    .parse::<TokenStream>()
-                    .unwrap()
-            } else {
-                // Check if this is an extern type that starts with :: or crate::
-                if self.prost_method.output_type.starts_with("::")
-                    || self.prost_method.output_type.starts_with("crate::")
-                {
-                    // This is an extern type, use it directly
-                    self.prost_method
-                        .output_type
-                        .parse::<TokenStream>()
-                        .unwrap()
-                } else {
-                    // Replace dots with double colons for the type name
-                    let rust_type = self.prost_method.output_type.replace('.', "::");
-                    // Remove leading :: if present
-                    let rust_type = rust_type.trim_start_matches("::");
-                    syn::parse_str::<syn::Path>(&format!("{proto_path}::{rust_type}"))
-                        .unwrap()
-                        .to_token_stream()
-                }
-            };
+        let request = convert_type(
+            &self.prost_method.input_proto_type,
+            &self.prost_method.input_type,
+        );
+        let response = convert_type(
+            &self.prost_method.output_proto_type,
+            &self.prost_method.output_type,
+        );
 
         (request, response)
     }
