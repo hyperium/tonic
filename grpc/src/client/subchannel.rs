@@ -522,10 +522,10 @@ impl InternalSubchannelPool {
 
     pub(super) fn lookup_subchannel(&self, key: &SubchannelKey) -> Option<Arc<InternalSubchannel>> {
         println!("looking up subchannel for: {key:?} in the pool");
-        if let Some(weak_isc) = self.subchannels.read().unwrap().get(key) {
-            if let Some(isc) = weak_isc.upgrade() {
-                return Some(isc);
-            }
+        if let Some(weak_isc) = self.subchannels.read().unwrap().get(key)
+            && let Some(isc) = weak_isc.upgrade()
+        {
+            return Some(isc);
         }
         None
     }
