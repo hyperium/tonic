@@ -1,0 +1,344 @@
+#![allow(dead_code)]
+//! xDS bootstrap configuration.
+//!
+//! Parses the bootstrap JSON from `GRPC_XDS_BOOTSTRAP` (file path) or
+//! `GRPC_XDS_BOOTSTRAP_CONFIG` (inline JSON) environment variables,
+//! per gRFC A27.
+
+use serde::Deserialize;
+use xds_client::message::{Locality, Node};
+
+/// Environment variable pointing to a bootstrap JSON file path.
+const ENV_BOOTSTRAP_FILE: &str = "GRPC_XDS_BOOTSTRAP";
+/// Environment variable containing inline bootstrap JSON.
+const ENV_BOOTSTRAP_CONFIG: &str = "GRPC_XDS_BOOTSTRAP_CONFIG";
+
+/// Parsed xDS bootstrap configuration.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct BootstrapConfig {
+    /// xDS management servers to connect to.
+    pub xds_servers: Vec<XdsServerConfig>,
+    /// Node identity sent to the xDS server.
+    #[serde(default)]
+    pub node: NodeConfig,
+}
+
+/// Configuration for a single xDS management server.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct XdsServerConfig {
+    /// URI of the xDS server (e.g., `"xds.example.com:443"`).
+    pub server_uri: String,
+    /// Ordered list of channel credentials. The client uses the first supported type.
+    #[serde(default)]
+    pub channel_creds: Vec<ChannelCredentialConfig>,
+    /// Server features (e.g., `["xds_v3"]`).
+    #[serde(default)]
+    pub server_features: Vec<String>,
+}
+
+/// A channel credential entry from the bootstrap config.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct ChannelCredentialConfig {
+    /// Credential type string (e.g., `"insecure"`, `"tls"`, `"google_default"`).
+    #[serde(rename = "type")]
+    pub cred_type: String,
+}
+
+/// Supported channel credential types.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChannelCredentialType {
+    Insecure,
+    Tls,
+}
+
+/// Node identity configuration from bootstrap JSON.
+#[derive(Debug, Clone, Default, Deserialize)]
+pub(crate) struct NodeConfig {
+    /// Opaque node identifier.
+    #[serde(default)]
+    pub id: String,
+    /// Cluster the node belongs to.
+    pub cluster: Option<String>,
+    /// Locality where the node is running.
+    pub locality: Option<LocalityConfig>,
+}
+
+/// Locality configuration from bootstrap JSON.
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct LocalityConfig {
+    #[serde(default)]
+    pub region: String,
+    #[serde(default)]
+    pub zone: String,
+    #[serde(default)]
+    pub sub_zone: String,
+}
+
+/// Errors that can occur when loading bootstrap configuration.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum BootstrapError {
+    #[error("neither {ENV_BOOTSTRAP_FILE} nor {ENV_BOOTSTRAP_CONFIG} environment variable is set")]
+    NotConfigured,
+    #[error("failed to read bootstrap file '{path}': {source}")]
+    ReadFile {
+        path: String,
+        source: std::io::Error,
+    },
+    #[error("failed to parse bootstrap JSON: {0}")]
+    InvalidJson(#[from] serde_json::Error),
+    #[error("bootstrap config validation failed: {0}")]
+    Validation(String),
+}
+
+impl BootstrapConfig {
+    /// Load bootstrap configuration from environment variables.
+    ///
+    /// Checks `GRPC_XDS_BOOTSTRAP` (file path) first, then falls back to
+    /// `GRPC_XDS_BOOTSTRAP_CONFIG` (inline JSON).
+    pub(crate) fn from_env() -> Result<Self, BootstrapError> {
+        if let Ok(path) = std::env::var(ENV_BOOTSTRAP_FILE) {
+            let json = std::fs::read_to_string(&path)
+                .map_err(|e| BootstrapError::ReadFile { path, source: e })?;
+            return Self::from_json(&json);
+        }
+
+        if let Ok(json) = std::env::var(ENV_BOOTSTRAP_CONFIG) {
+            return Self::from_json(&json);
+        }
+
+        Err(BootstrapError::NotConfigured)
+    }
+
+    /// Parse bootstrap configuration from a JSON string.
+    pub(crate) fn from_json(json: &str) -> Result<Self, BootstrapError> {
+        let config: BootstrapConfig = serde_json::from_str(json)?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    fn validate(&self) -> Result<(), BootstrapError> {
+        if self.xds_servers.is_empty() {
+            return Err(BootstrapError::Validation(
+                "xds_servers must not be empty".into(),
+            ));
+        }
+        for (i, server) in self.xds_servers.iter().enumerate() {
+            if server.server_uri.is_empty() {
+                return Err(BootstrapError::Validation(format!(
+                    "xds_servers[{i}].server_uri must not be empty"
+                )));
+            }
+        }
+        Ok(())
+    }
+
+    /// Convert the bootstrap node config to an `xds_client::Node`.
+    pub(crate) fn to_node(&self) -> Node {
+        let mut node = Node::new("grpc-rust", env!("CARGO_PKG_VERSION"));
+
+        if !self.node.id.is_empty() {
+            node = node.with_id(&self.node.id);
+        }
+        if let Some(cluster) = &self.node.cluster {
+            node = node.with_cluster(cluster);
+        }
+        if let Some(locality) = &self.node.locality {
+            node = node.with_locality(Locality {
+                region: locality.region.clone(),
+                zone: locality.zone.clone(),
+                sub_zone: locality.sub_zone.clone(),
+            });
+        }
+
+        node
+    }
+
+    /// Returns the URI of the first xDS server.
+    pub(crate) fn server_uri(&self) -> &str {
+        // Safe: validate() ensures xds_servers is non-empty.
+        &self.xds_servers[0].server_uri
+    }
+
+    /// Select the first supported channel credential type from the first server's config.
+    ///
+    /// Returns `None` if no supported credential type is found.
+    pub(crate) fn selected_credential(&self) -> Option<ChannelCredentialType> {
+        self.xds_servers[0]
+            .channel_creds
+            .iter()
+            .find_map(|c| match c.cred_type.as_str() {
+                "insecure" => Some(ChannelCredentialType::Insecure),
+                "tls" => Some(ChannelCredentialType::Tls),
+                _ => None,
+            })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn minimal_json() -> &'static str {
+        r#"{
+            "xds_servers": [{"server_uri": "xds.example.com:443"}],
+            "node": {"id": "test-node"}
+        }"#
+    }
+
+    fn full_json() -> &'static str {
+        r#"{
+            "xds_servers": [{
+                "server_uri": "xds.example.com:443",
+                "channel_creds": [
+                    {"type": "google_default"},
+                    {"type": "tls"},
+                    {"type": "insecure"}
+                ],
+                "server_features": ["xds_v3"]
+            }],
+            "node": {
+                "id": "projects/123/nodes/456",
+                "cluster": "test-cluster",
+                "locality": {
+                    "region": "us-east1",
+                    "zone": "us-east1-b",
+                    "sub_zone": "rack1"
+                }
+            }
+        }"#
+    }
+
+    #[test]
+    fn parse_minimal() {
+        let config = BootstrapConfig::from_json(minimal_json()).unwrap();
+        assert_eq!(config.xds_servers.len(), 1);
+        assert_eq!(config.server_uri(), "xds.example.com:443");
+        assert_eq!(config.node.id, "test-node");
+        assert!(config.node.cluster.is_none());
+        assert!(config.node.locality.is_none());
+    }
+
+    #[test]
+    fn parse_full() {
+        let config = BootstrapConfig::from_json(full_json()).unwrap();
+        assert_eq!(config.xds_servers[0].server_uri, "xds.example.com:443");
+        assert_eq!(config.xds_servers[0].channel_creds.len(), 3);
+        assert_eq!(
+            config.xds_servers[0].channel_creds[0].cred_type,
+            "google_default"
+        );
+        assert_eq!(config.xds_servers[0].server_features, vec!["xds_v3"]);
+        assert_eq!(config.node.id, "projects/123/nodes/456");
+        assert_eq!(config.node.cluster.as_deref(), Some("test-cluster"));
+
+        let locality = config.node.locality.as_ref().unwrap();
+        assert_eq!(locality.region, "us-east1");
+        assert_eq!(locality.zone, "us-east1-b");
+        assert_eq!(locality.sub_zone, "rack1");
+    }
+
+    #[test]
+    fn to_node_full() {
+        let config = BootstrapConfig::from_json(full_json()).unwrap();
+        let node = config.to_node();
+        assert_eq!(node.id.as_deref(), Some("projects/123/nodes/456"));
+        assert_eq!(node.cluster.as_deref(), Some("test-cluster"));
+        assert_eq!(node.user_agent_name, "grpc-rust");
+
+        let locality = node.locality.unwrap();
+        assert_eq!(locality.region, "us-east1");
+        assert_eq!(locality.zone, "us-east1-b");
+        assert_eq!(locality.sub_zone, "rack1");
+    }
+
+    #[test]
+    fn to_node_minimal() {
+        let config = BootstrapConfig::from_json(minimal_json()).unwrap();
+        let node = config.to_node();
+        assert_eq!(node.id.as_deref(), Some("test-node"));
+        assert!(node.cluster.is_none());
+        assert!(node.locality.is_none());
+    }
+
+    #[test]
+    fn selected_credential_first_supported_wins() {
+        let config = BootstrapConfig::from_json(full_json()).unwrap();
+        // google_default skipped, tls is first supported
+        assert_eq!(
+            config.selected_credential(),
+            Some(ChannelCredentialType::Tls)
+        );
+    }
+
+    #[test]
+    fn selected_credential_insecure() {
+        let json = r#"{
+            "xds_servers": [{
+                "server_uri": "localhost:5000",
+                "channel_creds": [{"type": "insecure"}]
+            }],
+            "node": {"id": "n1"}
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        assert_eq!(
+            config.selected_credential(),
+            Some(ChannelCredentialType::Insecure)
+        );
+    }
+
+    #[test]
+    fn selected_credential_none_supported() {
+        let json = r#"{
+            "xds_servers": [{
+                "server_uri": "localhost:5000",
+                "channel_creds": [{"type": "google_default"}]
+            }],
+            "node": {"id": "n1"}
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        assert_eq!(config.selected_credential(), None);
+    }
+
+    #[test]
+    fn selected_credential_empty_creds() {
+        let config = BootstrapConfig::from_json(minimal_json()).unwrap();
+        assert_eq!(config.selected_credential(), None);
+    }
+
+    #[test]
+    fn empty_xds_servers_fails() {
+        let json = r#"{"xds_servers": [], "node": {"id": "n1"}}"#;
+        let err = BootstrapConfig::from_json(json).unwrap_err();
+        assert!(err.to_string().contains("xds_servers must not be empty"));
+    }
+
+    #[test]
+    fn empty_server_uri_fails() {
+        let json = r#"{"xds_servers": [{"server_uri": ""}], "node": {"id": "n1"}}"#;
+        let err = BootstrapConfig::from_json(json).unwrap_err();
+        assert!(err.to_string().contains("server_uri must not be empty"));
+    }
+
+    #[test]
+    fn invalid_json_fails() {
+        let err = BootstrapConfig::from_json("not json").unwrap_err();
+        assert!(matches!(err, BootstrapError::InvalidJson(_)));
+    }
+
+    #[test]
+    fn missing_required_field_fails() {
+        let json = r#"{"node": {"id": "n1"}}"#;
+        let err = BootstrapConfig::from_json(json).unwrap_err();
+        assert!(err.to_string().contains("xds_servers"));
+    }
+
+    #[test]
+    fn node_without_id() {
+        let json = r#"{
+            "xds_servers": [{"server_uri": "localhost:5000"}]
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        let node = config.to_node();
+        assert!(node.id.is_none());
+    }
+}
