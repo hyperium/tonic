@@ -56,13 +56,13 @@ impl<I: InvokeOnce> Intercept<I> for ResponseValidator {
     type SendStream = I::SendStream;
     type RecvStream = RecvStreamValidator<I::RecvStream>;
 
-    fn intercept(
+    async fn intercept(
         &self,
         headers: RequestHeaders,
         options: CallOptions,
         next: I,
     ) -> (Self::SendStream, Self::RecvStream) {
-        let (tx, rx) = next.invoke_once(headers, options);
+        let (tx, rx) = next.invoke_once(headers, options).await;
         (tx, RecvStreamValidator::new(rx, self.unary))
     }
 }
@@ -413,8 +413,9 @@ mod test {
     ) {
         let (channel, tx) = MockRecvStream::new();
         let channel = channel.with_interceptor(ResponseValidator::new(unary));
-        let (_, recv_stream) =
-            channel.invoke_once(RequestHeaders::default(), CallOptions::default());
+        let (_, recv_stream) = channel
+            .invoke_once(RequestHeaders::default(), CallOptions::default())
+            .await;
 
         let mut validator = RecvStreamValidator::new(recv_stream, unary);
         // Send all but the last item, verifying it is returned by the
@@ -472,7 +473,7 @@ mod test {
         type SendStream = NopSendStream;
         type RecvStream = Self;
 
-        fn invoke_once(
+        async fn invoke_once(
             self,
             _headers: RequestHeaders,
             _options: CallOptions,
