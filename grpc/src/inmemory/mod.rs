@@ -74,18 +74,18 @@ static LISTENERS: LazyLock<Mutex<HashMap<String, mpsc::Sender<InMemoryServerCall
 
 static NEXT_ID: AtomicU64 = AtomicU64::new(0);
 
-pub struct InMemoryServerCall {
-    pub headers: RequestHeaders,
-    pub req_rx: mpsc::UnboundedReceiver<InMemoryRequestStreamItem>,
-    pub resp_tx: mpsc::UnboundedSender<InMemoryResponseStreamItem>,
+struct InMemoryServerCall {
+    headers: RequestHeaders,
+    req_rx: mpsc::UnboundedReceiver<InMemoryRequestStreamItem>,
+    resp_tx: mpsc::UnboundedSender<InMemoryResponseStreamItem>,
 }
 
-pub enum InMemoryRequestStreamItem {
+enum InMemoryRequestStreamItem {
     Message(Box<dyn Buf + Send + Sync>),
     StreamClosed,
 }
 
-pub enum InMemoryResponseStreamItem {
+enum InMemoryResponseStreamItem {
     Headers(ResponseHeaders),
     Message(Box<dyn Buf + Send + Sync>),
     Trailers(Trailers),
