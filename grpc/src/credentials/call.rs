@@ -125,7 +125,7 @@ pub trait CallCredentials: Send + Sync + Debug {
     }
 }
 
-/// A composite implementation of [`CallCredentialsProvider`] that combines
+/// A composite implementation of [`CallCredentials`] that combines
 /// multiple credentials.
 ///
 /// The inner credentials are invoked sequentially during metadata retrieval.
