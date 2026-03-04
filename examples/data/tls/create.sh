@@ -24,7 +24,7 @@ openssl req -x509 \
   -extensions test_ca \
   -sha256
 
-# Generate two server cert.
+# Generate two server certs.
 openssl genrsa -out server.key 4096
 openssl req -new \
   -key server.key \
