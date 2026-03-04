@@ -261,7 +261,6 @@ impl PersistentChannel {
 }
 
 struct ActiveChannel {
-    cur_state: Mutex<ConnectivityState>,
     abort_handle: Box<dyn rt::TaskHandle>,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
@@ -284,8 +283,6 @@ impl ActiveChannel {
             connectivity_state.clone(),
             runtime.clone(),
         );
-
-        let resolver_helper = Box::new(tx.clone());
 
         // TODO(arjan-bal): Return error here instead of panicking.
         let rb = global_registry().get(target.scheme()).unwrap();
@@ -315,7 +312,6 @@ impl ActiveChannel {
         }));
 
         Arc::new(Self {
-            cur_state: Mutex::new(ConnectivityState::Connecting),
             abort_handle: jh,
             picker: picker.clone(),
             connectivity_state: connectivity_state.clone(),
@@ -376,7 +372,7 @@ impl name_resolution::WorkScheduler for ResolverWorkScheduler {
 }
 
 pub(crate) struct InternalChannelController {
-    pub(super) lb: Arc<GracefulSwitchBalancer>, // called and passes mutable parent to it, so must be Arc.
+    pub(super) lb: Arc<LbController>, // called and passes mutable parent to it, so must be Arc.
     transport_registry: TransportRegistry,
     pub(super) subchannel_pool: Arc<InternalSubchannelPool>,
     resolve_now: Arc<Notify>,
@@ -395,7 +391,7 @@ impl InternalChannelController {
         connectivity_state: Arc<Watcher<ConnectivityState>>,
         runtime: GrpcRuntime,
     ) -> Self {
-        let lb = Arc::new(GracefulSwitchBalancer::new(wqtx.clone(), runtime.clone()));
+        let lb = Arc::new(LbController::new(wqtx.clone(), runtime.clone()));
 
         Self {
             lb,
@@ -477,7 +473,7 @@ impl load_balancing::ChannelController for InternalChannelController {
 
 // A channel that is not idle (connecting, ready, or erroring).
 #[derive(Debug)]
-pub(super) struct GracefulSwitchBalancer {
+pub(super) struct LbController {
     pub(super) policy: Mutex<Option<Box<dyn LbPolicy>>>,
     policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,
     work_scheduler: WorkQueueTx,
@@ -485,7 +481,7 @@ pub(super) struct GracefulSwitchBalancer {
     runtime: GrpcRuntime,
 }
 
-impl WorkScheduler for GracefulSwitchBalancer {
+impl WorkScheduler for LbController {
     fn schedule_work(&self) {
         if mem::replace(&mut *self.pending.lock().unwrap(), true) {
             // Already had a pending call scheduled.
@@ -506,7 +502,7 @@ impl WorkScheduler for GracefulSwitchBalancer {
     }
 }
 
-impl GracefulSwitchBalancer {
+impl LbController {
     fn new(work_scheduler: WorkQueueTx, runtime: GrpcRuntime) -> Self {
         Self {
             policy_builder: Mutex::default(),
