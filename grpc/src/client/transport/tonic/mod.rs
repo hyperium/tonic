@@ -43,7 +43,6 @@ use hyper::client::conn::http2::SendRequest;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
-use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::Request as TonicRequest;
 use tonic::Status as TonicStatus;
