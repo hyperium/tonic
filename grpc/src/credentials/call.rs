@@ -32,7 +32,7 @@ use tonic::metadata::MetadataMap;
 use crate::attributes::Attributes;
 use crate::credentials::common::SecurityLevel;
 
-/// Details regarding the RPC call.
+/// Details regarding the call.
 ///
 /// The fully qualified method name is constructed as:
 /// `service_url` + "/" + `method_name`
@@ -49,12 +49,12 @@ impl CallDetails {
         }
     }
 
-    /// Returns the base URL of the service for this RPC call.
+    /// Returns the base URL of the service for this call.
     pub fn service_url(&self) -> &str {
         &self.service_url
     }
 
-    /// The method name suffix (e.g., `Method` or `package.Service/Method`).
+    /// The method name suffix (e.g., `Method` in `package.Service/Method`).
     pub fn method_name(&self) -> &str {
         &self.method_name
     }
@@ -97,7 +97,7 @@ impl ChannelSecurityInfo {
 /// information to every individual RPC (e.g., OAuth2 tokens, JWTs).
 #[async_trait]
 pub trait CallCredentials: Send + Sync + Debug {
-    /// Generates the authentication metadata for a specific RPC call.
+    /// Generates the authentication metadata for a specific call.
     ///
     /// This method is called by the transport layer on each request.
     /// Implementations should populate the provided `metadata` map with the
@@ -106,6 +106,11 @@ pub trait CallCredentials: Send + Sync + Debug {
     /// If this returns an `Err`, the RPC will fail immediately with a status
     /// derived from the error if the status code is in the range defined in
     /// gRFC A54. Otherwise, the RPC is failed with an internal status.
+    ///
+    /// # Cancellation Safety
+    ///
+    /// Implementations of this method must be cancel safe as the future may be
+    /// dropped due to RPC timeouts.
     async fn get_metadata(
         &self,
         call_details: &CallDetails,
@@ -122,6 +127,8 @@ pub trait CallCredentials: Send + Sync + Debug {
 
 /// A composite implementation of [`CallCredentialsProvider`] that combines
 /// multiple credentials.
+///
+/// The inner credentials are invoked sequentially during metadata retrieval.
 #[derive(Debug)]
 pub struct CompositeCallCredentials {
     creds: Vec<Arc<dyn CallCredentials>>,
@@ -160,12 +167,8 @@ impl CallCredentials for CompositeCallCredentials {
         self.creds
             .iter()
             .map(|c| c.minimum_channel_security_level())
-            .max_by_key(|&l| match l {
-                SecurityLevel::NoSecurity => 0,
-                SecurityLevel::IntegrityOnly => 1,
-                SecurityLevel::PrivacyAndIntegrity => 2,
-            })
-            .unwrap_or(SecurityLevel::NoSecurity)
+            .max()
+            .expect("CompositeCallCredentials must hold at least two children.")
     }
 }
 

@@ -51,7 +51,7 @@ pub trait ServerCredentials: server::ServerCredsInternal + Sync + 'static {
 
 pub(crate) mod common {
     /// Defines the level of protection provided by an established connection.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
     #[non_exhaustive]
     pub enum SecurityLevel {
         /// The connection is insecure; no protection is applied.
