@@ -203,6 +203,12 @@ impl RequestHeaders {
     pub fn metadata_mut(&mut self) -> &mut MetadataMap {
         &mut self.metadata
     }
+
+    /// Returns the owned fields in the RequestHeaders.
+    // TODO: make public once fields are fixed.
+    pub(crate) fn into_parts(self) -> (String, MetadataMap) {
+        (self.method_name, self.metadata)
+    }
 }
 
 /// Contains all information transmitted in the response trailers of an RPC.

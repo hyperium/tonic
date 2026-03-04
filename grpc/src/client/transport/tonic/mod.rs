@@ -156,9 +156,10 @@ impl Invoke for TonicTransport {
         let (req_tx, req_rx) = mpsc::channel(1);
         let request_stream = ReceiverStream::new(req_rx);
         let mut request = TonicRequest::new(Box::pin(request_stream));
-        *request.metadata_mut() = headers.metadata().clone();
+        let (method, metadata) = headers.into_parts();
+        *request.metadata_mut() = metadata;
 
-        let Ok(path) = PathAndQuery::from_maybe_shared(headers.method_name().clone()) else {
+        let Ok(path) = PathAndQuery::from_maybe_shared(method) else {
             return err_streams(Status::new(StatusCode::Internal, "invalid path"));
         };
 
@@ -171,11 +172,11 @@ impl Invoke for TonicTransport {
         }
 
         // Note that Tonic's streaming call blocks until the server's headers
-        // are received.  We must return a working send (and, consequently,
-        // recv) stream before this to allow the application to write its
-        // request(s), so we need to spawn a task for this period of time, and
-        // then we send the response (headers, stream) to the TonicRecvStream
-        // when it is available.
+        // are received.  The client needs a SendStream to provide the request
+        // message(s), which the server may be awaiting before sending its
+        // headers.  So, we spawn a task for this period of time, and then we
+        // send the response (headers, stream) to the TonicRecvStream when it is
+        // available.
         let (resp_tx, resp_rx) = oneshot::channel();
         self.runtime.spawn(Box::pin(async move {
             let response = grpc.streaming(request, path, BufCodec {}).await;
@@ -185,17 +186,23 @@ impl Invoke for TonicTransport {
         (
             TonicSendStream { sender: Ok(req_tx) },
             TonicRecvStream {
-                receiver: None,
-                error: None,
-                response_rx: Some(resp_rx),
+                state: StreamState::AwaitingHeaders(resp_rx),
             },
         )
     }
 }
 
-// Converts from a tonic status to a grpc-crate status.
-fn from_tonic_status(status: TonicStatus) -> Status {
-    Status::new(StatusCode::from(status.code() as i32), status.message())
+// Converts from a tonic status to a trailers stream item.
+fn trailers_from_tonic_status(status: TonicStatus) -> ClientResponseStreamItem {
+    ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
+        StatusCode::from(status.code() as i32),
+        status.message(),
+    )))
+}
+
+// Builds a trailers with a status
+fn trailers_from_status(code: StatusCode, msg: impl Into<String>) -> ClientResponseStreamItem {
+    ClientResponseStreamItem::Trailers(Trailers::new(Status::new(code, msg)))
 }
 
 struct TonicSendStream {
@@ -218,69 +225,58 @@ impl SendStream for TonicSendStream {
 }
 
 struct TonicRecvStream {
-    error: Option<Status>,
-    response_rx: Option<oneshot::Receiver<Result<tonic::Response<Streaming<Bytes>>, TonicStatus>>>,
-    receiver: Option<Streaming<Bytes>>,
+    state: StreamState,
+}
+
+enum StreamState {
+    Error(Status),
+    AwaitingHeaders(oneshot::Receiver<Result<tonic::Response<Streaming<Bytes>>, TonicStatus>>),
+    Streaming(Streaming<Bytes>),
+    Closed,
 }
 
 impl RecvStream for TonicRecvStream {
     async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
-        if let Some(error) = self.error.take() {
-            return ClientResponseStreamItem::Trailers(Trailers::new(error));
-        }
+        // Take the current state, leaving `Closed` in its place temporarily
+        let state = std::mem::replace(&mut self.state, StreamState::Closed);
 
-        if let Some(rx) = self.response_rx.take() {
-            match rx.await {
+        match state {
+            // Closed is terminal.
+            StreamState::Closed => ClientResponseStreamItem::StreamClosed,
+            // Stay closed after sending trailers.
+            StreamState::Error(error) => ClientResponseStreamItem::Trailers(Trailers::new(error)),
+            StreamState::AwaitingHeaders(rx) => match rx.await {
                 Ok(Ok(response)) => {
                     let (metadata, stream, _extensions) = response.into_parts();
-                    self.receiver = Some(stream);
-                    return ClientResponseStreamItem::Headers(
+                    // Start streaming and return the headers.
+                    self.state = StreamState::Streaming(stream);
+                    ClientResponseStreamItem::Headers(
                         ResponseHeaders::new().with_metadata(metadata),
-                    );
+                    )
                 }
-                Ok(Err(status)) => {
-                    return ClientResponseStreamItem::Trailers(Trailers::new(from_tonic_status(
-                        status,
-                    )));
-                }
-                Err(_) => {
-                    return ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                        StatusCode::Unknown,
-                        "Task cancelled",
-                    )));
-                }
-            }
-        }
-
-        let Some(mut stream) = self.receiver.take() else {
-            return ClientResponseStreamItem::StreamClosed;
-        };
-
-        let Some(resp) = stream.next().await else {
-            return ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                StatusCode::Ok,
-                "",
-            )));
-        };
-
-        match resp {
-            Ok(mut buf) => match msg.decode(&mut buf) {
-                Ok(()) => {
-                    // More messages may remain in the stream; set receiver again.
-                    self.receiver = Some(stream);
-                    ClientResponseStreamItem::Message(())
-                }
-                // TODO: in this case, tonic believes the stream is still
-                // running, but our decoding failed -- do we need to terminate
-                // the request stream now even though the Streaming is dropped?
-                Err(e) => ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Internal,
-                    "error decoding response: {",
-                ))),
+                // Stay closed after sending trailers.
+                Err(_) => trailers_from_status(StatusCode::Unknown, "Task cancelled"),
+                Ok(Err(status)) => trailers_from_tonic_status(status),
             },
-            Err(status) => {
-                ClientResponseStreamItem::Trailers(Trailers::new(from_tonic_status(status)))
-            }
+            StreamState::Streaming(mut stream) => match stream.message().await {
+                Ok(Some(mut buf)) => match msg.decode(&mut buf) {
+                    Ok(()) => {
+                        // More messages may remain in the stream; set receiver again.
+                        self.state = StreamState::Streaming(stream);
+                        ClientResponseStreamItem::Message(())
+                    }
+                    // TODO: in this case, tonic believes the stream is still
+                    // running, but our decoding failed -- do we need to terminate
+                    // the request stream now even though the Streaming is dropped?
+                    Err(e) => trailers_from_status(
+                        StatusCode::Internal,
+                        format!("error decoding response: {e}"),
+                    ),
+                },
+                // Stay closed after sending trailers.
+                Err(status) => trailers_from_tonic_status(status),
+                Ok(None) => trailers_from_status(StatusCode::Ok, ""),
+            },
         }
     }
 }
@@ -289,9 +285,7 @@ fn err_streams(status: Status) -> (TonicSendStream, TonicRecvStream) {
     (
         TonicSendStream { sender: Err(()) },
         TonicRecvStream {
-            receiver: None,
-            response_rx: None,
-            error: Some(status),
+            state: StreamState::Error(status),
         },
     )
 }

@@ -252,7 +252,7 @@ impl DynInvoke for InternalSubchannel {
     ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
         let svc = match &self.inner.lock().unwrap().state {
             InternalSubchannelState::Ready(s) => s.svc.clone(),
-            _ => panic!("invoke called on non-READY subchannel"),
+            _ => todo!("handle non-READY subchannel"),
         };
         svc.dyn_invoke(headers, options).await
     }

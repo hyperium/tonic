@@ -212,35 +212,28 @@ async fn grpc_invoke_tonic_unary() {
     .await
     .unwrap();
 
-    // Response should be Headers, Message, Trailers (OK).
+    // Response should be Headers, Message ("hello interop"), Trailers (OK).
     let mut resp = WrappedEchoResponse(EchoResponse::default());
-    let mut received = false;
-    let mut headers = false;
-    loop {
-        match rx.next(&mut resp).await {
-            ClientResponseStreamItem::Message(()) => {
-                assert_eq!(resp.0.message, "hello interop");
-                assert!(!received, "Received multiple messages");
-                assert!(headers, "Received message without headers");
-                received = true;
-            }
-            ClientResponseStreamItem::Headers(_) => {
-                assert!(!received, "Received headers after message");
-                assert!(!headers, "Received multiple headers");
-                headers = true;
-            }
-            ClientResponseStreamItem::Trailers(t) => {
-                if t.status().code() != crate::StatusCode::Ok {
-                    panic!("RPC failed: {:?}", t.status());
-                }
-                break;
-            }
-            ClientResponseStreamItem::StreamClosed => {
-                panic!("Received StreamClosed instead of trailers");
-            }
-        }
-    }
-    assert!(received, "Did not receive response");
+
+    let ClientResponseStreamItem::Headers(_) = rx.next(&mut resp).await else {
+        panic!("Expected Headers first");
+    };
+
+    let ClientResponseStreamItem::Message(()) = rx.next(&mut resp).await else {
+        panic!("Expected Message after Headers");
+    };
+    assert_eq!(resp.0.message, "hello interop");
+
+    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
+        panic!("Expected Trailers, got StreamClosed or other item");
+    };
+
+    assert_eq!(
+        t.status().code(),
+        crate::StatusCode::Ok,
+        "RPC failed: {:?}",
+        t.status()
+    );
 
     shutdown_notify.notify_one();
     server_handle.await.unwrap();
