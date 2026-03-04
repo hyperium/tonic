@@ -37,7 +37,6 @@ pub mod credentials;
 pub mod inmemory;
 pub mod server;
 
-mod codec;
 mod macros;
 mod status;
 
