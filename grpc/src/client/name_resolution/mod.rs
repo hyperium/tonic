@@ -42,7 +42,7 @@ use crate::client::service_config::ServiceConfig;
 use crate::rt::GrpcRuntime;
 
 mod backoff;
-mod dns;
+pub(crate) mod dns;
 mod registry;
 pub(crate) use registry::global_registry;
 

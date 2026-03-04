@@ -25,8 +25,8 @@
 use std::time::Duration;
 use std::time::Instant;
 
+use crate::client::subchannel::SharedServiceTrait;
 use crate::rt::GrpcRuntime;
-use crate::service::Service;
 
 mod registry;
 
@@ -41,7 +41,7 @@ pub(crate) use registry::TransportRegistry;
 use tokio::sync::oneshot;
 
 pub(crate) struct ConnectedTransport {
-    pub service: Box<dyn Service>,
+    pub service: Box<dyn SharedServiceTrait>,
     pub disconnection_listener: oneshot::Receiver<Result<(), String>>,
 }
 
