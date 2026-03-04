@@ -22,6 +22,8 @@
  *
  */
 
+use std::sync::Arc;
+
 use crate::attributes::Attributes;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
@@ -89,7 +91,7 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
         })
     }
 
-    fn get_call_credentials(&self) -> Option<&CallCredentials> {
+    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>> {
         None
     }
 }

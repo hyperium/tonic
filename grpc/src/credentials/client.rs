@@ -22,6 +22,8 @@
  *
  */
 
+use std::sync::Arc;
+
 use crate::attributes::Attributes;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
@@ -60,7 +62,7 @@ pub trait ChannelCredsInternal {
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 
     /// Returns call credentials to be used for all RPCs made on a connection.
-    fn get_call_credentials(&self) -> Option<&CallCredentials>;
+    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>>;
 }
 
 pub struct HandshakeOutput<T, C: ClientConnectionSecurityContext> {
@@ -175,18 +177,18 @@ impl ClientHandshakeInfo {
 /// secure channel (like TLS).
 pub struct CompositeChannelCredentials<T> {
     channel_creds: T,
-    call_creds: CallCredentials,
+    call_creds: Arc<dyn CallCredentials>,
 }
 
 impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
-    pub fn new(channel_creds: T, call_creds: CallCredentials) -> Result<Self, String> {
+    pub fn new(channel_creds: T, call_creds: Arc<dyn CallCredentials>) -> Result<Self, String> {
         if channel_creds.info().security_protocol() == insecure::PROTOCOL_NAME {
             return Err("using tokens on an insecure credentials is disallowed".to_string());
         }
 
         let combined_call_creds = if let Some(existing) = channel_creds.get_call_credentials() {
             let composite_creds = CompositeCallCredentials::new(existing.clone(), call_creds);
-            composite_creds.into()
+            Arc::new(composite_creds)
         } else {
             call_creds
         };
@@ -214,8 +216,8 @@ impl<T: ChannelCredentials> ChannelCredsInternal for CompositeChannelCredentials
             .await
     }
 
-    fn get_call_credentials(&self) -> Option<&CallCredentials> {
-        Some(&self.call_creds)
+    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>> {
+        Some(self.call_creds.clone())
     }
 }
 
@@ -227,17 +229,20 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::credentials::call::{CallCredentialsProvider, CallDetails, ChannelSecurityInfo};
-    use crate::credentials::insecure::InsecureChannelCredentials;
-    use crate::credentials::local::LocalChannelCredentials;
-    use crate::rt;
-    use crate::rt::TcpOptions;
     use tokio::net::TcpListener;
     use tonic::Status;
     use tonic::async_trait;
     use tonic::metadata::MetadataMap;
     use tonic::metadata::MetadataValue;
+
+    use super::*;
+    use crate::credentials::call::CallCredentials;
+    use crate::credentials::call::CallDetails;
+    use crate::credentials::call::ChannelSecurityInfo;
+    use crate::credentials::insecure::InsecureChannelCredentials;
+    use crate::credentials::local::LocalChannelCredentials;
+    use crate::rt;
+    use crate::rt::TcpOptions;
 
     #[derive(Debug)]
     struct MockCallCredentials {
@@ -247,7 +252,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl CallCredentialsProvider for MockCallCredentials {
+    impl CallCredentials for MockCallCredentials {
         async fn get_metadata(
             &self,
             _call_details: &CallDetails,
@@ -271,12 +276,12 @@ mod tests {
     #[tokio::test]
     async fn test_multiple_composition() {
         let channel_creds = LocalChannelCredentials::new();
-        let call_creds1 = CallCredentials::from(MockCallCredentials {
+        let call_creds1 = Arc::new(MockCallCredentials {
             key: "auth1",
             value: "val1",
             min_security_level: SecurityLevel::IntegrityOnly,
         });
-        let call_creds2 = CallCredentials::from(MockCallCredentials {
+        let call_creds2 = Arc::new(MockCallCredentials {
             key: "auth2",
             value: "val2",
             min_security_level: SecurityLevel::PrivacyAndIntegrity,
@@ -336,7 +341,7 @@ mod tests {
     #[test]
     fn test_composite_channel_credentials_insecure() {
         let channel_creds = InsecureChannelCredentials::new();
-        let call_creds = CallCredentials::from(MockCallCredentials {
+        let call_creds = Arc::new(MockCallCredentials {
             key: "auth",
             value: "val",
             min_security_level: SecurityLevel::NoSecurity,

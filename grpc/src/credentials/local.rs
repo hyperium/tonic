@@ -24,6 +24,7 @@
 
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::attributes::Attributes;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
@@ -119,7 +120,7 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
         })
     }
 
-    fn get_call_credentials(&self) -> Option<&CallCredentials> {
+    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>> {
         None
     }
 }

@@ -93,45 +93,10 @@ impl ChannelSecurityInfo {
     }
 }
 
-/// A thread-safe handle for credentials that are attached to individual RPC
-/// calls.
-///
-/// `CallCredentials` wrap a [`CallCredentialsProvider`]. They can be combined
-/// using [`CompositeCallCredentials`].
-#[derive(Debug, Clone)]
-pub struct CallCredentials {
-    inner: Arc<dyn CallCredentialsProvider>,
-}
-
-impl CallCredentials {
-    pub(crate) async fn get_metadata(
-        &self,
-        call_details: &CallDetails,
-        auth_info: &ChannelSecurityInfo,
-        metadata: &mut MetadataMap,
-    ) -> Result<(), Status> {
-        self.inner
-            .get_metadata(call_details, auth_info, metadata)
-            .await
-    }
-
-    pub(crate) fn minimum_channel_security_level(&self) -> SecurityLevel {
-        self.inner.minimum_channel_security_level()
-    }
-}
-
-impl<T: CallCredentialsProvider + 'static> From<T> for CallCredentials {
-    fn from(provider: T) -> Self {
-        Self {
-            inner: Arc::new(provider),
-        }
-    }
-}
-
 /// Defines the interface for credentials that need to attach security
 /// information to every individual RPC (e.g., OAuth2 tokens, JWTs).
 #[async_trait]
-pub trait CallCredentialsProvider: Send + Sync + Debug {
+pub trait CallCredentials: Send + Sync + Debug {
     /// Generates the authentication metadata for a specific RPC call.
     ///
     /// This method is called by the transport layer on each request.
@@ -159,26 +124,26 @@ pub trait CallCredentialsProvider: Send + Sync + Debug {
 /// multiple credentials.
 #[derive(Debug)]
 pub struct CompositeCallCredentials {
-    creds: Vec<CallCredentials>,
+    creds: Vec<Arc<dyn CallCredentials>>,
 }
 
 impl CompositeCallCredentials {
     /// Creates a new [`CompositeCallCredentials`] with the first two credentials.
-    pub fn new(first: impl Into<CallCredentials>, second: impl Into<CallCredentials>) -> Self {
+    pub fn new(first: Arc<dyn CallCredentials>, second: Arc<dyn CallCredentials>) -> Self {
         Self {
-            creds: vec![first.into(), second.into()],
+            creds: vec![first, second],
         }
     }
 
     /// Adds an additional [`CallCredentials`] to the composite.
-    pub fn with_call_credentials(mut self, creds: impl Into<CallCredentials>) -> Self {
-        self.creds.push(creds.into());
+    pub fn with_call_credentials(mut self, creds: Arc<dyn CallCredentials>) -> Self {
+        self.creds.push(creds);
         self
     }
 }
 
 #[async_trait]
-impl CallCredentialsProvider for CompositeCallCredentials {
+impl CallCredentials for CompositeCallCredentials {
     async fn get_metadata(
         &self,
         call_details: &CallDetails,
@@ -218,7 +183,7 @@ mod tests {
     }
 
     #[async_trait]
-    impl CallCredentialsProvider for MockCallCredentials {
+    impl CallCredentials for MockCallCredentials {
         async fn get_metadata(
             &self,
             _call_details: &CallDetails,
@@ -241,16 +206,16 @@ mod tests {
 
     #[tokio::test]
     async fn test_composite_call_credentials() {
-        let cred1 = MockCallCredentials {
+        let cred1 = Arc::new(MockCallCredentials {
             key: "key1".to_string(),
             value: "value1".to_string(),
             security_level: SecurityLevel::IntegrityOnly,
-        };
-        let cred2 = MockCallCredentials {
+        });
+        let cred2 = Arc::new(MockCallCredentials {
             key: "key2".to_string(),
             value: "value2".to_string(),
             security_level: SecurityLevel::PrivacyAndIntegrity,
-        };
+        });
 
         let composite = CompositeCallCredentials::new(cred1, cred2);
 
