@@ -110,7 +110,7 @@ async fn test_tls_server_handshake() {
     tls_stream.read_exact(&mut buf).await.unwrap();
     assert_eq!(&buf, b"pong!");
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -154,7 +154,7 @@ async fn test_tls_server_handshake_no_alpn() {
     let res = tls_stream.read_exact(&mut buf).await;
     assert!(res.is_err());
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -193,7 +193,7 @@ async fn test_tls_server_handshake_bad_alpn() {
 
     // Handshake should fail due to incompatible application protocols.
     let result = connector.connect(domain, stream).await;
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -231,7 +231,7 @@ async fn test_tls_handshake_alpn_h1_and_h2() {
 
     // Handshake should succeed.
     let result = connector.connect(domain, stream).await.unwrap();
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -245,7 +245,7 @@ async fn test_tls_server_mtls_require_fail() {
     let root_provider = StaticProvider::new(root_certs);
 
     let config = ServerTlsConfig::new(identity_provider).with_request_type(
-        TlsClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
+        TlsClientCertificateRequestType::RequireAndVerify {
             roots_provider: root_provider,
         },
     );
@@ -284,7 +284,7 @@ async fn test_tls_server_mtls_require_fail() {
     let res = tls_stream.read(&mut buf).await;
     assert!(res.is_err());
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -298,7 +298,7 @@ async fn test_tls_server_mtls_success() {
     let root_provider = StaticProvider::new(root_certs);
 
     let config = ServerTlsConfig::new(identity_provider).with_request_type(
-        TlsClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
+        TlsClientCertificateRequestType::RequireAndVerify {
             roots_provider: root_provider,
         },
     );
@@ -346,7 +346,7 @@ async fn test_tls_server_mtls_success() {
     tls_stream.read_exact(&mut buf).await.unwrap();
     assert_eq!(&buf, b"pong!");
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -360,7 +360,7 @@ async fn test_tls_server_mtls_optional() {
     let root_provider = StaticProvider::new(root_certs);
 
     let config = ServerTlsConfig::new(identity_provider).with_request_type(
-        TlsClientCertificateRequestType::RequestClientCertificateAndVerify {
+        TlsClientCertificateRequestType::RequestAndVerify {
             roots_provider: root_provider,
         },
     );
@@ -404,7 +404,7 @@ async fn test_tls_server_mtls_optional() {
     tls_stream.read_exact(&mut buf).await.unwrap();
     assert_eq!(&buf, b"pong!");
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -454,7 +454,7 @@ async fn test_tls_server_key_log() {
     let mut buf = [0u8; 5];
     tls_stream.read_exact(&mut buf).await.unwrap();
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 
     // Verify key log file exists and has content
     let content = std::fs::read_to_string(key_log_file.path()).unwrap();
@@ -525,7 +525,7 @@ async fn check_resumption_disabled(versions: Vec<&'static rustls::SupportedProto
         assert_eq!(&buf, b"pong!");
     }
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -629,7 +629,7 @@ async fn test_tls_server_sni() {
         assert_eq!(&buf, b"pong!");
     }
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]

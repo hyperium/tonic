@@ -104,7 +104,7 @@ pub enum TlsClientCertificateRequestType<R = StaticRootCertificatesProvider> {
     /// The certificate presented by the client is not checked by the server at
     /// all. (A client may present a self-signed or signed certificate or not
     /// present a certificate at all and any of those option would be accepted).
-    DontRequestClientCertificate,
+    DontRequest,
 
     /// Server requests client certificate but does not enforce that the client
     /// presents a certificate.
@@ -116,7 +116,7 @@ pub enum TlsClientCertificateRequestType<R = StaticRootCertificatesProvider> {
     ///
     /// The client's key certificate pair must be valid for the TLS connection to
     /// be established.
-    RequestClientCertificateAndVerify { roots_provider: R },
+    RequestAndVerify { roots_provider: R },
 
     /// Server requests client certificate and enforces that the client presents a
     /// certificate.
@@ -127,7 +127,7 @@ pub enum TlsClientCertificateRequestType<R = StaticRootCertificatesProvider> {
     ///
     /// The client's key certificate pair must be valid for the TLS connection to
     /// be established.
-    RequestAndRequireClientCertificateAndVerify { roots_provider: R },
+    RequireAndVerify { roots_provider: R },
 }
 
 enum InnerClientCertificateRequestType {
@@ -143,19 +143,19 @@ enum InnerClientCertificateRequestType {
 impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType {
     fn from(value: TlsClientCertificateRequestType) -> Self {
         match value {
-            TlsClientCertificateRequestType::DontRequestClientCertificate => {
+            TlsClientCertificateRequestType::DontRequest => {
                 InnerClientCertificateRequestType::DontRequestClientCertificate
             }
-            TlsClientCertificateRequestType::RequestClientCertificateAndVerify {
-                roots_provider,
-            } => InnerClientCertificateRequestType::RequestClientCertificateAndVerify {
-                roots_provider: roots_provider.get_receiver(),
-            },
-            TlsClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
-                roots_provider,
-            } => InnerClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
-                roots_provider: roots_provider.get_receiver(),
-            },
+            TlsClientCertificateRequestType::RequestAndVerify { roots_provider } => {
+                InnerClientCertificateRequestType::RequestClientCertificateAndVerify {
+                    roots_provider: roots_provider.get_receiver(),
+                }
+            }
+            TlsClientCertificateRequestType::RequireAndVerify { roots_provider } => {
+                InnerClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
+                    roots_provider: roots_provider.get_receiver(),
+                }
+            }
         }
     }
 }
@@ -179,7 +179,7 @@ impl ServerTlsConfig {
     {
         ServerTlsConfig {
             identities_provider: identities_provider.get_receiver(),
-            request_type: TlsClientCertificateRequestType::DontRequestClientCertificate.into(),
+            request_type: TlsClientCertificateRequestType::DontRequest.into(),
             key_log_path: None,
         }
     }
