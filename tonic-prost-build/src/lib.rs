@@ -84,6 +84,7 @@ pub fn configure() -> Builder {
         generate_default_stubs: false,
         codec_path: "tonic_prost::ProstCodec".to_string(),
         skip_debug: HashSet::default(),
+        async_trait: true,
     }
 }
 
@@ -312,6 +313,7 @@ struct ServiceGenerator {
     compile_well_known_types: bool,
     codec_path: String,
     disable_comments: HashSet<String>,
+    async_trait: bool,
 }
 
 impl ServiceGenerator {
@@ -329,6 +331,7 @@ impl ServiceGenerator {
         compile_well_known_types: bool,
         codec_path: String,
         disable_comments: HashSet<String>,
+        async_trait: bool,
     ) -> Self {
         ServiceGenerator {
             build_client,
@@ -342,6 +345,7 @@ impl ServiceGenerator {
             compile_well_known_types,
             codec_path,
             disable_comments,
+            async_trait,
         }
     }
 }
@@ -357,7 +361,8 @@ impl prost_build::ServiceGenerator for ServiceGenerator {
             .compile_well_known_types(self.compile_well_known_types)
             .disable_comments(self.disable_comments.clone())
             .use_arc_self(self.use_arc_self)
-            .generate_default_stubs(self.generate_default_stubs);
+            .generate_default_stubs(self.generate_default_stubs)
+            .async_trait(self.async_trait);
 
         let mut tokens = TokenStream::new();
 
@@ -408,6 +413,7 @@ pub struct Builder {
     generate_default_stubs: bool,
     codec_path: String,
     skip_debug: HashSet<String>,
+    async_trait: bool,
 }
 
 impl Builder {
@@ -688,6 +694,13 @@ impl Builder {
         self
     }
 
+    /// Enable or disable the use of the `async_trait` crate for generated traits.
+    /// Default is enabled.
+    pub fn async_trait(mut self, enable: bool) -> Self {
+        self.async_trait = enable;
+        self
+    }
+
     /// Compile the .proto files and execute code generation.
     pub fn compile_protos<P>(self, protos: &[P], includes: &[P]) -> io::Result<()>
     where
@@ -790,6 +803,7 @@ impl Builder {
                 self.compile_well_known_types,
                 self.codec_path.clone(),
                 self.disable_comments,
+                self.async_trait,
             );
 
             config.service_generator(Box::new(service_generator));
@@ -892,6 +906,7 @@ impl Builder {
                 self.compile_well_known_types,
                 self.codec_path.clone(),
                 self.disable_comments,
+                self.async_trait,
             );
 
             config.service_generator(Box::new(service_generator));
@@ -917,6 +932,7 @@ impl Builder {
             self.compile_well_known_types,
             self.codec_path.clone(),
             self.disable_comments,
+            self.async_trait,
         ))
     }
 }
