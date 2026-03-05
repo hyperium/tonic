@@ -26,6 +26,15 @@ DNS.4 = localhost
 IP.1  = 127.0.0.1
 IP.2  = 0:0:0:0:0:0:0:1
 
+[test_server2]
+basicConstraints        = critical,CA:FALSE
+subjectKeyIdentifier    = hash
+keyUsage                = critical,digitalSignature,keyEncipherment,keyAgreement
+subjectAltName          = @server2_alt_names
+
+[server2_alt_names]
+DNS.1 = *.test.com
+
 [test_client]
 basicConstraints        = critical,CA:FALSE
 subjectKeyIdentifier    = hash

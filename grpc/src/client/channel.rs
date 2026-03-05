@@ -40,7 +40,12 @@ use tokio::sync::watch;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
 use crate::attributes::Attributes;
+use crate::client::CallOptions;
 use crate::client::ConnectivityState;
+use crate::client::DynInvoke;
+use crate::client::DynRecvStream;
+use crate::client::DynSendStream;
+use crate::client::Invoke;
 use crate::client::load_balancing::ExternalSubchannel;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
 use crate::client::load_balancing::LbPolicy;
@@ -67,6 +72,7 @@ use crate::client::subchannel::SubchannelKey;
 use crate::client::subchannel::SubchannelStateWatcher;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::TransportRegistry;
+use crate::core::RequestHeaders;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt;
@@ -194,6 +200,20 @@ impl Channel {
     }
 }
 
+impl Invoke for Channel {
+    type SendStream = Box<dyn DynSendStream>;
+    type RecvStream = Box<dyn DynRecvStream>;
+
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        let ac = self.inner.get_active_channel();
+        ac.invoke(headers, options).await
+    }
+}
+
 // A PersistentChannel represents the static configuration of a channel and an
 // optional Arc of an ActiveChannel.  An ActiveChannel exists whenever the
 // PersistentChannel is not IDLE.  Every channel is IDLE at creation, or after
@@ -261,7 +281,6 @@ impl PersistentChannel {
 }
 
 struct ActiveChannel {
-    cur_state: Mutex<ConnectivityState>,
     abort_handle: Box<dyn rt::TaskHandle>,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
@@ -284,8 +303,6 @@ impl ActiveChannel {
             connectivity_state.clone(),
             runtime.clone(),
         );
-
-        let resolver_helper = Box::new(tx.clone());
 
         // TODO(arjan-bal): Return error here instead of panicking.
         let rb = global_registry().get(target.scheme()).unwrap();
@@ -315,7 +332,6 @@ impl ActiveChannel {
         }));
 
         Arc::new(Self {
-            cur_state: Mutex::new(ConnectivityState::Connecting),
             abort_handle: jh,
             picker: picker.clone(),
             connectivity_state: connectivity_state.clone(),
@@ -328,7 +344,11 @@ impl ActiveChannel {
         let mut i = self.picker.iter();
         loop {
             if let Some(p) = i.next().await {
-                let result = &p.pick(&request);
+                let result = &p.pick(
+                    &RequestHeaders::new()
+                        .with_method_name(&method)
+                        .with_metadata(request.metadata().clone()),
+                );
                 // TODO: handle picker errors (queue or fail RPC)
                 match result {
                     PickResult::Pick(pr) => {
@@ -357,6 +377,51 @@ impl ActiveChannel {
     }
 }
 
+impl Invoke for Arc<ActiveChannel> {
+    type SendStream = Box<dyn DynSendStream>;
+    type RecvStream = Box<dyn DynRecvStream>;
+
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        let mut i = self.picker.iter();
+        loop {
+            if let Some(p) = i.next().await {
+                let result = &p.pick(&headers);
+                match result {
+                    PickResult::Pick(pr) => {
+                        if let Some(sc) = (pr.subchannel.as_ref() as &dyn Any)
+                            .downcast_ref::<ExternalSubchannel>()
+                        {
+                            return sc
+                                .isc
+                                .as_ref()
+                                .unwrap()
+                                .dyn_invoke(headers, options.clone())
+                                .await;
+                        } else {
+                            panic!(
+                                "picked subchannel is not an implementation provided by the channel"
+                            );
+                        }
+                    }
+                    PickResult::Queue => {
+                        // Continue and retry the RPC with the next picker.
+                    }
+                    PickResult::Fail(status) => {
+                        todo!("failed pick: {:?}", status);
+                    }
+                    PickResult::Drop(status) => {
+                        todo!("dropped pick: {:?}", status);
+                    }
+                }
+            }
+        }
+    }
+}
+
 impl Drop for ActiveChannel {
     fn drop(&mut self) {
         self.abort_handle.abort();
@@ -376,7 +441,7 @@ impl name_resolution::WorkScheduler for ResolverWorkScheduler {
 }
 
 pub(crate) struct InternalChannelController {
-    pub(super) lb: Arc<GracefulSwitchBalancer>, // called and passes mutable parent to it, so must be Arc.
+    pub(super) lb: Arc<LbController>, // called and passes mutable parent to it, so must be Arc.
     transport_registry: TransportRegistry,
     pub(super) subchannel_pool: Arc<InternalSubchannelPool>,
     resolve_now: Arc<Notify>,
@@ -395,7 +460,7 @@ impl InternalChannelController {
         connectivity_state: Arc<Watcher<ConnectivityState>>,
         runtime: GrpcRuntime,
     ) -> Self {
-        let lb = Arc::new(GracefulSwitchBalancer::new(wqtx.clone(), runtime.clone()));
+        let lb = Arc::new(LbController::new(wqtx.clone(), runtime.clone()));
 
         Self {
             lb,
@@ -477,7 +542,7 @@ impl load_balancing::ChannelController for InternalChannelController {
 
 // A channel that is not idle (connecting, ready, or erroring).
 #[derive(Debug)]
-pub(super) struct GracefulSwitchBalancer {
+pub(super) struct LbController {
     pub(super) policy: Mutex<Option<Box<dyn LbPolicy>>>,
     policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,
     work_scheduler: WorkQueueTx,
@@ -485,7 +550,7 @@ pub(super) struct GracefulSwitchBalancer {
     runtime: GrpcRuntime,
 }
 
-impl WorkScheduler for GracefulSwitchBalancer {
+impl WorkScheduler for LbController {
     fn schedule_work(&self) {
         if mem::replace(&mut *self.pending.lock().unwrap(), true) {
             // Already had a pending call scheduled.
@@ -506,7 +571,7 @@ impl WorkScheduler for GracefulSwitchBalancer {
     }
 }
 
-impl GracefulSwitchBalancer {
+impl LbController {
     fn new(work_scheduler: WorkQueueTx, runtime: GrpcRuntime) -> Self {
         Self {
             policy_builder: Mutex::default(),
