@@ -2,7 +2,12 @@ use super::*;
 use prost_build::{Comments, Method};
 use quote::quote;
 
-fn create_test_method(input_type: String, output_type: String) -> TonicBuildMethod {
+fn create_test_method_with_proto_types(
+    input_type: String,
+    output_type: String,
+    input_proto_type: String,
+    output_proto_type: String,
+) -> TonicBuildMethod {
     TonicBuildMethod {
         prost_method: Method {
             name: "TestMethod".to_string(),
@@ -12,16 +17,25 @@ fn create_test_method(input_type: String, output_type: String) -> TonicBuildMeth
                 trailing: vec![],
                 leading_detached: vec![],
             },
-            input_type: input_type.clone(),
-            output_type: output_type.clone(),
-            input_proto_type: input_type,
-            output_proto_type: output_type,
+            input_type,
+            output_type,
+            input_proto_type,
+            output_proto_type,
             client_streaming: false,
             server_streaming: false,
             options: prost_types::MethodOptions::default(),
         },
         codec_path: "tonic_prost::ProstCodec".to_string(),
     }
+}
+
+fn create_test_method(input_type: String, output_type: String) -> TonicBuildMethod {
+    create_test_method_with_proto_types(
+        input_type.clone(),
+        output_type.clone(),
+        input_type,
+        output_type,
+    )
 }
 
 #[test]
@@ -57,6 +71,38 @@ fn test_request_response_name_google_types_not_compiled() {
             "Failed for output type: {type_name}"
         );
     }
+}
+
+#[test]
+fn test_request_response_name_wrapper_types_resolved_to_primitives() {
+    // prost-build resolves wrapper method input/output types to primitives while
+    // preserving protobuf type names in input_proto_type/output_proto_type.
+    let method = create_test_method_with_proto_types(
+        "bool".to_string(),
+        "u32".to_string(),
+        ".google.protobuf.BoolValue".to_string(),
+        ".google.protobuf.UInt32Value".to_string(),
+    );
+    let (request, response) = method.request_response_name("super", false);
+
+    assert_eq!(request.to_string(), "bool");
+    assert_eq!(response.to_string(), "u32");
+}
+
+#[test]
+fn test_request_response_name_wrapper_types_legacy_dotted_paths() {
+    // Keep compatibility with dotted protobuf wrapper names if they appear.
+    // This ensures we never emit non-existent types like ::prost_types::BoolValue.
+    let method = create_test_method_with_proto_types(
+        ".google.protobuf.BoolValue".to_string(),
+        ".google.protobuf.UInt32Value".to_string(),
+        ".google.protobuf.BoolValue".to_string(),
+        ".google.protobuf.UInt32Value".to_string(),
+    );
+    let (request, response) = method.request_response_name("super", false);
+
+    assert_eq!(request.to_string(), "bool");
+    assert_eq!(response.to_string(), "u32");
 }
 
 #[test]
