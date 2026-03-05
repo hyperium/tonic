@@ -150,7 +150,7 @@ async fn test_tls_key_log() {
 
     // Server setup
     let server_config = default_server_config();
-    let (addr, task) = setup_server(server_config).await;
+    let (addr, server_task) = setup_server(server_config).await;
 
     // Client setup
     let root_certs = load_root_certs("ca.pem");
@@ -182,7 +182,7 @@ async fn test_tls_key_log() {
     let _ = stream.read_to_end(&mut buf).await;
     assert_eq!(buf, b"Hello world");
 
-    let _ = task.await;
+    server_task.await.unwrap();
 
     // Verify key log file has content.
     let content = std::fs::read_to_string(key_log_file.path()).unwrap();
@@ -235,7 +235,7 @@ async fn test_tls_handshake_wrong_server_name() {
         result.is_err(),
         "Handshake should fail with wrong server name"
     );
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -340,7 +340,7 @@ async fn test_mtls_handshake_no_identity() {
         "read from TLS stream should fail due to missing client identity"
     );
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -384,7 +384,7 @@ async fn test_mtls_handshake_with_identitiy() {
     let _ = stream.read_to_end(&mut buf).await;
     assert_eq!(buf, b"Hello world");
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 async fn check_client_resumption_disabled(
@@ -454,7 +454,7 @@ async fn check_client_resumption_disabled(
         assert_eq!(buf, b"Hello world");
     }
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
 
 #[tokio::test]
@@ -620,5 +620,5 @@ async fn run_handshake_test(server_alpn: Vec<Vec<u8>>, expect_success: bool) {
         assert!(result.is_err(), "Handshake succeeded but expected failure");
     }
 
-    let _ = server_task.await;
+    server_task.await.unwrap();
 }
