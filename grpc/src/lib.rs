@@ -44,10 +44,10 @@ pub use status::ServerStatus;
 pub use status::Status;
 pub use status::StatusCode;
 
-pub(crate) mod attributes;
-pub(crate) mod byte_str;
-pub(crate) mod rt;
-pub(crate) mod send_future;
+pub mod attributes;
+pub mod byte_str;
+pub mod rt;
+pub mod send_future;
 
 #[cfg(test)]
 mod echo_pb {

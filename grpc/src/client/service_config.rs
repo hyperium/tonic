@@ -29,7 +29,7 @@ use std::sync::Arc;
 /// a JSON object.
 // TODO: this shouldn't be public; users should set with JSON instead.
 #[derive(Debug, Default, Clone)]
-pub struct ServiceConfig {
+pub(crate) struct ServiceConfig {
     pub load_balancing_policy: Option<LbPolicyType>,
 }
 

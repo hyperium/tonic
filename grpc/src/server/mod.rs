@@ -119,7 +119,7 @@ impl<T: Handle> DynHandle for T {
 /// documentation for information about the different types of items and the
 /// order in which they must be sent.
 #[trait_variant::make(Send)]
-pub trait SendStream: Send {
+pub trait SendStream {
     /// Sends the next item on the stream.
     ///
     /// # Cancel safety
@@ -187,7 +187,7 @@ pub struct SendOptions {
 
 /// Represents the receiving side of a server stream.
 #[trait_variant::make(Send)]
-pub trait RecvStream: Send {
+pub trait RecvStream {
     /// Returns the next message on the stream.  If an error is returned, the
     /// stream ended or the client closed the send side of the request stream.
     ///

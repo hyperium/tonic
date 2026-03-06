@@ -390,8 +390,8 @@ impl InternalSubchannel {
                 }
                 result = transport.dyn_connect(address.to_string().clone(), runtime, &transport_opts) => {
                     match result {
-                        Ok(s) => {
-                            let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionSucceeded(Arc::from(s.0), s.1));
+                        Ok((service, onclose)) => {
+                            let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionSucceeded(Arc::from(service), onclose));
                         }
                         Err(e) => {
                             let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionFailed(e));
