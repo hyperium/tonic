@@ -62,7 +62,7 @@ pub trait ChannelCredsInternal {
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 
     /// Returns call credentials to be used for all RPCs made on a connection.
-    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>>;
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>>;
 }
 
 pub struct HandshakeOutput<T, C: ClientConnectionSecurityContext> {
@@ -216,8 +216,8 @@ impl<T: ChannelCredentials> ChannelCredsInternal for CompositeChannelCredentials
             .await
     }
 
-    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>> {
-        Some(self.call_creds.clone())
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
+        Some(&self.call_creds)
     }
 }
 

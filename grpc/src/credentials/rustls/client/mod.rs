@@ -263,7 +263,7 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
         })
     }
 
-    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
         None
     }
 }

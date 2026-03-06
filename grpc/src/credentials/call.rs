@@ -120,6 +120,7 @@ pub trait CallCredentials: Send + Sync + Debug {
 
     /// Indicates the minimum transport security level required to send
     /// these credentials.
+    /// **Default:** Returns [`SecurityLevel::PrivacyAndIntegrity`].
     fn minimum_channel_security_level(&self) -> SecurityLevel {
         SecurityLevel::PrivacyAndIntegrity
     }

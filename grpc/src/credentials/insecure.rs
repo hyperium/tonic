@@ -91,7 +91,7 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
         })
     }
 
-    fn get_call_credentials(&self) -> Option<Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
         None
     }
 }
