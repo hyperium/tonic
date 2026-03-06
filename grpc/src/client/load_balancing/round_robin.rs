@@ -46,7 +46,7 @@ use crate::client::load_balancing::child_manager::ChildUpdate;
 use crate::client::load_balancing::pick_first;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
-use crate::service::Request;
+use crate::core::RequestHeaders;
 
 pub(crate) static POLICY_NAME: &str = "round_robin";
 static START: Once = Once::new();
@@ -236,10 +236,10 @@ impl RoundRobinPicker {
 }
 
 impl Picker for RoundRobinPicker {
-    fn pick(&self, request: &Request) -> PickResult {
+    fn pick(&self, request_headers: &RequestHeaders) -> PickResult {
         let len = self.pickers.len();
         let idx = self.next.fetch_add(1, Ordering::Relaxed) % len;
-        self.pickers[idx].pick(request)
+        self.pickers[idx].pick(request_headers)
     }
 }
 
@@ -270,8 +270,8 @@ mod test {
     use crate::client::name_resolution::Address;
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverUpdate;
+    use crate::core::RequestHeaders;
     use crate::rt::default_runtime;
-    use crate::service::Request;
     use std::collections::HashSet;
     use std::panic;
     use std::sync::Arc;
@@ -416,7 +416,7 @@ mod test {
     }
 
     impl Picker for OneSubchannelPicker {
-        fn pick(&self, request: &Request) -> PickResult {
+        fn pick(&self, _: &RequestHeaders) -> PickResult {
             PickResult::Pick(Pick {
                 subchannel: self.sc.clone(),
                 on_complete: None,
@@ -596,7 +596,7 @@ mod test {
             TestEvent::UpdatePicker(update) => {
                 println!("connectivity state is {}", update.connectivity_state);
                 assert!(update.connectivity_state == ConnectivityState::Connecting);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 assert!(update.picker.pick(&req) == PickResult::Queue);
                 update.picker
             }
@@ -620,7 +620,7 @@ mod test {
                     update.connectivity_state
                 );
                 assert!(update.connectivity_state == ConnectivityState::Ready);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Pick(pick) => {
                         println!("selected subchannel is {}", pick.subchannel);
@@ -648,7 +648,7 @@ mod test {
                     update.connectivity_state
                 );
                 assert!(update.connectivity_state == ConnectivityState::Ready);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Pick(pick) => update.picker.clone(),
                     other => panic!("unexpected pick result {}", other),
@@ -670,7 +670,7 @@ mod test {
         (match rx_events.recv().await.unwrap() {
             TestEvent::UpdatePicker(update) => {
                 assert!(update.connectivity_state == ConnectivityState::TransientFailure);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Fail(status) => {
                         assert!(status.code() == tonic::Code::Unavailable);
@@ -748,7 +748,7 @@ mod test {
         send_resolver_error_to_policy(&mut lb_policy, resolver_error.clone(), tcc);
         verify_no_activity(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         match picker.pick(&req) {
             PickResult::Pick(pick) => {
                 assert!(pick.subchannel == subchannels[0].clone());
@@ -784,7 +784,7 @@ mod test {
 
         verify_no_activity(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         match picker.pick(&req) {
             PickResult::Queue => {}
             other => panic!("unexpected pick result {}", other),
@@ -854,7 +854,7 @@ mod test {
             tcc,
         );
         let picker = verify_roundrobin_ready_picker(&mut rx_events).await;
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match picker.pick(&req) {
@@ -940,7 +940,7 @@ mod test {
             tcc,
         );
         let picker = verify_roundrobin_ready_picker(&mut rx_events).await;
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match picker.pick(&req) {
@@ -966,7 +966,7 @@ mod test {
 
         let new_picker = verify_roundrobin_ready_picker(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match new_picker.pick(&req) {
@@ -1059,7 +1059,7 @@ mod test {
         );
         let picker = verify_roundrobin_ready_picker(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match picker.pick(&req) {
@@ -1115,7 +1115,7 @@ mod test {
         );
         let new_picker = verify_roundrobin_ready_picker(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match new_picker.pick(&req) {
@@ -1260,7 +1260,7 @@ mod test {
 
         let picker = verify_ready_picker(&mut rx_events, subchannels[0].clone()).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         // First pick determines the only subchannel the picker should yield
         let first_sc = match picker.pick(&req) {
             PickResult::Pick(p) => p.subchannel.clone(),

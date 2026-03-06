@@ -44,8 +44,8 @@ use crate::client::channel::WorkQueueTx;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::client::subchannel::InternalSubchannel;
+use crate::core::RequestHeaders;
 use crate::rt::GrpcRuntime;
-use crate::service::Request;
 use crate::service::Response;
 
 pub(crate) mod child_manager;
@@ -252,7 +252,7 @@ pub(crate) trait Picker: Send + Sync + Debug {
     /// time-consuming work to service this request, it should return Queue, and
     /// the Pick call will be repeated by the channel when a new Picker is
     /// produced by the LbPolicy.
-    fn pick(&self, request: &Request) -> PickResult;
+    fn pick(&self, request: &RequestHeaders) -> PickResult;
 }
 
 #[derive(Debug)]
@@ -604,7 +604,7 @@ impl<T: ForwardingSubchannel> private::Sealed for T {}
 pub(crate) struct QueuingPicker {}
 
 impl Picker for QueuingPicker {
-    fn pick(&self, _request: &Request) -> PickResult {
+    fn pick(&self, _request: &RequestHeaders) -> PickResult {
         PickResult::Queue
     }
 }
@@ -615,7 +615,7 @@ pub(crate) struct FailingPicker {
 }
 
 impl Picker for FailingPicker {
-    fn pick(&self, _: &Request) -> PickResult {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
         PickResult::Fail(Status::unavailable(self.error.clone()))
     }
 }

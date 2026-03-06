@@ -35,7 +35,7 @@ use crate::Status;
 
 #[allow(unused)]
 pub trait SendMessage: Send + Sync {
-    fn encode(&self) -> Result<Box<dyn Buf + Send>, String>;
+    fn encode(&self) -> Result<Box<dyn Buf + Send + Sync>, String>;
 
     #[doc(hidden)]
     unsafe fn _ptr_for(&self, id: TypeId) -> Option<*const ()> {
@@ -202,6 +202,12 @@ impl RequestHeaders {
     /// Returns a mutable reference to the metadata in these headers.
     pub fn metadata_mut(&mut self) -> &mut MetadataMap {
         &mut self.metadata
+    }
+
+    /// Returns the owned fields in the RequestHeaders.
+    // TODO: make public once fields are fixed.
+    pub(crate) fn into_parts(self) -> (String, MetadataMap) {
+        (self.method_name, self.metadata)
     }
 }
 
