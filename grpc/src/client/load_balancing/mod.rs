@@ -57,9 +57,10 @@ pub(crate) mod round_robin;
 pub(crate) mod test_utils;
 
 pub(crate) mod registry;
+pub(crate) use registry::GLOBAL_LB_REGISTRY;
+
 use super::service_config::LbConfig;
 use super::subchannel::SubchannelStateWatcher;
-pub(crate) use registry::GLOBAL_LB_REGISTRY;
 
 /// A collection of data configured on the channel that is constructing this
 /// LbPolicy.
@@ -539,7 +540,7 @@ impl Subchannel for ExternalSubchannel {
 
     fn connect(&self) {
         println!("connect called for subchannel: {self}");
-        self.isc.as_ref().unwrap().connect(false);
+        self.isc.as_ref().unwrap().connect();
     }
 }
 
