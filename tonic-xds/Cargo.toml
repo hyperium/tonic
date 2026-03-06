@@ -28,6 +28,11 @@ dashmap = "6.1"
 thiserror = "2.0.17"
 url = "2.5.8"
 futures-core = "0.3.31"
+bytes = "1"
+xds-client = { path = "../xds-client" }
+envoy-types = "0.7"
+prost = "0.14"
+regex = "1"
 
 [lints]
 workspace = true
@@ -35,7 +40,6 @@ workspace = true
 [dev-dependencies]
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
-prost = "0.14"
 tonic-prost = "0.14"
 tokio-stream = "0.1"
 tonic-prost-build = "0.14"
