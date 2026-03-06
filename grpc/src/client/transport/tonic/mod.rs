@@ -415,27 +415,6 @@ impl Future for ResponseFuture {
     }
 }
 
-/// An adapter for sending and receiving messages as bytes using tonic.
-/// Coding/decoding is handled within gRPC.
-/// TODO: Remove this when tonic allows access to bytes without requiring a
-/// codec.
-pub(crate) struct BytesCodec {}
-
-impl Codec for BytesCodec {
-    type Encode = Bytes;
-    type Decode = Bytes;
-    type Encoder = BytesEncoder;
-    type Decoder = BytesDecoder;
-
-    fn encoder(&mut self) -> Self::Encoder {
-        BytesEncoder {}
-    }
-
-    fn decoder(&mut self) -> Self::Decoder {
-        BytesDecoder {}
-    }
-}
-
 pub(crate) struct BufCodec {}
 
 impl Codec for BufCodec {

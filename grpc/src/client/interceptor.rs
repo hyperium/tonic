@@ -34,7 +34,7 @@ use crate::core::RequestHeaders;
 /// interceptors that only need to call next once) or Invoke[+Clone+'static]
 /// (for interceptors that need to call next multiple times).
 #[trait_variant::make(Send)]
-pub trait Intercept<I>: Send + Sync {
+pub trait Intercept<I>: Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
 
@@ -51,7 +51,7 @@ pub trait Intercept<I>: Send + Sync {
 
 /// Like Intercept, but not reusable.
 #[trait_variant::make(Send)]
-pub trait InterceptOnce<I>: Send + Sync {
+pub trait InterceptOnce<I>: Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
 

@@ -61,7 +61,7 @@ pub(crate) struct TransportOptions {
 }
 
 #[trait_variant::make(Send)]
-pub(crate) trait Transport: Send + Sync {
+pub(crate) trait Transport: Sync {
     type Service: Invoke + 'static;
 
     async fn connect(
