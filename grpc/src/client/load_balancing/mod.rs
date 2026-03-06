@@ -538,7 +538,7 @@ impl Subchannel for ExternalSubchannel {
 
     fn connect(&self) {
         println!("connect called for subchannel: {self}");
-        self.isc.as_ref().unwrap().connect(false);
+        self.isc.as_ref().unwrap().connect();
     }
 }
 

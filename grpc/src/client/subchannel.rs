@@ -164,7 +164,7 @@ impl DynInvoke for InternalSubchannel {
         headers: RequestHeaders,
         options: CallOptions,
     ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
-        let svc = match &self.inner.inner.lock().unwrap().state {
+        let svc = match &self.inner.data.lock().unwrap().state {
             InternalSubchannelState::Ready(s) => s.clone(),
             _ => todo!("handle non-READY subchannel"),
         };
@@ -174,25 +174,28 @@ impl DynInvoke for InternalSubchannel {
 
 pub(crate) struct InternalSubchannel {
     unregister_fn: Option<Box<dyn FnOnce(SubchannelKey) + Send + Sync>>,
+    key: SubchannelKey,
     inner: InnerSubchannel,
+    on_drop: Arc<Notify>,
 }
 
 #[derive(Clone)]
 struct InnerSubchannel {
-    inner: Arc<Mutex<InnerSubchannelState>>,
+    data: Arc<Mutex<SharedInnerSubchannelData>>,
 }
 
-struct InnerSubchannelState {
-    key: SubchannelKey,
+struct SharedInnerSubchannelData {
+    address: String,
     state: InternalSubchannelState,
     watchers: Vec<Arc<SubchannelStateWatcher>>, // TODO(easwars): Revisit the choice for this data structure.
     on_drop: Arc<Notify>,
     transport_builder: Arc<dyn DynTransport>,
     backoff: Arc<dyn Backoff>,
     runtime: GrpcRuntime,
+    transport_options: TransportOptions,
 }
 
-impl InnerSubchannelState {
+impl SharedInnerSubchannelData {
     fn update_state(&mut self, state: InternalSubchannelState) {
         self.state = state;
         let state: SubchannelState = (&self.state).into();
@@ -211,40 +214,41 @@ impl InternalSubchannel {
         runtime: GrpcRuntime,
     ) -> Arc<InternalSubchannel> {
         println!("creating new internal subchannel for: {:?}", &key);
+        let address = key.address.address.to_string();
+        let on_drop = Arc::new(Notify::new());
         Arc::new(Self {
+            key,
+            on_drop: on_drop.clone(),
             unregister_fn: Some(unregister_fn),
             inner: InnerSubchannel {
-                inner: Arc::new(Mutex::new(InnerSubchannelState {
-                    key,
+                data: Arc::new(Mutex::new(SharedInnerSubchannelData {
+                    address,
                     transport_builder: transport,
                     backoff,
                     runtime,
                     state: InternalSubchannelState::Idle,
                     watchers: Vec::new(),
-                    on_drop: Arc::default(),
+                    on_drop,
+                    transport_options: TransportOptions::default(), // TODO: should be configurable
                 })),
             },
         })
     }
 
     pub(super) fn address(&self) -> Address {
-        self.inner.inner.lock().unwrap().key.address.clone()
+        self.key.address.clone()
     }
 
-    /// Begins connecting the subchannel asynchronously.  If now is set, does
-    /// not wait for any pending connection backoff to complete.
-    pub(super) fn connect(self: &Arc<Self>, now: bool) {
-        if now || self.inner.inner.lock().unwrap().state == InternalSubchannelState::Idle {
-            self.inner.move_to_connecting();
-        }
-        // TODO: latch connect request if !now && !Idle so subchannel
-        // effectively skips idle and goes back to connecting immediatley.
+    /// Begins connecting the subchannel asynchronously.  Does nothing if the
+    /// subchannel is not currently idle.
+    pub(super) fn connect(self: &Arc<Self>) {
+        self.inner.begin_connecting();
     }
 
     pub(super) fn register_connectivity_state_watcher(&self, watcher: Arc<SubchannelStateWatcher>) {
-        let mut inner = self.inner.inner.lock().unwrap();
-        inner.watchers.push(watcher.clone());
-        let state = (&inner.state).into();
+        let mut data = self.inner.data.lock().unwrap();
+        data.watchers.push(watcher.clone());
+        let state = (&data.state).into();
         watcher.on_state_change(state);
     }
 
@@ -253,7 +257,7 @@ impl InternalSubchannel {
         watcher: Arc<SubchannelStateWatcher>,
     ) {
         self.inner
-            .inner
+            .data
             .lock()
             .unwrap()
             .watchers
@@ -261,104 +265,113 @@ impl InternalSubchannel {
     }
 }
 
+// The InnerSubchannel states progress as follows:
+//
+// Idle -> Connecting -> Ready -> Idle [after disconnect]
+// or
+// Idle -> Connecting -> TransientFailure -> Idle [after backoff]
+//
+// Idle is always a terminal state.
 impl InnerSubchannel {
     fn move_to_idle(&self) {
-        self.inner
+        self.data
             .lock()
             .unwrap()
             .update_state(InternalSubchannelState::Idle);
     }
 
-    fn move_to_connecting(&self) {
-        // TODO: All these options to be configured by users.
-        let transport_opts = TransportOptions::default();
+    // Starts connecting in the background and manages the full lifecycle of the
+    // subchannel until it returns back to idle in that background task.
+    fn begin_connecting(&self) {
+        let mut data = self.data.lock().unwrap();
+        if data.state != InternalSubchannelState::Idle {
+            return;
+        }
+        data.update_state(InternalSubchannelState::Connecting);
 
-        let mut state = self.inner.lock().unwrap();
         let self_clone = self.clone();
-        let backoff = state.backoff.min_connect_timeout();
-        let transport_builder = state.transport_builder.clone();
-        let address = state.key.address.address.to_string();
-        let runtime = state.runtime.clone();
-        let on_drop = state.on_drop.clone();
-        state.runtime.spawn(Box::pin(async move {
+        let connect_timeout = data.backoff.min_connect_timeout();
+        let transport_builder = data.transport_builder.clone();
+        let address = data.address.clone();
+        let runtime = data.runtime.clone();
+        let on_drop = data.on_drop.clone();
+        let transport_opts = data.transport_options.clone();
+        data.runtime.spawn(Box::pin(async move {
             tokio::select! {
-                _ = runtime.sleep(backoff) => {
-                    self_clone.move_to_transient_failure("connect timeout expired".into());
+                _ = runtime.sleep(connect_timeout) => {
+                    self_clone.move_to_transient_failure("connect timeout expired".into()).await;
                 }
                 _ = on_drop.notified() => {
                 }
                 result = transport_builder.dyn_connect(address, runtime, &transport_opts) => {
                     match result {
                         Ok((service, disconnection_listener)) => {
-                            self_clone.move_to_ready(Arc::from(service), disconnection_listener);
+                            self_clone.move_to_ready(Arc::from(service), disconnection_listener).await;
                         }
                         Err(e) => {
-                            self_clone.move_to_transient_failure(e);
+                            self_clone.move_to_transient_failure(e).await;
                         }
                     }
                 },
             }
         }));
-        state.update_state(InternalSubchannelState::Connecting);
     }
 
-    fn move_to_ready(
+    // Sets the state to ready and then waits until the subchannel is dropped or
+    // the connection is lost.  Moves to idle upon connection loss.
+    async fn move_to_ready(
         &self,
         svc: Arc<dyn DynInvoke>,
         closed_rx: oneshot::Receiver<Result<(), String>>,
     ) {
-        let mut state = self.inner.lock().unwrap();
-        // Reset connection backoff upon successfully moving to ready.
-        state.backoff.reset();
-        let self_clone = self.clone();
-        let on_drop = state.on_drop.clone();
-        state.runtime.spawn(Box::pin(async move {
-            // TODO(easwars): Does it make sense for disconnected() to return an
-            // error string containing information about why the connection
-            // terminated? But what can we do with that error other than logging
-            // it, which the transport can do as well?
-            tokio::select! {
-                _ = on_drop.notified() => {}
-                e = closed_rx => {
-                    eprintln!("Transport closed: {e:?}");
-                    self_clone.move_to_idle();
-                }
+        let on_drop;
+        {
+            let mut data = self.data.lock().unwrap();
+            // Reset connection backoff upon successfully moving to ready.
+            data.backoff.reset();
+            on_drop = data.on_drop.clone();
+            data.update_state(InternalSubchannelState::Ready(svc.clone()));
+        }
+        // TODO(easwars): Does it make sense for disconnected() to return an
+        // error string containing information about why the connection
+        // terminated? But what can we do with that error other than logging
+        // it, which the transport can do as well?
+        tokio::select! {
+            _ = on_drop.notified() => {}
+            e = closed_rx => {
+                eprintln!("Transport closed: {e:?}");
+                self.move_to_idle();
             }
-        }));
-        state.update_state(InternalSubchannelState::Ready(svc.clone()));
+        }
     }
 
-    fn move_to_transient_failure(&self, err: String) {
-        let mut state = self.inner.lock().unwrap();
-        let backoff_interval = state.backoff.backoff_until();
-        let runtime = state.runtime.clone();
-        let on_drop = state.on_drop.clone();
-        let self_clone = self.clone();
-        state.runtime.spawn(Box::pin(async move {
-            tokio::select! {
-                _ = on_drop.notified() => {}
-                _ = runtime.sleep(backoff_interval.saturating_duration_since(Instant::now())) => {
-                    self_clone.move_to_idle();
-                }
+    // Sets the state to transient failure and then waits until the subchannel
+    // is dropped or the backoff expires.  Moves to idle upon backoff expiry.
+    async fn move_to_transient_failure(&self, err: String) {
+        let runtime;
+        let on_drop;
+        let backoff_interval;
+        {
+            let mut data = self.data.lock().unwrap();
+            data.update_state(InternalSubchannelState::TransientFailure(err.clone()));
+            backoff_interval = data.backoff.backoff_until();
+            runtime = data.runtime.clone();
+            on_drop = data.on_drop.clone();
+        }
+        tokio::select! {
+            _ = on_drop.notified() => {}
+            _ = runtime.sleep(backoff_interval.saturating_duration_since(Instant::now())) => {
+                self.move_to_idle();
             }
-        }));
-        state.update_state(InternalSubchannelState::TransientFailure(err.clone()));
+        }
     }
 }
 
 impl Drop for InternalSubchannel {
     fn drop(&mut self) {
-        let key;
-        let on_drop;
-        {
-            let state = self.inner.inner.lock().unwrap();
-            key = state.key.clone();
-            on_drop = state.on_drop.clone();
-        }
-
         let unregister_fn = self.unregister_fn.take();
-        unregister_fn.unwrap()(key);
-        on_drop.notify_waiters();
+        unregister_fn.unwrap()(self.key.clone());
+        self.on_drop.notify_waiters();
     }
 }
 
