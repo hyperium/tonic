@@ -48,7 +48,7 @@ pub(crate) struct ConnectedTransport {
 // TODO: The following options are specific to HTTP/2. We should
 // instead pass an `Attribute` like struct to the connect method instead which
 // can hold config relevant to a particular transport.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct TransportOptions {
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
