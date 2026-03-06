@@ -30,7 +30,7 @@ use tonic::async_trait;
 use tonic::metadata::MetadataMap;
 
 use crate::attributes::Attributes;
-use crate::credentials::common::SecurityLevel;
+use crate::credentials::SecurityLevel;
 
 /// Details regarding the call.
 ///

@@ -37,8 +37,8 @@ use webpki::EndEntityCert;
 
 use crate::attributes::Attributes;
 use crate::credentials::ProtocolInfo;
+use crate::credentials::SecurityLevel;
 use crate::credentials::ServerCredentials;
-use crate::credentials::common::SecurityLevel;
 use crate::credentials::rustls::ALPN_PROTO_STR_H2;
 use crate::credentials::rustls::IdentityList;
 use crate::credentials::rustls::Provider;

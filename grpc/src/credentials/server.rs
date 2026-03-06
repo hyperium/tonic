@@ -23,7 +23,7 @@
  */
 
 use crate::attributes::Attributes;
-use crate::credentials::common::SecurityLevel;
+use crate::credentials::SecurityLevel;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 

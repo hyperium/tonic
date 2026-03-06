@@ -122,17 +122,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::credentials::InsecureServerCredentials;
-    use crate::credentials::client::ClientHandshakeInfo;
-    use crate::credentials::common::Authority;
-    use crate::credentials::common::SecurityLevel;
-    use crate::credentials::insecure::InsecureChannelCredentials;
-    use crate::rt::TcpOptions;
-    use crate::rt::{self};
     use tokio::io::AsyncReadExt;
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;
+
+    use super::*;
+    use crate::credentials::InsecureServerCredentials;
+    use crate::credentials::SecurityLevel;
+    use crate::credentials::client::ClientHandshakeInfo;
+    use crate::credentials::common::Authority;
+    use crate::credentials::insecure::InsecureChannelCredentials;
+    use crate::rt::TcpOptions;
+    use crate::rt::{self};
 
     #[tokio::test]
     async fn test_dyn_client_credential_dispatch() {
