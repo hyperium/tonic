@@ -34,6 +34,18 @@ use crate::service::Request;
 use crate::service::Response;
 use crate::service::Service;
 
+pub mod message;
+pub mod stream;
+
+mod codegen_api;
+pub use codegen_api::{
+    BidiStreamingMethod, ClientStreamingMethod, ServerStreamingMethod, UnaryMethod,
+};
+
+pub(crate) mod call;
+
+pub(crate) mod method_handler;
+
 pub struct Server {
     handler: Option<Arc<dyn Service>>,
 }

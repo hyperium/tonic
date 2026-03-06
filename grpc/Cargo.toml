@@ -15,7 +15,13 @@ allowed_external_types = [
 ]
 
 [features]
-default = ["dns", "_runtime-tokio", "tls-rustls"]
+default = ["dns", "_runtime-tokio","tls-rustls", "protobuf", "gzip", "deflate", "zstd"]
+protobuf = ["dep:protobuf"]
+prost = ["dep:prost"]
+gzip = ["dep:flate2"]
+deflate = ["dep:flate2"]
+zstd = ["dep:zstd"]
+unsafe-downcast = []
 dns = ["dep:hickory-resolver", "_runtime-tokio"]
 # The following feature is used to ensure all modules use the runtime
 # abstraction instead of using tokio directly.
@@ -41,6 +47,8 @@ tls-rustls = [
 ]
 
 [dependencies]
+protobuf = { version = "4.33.0-release", optional = true }
+prost = { version = "0.14.0", optional = true }
 bytes = "1.10.1"
 hickory-resolver = { version = "0.25.1", optional = true }
 http = "1.1.0"
@@ -77,6 +85,10 @@ tower = { version = "0.5.2", features = [
 tower-service = "0.3.3"
 trait-variant = "0.1.2"
 url = "2.5.0"
+# TODO(sauravzg): Vendor this in instead of adding a dependency
+arc-swap = "1.7"
+flate2 = { version = "1.0", optional = true }
+zstd = { version = "0.13", optional = true }
 
 [dev-dependencies]
 async-stream = "0.3.6"
@@ -89,3 +101,4 @@ tonic = { version = "0.14.0", path = "../tonic", default-features = false, featu
     "router",
 ] }
 tonic-prost = { version = "0.14.0", path = "../tonic-prost" }
+protobuf-well-known-types = "4.33.0-release"
