@@ -36,13 +36,14 @@ use tokio_rustls::TlsStream as RustlsStream;
 use crate::attributes::Attributes;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
+use crate::credentials::SecurityLevel;
+use crate::credentials::call::CallCredentials;
 use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
-use crate::credentials::common::SecurityLevel;
 use crate::credentials::rustls::ALPN_PROTO_STR_H2;
 use crate::credentials::rustls::Identity;
 use crate::credentials::rustls::Provider;
@@ -260,6 +261,10 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
             endpoint: ep,
             security: cs_info,
         })
+    }
+
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
+        None
     }
 }
 

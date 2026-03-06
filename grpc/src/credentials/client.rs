@@ -22,9 +22,16 @@
  *
  */
 
+use std::sync::Arc;
+
 use crate::attributes::Attributes;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::SecurityLevel;
+use crate::credentials::call::CallCredentials;
+use crate::credentials::call::CompositeCallCredentials;
 use crate::credentials::common::Authority;
-use crate::credentials::common::SecurityLevel;
+use crate::credentials::insecure;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -53,6 +60,9 @@ pub trait ChannelCredsInternal {
         info: ClientHandshakeInfo,
         runtime: GrpcRuntime,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
+
+    /// Returns call credentials to be used for all RPCs made on a connection.
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>>;
 }
 
 pub struct HandshakeOutput<T, C: ClientConnectionSecurityContext> {
@@ -158,5 +168,185 @@ impl ClientHandshakeInfo {
 
     pub fn attributes(&self) -> &Attributes {
         &self.attributes
+    }
+}
+
+/// A credential that combines [`ChannelCredentials`] with [`CallCredentials`].
+///
+/// This is used to attach per-call authentication (like OAuth2 tokens) to a
+/// secure channel (like TLS).
+pub struct CompositeChannelCredentials<T> {
+    channel_creds: T,
+    call_creds: Arc<dyn CallCredentials>,
+}
+
+impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
+    pub fn new(channel_creds: T, call_creds: Arc<dyn CallCredentials>) -> Result<Self, String> {
+        if channel_creds.info().security_protocol() == insecure::PROTOCOL_NAME {
+            return Err("using tokens on an insecure credentials is disallowed".to_string());
+        }
+
+        let combined_call_creds = if let Some(existing) = channel_creds.get_call_credentials() {
+            let composite_creds = CompositeCallCredentials::new(existing.clone(), call_creds);
+            Arc::new(composite_creds)
+        } else {
+            call_creds
+        };
+
+        Ok(Self {
+            channel_creds,
+            call_creds: combined_call_creds,
+        })
+    }
+}
+
+impl<T: ChannelCredentials> ChannelCredsInternal for CompositeChannelCredentials<T> {
+    type ContextType = T::ContextType;
+    type Output<I> = T::Output<I>;
+
+    async fn connect<Input: GrpcEndpoint>(
+        &self,
+        authority: &Authority,
+        source: Input,
+        info: ClientHandshakeInfo,
+        runtime: GrpcRuntime,
+    ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
+        self.channel_creds
+            .connect(authority, source, info, runtime)
+            .await
+    }
+
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
+        Some(&self.call_creds)
+    }
+}
+
+impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T> {
+    fn info(&self) -> &ProtocolInfo {
+        self.channel_creds.info()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tokio::net::TcpListener;
+    use tonic::Status;
+    use tonic::async_trait;
+    use tonic::metadata::MetadataMap;
+    use tonic::metadata::MetadataValue;
+
+    use super::*;
+    use crate::credentials::call::CallCredentials;
+    use crate::credentials::call::CallDetails;
+    use crate::credentials::call::ChannelSecurityInfo;
+    use crate::credentials::insecure::InsecureChannelCredentials;
+    use crate::credentials::local::LocalChannelCredentials;
+    use crate::rt;
+    use crate::rt::TcpOptions;
+
+    #[derive(Debug)]
+    struct MockCallCredentials {
+        key: &'static str,
+        value: &'static str,
+        min_security_level: SecurityLevel,
+    }
+
+    #[async_trait]
+    impl CallCredentials for MockCallCredentials {
+        async fn get_metadata(
+            &self,
+            _call_details: &CallDetails,
+            _auth_info: &ChannelSecurityInfo,
+            metadata: &mut MetadataMap,
+        ) -> Result<(), Status> {
+            metadata.insert(
+                self.key
+                    .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()
+                    .unwrap(),
+                MetadataValue::try_from(self.value).unwrap(),
+            );
+            Ok(())
+        }
+
+        fn minimum_channel_security_level(&self) -> SecurityLevel {
+            self.min_security_level
+        }
+    }
+
+    #[tokio::test]
+    async fn test_multiple_composition() {
+        let channel_creds = LocalChannelCredentials::new();
+        let call_creds1 = Arc::new(MockCallCredentials {
+            key: "auth1",
+            value: "val1",
+            min_security_level: SecurityLevel::IntegrityOnly,
+        });
+        let call_creds2 = Arc::new(MockCallCredentials {
+            key: "auth2",
+            value: "val2",
+            min_security_level: SecurityLevel::PrivacyAndIntegrity,
+        });
+
+        // First composition.
+        let composite1 = CompositeChannelCredentials::new(channel_creds, call_creds1).unwrap();
+
+        // Second composition (using the first composite as base).
+        let composite2 = CompositeChannelCredentials::new(composite1, call_creds2).unwrap();
+
+        // Verify call credentials
+        let combined_call_creds = composite2.get_call_credentials().unwrap();
+        let call_details = CallDetails::new("service".to_string(), "method".to_string());
+        let auth_info =
+            ChannelSecurityInfo::new("local", SecurityLevel::NoSecurity, Attributes::new());
+        let mut metadata = MetadataMap::new();
+
+        combined_call_creds
+            .get_metadata(&call_details, &auth_info, &mut metadata)
+            .await
+            .unwrap();
+
+        assert_eq!(metadata.get("auth1").unwrap(), "val1");
+        assert_eq!(metadata.get("auth2").unwrap(), "val2");
+
+        // Verify min security level is the max of both.
+        assert_eq!(
+            combined_call_creds.minimum_channel_security_level(),
+            SecurityLevel::PrivacyAndIntegrity
+        );
+
+        // Verify security level
+        let addr = "127.0.0.1:0";
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
+        let authority = Authority::new("localhost".to_string(), Some(server_addr.port()));
+        let runtime = rt::default_runtime();
+        let endpoint = runtime
+            .tcp_stream(server_addr, TcpOptions::default())
+            .await
+            .unwrap();
+
+        let output = composite2
+            .connect(
+                &authority,
+                endpoint,
+                ClientHandshakeInfo::default(),
+                runtime,
+            )
+            .await
+            .unwrap();
+        assert_eq!(output.security.security_level(), SecurityLevel::NoSecurity);
+        assert_eq!(output.security.security_protocol(), "local");
+    }
+
+    #[test]
+    fn test_composite_channel_credentials_insecure() {
+        let channel_creds = InsecureChannelCredentials::new();
+        let call_creds = Arc::new(MockCallCredentials {
+            key: "auth",
+            value: "val",
+            min_security_level: SecurityLevel::NoSecurity,
+        });
+        let result = CompositeChannelCredentials::new(channel_creds, call_creds);
+        assert!(result.is_err());
     }
 }
