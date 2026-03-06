@@ -24,25 +24,27 @@
 
 use std::sync::Arc;
 
-use tokio::sync::oneshot;
 use tonic::async_trait;
 
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ServerResponseStreamItem;
-use crate::service::Request;
-use crate::service::Response;
-use crate::service::Service;
 
 pub struct Server {
-    handler: Option<Arc<dyn Service>>,
+    handler: Option<Arc<dyn DynHandle>>,
 }
 
-pub type Call = (String, Request, oneshot::Sender<Response>);
+pub struct Call<SS, RS> {
+    pub headers: RequestHeaders,
+    pub send: SS,
+    pub recv: RS,
+}
 
-#[async_trait]
+#[trait_variant::make(Send)]
 pub trait Listener {
-    async fn accept(&self) -> Option<Call>;
+    type SendStream: SendStream + 'static;
+    type RecvStream: RecvStream + 'static;
+    async fn accept(&self) -> Option<Call<Self::SendStream, Self::RecvStream>>;
 }
 
 impl Server {
@@ -50,15 +52,22 @@ impl Server {
         Self { handler: None }
     }
 
-    pub fn set_handler(&mut self, f: impl Service + 'static) {
-        self.handler = Some(Arc::new(f))
+    pub fn set_handler<H>(&mut self, h: H)
+    where
+        H: Handle + Send + Sync + 'static,
+    {
+        self.handler = Some(Arc::new(h))
     }
 
     pub async fn serve(&self, l: &impl Listener) {
-        while let Some((method, req, reply_on)) = l.accept().await {
-            reply_on
-                .send(self.handler.as_ref().unwrap().call(method, req).await)
-                .ok(); // TODO: log error
+        while let Some(call) = l.accept().await {
+            let mut send: Box<dyn DynSendStream> = Box::new(call.send);
+            let recv: Box<dyn DynRecvStream> = Box::new(call.recv);
+            self.handler
+                .as_ref()
+                .unwrap()
+                .dyn_handle(call.headers, &mut *send, recv)
+                .await;
         }
     }
 }

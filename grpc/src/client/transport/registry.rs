@@ -28,13 +28,14 @@ use std::sync::Arc;
 use std::sync::LazyLock;
 use std::sync::Mutex;
 
+use crate::client::transport::DynTransport;
 use crate::client::transport::Transport;
 
 /// A registry to store and retrieve transports.  Transports are indexed by
 /// the address type they are intended to handle.
 #[derive(Default, Clone)]
 pub(crate) struct TransportRegistry {
-    inner: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
+    inner: Arc<Mutex<HashMap<String, Arc<dyn DynTransport>>>>,
 }
 
 impl Debug for TransportRegistry {
@@ -53,8 +54,10 @@ impl TransportRegistry {
         Self::default()
     }
 
-    /// Add a transport into the registry.
-    pub(crate) fn add_transport(&self, address_type: &str, transport: impl Transport + 'static) {
+    pub(crate) fn add_transport<T>(&self, address_type: &str, transport: T)
+    where
+        T: Transport + 'static,
+    {
         self.inner
             .lock()
             .unwrap()
@@ -62,7 +65,10 @@ impl TransportRegistry {
     }
 
     /// Retrieve a name resolver from the registry, or None if not found.
-    pub(crate) fn get_transport(&self, address_type: &str) -> Result<Arc<dyn Transport>, String> {
+    pub(crate) fn get_transport(
+        &self,
+        address_type: &str,
+    ) -> Result<Arc<dyn DynTransport>, String> {
         self.inner
             .lock()
             .unwrap()
