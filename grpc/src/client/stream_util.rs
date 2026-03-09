@@ -171,17 +171,11 @@ mod test {
     use tokio::sync::mpsc::Sender;
 
     use super::*;
-    use crate::client::CallOptions;
-    use crate::client::InvokeOnce;
-    use crate::client::RecvStream;
     use crate::client::SendOptions;
     use crate::client::SendStream;
     use crate::client::interceptor::InvokeOnceExt as _;
-    use crate::core::ClientResponseStreamItem;
-    use crate::core::RecvMessage;
     use crate::core::ResponseHeaders;
     use crate::core::SendMessage;
-    use crate::core::Trailers;
 
     // Tests that an error occurs if messages are received before headers.
     #[tokio::test]

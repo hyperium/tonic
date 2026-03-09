@@ -56,8 +56,9 @@ pub(crate) mod transport;
 ///
 /// Channels may re-enter the Idle state if they are unused for longer than
 /// their configured idleness timeout.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum ConnectivityState {
+    #[default]
     Idle,
     Connecting,
     Ready,
@@ -92,7 +93,7 @@ pub struct CallOptions {
 /// Most applications will not use this type directly, and will instead use the
 /// generated APIs (e.g.  protobuf) to perform RPCs instead.
 #[trait_variant::make(Send)]
-pub trait Invoke: Send + Sync {
+pub trait Invoke: Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
 
@@ -136,7 +137,7 @@ impl<T: Invoke> DynInvoke for T {
 // Like `Invoke`, but not reusable.  It is blanket implemented on references to
 // `Invoke`s.
 #[trait_variant::make(Send)]
-pub trait InvokeOnce: Send + Sync {
+pub trait InvokeOnce: Sync {
     type SendStream: SendStream + 'static;
     type RecvStream: RecvStream + 'static;
 
@@ -167,7 +168,7 @@ impl<T: Invoke> InvokeOnce for &T {
 /// Most applications will not need this type directly, and will use the
 /// generated APIs (e.g.  protobuf) to perform RPCs instead.
 #[trait_variant::make(Send)]
-pub trait SendStream: Send {
+pub trait SendStream {
     /// Sends T on the stream.  If Err(()) is returned, the message could not be
     /// delivered because the stream was closed.  Future calls to SendStream
     /// will do nothing.
@@ -218,7 +219,7 @@ pub struct SendOptions {
 /// Most applications will not need this type directly, and will use the
 /// generated APIs (e.g.  protobuf) to perform RPCs instead.
 #[trait_variant::make(Send)]
-pub trait RecvStream: Send {
+pub trait RecvStream {
     /// Returns the next item on the stream.  If that item represents a message,
     /// `msg` has been updated directly to contain the received message.
     ///
