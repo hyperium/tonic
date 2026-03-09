@@ -166,16 +166,11 @@ mod test {
     use std::mem::discriminant;
     use std::vec;
 
-    use bytes::Buf;
-    use tokio::sync::mpsc::Receiver;
-    use tokio::sync::mpsc::Sender;
-
     use super::*;
-    use crate::client::SendOptions;
-    use crate::client::SendStream;
     use crate::client::interceptor::InvokeOnceExt as _;
+    use crate::client::test_util::MockInvoker;
+    use crate::client::test_util::NopRecvMessage;
     use crate::core::ResponseHeaders;
-    use crate::core::SendMessage;
 
     // Tests that an error occurs if messages are received before headers.
     #[tokio::test]
@@ -405,9 +400,9 @@ mod test {
         expect: ResponseStreamItem<()>,
         unary: bool,
     ) {
-        let (channel, tx) = MockRecvStream::new();
-        let channel = channel.with_interceptor(ResponseValidator::new(unary));
-        let (_, recv_stream) = channel
+        let (invoker, mut tx) = MockInvoker::new();
+        let invoker = invoker.with_interceptor(ResponseValidator::new(unary));
+        let (_, recv_stream) = invoker
             .invoke_once(RequestHeaders::default(), CallOptions::default())
             .await;
 
@@ -415,14 +410,14 @@ mod test {
         // Send all but the last item, verifying it is returned by the
         // validator.
         for item in &scenario[..scenario.len() - 1] {
-            tx.send(item.clone()).await.unwrap();
+            tx.send_resp(item.clone()).await;
             let got = validator.next(&mut NopRecvMessage).await;
             // Assert that the item sent is the same type as the item received.
             println!("{got:?} vs {item:?}");
             assert_eq!(discriminant(&got), discriminant(item));
         }
         // Send the final item.
-        tx.send(scenario[scenario.len() - 1].clone()).await.unwrap();
+        tx.send_resp(scenario[scenario.len() - 1].clone()).await;
         let got = validator.next(&mut NopRecvMessage).await;
         assert!(matches!(&got, expect));
         if let ResponseStreamItem::Trailers(got_t) = got {
@@ -438,54 +433,6 @@ mod test {
                     .message()
                     .contains(expect_t.status().message())
             );
-        }
-    }
-
-    struct NopSendStream;
-
-    impl SendStream for NopSendStream {
-        async fn send(&mut self, _item: &dyn SendMessage, _options: SendOptions) -> Result<(), ()> {
-            Ok(())
-        }
-    }
-
-    struct NopRecvMessage;
-
-    impl RecvMessage for NopRecvMessage {
-        fn decode(&mut self, data: &mut dyn Buf) -> Result<(), String> {
-            Ok(())
-        }
-    }
-
-    /// Implements a RecvStream and an InvokeOnce that can be directed what to
-    /// return manually by writing to the channel returned by `new`.
-    struct MockRecvStream {
-        rx: Receiver<ClientResponseStreamItem>,
-    }
-
-    impl InvokeOnce for MockRecvStream {
-        type SendStream = NopSendStream;
-        type RecvStream = Self;
-
-        async fn invoke_once(
-            self,
-            _headers: RequestHeaders,
-            _options: CallOptions,
-        ) -> (Self::SendStream, Self::RecvStream) {
-            (NopSendStream, self)
-        }
-    }
-
-    impl RecvStream for MockRecvStream {
-        async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
-            self.rx.recv().await.unwrap()
-        }
-    }
-
-    impl MockRecvStream {
-        fn new() -> (Self, Sender<ClientResponseStreamItem>) {
-            let (tx, rx) = tokio::sync::mpsc::channel(1);
-            (Self { rx }, tx)
         }
     }
 }

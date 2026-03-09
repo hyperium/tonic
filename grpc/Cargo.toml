@@ -11,7 +11,7 @@ allowed_external_types = [
     "bytes::*",
     "tonic::*",
     "futures_core::stream::Stream",
-    "tokio::sync::oneshot::Sender",
+    "tokio::sync::oneshot::*",
 ]
 
 [features]

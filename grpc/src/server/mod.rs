@@ -66,7 +66,7 @@ impl Server {
             self.handler
                 .as_ref()
                 .unwrap()
-                .dyn_handle(call.headers, &mut *send, recv)
+                .dyn_handle(call.headers, &mut *send, BoxedRecvStream(recv))
                 .await;
         }
     }
@@ -99,19 +99,40 @@ trait DynHandle: Send + Sync {
         &self,
         headers: RequestHeaders,
         tx: &mut dyn DynSendStream,
-        rx: Box<dyn DynRecvStream>,
+        rx: BoxedRecvStream,
     );
 }
-
 #[async_trait]
 impl<T: Handle> DynHandle for T {
     async fn dyn_handle(
         &self,
         headers: RequestHeaders,
         mut tx: &mut dyn DynSendStream,
-        rx: Box<dyn DynRecvStream>,
+        rx: BoxedRecvStream,
     ) {
-        self.handle(headers, &mut tx, rx).await
+        // Wrap `rx` in BoxedRecvStream here
+        self.handle(headers, &mut tx, BoxedRecvStream(Box::new(rx)))
+            .await
+    }
+}
+
+// TODO: delete this type which is only needed pre-rust v1.92 due to a bug
+// handling lifetimes:
+//
+// error: implementation of `server::RecvStream` is not general enough
+//    --> grpc/src/server/mod.rs:108:5
+//     |
+// 108 |     async fn dyn_handle(
+//     |     ^^^^^ implementation of `server::RecvStream` is not general enough
+//     |
+//     = note: `Box<(dyn server::DynRecvStream + '0)>` must implement `server::RecvStream`, for any lifetime `'0`...
+//     = note: ...but `server::RecvStream` is actually implemented for the type `Box<(dyn server::DynRecvStream + 'static)>`
+struct BoxedRecvStream(Box<dyn DynRecvStream + 'static>);
+
+// Implement RecvStream for the wrapper instead of the Box directly
+impl RecvStream for BoxedRecvStream {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
+        self.0.dyn_next(msg).await
     }
 }
 
@@ -154,7 +175,7 @@ impl<T: SendStream> DynSendStream for T {
     }
 }
 
-impl SendStream for &mut dyn DynSendStream {
+impl<'b> SendStream for &mut (dyn DynSendStream + 'b) {
     async fn send<'a>(
         &mut self,
         item: ServerResponseStreamItem<'a>,
@@ -164,7 +185,7 @@ impl SendStream for &mut dyn DynSendStream {
     }
 }
 
-impl SendStream for Box<dyn DynSendStream> {
+impl<'b> SendStream for Box<dyn DynSendStream + 'b> {
     async fn send<'a>(
         &mut self,
         item: ServerResponseStreamItem<'a>,
@@ -211,7 +232,7 @@ impl<T: RecvStream> DynRecvStream for T {
     }
 }
 
-impl RecvStream for Box<dyn DynRecvStream> {
+impl<'a> RecvStream for Box<dyn DynRecvStream + 'a> {
     async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
         (**self).dyn_next(msg).await
     }
