@@ -22,18 +22,26 @@
  *
  */
 
-use crate::client::{InteropTest, InteropTestUnimplemented};
-use crate::{
-    TestAssertion, grpc_pb::test_service_client::*, grpc_pb::unimplemented_service_client::*,
-    grpc_pb::*, test_assert,
-};
-use tokio::sync::mpsc;
-use tokio_stream::StreamExt;
+use grpc::Status;
+use grpc::StatusCode;
+use grpc::client::Channel;
+use grpc::client::metadata_utils::AttachHeadersInterceptor;
+use grpc::client::metadata_utils::CaptureHeadersInterceptor;
+use grpc::client::metadata_utils::CaptureTrailersInterceptor;
+use grpc_protobuf::CallBuilder;
+use protobuf::message_eq;
+use protobuf::proto;
 use tonic::async_trait;
-use tonic::transport::Channel;
-use tonic::{Code, Request, Response, Status, metadata::MetadataValue};
-use tonic_protobuf::protobuf::__internal::MatcherEq;
-use tonic_protobuf::protobuf::proto;
+use tonic::metadata::MetadataMap;
+use tonic::metadata::MetadataValue;
+
+use crate::TestAssertion;
+use crate::client::InteropTest;
+use crate::client::InteropTestUnimplemented;
+use crate::grpc_pb::test_service_client::*;
+use crate::grpc_pb::unimplemented_service_client::*;
+use crate::grpc_pb::*;
+use crate::test_assert;
 
 pub type TestClient = TestServiceClient<Channel>;
 pub type UnimplementedClient = UnimplementedServiceClient<Channel>;
@@ -49,7 +57,7 @@ const SPECIAL_TEST_STATUS_MESSAGE: &str =
 #[async_trait]
 impl InteropTest for TestClient {
     async fn empty_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
-        let result = self.empty_call(Request::new(Empty::default())).await;
+        let result = self.empty_call(proto!(Empty {})).await;
 
         assertions.push(test_assert!(
             "call must be successful",
@@ -57,14 +65,15 @@ impl InteropTest for TestClient {
             format!("result={:?}", result)
         ));
 
-        if let Ok(response) = result {
-            let body = response.into_inner();
-            assertions.push(test_assert!(
-                "body must not be null",
-                body.matches(&Empty::default()),
-                format!("body={:?}", body)
-            ));
-        }
+        let Ok(response) = result else {
+            return;
+        };
+
+        assertions.push(test_assert!(
+            "body must not be null",
+            message_eq(&response, &proto!(Empty {})),
+            format!("result={:?}", response)
+        ));
     }
 
     async fn large_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
@@ -76,35 +85,36 @@ impl InteropTest for TestClient {
             payload: payload,
         });
 
-        let result = self.unary_call(Request::new(req)).await;
+        let mut result = SimpleResponse::new();
+        let status = self
+            .unary_call(req)
+            .with_response_message(&mut result)
+            .await;
 
         assertions.push(test_assert!(
             "call must be successful",
-            result.is_ok(),
-            format!("result={:?}", result)
+            status.code() == StatusCode::Ok,
+            format!("status={status:?}")
         ));
 
-        if let Ok(response) = result {
-            let body = response.into_inner();
-            let payload_len = body.payload().body().len();
+        let body = result.payload().body();
+        let payload_len = body.len();
 
-            assertions.push(test_assert!(
-                "body must be 314159 bytes",
-                payload_len == LARGE_RSP_SIZE as usize,
-                format!("mem::size_of_val(&body)={:?}", mem::size_of_val(&body))
-            ));
-        }
+        assertions.push(test_assert!(
+            "body must be 314159 bytes",
+            payload_len == LARGE_RSP_SIZE as usize,
+            format!("mem::size_of_val(&body)={:?}", mem::size_of_val(body))
+        ));
     }
 
     async fn client_streaming(&mut self, assertions: &mut Vec<TestAssertion>) {
-        let requests: Vec<_> = REQUEST_LENGTHS
-            .iter()
-            .map(make_streaming_input_request)
-            .collect();
+        let mut stream = self.streaming_input_call().await;
 
-        let stream = tokio_stream::iter(requests);
+        for request in REQUEST_LENGTHS.iter().map(make_streaming_input_request) {
+            let _ = stream.send_message(&request).await;
+        }
 
-        let result = self.streaming_input_call(Request::new(stream)).await;
+        let result = stream.await;
 
         assertions.push(test_assert!(
             "call must be successful",
@@ -113,14 +123,12 @@ impl InteropTest for TestClient {
         ));
 
         if let Ok(response) = result {
-            let body = response.into_inner();
-
             assertions.push(test_assert!(
                 "aggregated payload size must be 74922 bytes",
-                body.aggregated_payload_size() == 74922,
+                response.aggregated_payload_size() == 74922,
                 format!(
                     "aggregated_payload_size={:?}",
-                    body.aggregated_payload_size()
+                    response.aggregated_payload_size()
                 )
             ));
         }
@@ -132,115 +140,107 @@ impl InteropTest for TestClient {
                 .iter()
                 .map(|len| ResponseParameters::with_size(*len)),
         });
-        let req = Request::new(req);
 
-        let result = self.streaming_output_call(req).await;
+        let mut rx = self.streaming_output_call(req).start().await;
 
+        let mut responses = Vec::new();
+        while let Some(response) = rx.next().await {
+            responses.push(response);
+        }
+
+        let status = rx.status().await;
         assertions.push(test_assert!(
             "call must be successful",
-            result.is_ok(),
-            format!("result={:?}", result)
+            status.code() == StatusCode::Ok,
+            format!("result={status:?}")
         ));
 
-        if let Ok(response) = result {
-            let responses = response
-                .into_inner()
-                .filter_map(|m| m.ok())
-                .collect::<Vec<_>>()
-                .await;
-            let actual_response_lengths = crate::grpc_utils::response_lengths(&responses);
-            let asserts = vec![
-                test_assert!(
-                    "there should be four responses",
-                    responses.len() == 4,
-                    format!("responses.len()={:?}", responses.len())
-                ),
-                test_assert!(
-                    "the response payload sizes should match input",
-                    RESPONSE_LENGTHS == actual_response_lengths.as_slice(),
-                    format!("{:?}={:?}", RESPONSE_LENGTHS, actual_response_lengths)
-                ),
-            ];
+        let actual_response_lengths = crate::grpc_utils::response_lengths(&responses);
+        let asserts = vec![
+            test_assert!(
+                "there should be four responses",
+                responses.len() == 4,
+                format!("responses.len()={:?}", responses.len())
+            ),
+            test_assert!(
+                "the response payload sizes should match input",
+                RESPONSE_LENGTHS == actual_response_lengths.as_slice(),
+                format!("{:?}={:?}", RESPONSE_LENGTHS, actual_response_lengths)
+            ),
+        ];
 
-            assertions.extend(asserts);
-        }
+        assertions.extend(asserts);
     }
 
     async fn ping_pong(&mut self, assertions: &mut Vec<TestAssertion>) {
-        let (tx, rx) = mpsc::unbounded_channel();
-        tx.send(make_ping_pong_request(0)).unwrap();
+        let (mut tx, mut rx) = self.full_duplex_call().await;
+        let _ = tx.send_message(make_ping_pong_request(0)).await;
 
-        let result = self
-            .full_duplex_call(Request::new(
-                tokio_stream::wrappers::UnboundedReceiverStream::new(rx),
-            ))
-            .await;
-
-        assertions.push(test_assert!(
-            "call must be successful",
-            result.is_ok(),
-            format!("result={:?}", result)
-        ));
-
-        if let Ok(mut response) = result.map(Response::into_inner) {
-            let mut responses = Vec::new();
-
-            loop {
-                match response.next().await {
-                    Some(result) => {
-                        responses.push(result.unwrap());
-                        if responses.len() == REQUEST_LENGTHS.len() {
-                            drop(tx);
-                            break;
-                        } else {
-                            tx.send(make_ping_pong_request(responses.len())).unwrap();
-                        }
+        let mut responses = Vec::new();
+        loop {
+            match rx.next().await {
+                Some(message) => {
+                    responses.push(message);
+                    if responses.len() == RESPONSE_LENGTHS.len() {
+                        drop(tx);
+                        break;
+                    } else {
+                        let _ = tx
+                            .send_message(make_ping_pong_request(responses.len()))
+                            .await;
                     }
-                    None => {
-                        assertions.push(TestAssertion::Failed {
+                }
+                None => {
+                    assertions.push(TestAssertion::Failed {
                             description:
                                 "server should keep the stream open until the client closes it",
                             expression: "Stream terminated unexpectedly early",
                             why: None,
                         });
-                        break;
-                    }
+                    break;
                 }
             }
-
-            let actual_response_lengths = crate::grpc_utils::response_lengths(&responses);
-            assertions.push(test_assert!(
-                "there should be four responses",
-                responses.len() == RESPONSE_LENGTHS.len(),
-                format!("{:?}={:?}", responses.len(), RESPONSE_LENGTHS.len())
-            ));
-            assertions.push(test_assert!(
-                "the response payload sizes should match input",
-                RESPONSE_LENGTHS == actual_response_lengths.as_slice(),
-                format!("{:?}={:?}", RESPONSE_LENGTHS, actual_response_lengths)
-            ));
         }
+        let actual_response_lengths = crate::grpc_utils::response_lengths(&responses);
+        assertions.push(test_assert!(
+            "there should be four responses",
+            responses.len() == RESPONSE_LENGTHS.len(),
+            format!("{:?}={:?}", responses.len(), RESPONSE_LENGTHS.len())
+        ));
+        assertions.push(test_assert!(
+            "the response payload sizes should match input",
+            RESPONSE_LENGTHS == actual_response_lengths.as_slice(),
+            format!("{:?}={:?}", RESPONSE_LENGTHS, actual_response_lengths)
+        ));
+
+        let status = rx.status().await;
+        assertions.push(test_assert!(
+            "call must be successful",
+            status.code() == StatusCode::Ok,
+            format!("result={status:?}")
+        ));
     }
 
     async fn empty_stream(&mut self, assertions: &mut Vec<TestAssertion>) {
-        let stream = tokio_stream::empty();
-        let result = self.full_duplex_call(Request::new(stream)).await;
+        let (tx, mut rx) = self.full_duplex_call().await;
+        drop(tx);
 
+        let mut responses = Vec::new();
+        while let Some(response) = rx.next().await {
+            responses.push(response);
+        }
         assertions.push(test_assert!(
-            "call must be successful",
-            result.is_ok(),
-            format!("result={:?}", result)
+            "there should be no responses",
+            responses.is_empty(),
+            format!("responses.len()={:?}", responses.len())
         ));
 
-        if let Ok(response) = result.map(Response::into_inner) {
-            let responses = response.collect::<Vec<_>>().await;
-
-            assertions.push(test_assert!(
-                "there should be no responses",
-                responses.is_empty(),
-                format!("responses.len()={:?}", responses.len())
-            ));
-        }
+        let status = rx.status().await;
+        assertions.push(test_assert!(
+            "call must be successful",
+            status.code() == StatusCode::Ok,
+            format!("result={status:?}")
+        ));
     }
 
     async fn status_code_and_message(&mut self, assertions: &mut Vec<TestAssertion>) {
@@ -251,7 +251,7 @@ impl InteropTest for TestClient {
             assertions.push(test_assert!(
                 "call must fail with unknown status code",
                 match &result {
-                    Err(status) => status.code() == Code::Unknown,
+                    Err(status) => status.code() == StatusCode::Unknown,
                     _ => false,
                 },
                 format!("result={:?}", result)
@@ -281,17 +281,21 @@ impl InteropTest for TestClient {
             },
         });
 
-        let result = self.unary_call(Request::new(simple_req)).await;
+        let result = self.unary_call(simple_req).await;
         validate_response(result, assertions);
 
-        let stream = tokio_stream::once(duplex_req);
-        let result = match self.full_duplex_call(Request::new(stream)).await {
-            Ok(response) => {
-                let stream = response.into_inner();
-                let responses = stream.collect::<Vec<_>>().await;
-                Ok(responses)
-            }
-            Err(e) => Err(e),
+        let (mut tx, mut rx) = self.full_duplex_call().await;
+        let _ = tx.send_message(duplex_req).await;
+        drop(tx);
+        let mut responses = Vec::new();
+        while let Some(response) = rx.next().await {
+            responses.push(response);
+        }
+        let status = rx.status().await;
+        let result = if status.code() != StatusCode::Ok {
+            Err(status)
+        } else {
+            Ok(responses)
         };
 
         validate_response(result, assertions);
@@ -305,12 +309,12 @@ impl InteropTest for TestClient {
             },
         });
 
-        let result = self.unary_call(Request::new(req)).await;
+        let result = self.unary_call(req).await;
 
         assertions.push(test_assert!(
             "call must fail with unknown status code",
             match &result {
-                Err(status) => status.code() == Code::Unknown,
+                Err(status) => status.code() == StatusCode::Unknown,
                 _ => false,
             },
             format!("result={:?}", result)
@@ -327,13 +331,11 @@ impl InteropTest for TestClient {
     }
 
     async fn unimplemented_method(&mut self, assertions: &mut Vec<TestAssertion>) {
-        let result = self
-            .unimplemented_call(Request::new(Empty::default()))
-            .await;
+        let result = self.unimplemented_call(Empty::default()).await;
         assertions.push(test_assert!(
             "call must fail with unimplemented status code",
             match &result {
-                Err(status) => status.code() == Code::Unimplemented,
+                Err(status) => status.code() == StatusCode::Unimplemented,
                 _ => false,
             },
             format!("result={:?}", result)
@@ -345,53 +347,77 @@ impl InteropTest for TestClient {
         let value1: MetadataValue<_> = "test_initial_metadata_value".parse().unwrap();
         let key2 = "x-grpc-test-echo-trailing-bin";
         let value2 = MetadataValue::from_bytes(&[0xab, 0xab, 0xab]);
+        let mut md = MetadataMap::new();
+        md.insert(key1, value1.clone());
+        md.insert_bin(key2, value2.clone());
+
+        // First perform the unary call test.
 
         let req = proto!(SimpleRequest {
             response_type: PayloadType::Compressable,
             response_size: LARGE_RSP_SIZE,
             payload: crate::grpc_utils::client_payload(LARGE_REQ_SIZE),
         });
-        let mut req_unary = Request::new(req);
-        req_unary.metadata_mut().insert(key1, value1.clone());
-        req_unary.metadata_mut().insert_bin(key2, value2.clone());
 
-        let stream = tokio_stream::once(make_ping_pong_request(0));
-        let mut req_stream = Request::new(stream);
-        req_stream.metadata_mut().insert(key1, value1.clone());
-        req_stream.metadata_mut().insert_bin(key2, value2.clone());
+        let attacher = AttachHeadersInterceptor::new(md.clone());
+        let (hdr_int, hdr_rx) = CaptureHeadersInterceptor::new();
+        let (trl_int, trl_rx) = CaptureTrailersInterceptor::new();
 
-        let response = self.unary_call(req_unary).await.expect("call should pass.");
-
-        assertions.push(test_assert!(
-            "metadata string must match in unary",
-            response.metadata().get(key1) == Some(&value1),
-            format!("result={:?}", response.metadata().get(key1))
-        ));
-        assertions.push(test_assert!(
-            "metadata bin must match in unary",
-            response.metadata().get_bin(key2) == Some(&value2),
-            format!("result={:?}", response.metadata().get_bin(key1))
-        ));
-
-        let response = self
-            .full_duplex_call(req_stream)
+        self.unary_call(req)
+            .with_interceptor(attacher)
+            .with_once_interceptor(hdr_int)
+            .with_once_interceptor(trl_int)
             .await
             .expect("call should pass.");
 
+        let response_headers = hdr_rx.await.expect("headers should be received");
+        let response_trailers = trl_rx.await.expect("trailers should be received");
+
         assertions.push(test_assert!(
             "metadata string must match in unary",
-            response.metadata().get(key1) == Some(&value1),
-            format!("result={:?}", response.metadata().get(key1))
+            response_headers.get(key1) == Some(&value1),
+            format!("result={:?}", response_headers.get(key1))
+        ));
+        assertions.push(test_assert!(
+            "metadata bin must match in unary",
+            response_trailers.get_bin(key2) == Some(&value2),
+            format!("result={:?}", response_trailers.get_bin(key1))
         ));
 
-        let mut stream = response.into_inner();
+        // Now perform the streaming call test.
 
-        let trailers = stream.trailers().await.unwrap().unwrap();
+        let attacher = AttachHeadersInterceptor::new(md.clone());
+        let (hdr_int, hdr_rx) = CaptureHeadersInterceptor::new();
+        let (trl_int, trl_rx) = CaptureTrailersInterceptor::new();
+
+        let (mut tx, rx) = self
+            .full_duplex_call()
+            .with_interceptor(attacher)
+            .with_once_interceptor(hdr_int)
+            .with_once_interceptor(trl_int)
+            .await;
+        _ = tx.send_message(make_ping_pong_request(0)).await;
+        drop(tx);
+        let status = rx.status().await;
+        assert_eq!(
+            status.code(),
+            StatusCode::Ok,
+            "call should pass: {:?}",
+            status
+        );
+
+        let response_headers = hdr_rx.await.expect("headers should be received");
+        let response_trailers = trl_rx.await.expect("trailers should be received");
+        assertions.push(test_assert!(
+            "metadata string must match in unary",
+            response_headers.get(key1) == Some(&value1),
+            format!("result={:?}", response_headers.get(key1))
+        ));
 
         assertions.push(test_assert!(
             "metadata bin must match in unary",
-            trailers.get_bin(key2) == Some(&value2),
-            format!("result={:?}", trailers.get_bin(key1))
+            response_trailers.get_bin(key2) == Some(&value2),
+            format!("result={:?}", response_trailers.get_bin(key1))
         ));
     }
 }
@@ -399,13 +425,11 @@ impl InteropTest for TestClient {
 #[async_trait]
 impl InteropTestUnimplemented for UnimplementedClient {
     async fn unimplemented_service(&mut self, assertions: &mut Vec<TestAssertion>) {
-        let result = self
-            .unimplemented_call(Request::new(Empty::default()))
-            .await;
+        let result = self.unimplemented_call(Empty::default()).await;
         assertions.push(test_assert!(
             "call must fail with unimplemented status code",
             match &result {
-                Err(status) => status.code() == Code::Unimplemented,
+                Err(status) => status.code() == StatusCode::Unimplemented,
                 _ => false,
             },
             format!("result={:?}", result)

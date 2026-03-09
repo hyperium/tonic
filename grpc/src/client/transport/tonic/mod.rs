@@ -54,6 +54,7 @@ use tonic::codec::Codec;
 use tonic::codec::Decoder;
 use tonic::codec::EncodeBuf;
 use tonic::codec::Encoder;
+use tonic::metadata::MetadataMap;
 use tower::ServiceBuilder;
 use tower::buffer::Buffer;
 use tower::buffer::future::ResponseFuture as BufferResponseFuture;
@@ -165,16 +166,31 @@ impl Invoke for TonicTransport {
 }
 
 // Converts from a tonic status to a trailers stream item.
-fn trailers_from_tonic_status(status: TonicStatus) -> ClientResponseStreamItem {
-    ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
+fn trailers_from_tonic_status(
+    status: TonicStatus,
+    md: Option<MetadataMap>,
+) -> ClientResponseStreamItem {
+    let mut trailers = Trailers::new(Status::new(
         StatusCode::from(status.code() as i32),
         status.message(),
-    )))
+    ));
+    if let Some(md) = md {
+        trailers = trailers.with_metadata(md);
+    }
+    ClientResponseStreamItem::Trailers(trailers)
 }
 
 // Builds a trailers with a status
-fn trailers_from_status(code: StatusCode, msg: impl Into<String>) -> ClientResponseStreamItem {
-    ClientResponseStreamItem::Trailers(Trailers::new(Status::new(code, msg)))
+fn trailers_from_status(
+    code: StatusCode,
+    msg: impl Into<String>,
+    md: Option<MetadataMap>,
+) -> ClientResponseStreamItem {
+    let mut trailers = Trailers::new(Status::new(code, msg));
+    if let Some(md) = md {
+        trailers = trailers.with_metadata(md);
+    }
+    ClientResponseStreamItem::Trailers(trailers)
 }
 
 struct TonicSendStream {
@@ -227,8 +243,8 @@ impl RecvStream for TonicRecvStream {
                     )
                 }
                 // Stay closed after sending trailers.
-                Err(_) => trailers_from_status(StatusCode::Unknown, "Task cancelled"),
-                Ok(Err(status)) => trailers_from_tonic_status(status),
+                Err(_) => trailers_from_status(StatusCode::Unknown, "Task cancelled", None),
+                Ok(Err(status)) => trailers_from_tonic_status(status, None),
             },
             StreamState::Streaming(mut stream) => match stream.message().await {
                 Ok(Some(mut buf)) => match msg.decode(&mut buf) {
@@ -243,11 +259,20 @@ impl RecvStream for TonicRecvStream {
                     Err(e) => trailers_from_status(
                         StatusCode::Internal,
                         format!("error decoding response: {e}"),
+                        None,
                     ),
                 },
                 // Stay closed after sending trailers.
-                Err(status) => trailers_from_tonic_status(status),
-                Ok(None) => trailers_from_status(StatusCode::Ok, ""),
+                Err(status) => {
+                    let trailers = stream.trailers().await;
+                    let md = trailers.unwrap_or_default();
+                    trailers_from_tonic_status(status, md)
+                }
+                Ok(None) => {
+                    let trailers = stream.trailers().await;
+                    let md = trailers.unwrap_or_default();
+                    trailers_from_status(StatusCode::Ok, "", md)
+                }
             },
         }
     }

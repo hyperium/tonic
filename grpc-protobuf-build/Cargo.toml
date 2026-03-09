@@ -1,6 +1,6 @@
 [package]
-name = "tonic-protobuf-build"
-version = "0.14.0"
+name = "grpc-protobuf-build"
+version = "0.9.0-alpha.1"
 edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
