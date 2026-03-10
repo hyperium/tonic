@@ -393,6 +393,8 @@ impl Status {
     fn code_from_h2(err: &h2::Error) -> Code {
         // See https://github.com/grpc/grpc/blob/3977c30/doc/PROTOCOL-HTTP2.md#errors
         match err.reason() {
+            // NO_ERROR on a RST_STREAM means the peer reset the stream without a gRPC status.
+            // Per the spec this is still a protocol violation and must be mapped to INTERNAL.
             Some(h2::Reason::NO_ERROR)
             | Some(h2::Reason::PROTOCOL_ERROR)
             | Some(h2::Reason::INTERNAL_ERROR)
@@ -796,13 +798,27 @@ pub(crate) fn infer_grpc_status(
         | http::StatusCode::BAD_GATEWAY
         | http::StatusCode::SERVICE_UNAVAILABLE
         | http::StatusCode::GATEWAY_TIMEOUT => Code::Unavailable,
-        // We got a 200 but no trailers, we can infer that this request is finished.
+        // We got a 200 but no grpc-status trailer.
         //
-        // This can happen when a streaming response sends two Status but
-        // gRPC requires that we end the stream after the first status.
+        // Per the gRPC-over-HTTP/2 protocol, Status MUST be sent in Trailers even when the
+        // status code is OK. Receiving a clean end-of-stream without a grpc-status trailer
+        // after response headers (and potentially message frames) is therefore a protocol
+        // violation — the stream was truncated. This can happen in real deployments when an
+        // intermediary (proxy/load-balancer) sends a RST_STREAM with NO_ERROR or simply closes
+        // the stream cleanly before the server has sent its trailers. Silently treating it as
+        // Ok(None) would make a truncated streaming response look like a normal end-of-stream,
+        // hiding data loss from the caller.
         //
-        // https://github.com/hyperium/tonic/issues/681
-        http::StatusCode::OK => return Err(None),
+        // https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#responses
+        //
+        // Note: the old behaviour (returning Err(None) == "stream ended cleanly") was needed
+        // to handle the edge case in https://github.com/hyperium/tonic/issues/681 where a
+        // misbehaving server sends two Status frames. That case is already handled by the
+        // code above that parses grpc-status from whatever trailers *are* present, so
+        // changing this branch to a hard error is safe.
+        http::StatusCode::OK => return Err(Some(Status::internal(
+            "protocol error: missing grpc-status trailer, stream was terminated without a final status (possible truncation by a proxy or load balancer)",
+        ))),
         _ => Code::Unknown,
     };
 
