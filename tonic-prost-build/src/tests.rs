@@ -246,7 +246,7 @@ fn test_is_google_type() {
 }
 
 #[test]
-fn test_non_path_type_allowlist() {
+fn test_extended_non_path_type_allowlist() {
     // prost-build already compiles some well known types into
     // their rust primitive type counterpart. tonic-prost build must
     // use the given primitive type.
@@ -261,25 +261,42 @@ fn test_non_path_type_allowlist() {
         ("f64", quote!(f64)),
     ];
 
-    assert_eq!(NON_PATH_TYPE_ALLOWLIST.len(), test_cases.len());
+    NON_PATH_TYPE_ALLOWLIST.set(EXTENDED_NON_PATH_TYPE_ALLOWLIST);
 
-    for (type_name, expected) in test_cases {
-        assert!(NON_PATH_TYPE_ALLOWLIST.contains(&type_name));
+    NON_PATH_TYPE_ALLOWLIST.with(|set_allowlist| {
+        let allowlist = set_allowlist.borrow();
 
-        let method = create_test_method(type_name.to_string(), type_name.to_string());
-        let (request, response) = method.request_response_name("super", false);
+        assert_eq!(allowlist.len(), test_cases.len());
 
-        assert_eq!(
-            request.to_string(),
-            expected.to_string(),
-            "Failed for input type: {type_name}"
-        );
-        assert_eq!(
-            response.to_string(),
-            expected.to_string(),
-            "Failed for output type: {type_name}"
-        );
-    }
+        for (type_name, expected) in test_cases {
+            assert!(allowlist.contains(&type_name));
+
+            let method = create_test_method(type_name.to_string(), type_name.to_string());
+            let (request, response) = method.request_response_name("super", false);
+
+            assert_eq!(
+                request.to_string(),
+                expected.to_string(),
+                "Failed for input type: {type_name}"
+            );
+            assert_eq!(
+                response.to_string(),
+                expected.to_string(),
+                "Failed for output type: {type_name}"
+            );
+        }
+    });
+}
+
+#[test]
+fn test_default_non_path_type_allowlist() {
+    NON_PATH_TYPE_ALLOWLIST.with(|set_allowlist| {
+        let allowlist = set_allowlist.borrow();
+
+        // Verify that the default NON_PATH_TYPE_ALLOWLIST contains expected values.
+        assert!(allowlist.contains(&"()"));
+        assert_eq!(allowlist.len(), 1);
+    });
 }
 
 #[test]
