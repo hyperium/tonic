@@ -735,6 +735,17 @@ impl Builder {
     where
         P: AsRef<Path>,
     {
+        /// Drop guard that will set [`NON_PATH_TYPE_ALLOWLIST`] back
+        /// to its default on exit.
+        struct Defer;
+        impl Drop for Defer {
+            fn drop(&mut self) {
+                NON_PATH_TYPE_ALLOWLIST.set(DEFAULT_NON_PATH_TYPE_ALLOWLIST);
+            }
+        }
+
+        let _defer_guard = Defer;
+
         let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
             out_dir.clone()
         } else {
