@@ -117,11 +117,8 @@ impl CircuitBreakerLayer {
     ///
     /// - `failure_threshold`: consecutive failures before opening the circuit.
     /// - `success_threshold`: fraction of successes in the sliding window required to close
-    ///   the circuit from [`HalfOpen`] (e.g. `0.6` means 60%).
-    /// - `timeout`: how long to wait in [`Open`] state before probing with a single request.
-    ///
-    /// [`HalfOpen`]: CircuitState::HalfOpen
-    /// [`Open`]: CircuitState::Open
+    ///   the circuit from `HalfOpen` state (e.g. `0.6` means 60%).
+    /// - `timeout`: how long to wait in `Open` state before allowing a single probe request.
     pub fn new(failure_threshold: usize, success_threshold: f64, timeout: Duration) -> Self {
         Self {
             failure_threshold,
