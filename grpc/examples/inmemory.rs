@@ -22,84 +22,190 @@
  *
  */
 
-use std::any::Any;
-
-use tokio_stream::StreamExt;
-use tonic::async_trait;
-
+use bytes::Buf;
+use bytes::Bytes;
+use grpc::client;
+use grpc::client::CallOptions;
+use grpc::client::Channel;
 use grpc::client::ChannelOptions;
+use grpc::client::Invoke;
+use grpc::client::RecvStream as _;
+use grpc::client::SendStream as _;
+use grpc::core::ClientResponseStreamItem;
+use grpc::core::RecvMessage;
+use grpc::core::RequestHeaders;
+use grpc::core::SendMessage;
+use grpc::core::ServerResponseStreamItem;
 use grpc::credentials::InsecureChannelCredentials;
 use grpc::inmemory;
-use grpc::service::Message;
-use grpc::service::Request;
-use grpc::service::Response;
-use grpc::service::Service;
+use grpc::server;
+use grpc::server::Handle;
 
-struct Handler {}
+struct Handler {
+    id: String,
+}
 
-#[derive(Debug)]
+#[derive(Debug, Default)]
 struct MyReqMessage(String);
 
-#[derive(Debug)]
+impl SendMessage for MyReqMessage {
+    fn encode(&self) -> Result<Box<dyn Buf + Send + Sync>, String> {
+        Ok(Box::new(Bytes::from(self.0.clone())))
+    }
+}
+impl RecvMessage for MyReqMessage {
+    fn decode(&mut self, data: &mut dyn Buf) -> Result<(), String> {
+        let b = data.copy_to_bytes(data.remaining());
+        self.0 = String::from_utf8(b.to_vec()).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
+
+#[derive(Debug, Default)]
 struct MyResMessage(String);
+impl SendMessage for MyResMessage {
+    fn encode(&self) -> Result<Box<dyn Buf + Send + Sync>, String> {
+        Ok(Box::new(Bytes::from(self.0.clone())))
+    }
+}
+impl RecvMessage for MyResMessage {
+    fn decode(&mut self, data: &mut dyn Buf) -> Result<(), String> {
+        let b = data.copy_to_bytes(data.remaining());
+        self.0 = String::from_utf8(b.to_vec()).map_err(|e| e.to_string())?;
+        Ok(())
+    }
+}
 
-#[async_trait]
-impl Service for Handler {
-    async fn call(&self, method: String, request: Request) -> Response {
-        let mut stream = request.into_inner();
-        let output = async_stream::try_stream! {
-            while let Some(req) = stream.next().await {
-                yield Box::new(MyResMessage(format!(
-                    "Server: responding to: {}; msg: {}",
-                    method, (req as Box<dyn Any>).downcast_ref::<MyReqMessage>().unwrap().0,
-                ))) as Box<dyn Message>;
-            }
-        };
+impl Handle for Handler {
+    async fn handle(
+        &self,
+        headers: RequestHeaders,
+        tx: &mut impl server::SendStream,
+        mut rx: impl server::RecvStream + 'static,
+    ) {
+        let method = headers.method_name().clone();
+        let id = self.id.clone();
+        // Send headers
+        let _ = tx
+            .send(
+                ServerResponseStreamItem::Headers(grpc::core::ResponseHeaders::default()),
+                server::SendOptions::default(),
+            )
+            .await;
 
-        Response::new(Box::pin(output))
+        let mut req_msg = MyReqMessage::default();
+        while rx.next(&mut req_msg).await.is_ok() {
+            let res_msg = MyResMessage(format!(
+                "Server {}: responding to: {}; msg: {}",
+                id, method, req_msg.0,
+            ));
+            let _ = tx
+                .send(
+                    ServerResponseStreamItem::Message(&res_msg),
+                    server::SendOptions::default(),
+                )
+                .await;
+        }
+        // Send trailers
+        let _ = tx
+            .send(
+                ServerResponseStreamItem::Trailers(grpc::core::Trailers::new(grpc::Status::new(
+                    grpc::StatusCode::Ok,
+                    "OK",
+                ))),
+                server::SendOptions::default(),
+            )
+            .await;
     }
 }
 
 #[tokio::main]
 async fn main() {
     inmemory::reg();
+    let mut listeners = Vec::new();
+    for _ in 0..3 {
+        let lis = inmemory::InMemoryListener::new();
+        let mut srv = grpc::server::Server::new();
+        srv.set_handler(Handler { id: lis.id() });
+        let lis_clone = lis.clone();
+        tokio::task::spawn(async move {
+            srv.serve(&lis_clone).await;
+            println!("serve returned for listener {}!", lis_clone.id());
+        });
+        listeners.push(lis);
+    }
 
-    // Spawn the server.
-    let lis = inmemory::Listener::new();
-    let mut srv = grpc::server::Server::new();
-    srv.set_handler(Handler {});
-    let lis_clone = lis.clone();
-    tokio::task::spawn(async move {
-        srv.serve(&lis_clone).await;
-        println!("serve returned for listener 1!");
-    });
-
-    println!("Creating channel for {}", lis.target());
+    let ids: Vec<String> = listeners.iter().map(|lis| lis.id()).collect();
+    let target = format!("inmemory:///{}", ids.join(","));
+    println!("Creating channel for {target}");
     let chan_opts = ChannelOptions::default();
-    let chan = grpc::client::Channel::new(
-        lis.target().as_str(),
+    let chan = Channel::new(
+        target.as_str(),
         InsecureChannelCredentials::new(),
         chan_opts,
     );
 
-    let outbound = async_stream::stream! {
-        yield Box::new(MyReqMessage("My Request 1".to_string())) as Box<dyn Message>;
-        yield Box::new(MyReqMessage("My Request 2".to_string()));
-        yield Box::new(MyReqMessage("My Request 3".to_string()));
-    };
-
-    let req = Request::new(Box::pin(outbound));
-    let res = chan.call("/some/method".to_string(), req).await;
-    let mut res = res.into_inner();
-
-    while let Some(resp) = res.next().await {
-        println!(
-            "CALL RESPONSE: {}",
-            (resp.unwrap() as Box<dyn Any>)
-                .downcast_ref::<MyResMessage>()
-                .unwrap()
-                .0,
-        );
+    let expected_servers: std::collections::HashSet<_> = ids.into_iter().collect();
+    let mut responding_servers = std::collections::HashSet::new();
+    let start = std::time::Instant::now();
+    while responding_servers != expected_servers
+        && start.elapsed() < std::time::Duration::from_secs(3)
+    {
+        let server_id = run_rpc(&chan).await;
+        if !server_id.is_empty() {
+            responding_servers.insert(server_id);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(10)).await;
     }
-    lis.close().await;
+
+    println!("Responding servers: {:?}", responding_servers);
+    assert_eq!(responding_servers, expected_servers);
+
+    drop(chan);
+
+    for lis in listeners {
+        lis.close().await;
+    }
+}
+
+async fn run_rpc(chan: &Channel) -> String {
+    let (mut tx, mut rx) = chan
+        .invoke(
+            RequestHeaders::new().with_method_name("/some/method"),
+            CallOptions::default(),
+        )
+        .await;
+
+    tokio::spawn(async move {
+        let reqs = vec![
+            MyReqMessage("My Request 1".to_string()),
+            MyReqMessage("My Request 2".to_string()),
+            MyReqMessage("My Request 3".to_string()),
+        ];
+
+        for req in reqs {
+            tx.send(&req, client::SendOptions::default()).await.unwrap();
+        }
+    });
+
+    let mut server_id = String::new();
+    loop {
+        let mut res = MyResMessage::default();
+        match rx.next(&mut res).await {
+            ClientResponseStreamItem::Headers(_) => continue,
+            ClientResponseStreamItem::Message(_) => {
+                println!("CALL RESPONSE: {}", res.0);
+                if let Some(id) = res
+                    .0
+                    .strip_prefix("Server ")
+                    .and_then(|s| s.split(':').next())
+                {
+                    server_id = id.to_string();
+                }
+            }
+            ClientResponseStreamItem::Trailers(_) => break,
+            ClientResponseStreamItem::StreamClosed => break,
+        }
+    }
+    server_id
 }

@@ -62,10 +62,11 @@ trap cleanup EXIT
 
 sleep 3
 
-./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
+TARGET_DIR="$(cargo metadata --format-version 1 | jq -r '.target_directory')"
+"${TARGET_DIR}/debug/client" --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
 # Test a grpc rust client against a Go server.
-./target/debug/client --codec=protobuf --test_case="${JOINED_TEST_CASES}" ${ARG}
+"${TARGET_DIR}/debug/client" --codec=protobuf --test_case="${JOINED_TEST_CASES}" ${ARG}
 
 echo ":; killing test server"; kill "${SERVER_PID}";
 echo "Waiting for test server to exit..."
@@ -77,13 +78,13 @@ CODECS=("prost" "protobuf")
 
 for CODEC in "${CODECS[@]}"; do
     # run the test server
-    ./target/debug/server "${ARG}" --codec "${CODEC}" &
+    "${TARGET_DIR}/debug/server" "${ARG}" --codec "${CODEC}" &
     SERVER_PID=$!
     echo ":; started tonic test server with the ${CODEC} codec."
 
     sleep 3
 
-    ./target/debug/client --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
+    "${TARGET_DIR}/debug/client" --codec=prost --test_case="${JOINED_TEST_CASES}" "${ARG}"
 
     # Run client test cases
     if [ -n "${ARG:-}" ]; then

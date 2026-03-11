@@ -22,12 +22,16 @@
  *
  */
 
+pub mod call;
 pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
 mod insecure;
 mod local;
+#[cfg(feature = "tls-rustls")]
+pub mod rustls;
 pub(crate) mod server;
 
+pub use client::CompositeChannelCredentials;
 pub use insecure::InsecureChannelCredentials;
 pub use insecure::InsecureServerCredentials;
 pub use local::LocalChannelCredentials;
@@ -45,26 +49,26 @@ pub trait ServerCredentials: server::ServerCredsInternal + Sync + 'static {
     fn info(&self) -> &ProtocolInfo;
 }
 
-pub(crate) mod common {
-    /// Defines the level of protection provided by an established connection.
-    #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    #[non_exhaustive]
-    pub enum SecurityLevel {
-        /// The connection is insecure; no protection is applied.
-        NoSecurity,
-        /// The connection guarantees data integrity (tamper-proofing) but not
-        /// privacy.
-        ///
-        /// Payloads are visible to observers but cannot be modified without
-        /// detection.
-        IntegrityOnly,
-        /// The connection guarantees both privacy (confidentiality) and data
-        /// integrity.
-        ///
-        /// This is the standard level for secure transports like TLS.
-        PrivacyAndIntegrity,
-    }
+/// Defines the level of protection provided by an established connection.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum SecurityLevel {
+    /// The connection is insecure; no protection is applied.
+    NoSecurity,
+    /// The connection guarantees data integrity (tamper-proofing) but not
+    /// privacy.
+    ///
+    /// Payloads are visible to observers but cannot be modified without
+    /// detection.
+    IntegrityOnly,
+    /// The connection guarantees both privacy (confidentiality) and data
+    /// integrity.
+    ///
+    /// This is the standard level for secure transports like TLS.
+    PrivacyAndIntegrity,
+}
 
+pub(crate) mod common {
     /// Represents the value passed as the `:authority` pseudo-header, typically
     /// in the form `host:port`.
     pub struct Authority {
