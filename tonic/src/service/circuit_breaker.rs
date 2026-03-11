@@ -260,6 +260,12 @@ pub struct CircuitBreakerFuture<F, T> {
     _marker: std::marker::PhantomData<T>,
 }
 
+impl<F, T> fmt::Debug for CircuitBreakerFuture<F, T> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("CircuitBreakerFuture").finish()
+    }
+}
+
 impl<F, T, E> Future for CircuitBreakerFuture<F, T>
 where
     F: Future<Output = Result<T, E>>,
