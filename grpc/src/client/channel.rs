@@ -404,6 +404,7 @@ pub(crate) struct InternalChannelController {
     pub(super) subchannel_pool: Arc<InternalSubchannelPool>,
     resolve_now: Arc<Notify>,
     wqtx: WorkQueueTx,
+    lb_work_scheduler: Arc<LbWorkScheduler>,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
     runtime: GrpcRuntime,
@@ -418,7 +419,14 @@ impl InternalChannelController {
         connectivity_state: Arc<Watcher<ConnectivityState>>,
         runtime: GrpcRuntime,
     ) -> Self {
-        let lb = Arc::new(LbController::new(wqtx.clone(), runtime.clone()));
+        let lb_work_scheduler = Arc::new(LbWorkScheduler {
+            wqtx: wqtx.clone(),
+            pending: Mutex::default(),
+        });
+        let lb = Arc::new(LbController::new(
+            lb_work_scheduler.clone(),
+            runtime.clone(),
+        ));
 
         Self {
             lb,
@@ -429,6 +437,7 @@ impl InternalChannelController {
             picker,
             connectivity_state,
             runtime,
+            lb_work_scheduler,
         }
     }
 
@@ -503,20 +512,25 @@ impl load_balancing::ChannelController for InternalChannelController {
 pub(super) struct LbController {
     pub(super) policy: Mutex<Option<Box<dyn LbPolicy>>>,
     policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,
-    work_scheduler: WorkQueueTx,
-    pending: Mutex<bool>,
     runtime: GrpcRuntime,
+    work_scheduler: Arc<LbWorkScheduler>,
 }
 
-impl WorkScheduler for LbController {
+#[derive(Debug)]
+struct LbWorkScheduler {
+    pending: Mutex<bool>,
+    wqtx: WorkQueueTx,
+}
+
+impl WorkScheduler for LbWorkScheduler {
     fn schedule_work(&self) {
         if mem::replace(&mut *self.pending.lock().unwrap(), true) {
             // Already had a pending call scheduled.
             return;
         }
-        let _ = self.work_scheduler.send(WorkQueueItem::Closure(Box::new(
+        let _ = self.wqtx.send(WorkQueueItem::Closure(Box::new(
             |c: &mut InternalChannelController| {
-                *c.lb.pending.lock().unwrap() = false;
+                *c.lb_work_scheduler.pending.lock().unwrap() = false;
                 c.lb.clone()
                     .policy
                     .lock()
@@ -530,12 +544,11 @@ impl WorkScheduler for LbController {
 }
 
 impl LbController {
-    fn new(work_scheduler: WorkQueueTx, runtime: GrpcRuntime) -> Self {
+    fn new(work_scheduler: Arc<LbWorkScheduler>, runtime: GrpcRuntime) -> Self {
         Self {
             policy_builder: Mutex::default(),
             policy: Mutex::default(), // new(None::<Box<dyn LbPolicy>>),
             work_scheduler,
-            pending: Mutex::default(),
             runtime,
         }
     }
@@ -558,7 +571,7 @@ impl LbController {
         if p.is_none() {
             let builder = GLOBAL_LB_REGISTRY.get_policy(policy_name).unwrap();
             let newpol = builder.build(LbPolicyOptions {
-                work_scheduler: self.clone(),
+                work_scheduler: self.work_scheduler.clone(),
                 runtime: self.runtime.clone(),
             });
             *self.policy_builder.lock().unwrap() = Some(builder);
