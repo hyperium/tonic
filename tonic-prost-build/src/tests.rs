@@ -246,10 +246,57 @@ fn test_is_google_type() {
 }
 
 #[test]
-fn test_non_path_type_allowlist() {
-    // Verify that NON_PATH_TYPE_ALLOWLIST contains expected values
-    assert!(NON_PATH_TYPE_ALLOWLIST.contains(&"()"));
-    assert_eq!(NON_PATH_TYPE_ALLOWLIST.len(), 1);
+fn test_extended_non_path_type_allowlist() {
+    // prost-build already compiles some well known types into
+    // their rust primitive type counterpart. tonic-prost build must
+    // use the given primitive type.
+    let test_cases = vec![
+        ("()", quote!(())),
+        ("bool", quote!(bool)),
+        ("i32", quote!(i32)),
+        ("i64", quote!(i64)),
+        ("u32", quote!(u32)),
+        ("u64", quote!(u64)),
+        ("f32", quote!(f32)),
+        ("f64", quote!(f64)),
+    ];
+
+    NON_PATH_TYPE_ALLOWLIST.set(EXTENDED_NON_PATH_TYPE_ALLOWLIST);
+
+    NON_PATH_TYPE_ALLOWLIST.with(|set_allowlist| {
+        let allowlist = set_allowlist.borrow();
+
+        assert_eq!(allowlist.len(), test_cases.len());
+
+        for (type_name, expected) in test_cases {
+            assert!(allowlist.contains(&type_name));
+
+            let method = create_test_method(type_name.to_string(), type_name.to_string());
+            let (request, response) = method.request_response_name("super", false);
+
+            assert_eq!(
+                request.to_string(),
+                expected.to_string(),
+                "Failed for input type: {type_name}"
+            );
+            assert_eq!(
+                response.to_string(),
+                expected.to_string(),
+                "Failed for output type: {type_name}"
+            );
+        }
+    });
+}
+
+#[test]
+fn test_default_non_path_type_allowlist() {
+    NON_PATH_TYPE_ALLOWLIST.with(|set_allowlist| {
+        let allowlist = set_allowlist.borrow();
+
+        // Verify that the default NON_PATH_TYPE_ALLOWLIST contains expected values.
+        assert!(allowlist.contains(&"()"));
+        assert_eq!(allowlist.len(), 1);
+    });
 }
 
 #[test]
