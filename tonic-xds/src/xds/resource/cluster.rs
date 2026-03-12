@@ -20,8 +20,8 @@ pub(crate) struct ClusterResource {
 /// Load balancing policies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LbPolicy {
-    RoundRobin,
-    LeastRequest,
+    RoundRobin {},
+    LeastRequest {},
 }
 
 impl Resource for ClusterResource {
@@ -51,10 +51,10 @@ impl Resource for ClusterResource {
             .filter(|s| !s.is_empty());
 
         let lb_policy = match cluster::LbPolicy::try_from(message.lb_policy) {
-            Ok(cluster::LbPolicy::RoundRobin) => LbPolicy::RoundRobin,
-            Ok(cluster::LbPolicy::LeastRequest) => LbPolicy::LeastRequest,
+            Ok(cluster::LbPolicy::RoundRobin) => LbPolicy::RoundRobin {},
+            Ok(cluster::LbPolicy::LeastRequest) => LbPolicy::LeastRequest {},
             // Default to round-robin for unsupported policies.
-            _ => LbPolicy::RoundRobin,
+            _ => LbPolicy::RoundRobin {},
         };
 
         Ok(ClusterResource {
@@ -68,7 +68,7 @@ impl Resource for ClusterResource {
 impl ClusterResource {
     /// Returns the EDS service name for cascading EDS subscriptions.
     /// Falls back to the cluster name if no EDS service name is set.
-    pub(crate) fn cascade_eds_service_name(&self) -> &str {
+    pub(crate) fn eds_service_name(&self) -> &str {
         self.eds_service_name.as_deref().unwrap_or(&self.name)
     }
 }
@@ -91,15 +91,15 @@ mod tests {
         let cluster = make_cluster("my-cluster");
         let validated = ClusterResource::validate(cluster).expect("should validate");
         assert_eq!(validated.name, "my-cluster");
-        assert_eq!(validated.lb_policy, LbPolicy::RoundRobin);
+        assert_eq!(validated.lb_policy, LbPolicy::RoundRobin {});
         assert!(validated.eds_service_name.is_none());
     }
 
     #[test]
-    fn test_cascade_eds_service_name_defaults_to_cluster_name() {
+    fn test_eds_service_name_defaults_to_cluster_name() {
         let cluster = make_cluster("my-cluster");
         let validated = ClusterResource::validate(cluster).unwrap();
-        assert_eq!(validated.cascade_eds_service_name(), "my-cluster");
+        assert_eq!(validated.eds_service_name(), "my-cluster");
     }
 
     #[test]
@@ -115,7 +115,7 @@ mod tests {
         };
         let validated = ClusterResource::validate(cluster).unwrap();
         assert_eq!(validated.eds_service_name.as_deref(), Some("eds-svc"));
-        assert_eq!(validated.cascade_eds_service_name(), "eds-svc");
+        assert_eq!(validated.eds_service_name(), "eds-svc");
     }
 
     #[test]
@@ -126,7 +126,7 @@ mod tests {
             ..Default::default()
         };
         let validated = ClusterResource::validate(cluster).unwrap();
-        assert_eq!(validated.lb_policy, LbPolicy::LeastRequest);
+        assert_eq!(validated.lb_policy, LbPolicy::LeastRequest {});
     }
 
     #[test]
@@ -137,7 +137,7 @@ mod tests {
             ..Default::default()
         };
         let validated = ClusterResource::validate(cluster).unwrap();
-        assert_eq!(validated.lb_policy, LbPolicy::RoundRobin);
+        assert_eq!(validated.lb_policy, LbPolicy::RoundRobin {});
     }
 
     #[test]

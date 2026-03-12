@@ -7,6 +7,7 @@ use envoy_types::pb::envoy::config::route::v3::{
     RouteConfiguration, RouteMatch, route, route_action, route_match,
 };
 use prost::Message;
+use regex::Regex;
 use xds_client::resource::TypeUrl;
 use xds_client::{Error, Resource};
 
@@ -45,7 +46,7 @@ pub(crate) struct RouteConfigMatch {
 pub(crate) enum PathSpecifierConfig {
     Prefix(String),
     Path(String),
-    SafeRegex(String),
+    SafeRegex(Regex),
 }
 
 /// Header matching criteria.
@@ -60,7 +61,7 @@ pub(crate) struct HeaderMatcherConfig {
 #[derive(Debug, Clone)]
 pub(crate) enum HeaderMatchSpecifierConfig {
     Exact(String),
-    SafeRegex(String),
+    SafeRegex(Regex),
     Prefix(String),
     Suffix(String),
     Contains(String),
@@ -100,6 +101,13 @@ impl Resource for RouteConfigResource {
 
     fn validate(message: Self::Message) -> xds_client::Result<Self> {
         let name = message.name;
+
+        if message.virtual_hosts.is_empty() {
+            return Err(Error::Validation(format!(
+                "route configuration '{name}' has no virtual hosts"
+            )));
+        }
+
         let mut virtual_hosts = Vec::with_capacity(message.virtual_hosts.len());
 
         for vh in message.virtual_hosts {
@@ -168,7 +176,11 @@ fn validate_route_match(rm: RouteMatch) -> xds_client::Result<RouteConfigMatch> 
     let path_specifier = match rm.path_specifier {
         Some(route_match::PathSpecifier::Prefix(p)) => PathSpecifierConfig::Prefix(p),
         Some(route_match::PathSpecifier::Path(p)) => PathSpecifierConfig::Path(p),
-        Some(route_match::PathSpecifier::SafeRegex(r)) => PathSpecifierConfig::SafeRegex(r.regex),
+        Some(route_match::PathSpecifier::SafeRegex(r)) => {
+            let re = Regex::new(&r.regex)
+                .map_err(|e| Error::Validation(format!("invalid path regex '{}': {e}", r.regex)))?;
+            PathSpecifierConfig::SafeRegex(re)
+        }
         None => {
             // Default: empty prefix matches everything.
             PathSpecifierConfig::Prefix(String::new())
@@ -204,7 +216,10 @@ fn validate_header_matcher(
     let match_specifier = match hm.header_match_specifier {
         Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact(v),
         Some(HeaderMatchSpecifier::SafeRegexMatch(r)) => {
-            HeaderMatchSpecifierConfig::SafeRegex(r.regex)
+            let re = Regex::new(&r.regex).map_err(|e| {
+                Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
+            })?;
+            HeaderMatchSpecifierConfig::SafeRegex(re)
         }
         Some(HeaderMatchSpecifier::PresentMatch(_)) => HeaderMatchSpecifierConfig::Present,
         Some(HeaderMatchSpecifier::StringMatch(sm)) => match sm.match_pattern {
@@ -212,7 +227,12 @@ fn validate_header_matcher(
             Some(MatchPattern::Prefix(v)) => HeaderMatchSpecifierConfig::Prefix(v),
             Some(MatchPattern::Suffix(v)) => HeaderMatchSpecifierConfig::Suffix(v),
             Some(MatchPattern::Contains(v)) => HeaderMatchSpecifierConfig::Contains(v),
-            Some(MatchPattern::SafeRegex(r)) => HeaderMatchSpecifierConfig::SafeRegex(r.regex),
+            Some(MatchPattern::SafeRegex(r)) => {
+                let re = Regex::new(&r.regex).map_err(|e| {
+                    Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
+                })?;
+                HeaderMatchSpecifierConfig::SafeRegex(re)
+            }
             _ => {
                 return Err(Error::Validation(
                     "unsupported StringMatcher pattern".into(),
@@ -269,7 +289,7 @@ fn validate_route_action(
 
 impl RouteConfigResource {
     /// Returns cluster names referenced by this route configuration for cascading CDS subscriptions.
-    pub(crate) fn cascade_cluster_names(&self) -> HashSet<String> {
+    pub(crate) fn cluster_names(&self) -> HashSet<String> {
         let mut clusters = HashSet::new();
         for vh in &self.virtual_hosts {
             for route in &vh.routes {
@@ -333,10 +353,10 @@ mod tests {
     }
 
     #[test]
-    fn test_cascade_cluster_names() {
+    fn test_cluster_names() {
         let rc = make_route_config("rc-1");
         let validated = RouteConfigResource::validate(rc).unwrap();
-        let clusters = validated.cascade_cluster_names();
+        let clusters = validated.cluster_names();
         assert_eq!(clusters.len(), 1);
         assert!(clusters.contains("cluster-1"));
     }
@@ -452,7 +472,7 @@ mod tests {
             ..Default::default()
         };
         let validated = RouteConfigResource::validate(rc).unwrap();
-        let clusters = validated.cascade_cluster_names();
+        let clusters = validated.cluster_names();
         assert_eq!(clusters.len(), 2);
         assert!(clusters.contains("c1"));
         assert!(clusters.contains("c2"));
@@ -469,5 +489,51 @@ mod tests {
         let bytes = rc.encode_to_vec();
         let deserialized = RouteConfigResource::deserialize(Bytes::from(bytes)).unwrap();
         assert_eq!(RouteConfigResource::name(&deserialized), "rc-1");
+    }
+
+    #[test]
+    fn test_invalid_regex_fails_validation() {
+        use envoy_types::pb::envoy::config::route::v3::{
+            RouteAction, VirtualHost, route::Action, route_action::ClusterSpecifier,
+        };
+        use envoy_types::pb::envoy::r#type::matcher::v3::RegexMatcher;
+
+        let route = envoy_types::pb::envoy::config::route::v3::Route {
+            r#match: Some(RouteMatch {
+                path_specifier: Some(route_match::PathSpecifier::SafeRegex(RegexMatcher {
+                    regex: "[invalid".to_string(),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            }),
+            action: Some(Action::Route(RouteAction {
+                cluster_specifier: Some(ClusterSpecifier::Cluster("c1".to_string())),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![route],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let err = RouteConfigResource::validate(rc).unwrap_err();
+        assert!(err.to_string().contains("invalid path regex"));
+    }
+
+    #[test]
+    fn test_empty_virtual_hosts_fails() {
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![],
+            ..Default::default()
+        };
+        let err = RouteConfigResource::validate(rc).unwrap_err();
+        assert!(err.to_string().contains("no virtual hosts"));
     }
 }

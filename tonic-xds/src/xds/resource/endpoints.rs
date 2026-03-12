@@ -23,9 +23,18 @@ pub(crate) struct EndpointsResource {
 /// Endpoints within a locality.
 #[derive(Debug, Clone)]
 pub(crate) struct LocalityEndpoints {
+    pub locality: Option<Locality>,
     pub endpoints: Vec<ResolvedEndpoint>,
     pub load_balancing_weight: u32,
     pub priority: u32,
+}
+
+/// Locality information for a set of endpoints.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct Locality {
+    pub region: String,
+    pub zone: String,
+    pub sub_zone: String,
 }
 
 /// A single validated endpoint.
@@ -96,7 +105,14 @@ impl Resource for EndpointsResource {
                 .map(|w| w.value)
                 .unwrap_or(0);
 
+            let locality = locality_endpoints.locality.map(|l| Locality {
+                region: l.region,
+                zone: l.zone,
+                sub_zone: l.sub_zone,
+            });
+
             localities.push(LocalityEndpoints {
+                locality,
                 endpoints,
                 load_balancing_weight: weight,
                 priority: locality_endpoints.priority,
@@ -237,7 +253,9 @@ mod tests {
     }
 
     #[test]
-    fn test_not_all_resources_required() {
+    fn test_eds_allows_partial_responses_in_sotw() {
+        // EDS resources are per-cluster, so SotW responses may contain only a subset.
+        // Unlike LDS/CDS which require all resources in every SotW response.
         assert!(!EndpointsResource::ALL_RESOURCES_REQUIRED_IN_SOTW);
     }
 

@@ -92,7 +92,7 @@ impl Resource for ListenerResource {
 
 impl ListenerResource {
     /// Returns the RDS route config name for cascading subscriptions.
-    pub(crate) fn cascade_route_config_name(&self) -> Option<&str> {
+    pub(crate) fn route_config_name(&self) -> Option<&str> {
         match &self.route_source {
             RouteSource::Rds(name) => Some(name),
             RouteSource::Inline(_) => None,
@@ -137,10 +137,7 @@ mod tests {
         assert!(
             matches!(&validated.route_source, RouteSource::Rds(name) if name == "route-config-1")
         );
-        assert_eq!(
-            validated.cascade_route_config_name(),
-            Some("route-config-1")
-        );
+        assert_eq!(validated.route_config_name(), Some("route-config-1"));
     }
 
     #[test]
@@ -239,6 +236,6 @@ mod tests {
         let validated = ListenerResource::validate(listener).expect("should validate");
         assert_eq!(validated.name, "inline-listener");
         assert!(matches!(&validated.route_source, RouteSource::Inline(_)));
-        assert!(validated.cascade_route_config_name().is_none());
+        assert!(validated.route_config_name().is_none());
     }
 }
