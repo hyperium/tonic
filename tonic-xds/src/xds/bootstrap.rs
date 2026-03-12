@@ -15,6 +15,7 @@ const ENV_BOOTSTRAP_CONFIG: &str = "GRPC_XDS_BOOTSTRAP_CONFIG";
 
 /// Parsed xDS bootstrap configuration.
 #[derive(Debug, Clone, Deserialize)]
+#[non_exhaustive]
 pub(crate) struct BootstrapConfig {
     /// xDS management servers to connect to.
     pub xds_servers: Vec<XdsServerConfig>,
@@ -39,16 +40,22 @@ pub(crate) struct XdsServerConfig {
 /// A channel credential entry from the bootstrap config.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct ChannelCredentialConfig {
-    /// Credential type string (e.g., `"insecure"`, `"tls"`, `"google_default"`).
+    /// Credential type (e.g., `"insecure"`, `"tls"`, `"google_default"`).
     #[serde(rename = "type")]
-    pub cred_type: String,
+    pub cred_type: ChannelCredentialType,
 }
 
-/// Supported channel credential types.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Channel credential type from the bootstrap config.
+///
+/// Known types are deserialized into specific variants; unrecognized types
+/// are captured as `Unsupported(String)` so they can be skipped gracefully.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub(crate) enum ChannelCredentialType {
     Insecure,
     Tls,
+    #[serde(untagged)]
+    Unsupported(String),
 }
 
 /// Node identity configuration from bootstrap JSON.
@@ -91,6 +98,16 @@ pub(crate) enum BootstrapError {
 }
 
 impl BootstrapConfig {
+    /// Create a bootstrap configuration directly from struct fields.
+    pub(crate) fn new(
+        xds_servers: Vec<XdsServerConfig>,
+        node: NodeConfig,
+    ) -> Result<Self, BootstrapError> {
+        let config = Self { xds_servers, node };
+        config.validate()?;
+        Ok(config)
+    }
+
     /// Load bootstrap configuration from environment variables.
     ///
     /// Checks `GRPC_XDS_BOOTSTRAP` (file path) first, then falls back to
@@ -134,7 +151,7 @@ impl BootstrapConfig {
 
     /// Convert the bootstrap node config to an `xds_client::Node`.
     pub(crate) fn to_node(&self) -> Node {
-        let mut node = Node::new("grpc-rust", env!("CARGO_PKG_VERSION"));
+        let mut node = Node::new("tonic-xds", env!("CARGO_PKG_VERSION"));
 
         if !self.node.id.is_empty() {
             node = node.with_id(&self.node.id);
@@ -155,21 +172,27 @@ impl BootstrapConfig {
 
     /// Returns the URI of the first xDS server.
     pub(crate) fn server_uri(&self) -> &str {
-        // Safe: validate() ensures xds_servers is non-empty.
-        &self.xds_servers[0].server_uri
+        self.xds_servers
+            .first()
+            .map(|s| s.server_uri.as_str())
+            .expect("xds_servers validated non-empty")
     }
 
     /// Select the first supported channel credential type from the first server's config.
     ///
+    /// Per gRFC A27, the client stops at the first credential type it supports.
     /// Returns `None` if no supported credential type is found.
-    pub(crate) fn selected_credential(&self) -> Option<ChannelCredentialType> {
-        self.xds_servers[0]
+    pub(crate) fn selected_credential(&self) -> Option<&ChannelCredentialType> {
+        self.xds_servers
+            .first()?
             .channel_creds
             .iter()
-            .find_map(|c| match c.cred_type.as_str() {
-                "insecure" => Some(ChannelCredentialType::Insecure),
-                "tls" => Some(ChannelCredentialType::Tls),
-                _ => None,
+            .map(|c| &c.cred_type)
+            .find(|t| {
+                matches!(
+                    t,
+                    ChannelCredentialType::Insecure | ChannelCredentialType::Tls
+                )
             })
     }
 }
@@ -223,10 +246,10 @@ mod tests {
         let config = BootstrapConfig::from_json(full_json()).unwrap();
         assert_eq!(config.xds_servers[0].server_uri, "xds.example.com:443");
         assert_eq!(config.xds_servers[0].channel_creds.len(), 3);
-        assert_eq!(
+        assert!(matches!(
             config.xds_servers[0].channel_creds[0].cred_type,
-            "google_default"
-        );
+            ChannelCredentialType::Unsupported(_)
+        ));
         assert_eq!(config.xds_servers[0].server_features, vec!["xds_v3"]);
         assert_eq!(config.node.id, "projects/123/nodes/456");
         assert_eq!(config.node.cluster.as_deref(), Some("test-cluster"));
@@ -243,7 +266,7 @@ mod tests {
         let node = config.to_node();
         assert_eq!(node.id.as_deref(), Some("projects/123/nodes/456"));
         assert_eq!(node.cluster.as_deref(), Some("test-cluster"));
-        assert_eq!(node.user_agent_name, "grpc-rust");
+        assert_eq!(node.user_agent_name, "tonic-xds");
 
         let locality = node.locality.unwrap();
         assert_eq!(locality.region, "us-east1");
@@ -266,7 +289,7 @@ mod tests {
         // google_default skipped, tls is first supported
         assert_eq!(
             config.selected_credential(),
-            Some(ChannelCredentialType::Tls)
+            Some(&ChannelCredentialType::Tls)
         );
     }
 
@@ -282,7 +305,7 @@ mod tests {
         let config = BootstrapConfig::from_json(json).unwrap();
         assert_eq!(
             config.selected_credential(),
-            Some(ChannelCredentialType::Insecure)
+            Some(&ChannelCredentialType::Insecure)
         );
     }
 
