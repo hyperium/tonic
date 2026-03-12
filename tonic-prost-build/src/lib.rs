@@ -32,6 +32,7 @@
 use proc_macro2::TokenStream;
 use prost_build::{Method, Service};
 use quote::{ToTokens, quote};
+use std::cell::RefCell;
 use std::{
     collections::HashSet,
     ffi::OsString,
@@ -76,6 +77,7 @@ pub fn configure() -> Builder {
         proto_path: "super".to_string(),
         compile_well_known_types: false,
         emit_package: true,
+        with_extended_rust_types: false,
         protoc_args: Vec::new(),
         include_file: None,
         emit_rerun_if_changed: std::env::var_os("CARGO").is_some(),
@@ -107,8 +109,20 @@ pub fn compile_fds(fds: prost_types::FileDescriptorSet) -> io::Result<()> {
     self::configure().compile_fds(fds)
 }
 
-/// Non-path Rust types allowed for request/response types.
-const NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
+/// Extended list of Non-path Rust types allowed for request/response types.
+/// Needed for compiling well known types as request/responses.
+const EXTENDED_NON_PATH_TYPE_ALLOWLIST: &[&str] =
+    &["()", "bool", "i32", "i64", "u32", "u64", "f32", "f64"];
+/// List of Non-path Rust types allowed for request/response types.
+const DEFAULT_NON_PATH_TYPE_ALLOWLIST: &[&str] = &["()"];
+
+thread_local! {
+    /// Chosen allowlist, which would be [`EXTENDED_NON_PATH_TYPE_ALLOWLIST`] if
+    /// [`Builder::with_extended_rust_types`] was called.
+    pub static NON_PATH_TYPE_ALLOWLIST: RefCell<&'static [&'static str]> = const {
+        RefCell::new(DEFAULT_NON_PATH_TYPE_ALLOWLIST)
+    };
+}
 
 /// Newtype wrapper for prost to add tonic-specific extensions
 struct TonicBuildService {
@@ -211,10 +225,7 @@ impl tonic_build::Method for TonicBuildMethod {
                         .to_token_stream()
                 }
             }
-        } else if NON_PATH_TYPE_ALLOWLIST
-            .iter()
-            .any(|ty| self.prost_method.input_type.ends_with(ty))
-        {
+        } else if is_non_path_type(&self.prost_method.input_type) {
             self.prost_method.input_type.parse::<TokenStream>().unwrap()
         } else {
             // Check if this is an extern type that starts with :: or crate::
@@ -253,10 +264,7 @@ impl tonic_build::Method for TonicBuildMethod {
                             .to_token_stream()
                     }
                 }
-            } else if NON_PATH_TYPE_ALLOWLIST
-                .iter()
-                .any(|ty| self.prost_method.output_type.ends_with(ty))
-            {
+            } else if is_non_path_type(&self.prost_method.output_type) {
                 self.prost_method
                     .output_type
                     .parse::<TokenStream>()
@@ -292,6 +300,15 @@ impl tonic_build::Method for TonicBuildMethod {
     fn deprecated(&self) -> bool {
         self.prost_method.options.deprecated()
     }
+}
+
+fn is_non_path_type(ty: &str) -> bool {
+    NON_PATH_TYPE_ALLOWLIST.with(|allowlist| {
+        allowlist
+            .borrow()
+            .iter()
+            .any(|allowlist_type| ty.ends_with(allowlist_type))
+    })
 }
 
 fn is_google_type(ty: &str) -> bool {
@@ -400,6 +417,7 @@ pub struct Builder {
     proto_path: String,
     compile_well_known_types: bool,
     emit_package: bool,
+    with_extended_rust_types: bool,
     protoc_args: Vec<OsString>,
     include_file: Option<PathBuf>,
     emit_rerun_if_changed: bool,
@@ -594,6 +612,14 @@ impl Builder {
         self
     }
 
+    /// Use the extended mapping of well-known types to rust types.
+    ///
+    /// Default is `false`.
+    pub fn with_extended_rust_types(mut self, enable: bool) -> Self {
+        self.with_extended_rust_types = enable;
+        self
+    }
+
     /// Enable or disable emitting package information.
     ///
     /// Passed directly to `prost_build::Config.emit_package`.
@@ -709,6 +735,17 @@ impl Builder {
     where
         P: AsRef<Path>,
     {
+        /// Drop guard that will set [`NON_PATH_TYPE_ALLOWLIST`] back
+        /// to its default on exit.
+        struct Defer;
+        impl Drop for Defer {
+            fn drop(&mut self) {
+                NON_PATH_TYPE_ALLOWLIST.set(DEFAULT_NON_PATH_TYPE_ALLOWLIST);
+            }
+        }
+
+        let _defer_guard = Defer;
+
         let out_dir = if let Some(out_dir) = self.out_dir.as_ref() {
             out_dir.clone()
         } else {
@@ -759,6 +796,10 @@ impl Builder {
 
         if let Some(path) = &self.include_file {
             config.include_file(path);
+        }
+
+        if self.with_extended_rust_types {
+            NON_PATH_TYPE_ALLOWLIST.set(EXTENDED_NON_PATH_TYPE_ALLOWLIST);
         }
 
         // Note: We don't pass self.disable_comments to prost Config here
