@@ -22,8 +22,11 @@
  *
  */
 
+use std::fs;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::Once;
 use std::time::Duration;
 
 use bytes::Buf;
@@ -35,6 +38,7 @@ use tokio::time::timeout;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::wrappers::TcpListenerStream;
 use tonic::Response;
 use tonic::Status;
 use tonic::async_trait;
@@ -48,6 +52,7 @@ use crate::client::RecvStream as _;
 use crate::client::SendOptions;
 use crate::client::SendStream as _;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::core::ClientResponseStreamItem;
@@ -55,6 +60,12 @@ use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::SendMessage;
 use crate::credentials::InsecureChannelCredentials;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::common::Authority;
+use crate::credentials::rustls::RootCertificates;
+use crate::credentials::rustls::StaticProvider;
+use crate::credentials::rustls::client::ClientTlsConfig;
+use crate::credentials::rustls::client::RustlsClientTlsCredendials;
 use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
@@ -80,7 +91,7 @@ pub(crate) async fn tonic_transport_rpc() {
         let _ = Server::builder()
             .add_service(svc)
             .serve_with_incoming_shutdown(
-                tokio_stream::wrappers::TcpListenerStream::new(listener),
+                TcpListenerStream::new(listener),
                 shutdown_notify_copy.notified(),
             )
             .await;
@@ -90,10 +101,16 @@ pub(crate) async fn tonic_transport_rpc() {
         .get_transport(TCP_IP_NETWORK_TYPE)
         .unwrap();
     let config = Arc::new(TransportOptions::default());
+    let securty_opts = SecurityOpts {
+        credentials: InsecureChannelCredentials::new_arc(),
+        authority: Authority::new("localhost".to_string(), None),
+        handshake_info: ClientHandshakeInfo::default(),
+    };
     let (conn, mut disconnection_listener) = builder
         .dyn_connect(
             addr.to_string(),
             GrpcRuntime::new(TokioRuntime::default()),
+            &securty_opts,
             &config,
         )
         .await
@@ -177,7 +194,7 @@ async fn grpc_invoke_tonic_unary() {
         let _ = Server::builder()
             .add_service(svc)
             .serve_with_incoming_shutdown(
-                tokio_stream::wrappers::TcpListenerStream::new(listener),
+                TcpListenerStream::new(listener),
                 shutdown_notify_copy.notified(),
             )
             .await;
@@ -187,7 +204,7 @@ async fn grpc_invoke_tonic_unary() {
     let target = format!("dns:///{}", addr);
     let channel = Channel::new(
         &target,
-        InsecureChannelCredentials::new(),
+        InsecureChannelCredentials::new_arc(),
         Default::default(),
     );
 
@@ -224,6 +241,111 @@ async fn grpc_invoke_tonic_unary() {
         panic!("Expected Message after Headers");
     };
     assert_eq!(resp.0.message, "hello interop");
+
+    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
+        panic!("Expected Trailers, got StreamClosed or other item");
+    };
+
+    assert_eq!(
+        t.status().code(),
+        crate::StatusCode::Ok,
+        "RPC failed: {:?}",
+        t.status()
+    );
+
+    shutdown_notify.notify_one();
+    server_handle.await.unwrap();
+}
+
+static INIT: Once = Once::new();
+
+fn init_provider() {
+    INIT.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
+#[tokio::test]
+async fn grpc_invoke_tonic_unary_tls() {
+    init_provider();
+    // Register DNS & Tonic.
+    super::reg();
+    crate::client::name_resolution::dns::reg();
+
+    let certs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/data/tls");
+
+    let server_cert = fs::read(certs_path.join("server.pem")).expect("failed to read server.pem");
+    let server_key = fs::read(certs_path.join("server.key")).expect("failed to read server.key");
+    let ca_cert = fs::read(certs_path.join("ca.pem")).expect("failed to read ca.pem");
+
+    let identity = tonic::transport::Identity::from_pem(server_cert, server_key);
+    let tls_config = tonic::transport::ServerTlsConfig::new().identity(identity);
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let shutdown_notify = Arc::new(Notify::new());
+    let shutdown_notify_copy = shutdown_notify.clone();
+
+    // Spawn a task for the server.
+    let server_handle = tokio::spawn(async move {
+        let echo_server = EchoService {};
+        let svc = EchoServer::new(echo_server);
+        let _ = Server::builder()
+            .tls_config(tls_config)
+            .expect("failed to set tls config")
+            .add_service(svc)
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(listener),
+                shutdown_notify_copy.notified(),
+            )
+            .await;
+    });
+
+    // Create the channel.
+    let root_certs = RootCertificates::from_pem(ca_cert);
+    let root_provider = StaticProvider::new(root_certs);
+    let config = ClientTlsConfig::new().with_root_certificates_provider(root_provider);
+    let creds = RustlsClientTlsCredendials::new(config).unwrap();
+
+    let target = format!("dns:///{}", addr);
+    let channel = Channel::new(&target, Arc::new(creds), Default::default());
+
+    // Start the call.
+    let (mut tx, mut rx) = channel
+        .invoke(
+            RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
+            CallOptions::default(),
+        )
+        .await;
+
+    // Send the request.
+    let req = WrappedEchoRequest(EchoRequest {
+        message: "hello interop tls".into(),
+    });
+    tx.send(
+        &req,
+        SendOptions {
+            final_msg: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    // Response should be Headers, Message ("hello interop tls"), Trailers (OK).
+    let mut resp = WrappedEchoResponse(EchoResponse::default());
+
+    let ClientResponseStreamItem::Headers(_) = rx.next(&mut resp).await else {
+        panic!("Expected Headers first");
+    };
+
+    let ClientResponseStreamItem::Message(()) = rx.next(&mut resp).await else {
+        panic!("Expected Message after Headers");
+    };
+    assert_eq!(resp.0.message, "hello interop tls");
 
     let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
         panic!("Expected Trailers, got StreamClosed or other item");

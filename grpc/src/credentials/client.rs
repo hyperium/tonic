@@ -57,8 +57,8 @@ pub trait ChannelCredsInternal {
         &self,
         authority: &Authority,
         source: Input,
-        info: ClientHandshakeInfo,
-        runtime: GrpcRuntime,
+        info: &ClientHandshakeInfo,
+        runtime: &GrpcRuntime,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 
     /// Returns call credentials to be used for all RPCs made on a connection.
@@ -155,7 +155,7 @@ impl<C> ClientConnectionSecurityInfo<C> {
 ///
 /// Individual credential implementations are responsible for validating and
 /// interpreting the format of the data they receive.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ClientHandshakeInfo {
     /// The bag of attributes containing the handshake data.
     attributes: Attributes,
@@ -208,8 +208,8 @@ impl<T: ChannelCredentials> ChannelCredsInternal for CompositeChannelCredentials
         &self,
         authority: &Authority,
         source: Input,
-        info: ClientHandshakeInfo,
-        runtime: GrpcRuntime,
+        info: &ClientHandshakeInfo,
+        runtime: &GrpcRuntime,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         self.channel_creds
             .connect(authority, source, info, runtime)
@@ -329,8 +329,8 @@ mod tests {
             .connect(
                 &authority,
                 endpoint,
-                ClientHandshakeInfo::default(),
-                runtime,
+                &ClientHandshakeInfo::default(),
+                &runtime,
             )
             .await
             .unwrap();

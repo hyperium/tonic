@@ -50,6 +50,7 @@ use crate::client::load_balancing::ExternalSubchannel;
 use crate::client::load_balancing::SubchannelState;
 use crate::client::name_resolution::Address;
 use crate::client::transport::DynTransport;
+use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportOptions;
 use crate::core::RequestHeaders;
 use crate::rt::BoxedTaskHandle;
@@ -210,6 +211,7 @@ pub(crate) struct InternalSubchannel {
     state_machine_event_sender: mpsc::UnboundedSender<SubchannelStateMachineEvent>,
     inner: Mutex<InnerSubchannel>,
     runtime: GrpcRuntime,
+    security_opts: SecurityOpts,
 }
 
 struct InnerSubchannel {
@@ -262,6 +264,7 @@ impl InternalSubchannel {
         backoff: Arc<dyn Backoff>,
         unregister_fn: Box<dyn FnOnce(SubchannelKey) + Send + Sync>,
         runtime: GrpcRuntime,
+        security_opts: SecurityOpts,
     ) -> Arc<InternalSubchannel> {
         println!("creating new internal subchannel for: {:?}", &key);
         let (tx, mut rx) = mpsc::unbounded_channel::<SubchannelStateMachineEvent>();
@@ -278,6 +281,7 @@ impl InternalSubchannel {
                 disconnect_task: None,
             }),
             runtime: runtime.clone(),
+            security_opts,
         });
 
         // This long running task implements the subchannel state machine. When
@@ -382,13 +386,14 @@ impl InternalSubchannel {
         // TODO: All these options to be configured by users.
         let transport_opts = TransportOptions::default();
         let runtime = self.runtime.clone();
+        let security_opts = self.security_opts.clone();
 
         let connect_task = self.runtime.spawn(Box::pin(async move {
             tokio::select! {
                 _ = runtime.sleep(min_connect_timeout) => {
                     let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionTimedOut);
                 }
-                result = transport.dyn_connect(address.to_string().clone(), runtime, &transport_opts) => {
+                result = transport.dyn_connect(address.to_string().clone(), runtime, &security_opts, &transport_opts) => {
                     match result {
                         Ok((service, onclose)) => {
                             let _ = state_machine_tx.send(SubchannelStateMachineEvent::ConnectionSucceeded(Arc::from(service), onclose));

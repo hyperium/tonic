@@ -70,6 +70,7 @@ use crate::client::RecvStream;
 use crate::client::SendOptions;
 use crate::client::SendStream;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::transport::SecurityOpts;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
@@ -79,6 +80,7 @@ use crate::core::RequestHeaders;
 use crate::core::ResponseHeaders;
 use crate::core::SendMessage;
 use crate::core::Trailers;
+use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 use crate::rt::TcpOptions;
@@ -266,6 +268,7 @@ impl Transport for TransportBuilder {
         &self,
         address: String,
         runtime: GrpcRuntime,
+        security_info: &SecurityOpts,
         opts: &TransportOptions,
     ) -> Result<(Self::Service, oneshot::Receiver<Result<(), String>>), String> {
         let runtime = runtime.clone();
@@ -315,7 +318,17 @@ impl Transport for TransportBuilder {
         } else {
             tcp_stream_fut.await?
         };
-        let tcp_stream = HyperStream::new(tcp_stream);
+        let credentials = &security_info.credentials;
+        let plaintext_stream = credentials
+            .connect_dyn(
+                &security_info.authority,
+                tcp_stream,
+                &security_info.handshake_info,
+                &runtime,
+            )
+            .await?
+            .endpoint;
+        let tcp_stream = HyperStream::new(plaintext_stream);
 
         let (sender, connection) = settings
             .handshake(tcp_stream)

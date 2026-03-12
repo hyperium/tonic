@@ -57,6 +57,11 @@ impl InsecureChannelCredentials {
     pub fn new() -> Self {
         Self { _private: () }
     }
+
+    /// Creates a new ref-counted instance of `InsecureChannelCredentials`.
+    pub fn new_arc() -> Arc<Self> {
+        Arc::new(Self { _private: () })
+    }
 }
 
 /// An implementation of [`ClientConnectionSecurityContext`] for insecure connections.
@@ -77,8 +82,8 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
         &self,
         _authority: &Authority,
         source: Input,
-        _info: ClientHandshakeInfo,
-        _runtime: GrpcRuntime,
+        _info: &ClientHandshakeInfo,
+        _runtime: &GrpcRuntime,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         Ok(HandshakeOutput {
             endpoint: source,
@@ -157,7 +162,6 @@ mod test {
     use crate::credentials::client::ChannelCredsInternal as ClientSealed;
     use crate::credentials::client::ClientConnectionSecurityContext;
     use crate::credentials::client::ClientHandshakeInfo;
-    use crate::credentials::common::Authority;
     use crate::credentials::server::ServerCredsInternal;
     use crate::rt::GrpcEndpoint;
     use crate::rt::TcpOptions;
@@ -183,7 +187,7 @@ mod test {
         let handshake_info = ClientHandshakeInfo::default();
 
         let output = creds
-            .connect(&authority, endpoint, handshake_info, runtime)
+            .connect(&authority, endpoint, &handshake_info, &runtime)
             .await
             .unwrap();
 

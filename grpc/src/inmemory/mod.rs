@@ -53,6 +53,7 @@ use crate::client::name_resolution::Target;
 use crate::client::name_resolution::global_registry as global_resolver_registry;
 use crate::client::service_config::ServiceConfig;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::SecurityOpts;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::core::ClientResponseStreamItem;
@@ -314,6 +315,7 @@ impl Transport for InMemoryTransport {
         &self,
         target: String,
         _runtime: GrpcRuntime,
+        _security_opts: &SecurityOpts,
         _options: &TransportOptions,
     ) -> Result<(Self::Service, oneshot::Receiver<Result<(), String>>), String> {
         let listeners = LISTENERS.lock().unwrap();
