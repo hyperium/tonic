@@ -1,7 +1,7 @@
-use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
+use hello_world::greeter_client::GreeterClient;
 
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");

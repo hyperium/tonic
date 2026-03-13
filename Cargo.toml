@@ -9,11 +9,13 @@ members = [
   "tonic-reflection",
   "tonic-prost",
   "tonic-prost-build",
-  "tonic-web", # Non-published crates
+  "tonic-web",
   "examples",
   "codegen",
   "grpc",
-  "interop", # Tests
+  "xds-client",
+  "tonic-xds",
+  "interop",
   "tests/disable_comments",
   "tests/wellknown",
   "tests/wellknown-compiled",
@@ -29,7 +31,7 @@ members = [
 resolver = "2"
 
 [workspace.package]
-rust-version = "1.75"
+rust-version = "1.88"
 
 [workspace.lints.rust]
 missing_debug_implementations = "warn"

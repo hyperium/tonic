@@ -11,7 +11,7 @@
 )]
 #![doc(issue_tracker_base_url = "https://github.com/hyperium/tonic/issues/")]
 #![doc(test(no_crate_inject, attr(deny(rust_2018_idioms))))]
-#![cfg_attr(docsrs, feature(doc_auto_cfg))]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use std::fmt::{Display, Formatter};
 
@@ -39,7 +39,7 @@ mod generated {
 
 /// Generated protobuf types from the `grpc.health.v1` package.
 pub mod pb {
-    pub use crate::generated::{grpc_health_v1::*, FILE_DESCRIPTOR_SET};
+    pub use crate::generated::{FILE_DESCRIPTOR_SET, grpc_health_v1::*};
 }
 
 pub mod server;

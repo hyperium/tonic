@@ -18,7 +18,7 @@ jobs:
   rustfmt:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
       with:
         components: rustfmt
@@ -32,7 +32,7 @@ jobs:
     outputs:
       cache-hit: ${{ steps.cache-plugin.outputs.cache-hit }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Cache protoc and plugin
         id: cache-plugin
         uses: actions/cache@v4
@@ -154,7 +154,7 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-protoc-plugin
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
       with:
         components: clippy
@@ -190,7 +190,7 @@ jobs:
   codegen:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
     - uses: Swatinem/rust-cache@v2
     - run: cargo run --package codegen
@@ -200,10 +200,10 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-protoc-plugin
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2025-03-27
+        toolchain: nightly-2026-02-22
     - uses: taiki-e/install-action@cargo-hack
     - uses: taiki-e/install-action@cargo-udeps
     - name: Restore protoc and plugin from cache
@@ -251,7 +251,7 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
     - name: Restore protoc and plugin from cache
@@ -291,7 +291,7 @@ jobs:
   msrv:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
     - name: Resolve MSRV aware dependencies
       run: cargo update
@@ -307,7 +307,16 @@ jobs:
     - uses: Swatinem/rust-cache@v2
     # we exlude crates that do not use rust-version = { workspace = true }
     - run: cargo no-dev-deps --no-private check --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
-    - run: cargo no-dev-deps --no-private doc --no-deps --all-features --workspace --exclude grpc --exclude tonic-protobuf\*
+
+  doc:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v6
+    - uses: dtolnay/rust-toolchain@nightly
+    - uses: dtolnay/install@cargo-docs-rs
+    - uses: taiki-e/install-action@cargo-hack
+    - uses: Swatinem/rust-cache@v2
+    - run: cargo +nightly hack --no-private docs-rs
       env:
         RUSTDOCFLAGS: "-D warnings"
 
@@ -318,7 +327,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
     - name: Restore protoc and plugin from cache
       id: cache-plugin
@@ -362,7 +371,7 @@ jobs:
   doc-test:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
@@ -376,7 +385,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macOS-latest, windows-latest]
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
     - name: Restore protoc and plugin from cache
       id: cache-plugin
@@ -415,7 +424,7 @@ jobs:
   semver:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: obi1kenobi/cargo-semver-checks-action@v2
       with:
         feature-group: all-features
@@ -423,14 +432,14 @@ jobs:
   external-types:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v5
+    - uses: actions/checkout@v6
     - uses: dtolnay/rust-toolchain@master
       with:
-        toolchain: nightly-2025-08-06
+        toolchain: nightly-2025-10-18
     - name: Install cargo-check-external-types
       uses: taiki-e/cache-cargo-install-action@v2
       with:
-        tool: cargo-check-external-types@0.3.0
+        tool: cargo-check-external-types@0.4.0
     - uses: taiki-e/install-action@cargo-hack
     - uses: Swatinem/rust-cache@v2
     - run: cargo hack --no-private check-external-types --all-features

@@ -23,38 +23,41 @@
  */
 
 use core::panic;
-use std::{
-    any::Any,
-    error::Error,
-    fmt::{Debug, Display},
-    hash::{Hash, Hasher},
-    ptr::addr_eq,
-    sync::{Arc, Mutex, Weak},
-};
-use tonic::{metadata::MetadataMap, Status};
+use std::any::Any;
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::hash::Hash;
+use std::hash::Hasher;
+use std::ptr::addr_eq;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::Weak;
 
-use crate::{
-    client::channel::WorkQueueTx,
-    rt::Runtime,
-    service::{Request, Response},
-};
+use tonic::Status;
+use tonic::metadata::MetadataMap;
 
-use crate::client::{
-    channel::{InternalChannelController, WorkQueueItem},
-    name_resolution::{Address, ResolverUpdate},
-    subchannel::InternalSubchannel,
-    ConnectivityState,
-};
+use crate::client::ConnectivityState;
+use crate::client::channel::InternalChannelController;
+use crate::client::channel::WorkQueueItem;
+use crate::client::channel::WorkQueueTx;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::service_config::LbConfig;
+use crate::client::subchannel::InternalSubchannel;
+use crate::client::subchannel::SubchannelStateWatcher;
+use crate::core::RequestHeaders;
+use crate::rt::GrpcRuntime;
 
 pub(crate) mod child_manager;
 pub(crate) mod graceful_switch;
 pub(crate) mod pick_first;
+pub(crate) mod round_robin;
 
 #[cfg(test)]
 pub(crate) mod test_utils;
 
 pub(crate) mod registry;
-use super::{service_config::LbConfig, subchannel::SubchannelStateWatcher};
 pub(crate) use registry::GLOBAL_LB_REGISTRY;
 
 /// A collection of data configured on the channel that is constructing this
@@ -64,7 +67,7 @@ pub(crate) struct LbPolicyOptions {
     /// A hook into the channel's work scheduler that allows the LbPolicy to
     /// request the ability to perform operations on the ChannelController.
     pub work_scheduler: Arc<dyn WorkScheduler>,
-    pub runtime: Arc<dyn Runtime>,
+    pub runtime: GrpcRuntime,
 }
 
 /// Used to asynchronously request a call into the LbPolicy's work method if
@@ -248,7 +251,7 @@ pub(crate) trait Picker: Send + Sync + Debug {
     /// time-consuming work to service this request, it should return Queue, and
     /// the Pick call will be repeated by the channel when a new Picker is
     /// produced by the LbPolicy.
-    fn pick(&self, request: &Request) -> PickResult;
+    fn pick(&self, request: &RequestHeaders) -> PickResult;
 }
 
 #[derive(Debug)]
@@ -346,7 +349,7 @@ impl LbState {
 }
 
 /// Type alias for the completion callback function.
-pub(crate) type CompletionCallback = Box<dyn Fn(&Response) + Send + Sync>;
+pub(crate) type CompletionCallback = Box<dyn Fn() + Send + Sync>;
 
 /// A collection of data used by the channel for routing a request.
 pub(crate) struct Pick {
@@ -535,7 +538,7 @@ impl Subchannel for ExternalSubchannel {
 
     fn connect(&self) {
         println!("connect called for subchannel: {self}");
-        self.isc.as_ref().unwrap().connect(false);
+        self.isc.as_ref().unwrap().connect();
     }
 }
 
@@ -600,18 +603,18 @@ impl<T: ForwardingSubchannel> private::Sealed for T {}
 pub(crate) struct QueuingPicker {}
 
 impl Picker for QueuingPicker {
-    fn pick(&self, _request: &Request) -> PickResult {
+    fn pick(&self, _request: &RequestHeaders) -> PickResult {
         PickResult::Queue
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct Failing {
+pub(crate) struct FailingPicker {
     pub error: String,
 }
 
-impl Picker for Failing {
-    fn pick(&self, _: &Request) -> PickResult {
+impl Picker for FailingPicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
         PickResult::Fail(Status::unavailable(self.error.clone()))
     }
 }

@@ -2,7 +2,8 @@
 name = "codegen"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
 license = "MIT"
-edition = "2021"
+edition = "2024"
+rust-version = { workspace = true }
 
 [dependencies]
 protox = "0.9"

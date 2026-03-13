@@ -15,8 +15,8 @@ use self::service::{Connection, DynamicServiceStream, Executor, SharedExec};
 use crate::body::Body;
 use bytes::Bytes;
 use http::{
-    uri::{InvalidUri, Uri},
     Request, Response,
+    uri::{InvalidUri, Uri},
 };
 use std::{
     fmt,
@@ -25,15 +25,15 @@ use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-use tokio::sync::mpsc::{channel, Sender};
+use tokio::sync::mpsc::{Sender, channel};
 
 use hyper::rt;
 use tower::balance::p2c::Balance;
 use tower::{
-    buffer::{future::ResponseFuture as BufferResponseFuture, Buffer},
+    Service,
+    buffer::{Buffer, future::ResponseFuture as BufferResponseFuture},
     discover::Discover,
     util::BoxService,
-    Service,
 };
 
 type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;

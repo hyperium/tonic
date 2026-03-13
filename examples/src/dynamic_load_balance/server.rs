@@ -4,7 +4,7 @@ pub mod pb {
 
 use std::net::SocketAddr;
 use tokio::sync::mpsc;
-use tonic::{transport::Server, Request, Response, Status};
+use tonic::{Request, Response, Status, transport::Server};
 
 use pb::{EchoRequest, EchoResponse};
 

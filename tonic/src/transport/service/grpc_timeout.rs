@@ -1,10 +1,10 @@
-use crate::{metadata::GRPC_TIMEOUT_HEADER, TimeoutExpired};
+use crate::{TimeoutExpired, metadata::GRPC_TIMEOUT_HEADER};
 use http::{HeaderMap, HeaderValue, Request};
 use pin_project::pin_project;
 use std::{
     future::Future,
     pin::Pin,
-    task::{ready, Context, Poll},
+    task::{Context, Poll, ready},
     time::Duration,
 };
 use tokio::time::Sleep;

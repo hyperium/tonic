@@ -23,15 +23,26 @@
  */
 
 use std::fmt::Display;
+use std::time::Instant;
+
+use tonic::async_trait;
+
+use crate::core::ClientResponseStreamItem;
+use crate::core::RecvMessage;
+use crate::core::RequestHeaders;
+use crate::core::SendMessage;
 
 pub mod channel;
+pub mod interceptor;
 pub mod service_config;
-mod subchannel;
+pub mod stream_util;
+
 pub use channel::Channel;
 pub use channel::ChannelOptions;
 
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
+mod subchannel;
 pub(crate) mod transport;
 
 /// A representation of the current state of a gRPC channel, also used for the
@@ -45,8 +56,9 @@ pub(crate) mod transport;
 ///
 /// Channels may re-enter the Idle state if they are unused for longer than
 /// their configured idleness timeout.
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
 pub enum ConnectivityState {
+    #[default]
     Idle,
     Connecting,
     Ready,
@@ -61,5 +73,178 @@ impl Display for ConnectivityState {
             ConnectivityState::Ready => write!(f, "Ready"),
             ConnectivityState::TransientFailure => write!(f, "TransientFailure"),
         }
+    }
+}
+
+/// Contains settings to configure an RPC.
+///
+/// Most applications will not need this type, and will set options via the
+/// generated (e.g. protobuf) APIs instead.
+#[derive(Default, Clone)]
+#[non_exhaustive]
+pub struct CallOptions {
+    /// The deadline for the call.  If unset, the call may run indefinitely.
+    deadline: Option<Instant>,
+}
+
+/// A trait which may be implemented by types to perform RPCs (Remote Procedure
+/// Calls, often shortened to "call").
+///
+/// Most applications will not use this type directly, and will instead use the
+/// generated APIs (e.g.  protobuf) to perform RPCs instead.
+#[trait_variant::make(Send)]
+pub trait Invoke: Sync {
+    type SendStream: SendStream + 'static;
+    type RecvStream: RecvStream + 'static;
+
+    /// Starts an RPC, returning the send and receive streams to interact with
+    /// it.
+    ///
+    /// Note that invoke is synchronous, which implies no pushback may be
+    /// enforced via execution flow.  If a call cannot be started or queued
+    /// locally, the returned SendStream and RecvStream may represent a
+    /// locally-erroring stream immediately instead.  However, SendStream and
+    /// RecvStream are asynchronous, and may block their first operations until
+    /// quota is available, a connection is ready, etc.
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream);
+}
+
+#[async_trait]
+pub trait DynInvoke: Send + Sync {
+    async fn dyn_invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>);
+}
+
+#[async_trait]
+impl<T: Invoke> DynInvoke for T {
+    async fn dyn_invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
+        let (tx, rx) = self.invoke(headers, options).await;
+        (Box::new(tx), Box::new(rx))
+    }
+}
+
+// Like `Invoke`, but not reusable.  It is blanket implemented on references to
+// `Invoke`s.
+#[trait_variant::make(Send)]
+pub trait InvokeOnce: Sync {
+    type SendStream: SendStream + 'static;
+    type RecvStream: RecvStream + 'static;
+
+    async fn invoke_once(
+        self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream);
+}
+
+impl<T: Invoke> InvokeOnce for &T {
+    type SendStream = T::SendStream;
+    type RecvStream = T::RecvStream;
+
+    async fn invoke_once(
+        self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        self.invoke(headers, options).await
+    }
+}
+
+/// Represents the sending side of a client stream.  When a `SendStream` is
+/// dropped, the send side of the stream is closed.  Clients may continue to
+/// read from the RecvStream
+///
+/// Most applications will not need this type directly, and will use the
+/// generated APIs (e.g.  protobuf) to perform RPCs instead.
+#[trait_variant::make(Send)]
+pub trait SendStream {
+    /// Sends T on the stream.  If Err(()) is returned, the message could not be
+    /// delivered because the stream was closed.  Future calls to SendStream
+    /// will do nothing.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method is not intended to be cancellation safe.  If the returned
+    /// future is not polled to completion, the behavior of any subsequent calls
+    /// to the SendStream are undefined and data may be lost.
+    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
+}
+
+#[async_trait]
+pub trait DynSendStream: Send {
+    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()>;
+}
+
+#[async_trait]
+impl<T: SendStream> DynSendStream for T {
+    async fn dyn_send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        self.send(msg, options).await
+    }
+}
+
+impl SendStream for Box<dyn DynSendStream> {
+    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        (**self).dyn_send(msg, options).await
+    }
+}
+
+/// Contains settings to configure a send operation on a SendStream.
+///
+/// Most applications will not need this type directly, and will use the
+/// generated (e.g.  protobuf) APIs to configure RPCs instead.
+#[derive(Default, Clone)]
+#[non_exhaustive]
+pub struct SendOptions {
+    /// Closes the stream immediately after sending this message.
+    pub final_msg: bool,
+    /// If set, compression will be disabled for this message.
+    pub disable_compression: bool,
+}
+
+/// Represents the receiving side of a client stream.  When a `RecvStream` is
+/// dropped, the associated call is cancelled if the server has not already
+/// terminated the stream.
+///
+/// Most applications will not need this type directly, and will use the
+/// generated APIs (e.g.  protobuf) to perform RPCs instead.
+#[trait_variant::make(Send)]
+pub trait RecvStream {
+    /// Returns the next item on the stream.  If that item represents a message,
+    /// `msg` has been updated directly to contain the received message.
+    ///
+    /// # Cancel safety
+    ///
+    /// This method is not intended to be cancellation safe.  If the returned
+    /// future is not polled to completion, the behavior of any subsequent calls
+    /// to the RecvStream are undefined and data may be lost.
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
+}
+
+#[async_trait]
+pub trait DynRecvStream: Send {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem;
+}
+
+#[async_trait]
+impl<T: RecvStream> DynRecvStream for T {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        self.next(msg).await
+    }
+}
+
+impl RecvStream for Box<dyn DynRecvStream> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        (**self).dyn_next(msg).await
     }
 }

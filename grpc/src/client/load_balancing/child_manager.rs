@@ -29,20 +29,29 @@
 // policy in use.  Complete tests must be written before it can be used in
 // production.
 
+use std::collections::HashMap;
 use std::collections::HashSet;
+use std::error::Error;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::mem;
+use std::sync::Arc;
 use std::sync::Mutex;
-use std::{collections::HashMap, hash::Hash, mem, sync::Arc};
 
-use crate::client::load_balancing::{
-    ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-    WeakSubchannel, WorkScheduler,
-};
-use crate::client::name_resolution::{Address, ResolverUpdate};
 use crate::client::ConnectivityState;
-use crate::rt::Runtime;
-
-use super::{Subchannel, SubchannelState};
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::LbConfig;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WeakSubchannel;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::rt::GrpcRuntime;
 
 // An LbPolicy implementation that manages multiple children.
 #[derive(Debug)]
@@ -50,7 +59,7 @@ pub(crate) struct ChildManager<T: Debug> {
     subchannel_to_child_idx: HashMap<WeakSubchannel, usize>,
     children: Vec<Child<T>>,
     pending_work: Arc<Mutex<HashSet<usize>>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
     updated: bool, // Set when any child updates its picker; cleared when accessed.
     work_scheduler: Arc<dyn WorkScheduler>,
 }
@@ -87,7 +96,7 @@ where
 {
     /// Creates a new ChildManager LB policy.  shard_update is called whenever a
     /// resolver_update operation occurs.
-    pub fn new(runtime: Arc<dyn Runtime>, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
+    pub fn new(runtime: GrpcRuntime, work_scheduler: Arc<dyn WorkScheduler>) -> Self {
         Self {
             subchannel_to_child_idx: Default::default(),
             children: Default::default(),
@@ -287,9 +296,10 @@ where
         &mut self,
         child_updates: impl IntoIterator<Item = ChildUpdate<T>>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         // Split the child updates into the IDs and builders, and the
         // ResolverUpdates/LbConfigs.
+        let mut errs = vec![];
         let (ids_builders, updates): (Vec<_>, Vec<_>) = child_updates
             .into_iter()
             .map(|e| ((e.child_identifier, e.child_policy_builder), e.child_update))
@@ -306,14 +316,59 @@ where
                 continue;
             };
             let mut channel_controller = WrappedController::new(channel_controller);
-            let _ = child.policy.resolver_update(
+            if let Err(err) = child.policy.resolver_update(
                 resolver_update,
                 config.as_ref(),
                 &mut channel_controller,
-            );
+            ) {
+                errs.push(err);
+            }
             self.resolve_child_controller(channel_controller, child_idx);
         }
-        Ok(())
+        if errs.is_empty() {
+            Ok(())
+        } else {
+            let err = errs
+                .into_iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            Err(err.into())
+        }
+    }
+
+    /// Forwards the `resolver_update` and `config` to all current children.
+    ///
+    /// Returns the Result from calling into each child.
+    pub fn resolver_update(
+        &mut self,
+        resolver_update: ResolverUpdate,
+        config: Option<&LbConfig>,
+        channel_controller: &mut dyn ChannelController,
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+        let mut errs = Vec::with_capacity(self.children.len());
+        for child_idx in 0..self.children.len() {
+            let child = &mut self.children[child_idx];
+            let mut channel_controller = WrappedController::new(channel_controller);
+            if let Err(err) = child.policy.resolver_update(
+                resolver_update.clone(),
+                config,
+                &mut channel_controller,
+            ) {
+                errs.push(err);
+            }
+            self.resolve_child_controller(channel_controller, child_idx);
+        }
+        if errs.is_empty() {
+            Ok(())
+        } else {
+            let err = errs
+                .into_iter()
+                .map(|e| e.to_string())
+                .collect::<Vec<_>>()
+                .join("; ");
+            Err(err.into())
+        }
     }
 
     /// Forwards the incoming subchannel_update to the child that created the
@@ -421,19 +476,28 @@ impl ChildWorkScheduler {
 
 #[cfg(test)]
 mod test {
-    use crate::client::load_balancing::child_manager::{ChildManager, ChildUpdate};
-    use crate::client::load_balancing::test_utils::{
-        self, StubPolicyFuncs, TestChannelController, TestEvent, TestWorkScheduler,
-    };
-    use crate::client::load_balancing::{
-        ChannelController, LbPolicyBuilder, LbState, QueuingPicker, Subchannel, SubchannelState,
-        GLOBAL_LB_REGISTRY,
-    };
-    use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
-    use crate::client::service_config::LbConfig;
     use crate::client::ConnectivityState;
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+    use crate::client::load_balancing::LbPolicyBuilder;
+    use crate::client::load_balancing::LbState;
+    use crate::client::load_balancing::QueuingPicker;
+    use crate::client::load_balancing::Subchannel;
+    use crate::client::load_balancing::SubchannelState;
+    use crate::client::load_balancing::child_manager::ChildManager;
+    use crate::client::load_balancing::child_manager::ChildUpdate;
+    use crate::client::load_balancing::test_utils::StubPolicyFuncs;
+    use crate::client::load_balancing::test_utils::TestChannelController;
+    use crate::client::load_balancing::test_utils::TestEvent;
+    use crate::client::load_balancing::test_utils::TestWorkScheduler;
+    use crate::client::load_balancing::test_utils::{self};
+    use crate::client::name_resolution::Address;
+    use crate::client::name_resolution::Endpoint;
+    use crate::client::name_resolution::ResolverUpdate;
+    use crate::client::service_config::LbConfig;
     use crate::rt::default_runtime;
     use std::collections::HashMap;
+    use std::error::Error;
     use std::panic;
     use std::sync::Arc;
     use std::sync::Mutex;
@@ -498,13 +562,13 @@ mod test {
         endpoints: Vec<Endpoint>,
         builder: Arc<dyn LbPolicyBuilder>,
         tcc: &mut dyn ChannelController,
-    ) {
+    ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let updates = endpoints.iter().map(|e| ChildUpdate {
             child_identifier: e.clone(),
             child_policy_builder: builder.clone(),
             child_update: Some((
                 ResolverUpdate {
-                    attributes: crate::attributes::Attributes,
+                    attributes: crate::attributes::Attributes::default(),
                     endpoints: Ok(vec![e.clone()]),
                     service_config: Ok(None),
                     resolution_note: None,
@@ -513,7 +577,7 @@ mod test {
             )),
         });
 
-        assert!(child_manager.update(updates, tcc).is_ok());
+        child_manager.update(updates, tcc)
     }
 
     fn move_subchannel_to_state(
@@ -595,7 +659,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
@@ -648,7 +713,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
@@ -699,7 +765,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(
@@ -740,7 +807,8 @@ mod test {
             endpoints.clone(),
             builder,
             tcc.as_mut(),
-        );
+        )
+        .unwrap();
         let mut subchannels = vec![];
         for endpoint in endpoints {
             subchannels.push(

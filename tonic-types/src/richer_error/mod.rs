@@ -1,16 +1,16 @@
 use prost::{
-    bytes::{Bytes, BytesMut},
     DecodeError, Message,
+    bytes::{Bytes, BytesMut},
 };
 use prost_types::Any;
-use tonic::{metadata::MetadataMap, Code};
+use tonic::{Code, metadata::MetadataMap};
 
 mod error_details;
 mod std_messages;
 
 use super::pb;
 
-pub use error_details::{vec::ErrorDetail, ErrorDetails};
+pub use error_details::{ErrorDetails, vec::ErrorDetail};
 pub use std_messages::{
     BadRequest, DebugInfo, ErrorInfo, FieldViolation, Help, HelpLink, LocalizedMessage,
     PreconditionFailure, PreconditionViolation, QuotaFailure, QuotaViolation, RequestInfo,

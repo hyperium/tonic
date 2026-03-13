@@ -1,10 +1,12 @@
 #[cfg(feature = "_tls-any")]
 use std::future::Future;
+#[cfg(feature = "_tls-any")]
+use std::pin::pin;
 use std::{
     io,
     ops::ControlFlow,
-    pin::{pin, Pin},
-    task::{ready, Context, Poll},
+    pin::Pin,
+    task::{Context, Poll, ready},
 };
 
 use pin_project::pin_project;
