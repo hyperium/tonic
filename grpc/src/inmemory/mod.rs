@@ -35,6 +35,7 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
+use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream as ClientDynRecvStream;
 use crate::client::DynSendStream as ClientDynSendStream;
@@ -63,6 +64,11 @@ use crate::core::ResponseHeaders;
 use crate::core::ResponseStreamItem;
 use crate::core::SendMessage;
 use crate::core::Trailers;
+use crate::credentials::SecurityLevel;
+use crate::credentials::client::ChannelSecurityContext;
+use crate::credentials::client::ChannelSecurityInfo;
+use crate::credentials::client::DynChannelSecurityInfo;
+use crate::credentials::common::Authority;
 use crate::rt::GrpcRuntime;
 use crate::server::Call as ServerCall;
 use crate::server::Listener as ServerListener;
@@ -317,7 +323,14 @@ impl Transport for InMemoryTransport {
         _runtime: GrpcRuntime,
         _security_opts: &SecurityOpts,
         _options: &TransportOptions,
-    ) -> Result<(Self::Service, oneshot::Receiver<Result<(), String>>), String> {
+    ) -> Result<
+        (
+            Self::Service,
+            DynChannelSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    > {
         let listeners = LISTENERS.lock().unwrap();
         let s = listeners
             .get(&target)
@@ -328,8 +341,25 @@ impl Transport for InMemoryTransport {
             s: s.clone(),
             closed_tx: Some(closed_tx),
         };
+        let sec_info = ChannelSecurityInfo::new(
+            "inmemory",
+            SecurityLevel::PrivacyAndIntegrity,
+            InMemoryChannelecurityContext {},
+            Attributes::new(),
+        )
+        .into_boxed();
 
-        Ok((conn, closed_rx))
+        Ok((conn, sec_info, closed_rx))
+    }
+}
+
+/// An implementation of [`ChannelSecurityContext`] for in-memory connections.
+#[derive(Debug, Clone)]
+struct InMemoryChannelecurityContext;
+
+impl ChannelSecurityContext for InMemoryChannelecurityContext {
+    fn validate_authority(&self, _authority: &Authority) -> bool {
+        true
     }
 }
 

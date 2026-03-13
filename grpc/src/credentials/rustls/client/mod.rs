@@ -39,8 +39,8 @@ use crate::credentials::ProtocolInfo;
 use crate::credentials::SecurityLevel;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::client;
-use crate::credentials::client::ClientConnectionSecurityContext;
-use crate::credentials::client::ClientConnectionSecurityInfo;
+use crate::credentials::client::ChannelSecurityContext;
+use crate::credentials::client::ChannelSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
@@ -193,7 +193,7 @@ pub struct ClientTlsSecContext {
     verified_peer_cert: Option<CertificateDer<'static>>,
 }
 
-impl ClientConnectionSecurityContext for ClientTlsSecContext {
+impl ChannelSecurityContext for ClientTlsSecContext {
     fn validate_authority(&self, authority: &Authority) -> bool {
         let server_name = match ServerName::try_from(authority.host()) {
             Ok(n) => n,
@@ -248,7 +248,7 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
             .and_then(|certs| certs.first())
             .map(|c| c.clone().into_owned());
 
-        let cs_info = ClientConnectionSecurityInfo::new(
+        let cs_info = ChannelSecurityInfo::new(
             "tls",
             SecurityLevel::PrivacyAndIntegrity,
             ClientTlsSecContext {

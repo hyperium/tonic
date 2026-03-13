@@ -37,7 +37,7 @@ use crate::rt::GrpcRuntime;
 
 #[trait_variant::make(Send)]
 pub trait ChannelCredsInternal {
-    type ContextType: ClientConnectionSecurityContext;
+    type ContextType: ChannelSecurityContext;
     type Output<I>;
     /// Performs the client-side authentication handshake on a raw endpoint.
     ///
@@ -65,12 +65,12 @@ pub trait ChannelCredsInternal {
     fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>>;
 }
 
-pub struct HandshakeOutput<T, C: ClientConnectionSecurityContext> {
+pub struct HandshakeOutput<T, C: ChannelSecurityContext> {
     pub endpoint: T,
-    pub security: ClientConnectionSecurityInfo<C>,
+    pub security: ChannelSecurityInfo<C>,
 }
 
-pub trait ClientConnectionSecurityContext: Send + Sync + 'static {
+pub trait ChannelSecurityContext: Send + Sync + 'static {
     /// Checks if the established connection is authorized to send requests to
     /// the given authority.
     ///
@@ -87,14 +87,14 @@ pub trait ClientConnectionSecurityContext: Send + Sync + 'static {
     }
 }
 
-impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {
+impl ChannelSecurityContext for Box<dyn ChannelSecurityContext> {
     fn validate_authority(&self, authority: &Authority) -> bool {
         (**self).validate_authority(authority)
     }
 }
 
 /// Represents the security state of an established client-side connection.
-pub struct ClientConnectionSecurityInfo<C> {
+pub struct ChannelSecurityInfo<C> {
     security_protocol: &'static str,
     security_level: SecurityLevel,
     security_context: C,
@@ -102,7 +102,9 @@ pub struct ClientConnectionSecurityInfo<C> {
     attributes: Attributes,
 }
 
-impl<C> ClientConnectionSecurityInfo<C> {
+pub type DynChannelSecurityInfo = ChannelSecurityInfo<Box<dyn ChannelSecurityContext>>;
+
+impl<C> ChannelSecurityInfo<C> {
     pub fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
@@ -133,13 +135,11 @@ impl<C> ClientConnectionSecurityInfo<C> {
         &self.attributes
     }
 
-    pub fn into_boxed(
-        self,
-    ) -> ClientConnectionSecurityInfo<Box<dyn ClientConnectionSecurityContext>>
+    pub fn into_boxed(self) -> DynChannelSecurityInfo
     where
-        C: ClientConnectionSecurityContext + 'static,
+        C: ChannelSecurityContext + 'static,
     {
-        ClientConnectionSecurityInfo {
+        ChannelSecurityInfo {
             security_protocol: self.security_protocol,
             security_level: self.security_level,
             security_context: Box::new(self.security_context),
@@ -230,12 +230,12 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
 #[cfg(test)]
 mod tests {
     use tokio::net::TcpListener;
-    use tonic::Status;
     use tonic::async_trait;
     use tonic::metadata::MetadataMap;
     use tonic::metadata::MetadataValue;
 
     use super::*;
+    use crate::Status;
     use crate::credentials::call::CallCredentials;
     use crate::credentials::call::CallDetails;
     use crate::credentials::call::ChannelSecurityInfo;

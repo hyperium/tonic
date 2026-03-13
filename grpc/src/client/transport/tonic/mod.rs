@@ -80,6 +80,7 @@ use crate::core::RequestHeaders;
 use crate::core::ResponseHeaders;
 use crate::core::SendMessage;
 use crate::core::Trailers;
+use crate::credentials::client::DynChannelSecurityInfo;
 use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
@@ -270,7 +271,14 @@ impl Transport for TransportBuilder {
         runtime: GrpcRuntime,
         security_info: &SecurityOpts,
         opts: &TransportOptions,
-    ) -> Result<(Self::Service, oneshot::Receiver<Result<(), String>>), String> {
+    ) -> Result<
+        (
+            Self::Service,
+            DynChannelSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    > {
         let runtime = runtime.clone();
         let mut settings = Builder::<HyperCompatExec>::new(HyperCompatExec {
             inner: runtime.clone(),
@@ -319,16 +327,16 @@ impl Transport for TransportBuilder {
             tcp_stream_fut.await?
         };
         let credentials = &security_info.credentials;
-        let plaintext_stream = credentials
+        let handshake_ouput = credentials
             .connect_dyn(
                 &security_info.authority,
                 tcp_stream,
                 &security_info.handshake_info,
                 &runtime,
             )
-            .await?
-            .endpoint;
-        let tcp_stream = HyperStream::new(plaintext_stream);
+            .await?;
+
+        let tcp_stream = HyperStream::new(handshake_ouput.endpoint);
 
         let (sender, connection) = settings
             .handshake(tcp_stream)
@@ -363,7 +371,7 @@ impl Transport for TransportBuilder {
             task_handle,
             runtime,
         };
-        Ok((service, rx))
+        Ok((service, handshake_ouput.security, rx))
     }
 }
 

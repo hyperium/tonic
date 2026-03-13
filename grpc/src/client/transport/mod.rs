@@ -29,6 +29,7 @@ use std::time::Instant;
 use crate::client::DynInvoke;
 use crate::client::Invoke;
 use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::client::DynChannelSecurityInfo;
 use crate::credentials::common::Authority;
 use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt::GrpcRuntime;
@@ -74,7 +75,14 @@ pub(crate) trait Transport: Sync {
         runtime: GrpcRuntime,
         security_opts: &SecurityOpts,
         opts: &TransportOptions,
-    ) -> Result<(Self::Service, oneshot::Receiver<Result<(), String>>), String>;
+    ) -> Result<
+        (
+            Self::Service,
+            DynChannelSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    >;
 }
 
 #[async_trait]
@@ -85,7 +93,14 @@ pub(crate) trait DynTransport: Send + Sync {
         runtime: GrpcRuntime,
         security_opts: &SecurityOpts,
         opts: &TransportOptions,
-    ) -> Result<(Box<dyn DynInvoke>, oneshot::Receiver<Result<(), String>>), String>;
+    ) -> Result<
+        (
+            Box<dyn DynInvoke>,
+            DynChannelSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    >;
 }
 
 #[async_trait]
@@ -96,9 +111,16 @@ impl<T: Transport> DynTransport for T {
         runtime: GrpcRuntime,
         security_opts: &SecurityOpts,
         opts: &TransportOptions,
-    ) -> Result<(Box<dyn DynInvoke>, oneshot::Receiver<Result<(), String>>), String> {
-        let (i, rx) = self.connect(address, runtime, security_opts, opts).await?;
-        Ok((Box::new(i), rx))
+    ) -> Result<
+        (
+            Box<dyn DynInvoke>,
+            DynChannelSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    > {
+        let (i, sc, rx) = self.connect(address, runtime, security_opts, opts).await?;
+        Ok((Box::new(i), sc, rx))
     }
 }
 

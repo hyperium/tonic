@@ -25,10 +25,10 @@
 use std::fmt::Debug;
 use std::sync::Arc;
 
-use tonic::Status;
 use tonic::async_trait;
 use tonic::metadata::MetadataMap;
 
+use crate::Status;
 use crate::attributes::Attributes;
 use crate::credentials::SecurityLevel;
 

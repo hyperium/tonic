@@ -40,7 +40,7 @@ use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
 
 use crate::credentials::client::ChannelCredsInternal;
-use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ChannelSecurityContext;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::common::Authority;
 use crate::credentials::rustls::ALPN_PROTO_STR_H2;

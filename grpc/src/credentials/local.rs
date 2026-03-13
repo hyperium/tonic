@@ -34,8 +34,8 @@ use crate::credentials::SecurityLevel;
 use crate::credentials::ServerCredentials;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::client;
-use crate::credentials::client::ClientConnectionSecurityContext;
-use crate::credentials::client::ClientConnectionSecurityInfo;
+use crate::credentials::client::ChannelSecurityContext;
+use crate::credentials::client::ChannelSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
@@ -63,12 +63,12 @@ impl LocalChannelCredentials {
     }
 }
 
-/// An implementation of [`ClientConnectionSecurityContext`] for local
+/// An implementation of [`ChannelSecurityContext`] for local
 /// connections.
 #[derive(Debug, Clone)]
-pub struct LocalConnectionSecurityContext;
+pub struct LocalChannelSecurityContext;
 
-impl ClientConnectionSecurityContext for LocalConnectionSecurityContext {
+impl ChannelSecurityContext for LocalChannelSecurityContext {
     fn validate_authority(&self, _authority: &Authority) -> bool {
         true
     }
@@ -97,7 +97,7 @@ fn security_level_for_endpoint(
 }
 
 impl client::ChannelCredsInternal for LocalChannelCredentials {
-    type ContextType = LocalConnectionSecurityContext;
+    type ContextType = LocalChannelSecurityContext;
     type Output<I> = I;
 
     async fn connect<Input: GrpcEndpoint>(
@@ -111,10 +111,10 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
             security_level_for_endpoint(source.get_peer_address(), source.get_network_type())?;
         Ok(HandshakeOutput {
             endpoint: source,
-            security: ClientConnectionSecurityInfo::new(
+            security: ChannelSecurityInfo::new(
                 PROTOCOL_NAME,
                 security_level,
-                LocalConnectionSecurityContext,
+                LocalChannelSecurityContext,
                 Attributes::new(),
             ),
         })
@@ -184,7 +184,7 @@ mod test {
     use crate::credentials::SecurityLevel;
     use crate::credentials::ServerCredentials;
     use crate::credentials::client::ChannelCredsInternal as ClientSealed;
-    use crate::credentials::client::ClientConnectionSecurityContext;
+    use crate::credentials::client::ChannelSecurityContext;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::Authority;
     use crate::credentials::server::ServerCredsInternal;

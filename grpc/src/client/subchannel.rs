@@ -38,11 +38,16 @@ use tokio::sync::Notify;
 use tokio::sync::oneshot;
 use tonic::async_trait;
 
+use crate::Status;
+use crate::StatusCode;
 use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::DynInvoke;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
+use crate::client::RecvStream;
+use crate::client::SendOptions;
+use crate::client::SendStream;
 use crate::client::channel::InternalChannelController;
 use crate::client::channel::WorkQueueItem;
 use crate::client::channel::WorkQueueTx;
@@ -52,7 +57,16 @@ use crate::client::name_resolution::Address;
 use crate::client::transport::DynTransport;
 use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportOptions;
+use crate::core::ClientResponseStreamItem;
+use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
+use crate::core::SendMessage;
+use crate::core::Trailers;
+use crate::credentials::call::CallDetails;
+use crate::credentials::call::ChannelSecurityInfo as CallChannelSecurityInfo;
+use crate::credentials::client::ChannelSecurityContext;
+use crate::credentials::client::ChannelSecurityInfo;
+use crate::credentials::common::Authority;
 use crate::rt::GrpcRuntime;
 
 type SharedInvoke = Arc<dyn DynInvoke>;
@@ -75,10 +89,16 @@ impl Backoff for NopBackoff {
     }
 }
 
+struct ReadyState {
+    service: Box<dyn DynInvoke>,
+    security_info: ChannelSecurityInfo<Box<dyn ChannelSecurityContext>>,
+    authority: Authority,
+}
+
 enum InternalSubchannelState {
     Idle,
     Connecting,
-    Ready(Arc<dyn DynInvoke>),
+    Ready(Arc<ReadyState>),
     TransientFailure(String),
 }
 
@@ -162,14 +182,70 @@ impl PartialEq for InternalSubchannelState {
 impl DynInvoke for InternalSubchannel {
     async fn dyn_invoke(
         &self,
-        headers: RequestHeaders,
+        mut headers: RequestHeaders,
         options: CallOptions,
     ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
-        let svc = match &self.inner.data.lock().unwrap().state {
-            InternalSubchannelState::Ready(s) => s.clone(),
-            _ => todo!("handle non-READY subchannel"),
+        let (state, call_creds) = {
+            let data = self.inner.data.lock().unwrap();
+
+            let state = match &data.state {
+                InternalSubchannelState::Ready(state) => state.clone(),
+                _ => todo!("handle non-READY subchannel"),
+            };
+
+            let creds = data
+                .security_opts
+                .credentials
+                .get_call_credentials()
+                .cloned();
+
+            (state, creds)
         };
-        svc.dyn_invoke(headers, options).await
+
+        let fail_with = |status| -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
+            (
+                Box::new(FailingSendStream {}),
+                Box::new(FailingRecvStream::new(status)),
+            )
+        };
+
+        if let Some(call_creds) = call_creds {
+            if call_creds.minimum_channel_security_level() > state.security_info.security_level() {
+                return fail_with(Status::new(
+                    StatusCode::Unauthenticated,
+                    "transport: cannot send secure credentials on an insecure connection",
+                ));
+            }
+
+            let call_details = create_call_details(&state.authority, headers.method_name());
+
+            let channel_sec_info = CallChannelSecurityInfo::new(
+                state.security_info.security_protocol(),
+                state.security_info.security_level(),
+                state.security_info.attributes().clone(),
+            );
+
+            if let Err(s) = call_creds
+                .get_metadata(&call_details, &channel_sec_info, headers.metadata_mut())
+                .await
+            {
+                let status = if s.is_restricted_control_plane_code() {
+                    Status::new(
+                        StatusCode::Internal,
+                        format!(
+                            "transport: received call credentials error with illegal status: {}",
+                            s.message()
+                        ),
+                    )
+                } else {
+                    s
+                };
+
+                return fail_with(status);
+            }
+        }
+
+        state.service.dyn_invoke(headers, options).await
     }
 }
 
@@ -310,8 +386,11 @@ impl InnerSubchannel {
                 }
                 result = transport_builder.dyn_connect(address, runtime, &security_opts, &transport_opts) => {
                     match result {
-                        Ok((service, disconnection_listener)) => {
-                            self_clone.move_to_ready(Arc::from(service), disconnection_listener).await;
+                        Ok((service, security_info, disconnection_listener)) => {
+                            self_clone.move_to_ready(Arc::new(ReadyState{
+                                service, 
+                                security_info, 
+                                authority: security_opts.authority}), disconnection_listener).await;
                         }
                         Err(e) => {
                             self_clone.move_to_transient_failure(e).await;
@@ -326,7 +405,7 @@ impl InnerSubchannel {
     // the connection is lost.  Moves to idle upon connection loss.
     async fn move_to_ready(
         &self,
-        svc: Arc<dyn DynInvoke>,
+        ready_state: Arc<ReadyState>,
         closed_rx: oneshot::Receiver<Result<(), String>>,
     ) {
         let on_drop;
@@ -335,7 +414,7 @@ impl InnerSubchannel {
             // Reset connection backoff upon successfully moving to ready.
             data.backoff.reset();
             on_drop = data.on_drop.clone();
-            data.update_state(InternalSubchannelState::Ready(svc.clone()));
+            data.update_state(InternalSubchannelState::Ready(ready_state));
         }
         // TODO(easwars): Does it make sense for disconnected() to return an
         // error string containing information about why the connection
@@ -485,5 +564,84 @@ impl SubchannelStateWatcher {
                 },
             )));
         }
+    }
+}
+
+struct FailingSendStream {}
+
+impl SendStream for FailingSendStream {
+    async fn send(&mut self, _msg: &dyn SendMessage, _options: SendOptions) -> Result<(), ()> {
+        Err(())
+    }
+}
+
+struct FailingRecvStream {
+    status: Option<Status>,
+}
+
+impl RecvStream for FailingRecvStream {
+    async fn next(&mut self, _msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        match self.status.take() {
+            Some(status) => ClientResponseStreamItem::Trailers(Trailers::new(status)),
+            None => ClientResponseStreamItem::StreamClosed,
+        }
+    }
+}
+
+impl FailingRecvStream {
+    fn new(status: Status) -> Self {
+        FailingRecvStream {
+            status: Some(status),
+        }
+    }
+}
+
+fn create_call_details(authority: &Authority, full_method: &str) -> CallDetails {
+    let (service, method) = full_method.rsplit_once('/').unwrap_or((full_method, ""));
+    let host_str = authority.host();
+
+    let host = match authority.port() {
+        Some(443) | None => host_str.to_string(),
+        // Add [] for IPv6 addresses.
+        Some(port) if host_str.contains(':') => {
+            format!("[{}]:{}", host_str, port)
+        }
+        Some(port) => format!("{}:{}", host_str, port),
+    };
+
+    CallDetails::new(format!("https://{}{}", host, service), method.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_create_call_details() {
+        let authority = Authority::new("localhost", None);
+        let details = create_call_details(&authority, "/service/method");
+        assert_eq!(details.service_url(), "https://localhost/service");
+        assert_eq!(details.method_name(), "method");
+
+        let authority = Authority::new("localhost", Some(50051));
+        let details = create_call_details(&authority, "/service/method");
+        assert_eq!(details.service_url(), "https://localhost:50051/service");
+        assert_eq!(details.method_name(), "method");
+
+        let authority = Authority::new("localhost", Some(443));
+        let details = create_call_details(&authority, "/service/method");
+        assert_eq!(details.service_url(), "https://localhost/service");
+        assert_eq!(details.method_name(), "method");
+
+        let authority = Authority::new("::1", Some(50051));
+        let details = create_call_details(&authority, "/service/method");
+        assert_eq!(details.service_url(), "https://[::1]:50051/service");
+        assert_eq!(details.method_name(), "method");
+
+        let authority = Authority::new("::1", None);
+        let details = create_call_details(&authority, "/service/method");
+        assert_eq!(details.service_url(), "https://::1/service");
+        assert_eq!(details.method_name(), "method");
+
     }
 }
