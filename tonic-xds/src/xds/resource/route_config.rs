@@ -420,10 +420,10 @@ mod tests {
         };
         let validated = RouteConfigResource::validate(rc).unwrap();
         assert!(matches!(
-            validated.virtual_hosts[0].routes[0]
+            &validated.virtual_hosts[0].routes[0]
                 .match_criteria
                 .path_specifier,
-            PathSpecifierConfig::Path(_)
+            PathSpecifierConfig::Path(p) if p == "/service/Method"
         ));
     }
 
