@@ -24,19 +24,21 @@
 
 use std::net::SocketAddr;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use crate::attributes::Attributes;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
+use crate::credentials::SecurityLevel;
 use crate::credentials::ServerCredentials;
+use crate::credentials::call::CallCredentials;
 use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
-use crate::credentials::common::SecurityLevel;
 use crate::credentials::server;
 use crate::credentials::server::ServerConnectionSecurityInfo;
 use crate::rt::GrpcEndpoint;
@@ -117,6 +119,10 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
             ),
         })
     }
+
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
+        None
+    }
 }
 
 impl ChannelCredentials for LocalChannelCredentials {
@@ -175,12 +181,12 @@ mod test {
 
     use super::*;
     use crate::credentials::ChannelCredentials;
+    use crate::credentials::SecurityLevel;
     use crate::credentials::ServerCredentials;
     use crate::credentials::client::ChannelCredsInternal as ClientSealed;
     use crate::credentials::client::ClientConnectionSecurityContext;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::Authority;
-    use crate::credentials::common::SecurityLevel;
     use crate::credentials::server::ServerCredsInternal;
     use crate::rt;
     use crate::rt::GrpcEndpoint;

@@ -10,7 +10,7 @@ name = "integration-tests"
 bytes = "1.0"
 prost = "0.14"
 tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net", "sync"]}
-tonic = {path = "../../tonic"}
+tonic = {path = "../../tonic", features = ["tls-ring", "tls-webpki-roots"]}
 tonic-prost = {path = "../../tonic-prost"}
 tracing-subscriber = {version = "0.3"}
 

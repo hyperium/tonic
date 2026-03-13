@@ -51,6 +51,7 @@ function(fetch_protobuf VERSION)
     set(protobuf_INSTALL OFF CACHE BOOL "" FORCE)
     set(protobuf_WITH_ZLIB OFF CACHE BOOL "" FORCE)
     set(protobuf_MSVC_STATIC_RUNTIME OFF CACHE BOOL "" FORCE)
+    set(protobuf_FORCE_FETCH_DEPENDENCIES ON CACHE BOOL "" FORCE)
 
     FetchContent_MakeAvailable(protobuf)
 

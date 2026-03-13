@@ -851,10 +851,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_retry_info(&self) -> Option<RetryInfo> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == RetryInfo::TYPE_URL {
-                if let Ok(detail) = RetryInfo::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == RetryInfo::TYPE_URL
+                && let Ok(detail) = RetryInfo::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -863,10 +863,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_debug_info(&self) -> Option<DebugInfo> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == DebugInfo::TYPE_URL {
-                if let Ok(detail) = DebugInfo::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == DebugInfo::TYPE_URL
+                && let Ok(detail) = DebugInfo::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -875,10 +875,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_quota_failure(&self) -> Option<QuotaFailure> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == QuotaFailure::TYPE_URL {
-                if let Ok(detail) = QuotaFailure::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == QuotaFailure::TYPE_URL
+                && let Ok(detail) = QuotaFailure::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -887,10 +887,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_error_info(&self) -> Option<ErrorInfo> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == ErrorInfo::TYPE_URL {
-                if let Ok(detail) = ErrorInfo::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == ErrorInfo::TYPE_URL
+                && let Ok(detail) = ErrorInfo::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -899,10 +899,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_precondition_failure(&self) -> Option<PreconditionFailure> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == PreconditionFailure::TYPE_URL {
-                if let Ok(detail) = PreconditionFailure::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == PreconditionFailure::TYPE_URL
+                && let Ok(detail) = PreconditionFailure::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -911,10 +911,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_bad_request(&self) -> Option<BadRequest> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == BadRequest::TYPE_URL {
-                if let Ok(detail) = BadRequest::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == BadRequest::TYPE_URL
+                && let Ok(detail) = BadRequest::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -923,10 +923,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_request_info(&self) -> Option<RequestInfo> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == RequestInfo::TYPE_URL {
-                if let Ok(detail) = RequestInfo::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == RequestInfo::TYPE_URL
+                && let Ok(detail) = RequestInfo::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -935,10 +935,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_resource_info(&self) -> Option<ResourceInfo> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == ResourceInfo::TYPE_URL {
-                if let Ok(detail) = ResourceInfo::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == ResourceInfo::TYPE_URL
+                && let Ok(detail) = ResourceInfo::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -947,10 +947,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_help(&self) -> Option<Help> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == Help::TYPE_URL {
-                if let Ok(detail) = Help::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == Help::TYPE_URL
+                && let Ok(detail) = Help::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
@@ -959,10 +959,10 @@ impl RpcStatusExt for pb::Status {
 
     fn get_details_localized_message(&self) -> Option<LocalizedMessage> {
         for any in self.details.iter() {
-            if any.type_url.as_str() == LocalizedMessage::TYPE_URL {
-                if let Ok(detail) = LocalizedMessage::from_any_ref(any) {
-                    return Some(detail);
-                }
+            if any.type_url.as_str() == LocalizedMessage::TYPE_URL
+                && let Ok(detail) = LocalizedMessage::from_any_ref(any)
+            {
+                return Some(detail);
             }
         }
 
