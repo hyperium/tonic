@@ -60,14 +60,14 @@ impl CallDetails {
     }
 }
 
-pub struct ChannelSecurityInfo {
+pub struct ClientConnectionSecurityInfo {
     security_protocol: &'static str,
     security_level: SecurityLevel,
     /// Stores extra data derived from the underlying protocol.
     attributes: Attributes,
 }
 
-impl ChannelSecurityInfo {
+impl ClientConnectionSecurityInfo {
     pub(crate) fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
@@ -114,7 +114,7 @@ pub trait CallCredentials: Send + Sync + Debug {
     async fn get_metadata(
         &self,
         call_details: &CallDetails,
-        auth_info: &ChannelSecurityInfo,
+        auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
     ) -> Result<(), Status>;
 
@@ -155,7 +155,7 @@ impl CallCredentials for CompositeCallCredentials {
     async fn get_metadata(
         &self,
         call_details: &CallDetails,
-        auth_info: &ChannelSecurityInfo,
+        auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
     ) -> Result<(), Status> {
         for cred in &self.creds {
@@ -191,7 +191,7 @@ mod tests {
         async fn get_metadata(
             &self,
             _call_details: &CallDetails,
-            _auth_info: &ChannelSecurityInfo,
+            _auth_info: &ClientConnectionSecurityInfo,
             metadata: &mut MetadataMap,
         ) -> Result<(), Status> {
             metadata.insert(
@@ -227,7 +227,7 @@ mod tests {
             service_url: "url".to_string(),
             method_name: "method".to_string(),
         };
-        let auth_info = ChannelSecurityInfo::new(
+        let auth_info = ClientConnectionSecurityInfo::new(
             "test",
             SecurityLevel::PrivacyAndIntegrity,
             Attributes::new(),

@@ -31,7 +31,7 @@ use crate::credentials::ProtocolInfo;
 use crate::credentials::ServerCredentials;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::client::ChannelCredsInternal;
-use crate::credentials::client::ChannelSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
@@ -51,7 +51,7 @@ pub(crate) trait DynChannelCredentials: Send + Sync {
         source: BoxEndpoint,
         info: &ClientHandshakeInfo,
         runtime: &GrpcRuntime,
-    ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ChannelSecurityContext>>, String>;
+    ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>;
 
     fn info(&self) -> &ProtocolInfo;
 
@@ -70,7 +70,8 @@ where
         source: BoxEndpoint,
         info: &ClientHandshakeInfo,
         runtime: &GrpcRuntime,
-    ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ChannelSecurityContext>>, String> {
+    ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>
+    {
         let output = self
             .connect(authority, source, info, runtime)
             .make_send()
@@ -95,7 +96,7 @@ where
 }
 
 impl ChannelCredsInternal for Arc<dyn DynChannelCredentials> {
-    type ContextType = Box<dyn ChannelSecurityContext>;
+    type ContextType = Box<dyn ClientConnectionSecurityContext>;
     type Output<I> = BoxEndpoint;
 
     async fn connect<Input: GrpcEndpoint>(

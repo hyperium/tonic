@@ -66,7 +66,7 @@ use crate::credentials::LocalChannelCredentials;
 use crate::credentials::SecurityLevel;
 use crate::credentials::call::CallCredentials;
 use crate::credentials::call::CallDetails;
-use crate::credentials::call::ChannelSecurityInfo;
+use crate::credentials::call::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::common::Authority;
 use crate::credentials::rustls::RootCertificates;
@@ -92,7 +92,7 @@ impl CallCredentials for MockCallCredentials {
     async fn get_metadata(
         &self,
         _call_details: &CallDetails,
-        _auth_info: &ChannelSecurityInfo,
+        _auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
     ) -> Result<(), crate::Status> {
         if let Some(status) = &self.should_fail {

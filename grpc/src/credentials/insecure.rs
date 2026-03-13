@@ -30,8 +30,8 @@ use crate::credentials::ProtocolInfo;
 use crate::credentials::SecurityLevel;
 use crate::credentials::ServerCredentials;
 use crate::credentials::call::CallCredentials;
-use crate::credentials::client::ChannelSecurityContext;
-use crate::credentials::client::ChannelSecurityInfo;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::client::{self};
@@ -66,16 +66,16 @@ impl InsecureChannelCredentials {
 
 /// An implementation of [`ClientConnectionSecurityContext`] for insecure connections.
 #[derive(Debug, Clone)]
-pub struct InsecureChannelSecurityContext;
+pub struct InsecureConnectionSecurityContext;
 
-impl ChannelSecurityContext for InsecureChannelSecurityContext {
+impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {
     fn validate_authority(&self, _authority: &Authority) -> bool {
         true
     }
 }
 
 impl client::ChannelCredsInternal for InsecureChannelCredentials {
-    type ContextType = InsecureChannelSecurityContext;
+    type ContextType = InsecureConnectionSecurityContext;
     type Output<I> = I;
 
     async fn connect<Input: GrpcEndpoint>(
@@ -87,10 +87,10 @@ impl client::ChannelCredsInternal for InsecureChannelCredentials {
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         Ok(HandshakeOutput {
             endpoint: source,
-            security: ChannelSecurityInfo::new(
+            security: ClientConnectionSecurityInfo::new(
                 PROTOCOL_NAME,
                 SecurityLevel::NoSecurity,
-                InsecureChannelSecurityContext,
+                InsecureConnectionSecurityContext,
                 Attributes::new(),
             ),
         })

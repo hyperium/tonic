@@ -63,9 +63,9 @@ use crate::core::RequestHeaders;
 use crate::core::SendMessage;
 use crate::core::Trailers;
 use crate::credentials::call::CallDetails;
-use crate::credentials::call::ChannelSecurityInfo as CallChannelSecurityInfo;
-use crate::credentials::client::ChannelSecurityContext;
-use crate::credentials::client::ChannelSecurityInfo;
+use crate::credentials::call::ClientConnectionSecurityInfo as CallClientConnectionSecurityInfo;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::common::Authority;
 use crate::rt::GrpcRuntime;
 
@@ -91,7 +91,7 @@ impl Backoff for NopBackoff {
 
 struct ReadyState {
     service: Box<dyn DynInvoke>,
-    security_info: ChannelSecurityInfo<Box<dyn ChannelSecurityContext>>,
+    security_info: ClientConnectionSecurityInfo<Box<dyn ClientConnectionSecurityContext>>,
     authority: Authority,
 }
 
@@ -219,7 +219,7 @@ impl DynInvoke for InternalSubchannel {
 
             let call_details = create_call_details(&state.authority, headers.method_name());
 
-            let channel_sec_info = CallChannelSecurityInfo::new(
+            let channel_sec_info = CallClientConnectionSecurityInfo::new(
                 state.security_info.security_protocol(),
                 state.security_info.security_level(),
                 state.security_info.attributes().clone(),
@@ -388,8 +388,8 @@ impl InnerSubchannel {
                     match result {
                         Ok((service, security_info, disconnection_listener)) => {
                             self_clone.move_to_ready(Arc::new(ReadyState{
-                                service, 
-                                security_info, 
+                                service,
+                                security_info,
                                 authority: security_opts.authority}), disconnection_listener).await;
                         }
                         Err(e) => {
@@ -642,6 +642,5 @@ mod tests {
         let details = create_call_details(&authority, "/service/method");
         assert_eq!(details.service_url(), "https://::1/service");
         assert_eq!(details.method_name(), "method");
-
     }
 }

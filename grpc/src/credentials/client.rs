@@ -37,7 +37,7 @@ use crate::rt::GrpcRuntime;
 
 #[trait_variant::make(Send)]
 pub trait ChannelCredsInternal {
-    type ContextType: ChannelSecurityContext;
+    type ContextType: ClientConnectionSecurityContext;
     type Output<I>;
     /// Performs the client-side authentication handshake on a raw endpoint.
     ///
@@ -65,12 +65,12 @@ pub trait ChannelCredsInternal {
     fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>>;
 }
 
-pub struct HandshakeOutput<T, C: ChannelSecurityContext> {
+pub struct HandshakeOutput<T, C: ClientConnectionSecurityContext> {
     pub endpoint: T,
-    pub security: ChannelSecurityInfo<C>,
+    pub security: ClientConnectionSecurityInfo<C>,
 }
 
-pub trait ChannelSecurityContext: Send + Sync + 'static {
+pub trait ClientConnectionSecurityContext: Send + Sync + 'static {
     /// Checks if the established connection is authorized to send requests to
     /// the given authority.
     ///
@@ -87,14 +87,14 @@ pub trait ChannelSecurityContext: Send + Sync + 'static {
     }
 }
 
-impl ChannelSecurityContext for Box<dyn ChannelSecurityContext> {
+impl ClientConnectionSecurityContext for Box<dyn ClientConnectionSecurityContext> {
     fn validate_authority(&self, authority: &Authority) -> bool {
         (**self).validate_authority(authority)
     }
 }
 
 /// Represents the security state of an established client-side connection.
-pub struct ChannelSecurityInfo<C> {
+pub struct ClientConnectionSecurityInfo<C> {
     security_protocol: &'static str,
     security_level: SecurityLevel,
     security_context: C,
@@ -102,9 +102,10 @@ pub struct ChannelSecurityInfo<C> {
     attributes: Attributes,
 }
 
-pub type DynChannelSecurityInfo = ChannelSecurityInfo<Box<dyn ChannelSecurityContext>>;
+pub type DynClientConnectionSecurityInfo =
+    ClientConnectionSecurityInfo<Box<dyn ClientConnectionSecurityContext>>;
 
-impl<C> ChannelSecurityInfo<C> {
+impl<C> ClientConnectionSecurityInfo<C> {
     pub fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
@@ -135,11 +136,11 @@ impl<C> ChannelSecurityInfo<C> {
         &self.attributes
     }
 
-    pub fn into_boxed(self) -> DynChannelSecurityInfo
+    pub fn into_boxed(self) -> DynClientConnectionSecurityInfo
     where
-        C: ChannelSecurityContext + 'static,
+        C: ClientConnectionSecurityContext + 'static,
     {
-        ChannelSecurityInfo {
+        ClientConnectionSecurityInfo {
             security_protocol: self.security_protocol,
             security_level: self.security_level,
             security_context: Box::new(self.security_context),
@@ -238,7 +239,7 @@ mod tests {
     use crate::Status;
     use crate::credentials::call::CallCredentials;
     use crate::credentials::call::CallDetails;
-    use crate::credentials::call::ChannelSecurityInfo;
+    use crate::credentials::call::ClientConnectionSecurityInfo;
     use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::credentials::local::LocalChannelCredentials;
     use crate::rt;
@@ -256,7 +257,7 @@ mod tests {
         async fn get_metadata(
             &self,
             _call_details: &CallDetails,
-            _auth_info: &ChannelSecurityInfo,
+            _auth_info: &ClientConnectionSecurityInfo,
             metadata: &mut MetadataMap,
         ) -> Result<(), Status> {
             metadata.insert(
@@ -296,8 +297,11 @@ mod tests {
         // Verify call credentials
         let combined_call_creds = composite2.get_call_credentials().unwrap();
         let call_details = CallDetails::new("service".to_string(), "method".to_string());
-        let auth_info =
-            ChannelSecurityInfo::new("local", SecurityLevel::NoSecurity, Attributes::new());
+        let auth_info = ClientConnectionSecurityInfo::new(
+            "local",
+            SecurityLevel::NoSecurity,
+            Attributes::new(),
+        );
         let mut metadata = MetadataMap::new();
 
         combined_call_creds
