@@ -9,7 +9,7 @@ rust-version = { workspace = true }
 
 [dependencies]
 prettyplease = "0.2.35"
-protobuf-codegen = { version = "4.33.0-release" }
+protobuf-codegen = { version = "4.34.0-release" }
 syn = "2.0.104"
 
 [build-dependencies]
