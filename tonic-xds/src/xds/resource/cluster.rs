@@ -141,7 +141,10 @@ mod tests {
             ..Default::default()
         };
         let err = ClusterResource::validate(cluster).unwrap_err();
-        assert!(err.to_string().contains("unsupported load balancing policy"));
+        assert!(
+            err.to_string()
+                .contains("unsupported load balancing policy")
+        );
     }
 
     #[test]
