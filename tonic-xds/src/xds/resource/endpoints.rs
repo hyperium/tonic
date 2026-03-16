@@ -131,7 +131,10 @@ fn validate_lb_endpoint(lb_ep: LbEndpoint) -> xds_client::Result<Option<Resolved
 
     let host_identifier = match lb_ep.host_identifier {
         Some(lb_endpoint::HostIdentifier::Endpoint(ep)) => ep,
-        // Named endpoints not supported.
+        // Skip unsupported or missing host_identifier variants (e.g. named
+        // endpoints). These are not relevant to gRPC and should not cause the
+        // entire EDS resource to be NACKed — the control plane may be serving
+        // both envoy proxies and gRPC clients.
         _ => return Ok(None),
     };
 
