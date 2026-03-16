@@ -43,6 +43,7 @@ use crate::rt::GrpcRuntime;
 
 pub(crate) mod child_manager;
 pub(crate) mod graceful_switch;
+pub(crate) mod lazy;
 pub(crate) mod pick_first;
 pub(crate) mod round_robin;
 pub(crate) mod subchannel;
