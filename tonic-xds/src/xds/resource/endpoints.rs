@@ -14,14 +14,14 @@ use xds_client::{Error, Resource};
 use crate::client::endpoint::EndpointAddress;
 
 /// Validated ClusterLoadAssignment (EDS resource).
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct EndpointsResource {
     pub cluster_name: String,
     pub localities: Vec<LocalityEndpoints>,
 }
 
 /// Endpoints within a locality.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct LocalityEndpoints {
     pub locality: Option<Locality>,
     pub endpoints: Vec<ResolvedEndpoint>,
@@ -30,7 +30,7 @@ pub(crate) struct LocalityEndpoints {
 }
 
 /// Locality information for a set of endpoints.
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, PartialEq, Eq, Hash)]
 pub(crate) struct Locality {
     pub region: String,
     pub zone: String,
@@ -38,7 +38,7 @@ pub(crate) struct Locality {
 }
 
 /// A single validated endpoint.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ResolvedEndpoint {
     pub address: EndpointAddress,
     pub health_status: HealthStatus,

@@ -12,7 +12,7 @@ use xds_client::{Error, Resource};
 use super::route_config::RouteConfigResource;
 
 /// How the listener obtains its route configuration.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) enum RouteSource {
     /// Route configuration fetched dynamically via RDS.
     Rds(String),
@@ -24,7 +24,7 @@ pub(crate) enum RouteSource {
 ///
 /// Extracts the route source from the
 /// `ApiListener` -> `HttpConnectionManager` -> `route_specifier` chain.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct ListenerResource {
     pub name: String,
     pub route_source: RouteSource,
