@@ -53,8 +53,12 @@ impl Resource for ClusterResource {
         let lb_policy = match cluster::LbPolicy::try_from(message.lb_policy) {
             Ok(cluster::LbPolicy::RoundRobin) => LbPolicy::RoundRobin {},
             Ok(cluster::LbPolicy::LeastRequest) => LbPolicy::LeastRequest {},
-            // Default to round-robin for unsupported policies.
-            _ => LbPolicy::RoundRobin {},
+            _ => {
+                return Err(Error::Validation(format!(
+                    "unsupported load balancing policy: {}",
+                    message.lb_policy
+                )));
+            }
         };
 
         Ok(ClusterResource {
@@ -130,14 +134,14 @@ mod tests {
     }
 
     #[test]
-    fn test_unsupported_lb_policy_defaults_to_round_robin() {
+    fn test_unsupported_lb_policy_is_rejected() {
         let cluster = Cluster {
             name: "rh-cluster".to_string(),
             lb_policy: cluster::LbPolicy::RingHash as i32,
             ..Default::default()
         };
-        let validated = ClusterResource::validate(cluster).unwrap();
-        assert_eq!(validated.lb_policy, LbPolicy::RoundRobin {});
+        let err = ClusterResource::validate(cluster).unwrap_err();
+        assert!(err.to_string().contains("unsupported load balancing policy"));
     }
 
     #[test]
