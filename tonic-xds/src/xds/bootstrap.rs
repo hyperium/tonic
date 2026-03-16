@@ -149,27 +149,6 @@ impl BootstrapConfig {
         Ok(())
     }
 
-    /// Convert the bootstrap node config to an `xds_client::Node`.
-    pub(crate) fn to_node(&self) -> Node {
-        let mut node = Node::new("tonic-xds", env!("CARGO_PKG_VERSION"));
-
-        if !self.node.id.is_empty() {
-            node = node.with_id(&self.node.id);
-        }
-        if let Some(cluster) = &self.node.cluster {
-            node = node.with_cluster(cluster);
-        }
-        if let Some(locality) = &self.node.locality {
-            node = node.with_locality(Locality {
-                region: locality.region.clone(),
-                zone: locality.zone.clone(),
-                sub_zone: locality.sub_zone.clone(),
-            });
-        }
-
-        node
-    }
-
     /// Returns the URI of the first xDS server.
     pub(crate) fn server_uri(&self) -> &str {
         self.xds_servers
@@ -194,6 +173,28 @@ impl BootstrapConfig {
                     ChannelCredentialType::Insecure | ChannelCredentialType::Tls
                 )
             })
+    }
+}
+
+impl From<NodeConfig> for Node {
+    fn from(config: NodeConfig) -> Self {
+        let mut node = Node::new("tonic-xds", env!("CARGO_PKG_VERSION"));
+
+        if !config.id.is_empty() {
+            node = node.with_id(config.id);
+        }
+        if let Some(cluster) = config.cluster {
+            node = node.with_cluster(cluster);
+        }
+        if let Some(locality) = config.locality {
+            node = node.with_locality(Locality {
+                region: locality.region,
+                zone: locality.zone,
+                sub_zone: locality.sub_zone,
+            });
+        }
+
+        node
     }
 }
 
@@ -261,9 +262,9 @@ mod tests {
     }
 
     #[test]
-    fn to_node_full() {
+    fn node_from_full_config() {
         let config = BootstrapConfig::from_json(full_json()).unwrap();
-        let node = config.to_node();
+        let node = Node::from(config.node);
         assert_eq!(node.id.as_deref(), Some("projects/123/nodes/456"));
         assert_eq!(node.cluster.as_deref(), Some("test-cluster"));
         assert_eq!(node.user_agent_name, "tonic-xds");
@@ -275,9 +276,9 @@ mod tests {
     }
 
     #[test]
-    fn to_node_minimal() {
+    fn node_from_minimal_config() {
         let config = BootstrapConfig::from_json(minimal_json()).unwrap();
-        let node = config.to_node();
+        let node = Node::from(config.node);
         assert_eq!(node.id.as_deref(), Some("test-node"));
         assert!(node.cluster.is_none());
         assert!(node.locality.is_none());
@@ -361,7 +362,7 @@ mod tests {
             "xds_servers": [{"server_uri": "localhost:5000"}]
         }"#;
         let config = BootstrapConfig::from_json(json).unwrap();
-        let node = config.to_node();
+        let node = Node::from(config.node);
         assert!(node.id.is_none());
     }
 }
