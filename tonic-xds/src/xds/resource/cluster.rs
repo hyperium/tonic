@@ -20,8 +20,8 @@ pub(crate) struct ClusterResource {
 /// Load balancing policies.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum LbPolicy {
-    RoundRobin {},
-    LeastRequest {},
+    RoundRobin,
+    LeastRequest,
 }
 
 impl Resource for ClusterResource {
@@ -51,8 +51,8 @@ impl Resource for ClusterResource {
             .filter(|s| !s.is_empty());
 
         let lb_policy = match cluster::LbPolicy::try_from(message.lb_policy) {
-            Ok(cluster::LbPolicy::RoundRobin) => LbPolicy::RoundRobin {},
-            Ok(cluster::LbPolicy::LeastRequest) => LbPolicy::LeastRequest {},
+            Ok(cluster::LbPolicy::RoundRobin) => LbPolicy::RoundRobin,
+            Ok(cluster::LbPolicy::LeastRequest) => LbPolicy::LeastRequest,
             _ => {
                 return Err(Error::Validation(format!(
                     "unsupported load balancing policy: {}",
@@ -95,7 +95,7 @@ mod tests {
         let cluster = make_cluster("my-cluster");
         let validated = ClusterResource::validate(cluster).expect("should validate");
         assert_eq!(validated.name, "my-cluster");
-        assert_eq!(validated.lb_policy, LbPolicy::RoundRobin {});
+        assert_eq!(validated.lb_policy, LbPolicy::RoundRobin);
         assert!(validated.eds_service_name.is_none());
     }
 
@@ -130,7 +130,7 @@ mod tests {
             ..Default::default()
         };
         let validated = ClusterResource::validate(cluster).unwrap();
-        assert_eq!(validated.lb_policy, LbPolicy::LeastRequest {});
+        assert_eq!(validated.lb_policy, LbPolicy::LeastRequest);
     }
 
     #[test]
