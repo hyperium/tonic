@@ -48,12 +48,12 @@ use crate::credentials::rustls::TLS_PROTO_INFO;
 use crate::credentials::rustls::key_log::KeyLogFile;
 use crate::credentials::rustls::parse_certs;
 use crate::credentials::rustls::parse_key;
-use crate::credentials::rustls::provider::ProviderInternal;
 use crate::credentials::rustls::sanitize_crypto_provider;
 use crate::credentials::rustls::tls_stream::TlsStream;
 use crate::credentials::server::HandshakeOutput;
 use crate::credentials::server::ServerConnectionSecurityInfo;
-use crate::credentials::server::ServerCredsInternal;
+use crate::private::Token;
+use crate::rt::AsyncIoAdapter;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -148,12 +148,12 @@ impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType
             }
             TlsClientCertificateRequestType::RequestAndVerify { roots_provider } => {
                 InnerClientCertificateRequestType::RequestClientCertificateAndVerify {
-                    roots_provider: roots_provider.get_receiver(),
+                    roots_provider: roots_provider.get_receiver(Token),
                 }
             }
             TlsClientCertificateRequestType::RequireAndVerify { roots_provider } => {
                 InnerClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
-                    roots_provider: roots_provider.get_receiver(),
+                    roots_provider: roots_provider.get_receiver(Token),
                 }
             }
         }
@@ -178,7 +178,7 @@ impl ServerTlsConfig {
         I: Provider<IdentityList>,
     {
         ServerTlsConfig {
-            identities_provider: identities_provider.get_receiver(),
+            identities_provider: identities_provider.get_receiver(Token),
             request_type: TlsClientCertificateRequestType::DontRequest.into(),
             key_log_path: None,
         }
@@ -320,17 +320,19 @@ impl ProducesTickets for NoTicketer {
     }
 }
 
-impl ServerCredsInternal for RustlsServerTlsCredendials {
+impl ServerCredentials for RustlsServerTlsCredendials {
     type Output<Input> = TlsStream<Input>;
 
     async fn accept<Input: GrpcEndpoint>(
         &self,
         source: Input,
         _runtime: GrpcRuntime,
+        _token: Token,
     ) -> Result<HandshakeOutput<Self::Output<Input>>, String> {
+        let input_io = AsyncIoAdapter::new(source);
         let tls_stream = self
             .acceptor
-            .accept(source)
+            .accept(input_io)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -350,9 +352,7 @@ impl ServerCredsInternal for RustlsServerTlsCredendials {
             security: auth_info,
         })
     }
-}
 
-impl ServerCredentials for RustlsServerTlsCredendials {
     fn info(&self) -> &ProtocolInfo {
         &TLS_PROTO_INFO
     }

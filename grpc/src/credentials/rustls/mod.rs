@@ -30,6 +30,7 @@ use rustls_pki_types::CertificateDer;
 use tokio::sync::watch;
 
 use crate::credentials::ProtocolInfo;
+use crate::private::Token;
 
 pub mod client;
 mod key_log;
@@ -79,23 +80,6 @@ impl Identity {
     }
 }
 
-mod provider {
-    use tokio::sync::watch::Receiver;
-
-    /// A sealed trait to prevent downstream implementations of `Provider`.
-    ///
-    /// This trait exposes the internal mechanism (Tokio watch channel) used to
-    /// receive updates. It is kept private/restricted to ensure that `Provider`
-    /// can only be implemented by types defined within this crate.
-    pub trait ProviderInternal<T> {
-        /// Returns a clone of the underlying watch receiver.
-        ///
-        /// This allows the consumer to observe the current value and await
-        /// future updates.
-        fn get_receiver(self) -> Receiver<T>;
-    }
-}
-
 /// A source of configuration or state of type `T` that allows for dynamic
 /// updates.
 ///
@@ -108,7 +92,14 @@ mod provider {
 /// This trait is **sealed**. It cannot be implemented by downstream crates.
 /// Users should rely on the provided implementations (e.g.,
 /// `StaticIdentityProvider`, `StaticRootsProvider`).
-pub trait Provider<T>: provider::ProviderInternal<T> {}
+pub trait Provider<T> {
+    /// Returns a clone of the underlying watch receiver.
+    ///
+    /// This allows the consumer to observe the current value and await
+    /// future updates.
+    #[doc(hidden)]
+    fn get_receiver(self, token: Token) -> watch::Receiver<T>;
+}
 
 /// A provider that supplies a constant, immutable value.
 pub struct StaticProvider<T> {
@@ -122,8 +113,8 @@ impl<T> StaticProvider<T> {
     }
 }
 
-impl<T> provider::ProviderInternal<T> for StaticProvider<T> {
-    fn get_receiver(self) -> watch::Receiver<T> {
+impl<T> Provider<T> for StaticProvider<T> {
+    fn get_receiver(self, _: Token) -> watch::Receiver<T> {
         // We drop the sender (_) immediately.
         // This ensures the receiver sees the initial value but knows
         // no future updates will arrive.
@@ -131,8 +122,6 @@ impl<T> provider::ProviderInternal<T> for StaticProvider<T> {
         rx
     }
 }
-
-impl<T> Provider<T> for StaticProvider<T> {}
 
 pub type StaticRootCertificatesProvider = StaticProvider<RootCertificates>;
 pub type StaticIdentityProvider = StaticProvider<Identity>;

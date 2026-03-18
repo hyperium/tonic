@@ -35,6 +35,7 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 
+use crate::credentials::ServerCredentials;
 use crate::credentials::rustls::ALPN_PROTO_STR_H2;
 use crate::credentials::rustls::Identity;
 use crate::credentials::rustls::RootCertificates;
@@ -42,7 +43,8 @@ use crate::credentials::rustls::StaticProvider;
 use crate::credentials::rustls::server::RustlsServerTlsCredendials;
 use crate::credentials::rustls::server::ServerTlsConfig;
 use crate::credentials::rustls::server::TlsClientCertificateRequestType;
-use crate::credentials::server::ServerCredsInternal;
+use crate::private::Token;
+use crate::rt::AsyncIoAdapter;
 use crate::rt::TcpOptions;
 use crate::rt::{self};
 
@@ -73,13 +75,13 @@ async fn test_tls_server_handshake() {
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
-        let result = creds.accept(stream, runtime).await;
+        let result = creds.accept(stream, runtime, Token).await;
         assert!(
             result.is_ok(),
             "Server handshake failed: {:?}",
             result.err()
         );
-        let mut stream = result.unwrap().endpoint;
+        let mut stream = AsyncIoAdapter::new(result.unwrap().endpoint);
         let mut buf = [0u8; 5];
         stream.read_exact(&mut buf).await.unwrap();
         assert_eq!(&buf, b"ping!");
@@ -131,7 +133,7 @@ async fn test_tls_server_handshake_no_alpn() {
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
-        let result = creds.accept(stream, runtime).await;
+        let result = creds.accept(stream, runtime, Token).await;
         assert!(result.is_err(), "Server handshake should have failed");
     });
 
@@ -177,7 +179,7 @@ async fn test_tls_server_handshake_bad_alpn() {
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let runtime = rt::default_runtime();
-        let result = creds.accept(stream, runtime).await;
+        let result = creds.accept(stream, runtime, Token).await;
         assert!(result.is_err(), "Server handshake should have failed");
     });
 
@@ -216,7 +218,7 @@ async fn test_tls_handshake_alpn_h1_and_h2() {
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let runtime = rt::default_runtime();
-        let result = creds.accept(stream, runtime).await.unwrap();
+        let result = creds.accept(stream, runtime, Token).await.unwrap();
     });
 
     // Client setup
@@ -261,7 +263,7 @@ async fn test_tls_server_mtls_require_fail() {
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
-        let result = creds.accept(stream, runtime).await;
+        let result = creds.accept(stream, runtime, Token).await;
         assert!(result.is_err(), "Handshake should fail without client cert");
     });
 
@@ -315,10 +317,10 @@ async fn test_tls_server_mtls_success() {
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let result = creds
-            .accept(stream, runtime)
+            .accept(stream, runtime, Token)
             .await
             .expect("Server handshake failed");
-        let mut stream = result.endpoint;
+        let mut stream = AsyncIoAdapter::new(result.endpoint);
         let mut buf = [0u8; 5];
         stream.read_exact(&mut buf).await.unwrap();
         assert_eq!(&buf, b"ping!");
@@ -377,10 +379,10 @@ async fn test_tls_server_mtls_optional() {
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let result = creds
-            .accept(stream, runtime)
+            .accept(stream, runtime, Token)
             .await
             .expect("Server handshake failed");
-        let mut stream = result.endpoint;
+        let mut stream = AsyncIoAdapter::new(result.endpoint);
         let mut buf = [0u8; 5];
         stream.read_exact(&mut buf).await.unwrap();
         assert_eq!(&buf, b"ping!");
@@ -429,10 +431,10 @@ async fn test_tls_server_key_log() {
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
         let result = creds
-            .accept(stream, runtime)
+            .accept(stream, runtime, Token)
             .await
             .expect("Server handshake failed");
-        let mut stream = result.endpoint;
+        let mut stream = AsyncIoAdapter::new(result.endpoint);
         let mut buf = [0u8; 5];
         stream.read_exact(&mut buf).await.unwrap();
         assert_eq!(&buf, b"ping!");
@@ -485,10 +487,13 @@ async fn check_resumption_disabled(versions: Vec<&'static rustls::SupportedProto
         for _ in 0..2 {
             let (stream, _) = listener.accept().await.unwrap();
             let runtime = rt::default_runtime();
-            let result = creds.accept(stream, runtime).await;
+            let result = creds.accept(stream, runtime, Token).await;
             assert!(result.is_ok());
-            let mut stream = result.unwrap().endpoint;
-            stream.write_all(b"pong!").await.unwrap();
+            let stream = result.unwrap().endpoint;
+            AsyncIoAdapter::new(stream)
+                .write_all(b"pong!")
+                .await
+                .unwrap();
         }
     });
 
@@ -560,13 +565,13 @@ async fn test_tls_server_sni() {
         for _ in 0..2 {
             let (stream, _) = listener.accept().await.unwrap();
             let runtime = rt::default_runtime();
-            let result = creds.accept(stream, runtime).await;
+            let result = creds.accept(stream, runtime, Token).await;
             assert!(
                 result.is_ok(),
                 "Server handshake failed: {:?}",
                 result.err()
             );
-            let mut stream = result.unwrap().endpoint;
+            let mut stream = AsyncIoAdapter::new(result.unwrap().endpoint);
             let mut buf = [0u8; 5];
             stream.read_exact(&mut buf).await.unwrap();
             assert_eq!(&buf, b"ping!");

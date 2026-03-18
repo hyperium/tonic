@@ -33,7 +33,6 @@ use crate::credentials::ProtocolInfo;
 use crate::credentials::SecurityLevel;
 use crate::credentials::ServerCredentials;
 use crate::credentials::call::CallCredentials;
-use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
@@ -41,6 +40,7 @@ use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
 use crate::credentials::server;
 use crate::credentials::server::ServerConnectionSecurityInfo;
+use crate::private::Token;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -96,7 +96,7 @@ fn security_level_for_endpoint(
     ))
 }
 
-impl client::ChannelCredsInternal for LocalChannelCredentials {
+impl ChannelCredentials for LocalChannelCredentials {
     type ContextType = LocalConnectionSecurityContext;
     type Output<I> = I;
 
@@ -106,6 +106,7 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
         source: Input,
         _info: ClientHandshakeInfo,
         _runtime: GrpcRuntime,
+        _token: Token,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         let security_level =
             security_level_for_endpoint(source.get_peer_address(), source.get_network_type())?;
@@ -120,15 +121,13 @@ impl client::ChannelCredsInternal for LocalChannelCredentials {
         })
     }
 
-    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
-        None
-    }
-}
-
-impl ChannelCredentials for LocalChannelCredentials {
     fn info(&self) -> &ProtocolInfo {
         static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
+    }
+
+    fn get_call_credentials(&self, _: Token) -> Option<&Arc<dyn CallCredentials>> {
+        None
     }
 }
 
@@ -144,13 +143,14 @@ impl LocalServerCredentials {
     }
 }
 
-impl server::ServerCredsInternal for LocalServerCredentials {
+impl ServerCredentials for LocalServerCredentials {
     type Output<I> = I;
 
     async fn accept<Input: GrpcEndpoint>(
         &self,
         source: Input,
         _runtime: GrpcRuntime,
+        _token: Token,
     ) -> Result<server::HandshakeOutput<Self::Output<Input>>, String> {
         let security_level =
             security_level_for_endpoint(source.get_peer_address(), source.get_network_type())?;
@@ -163,9 +163,7 @@ impl server::ServerCredsInternal for LocalServerCredentials {
             ),
         })
     }
-}
 
-impl ServerCredentials for LocalServerCredentials {
     fn info(&self) -> &ProtocolInfo {
         static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
@@ -183,12 +181,11 @@ mod test {
     use crate::credentials::ChannelCredentials;
     use crate::credentials::SecurityLevel;
     use crate::credentials::ServerCredentials;
-    use crate::credentials::client::ChannelCredsInternal as ClientSealed;
     use crate::credentials::client::ClientConnectionSecurityContext;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::common::Authority;
-    use crate::credentials::server::ServerCredsInternal;
     use crate::rt;
+    use crate::rt::AsyncIoAdapter;
     use crate::rt::GrpcEndpoint;
     use crate::rt::TcpOptions;
 
@@ -231,11 +228,11 @@ mod test {
         let handshake_info = ClientHandshakeInfo::default();
 
         let output = creds
-            .connect(&authority, endpoint, handshake_info, runtime)
+            .connect(&authority, endpoint, handshake_info, runtime, Token)
             .await
             .unwrap();
 
-        let mut endpoint = output.endpoint;
+        let endpoint = output.endpoint;
         let security_info = output.security;
 
         // Verify security info.
@@ -252,7 +249,10 @@ mod test {
         server_stream.write_all(test_data).await.unwrap();
 
         let mut buf = vec![0u8; test_data.len()];
-        endpoint.read_exact(&mut buf).await.unwrap();
+        AsyncIoAdapter::new(endpoint)
+            .read_exact(&mut buf)
+            .await
+            .unwrap();
         assert_eq!(buf, test_data);
 
         // Validate arbitrary authority.
@@ -290,15 +290,18 @@ mod test {
 
         let (server_stream, _) = listener.accept().await.unwrap();
 
-        let output = creds.accept(server_stream, runtime).await.unwrap();
-        let mut endpoint = output.endpoint;
+        let output = creds.accept(server_stream, runtime, Token).await.unwrap();
+        let endpoint = output.endpoint;
         let security_info = output.security;
 
         assert_eq!(security_info.security_protocol(), "local");
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         let mut buf = vec![0u8; 10];
-        endpoint.read_exact(&mut buf).await.unwrap();
+        AsyncIoAdapter::new(endpoint)
+            .read_exact(&mut buf)
+            .await
+            .unwrap();
         assert_eq!(&buf[..], b"hello grpc");
 
         client_handle.abort();

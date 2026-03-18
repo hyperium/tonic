@@ -32,68 +32,13 @@ use tokio::io::AsyncWrite;
 use tokio::io::ReadBuf;
 use tokio_rustls::TlsStream as RustlsStream;
 
+use crate::private::Token;
+use crate::rt::AsyncIoAdapter;
 use crate::rt::GrpcEndpoint;
-use crate::rt::endpoint;
 
 pub struct TlsStream<T> {
-    inner: RustlsStream<T>,
+    inner: RustlsStream<AsyncIoAdapter<T>>,
 }
-
-impl<T> AsyncRead for TlsStream<T>
-where
-    T: GrpcEndpoint,
-{
-    fn poll_read(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<std::io::Result<()>> {
-        let pinned = Pin::new(&mut self.get_mut().inner);
-        AsyncRead::poll_read(pinned, cx, buf)
-    }
-}
-
-impl<T> AsyncWrite for TlsStream<T>
-where
-    T: GrpcEndpoint,
-{
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        let pinned = Pin::new(&mut self.get_mut().inner);
-        AsyncWrite::poll_write(pinned, cx, buf)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), std::io::Error>> {
-        let pinned = Pin::new(&mut self.get_mut().inner);
-        AsyncWrite::poll_flush(pinned, cx)
-    }
-
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-    ) -> Poll<Result<(), std::io::Error>> {
-        let pinned = Pin::new(&mut self.get_mut().inner);
-        AsyncWrite::poll_shutdown(pinned, cx)
-    }
-
-    fn poll_write_vectored(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        bufs: &[IoSlice<'_>],
-    ) -> Poll<Result<usize, std::io::Error>> {
-        let pinned = Pin::new(&mut self.get_mut().inner);
-        AsyncWrite::poll_write_vectored(pinned, cx, bufs)
-    }
-
-    fn is_write_vectored(&self) -> bool {
-        self.inner.is_write_vectored()
-    }
-}
-
-impl<T> endpoint::Sealed for TlsStream<T> where T: GrpcEndpoint {}
 
 impl<T> GrpcEndpoint for TlsStream<T>
 where
@@ -101,32 +46,84 @@ where
 {
     fn get_local_address(&self) -> &str {
         match &self.inner {
-            RustlsStream::Client(s) => s.get_ref().0.get_local_address(),
-            RustlsStream::Server(s) => s.get_ref().0.get_local_address(),
+            RustlsStream::Client(s) => s.get_ref().0.get_ref().get_local_address(),
+            RustlsStream::Server(s) => s.get_ref().0.get_ref().get_local_address(),
         }
     }
 
     fn get_peer_address(&self) -> &str {
         match &self.inner {
-            RustlsStream::Client(s) => s.get_ref().0.get_peer_address(),
-            RustlsStream::Server(s) => s.get_ref().0.get_peer_address(),
+            RustlsStream::Client(s) => s.get_ref().0.get_ref().get_peer_address(),
+            RustlsStream::Server(s) => s.get_ref().0.get_ref().get_peer_address(),
         }
     }
 
     fn get_network_type(&self) -> &'static str {
         match &self.inner {
-            RustlsStream::Client(s) => s.get_ref().0.get_network_type(),
-            RustlsStream::Server(s) => s.get_ref().0.get_network_type(),
+            RustlsStream::Client(s) => s.get_ref().0.get_ref().get_network_type(),
+            RustlsStream::Server(s) => s.get_ref().0.get_ref().get_network_type(),
         }
+    }
+
+    fn poll_read_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+        token: Token,
+    ) -> Poll<std::io::Result<()>> {
+        let pinned = Pin::new(&mut self.get_mut().inner);
+        pinned.poll_read(cx, buf)
+    }
+
+    fn poll_write_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        token: Token,
+    ) -> Poll<Result<usize, std::io::Error>> {
+        let pinned = Pin::new(&mut self.get_mut().inner);
+        pinned.poll_write(cx, buf)
+    }
+
+    fn poll_flush_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        token: Token,
+    ) -> Poll<Result<(), std::io::Error>> {
+        let pinned = Pin::new(&mut self.get_mut().inner);
+        pinned.poll_flush(cx)
+    }
+
+    fn poll_shutdown_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        token: Token,
+    ) -> Poll<Result<(), std::io::Error>> {
+        let pinned = Pin::new(&mut self.get_mut().inner);
+        pinned.poll_shutdown(cx)
+    }
+
+    fn poll_write_vectored_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+        token: Token,
+    ) -> Poll<Result<usize, std::io::Error>> {
+        let pinned = Pin::new(&mut self.get_mut().inner);
+        pinned.poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored_private(&self, token: Token) -> bool {
+        self.inner.is_write_vectored()
     }
 }
 
-impl<T> TlsStream<T> {
-    pub fn new(inner: RustlsStream<T>) -> Self {
+impl<T: GrpcEndpoint> TlsStream<T> {
+    pub(crate) fn new(inner: RustlsStream<AsyncIoAdapter<T>>) -> Self {
         Self { inner }
     }
 
-    pub fn inner(&self) -> &RustlsStream<T> {
+    pub(crate) fn inner(&self) -> &RustlsStream<AsyncIoAdapter<T>> {
         &self.inner
     }
 }

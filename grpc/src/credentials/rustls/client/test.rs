@@ -39,7 +39,7 @@ use tokio::net::TcpListener;
 use tokio::task::JoinHandle;
 use tokio_rustls::TlsAcceptor;
 
-use crate::credentials::client::ChannelCredsInternal;
+use crate::credentials::ChannelCredentials;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::common::Authority;
@@ -49,7 +49,9 @@ use crate::credentials::rustls::RootCertificates;
 use crate::credentials::rustls::StaticProvider;
 use crate::credentials::rustls::client::ClientTlsConfig;
 use crate::credentials::rustls::client::RustlsClientTlsCredendials;
+use crate::private::Token;
 use crate::rt;
+use crate::rt::AsyncIoAdapter;
 use crate::rt::TcpOptions;
 
 static INIT: Once = Once::new();
@@ -174,12 +176,13 @@ async fn test_tls_key_log() {
             endpoint,
             ClientHandshakeInfo::default(),
             runtime,
+            Token,
         )
         .await
         .expect("Handshake failed");
-    let mut stream = result.endpoint;
+    let stream = result.endpoint;
     let mut buf = Vec::new();
-    let _ = stream.read_to_end(&mut buf).await;
+    let _ = AsyncIoAdapter::new(stream).read_to_end(&mut buf).await;
     assert_eq!(buf, b"Hello world");
 
     server_task.await.unwrap();
@@ -228,6 +231,7 @@ async fn test_tls_handshake_wrong_server_name() {
             endpoint,
             ClientHandshakeInfo::default(),
             runtime,
+            Token,
         )
         .await;
 
@@ -280,6 +284,7 @@ async fn test_tls_validate_authority() {
             endpoint,
             ClientHandshakeInfo::default(),
             runtime,
+            Token,
         )
         .await
         .expect("Handshake failed");
@@ -328,13 +333,14 @@ async fn test_mtls_handshake_no_identity() {
             endpoint,
             ClientHandshakeInfo::default(),
             runtime,
+            Token,
         )
         .await
         .expect("Client handshake expected to succeed with TLS 1.3");
 
-    let mut stream = result.endpoint;
+    let stream = result.endpoint;
     let mut buf = Vec::new();
-    let res = stream.read_to_end(&mut buf).await;
+    let res = AsyncIoAdapter::new(stream).read_to_end(&mut buf).await;
     assert!(
         res.is_err(),
         "read from TLS stream should fail due to missing client identity"
@@ -375,13 +381,14 @@ async fn test_mtls_handshake_with_identitiy() {
             endpoint,
             ClientHandshakeInfo::default(),
             runtime,
+            Token,
         )
         .await
         .expect("Handshake failed with client identity");
 
-    let mut stream = result.endpoint;
+    let stream = result.endpoint;
     let mut buf = Vec::new();
-    let _ = stream.read_to_end(&mut buf).await;
+    let _ = AsyncIoAdapter::new(stream).read_to_end(&mut buf).await;
     assert_eq!(buf, b"Hello world");
 
     server_task.await.unwrap();
@@ -431,11 +438,12 @@ async fn check_client_resumption_disabled(
                 endpoint,
                 ClientHandshakeInfo::default(),
                 runtime,
+                Token,
             )
             .await
             .expect("Handshake failed");
 
-        let mut tls_stream = result.endpoint;
+        let tls_stream = result.endpoint;
 
         let connection = match tls_stream.inner() {
             tokio_rustls::TlsStream::Client(conn) => conn.get_ref().1,
@@ -450,7 +458,7 @@ async fn check_client_resumption_disabled(
         );
 
         let mut buf = Vec::new();
-        let _ = tls_stream.read_to_end(&mut buf).await;
+        let _ = AsyncIoAdapter::new(tls_stream).read_to_end(&mut buf).await;
         assert_eq!(buf, b"Hello world");
     }
 
@@ -605,16 +613,17 @@ async fn run_handshake_test(server_alpn: Vec<Vec<u8>>, expect_success: bool) {
             endpoint,
             ClientHandshakeInfo::default(),
             runtime,
+            Token,
         )
         .await;
 
     if expect_success {
         assert!(result.is_ok(), "Handshake failed: {:?}", result.err());
         let result = result.unwrap();
-        let mut stream = result.endpoint;
+        let stream = result.endpoint;
         let mut buf = Vec::new();
         // Ignore read errors if server closed connection abruptly (which happens in failure cases, but here we expect success)
-        let _ = stream.read_to_end(&mut buf).await;
+        let _ = AsyncIoAdapter::new(stream).read_to_end(&mut buf).await;
         assert_eq!(buf, b"Hello world");
     } else {
         assert!(result.is_err(), "Handshake succeeded but expected failure");

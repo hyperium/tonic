@@ -32,10 +32,8 @@ use std::time::Instant;
 use hyper::rt::Executor;
 use hyper::rt::Timer;
 use pin_project_lite::pin_project;
-use tokio::io::AsyncRead;
-use tokio::io::AsyncWrite;
-use tokio::io::ReadBuf;
 
+use crate::private::Token;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -111,35 +109,6 @@ impl HyperStream {
     }
 }
 
-impl AsyncRead for HyperStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut ReadBuf<'_>,
-    ) -> Poll<io::Result<()>> {
-        // Delegate the poll_read call to the inner stream.
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for HyperStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &[u8],
-    ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-}
-
 impl hyper::rt::Read for HyperStream {
     fn poll_read(
         self: Pin<&mut Self>,
@@ -148,7 +117,7 @@ impl hyper::rt::Read for HyperStream {
     ) -> Poll<Result<(), io::Error>> {
         let n = unsafe {
             let mut tbuf = tokio::io::ReadBuf::uninit(buf.as_mut());
-            match tokio::io::AsyncRead::poll_read(self.project().inner, cx, &mut tbuf) {
+            match self.project().inner.poll_read_private(cx, &mut tbuf, Token) {
                 Poll::Ready(Ok(())) => tbuf.filled().len(),
                 other => return other,
             }
@@ -167,19 +136,19 @@ impl hyper::rt::Write for HyperStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        AsyncWrite::poll_write(self.project().inner, cx, buf)
+        self.project().inner.poll_write_private(cx, buf, Token)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        AsyncWrite::poll_flush(self.project().inner, cx)
+        self.project().inner.poll_flush_private(cx, Token)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        AsyncWrite::poll_shutdown(self.project().inner, cx)
+        self.project().inner.poll_shutdown_private(cx, Token)
     }
 
     fn is_write_vectored(&self) -> bool {
-        AsyncWrite::is_write_vectored(&self.inner)
+        self.inner.is_write_vectored_private(Token)
     }
 
     fn poll_write_vectored(
@@ -187,6 +156,8 @@ impl hyper::rt::Write for HyperStream {
         cx: &mut Context<'_>,
         bufs: &[io::IoSlice<'_>],
     ) -> Poll<Result<usize, io::Error>> {
-        AsyncWrite::poll_write_vectored(self.project().inner, cx, bufs)
+        self.project()
+            .inner
+            .poll_write_vectored_private(cx, bufs, Token)
     }
 }

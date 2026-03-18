@@ -31,22 +31,83 @@ mod local;
 pub mod rustls;
 pub(crate) mod server;
 
+use std::sync::Arc;
+
 pub use client::CompositeChannelCredentials;
 pub use insecure::InsecureChannelCredentials;
 pub use insecure::InsecureServerCredentials;
 pub use local::LocalChannelCredentials;
 pub use local::LocalServerCredentials;
 
+use crate::credentials::call::CallCredentials;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::client::HandshakeOutput;
+use crate::credentials::common::Authority;
+use crate::private::Token;
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
+
 /// Defines the common interface for all live gRPC wire protocols and supported
 /// transport security protocols (e.g., TLS, ALTS).
-pub trait ChannelCredentials: client::ChannelCredsInternal + Sync + 'static {
+#[trait_variant::make(Send)]
+pub trait ChannelCredentials: Sync + 'static {
+    #[doc(hidden)]
+    type ContextType: ClientConnectionSecurityContext;
+    #[doc(hidden)]
+    type Output<I>;
+
     //// Provides the ProtocolInfo of these credentials.
     fn info(&self) -> &ProtocolInfo;
+
+    /// Returns call credentials to be used for all RPCs made on a connection.
+    #[doc(hidden)]
+    fn get_call_credentials(&self, token: Token) -> Option<&Arc<dyn CallCredentials>>;
+
+    /// Performs the client-side authentication handshake on a raw endpoint.
+    ///
+    /// This method wraps the provided `source` endpoint with the security protocol
+    /// (e.g., TLS) and returns the authenticated endpoint along with its
+    /// security details.
+    ///
+    /// # Arguments
+    ///
+    /// * `authority` - The `:authority` header value to be used when creating
+    ///   new streams.
+    ///   **Important:** Implementations must use this value as the server name
+    ///   (e.g., for SNI) during the handshake.
+    /// * `source` - The raw connection handle.
+    /// * `info` - Additional context passed from the resolver or load balancer.
+    #[doc(hidden)]
+    async fn connect<Input: GrpcEndpoint>(
+        &self,
+        authority: &Authority,
+        source: Input,
+        info: ClientHandshakeInfo,
+        runtime: GrpcRuntime,
+        token: Token,
+    ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 }
 
-pub trait ServerCredentials: server::ServerCredsInternal + Sync + 'static {
+#[trait_variant::make(Send)]
+pub trait ServerCredentials: Sync + 'static {
+    #[doc(hidden)]
+    type Output<I>;
+
     //// Provides the ProtocolInfo of this credentials.
     fn info(&self) -> &ProtocolInfo;
+
+    /// Performs the server-side authentication handshake.
+    ///
+    /// This method wraps the incoming raw `source` connection with the configured
+    /// security protocol (e.g., TLS).
+    #[doc(hidden)]
+    async fn accept<Input: GrpcEndpoint>(
+        &self,
+        source: Input,
+        runtime: GrpcRuntime,
+        token: Token,
+    ) -> Result<server::HandshakeOutput<Self::Output<Input>>, String>;
 }
 
 /// Defines the level of protection provided by an established connection.

@@ -34,6 +34,7 @@ use tokio::net::TcpStream;
 use tokio::task::JoinHandle;
 
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::private::Token;
 use crate::rt::BoxEndpoint;
 use crate::rt::BoxFuture;
 use crate::rt::BoxedTaskHandle;
@@ -45,7 +46,6 @@ use crate::rt::ScopedBoxFuture;
 use crate::rt::Sleep;
 use crate::rt::TaskHandle;
 use crate::rt::TcpOptions;
-use crate::rt::endpoint;
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
@@ -173,54 +173,6 @@ struct TokioTcpStream {
     local_addr: Box<str>,
 }
 
-impl AsyncRead for TokioTcpStream {
-    fn poll_read(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &mut tokio::io::ReadBuf<'_>,
-    ) -> std::task::Poll<std::io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read(cx, buf)
-    }
-}
-
-impl AsyncWrite for TokioTcpStream {
-    fn poll_write(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        buf: &[u8],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut self.inner).poll_write(cx, buf)
-    }
-
-    fn poll_write_vectored(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-        bufs: &[std::io::IoSlice<'_>],
-    ) -> std::task::Poll<Result<usize, std::io::Error>> {
-        Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
-    }
-
-    fn is_write_vectored(&self) -> bool {
-        self.inner.is_write_vectored()
-    }
-
-    fn poll_flush(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_flush(cx)
-    }
-
-    fn poll_shutdown(
-        mut self: Pin<&mut Self>,
-        cx: &mut std::task::Context<'_>,
-    ) -> std::task::Poll<Result<(), std::io::Error>> {
-        Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-}
-
-impl endpoint::Sealed for TokioTcpStream {}
-
 impl super::GrpcEndpoint for TokioTcpStream {
     fn get_local_address(&self) -> &str {
         &self.local_addr
@@ -232,6 +184,53 @@ impl super::GrpcEndpoint for TokioTcpStream {
 
     fn get_network_type(&self) -> &'static str {
         TCP_IP_NETWORK_TYPE
+    }
+
+    fn poll_read_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &mut tokio::io::ReadBuf<'_>,
+        _token: Token,
+    ) -> std::task::Poll<std::io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read(cx, buf)
+    }
+
+    fn poll_write_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        buf: &[u8],
+        _token: Token,
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.inner).poll_write(cx, buf)
+    }
+
+    fn poll_write_vectored_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        bufs: &[std::io::IoSlice<'_>],
+        _token: Token,
+    ) -> std::task::Poll<Result<usize, std::io::Error>> {
+        Pin::new(&mut self.inner).poll_write_vectored(cx, bufs)
+    }
+
+    fn is_write_vectored_private(&self, _token: Token) -> bool {
+        self.inner.is_write_vectored()
+    }
+
+    fn poll_flush_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        _token: Token,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.inner).poll_flush(cx)
+    }
+
+    fn poll_shutdown_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut std::task::Context<'_>,
+        _token: Token,
+    ) -> std::task::Poll<Result<(), std::io::Error>> {
+        Pin::new(&mut self.inner).poll_shutdown(cx)
     }
 }
 
