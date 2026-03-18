@@ -311,14 +311,8 @@ mod tests {
 
         rx1.changed().await.unwrap();
         rx2.changed().await.unwrap();
-        assert_eq!(
-            rx1.borrow_and_update().as_ref().unwrap().cluster_name,
-            "c1"
-        );
-        assert_eq!(
-            rx2.borrow_and_update().as_ref().unwrap().cluster_name,
-            "c1"
-        );
+        assert_eq!(rx1.borrow_and_update().as_ref().unwrap().cluster_name, "c1");
+        assert_eq!(rx2.borrow_and_update().as_ref().unwrap().cluster_name, "c1");
     }
 
     #[tokio::test]
