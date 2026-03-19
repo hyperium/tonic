@@ -335,9 +335,7 @@ impl ActiveChannel {
                     WorkQueueItem::ScheduleResolver => {
                         resolver.work(&mut resolver_channel_controller)
                     }
-                    WorkQueueItem::ResolveNow => {
-                        resolver.resolve_now();
-                    }
+                    WorkQueueItem::ResolveNow => resolver.resolve_now(),
                     WorkQueueItem::ScheduleLbPolicy => {
                         *resolver_channel_controller
                             .lb_work_scheduler
@@ -426,12 +424,12 @@ impl name_resolution::WorkScheduler for ResolverWorkScheduler {
     }
 }
 
-pub(crate) struct ResolverChannelController {
+struct ResolverChannelController {
     wqtx: WorkQueueTx, // To queue re-resolution requests
-    pub(super) lb_policy: SubchannelSharing<GracefulSwitchPolicy>,
     runtime: GrpcRuntime,
+    lb_policy: SubchannelSharing<GracefulSwitchPolicy>,
     lb_work_scheduler: Arc<LbWorkScheduler>,
-    pub(super) lb_channel_controller: LbChannelController,
+    lb_channel_controller: LbChannelController,
 }
 
 impl ResolverChannelController {
@@ -466,7 +464,7 @@ impl ResolverChannelController {
     }
 }
 
-pub(crate) struct LbChannelController {
+struct LbChannelController {
     lb_work_scheduler: Arc<LbWorkScheduler>, // Holds `pending` bool (??)
     transport_registry: TransportRegistry,   // For creating subchannels
     wqtx: WorkQueueTx,                       // To queue subchannel state updates
