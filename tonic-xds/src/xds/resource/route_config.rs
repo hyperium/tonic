@@ -214,6 +214,10 @@ fn validate_route_match(rm: RouteMatch) -> xds_client::Result<RouteConfigMatch> 
 
     let mut headers = Vec::with_capacity(rm.headers.len());
     for hm in rm.headers {
+        // Per A28: exclude headers with -bin suffix from matching.
+        if hm.name.ends_with("-bin") {
+            continue;
+        }
         let validated_hm = validate_header_matcher(hm)?;
         headers.push(validated_hm);
     }
@@ -773,5 +777,61 @@ mod tests {
             &validated.virtual_hosts[0].routes[0].match_criteria.headers[0].match_specifier,
             HeaderMatchSpecifierConfig::Range { start: 1, end: 10 }
         ));
+    }
+
+    #[test]
+    fn test_binary_header_excluded_at_validation() {
+        use envoy_types::pb::envoy::config::route::v3::HeaderMatcher;
+        use envoy_types::pb::envoy::config::route::v3::header_matcher::HeaderMatchSpecifier;
+        use envoy_types::pb::envoy::r#type::matcher::v3::StringMatcher;
+        use envoy_types::pb::envoy::r#type::matcher::v3::string_matcher::MatchPattern;
+
+        let route = envoy_types::pb::envoy::config::route::v3::Route {
+            r#match: Some(RouteMatch {
+                path_specifier: Some(route_match::PathSpecifier::Prefix("/".to_string())),
+                headers: vec![
+                    HeaderMatcher {
+                        name: "x-data-bin".to_string(),
+                        header_match_specifier: Some(HeaderMatchSpecifier::StringMatch(
+                            StringMatcher {
+                                match_pattern: Some(MatchPattern::Exact("secret".to_string())),
+                                ..Default::default()
+                            },
+                        )),
+                        ..Default::default()
+                    },
+                    HeaderMatcher {
+                        name: "x-env".to_string(),
+                        header_match_specifier: Some(HeaderMatchSpecifier::StringMatch(
+                            StringMatcher {
+                                match_pattern: Some(MatchPattern::Exact("prod".to_string())),
+                                ..Default::default()
+                            },
+                        )),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            }),
+            action: Some(Action::Route(RouteAction {
+                cluster_specifier: Some(ClusterSpecifier::Cluster("c1".to_string())),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![route],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        let headers = &validated.virtual_hosts[0].routes[0].match_criteria.headers;
+        assert_eq!(headers.len(), 1);
+        assert_eq!(headers[0].name, "x-env");
     }
 }

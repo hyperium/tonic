@@ -194,10 +194,6 @@ fn match_path(criteria: &RouteConfigMatch, path: &str) -> bool {
 
 fn match_headers(criteria: &RouteConfigMatch, headers: &http::HeaderMap) -> bool {
     criteria.headers.iter().all(|m| {
-        // Per A28: exclude headers with -bin suffix from matching.
-        if m.name.ends_with("-bin") {
-            return true;
-        }
         let result = match_header(m, headers);
         if m.invert_match { !result } else { result }
     })
@@ -662,27 +658,45 @@ mod tests {
     }
 
     #[test]
-    fn binary_header_skipped() {
-        let rc = simple_rc(vec![VirtualHostConfig {
-            name: "vh1".into(),
-            domains: vec!["*".into()],
-            routes: vec![RouteConfig {
-                match_criteria: RouteConfigMatch {
-                    path_specifier: PathSpecifierConfig::Prefix("/".into()),
-                    headers: vec![HeaderMatcherConfig {
-                        name: "x-data-bin".into(),
-                        match_specifier: HeaderMatchSpecifierConfig::Exact("secret".into()),
-                        invert_match: false,
-                    }],
-                    case_sensitive: true,
-                    match_fraction: None,
-                },
-                action: RouteConfigAction::Cluster("c1".into()),
-            }],
-        }]);
-        // Binary header matcher is skipped, so route matches even without the header.
-        let action = rc.route("host", "/", &http::HeaderMap::new()).unwrap();
-        assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "c1"));
+    fn select_weighted_cluster_single() {
+        let clusters = vec![WeightedCluster {
+            name: "only".into(),
+            weight: 100,
+        }];
+        assert_eq!(select_weighted_cluster(&clusters), "only");
+    }
+
+    #[test]
+    fn select_weighted_cluster_zero_weights() {
+        let clusters = vec![
+            WeightedCluster {
+                name: "a".into(),
+                weight: 0,
+            },
+            WeightedCluster {
+                name: "b".into(),
+                weight: 0,
+            },
+        ];
+        let name = select_weighted_cluster(&clusters);
+        assert!(name == "a" || name == "b");
+    }
+
+    #[test]
+    fn select_weighted_cluster_weight_1_vs_0() {
+        let clusters = vec![
+            WeightedCluster {
+                name: "winner".into(),
+                weight: 1,
+            },
+            WeightedCluster {
+                name: "loser".into(),
+                weight: 0,
+            },
+        ];
+        for _ in 0..1000 {
+            assert_eq!(select_weighted_cluster(&clusters), "winner");
+        }
     }
 
     #[test]
