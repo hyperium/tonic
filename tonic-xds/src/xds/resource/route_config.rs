@@ -39,6 +39,9 @@ pub(crate) struct RouteConfigMatch {
     pub path_specifier: PathSpecifierConfig,
     pub headers: Vec<HeaderMatcherConfig>,
     pub case_sensitive: bool,
+    /// Fraction of requests this route should match, as numerator out of 1,000,000.
+    /// `None` means always match (100%).
+    pub match_fraction: Option<u32>,
 }
 
 /// Path matching specifier.
@@ -67,6 +70,11 @@ pub(crate) enum HeaderMatchSpecifierConfig {
     Contains(String),
     /// Match if header is present (any value).
     Present,
+    /// Match if the header value, parsed as an integer, falls within [start, end).
+    Range {
+        start: i64,
+        end: i64,
+    },
 }
 
 /// Route action deciding where to send traffic.
@@ -120,8 +128,9 @@ impl Resource for RouteConfigResource {
 
             let mut routes = Vec::with_capacity(vh.routes.len());
             for route in vh.routes {
-                let validated_route = validate_route(route)?;
-                routes.push(validated_route);
+                if let Some(validated_route) = validate_route(route)? {
+                    routes.push(validated_route);
+                }
             }
 
             virtual_hosts.push(VirtualHostConfig {
@@ -138,12 +147,19 @@ impl Resource for RouteConfigResource {
     }
 }
 
+/// Returns `Ok(None)` for routes that should be silently skipped (query param matchers,
+/// unsupported cluster specifiers like `cluster_header`).
 fn validate_route(
     route: envoy_types::pb::envoy::config::route::v3::Route,
-) -> xds_client::Result<RouteConfig> {
+) -> xds_client::Result<Option<RouteConfig>> {
     let route_match = route
         .r#match
         .ok_or_else(|| Error::Validation("route missing match field".into()))?;
+
+    // Per A28: ignore routes with query parameter matchers.
+    if !route_match.query_parameters.is_empty() {
+        return Ok(None);
+    }
 
     let match_criteria = validate_route_match(route_match)?;
 
@@ -152,13 +168,11 @@ fn validate_route(
         .ok_or_else(|| Error::Validation("route missing action field".into()))?;
 
     let validated_action = match action {
-        route::Action::Route(route_action) => validate_route_action(route_action)?,
-        route::Action::NonForwardingAction(_) => {
-            // Non-forwarding actions are used in xDS server-side, not client-side.
-            return Err(Error::Validation(
-                "non_forwarding_action not supported for client-side routing".into(),
-            ));
-        }
+        route::Action::Route(route_action) => match validate_route_action(route_action)? {
+            Some(action) => action,
+            None => return Ok(None),
+        },
+        // Per A28: action field must be "route", otherwise NACK.
         _ => {
             return Err(Error::Validation(
                 "only route action is supported for client routing".into(),
@@ -166,13 +180,15 @@ fn validate_route(
         }
     };
 
-    Ok(RouteConfig {
+    Ok(Some(RouteConfig {
         match_criteria,
         action: validated_action,
-    })
+    }))
 }
 
 fn validate_route_match(rm: RouteMatch) -> xds_client::Result<RouteConfigMatch> {
+    use envoy_types::pb::envoy::r#type::v3::fractional_percent::DenominatorType;
+
     let path_specifier = match rm.path_specifier {
         Some(route_match::PathSpecifier::Prefix(p)) => PathSpecifierConfig::Prefix(p),
         Some(route_match::PathSpecifier::Path(p)) => PathSpecifierConfig::Path(p),
@@ -181,9 +197,11 @@ fn validate_route_match(rm: RouteMatch) -> xds_client::Result<RouteConfigMatch> 
                 .map_err(|e| Error::Validation(format!("invalid path regex '{}': {e}", r.regex)))?;
             PathSpecifierConfig::SafeRegex(re)
         }
+        // Per A28: not having path_specifier will cause a NACK.
         None => {
-            // Default: empty prefix matches everything.
-            PathSpecifierConfig::Prefix(String::new())
+            return Err(Error::Validation(
+                "route match missing path_specifier".into(),
+            ));
         }
         _ => {
             return Err(Error::Validation(
@@ -200,10 +218,26 @@ fn validate_route_match(rm: RouteMatch) -> xds_client::Result<RouteConfigMatch> 
         headers.push(validated_hm);
     }
 
+    // Per A28: use runtime_fraction.default_value, normalize to numerator out of 1,000,000.
+    // runtime_key is ignored (gRPC has no runtime config).
+    let match_fraction = rm
+        .runtime_fraction
+        .and_then(|rf| rf.default_value)
+        .map(|frac| {
+            let scale = match DenominatorType::try_from(frac.denominator) {
+                Ok(DenominatorType::Hundred) => 10_000,
+                Ok(DenominatorType::TenThousand) => 100,
+                Ok(DenominatorType::Million) => 1,
+                Err(_) => 1,
+            };
+            (frac.numerator.saturating_mul(scale)).min(1_000_000)
+        });
+
     Ok(RouteConfigMatch {
         path_specifier,
         headers,
         case_sensitive,
+        match_fraction,
     })
 }
 
@@ -221,6 +255,10 @@ fn validate_header_matcher(
             })?;
             HeaderMatchSpecifierConfig::SafeRegex(re)
         }
+        Some(HeaderMatchSpecifier::RangeMatch(r)) => HeaderMatchSpecifierConfig::Range {
+            start: r.start,
+            end: r.end,
+        },
         Some(HeaderMatchSpecifier::PresentMatch(_)) => HeaderMatchSpecifierConfig::Present,
         Some(HeaderMatchSpecifier::StringMatch(sm)) => match sm.match_pattern {
             Some(MatchPattern::Exact(v)) => HeaderMatchSpecifierConfig::Exact(v),
@@ -254,15 +292,16 @@ fn validate_header_matcher(
     })
 }
 
+/// Returns `Ok(None)` for routes with unsupported cluster specifiers (e.g. `cluster_header`).
 fn validate_route_action(
     ra: envoy_types::pb::envoy::config::route::v3::RouteAction,
-) -> xds_client::Result<RouteConfigAction> {
+) -> xds_client::Result<Option<RouteConfigAction>> {
     match ra.cluster_specifier {
         Some(route_action::ClusterSpecifier::Cluster(name)) => {
             if name.is_empty() {
                 return Err(Error::Validation("cluster name is empty".into()));
             }
-            Ok(RouteConfigAction::Cluster(name))
+            Ok(Some(RouteConfigAction::Cluster(name)))
         }
         Some(route_action::ClusterSpecifier::WeightedClusters(wc)) => {
             if wc.clusters.is_empty() {
@@ -276,11 +315,10 @@ fn validate_route_action(
                     weight: c.weight.map(|w| w.value).unwrap_or(0),
                 })
                 .collect();
-            Ok(RouteConfigAction::WeightedClusters(clusters))
+            Ok(Some(RouteConfigAction::WeightedClusters(clusters)))
         }
-        Some(_) => Err(Error::Validation(
-            "unsupported cluster specifier variant".into(),
-        )),
+        // Per A28: silently ignore routes with cluster_header or other unsupported specifiers.
+        Some(_) => Ok(None),
         None => Err(Error::Validation(
             "route action missing cluster specifier".into(),
         )),
@@ -535,5 +573,205 @@ mod tests {
         };
         let err = RouteConfigResource::validate(rc).unwrap_err();
         assert!(err.to_string().contains("no virtual hosts"));
+    }
+
+    #[test]
+    fn test_route_with_query_params_is_skipped() {
+        use envoy_types::pb::envoy::config::route::v3::QueryParameterMatcher;
+
+        let route_with_qp = envoy_types::pb::envoy::config::route::v3::Route {
+            r#match: Some(RouteMatch {
+                path_specifier: Some(route_match::PathSpecifier::Prefix("/".to_string())),
+                query_parameters: vec![QueryParameterMatcher {
+                    name: "key".to_string(),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            action: Some(Action::Route(RouteAction {
+                cluster_specifier: Some(ClusterSpecifier::Cluster("c1".to_string())),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![route_with_qp, make_route("/", "c2")],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        // Only the second route (without query params) should remain.
+        assert_eq!(validated.virtual_hosts[0].routes.len(), 1);
+        assert!(matches!(
+            &validated.virtual_hosts[0].routes[0].action,
+            RouteConfigAction::Cluster(c) if c == "c2"
+        ));
+    }
+
+    #[test]
+    fn test_route_with_cluster_header_is_skipped() {
+        let route_with_ch = envoy_types::pb::envoy::config::route::v3::Route {
+            r#match: Some(RouteMatch {
+                path_specifier: Some(route_match::PathSpecifier::Prefix("/".to_string())),
+                ..Default::default()
+            }),
+            action: Some(Action::Route(RouteAction {
+                cluster_specifier: Some(route_action::ClusterSpecifier::ClusterHeader(
+                    "x-cluster".to_string(),
+                )),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![route_with_ch, make_route("/", "c1")],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        assert_eq!(validated.virtual_hosts[0].routes.len(), 1);
+        assert!(matches!(
+            &validated.virtual_hosts[0].routes[0].action,
+            RouteConfigAction::Cluster(c) if c == "c1"
+        ));
+    }
+
+    #[test]
+    fn test_match_fraction_normalized_to_million() {
+        use envoy_types::pb::envoy::config::core::v3::RuntimeFractionalPercent;
+        use envoy_types::pb::envoy::r#type::v3::FractionalPercent;
+        use envoy_types::pb::envoy::r#type::v3::fractional_percent::DenominatorType;
+
+        let route = envoy_types::pb::envoy::config::route::v3::Route {
+            r#match: Some(RouteMatch {
+                path_specifier: Some(route_match::PathSpecifier::Prefix("/".to_string())),
+                runtime_fraction: Some(RuntimeFractionalPercent {
+                    default_value: Some(FractionalPercent {
+                        numerator: 50,
+                        denominator: DenominatorType::Hundred as i32,
+                    }),
+                    runtime_key: String::new(),
+                }),
+                ..Default::default()
+            }),
+            action: Some(Action::Route(RouteAction {
+                cluster_specifier: Some(ClusterSpecifier::Cluster("c1".to_string())),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![route],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        // 50/100 = 500,000/1,000,000
+        assert_eq!(
+            validated.virtual_hosts[0].routes[0]
+                .match_criteria
+                .match_fraction,
+            Some(500_000)
+        );
+    }
+
+    #[test]
+    fn test_match_fraction_capped_at_million() {
+        use envoy_types::pb::envoy::config::core::v3::RuntimeFractionalPercent;
+        use envoy_types::pb::envoy::r#type::v3::FractionalPercent;
+        use envoy_types::pb::envoy::r#type::v3::fractional_percent::DenominatorType;
+
+        let route = envoy_types::pb::envoy::config::route::v3::Route {
+            r#match: Some(RouteMatch {
+                path_specifier: Some(route_match::PathSpecifier::Prefix("/".to_string())),
+                runtime_fraction: Some(RuntimeFractionalPercent {
+                    default_value: Some(FractionalPercent {
+                        numerator: 200,
+                        denominator: DenominatorType::Hundred as i32,
+                    }),
+                    runtime_key: String::new(),
+                }),
+                ..Default::default()
+            }),
+            action: Some(Action::Route(RouteAction {
+                cluster_specifier: Some(ClusterSpecifier::Cluster("c1".to_string())),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![route],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        assert_eq!(
+            validated.virtual_hosts[0].routes[0]
+                .match_criteria
+                .match_fraction,
+            Some(1_000_000)
+        );
+    }
+
+    #[test]
+    fn test_range_match_header() {
+        use envoy_types::pb::envoy::config::route::v3::HeaderMatcher;
+        use envoy_types::pb::envoy::config::route::v3::header_matcher::HeaderMatchSpecifier;
+        use envoy_types::pb::envoy::r#type::v3::Int64Range;
+
+        let route = envoy_types::pb::envoy::config::route::v3::Route {
+            r#match: Some(RouteMatch {
+                path_specifier: Some(route_match::PathSpecifier::Prefix("/".to_string())),
+                headers: vec![HeaderMatcher {
+                    name: "x-version".to_string(),
+                    header_match_specifier: Some(HeaderMatchSpecifier::RangeMatch(Int64Range {
+                        start: 1,
+                        end: 10,
+                    })),
+                    ..Default::default()
+                }],
+                ..Default::default()
+            }),
+            action: Some(Action::Route(RouteAction {
+                cluster_specifier: Some(ClusterSpecifier::Cluster("c1".to_string())),
+                ..Default::default()
+            })),
+            ..Default::default()
+        };
+        let rc = RouteConfiguration {
+            name: "rc".to_string(),
+            virtual_hosts: vec![VirtualHost {
+                name: "vh1".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![route],
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        let validated = RouteConfigResource::validate(rc).unwrap();
+        assert!(matches!(
+            &validated.virtual_hosts[0].routes[0].match_criteria.headers[0].match_specifier,
+            HeaderMatchSpecifierConfig::Range { start: 1, end: 10 }
+        ));
     }
 }

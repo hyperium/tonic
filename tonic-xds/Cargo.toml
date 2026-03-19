@@ -36,6 +36,9 @@ envoy-types = "0.7"
 prost = "0.14"
 regex = "1"
 tokio = { version = "1", features = ["sync"] }
+# Used for weighted cluster selection and fractional route matching — does not need
+# cryptographic security, only statistical uniformity for traffic distribution.
+fastrand = "2"
 
 [lints]
 workspace = true
