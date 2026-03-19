@@ -44,10 +44,8 @@ use crate::client::ConnectivityState;
 use crate::client::DynInvoke;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
-use crate::client::channel::InternalChannelController;
 use crate::client::channel::WorkQueueItem;
 use crate::client::channel::WorkQueueTx;
-use crate::client::load_balancing::LbPolicy as _;
 use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
 use crate::client::load_balancing::subchannel::private::Sealed;
@@ -267,19 +265,13 @@ impl SharedInnerSubchannelData {
         self.state = state;
         let state: SubchannelState = (&self.state).into();
 
-        let Some(strong) = self.weak_self.upgrade() else {
+        let Some(subchannel) = self.weak_self.upgrade() else {
             return;
         };
 
-        let _ = self.work_queue.send(WorkQueueItem::Closure(Box::new(
-            move |c: &mut InternalChannelController| {
-                c.lb.clone()
-                    .policy
-                    .lock()
-                    .unwrap()
-                    .subchannel_update(strong, &state, c);
-            },
-        )));
+        _ = self
+            .work_queue
+            .send(WorkQueueItem::SubchannelStateUpdate { subchannel, state });
     }
 }
 
