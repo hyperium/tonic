@@ -277,8 +277,6 @@ impl SharedInnerSubchannelData {
                     .policy
                     .lock()
                     .unwrap()
-                    .as_mut()
-                    .unwrap()
                     .subchannel_update(strong, &state, c);
             },
         )));

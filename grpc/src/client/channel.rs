@@ -45,16 +45,13 @@ use crate::client::DynInvoke;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
 use crate::client::Invoke;
-use crate::client::load_balancing::DynLbPolicy;
-use crate::client::load_balancing::DynLbPolicyBuilder;
-use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
 use crate::client::load_balancing::LbPolicy as _;
-use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
 use crate::client::load_balancing::ParsedJsonLbConfig;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::graceful_switch::GracefulSwitchPolicy;
 use crate::client::load_balancing::pick_first;
 use crate::client::load_balancing::round_robin;
 use crate::client::load_balancing::subchannel::Subchannel;
@@ -500,8 +497,7 @@ impl load_balancing::ChannelController for InternalChannelController {
 // A channel that is not idle (connecting, ready, or erroring).
 #[derive(Debug)]
 pub(super) struct LbController {
-    pub(super) policy: Mutex<Option<SubchannelSharing<Box<DynLbPolicy>>>>,
-    policy_builder: Mutex<Option<Arc<DynLbPolicyBuilder>>>,
+    pub(super) policy: Mutex<SubchannelSharing<GracefulSwitchPolicy>>,
     runtime: GrpcRuntime,
     work_scheduler: Arc<LbWorkScheduler>,
 }
@@ -521,13 +517,7 @@ impl WorkScheduler for LbWorkScheduler {
         let _ = self.wqtx.send(WorkQueueItem::Closure(Box::new(
             |c: &mut InternalChannelController| {
                 *c.lb_work_scheduler.pending.lock().unwrap() = false;
-                c.lb.clone()
-                    .policy
-                    .lock()
-                    .unwrap()
-                    .as_mut()
-                    .unwrap()
-                    .work(c);
+                c.lb.clone().policy.lock().unwrap().work(c);
             },
         )));
     }
@@ -536,8 +526,10 @@ impl WorkScheduler for LbWorkScheduler {
 impl LbController {
     fn new(work_scheduler: Arc<LbWorkScheduler>, runtime: GrpcRuntime) -> Self {
         Self {
-            policy_builder: Mutex::default(),
-            policy: Mutex::default(), // new(None::<Box<dyn LbPolicy>>),
+            policy: Mutex::new(SubchannelSharing::new(GracefulSwitchPolicy::new(
+                runtime.clone(),
+                work_scheduler.clone(),
+            ))),
             work_scheduler,
             runtime,
         }
@@ -548,44 +540,25 @@ impl LbController {
         update: ResolverUpdate,
         controller: &mut InternalChannelController,
     ) -> Result<(), String> {
-        let mut policy_name = pick_first::POLICY_NAME;
-        if let Ok(Some(service_config)) = update.service_config.as_ref()
+        let json_config = if let Ok(Some(service_config)) = update.service_config.as_ref()
             && service_config
                 .load_balancing_policy
                 .as_ref()
                 .is_some_and(|p| *p == LbPolicyType::RoundRobin)
         {
-            policy_name = round_robin::POLICY_NAME;
-        }
-        let mut p = self.policy.lock().unwrap();
-        if p.is_none() {
-            // TODO: use GracefulSwitch as the child of SubchannelSharing.
-            let builder = GLOBAL_LB_REGISTRY.get_policy(policy_name).unwrap();
-            let newpol = builder.build(LbPolicyOptions {
-                work_scheduler: self.work_scheduler.clone(),
-                runtime: self.runtime.clone(),
-            });
-            *self.policy_builder.lock().unwrap() = Some(builder);
-            *p = Some(SubchannelSharing::new(newpol));
-        }
-
-        // TODO: config should come from ServiceConfig.
-        let builder = self.policy_builder.lock().unwrap();
-        let config = match builder
-            .as_ref()
-            .unwrap()
-            .parse_config(&ParsedJsonLbConfig::from_value(
-                json!({"shuffleAddressList": true, "unknown_field": false}),
-            )) {
-            Ok(cfg) => cfg,
-            Err(e) => {
-                return Err(e);
-            }
+            json!([{round_robin::POLICY_NAME: {}}])
+        } else {
+            json!([{pick_first::POLICY_NAME: {"shuffleAddressList": true, "unknown_field": false}}])
         };
 
-        p.as_mut()
+        // TODO: config should come from ServiceConfig.
+        let config =
+            GracefulSwitchPolicy::parse_config(&ParsedJsonLbConfig::from_value(json_config))?;
+
+        self.policy
+            .lock()
             .unwrap()
-            .resolver_update(update, config.as_ref(), controller)
+            .resolver_update(update, Some(&config), controller)
     }
     pub(super) fn subchannel_update(
         &self,
@@ -594,10 +567,7 @@ impl LbController {
         channel_controller: &mut dyn load_balancing::ChannelController,
     ) {
         let mut p = self.policy.lock().unwrap();
-
-        p.as_mut()
-            .unwrap()
-            .subchannel_update(subchannel, state, channel_controller);
+        p.subchannel_update(subchannel, state, channel_controller);
     }
 }
 
