@@ -207,13 +207,16 @@ const DEFAULT_CONTENT_TYPE: &str = "application/grpc";
 
 fn match_header(hm: &HeaderMatcherConfig, headers: &http::HeaderMap) -> bool {
     // Per A28: if content-type is not present, assume "application/grpc".
-    let value = headers.get(&hm.name).and_then(|v| v.to_str().ok()).or_else(|| {
-        if hm.name.eq_ignore_ascii_case("content-type") {
-            Some(DEFAULT_CONTENT_TYPE)
-        } else {
-            None
-        }
-    });
+    let value = headers
+        .get(&hm.name)
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| {
+            if hm.name.eq_ignore_ascii_case("content-type") {
+                Some(DEFAULT_CONTENT_TYPE)
+            } else {
+                None
+            }
+        });
 
     match &hm.match_specifier {
         HeaderMatchSpecifierConfig::Present => value.is_some(),
