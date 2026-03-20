@@ -816,9 +816,11 @@ pub(crate) fn infer_grpc_status(
         // misbehaving server sends two Status frames. That case is already handled by the
         // code above that parses grpc-status from whatever trailers *are* present, so
         // changing this branch to a hard error is safe.
-        http::StatusCode::OK => return Err(Some(Status::internal(
-            "protocol error: missing grpc-status trailer, stream was terminated without a final status (possible truncation by a proxy or load balancer)",
-        ))),
+        http::StatusCode::OK => {
+            return Err(Some(Status::internal(
+                "protocol error: missing grpc-status trailer, stream was terminated without a final status (possible truncation by a proxy or load balancer)",
+            )));
+        }
         _ => Code::Unknown,
     };
 
