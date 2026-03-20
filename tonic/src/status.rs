@@ -800,24 +800,32 @@ pub(crate) fn infer_grpc_status(
         | http::StatusCode::GATEWAY_TIMEOUT => Code::Unavailable,
         // We got a 200 but no grpc-status trailer.
         //
-        // Per the gRPC-over-HTTP/2 protocol, Status MUST be sent in Trailers even when the
-        // status code is OK. Receiving a clean end-of-stream without a grpc-status trailer
-        // after response headers (and potentially message frames) is therefore a protocol
-        // violation — the stream was truncated. This can happen in real deployments when an
-        // intermediary (proxy/load-balancer) sends a RST_STREAM with NO_ERROR or simply closes
-        // the stream cleanly before the server has sent its trailers. Silently treating it as
-        // Ok(None) would make a truncated streaming response look like a normal end-of-stream,
-        // hiding data loss from the caller.
+        // Per the gRPC-over-HTTP/2 protocol, grpc-status MUST be present in Trailers
+        // even when the HTTP status is 200 OK. A clean end-of-stream without a
+        // grpc-status trailer is therefore a protocol violation.
+        //
+        // Tonic attempts to follow the RST_STREAM error-code mapping defined in the
+        // gRPC-over-HTTP/2 spec (see `code_from_h2` and the h2 error handling in
+        // `from_hyper_error`):
+        //   https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#errors
+        //
+        // However, hyper intentionally converts RST_STREAM frames with reason NO_ERROR
+        // or CANCEL into a clean end-of-stream (Poll::Ready(None)) instead of surfacing
+        // them as errors — see hyper's `Incoming::poll_frame` for h2 bodies. By the time
+        // tonic observes the body termination, the h2 reset reason has been discarded and
+        // is no longer accessible. Tonic therefore has no way to distinguish a legitimate
+        // graceful close from a proxy/load-balancer reset (e.g. an Envoy timeout that
+        // issues RST_STREAM(NO_ERROR)) via the h2 error path.
+        //
+        // The only signal available at this point is the absence of a grpc-status
+        // trailer on an otherwise-successful (HTTP 200) stream. We map this to Unknown,
+        // which the gRPC spec defines as the appropriate code when a final status is
+        // absent or indeterminate. This matches the behaviour of grpc-go:
+        //   https://github.com/grpc/grpc-go/pull/8702
         //
         // https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#responses
-        //
-        // Note: the old behaviour (returning Err(None) == "stream ended cleanly") was needed
-        // to handle the edge case in https://github.com/hyperium/tonic/issues/681 where a
-        // misbehaving server sends two Status frames. That case is already handled by the
-        // code above that parses grpc-status from whatever trailers *are* present, so
-        // changing this branch to a hard error is safe.
         http::StatusCode::OK => {
-            return Err(Some(Status::internal(
+            return Err(Some(Status::unknown(
                 "protocol error: missing grpc-status trailer, stream was terminated without a final status (possible truncation by a proxy or load balancer)",
             )));
         }
