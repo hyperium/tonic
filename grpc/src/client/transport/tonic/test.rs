@@ -40,12 +40,13 @@ use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::Response;
-use tonic::Status;
 use tonic::async_trait;
 use tonic::metadata::MetadataMap;
 use tonic::transport::Server;
 use tonic_prost::prost::Message as ProstMessage;
 
+use crate::Status;
+use crate::StatusCode;
 use crate::client::CallOptions;
 use crate::client::Channel;
 use crate::client::Invoke as _;
@@ -59,7 +60,9 @@ use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
+use crate::core::ResponseHeaders;
 use crate::core::SendMessage;
+use crate::core::Trailers;
 use crate::credentials::CompositeChannelCredentials;
 use crate::credentials::InsecureChannelCredentials;
 use crate::credentials::LocalChannelCredentials;
@@ -248,49 +251,14 @@ async fn grpc_invoke_tonic_unary() {
         Default::default(),
     );
 
-    // Start the call.
-    let (mut tx, mut rx) = channel
-        .invoke(
-            RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
-            CallOptions::default(),
-        )
-        .await;
-
-    // Send the request.
-    let req = WrappedEchoRequest(EchoRequest {
-        message: "hello interop".into(),
-    });
-    tx.send(
-        &req,
-        SendOptions {
-            final_msg: true,
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-
-    // Response should be Headers, Message ("hello interop"), Trailers (OK).
-    let mut resp = WrappedEchoResponse(EchoResponse::default());
-
-    let ClientResponseStreamItem::Headers(_) = rx.next(&mut resp).await else {
-        panic!("Expected Headers first");
-    };
-
-    let ClientResponseStreamItem::Message(()) = rx.next(&mut resp).await else {
-        panic!("Expected Message after Headers");
-    };
-    assert_eq!(resp.0.message, "hello interop");
-
-    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
-        panic!("Expected Trailers, got StreamClosed or other item");
-    };
+    let (_, resp, trailers) = perform_unary_echo(&channel, "hello interop").await;
+    assert_eq!(resp.message, "hello interop");
 
     assert_eq!(
-        t.status().code(),
-        crate::StatusCode::Ok,
+        trailers.status().code(),
+        StatusCode::Ok,
         "RPC failed: {:?}",
-        t.status()
+        trailers.status()
     );
 
     shutdown_notify.notify_one();
@@ -359,53 +327,18 @@ async fn grpc_invoke_tonic_unary_tls() {
     let target = format!("dns:///{}", addr);
     let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
-    // Start the call.
-    let (mut tx, mut rx) = channel
-        .invoke(
-            RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
-            CallOptions::default(),
-        )
-        .await;
-
-    // Send the request.
-    let req = WrappedEchoRequest(EchoRequest {
-        message: "hello interop tls".into(),
-    });
-    tx.send(
-        &req,
-        SendOptions {
-            final_msg: true,
-            ..Default::default()
-        },
-    )
-    .await
-    .unwrap();
-
-    // Response should be Headers, Message ("hello interop tls"), Trailers (OK).
-    let mut resp = WrappedEchoResponse(EchoResponse::default());
-
-    let ClientResponseStreamItem::Headers(h) = rx.next(&mut resp).await else {
-        panic!("Expected Headers first");
-    };
+    let (headers, resp, trilers) = perform_unary_echo(&channel, "hello interop tls").await;
     assert_eq!(
-        h.metadata().get("x-test-metadata-echo").unwrap(),
+        headers.metadata().get("x-test-metadata-echo").unwrap(),
         "test-value"
     );
-
-    let ClientResponseStreamItem::Message(()) = rx.next(&mut resp).await else {
-        panic!("Expected Message after Headers");
-    };
-    assert_eq!(resp.0.message, "hello interop tls");
-
-    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
-        panic!("Expected Trailers, got StreamClosed or other item");
-    };
+    assert_eq!(resp.message, "hello interop tls");
 
     assert_eq!(
-        t.status().code(),
-        crate::StatusCode::Ok,
+        trilers.status().code(),
+        StatusCode::Ok,
         "RPC failed: {:?}",
-        t.status()
+        trilers.status()
     );
 
     shutdown_notify.notify_one();
@@ -448,18 +381,8 @@ async fn grpc_invoke_failure_cases() {
         let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
-        let (_tx, mut rx) = channel
-            .invoke(
-                RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
-                CallOptions::default(),
-            )
-            .await;
-
-        let mut resp = WrappedEchoResponse(EchoResponse::default());
-        let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
-            panic!("Expected Trailers due to security level mismatch");
-        };
-        assert_eq!(t.status().code(), crate::StatusCode::Unauthenticated);
+        let trailers = perform_unary_echo_failure(&channel).await;
+        assert_eq!(trailers.status().code(), StatusCode::Unauthenticated);
     }
 
     // Call credentials return error
@@ -469,26 +392,16 @@ async fn grpc_invoke_failure_cases() {
             metadata: vec![],
             min_security_level: SecurityLevel::NoSecurity,
             should_fail: Some(crate::Status::new(
-                crate::StatusCode::PermissionDenied,
+                StatusCode::PermissionDenied,
                 "test message",
             )),
         });
         let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
-        let (_tx, mut rx) = channel
-            .invoke(
-                RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
-                CallOptions::default(),
-            )
-            .await;
-
-        let mut resp = WrappedEchoResponse(EchoResponse::default());
-        let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
-            panic!("Expected Trailers due to call creds failure");
-        };
-        assert_eq!(t.status().code(), crate::StatusCode::PermissionDenied);
-        assert!(t.status().message().contains("test message"));
+        let trailers = perform_unary_echo_failure(&channel).await;
+        assert_eq!(trailers.status().code(), StatusCode::PermissionDenied);
+        assert!(trailers.status().message().contains("test message"));
     }
 
     // Call credentials return restricted control plane code (mapped to Internal)
@@ -497,30 +410,74 @@ async fn grpc_invoke_failure_cases() {
         let call_creds = Arc::new(MockCallCredentials {
             metadata: vec![],
             min_security_level: SecurityLevel::NoSecurity,
-            should_fail: Some(crate::Status::new(
-                crate::StatusCode::InvalidArgument,
-                "test message",
-            )),
+            should_fail: Some(Status::new(StatusCode::InvalidArgument, "test message")),
         });
         let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
-        let (_tx, mut rx) = channel
-            .invoke(
-                RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
-                CallOptions::default(),
-            )
-            .await;
-
-        let mut resp = WrappedEchoResponse(EchoResponse::default());
-        let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
-            panic!("Expected Trailers due to restricted code");
-        };
-        assert_eq!(t.status().code(), crate::StatusCode::Internal);
-        assert!(t.status().message().contains("test message"));
+        let trailers = perform_unary_echo_failure(&channel).await;
+        assert_eq!(trailers.status().code(), StatusCode::Internal);
+        assert!(trailers.status().message().contains("test message"));
     }
 
     shutdown_notify.notify_one();
+}
+
+async fn perform_unary_echo(
+    channel: &Channel,
+    message: &str,
+) -> (ResponseHeaders, EchoResponse, Trailers) {
+    let (mut tx, mut rx) = channel
+        .invoke(
+            RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
+            CallOptions::default(),
+        )
+        .await;
+
+    let req = WrappedEchoRequest(EchoRequest {
+        message: message.into(),
+    });
+    tx.send(
+        &req,
+        SendOptions {
+            final_msg: true,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap();
+
+    let mut resp = WrappedEchoResponse(EchoResponse::default());
+
+    let ClientResponseStreamItem::Headers(headers) = rx.next(&mut resp).await else {
+        panic!("Expected Headers first");
+    };
+
+    let ClientResponseStreamItem::Message(()) = rx.next(&mut resp).await else {
+        panic!("Expected Message after Headers");
+    };
+    let echo_resp = std::mem::take(&mut resp.0);
+
+    let ClientResponseStreamItem::Trailers(trailers) = rx.next(&mut resp).await else {
+        panic!("Expected Trailers, got StreamClosed or other item");
+    };
+
+    (headers, echo_resp, trailers)
+}
+
+async fn perform_unary_echo_failure(channel: &Channel) -> Trailers {
+    let (_tx, mut rx) = channel
+        .invoke(
+            RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
+            CallOptions::default(),
+        )
+        .await;
+
+    let mut resp = WrappedEchoResponse(EchoResponse::default());
+    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
+        panic!("Expected Trailers due to failure");
+    };
+    t
 }
 
 struct WrappedEchoRequest(EchoRequest);
@@ -560,7 +517,7 @@ impl Echo for EchoService {
         Ok(response)
     }
 
-    type ServerStreamingEchoStream = ReceiverStream<Result<EchoResponse, Status>>;
+    type ServerStreamingEchoStream = ReceiverStream<Result<EchoResponse, tonic::Status>>;
 
     async fn server_streaming_echo(
         &self,
@@ -576,7 +533,7 @@ impl Echo for EchoService {
         unimplemented!()
     }
     type BidirectionalStreamingEchoStream =
-        Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<EchoResponse, tonic::Status>> + Send + 'static>>;
 
     async fn bidirectional_streaming_echo(
         &self,

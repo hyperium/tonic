@@ -328,7 +328,7 @@ impl Transport for TransportBuilder {
         };
         let credentials = &security_info.credentials;
         let handshake_ouput = credentials
-            .connect_dyn(
+            .dyn_connect(
                 &security_info.authority,
                 tcp_stream,
                 &security_info.handshake_info,

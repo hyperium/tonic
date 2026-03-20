@@ -45,7 +45,7 @@ type BoxEndpoint = Box<dyn GrpcEndpoint>;
 // Bridge trait for type erasure.
 #[async_trait]
 pub(crate) trait DynChannelCredentials: Send + Sync {
-    async fn connect_dyn(
+    async fn dyn_connect(
         &self,
         authority: &Authority,
         source: BoxEndpoint,
@@ -64,7 +64,7 @@ where
     T: ChannelCredentials,
     T::Output<BoxEndpoint>: GrpcEndpoint,
 {
-    async fn connect_dyn(
+    async fn dyn_connect(
         &self,
         authority: &Authority,
         source: BoxEndpoint,
@@ -107,7 +107,7 @@ impl ChannelCredsInternal for Arc<dyn DynChannelCredentials> {
         runtime: &GrpcRuntime,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         (**self)
-            .connect_dyn(authority, Box::new(source), info, runtime)
+            .dyn_connect(authority, Box::new(source), info, runtime)
             .await
     }
 
@@ -125,7 +125,7 @@ impl ChannelCredentials for Arc<dyn DynChannelCredentials> {
 // Bridge trait for type erasure.
 #[async_trait]
 pub(crate) trait DynServerCredentials: Send + Sync {
-    async fn accept(
+    async fn dyn_accept(
         &self,
         source: BoxEndpoint,
         runtime: GrpcRuntime,
@@ -140,7 +140,7 @@ where
     T: ServerCredentials,
     T::Output<BoxEndpoint>: GrpcEndpoint,
 {
-    async fn accept(
+    async fn dyn_accept(
         &self,
         source: BoxEndpoint,
         runtime: GrpcRuntime,
@@ -188,7 +188,7 @@ mod tests {
         let info = ClientHandshakeInfo::default();
 
         let result = dyn_creds
-            .connect_dyn(&authority, source, &info, &runtime)
+            .dyn_connect(&authority, source, &info, &runtime)
             .await;
 
         assert!(result.is_ok());
@@ -249,7 +249,7 @@ mod tests {
 
         let (server_stream, _) = listener.accept().await.unwrap();
 
-        let result = dyn_creds.accept(server_stream, runtime).await;
+        let result = dyn_creds.dyn_accept(server_stream, runtime).await;
 
         assert!(result.is_ok());
         let output = result.unwrap();
