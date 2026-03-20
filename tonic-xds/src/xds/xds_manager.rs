@@ -2,7 +2,7 @@ use crate::common::async_util::BoxFuture;
 use std::pin::Pin;
 use tower::{BoxError, discover::Change};
 
-use crate::xds::route::{RouteDecision, RouteInput};
+use crate::client::route::{RouteDecision, RouteInput};
 
 pub(crate) type BoxDiscover<Endpoint, S> =
     Pin<Box<dyn futures_core::Stream<Item = Result<Change<Endpoint, S>, BoxError>> + Send>>;

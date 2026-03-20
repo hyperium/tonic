@@ -1,10 +1,25 @@
 use crate::common::async_util::BoxFuture;
-use crate::xds::route::RouteInput;
 use crate::xds::xds_manager::XdsRouter;
 use http::Request;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tower::{Layer, Service};
+
+/// Represents the input for xDS routing decisions.
+#[allow(dead_code)]
+pub(crate) struct RouteInput<'a> {
+    /// The authority (host) of the request URI.
+    pub authority: &'a str,
+    /// The HTTP headers of the request. These can be used for header-based routing decisions.
+    pub headers: &'a http::HeaderMap,
+}
+
+/// Represents the routing decision made by the xDS routing layer.
+#[derive(Clone)]
+pub(crate) struct RouteDecision {
+    /// The name of the cluster to which the request should be routed.
+    pub cluster: String,
+}
 
 /// Tower service for routing requests to the appropriate cluster based on the xDS routing configurations.
 /// Attaches routing decision as `RoutingDecision` to the request extensions.

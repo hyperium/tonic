@@ -530,17 +530,16 @@ where
                     event_tx,
                     decoder,
                     all_resources_required_in_sotw,
-                ) {
-                    if let Some(stream) = stream {
-                        self.send_request(stream, type_url).await?;
-                    }
+                ) && let Some(stream) = stream
+                {
+                    self.send_request(stream, type_url).await?;
                 }
             }
             WorkerCommand::Unwatch { watcher_id } => {
-                if let Some((type_url, true)) = self.remove_watcher(watcher_id) {
-                    if let Some(stream) = stream {
-                        self.send_request(stream, &type_url).await?;
-                    }
+                if let Some((type_url, true)) = self.remove_watcher(watcher_id)
+                    && let Some(stream) = stream
+                {
+                    self.send_request(stream, &type_url).await?;
                 }
             }
             WorkerCommand::ResourceTimerExpired { type_url, name } => {
