@@ -438,10 +438,7 @@ async fn missing_grpc_status_trailer_is_internal_error() {
         type Error = std::convert::Infallible;
         type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
 
-        fn poll_ready(
-            &mut self,
-            cx: &mut StdContext<'_>,
-        ) -> StdPoll<Result<(), Self::Error>> {
+        fn poll_ready(&mut self, cx: &mut StdContext<'_>) -> StdPoll<Result<(), Self::Error>> {
             self.0.poll_ready(cx)
         }
 
@@ -461,8 +458,7 @@ async fn missing_grpc_status_trailer_is_internal_error() {
 
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let incoming =
-        tonic::transport::server::TcpIncoming::from(listener).with_nodelay(Some(true));
+    let incoming = tonic::transport::server::TcpIncoming::from(listener).with_nodelay(Some(true));
 
     tokio::spawn(async move {
         tonic::transport::Server::builder()
@@ -475,10 +471,9 @@ async fn missing_grpc_status_trailer_is_internal_error() {
 
     tokio::time::sleep(std::time::Duration::from_millis(100)).await;
 
-    let mut client =
-        test_stream_client::TestStreamClient::connect(format!("http://{addr}"))
-            .await
-            .unwrap();
+    let mut client = test_stream_client::TestStreamClient::connect(format!("http://{addr}"))
+        .await
+        .unwrap();
 
     let mut stream = client
         .stream_call(InputStream {})
@@ -500,5 +495,3 @@ async fn missing_grpc_status_trailer_is_internal_error() {
         err.message()
     );
 }
-
-
