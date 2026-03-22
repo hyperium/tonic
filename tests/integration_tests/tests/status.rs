@@ -355,7 +355,7 @@ async fn message_and_then_status_from_server_stream() {
 
 // ---------------------------------------------------------------------------
 // Bug fix: HTTP 200 response with no grpc-status trailer must surface as
-// Internal, not silently treated as a clean end-of-stream.
+// Unknown, not silently treated as a clean end-of-stream.
 //
 // We simulate this by interposing a tower layer that replaces the real
 // server response body with one that immediately ends (no frames, no
@@ -380,7 +380,7 @@ impl http_body::Body for TruncatedBody {
 }
 
 #[tokio::test]
-async fn missing_grpc_status_trailer_is_internal_error() {
+async fn missing_grpc_status_trailer_is_unknown_error() {
     integration_tests::trace_init();
 
     struct Svc;
@@ -481,12 +481,12 @@ async fn missing_grpc_status_trailer_is_internal_error() {
         .unwrap()
         .into_inner();
 
-    // The stream must surface as an Internal error — NOT silently return None.
+    // The stream must surface as an Unknown error — NOT silently return None.
     let err = stream.message().await.unwrap_err();
     assert_eq!(
         err.code(),
-        tonic::Code::Internal,
-        "expected Internal for missing grpc-status trailer, got: {:?}",
+        tonic::Code::Unknown,
+        "expected Unknown for missing grpc-status trailer, got: {:?}",
         err
     );
     assert!(
