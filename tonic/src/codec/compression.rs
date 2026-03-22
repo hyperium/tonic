@@ -4,6 +4,11 @@ use bytes::{Buf, BufMut, BytesMut};
 use flate2::read::{GzDecoder, GzEncoder};
 #[cfg(feature = "deflate")]
 use flate2::read::{ZlibDecoder, ZlibEncoder};
+#[cfg(all(feature = "ruzstd", any(not(feature = "zstd"), test)))]
+use ruzstd::{
+    decoding::StreamingDecoder,
+    encoding::{CompressionLevel, FrameCompressor},
+};
 use std::{borrow::Cow, fmt};
 #[cfg(feature = "zstd")]
 use zstd::stream::read::{Decoder, Encoder};
@@ -90,7 +95,7 @@ pub enum CompressionEncoding {
     #[cfg(feature = "deflate")]
     Deflate,
     #[allow(missing_docs)]
-    #[cfg(feature = "zstd")]
+    #[cfg(any(feature = "zstd", feature = "ruzstd"))]
     Zstd,
 }
 
@@ -100,7 +105,7 @@ impl CompressionEncoding {
         CompressionEncoding::Gzip,
         #[cfg(feature = "deflate")]
         CompressionEncoding::Deflate,
-        #[cfg(feature = "zstd")]
+        #[cfg(any(feature = "zstd", feature = "ruzstd"))]
         CompressionEncoding::Zstd,
     ];
 
@@ -121,7 +126,7 @@ impl CompressionEncoding {
             "gzip" => Some(CompressionEncoding::Gzip),
             #[cfg(feature = "deflate")]
             "deflate" => Some(CompressionEncoding::Deflate),
-            #[cfg(feature = "zstd")]
+            #[cfg(any(feature = "zstd", feature = "ruzstd"))]
             "zstd" => Some(CompressionEncoding::Zstd),
             _ => None,
         })
@@ -145,7 +150,7 @@ impl CompressionEncoding {
             b"deflate" if enabled_encodings.is_enabled(CompressionEncoding::Deflate) => {
                 Ok(Some(CompressionEncoding::Deflate))
             }
-            #[cfg(feature = "zstd")]
+            #[cfg(any(feature = "zstd", feature = "ruzstd"))]
             b"zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
                 Ok(Some(CompressionEncoding::Zstd))
             }
@@ -179,12 +184,17 @@ impl CompressionEncoding {
             CompressionEncoding::Gzip => "gzip",
             #[cfg(feature = "deflate")]
             CompressionEncoding::Deflate => "deflate",
-            #[cfg(feature = "zstd")]
+            #[cfg(any(feature = "zstd", feature = "ruzstd"))]
             CompressionEncoding::Zstd => "zstd",
         }
     }
 
-    #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
+    #[cfg(any(
+        feature = "gzip",
+        feature = "deflate",
+        feature = "zstd",
+        feature = "ruzstd"
+    ))]
     pub(crate) fn into_header_value(self) -> http::HeaderValue {
         http::HeaderValue::from_static(self.as_str())
     }
@@ -200,6 +210,39 @@ fn split_by_comma(s: &str) -> impl Iterator<Item = &str> {
     s.split(',').map(|s| s.trim())
 }
 
+#[cfg(feature = "zstd")]
+fn compress_zstd(input: &[u8], mut out: impl std::io::Write) -> Result<(), std::io::Error> {
+    // FIXME: support customizing the compression level
+    let mut encoder = Encoder::new(input, zstd::DEFAULT_COMPRESSION_LEVEL)?;
+    std::io::copy(&mut encoder, &mut out)?;
+    Ok(())
+}
+
+#[cfg(all(feature = "ruzstd", any(not(feature = "zstd"), test)))]
+fn compress_ruzstd(input: &[u8], out: impl std::io::Write) -> Result<(), std::io::Error> {
+    // ruzstd 0.8 only implements Uncompressed and Fastest levels.
+    let mut compressor = FrameCompressor::new(CompressionLevel::Fastest);
+    compressor.set_source(input);
+    compressor.set_drain(out);
+    compressor.compress();
+    Ok(())
+}
+
+#[cfg(feature = "zstd")]
+fn decompress_zstd(input: &[u8], mut out: impl std::io::Write) -> Result<(), std::io::Error> {
+    let mut decoder = Decoder::new(input)?;
+    std::io::copy(&mut decoder, &mut out)?;
+    Ok(())
+}
+
+#[cfg(all(feature = "ruzstd", any(not(feature = "zstd"), test)))]
+fn decompress_ruzstd(input: &[u8], mut out: impl std::io::Write) -> Result<(), std::io::Error> {
+    let mut decoder = StreamingDecoder::new(input)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+    std::io::copy(&mut decoder, &mut out)?;
+    Ok(())
+}
+
 /// Compress `len` bytes from `decompressed_buf` into `out_buf`.
 /// buffer_size_increment is a hint to control the growth of out_buf versus the cost of resizing it.
 #[allow(unused_variables, unreachable_code)]
@@ -213,7 +256,12 @@ pub(crate) fn compress(
     let capacity = ((len / buffer_growth_interval) + 1) * buffer_growth_interval;
     out_buf.reserve(capacity);
 
-    #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
+    #[cfg(any(
+        feature = "gzip",
+        feature = "deflate",
+        feature = "zstd",
+        feature = "ruzstd"
+    ))]
     let mut out_writer = out_buf.writer();
 
     match settings.encoding {
@@ -237,12 +285,11 @@ pub(crate) fn compress(
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
-            let mut zstd_encoder = Encoder::new(
-                &decompressed_buf[0..len],
-                // FIXME: support customizing the compression level
-                zstd::DEFAULT_COMPRESSION_LEVEL,
-            )?;
-            std::io::copy(&mut zstd_encoder, &mut out_writer)?;
+            compress_zstd(&decompressed_buf[0..len], &mut out_writer)?;
+        }
+        #[cfg(all(feature = "ruzstd", not(feature = "zstd")))]
+        CompressionEncoding::Zstd => {
+            compress_ruzstd(&decompressed_buf[0..len], &mut out_writer)?;
         }
     }
 
@@ -268,7 +315,12 @@ pub(crate) fn decompress(
 
     out_buf.get_mut().reserve(capacity);
 
-    #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
+    #[cfg(any(
+        feature = "gzip",
+        feature = "deflate",
+        feature = "zstd",
+        feature = "ruzstd"
+    ))]
     let mut out_writer = out_buf.writer();
 
     match settings.encoding {
@@ -284,8 +336,11 @@ pub(crate) fn decompress(
         }
         #[cfg(feature = "zstd")]
         CompressionEncoding::Zstd => {
-            let mut zstd_decoder = Decoder::new(&compressed_buf[0..len])?;
-            std::io::copy(&mut zstd_decoder, &mut out_writer)?;
+            decompress_zstd(&compressed_buf[0..len], &mut out_writer)?;
+        }
+        #[cfg(all(feature = "ruzstd", not(feature = "zstd")))]
+        CompressionEncoding::Zstd => {
+            decompress_ruzstd(&compressed_buf[0..len], &mut out_writer)?;
         }
     }
 
@@ -309,7 +364,12 @@ pub enum SingleMessageCompressionOverride {
 
 #[cfg(test)]
 mod tests {
-    #[cfg(any(feature = "gzip", feature = "deflate", feature = "zstd"))]
+    #[cfg(any(
+        feature = "gzip",
+        feature = "deflate",
+        feature = "zstd",
+        feature = "ruzstd"
+    ))]
     use http::HeaderValue;
 
     use super::*;
@@ -340,7 +400,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg(feature = "zstd")]
+    #[cfg(any(feature = "zstd", feature = "ruzstd"))]
     fn convert_zstd_into_header_value() {
         const ZSTD: HeaderValue = HeaderValue::from_static("zstd,identity");
 
@@ -358,7 +418,11 @@ mod tests {
     }
 
     #[test]
-    #[cfg(all(feature = "gzip", feature = "deflate", feature = "zstd"))]
+    #[cfg(all(
+        feature = "gzip",
+        feature = "deflate",
+        any(feature = "zstd", feature = "ruzstd")
+    ))]
     fn convert_compression_encodings_into_header_value() {
         let encodings = EnabledCompressionEncodings {
             inner: [
@@ -385,5 +449,25 @@ mod tests {
             encodings.into_accept_encoding_header_value().unwrap(),
             HeaderValue::from_static("zstd,deflate,gzip,identity"),
         );
+    }
+
+    #[test]
+    #[cfg(all(feature = "zstd", feature = "ruzstd"))]
+    fn zstd_ruzstd_cross_compress_decompress() {
+        let original = b"hello world, this is a test of zstd cross-implementation compatibility";
+
+        // zstd compress -> ruzstd decompress
+        let mut compressed = Vec::new();
+        compress_zstd(original, &mut compressed).unwrap();
+        let mut decompressed = Vec::new();
+        decompress_ruzstd(&compressed, &mut decompressed).unwrap();
+        assert_eq!(decompressed, original);
+
+        // ruzstd compress -> zstd decompress
+        let mut compressed = Vec::new();
+        compress_ruzstd(original, &mut compressed).unwrap();
+        let mut decompressed = Vec::new();
+        decompress_zstd(&compressed, &mut decompressed).unwrap();
+        assert_eq!(decompressed, original);
     }
 }

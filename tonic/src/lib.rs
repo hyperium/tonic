@@ -42,6 +42,8 @@
 //!   Not enabled by default.
 //! - `zstd`: Enables compressing requests, responses, and streams. Depends on [`zstd`].
 //!   Not enabled by default.
+//! - `ruzstd`: Enables `CompressionEncoding::Zstd` using a pure Rust implementation.
+//!   Depends on [`ruzstd`]. Used when the `zstd` feature is not enabled. Not enabled by default.
 //!
 //! # Structure
 //!
@@ -90,6 +92,7 @@
 //! [`webpki-roots`]: https://docs.rs/webpki-roots
 //! [`flate2`]: https://docs.rs/flate2
 //! [`zstd`]: https://docs.rs/zstd
+//! [`ruzstd`]: https://docs.rs/ruzstd
 
 #![recursion_limit = "256"]
 #![doc(
