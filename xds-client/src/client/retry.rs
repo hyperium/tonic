@@ -186,10 +186,10 @@ impl RetryPolicy {
     /// ```
     pub fn backoff_duration(&self, attempt: usize) -> Option<Duration> {
         // Check if we've exceeded max attempts
-        if let Some(max) = self.max_attempts {
-            if attempt >= max {
-                return None;
-            }
+        if let Some(max) = self.max_attempts
+            && attempt >= max
+        {
+            return None;
         }
 
         // Calculate exponential backoff (saturate to i32::MAX to avoid overflow in powi)

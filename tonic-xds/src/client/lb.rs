@@ -1,6 +1,6 @@
 use crate::client::cluster::ClusterClientRegistry;
+use crate::client::route::RouteDecision;
 use crate::common::async_util::BoxFuture;
-use crate::xds::route::RouteDecision;
 use crate::xds::xds_manager::XdsClusterDiscovery;
 use http::Request;
 use std::sync::Arc;

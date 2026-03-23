@@ -191,12 +191,12 @@ mod tests {
     use crate::client::channel::XdsChannelGrpc;
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
+    use crate::client::route::RouteDecision;
+    use crate::client::route::RouteInput;
     use crate::common::async_util::BoxFuture;
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::TestServer;
-    use crate::xds::route::RouteDecision;
-    use crate::xds::route::RouteInput;
     use crate::xds::xds_manager::BoxDiscover;
     use crate::xds::xds_manager::{XdsClusterDiscovery, XdsRouter};
     use std::sync::Arc;

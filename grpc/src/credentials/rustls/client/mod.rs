@@ -221,8 +221,8 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
         &self,
         authority: &Authority,
         source: Input,
-        _info: ClientHandshakeInfo,
-        _rt: GrpcRuntime,
+        _info: &ClientHandshakeInfo,
+        _rt: &GrpcRuntime,
     ) -> Result<HandshakeOutput<TlsStream<Input>, ClientTlsSecContext>, String> {
         let server_name = ServerName::try_from(authority.host())
             .map_err(|e| format!("invalid authority: {}", e))?

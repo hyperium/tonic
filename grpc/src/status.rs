@@ -53,6 +53,21 @@ impl Status {
     pub fn message(&self) -> &str {
         &self.message
     }
+
+    /// Returns whether the status includes a code restricted for control
+    /// plane usage as defined by gRFC A54.
+    pub(crate) fn is_restricted_control_plane_code(&self) -> bool {
+        matches!(
+            self.code,
+            StatusCode::InvalidArgument
+                | StatusCode::NotFound
+                | StatusCode::AlreadyExists
+                | StatusCode::FailedPrecondition
+                | StatusCode::Aborted
+                | StatusCode::OutOfRange
+                | StatusCode::DataLoss
+        )
+    }
 }
 
 #[cfg(test)]
