@@ -398,7 +398,11 @@ async fn missing_grpc_status_trailer_is_unknown_error() {
     //
     //      tonic's decoder sees None with an empty buffer, calls
     //      `infer_grpc_status(trailers=None, status=200)`, and returns
-    //      `Code::Unknown` — the expected behaviour.
+    //      `Code::Unknown` because it is not able to observe the
+    //      RST_STREAM(NO_ERROR) at this time and only sees a stream end
+    //      successfully but without trailers containing grpc-status.
+    //      TODO: this should expect Code::Internal instead.
+
     let (headers_acked_tx, headers_acked_rx) = tokio::sync::oneshot::channel::<()>();
 
     tokio::spawn(async move {
