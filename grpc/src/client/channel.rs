@@ -23,41 +23,67 @@
  */
 
 use core::panic;
-use std::{
-    any::Any,
-    error::Error,
-    mem,
-    str::FromStr,
-    sync::{Arc, Mutex},
-    time::{Duration, Instant},
-    vec,
-};
-
-use tokio::sync::{mpsc, watch, Notify};
+use std::any::Any;
+use std::error::Error;
+use std::mem;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
+use std::time::Instant;
+use std::vec;
 
 use serde_json::json;
+use tokio::sync::Notify;
+use tokio::sync::mpsc;
+use tokio::sync::watch;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
 use crate::attributes::Attributes;
+use crate::client::CallOptions;
+use crate::client::ConnectivityState;
+use crate::client::DynInvoke;
+use crate::client::DynRecvStream;
+use crate::client::DynSendStream;
+use crate::client::Invoke;
+use crate::client::load_balancing::ExternalSubchannel;
+use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::ParsedJsonLbConfig;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::pick_first;
+use crate::client::load_balancing::round_robin;
+use crate::client::load_balancing::{self};
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::global_registry;
+use crate::client::name_resolution::{self};
+use crate::client::service_config::LbPolicyType;
+use crate::client::service_config::ServiceConfig;
+use crate::client::subchannel::InternalSubchannel;
+use crate::client::subchannel::InternalSubchannelPool;
+use crate::client::subchannel::NopBackoff;
+use crate::client::subchannel::SubchannelKey;
+use crate::client::subchannel::SubchannelStateWatcher;
+use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::SecurityOpts;
+use crate::client::transport::TransportRegistry;
+use crate::core::RequestHeaders;
+use crate::credentials::ChannelCredentials;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::common::Authority;
+use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt;
-use crate::service::{Request, Response, Service};
-use crate::{client::ConnectivityState, rt::Runtime};
-use crate::{credentials::Credentials, rt::default_runtime};
-
-use super::name_resolution::{self, global_registry, Address, ResolverUpdate};
-use super::service_config::ServiceConfig;
-use super::transport::{TransportRegistry, GLOBAL_TRANSPORT_REGISTRY};
-use super::{
-    load_balancing::{
-        self, pick_first, ExternalSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-        ParsedJsonLbConfig, PickResult, Picker, Subchannel, SubchannelState, WorkScheduler,
-        GLOBAL_LB_REGISTRY,
-    },
-    subchannel::{
-        InternalSubchannel, InternalSubchannelPool, NopBackoff, SubchannelKey,
-        SubchannelStateWatcher,
-    },
-};
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
+use crate::rt::default_runtime;
 
 #[non_exhaustive]
 pub struct ChannelOptions {
@@ -96,7 +122,7 @@ pub struct ChannelOptions {
 impl Default for ChannelOptions {
     fn default() -> Self {
         Self {
-            transport_options: Attributes {},
+            transport_options: Attributes::default(),
             override_authority: None,
             connection_backoff: None,
             default_service_config: None,
@@ -136,18 +162,19 @@ impl Channel {
     /// target string is invalid, the returned channel will never connect, and
     /// will fail all RPCs.
     // TODO: should this return a Result instead?
-    pub fn new(
-        target: &str,
-        credentials: Option<Box<dyn Credentials>>,
-        options: ChannelOptions,
-    ) -> Self {
+    pub fn new<C>(target: &str, credentials: Arc<C>, options: ChannelOptions) -> Self
+    where
+        C: ChannelCredentials,
+        C::Output<Box<dyn GrpcEndpoint>>: GrpcEndpoint + 'static,
+    {
         pick_first::reg();
+        round_robin::reg();
         Self {
             inner: Arc::new(PersistentChannel::new(
                 target,
-                credentials,
                 default_runtime(),
                 options,
+                credentials as Arc<dyn DynChannelCredentials>,
             )),
         }
     }
@@ -169,10 +196,19 @@ impl Channel {
     ) -> Result<(), Box<dyn Error>> {
         todo!()
     }
+}
 
-    pub async fn call(&self, method: String, request: Request) -> Response {
+impl Invoke for Channel {
+    type SendStream = Box<dyn DynSendStream>;
+    type RecvStream = Box<dyn DynRecvStream>;
+
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
         let ac = self.inner.get_active_channel();
-        ac.call(method, request).await
+        ac.invoke(headers, options).await
     }
 }
 
@@ -184,7 +220,8 @@ struct PersistentChannel {
     target: Url,
     options: ChannelOptions,
     active_channel: Mutex<Option<Arc<ActiveChannel>>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
+    credentials: Arc<dyn DynChannelCredentials>,
 }
 
 impl PersistentChannel {
@@ -192,15 +229,16 @@ impl PersistentChannel {
     // ChannelOption contain only optional parameters.
     fn new(
         target: &str,
-        _credentials: Option<Box<dyn Credentials>>,
-        runtime: Arc<dyn rt::Runtime>,
+        runtime: GrpcRuntime,
         options: ChannelOptions,
+        credentials: Arc<dyn DynChannelCredentials>,
     ) -> Self {
         Self {
             target: Url::from_str(target).unwrap(), // TODO handle err
             active_channel: Mutex::default(),
             options,
             runtime,
+            credentials,
         }
     }
 
@@ -235,6 +273,7 @@ impl PersistentChannel {
                 self.target.clone(),
                 &self.options,
                 self.runtime.clone(),
+                self.credentials.clone(),
             ));
         }
 
@@ -243,21 +282,34 @@ impl PersistentChannel {
 }
 
 struct ActiveChannel {
-    cur_state: Mutex<ConnectivityState>,
     abort_handle: Box<dyn rt::TaskHandle>,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
 }
 
 impl ActiveChannel {
-    fn new(target: Url, options: &ChannelOptions, runtime: Arc<dyn Runtime>) -> Arc<Self> {
+    fn new(
+        target: Url,
+        options: &ChannelOptions,
+        runtime: GrpcRuntime,
+        credentials: Arc<dyn DynChannelCredentials>,
+    ) -> Arc<Self> {
         let (tx, mut rx) = mpsc::unbounded_channel::<WorkQueueItem>();
         let transport_registry = GLOBAL_TRANSPORT_REGISTRY.clone();
 
         let resolve_now = Arc::new(Notify::new());
         let connectivity_state = Arc::new(Watcher::new());
         let picker = Arc::new(Watcher::new());
+        // TODO(arjan-bal): Return error here instead of panicking.
+        let rb = global_registry().get(target.scheme()).unwrap();
+        let target = name_resolution::Target::from(target);
+        let authority = rb.default_authority(&target).to_owned();
+        let security_opts = SecurityOpts {
+            credentials,
+            authority: parse_authority(&authority),
+            handshake_info: ClientHandshakeInfo::default(),
+        };
         let mut channel_controller = InternalChannelController::new(
             transport_registry,
             resolve_now.clone(),
@@ -265,19 +317,9 @@ impl ActiveChannel {
             picker.clone(),
             connectivity_state.clone(),
             runtime.clone(),
+            security_opts,
         );
 
-        let resolver_helper = Box::new(tx.clone());
-
-        // TODO(arjan-bal): Return error here instead of panicking.
-        let rb = global_registry().get(target.scheme()).unwrap();
-        let target = name_resolution::Target::from(target);
-        let authority = target.authority_host_port();
-        let authority = if authority.is_empty() {
-            rb.default_authority(&target).to_owned()
-        } else {
-            authority
-        };
         let work_scheduler = Arc::new(ResolverWorkScheduler { wqtx: tx });
         let resolver_opts = name_resolution::ResolverOptions {
             authority,
@@ -297,39 +339,52 @@ impl ActiveChannel {
         }));
 
         Arc::new(Self {
-            cur_state: Mutex::new(ConnectivityState::Connecting),
             abort_handle: jh,
             picker: picker.clone(),
             connectivity_state: connectivity_state.clone(),
             runtime,
         })
     }
+}
 
-    async fn call(&self, method: String, request: Request) -> Response {
-        // TODO: pre-pick tasks (e.g. deadlines, interceptors, retry)
+impl Invoke for Arc<ActiveChannel> {
+    type SendStream = Box<dyn DynSendStream>;
+    type RecvStream = Box<dyn DynRecvStream>;
+
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
         let mut i = self.picker.iter();
         loop {
             if let Some(p) = i.next().await {
-                let result = &p.pick(&request);
-                // TODO: handle picker errors (queue or fail RPC)
+                let result = &p.pick(&headers);
                 match result {
                     PickResult::Pick(pr) => {
                         if let Some(sc) = (pr.subchannel.as_ref() as &dyn Any)
                             .downcast_ref::<ExternalSubchannel>()
                         {
-                            return sc.isc.as_ref().unwrap().call(method, request).await;
+                            return sc
+                                .isc
+                                .as_ref()
+                                .unwrap()
+                                .dyn_invoke(headers, options.clone())
+                                .await;
                         } else {
-                            panic!("picked subchannel is not an implementation provided by the channel");
+                            panic!(
+                                "picked subchannel is not an implementation provided by the channel"
+                            );
                         }
                     }
                     PickResult::Queue => {
                         // Continue and retry the RPC with the next picker.
                     }
                     PickResult::Fail(status) => {
-                        panic!("failed pick: {}", status);
+                        todo!("failed pick: {:?}", status);
                     }
                     PickResult::Drop(status) => {
-                        panic!("dropped pick: {}", status);
+                        todo!("dropped pick: {:?}", status);
                     }
                 }
             }
@@ -356,14 +411,16 @@ impl name_resolution::WorkScheduler for ResolverWorkScheduler {
 }
 
 pub(crate) struct InternalChannelController {
-    pub(super) lb: Arc<GracefulSwitchBalancer>, // called and passes mutable parent to it, so must be Arc.
+    pub(super) lb: Arc<LbController>, // called and passes mutable parent to it, so must be Arc.
     transport_registry: TransportRegistry,
     pub(super) subchannel_pool: Arc<InternalSubchannelPool>,
     resolve_now: Arc<Notify>,
     wqtx: WorkQueueTx,
+    lb_work_scheduler: Arc<LbWorkScheduler>,
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
+    security_opts: SecurityOpts,
 }
 
 impl InternalChannelController {
@@ -373,9 +430,17 @@ impl InternalChannelController {
         wqtx: WorkQueueTx,
         picker: Arc<Watcher<Arc<dyn Picker>>>,
         connectivity_state: Arc<Watcher<ConnectivityState>>,
-        runtime: Arc<dyn Runtime>,
+        runtime: GrpcRuntime,
+        security_opts: SecurityOpts,
     ) -> Self {
-        let lb = Arc::new(GracefulSwitchBalancer::new(wqtx.clone(), runtime.clone()));
+        let lb_work_scheduler = Arc::new(LbWorkScheduler {
+            wqtx: wqtx.clone(),
+            pending: Mutex::default(),
+        });
+        let lb = Arc::new(LbController::new(
+            lb_work_scheduler.clone(),
+            runtime.clone(),
+        ));
 
         Self {
             lb,
@@ -386,6 +451,8 @@ impl InternalChannelController {
             picker,
             connectivity_state,
             runtime,
+            security_opts,
+            lb_work_scheduler,
         }
     }
 
@@ -436,6 +503,7 @@ impl load_balancing::ChannelController for InternalChannelController {
                 scp.unregister_subchannel(&k);
             }),
             self.runtime.clone(),
+            self.security_opts.clone(),
         );
         let _ = self.subchannel_pool.register_subchannel(&key, isc.clone());
         self.new_esc_for_isc(isc)
@@ -457,23 +525,28 @@ impl load_balancing::ChannelController for InternalChannelController {
 
 // A channel that is not idle (connecting, ready, or erroring).
 #[derive(Debug)]
-pub(super) struct GracefulSwitchBalancer {
+pub(super) struct LbController {
     pub(super) policy: Mutex<Option<Box<dyn LbPolicy>>>,
     policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,
-    work_scheduler: WorkQueueTx,
-    pending: Mutex<bool>,
-    runtime: Arc<dyn Runtime>,
+    runtime: GrpcRuntime,
+    work_scheduler: Arc<LbWorkScheduler>,
 }
 
-impl WorkScheduler for GracefulSwitchBalancer {
+#[derive(Debug)]
+struct LbWorkScheduler {
+    pending: Mutex<bool>,
+    wqtx: WorkQueueTx,
+}
+
+impl WorkScheduler for LbWorkScheduler {
     fn schedule_work(&self) {
         if mem::replace(&mut *self.pending.lock().unwrap(), true) {
             // Already had a pending call scheduled.
             return;
         }
-        let _ = self.work_scheduler.send(WorkQueueItem::Closure(Box::new(
+        let _ = self.wqtx.send(WorkQueueItem::Closure(Box::new(
             |c: &mut InternalChannelController| {
-                *c.lb.pending.lock().unwrap() = false;
+                *c.lb_work_scheduler.pending.lock().unwrap() = false;
                 c.lb.clone()
                     .policy
                     .lock()
@@ -486,13 +559,12 @@ impl WorkScheduler for GracefulSwitchBalancer {
     }
 }
 
-impl GracefulSwitchBalancer {
-    fn new(work_scheduler: WorkQueueTx, runtime: Arc<dyn Runtime>) -> Self {
+impl LbController {
+    fn new(work_scheduler: Arc<LbWorkScheduler>, runtime: GrpcRuntime) -> Self {
         Self {
             policy_builder: Mutex::default(),
             policy: Mutex::default(), // new(None::<Box<dyn LbPolicy>>),
             work_scheduler,
-            pending: Mutex::default(),
             runtime,
         }
     }
@@ -502,15 +574,20 @@ impl GracefulSwitchBalancer {
         update: ResolverUpdate,
         controller: &mut InternalChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        if update.service_config.as_ref().is_ok_and(|sc| sc.is_some()) {
-            return Err("can't do service configs yet".into());
+        let mut policy_name = pick_first::POLICY_NAME;
+        if let Ok(Some(service_config)) = update.service_config.as_ref()
+            && service_config
+                .load_balancing_policy
+                .as_ref()
+                .is_some_and(|p| *p == LbPolicyType::RoundRobin)
+        {
+            policy_name = round_robin::POLICY_NAME;
         }
-        let policy_name = pick_first::POLICY_NAME;
         let mut p = self.policy.lock().unwrap();
         if p.is_none() {
             let builder = GLOBAL_LB_REGISTRY.get_policy(policy_name).unwrap();
             let newpol = builder.build(LbPolicyOptions {
-                work_scheduler: self.clone(),
+                work_scheduler: self.work_scheduler.clone(),
                 runtime: self.runtime.clone(),
             });
             *self.policy_builder.lock().unwrap() = Some(builder);
@@ -608,6 +685,186 @@ impl<T: Clone> WatcherIter<T> {
             if x.is_some() {
                 return x.clone();
             }
+        }
+    }
+}
+
+/// Parses the host and port from a URL-encoded string. When the input can not
+/// be parsed as (host, port) pair, it returns the entire input as the host.
+fn parse_authority(host_and_port: &str) -> Authority {
+    // Handle bracketed IPv6 addresses (e.g., "[::1]:80").
+    if let Some(stripped) = host_and_port.strip_prefix('[')
+        && let Some((host, port_str)) = stripped.split_once("]:")
+        && let Ok(port) = port_str.parse::<u16>()
+    {
+        return Authority::new(host, Some(port));
+    }
+    // Handle unbracketed addresses (IPv4 or hostnames, e.g., "localhost:8080").
+    if let Some((host, port_str)) = host_and_port.rsplit_once(':')
+        && !host.contains(':')
+        && let Ok(port) = port_str.parse::<u16>()
+    {
+        return Authority::new(host, Some(port));
+    }
+    Authority::new(host_and_port.to_string(), None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_authority() {
+        struct TestCase {
+            input: &'static str,
+            expected: Authority,
+        }
+
+        let cases = [
+            TestCase {
+                input: "localhost:http",
+                expected: Authority::new("localhost:http", None),
+            },
+            TestCase {
+                input: "localhost:80",
+                expected: Authority::new("localhost", Some(80)),
+            },
+            // host name with zone identifier.
+            TestCase {
+                input: "localhost%lo0:80",
+                expected: Authority::new("localhost%lo0", Some(80)),
+            },
+            TestCase {
+                input: "localhost%lo0:http",
+                expected: Authority::new("localhost%lo0:http", None),
+            },
+            TestCase {
+                input: "[localhost%lo0]:http",
+                expected: Authority::new("[localhost%lo0]:http", None),
+            },
+            TestCase {
+                input: "[localhost%lo0]:80",
+                expected: Authority::new("localhost%lo0", Some(80)),
+            },
+            // IP literal
+            TestCase {
+                input: "127.0.0.1:http",
+                expected: Authority::new("127.0.0.1:http", None),
+            },
+            TestCase {
+                input: "127.0.0.1:80",
+                expected: Authority::new("127.0.0.1", Some(80)),
+            },
+            TestCase {
+                input: "[::1]:http",
+                expected: Authority::new("[::1]:http", None),
+            },
+            TestCase {
+                input: "[::1]:80",
+                expected: Authority::new("::1", Some(80)),
+            },
+            // IP literal with zone identifier.
+            TestCase {
+                input: "[::1%lo0]:http",
+                expected: Authority::new("[::1%lo0]:http", None),
+            },
+            TestCase {
+                input: "[::1%lo0]:80",
+                expected: Authority::new("::1%lo0", Some(80)),
+            },
+            TestCase {
+                input: ":http",
+                expected: Authority::new(":http", None),
+            },
+            TestCase {
+                input: ":80",
+                expected: Authority::new("", Some(80)),
+            },
+            TestCase {
+                input: "grpc.io:",
+                expected: Authority::new("grpc.io:", None),
+            },
+            TestCase {
+                input: "127.0.0.1:",
+                expected: Authority::new("127.0.0.1:", None),
+            },
+            TestCase {
+                input: "[::1]:",
+                expected: Authority::new("[::1]:", None),
+            },
+            TestCase {
+                input: "grpc.io:https%foo",
+                expected: Authority::new("grpc.io:https%foo", None),
+            },
+            TestCase {
+                input: "grpc.io",
+                expected: Authority::new("grpc.io", None),
+            },
+            TestCase {
+                input: "127.0.0.1",
+                expected: Authority::new("127.0.0.1", None),
+            },
+            TestCase {
+                input: "[::1]",
+                expected: Authority::new("[::1]", None),
+            },
+            TestCase {
+                input: "[fe80::1%lo0]",
+                expected: Authority::new("[fe80::1%lo0]", None),
+            },
+            TestCase {
+                input: "[localhost%lo0]",
+                expected: Authority::new("[localhost%lo0]", None),
+            },
+            TestCase {
+                input: "localhost%lo0",
+                expected: Authority::new("localhost%lo0", None),
+            },
+            TestCase {
+                input: "::1",
+                expected: Authority::new("::1", None),
+            },
+            TestCase {
+                input: "fe80::1%lo0",
+                expected: Authority::new("fe80::1%lo0", None),
+            },
+            TestCase {
+                input: "fe80::1%lo0:80",
+                expected: Authority::new("fe80::1%lo0:80", None),
+            },
+            TestCase {
+                input: "[foo:bar]",
+                expected: Authority::new("[foo:bar]", None),
+            },
+            TestCase {
+                input: "[foo:bar]baz",
+                expected: Authority::new("[foo:bar]baz", None),
+            },
+            TestCase {
+                input: "[foo]bar:baz",
+                expected: Authority::new("[foo]bar:baz", None),
+            },
+            TestCase {
+                input: "[foo]:[bar]:baz",
+                expected: Authority::new("[foo]:[bar]:baz", None),
+            },
+            TestCase {
+                input: "[foo]:[bar]baz",
+                expected: Authority::new("[foo]:[bar]baz", None),
+            },
+            TestCase {
+                input: "foo[bar]:baz",
+                expected: Authority::new("foo[bar]:baz", None),
+            },
+            TestCase {
+                input: "foo]bar:baz",
+                expected: Authority::new("foo]bar:baz", None),
+            },
+        ];
+
+        for TestCase { input, expected } in cases {
+            let auth = parse_authority(input);
+            assert_eq!(auth, expected, "authority mismatch for {}", input);
         }
     }
 }

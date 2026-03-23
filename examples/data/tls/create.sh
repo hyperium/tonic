@@ -24,7 +24,7 @@ openssl req -x509 \
   -extensions test_ca \
   -sha256
 
-# Generate one server cert.
+# Generate two server certs.
 openssl genrsa -out server.key 4096
 openssl req -new \
   -key server.key \
@@ -43,6 +43,25 @@ openssl x509 -req \
   -extensions test_server \
   -sha256
 openssl verify -verbose -CAfile ca.pem  server.pem
+
+openssl genrsa -out server2.key 4096
+openssl req -new \
+  -key server2.key \
+  -out server2_csr.pem \
+  -subj /O=Tonic/CN=test-server/ \
+  -config ./openssl.cnf \
+  -reqexts test_server2
+openssl x509 -req \
+  -in server2_csr.pem \
+  -CAkey ca.key \
+  -CA ca.pem \
+  -days 3650 \
+  -set_serial 1000 \
+  -out server2.pem \
+  -extfile ./openssl.cnf \
+  -extensions test_server2 \
+  -sha256
+openssl verify -verbose -CAfile ca.pem  server2.pem
 
 # Generate two client certs.
 openssl genrsa -out client1.key 4096

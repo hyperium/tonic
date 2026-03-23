@@ -5,6 +5,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(MINGW)
+    add_compile_options("-Wa,-mbig-obj")
+elseif(MSVC)
+    add_compile_options("/bigobj")
+endif()
+
 # Options
 set(PROTOBUF_VERSION "33.0" CACHE STRING "Version of protobuf to download")
 option(BUILD_SHARED_LIBS "Build shared libraries" OFF)

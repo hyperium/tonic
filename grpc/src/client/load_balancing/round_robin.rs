@@ -22,18 +22,31 @@
  *
  */
 
-use crate::client::load_balancing::child_manager::{ChildManager, ChildUpdate};
-use crate::client::load_balancing::pick_first;
-use crate::client::load_balancing::{
-    ChannelController, FailingPicker, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions,
-    LbState, PickResult, Picker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
-};
-use crate::client::name_resolution::{Endpoint, ResolverUpdate};
-use crate::client::ConnectivityState;
-use crate::service::Request;
 use std::error::Error;
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Once};
+use std::sync::Arc;
+use std::sync::Once;
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::Ordering;
+
+use crate::client::ConnectivityState;
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::FailingPicker;
+use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+use crate::client::load_balancing::LbConfig;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::PickResult;
+use crate::client::load_balancing::Picker;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::child_manager::ChildManager;
+use crate::client::load_balancing::child_manager::ChildUpdate;
+use crate::client::load_balancing::pick_first;
+use crate::client::name_resolution::Endpoint;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::core::RequestHeaders;
 
 pub(crate) static POLICY_NAME: &str = "round_robin";
 static START: Once = Once::new();
@@ -132,7 +145,7 @@ impl RoundRobinPolicy {
             .child_manager
             .resolver_update(resolver_update, None, channel_controller);
         self.update_picker(channel_controller);
-        return Err(err.into());
+        Err(err.into())
     }
 }
 
@@ -150,7 +163,7 @@ impl LbPolicy for RoundRobinPolicy {
         // Shard the update by endpoint.
         let updates = update.endpoints.as_ref().unwrap().iter().map(|e| {
             let update = ResolverUpdate {
-                attributes: crate::attributes::Attributes,
+                attributes: crate::attributes::Attributes::default(),
                 endpoints: Ok(vec![e.clone()]),
                 service_config: update.service_config.clone(),
                 resolution_note: None,
@@ -223,28 +236,42 @@ impl RoundRobinPicker {
 }
 
 impl Picker for RoundRobinPicker {
-    fn pick(&self, request: &Request) -> PickResult {
+    fn pick(&self, request_headers: &RequestHeaders) -> PickResult {
         let len = self.pickers.len();
         let idx = self.next.fetch_add(1, Ordering::Relaxed) % len;
-        self.pickers[idx].pick(request)
+        self.pickers[idx].pick(request_headers)
     }
 }
 
 #[cfg(test)]
 mod test {
-    use crate::client::load_balancing::child_manager::ChildManager;
-    use crate::client::load_balancing::round_robin::{self, RoundRobinPolicy};
-    use crate::client::load_balancing::test_utils::{
-        self, StubPolicyData, StubPolicyFuncs, TestChannelController, TestEvent, TestWorkScheduler,
-    };
-    use crate::client::load_balancing::{
-        pick_first, ChannelController, FailingPicker, LbPolicy, LbState, Pick, PickResult, Picker,
-        QueuingPicker, Subchannel, SubchannelState, GLOBAL_LB_REGISTRY,
-    };
-    use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
     use crate::client::ConnectivityState;
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::FailingPicker;
+    use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+    use crate::client::load_balancing::LbPolicy;
+    use crate::client::load_balancing::LbState;
+    use crate::client::load_balancing::Pick;
+    use crate::client::load_balancing::PickResult;
+    use crate::client::load_balancing::Picker;
+    use crate::client::load_balancing::QueuingPicker;
+    use crate::client::load_balancing::Subchannel;
+    use crate::client::load_balancing::SubchannelState;
+    use crate::client::load_balancing::child_manager::ChildManager;
+    use crate::client::load_balancing::pick_first;
+    use crate::client::load_balancing::round_robin::RoundRobinPolicy;
+    use crate::client::load_balancing::round_robin::{self};
+    use crate::client::load_balancing::test_utils::StubPolicyData;
+    use crate::client::load_balancing::test_utils::StubPolicyFuncs;
+    use crate::client::load_balancing::test_utils::TestChannelController;
+    use crate::client::load_balancing::test_utils::TestEvent;
+    use crate::client::load_balancing::test_utils::TestWorkScheduler;
+    use crate::client::load_balancing::test_utils::{self};
+    use crate::client::name_resolution::Address;
+    use crate::client::name_resolution::Endpoint;
+    use crate::client::name_resolution::ResolverUpdate;
+    use crate::core::RequestHeaders;
     use crate::rt::default_runtime;
-    use crate::service::Request;
     use std::collections::HashSet;
     use std::panic;
     use std::sync::Arc;
@@ -294,10 +321,10 @@ mod test {
     }
 
     impl TestSubchannelList {
-        fn new(addresses: &Vec<Address>, channel_controller: &mut dyn ChannelController) -> Self {
+        fn new(addresses: &[Address], channel_controller: &mut dyn ChannelController) -> Self {
             TestSubchannelList {
                 subchannels: addresses
-                    .into_iter()
+                    .iter()
                     .map(|a| channel_controller.new_subchannel(a))
                     .collect(),
             }
@@ -389,7 +416,7 @@ mod test {
     }
 
     impl Picker for OneSubchannelPicker {
-        fn pick(&self, request: &Request) -> PickResult {
+        fn pick(&self, _: &RequestHeaders) -> PickResult {
             PickResult::Pick(Pick {
                 subchannel: self.sc.clone(),
                 on_complete: None,
@@ -569,7 +596,7 @@ mod test {
             TestEvent::UpdatePicker(update) => {
                 println!("connectivity state is {}", update.connectivity_state);
                 assert!(update.connectivity_state == ConnectivityState::Connecting);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 assert!(update.picker.pick(&req) == PickResult::Queue);
                 update.picker
             }
@@ -593,7 +620,7 @@ mod test {
                     update.connectivity_state
                 );
                 assert!(update.connectivity_state == ConnectivityState::Ready);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Pick(pick) => {
                         println!("selected subchannel is {}", pick.subchannel);
@@ -621,7 +648,7 @@ mod test {
                     update.connectivity_state
                 );
                 assert!(update.connectivity_state == ConnectivityState::Ready);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Pick(pick) => update.picker.clone(),
                     other => panic!("unexpected pick result {}", other),
@@ -640,10 +667,10 @@ mod test {
         rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
         want_error: String,
     ) -> Arc<dyn Picker> {
-        let picker = match rx_events.recv().await.unwrap() {
+        (match rx_events.recv().await.unwrap() {
             TestEvent::UpdatePicker(update) => {
                 assert!(update.connectivity_state == ConnectivityState::TransientFailure);
-                let req = test_utils::new_request();
+                let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Fail(status) => {
                         assert!(status.code() == tonic::Code::Unavailable);
@@ -656,8 +683,7 @@ mod test {
                 }
             }
             other => panic!("unexpected event {:?}", other),
-        };
-        picker
+        }) as _
     }
 
     // Verifies that the LB policy requests re-resolution.
@@ -722,7 +748,7 @@ mod test {
         send_resolver_error_to_policy(&mut lb_policy, resolver_error.clone(), tcc);
         verify_no_activity(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         match picker.pick(&req) {
             PickResult::Pick(pick) => {
                 assert!(pick.subchannel == subchannels[0].clone());
@@ -758,7 +784,7 @@ mod test {
 
         verify_no_activity(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         match picker.pick(&req) {
             PickResult::Queue => {}
             other => panic!("unexpected pick result {}", other),
@@ -828,7 +854,7 @@ mod test {
             tcc,
         );
         let picker = verify_roundrobin_ready_picker(&mut rx_events).await;
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match picker.pick(&req) {
@@ -914,7 +940,7 @@ mod test {
             tcc,
         );
         let picker = verify_roundrobin_ready_picker(&mut rx_events).await;
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match picker.pick(&req) {
@@ -940,7 +966,7 @@ mod test {
 
         let new_picker = verify_roundrobin_ready_picker(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match new_picker.pick(&req) {
@@ -1033,7 +1059,7 @@ mod test {
         );
         let picker = verify_roundrobin_ready_picker(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match picker.pick(&req) {
@@ -1089,7 +1115,7 @@ mod test {
         );
         let new_picker = verify_roundrobin_ready_picker(&mut rx_events).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         let mut picked = Vec::new();
         for _ in 0..4 {
             match new_picker.pick(&req) {
@@ -1234,7 +1260,7 @@ mod test {
 
         let picker = verify_ready_picker(&mut rx_events, subchannels[0].clone()).await;
 
-        let req = test_utils::new_request();
+        let req = test_utils::new_request_headers();
         // First pick determines the only subchannel the picker should yield
         let first_sc = match picker.pick(&req) {
             PickResult::Pick(p) => p.subchannel.clone(),

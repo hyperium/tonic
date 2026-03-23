@@ -1,10 +1,10 @@
 use std::fmt;
 use std::pin::Pin;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 use base64::Engine as _;
 use bytes::{Buf, BufMut, Bytes, BytesMut};
-use http::{header, HeaderMap, HeaderName, HeaderValue};
+use http::{HeaderMap, HeaderName, HeaderValue, header};
 use http_body::{Body, Frame, SizeHint};
 use pin_project::pin_project;
 use tokio_stream::Stream;
@@ -16,7 +16,7 @@ use self::content_types::*;
 const GRPC_HEADER_SIZE: usize = 1 + 4;
 
 pub(crate) mod content_types {
-    use http::{header::CONTENT_TYPE, HeaderMap};
+    use http::{HeaderMap, header::CONTENT_TYPE};
 
     pub(crate) const GRPC_WEB: &str = "application/grpc-web";
     pub(crate) const GRPC_WEB_PROTO: &str = "application/grpc-web+proto";
@@ -186,10 +186,10 @@ where
                     Some(Ok(frame)) if frame.is_trailers() => {
                         return Poll::Ready(Some(Err(internal_error(
                             "malformed base64 request has unencoded trailers",
-                        ))))
+                        ))));
                     }
                     Some(Ok(_)) => {
-                        return Poll::Ready(Some(Err(internal_error("unexpected frame type"))))
+                        return Poll::Ready(Some(Err(internal_error("unexpected frame type"))));
                     }
                     Some(Err(e)) => return Poll::Ready(Some(Err(internal_error(e)))),
                     None => {
@@ -199,7 +199,7 @@ where
                             Poll::Ready(Some(Ok(Frame::trailers(trailers))))
                         } else {
                             Poll::Ready(None)
-                        }
+                        };
                     }
                 }
             },
@@ -418,20 +418,17 @@ fn decode_trailers_frame(mut buf: Bytes) -> Result<Option<HeaderMap>, Status> {
     }
 
     for trailer in trailers {
-        let mut s = trailer.split(|b| b == &b':');
-        let key = s
-            .next()
-            .ok_or_else(|| Status::internal("trailers couldn't parse key"))?;
-        let value = s
-            .next()
-            .ok_or_else(|| Status::internal("trailers couldn't parse value"))?;
+        let Some((key, value)) = trailer
+            .iter()
+            .position(|b| *b == b':')
+            .map(|pos| trailer.split_at(pos))
+        else {
+            return Err(Status::internal("trailers couldn't parse key/value"));
+        };
 
-        let value = value
-            .split(|b| b == &b'\r')
-            .next()
-            .ok_or_else(|| Status::internal("trailers was not escaped"))?
-            .strip_prefix(b" ")
-            .unwrap_or(value);
+        // Skip the ':' separator and trim leading OWS (spaces/tabs) from the value
+        let value = &value[1..]; // skip ':'
+        let value = trim_ascii_start(value);
 
         let header_key = HeaderName::try_from(key)
             .map_err(|e| Status::internal(format!("Unable to parse HeaderName: {e}")))?;
@@ -441,6 +438,14 @@ fn decode_trailers_frame(mut buf: Bytes) -> Result<Option<HeaderMap>, Status> {
     }
 
     Ok(Some(map))
+}
+
+fn trim_ascii_start(bytes: &[u8]) -> &[u8] {
+    let start = bytes
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .unwrap_or(bytes.len());
+    &bytes[start..]
 }
 
 fn make_trailers_frame(trailers: HeaderMap) -> Bytes {
@@ -658,5 +663,47 @@ mod tests {
         expected.insert(Status::GRPC_MESSAGE, "".parse().unwrap());
 
         assert_eq!(trailers, expected);
+    }
+
+    #[test]
+    fn decode_trailers_space_after_colon() {
+        // connect-rpc and standard HTTP use "key: value" (space after colon)
+        let trailers_bytes = b"grpc-status: 0\r\ngrpc-message: this is a message\r\n";
+        let len = trailers_bytes.len();
+
+        let mut frame = BytesMut::new();
+        frame.put_u8(GRPC_WEB_TRAILERS_BIT);
+        frame.put_u32(len as u32);
+        frame.put_slice(&trailers_bytes[..]);
+
+        let map = decode_trailers_frame(frame.freeze()).unwrap().unwrap();
+
+        let mut expected = HeaderMap::new();
+        expected.insert(Status::GRPC_STATUS, HeaderValue::from_static("0"));
+        expected.insert(
+            Status::GRPC_MESSAGE,
+            HeaderValue::from_static("this is a message"),
+        );
+
+        assert_eq!(map, expected);
+    }
+
+    #[test]
+    fn decode_trailers_value_with_colons() {
+        let trailers_bytes = b"grpc-status: 0\r\ngrpc-message: error: something: went wrong\r\n";
+        let len = trailers_bytes.len();
+
+        let mut frame = BytesMut::new();
+        frame.put_u8(GRPC_WEB_TRAILERS_BIT);
+        frame.put_u32(len as u32);
+        frame.put_slice(&trailers_bytes[..]);
+
+        let map = decode_trailers_frame(frame.freeze()).unwrap().unwrap();
+
+        assert_eq!(map.get("grpc-status").unwrap(), "0");
+        assert_eq!(
+            map.get("grpc-message").unwrap(),
+            "error: something: went wrong"
+        );
     }
 }

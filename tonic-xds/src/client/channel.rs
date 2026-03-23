@@ -1,14 +1,14 @@
+use crate::XdsUri;
 use crate::client::endpoint::{EndpointAddress, EndpointChannel};
 use crate::client::lb::XdsLbService;
 use crate::client::route::XdsRoutingService;
 use crate::common::async_util::BoxFuture;
-use crate::XdsUri;
 use http::Request;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::{body::Body as TonicBody, client::GrpcService, transport::channel::Channel};
-use tower::{load::Load, util::BoxCloneService, BoxError, Service};
+use tower::{BoxError, Service, load::Load, util::BoxCloneService};
 
 #[cfg(test)]
 use {
@@ -191,12 +191,12 @@ mod tests {
     use crate::client::channel::XdsChannelGrpc;
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
+    use crate::client::route::RouteDecision;
+    use crate::client::route::RouteInput;
     use crate::common::async_util::BoxFuture;
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::TestServer;
-    use crate::xds::route::RouteDecision;
-    use crate::xds::route::RouteInput;
     use crate::xds::xds_manager::BoxDiscover;
     use crate::xds::xds_manager::{XdsClusterDiscovery, XdsRouter};
     use std::sync::Arc;

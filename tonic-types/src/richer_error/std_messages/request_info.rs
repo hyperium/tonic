@@ -3,7 +3,7 @@ use prost_types::Any;
 
 use crate::richer_error::FromAnyRef;
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::{FromAny, IntoAny, pb};
 
 /// Used to encode/decode the `RequestInfo` standard error message described
 /// in [error_details.proto]. Contains metadata about the request that
@@ -108,8 +108,7 @@ mod tests {
 
         let formatted = format!("{gen_any:?}");
 
-        let expected =
-            "Any { type_url: \"type.googleapis.com/google.rpc.RequestInfo\", value: [10, 7, 115, 111, 109, 101, 45, 105, 100, 18, 9, 115, 111, 109, 101, 45, 100, 97, 116, 97] }";
+        let expected = "Any { type_url: \"type.googleapis.com/google.rpc.RequestInfo\", value: [10, 7, 115, 111, 109, 101, 45, 105, 100, 18, 9, 115, 111, 109, 101, 45, 100, 97, 116, 97] }";
 
         assert!(
             formatted.eq(expected),

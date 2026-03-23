@@ -1,6 +1,38 @@
-use crate::{rt::Runtime, service::Service};
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
+use std::sync::Arc;
+use std::time::Duration;
 use std::time::Instant;
-use std::{sync::Arc, time::Duration};
+
+use crate::client::DynInvoke;
+use crate::client::Invoke;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::client::DynClientConnectionSecurityInfo;
+use crate::credentials::common::Authority;
+use crate::credentials::dyn_wrapper::DynChannelCredentials;
+use crate::rt::GrpcRuntime;
 
 mod registry;
 
@@ -10,19 +42,14 @@ mod registry;
 mod tonic;
 
 use ::tonic::async_trait;
-pub(crate) use registry::TransportRegistry;
 pub(crate) use registry::GLOBAL_TRANSPORT_REGISTRY;
+pub(crate) use registry::TransportRegistry;
 use tokio::sync::oneshot;
-
-pub(crate) struct ConnectedTransport {
-    pub service: Box<dyn Service>,
-    pub disconnection_listener: oneshot::Receiver<Result<(), String>>,
-}
 
 // TODO: The following options are specific to HTTP/2. We should
 // instead pass an `Attribute` like struct to the connect method instead which
 // can hold config relevant to a particular transport.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub(crate) struct TransportOptions {
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
@@ -38,12 +65,68 @@ pub(crate) struct TransportOptions {
     pub(crate) connect_deadline: Option<Instant>,
 }
 
-#[async_trait]
-pub(crate) trait Transport: Send + Sync {
+#[trait_variant::make(Send)]
+pub(crate) trait Transport: Sync {
+    type Service: Invoke + 'static;
+
     async fn connect(
         &self,
         address: String,
-        runtime: Arc<dyn Runtime>,
+        runtime: GrpcRuntime,
+        security_opts: &SecurityOpts,
         opts: &TransportOptions,
-    ) -> Result<ConnectedTransport, String>;
+    ) -> Result<
+        (
+            Self::Service,
+            DynClientConnectionSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    >;
+}
+
+#[async_trait]
+pub(crate) trait DynTransport: Send + Sync {
+    async fn dyn_connect(
+        &self,
+        address: String,
+        runtime: GrpcRuntime,
+        security_opts: &SecurityOpts,
+        opts: &TransportOptions,
+    ) -> Result<
+        (
+            Box<dyn DynInvoke>,
+            DynClientConnectionSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    >;
+}
+
+#[async_trait]
+impl<T: Transport> DynTransport for T {
+    async fn dyn_connect(
+        &self,
+        address: String,
+        runtime: GrpcRuntime,
+        security_opts: &SecurityOpts,
+        opts: &TransportOptions,
+    ) -> Result<
+        (
+            Box<dyn DynInvoke>,
+            DynClientConnectionSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    > {
+        let (i, sc, rx) = self.connect(address, runtime, security_opts, opts).await?;
+        Ok((Box::new(i), sc, rx))
+    }
+}
+
+#[derive(Clone)]
+pub(crate) struct SecurityOpts {
+    pub(crate) credentials: Arc<dyn DynChannelCredentials>,
+    pub(crate) authority: Authority,
+    pub(crate) handshake_info: ClientHandshakeInfo,
 }

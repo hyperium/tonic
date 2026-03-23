@@ -2032,7 +2032,7 @@ mod into_metadata_key {
     pub trait Sealed<VE: ValueEncoding> {
         #[doc(hidden)]
         fn insert(self, map: &mut MetadataMap, val: MetadataValue<VE>)
-            -> Option<MetadataValue<VE>>;
+        -> Option<MetadataValue<VE>>;
 
         #[doc(hidden)]
         fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>) -> bool;
@@ -2140,7 +2140,7 @@ mod as_metadata_key {
 
         #[doc(hidden)]
         fn entry(self, map: &mut MetadataMap)
-            -> Result<Entry<'_, HeaderValue>, InvalidMetadataKey>;
+        -> Result<Entry<'_, HeaderValue>, InvalidMetadataKey>;
 
         #[doc(hidden)]
         fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>>;

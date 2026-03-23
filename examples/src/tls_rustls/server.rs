@@ -11,13 +11,13 @@ use pb::{EchoRequest, EchoResponse};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tokio_rustls::{
-    rustls::{
-        pki_types::{pem::PemObject as _, CertificateDer, PrivateKeyDer},
-        ServerConfig,
-    },
     TlsAcceptor,
+    rustls::{
+        ServerConfig,
+        pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject as _},
+    },
 };
-use tonic::{body::Body, service::Routes, Request, Response, Status};
+use tonic::{Request, Response, Status, body::Body, service::Routes};
 use tower::ServiceExt;
 use tower_http::ServiceBuilderExt;
 

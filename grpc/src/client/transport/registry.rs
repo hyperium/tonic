@@ -1,12 +1,41 @@
-use super::Transport;
-use std::sync::{Arc, LazyLock, Mutex};
-use std::{collections::HashMap, fmt::Debug};
+/*
+ *
+ * Copyright 2025 gRPC authors.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to
+ * deal in the Software without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute, sublicense, and/or
+ * sell copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in
+ * all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
+ * FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS
+ * IN THE SOFTWARE.
+ *
+ */
+
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+
+use crate::client::transport::DynTransport;
+use crate::client::transport::Transport;
 
 /// A registry to store and retrieve transports.  Transports are indexed by
 /// the address type they are intended to handle.
 #[derive(Default, Clone)]
 pub(crate) struct TransportRegistry {
-    inner: Arc<Mutex<HashMap<String, Arc<dyn Transport>>>>,
+    inner: Arc<Mutex<HashMap<String, Arc<dyn DynTransport>>>>,
 }
 
 impl Debug for TransportRegistry {
@@ -25,8 +54,10 @@ impl TransportRegistry {
         Self::default()
     }
 
-    /// Add a transport into the registry.
-    pub(crate) fn add_transport(&self, address_type: &str, transport: impl Transport + 'static) {
+    pub(crate) fn add_transport<T>(&self, address_type: &str, transport: T)
+    where
+        T: Transport + 'static,
+    {
         self.inner
             .lock()
             .unwrap()
@@ -34,7 +65,10 @@ impl TransportRegistry {
     }
 
     /// Retrieve a name resolver from the registry, or None if not found.
-    pub(crate) fn get_transport(&self, address_type: &str) -> Result<Arc<dyn Transport>, String> {
+    pub(crate) fn get_transport(
+        &self,
+        address_type: &str,
+    ) -> Result<Arc<dyn DynTransport>, String> {
         self.inner
             .lock()
             .unwrap()

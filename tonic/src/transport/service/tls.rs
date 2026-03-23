@@ -1,6 +1,6 @@
 use std::{fmt, io::Cursor};
 
-use tokio_rustls::rustls::pki_types::{pem::PemObject as _, CertificateDer, PrivateKeyDer};
+use tokio_rustls::rustls::pki_types::{CertificateDer, PrivateKeyDer, pem::PemObject as _};
 
 use crate::transport::{Certificate, Identity};
 
