@@ -35,7 +35,7 @@ fn bench_metadata_map_insert(c: &mut Criterion) {
     let mut group = c.benchmark_group("metadata_map_insert");
 
     for size in [5, 10, 20].iter() {
-        group.bench_with_input(format!("new_metadata_map_{}", size), size, |b, &size| {
+        group.bench_with_input(format!("grpc_metadata_map_{}", size), size, |b, &size| {
             b.iter(|| {
                 let mut map = MetadataMap::with_capacity(size);
                 for i in 0..size {
@@ -72,7 +72,7 @@ fn bench_metadata_map_append(c: &mut Criterion) {
     let mut group = c.benchmark_group("metadata_map_append");
 
     for size in [5, 10, 20].iter() {
-        group.bench_with_input(format!("new_metadata_map_{}", size), size, |b, &size| {
+        group.bench_with_input(format!("grpc_metadata_map_{}", size), size, |b, &size| {
             b.iter(|| {
                 let mut map = MetadataMap::with_capacity(size);
                 for i in 0..size {
@@ -118,7 +118,7 @@ fn bench_metadata_map_get(c: &mut Criterion) {
             keys.push(key);
         }
 
-        group.bench_with_input(format!("new_metadata_map_{}", size), size, |b, _| {
+        group.bench_with_input(format!("grpc_metadata_map_{}", size), size, |b, _| {
             b.iter(|| {
                 for key in &keys {
                     black_box(map.get(key));
@@ -159,7 +159,7 @@ fn bench_metadata_map_iter(c: &mut Criterion) {
             map.insert(key, MetadataValue::try_from("value").unwrap());
         }
 
-        group.bench_with_input(format!("new_metadata_map_{}", size), size, |b, _| {
+        group.bench_with_input(format!("grpc_metadata_map_{}", size), size, |b, _| {
             b.iter(|| {
                 for entry in map.iter() {
                     black_box(entry);

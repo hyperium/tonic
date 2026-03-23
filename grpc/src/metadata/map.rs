@@ -66,7 +66,7 @@ pub struct MetadataMap {
 
 /// `MetadataMap` entry iterator.
 ///
-/// Yields `KeyAndValueRef` values. The same header name may be yielded
+/// Yields `KeyAndValueRef` values. The same metadata key name may be yielded
 /// more than once if it has more than one associated value.
 #[derive(Debug)]
 pub struct Iter<'a> {
@@ -154,6 +154,8 @@ impl MetadataMap {
             let key_str = k.as_str();
 
             if Ascii::is_valid_key(key_str) {
+                // We copy the header value here because the `HeaderValue`
+                // struct doesn't provide an API to fetch the underlying `Bytes`.
                 if let Ok(mut mv) = MetadataValue::<Ascii>::try_from(value.as_bytes()) {
                     mv.set_sensitive(value.is_sensitive());
                     ret.push((k.clone(), mv.inner));
@@ -174,10 +176,10 @@ impl MetadataMap {
     pub(crate) fn into_headers(self) -> HeaderMap {
         let mut ret = HeaderMap::with_capacity(self.capacity());
         for (key, value) in self.headers {
-            let bytes = if Ascii::is_valid_key(key.as_str()) {
-                MetadataValue::<Ascii>::encode(value.data)
-            } else {
+            let bytes = if key.as_str().ends_with("-bin") {
                 MetadataValue::<Binary>::encode(value.data)
+            } else {
+                MetadataValue::<Ascii>::encode(value.data)
             };
             // gRPC's validation is stricter than HTTP/2.
             unsafe {
@@ -454,7 +456,7 @@ impl MetadataMap {
     /// the values associated with the key.  See [`GetAll`] for more details.
     /// Returns `None` if there are no values associated with the key.
     ///
-    /// [`GetAll`]: struct.GetAll.html
+    /// [`GetAll`]: crate::metadata::GetAll
     ///
     /// # Examples
     ///

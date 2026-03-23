@@ -38,13 +38,12 @@ use super::encoding::ValueEncoding;
 ///
 /// `MetadataKey` is used as the [`MetadataMap`] key.
 ///
-/// [`HeaderMap`]: struct.HeaderMap.html
-/// [`MetadataMap`]: struct.MetadataMap.html
+/// [`MetadataMap`]: crate::metadata::MetadataMap
 #[derive(Clone, Eq, PartialEq, Hash)]
 #[repr(transparent)]
 pub struct MetadataKey<VE: ValueEncoding> {
     // Note: There are unsafe transmutes that assume that the memory layout
-    // of MetadataValue is identical to HeaderName
+    // of MetadataKey is identical to HeaderName
     pub(crate) inner: http::header::HeaderName,
     phantom: PhantomData<VE>,
 }
@@ -86,7 +85,7 @@ impl<VE: ValueEncoding> MetadataKey<VE> {
     ///
     /// This function requires the static string to only contain lowercase
     /// characters, numerals and symbols, as per the HTTP/2.0 specification
-    /// and header names internal representation within this library.
+    /// and metadata key names internal representation within this library.
     ///
     ///
     /// # Examples
@@ -146,7 +145,7 @@ impl<VE: ValueEncoding> MetadataKey<VE> {
     }
 
     /// Converts a HeaderName reference to a MetadataKey. This method assumes
-    /// that the caller has made sure that the header name has the correct
+    /// that the caller has made sure that the metadata key name has the correct
     /// "-bin" or non-"-bin" suffix, it does not validate its input.
     #[inline]
     pub(crate) fn unchecked_from_header_name_ref(header_name: &HeaderName) -> &Self {
@@ -219,8 +218,8 @@ impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &MetadataKey<VE> {
 }
 
 impl<VE: ValueEncoding> PartialEq<str> for MetadataKey<VE> {
-    /// Performs a case-insensitive comparison of the string against the header
-    /// name
+    /// Performs a case-insensitive comparison of the string against the
+    /// metadata key name.
     ///
     /// # Examples
     ///
@@ -239,8 +238,8 @@ impl<VE: ValueEncoding> PartialEq<str> for MetadataKey<VE> {
 }
 
 impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for str {
-    /// Performs a case-insensitive comparison of the string against the header
-    /// name
+    /// Performs a case-insensitive comparison of the string against the
+    /// metadata key name.
     ///
     /// # Examples
     ///
@@ -259,8 +258,8 @@ impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for str {
 }
 
 impl<'a, VE: ValueEncoding> PartialEq<&'a str> for MetadataKey<VE> {
-    /// Performs a case-insensitive comparison of the string against the header
-    /// name
+    /// Performs a case-insensitive comparison of the string against the
+    /// metadata key name.
     #[inline]
     fn eq(&self, other: &&'a str) -> bool {
         *self == **other
@@ -268,8 +267,8 @@ impl<'a, VE: ValueEncoding> PartialEq<&'a str> for MetadataKey<VE> {
 }
 
 impl<VE: ValueEncoding> PartialEq<MetadataKey<VE>> for &str {
-    /// Performs a case-insensitive comparison of the string against the header
-    /// name
+    /// Performs a case-insensitive comparison of the string against the
+    /// metadata key name.
     #[inline]
     fn eq(&self, other: &MetadataKey<VE>) -> bool {
         *other == *self

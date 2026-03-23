@@ -44,13 +44,12 @@ use crate::private;
 ///
 /// `MetadataValue` is used as the [`MetadataMap`] value.
 ///
-/// [`HeaderMap`]: struct.HeaderMap.html
-/// [`MetadataMap`]: struct.MetadataMap.html
+/// [`MetadataMap`]: crate::metadata::MetadataMap
 #[derive(Clone)]
 #[repr(transparent)]
 pub struct MetadataValue<VE: ValueEncoding> {
     // Note: There are unsafe transmutes that assume that the memory layout
-    // of MetadataValue is identical to PrivateHeaderValue.
+    // of MetadataValue is identical to UnencodedHeaderValue.
     pub(crate) inner: UnencodedHeaderValue,
     phantom: PhantomData<VE>,
 }
@@ -187,9 +186,9 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
         self.inner.is_sensitive
     }
 
-    /// Converts a HeaderValue to a MetadataValue. This method assumes that the
-    /// caller has made sure that the value is of the correct Ascii or Binary
-    /// value encoding.
+    /// Converts an `UnencodedHeaderValue` to a `MetadataValue`. This method
+    /// assumes that the caller has made sure that the value is of the correct
+    /// `Ascii` or `Binary` value encoding.
     #[inline]
     pub(crate) fn unchecked_from_header_value(value: UnencodedHeaderValue) -> Self {
         MetadataValue {
@@ -198,17 +197,17 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
         }
     }
 
-    /// Converts a HeaderValue reference to a MetadataValue. This method assumes
-    /// that the caller has made sure that the value is of the correct Ascii or
-    /// Binary value encoding.
+    /// Converts an `UnencodedHeaderValue` reference to a `MetadataValue`. This
+    /// method assumes that the caller has made sure that the value is of the
+    /// correct `Ascii` or `Binary` value encoding.
     #[inline]
     pub(crate) fn unchecked_from_header_value_ref(header_value: &UnencodedHeaderValue) -> &Self {
         unsafe { &*(header_value as *const UnencodedHeaderValue as *const Self) }
     }
 
-    /// Converts a HeaderValue reference to a MetadataValue. This method assumes
-    /// that the caller has made sure that the value is of the correct Ascii or
-    /// Binary value encoding.
+    /// Converts an `UnencodedHeaderValue` reference to a `MetadataValue`. This
+    /// method assumes that the caller has made sure that the value is of the
+    /// correct `Ascii` or `Binary` value encoding.
     #[inline]
     pub(crate) fn unchecked_from_mut_header_value_ref(
         header_value: &mut UnencodedHeaderValue,

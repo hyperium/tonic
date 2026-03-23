@@ -29,7 +29,6 @@ use std::hash::Hash;
 use base64::Engine as _;
 use bytes::Bytes;
 
-use crate::metadata::util;
 use crate::metadata::value::UnencodedHeaderValue;
 use crate::private;
 
@@ -91,8 +90,8 @@ pub trait ValueEncoding: Clone + Eq + PartialEq + Hash {
 /// to, because there's no variants to instantiate. Instead, it's just used as
 /// a type parameter for [`MetadataKey`] and [`MetadataValue`].
 ///
-/// [`MetadataKey`]: struct.MetadataKey.html
-/// [`MetadataValue`]: struct.MetadataValue.html
+/// [`MetadataKey`]: crate::metadata::MetadataKey
+/// [`MetadataValue`]: crate::metadata::MetadataValue
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum Ascii {}
@@ -100,7 +99,7 @@ pub enum Ascii {}
 impl Ascii {
     pub(crate) fn is_valid_value(key: impl AsRef<[u8]>) -> bool {
         // This array maps every byte (0-255) to a boolean (valid/invalid).
-        static VALID_HEADER_VALUE_CHARS: [bool; 256] = {
+        static VALID_METADATA_VALUE_CHARS: [bool; 256] = {
             let mut table = [false; 256];
 
             let mut i = 0x20;
@@ -113,7 +112,7 @@ impl Ascii {
         let bytes = key.as_ref();
 
         for &b in bytes {
-            if !VALID_HEADER_VALUE_CHARS[b as usize] {
+            if !VALID_METADATA_VALUE_CHARS[b as usize] {
                 return false;
             }
         }
@@ -126,8 +125,8 @@ impl Ascii {
 /// to, because there's no variants to instantiate. Instead, it's just used as
 /// a type parameter for [`MetadataKey`] and [`MetadataValue`].
 ///
-/// [`MetadataKey`]: struct.MetadataKey.html
-/// [`MetadataValue`]: struct.MetadataValue.html
+/// [`MetadataKey`]: crate::metadata::MetadataKey
+/// [`MetadataValue`]: crate::metadata::MetadataValue
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 #[non_exhaustive]
 pub enum Binary {}
@@ -179,7 +178,7 @@ impl ValueEncoding for Ascii {
     fn from_static(value: &'static str, _: private::Internal) -> UnencodedHeaderValue {
         let value = value.trim_ascii();
         if !Ascii::is_valid_value(value) {
-            panic!("Invalid ASCII header value: {}", value)
+            panic!("Invalid ASCII metadata value: {}", value)
         }
         UnencodedHeaderValue::from_bytes(Bytes::from_static(value.as_bytes()))
     }
@@ -220,7 +219,7 @@ impl ValueEncoding for Ascii {
 
 fn is_valid_key(key: impl AsRef<[u8]>) -> bool {
     // This array maps every byte (0-255) to a boolean (valid/invalid).
-    static VALID_HEADER_KEY_CHARS: [bool; 256] = {
+    static VALID_METADATA_KEY_CHARS: [bool; 256] = {
         let mut table = [false; 256];
 
         // Valid: 0-9
@@ -250,7 +249,7 @@ fn is_valid_key(key: impl AsRef<[u8]>) -> bool {
     }
 
     for &b in bytes {
-        if !VALID_HEADER_KEY_CHARS[b as usize] {
+        if !VALID_METADATA_KEY_CHARS[b as usize] {
             return false;
         }
     }
@@ -283,7 +282,7 @@ impl ValueEncoding for Binary {
     }
 
     fn decode(value: &[u8], _: private::Internal) -> Result<Bytes, InvalidMetadataValueBytes> {
-        util::base64::STANDARD
+        base64_util::STANDARD
             .decode(value)
             .map(|bytes_vec| bytes_vec.into())
             .map_err(|_| InvalidMetadataValueBytes::new())
@@ -310,7 +309,7 @@ impl ValueEncoding for Binary {
     }
 
     fn encode(value: Bytes, _: private::Internal) -> Bytes {
-        let encoded_value: String = util::base64::STANDARD_NO_PAD.encode(value);
+        let encoded_value: String = base64_util::STANDARD_NO_PAD.encode(value);
         Bytes::from(encoded_value)
     }
 }
@@ -351,3 +350,24 @@ impl fmt::Display for InvalidMetadataValueBytes {
 }
 
 impl Error for InvalidMetadataValueBytes {}
+
+mod base64_util {
+    use base64::alphabet;
+    use base64::engine::DecodePaddingMode;
+    use base64::engine::general_purpose::GeneralPurpose;
+    use base64::engine::general_purpose::GeneralPurposeConfig;
+
+    pub(super) const STANDARD: GeneralPurpose = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_encode_padding(true)
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+
+    pub(super) const STANDARD_NO_PAD: GeneralPurpose = GeneralPurpose::new(
+        &alphabet::STANDARD,
+        GeneralPurposeConfig::new()
+            .with_encode_padding(false)
+            .with_decode_padding_mode(DecodePaddingMode::Indifferent),
+    );
+}

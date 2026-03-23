@@ -27,7 +27,6 @@
 mod encoding;
 mod key;
 mod map;
-mod util;
 mod value;
 
 pub use self::encoding::Ascii;
