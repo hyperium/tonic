@@ -164,17 +164,17 @@ impl MetadataMap {
             };
             let key_str = k.as_str();
 
-            if Ascii::is_valid_key(key_str) {
-                if let Ok(mut mv) = MetadataValue::<Ascii>::try_from(value.as_bytes()) {
-                    mv.set_sensitive(value.is_sensitive());
-                    ret.push((k.clone(), mv.inner));
-                }
-            } else if Binary::is_valid_key(key_str) {
-                if let Ok(b) = Binary::decode(value.as_bytes()) {
-                    let mut mv = unsafe { MetadataValue::<Binary>::from_shared_unchecked(b) };
-                    mv.set_sensitive(value.is_sensitive());
-                    ret.push((k.clone(), mv.inner));
-                }
+            if Ascii::is_valid_key(key_str)
+                && let Ok(mut mv) = MetadataValue::<Ascii>::try_from(value.as_bytes())
+            {
+                mv.set_sensitive(value.is_sensitive());
+                ret.push((k.clone(), mv.inner));
+            } else if Binary::is_valid_key(key_str)
+                && let Ok(b) = Binary::decode(value.as_bytes())
+            {
+                let mut mv = unsafe { MetadataValue::<Binary>::from_shared_unchecked(b) };
+                mv.set_sensitive(value.is_sensitive());
+                ret.push((k.clone(), mv.inner));
             }
         }
 
@@ -897,8 +897,6 @@ impl MetadataMap {
     /// let values: Vec<_> = map.remove_all("x-host").collect();
     /// assert_eq!(2, values.len());
     /// ```
-    // TODO: Switch to `Vec::extract_if` once the MSRV reaches 1.87. This will
-    // allow us to maintain the original insertion order of the removed elements.
     pub fn remove_all<K>(&mut self, key: K) -> ValueDrain<'_, Ascii>
     where
         K: AsMetadataKey<Ascii>,
@@ -916,8 +914,6 @@ impl MetadataMap {
     /// insertion order.
     ///
     /// [`remove_all`]: Self::remove_all
-    // TODO: Switch to `Vec::extract_if` once the MSRV reaches 1.87. This will
-    // allow us to maintain the original insertion order of the removed elements.
     pub fn remove_all_bin<K>(&mut self, key: K) -> ValueDrain<'_, Binary>
     where
         K: AsMetadataKey<Binary>,
@@ -963,7 +959,7 @@ impl<VE: ValueEncoding> Iterator for ValueDrain<'_, VE> {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.inner
-            .next_back()
+            .next()
             .map(|(_, v)| MetadataValue::unchecked_from_header_value(v))
     }
 }
@@ -1066,7 +1062,7 @@ mod into_metadata_key {
     pub trait Sealed<VE: ValueEncoding> {
         #[doc(hidden)]
         fn insert(self, map: &mut MetadataMap, val: MetadataValue<VE>)
-            -> Option<MetadataValue<VE>>;
+        -> Option<MetadataValue<VE>>;
 
         #[doc(hidden)]
         fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>);

@@ -22,10 +22,10 @@
  *
  */
 
+use criterion::Criterion;
 use criterion::black_box;
 use criterion::criterion_group;
 use criterion::criterion_main;
-use criterion::Criterion;
 use grpc::metadata::MetadataKey;
 use grpc::metadata::MetadataMap;
 use grpc::metadata::MetadataValue;
