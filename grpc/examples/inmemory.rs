@@ -141,7 +141,7 @@ async fn main() {
     let chan_opts = ChannelOptions::default();
     let chan = Channel::new(
         target.as_str(),
-        InsecureChannelCredentials::new(),
+        InsecureChannelCredentials::new_arc(),
         chan_opts,
     );
 
