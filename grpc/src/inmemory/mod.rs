@@ -35,6 +35,7 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
+use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream as ClientDynRecvStream;
 use crate::client::DynSendStream as ClientDynSendStream;
@@ -53,6 +54,7 @@ use crate::client::name_resolution::Target;
 use crate::client::name_resolution::global_registry as global_resolver_registry;
 use crate::client::service_config::ServiceConfig;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::SecurityOpts;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
 use crate::core::ClientResponseStreamItem;
@@ -62,6 +64,11 @@ use crate::core::ResponseHeaders;
 use crate::core::ResponseStreamItem;
 use crate::core::SendMessage;
 use crate::core::Trailers;
+use crate::credentials::SecurityLevel;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityInfo;
+use crate::credentials::client::DynClientConnectionSecurityInfo;
+use crate::credentials::common::Authority;
 use crate::rt::GrpcRuntime;
 use crate::server::Call as ServerCall;
 use crate::server::Listener as ServerListener;
@@ -314,8 +321,16 @@ impl Transport for InMemoryTransport {
         &self,
         target: String,
         _runtime: GrpcRuntime,
+        _security_opts: &SecurityOpts,
         _options: &TransportOptions,
-    ) -> Result<(Self::Service, oneshot::Receiver<Result<(), String>>), String> {
+    ) -> Result<
+        (
+            Self::Service,
+            DynClientConnectionSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    > {
         let listeners = LISTENERS.lock().unwrap();
         let s = listeners
             .get(&target)
@@ -326,8 +341,25 @@ impl Transport for InMemoryTransport {
             s: s.clone(),
             closed_tx: Some(closed_tx),
         };
+        let sec_info = ClientConnectionSecurityInfo::new(
+            "inmemory",
+            SecurityLevel::PrivacyAndIntegrity,
+            InMemoryChannelecurityContext {},
+            Attributes::new(),
+        )
+        .into_boxed();
 
-        Ok((conn, closed_rx))
+        Ok((conn, sec_info, closed_rx))
+    }
+}
+
+/// An implementation of [`ClientConnectionSecurityContext`] for in-memory connections.
+#[derive(Debug, Clone)]
+struct InMemoryChannelecurityContext;
+
+impl ClientConnectionSecurityContext for InMemoryChannelecurityContext {
+    fn validate_authority(&self, _authority: &Authority) -> bool {
+        true
     }
 }
 

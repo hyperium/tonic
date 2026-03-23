@@ -73,9 +73,12 @@ use crate::client::subchannel::NopBackoff;
 use crate::client::subchannel::SubchannelKey;
 use crate::client::subchannel::SubchannelStateWatcher;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportRegistry;
 use crate::core::RequestHeaders;
 use crate::credentials::ChannelCredentials;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::common::Authority;
 use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt;
 use crate::rt::GrpcEndpoint;
@@ -159,7 +162,7 @@ impl Channel {
     /// target string is invalid, the returned channel will never connect, and
     /// will fail all RPCs.
     // TODO: should this return a Result instead?
-    pub fn new<C>(target: &str, credentials: C, options: ChannelOptions) -> Self
+    pub fn new<C>(target: &str, credentials: Arc<C>, options: ChannelOptions) -> Self
     where
         C: ChannelCredentials,
         C::Output<Box<dyn GrpcEndpoint>>: GrpcEndpoint + 'static,
@@ -169,9 +172,9 @@ impl Channel {
         Self {
             inner: Arc::new(PersistentChannel::new(
                 target,
-                Box::new(credentials) as Box<dyn DynChannelCredentials>,
                 default_runtime(),
                 options,
+                credentials as Arc<dyn DynChannelCredentials>,
             )),
         }
     }
@@ -218,6 +221,7 @@ struct PersistentChannel {
     options: ChannelOptions,
     active_channel: Mutex<Option<Arc<ActiveChannel>>>,
     runtime: GrpcRuntime,
+    credentials: Arc<dyn DynChannelCredentials>,
 }
 
 impl PersistentChannel {
@@ -225,15 +229,16 @@ impl PersistentChannel {
     // ChannelOption contain only optional parameters.
     fn new(
         target: &str,
-        _credentials: Box<dyn DynChannelCredentials>,
         runtime: GrpcRuntime,
         options: ChannelOptions,
+        credentials: Arc<dyn DynChannelCredentials>,
     ) -> Self {
         Self {
             target: Url::from_str(target).unwrap(), // TODO handle err
             active_channel: Mutex::default(),
             options,
             runtime,
+            credentials,
         }
     }
 
@@ -268,6 +273,7 @@ impl PersistentChannel {
                 self.target.clone(),
                 &self.options,
                 self.runtime.clone(),
+                self.credentials.clone(),
             ));
         }
 
@@ -283,13 +289,27 @@ struct ActiveChannel {
 }
 
 impl ActiveChannel {
-    fn new(target: Url, options: &ChannelOptions, runtime: GrpcRuntime) -> Arc<Self> {
+    fn new(
+        target: Url,
+        options: &ChannelOptions,
+        runtime: GrpcRuntime,
+        credentials: Arc<dyn DynChannelCredentials>,
+    ) -> Arc<Self> {
         let (tx, mut rx) = mpsc::unbounded_channel::<WorkQueueItem>();
         let transport_registry = GLOBAL_TRANSPORT_REGISTRY.clone();
 
         let resolve_now = Arc::new(Notify::new());
         let connectivity_state = Arc::new(Watcher::new());
         let picker = Arc::new(Watcher::new());
+        // TODO(arjan-bal): Return error here instead of panicking.
+        let rb = global_registry().get(target.scheme()).unwrap();
+        let target = name_resolution::Target::from(target);
+        let authority = rb.default_authority(&target).to_owned();
+        let security_opts = SecurityOpts {
+            credentials,
+            authority: parse_authority(&authority),
+            handshake_info: ClientHandshakeInfo::default(),
+        };
         let mut channel_controller = InternalChannelController::new(
             transport_registry,
             resolve_now.clone(),
@@ -297,17 +317,9 @@ impl ActiveChannel {
             picker.clone(),
             connectivity_state.clone(),
             runtime.clone(),
+            security_opts,
         );
 
-        // TODO(arjan-bal): Return error here instead of panicking.
-        let rb = global_registry().get(target.scheme()).unwrap();
-        let target = name_resolution::Target::from(target);
-        let authority = target.authority_host_port();
-        let authority = if authority.is_empty() {
-            rb.default_authority(&target).to_owned()
-        } else {
-            authority
-        };
         let work_scheduler = Arc::new(ResolverWorkScheduler { wqtx: tx });
         let resolver_opts = name_resolution::ResolverOptions {
             authority,
@@ -408,6 +420,7 @@ pub(crate) struct InternalChannelController {
     picker: Arc<Watcher<Arc<dyn Picker>>>,
     connectivity_state: Arc<Watcher<ConnectivityState>>,
     runtime: GrpcRuntime,
+    security_opts: SecurityOpts,
 }
 
 impl InternalChannelController {
@@ -418,6 +431,7 @@ impl InternalChannelController {
         picker: Arc<Watcher<Arc<dyn Picker>>>,
         connectivity_state: Arc<Watcher<ConnectivityState>>,
         runtime: GrpcRuntime,
+        security_opts: SecurityOpts,
     ) -> Self {
         let lb_work_scheduler = Arc::new(LbWorkScheduler {
             wqtx: wqtx.clone(),
@@ -437,6 +451,7 @@ impl InternalChannelController {
             picker,
             connectivity_state,
             runtime,
+            security_opts,
             lb_work_scheduler,
         }
     }
@@ -488,6 +503,7 @@ impl load_balancing::ChannelController for InternalChannelController {
                 scp.unregister_subchannel(&k);
             }),
             self.runtime.clone(),
+            self.security_opts.clone(),
         );
         let _ = self.subchannel_pool.register_subchannel(&key, isc.clone());
         self.new_esc_for_isc(isc)
@@ -669,6 +685,186 @@ impl<T: Clone> WatcherIter<T> {
             if x.is_some() {
                 return x.clone();
             }
+        }
+    }
+}
+
+/// Parses the host and port from a URL-encoded string. When the input can not
+/// be parsed as (host, port) pair, it returns the entire input as the host.
+fn parse_authority(host_and_port: &str) -> Authority {
+    // Handle bracketed IPv6 addresses (e.g., "[::1]:80").
+    if let Some(stripped) = host_and_port.strip_prefix('[')
+        && let Some((host, port_str)) = stripped.split_once("]:")
+        && let Ok(port) = port_str.parse::<u16>()
+    {
+        return Authority::new(host, Some(port));
+    }
+    // Handle unbracketed addresses (IPv4 or hostnames, e.g., "localhost:8080").
+    if let Some((host, port_str)) = host_and_port.rsplit_once(':')
+        && !host.contains(':')
+        && let Ok(port) = port_str.parse::<u16>()
+    {
+        return Authority::new(host, Some(port));
+    }
+    Authority::new(host_and_port.to_string(), None)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_authority() {
+        struct TestCase {
+            input: &'static str,
+            expected: Authority,
+        }
+
+        let cases = [
+            TestCase {
+                input: "localhost:http",
+                expected: Authority::new("localhost:http", None),
+            },
+            TestCase {
+                input: "localhost:80",
+                expected: Authority::new("localhost", Some(80)),
+            },
+            // host name with zone identifier.
+            TestCase {
+                input: "localhost%lo0:80",
+                expected: Authority::new("localhost%lo0", Some(80)),
+            },
+            TestCase {
+                input: "localhost%lo0:http",
+                expected: Authority::new("localhost%lo0:http", None),
+            },
+            TestCase {
+                input: "[localhost%lo0]:http",
+                expected: Authority::new("[localhost%lo0]:http", None),
+            },
+            TestCase {
+                input: "[localhost%lo0]:80",
+                expected: Authority::new("localhost%lo0", Some(80)),
+            },
+            // IP literal
+            TestCase {
+                input: "127.0.0.1:http",
+                expected: Authority::new("127.0.0.1:http", None),
+            },
+            TestCase {
+                input: "127.0.0.1:80",
+                expected: Authority::new("127.0.0.1", Some(80)),
+            },
+            TestCase {
+                input: "[::1]:http",
+                expected: Authority::new("[::1]:http", None),
+            },
+            TestCase {
+                input: "[::1]:80",
+                expected: Authority::new("::1", Some(80)),
+            },
+            // IP literal with zone identifier.
+            TestCase {
+                input: "[::1%lo0]:http",
+                expected: Authority::new("[::1%lo0]:http", None),
+            },
+            TestCase {
+                input: "[::1%lo0]:80",
+                expected: Authority::new("::1%lo0", Some(80)),
+            },
+            TestCase {
+                input: ":http",
+                expected: Authority::new(":http", None),
+            },
+            TestCase {
+                input: ":80",
+                expected: Authority::new("", Some(80)),
+            },
+            TestCase {
+                input: "grpc.io:",
+                expected: Authority::new("grpc.io:", None),
+            },
+            TestCase {
+                input: "127.0.0.1:",
+                expected: Authority::new("127.0.0.1:", None),
+            },
+            TestCase {
+                input: "[::1]:",
+                expected: Authority::new("[::1]:", None),
+            },
+            TestCase {
+                input: "grpc.io:https%foo",
+                expected: Authority::new("grpc.io:https%foo", None),
+            },
+            TestCase {
+                input: "grpc.io",
+                expected: Authority::new("grpc.io", None),
+            },
+            TestCase {
+                input: "127.0.0.1",
+                expected: Authority::new("127.0.0.1", None),
+            },
+            TestCase {
+                input: "[::1]",
+                expected: Authority::new("[::1]", None),
+            },
+            TestCase {
+                input: "[fe80::1%lo0]",
+                expected: Authority::new("[fe80::1%lo0]", None),
+            },
+            TestCase {
+                input: "[localhost%lo0]",
+                expected: Authority::new("[localhost%lo0]", None),
+            },
+            TestCase {
+                input: "localhost%lo0",
+                expected: Authority::new("localhost%lo0", None),
+            },
+            TestCase {
+                input: "::1",
+                expected: Authority::new("::1", None),
+            },
+            TestCase {
+                input: "fe80::1%lo0",
+                expected: Authority::new("fe80::1%lo0", None),
+            },
+            TestCase {
+                input: "fe80::1%lo0:80",
+                expected: Authority::new("fe80::1%lo0:80", None),
+            },
+            TestCase {
+                input: "[foo:bar]",
+                expected: Authority::new("[foo:bar]", None),
+            },
+            TestCase {
+                input: "[foo:bar]baz",
+                expected: Authority::new("[foo:bar]baz", None),
+            },
+            TestCase {
+                input: "[foo]bar:baz",
+                expected: Authority::new("[foo]bar:baz", None),
+            },
+            TestCase {
+                input: "[foo]:[bar]:baz",
+                expected: Authority::new("[foo]:[bar]:baz", None),
+            },
+            TestCase {
+                input: "[foo]:[bar]baz",
+                expected: Authority::new("[foo]:[bar]baz", None),
+            },
+            TestCase {
+                input: "foo[bar]:baz",
+                expected: Authority::new("foo[bar]:baz", None),
+            },
+            TestCase {
+                input: "foo]bar:baz",
+                expected: Authority::new("foo]bar:baz", None),
+            },
+        ];
+
+        for TestCase { input, expected } in cases {
+            let auth = parse_authority(input);
+            assert_eq!(auth, expected, "authority mismatch for {}", input);
         }
     }
 }

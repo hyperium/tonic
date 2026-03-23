@@ -172,8 +172,8 @@ async fn test_tls_key_log() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
         )
         .await
         .expect("Handshake failed");
@@ -226,8 +226,8 @@ async fn test_tls_handshake_wrong_server_name() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
         )
         .await;
 
@@ -278,8 +278,8 @@ async fn test_tls_validate_authority() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
         )
         .await
         .expect("Handshake failed");
@@ -326,8 +326,8 @@ async fn test_mtls_handshake_no_identity() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
         )
         .await
         .expect("Client handshake expected to succeed with TLS 1.3");
@@ -373,8 +373,8 @@ async fn test_mtls_handshake_with_identitiy() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
         )
         .await
         .expect("Handshake failed with client identity");
@@ -429,8 +429,8 @@ async fn check_client_resumption_disabled(
             .connect(
                 &authority,
                 endpoint,
-                ClientHandshakeInfo::default(),
-                runtime,
+                &ClientHandshakeInfo::default(),
+                &runtime,
             )
             .await
             .expect("Handshake failed");
@@ -603,8 +603,8 @@ async fn run_handshake_test(server_alpn: Vec<Vec<u8>>, expect_success: bool) {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
         )
         .await;
 
