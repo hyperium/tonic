@@ -223,10 +223,10 @@ impl ChannelCredentials for RustlsClientTlsCredendials {
         &self,
         authority: &Authority,
         source: Input,
-        _info: ClientHandshakeInfo,
-        _rt: GrpcRuntime,
+        _info: &ClientHandshakeInfo,
+        _rt: &GrpcRuntime,
         _token: Token,
-    ) -> Result<HandshakeOutput<Self::Output<Input>, ClientTlsSecContext>, String> {
+    ) -> Result<HandshakeOutput<TlsStream<Input>, ClientTlsSecContext>, String> {
         let server_name = ServerName::try_from(authority.host())
             .map_err(|e| format!("invalid authority: {}", e))?
             .to_owned();

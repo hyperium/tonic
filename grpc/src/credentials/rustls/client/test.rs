@@ -174,8 +174,8 @@ async fn test_tls_key_log() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
             Token,
         )
         .await
@@ -229,8 +229,8 @@ async fn test_tls_handshake_wrong_server_name() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
             Token,
         )
         .await;
@@ -282,8 +282,8 @@ async fn test_tls_validate_authority() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
             Token,
         )
         .await
@@ -331,8 +331,8 @@ async fn test_mtls_handshake_no_identity() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
             Token,
         )
         .await
@@ -379,8 +379,8 @@ async fn test_mtls_handshake_with_identitiy() {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
             Token,
         )
         .await
@@ -436,8 +436,8 @@ async fn check_client_resumption_disabled(
             .connect(
                 &authority,
                 endpoint,
-                ClientHandshakeInfo::default(),
-                runtime,
+                &ClientHandshakeInfo::default(),
+                &runtime,
                 Token,
             )
             .await
@@ -611,8 +611,8 @@ async fn run_handshake_test(server_alpn: Vec<Vec<u8>>, expect_success: bool) {
         .connect(
             &authority,
             endpoint,
-            ClientHandshakeInfo::default(),
-            runtime,
+            &ClientHandshakeInfo::default(),
+            &runtime,
             Token,
         )
         .await;

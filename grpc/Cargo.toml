@@ -87,5 +87,6 @@ tempfile = "3.26"
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
     "server",
     "router",
+    "tls-ring",
 ] }
 tonic-prost = { version = "0.14.0", path = "../tonic-prost" }

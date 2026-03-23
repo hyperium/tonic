@@ -73,6 +73,9 @@ pub struct ClientConnectionSecurityInfo<C> {
     attributes: Attributes,
 }
 
+pub type DynClientConnectionSecurityInfo =
+    ClientConnectionSecurityInfo<Box<dyn ClientConnectionSecurityContext>>;
+
 impl<C> ClientConnectionSecurityInfo<C> {
     pub fn new(
         security_protocol: &'static str,
@@ -104,9 +107,7 @@ impl<C> ClientConnectionSecurityInfo<C> {
         &self.attributes
     }
 
-    pub fn into_boxed(
-        self,
-    ) -> ClientConnectionSecurityInfo<Box<dyn ClientConnectionSecurityContext>>
+    pub fn into_boxed(self) -> DynClientConnectionSecurityInfo
     where
         C: ClientConnectionSecurityContext + 'static,
     {
@@ -126,7 +127,7 @@ impl<C> ClientConnectionSecurityInfo<C> {
 ///
 /// Individual credential implementations are responsible for validating and
 /// interpreting the format of the data they receive.
-#[derive(Default)]
+#[derive(Default, Clone)]
 pub struct ClientHandshakeInfo {
     /// The bag of attributes containing the handshake data.
     attributes: Attributes,
@@ -180,8 +181,8 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
         &self,
         authority: &Authority,
         source: Input,
-        info: ClientHandshakeInfo,
-        runtime: GrpcRuntime,
+        info: &ClientHandshakeInfo,
+        runtime: &GrpcRuntime,
         token: Token,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         self.channel_creds
@@ -201,15 +202,15 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
 #[cfg(test)]
 mod tests {
     use tokio::net::TcpListener;
-    use tonic::Status;
     use tonic::async_trait;
     use tonic::metadata::MetadataMap;
     use tonic::metadata::MetadataValue;
 
     use super::*;
+    use crate::Status;
     use crate::credentials::call::CallCredentials;
     use crate::credentials::call::CallDetails;
-    use crate::credentials::call::ChannelSecurityInfo;
+    use crate::credentials::call::ClientConnectionSecurityInfo;
     use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::credentials::local::LocalChannelCredentials;
     use crate::rt;
@@ -227,7 +228,7 @@ mod tests {
         async fn get_metadata(
             &self,
             _call_details: &CallDetails,
-            _auth_info: &ChannelSecurityInfo,
+            _auth_info: &ClientConnectionSecurityInfo,
             metadata: &mut MetadataMap,
         ) -> Result<(), Status> {
             metadata.insert(
@@ -267,8 +268,11 @@ mod tests {
         // Verify call credentials
         let combined_call_creds = composite2.get_call_credentials(Token).unwrap();
         let call_details = CallDetails::new("service".to_string(), "method".to_string());
-        let auth_info =
-            ChannelSecurityInfo::new("local", SecurityLevel::NoSecurity, Attributes::new());
+        let auth_info = ClientConnectionSecurityInfo::new(
+            "local",
+            SecurityLevel::NoSecurity,
+            Attributes::new(),
+        );
         let mut metadata = MetadataMap::new();
 
         combined_call_creds
@@ -300,8 +304,8 @@ mod tests {
             .connect(
                 &authority,
                 endpoint,
-                ClientHandshakeInfo::default(),
-                runtime,
+                &ClientHandshakeInfo::default(),
+                &runtime,
                 Token,
             )
             .await

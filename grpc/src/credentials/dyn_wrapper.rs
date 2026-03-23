@@ -22,11 +22,14 @@
  *
  */
 
+use std::sync::Arc;
+
 use tonic::async_trait;
 
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::ServerCredentials;
+use crate::credentials::call::CallCredentials;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
@@ -42,15 +45,17 @@ type BoxEndpoint = Box<dyn GrpcEndpoint>;
 // Bridge trait for type erasure.
 #[async_trait]
 pub(crate) trait DynChannelCredentials: Send + Sync {
-    async fn connect(
+    async fn dyn_connect(
         &self,
         authority: &Authority,
         source: BoxEndpoint,
-        info: ClientHandshakeInfo,
-        runtime: GrpcRuntime,
+        info: &ClientHandshakeInfo,
+        runtime: &GrpcRuntime,
     ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>;
 
     fn info(&self) -> &ProtocolInfo;
+
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>>;
 }
 
 #[async_trait]
@@ -59,12 +64,12 @@ where
     T: ChannelCredentials,
     T::Output<BoxEndpoint>: GrpcEndpoint,
 {
-    async fn connect(
+    async fn dyn_connect(
         &self,
         authority: &Authority,
         source: BoxEndpoint,
-        info: ClientHandshakeInfo,
-        runtime: GrpcRuntime,
+        info: &ClientHandshakeInfo,
+        runtime: &GrpcRuntime,
     ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>
     {
         let output = self
@@ -84,12 +89,42 @@ where
     fn info(&self) -> &ProtocolInfo {
         self.info()
     }
+
+    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
+        self.get_call_credentials(Token)
+    }
+}
+
+impl ChannelCredentials for Arc<dyn DynChannelCredentials> {
+    type ContextType = Box<dyn ClientConnectionSecurityContext>;
+    type Output<I> = BoxEndpoint;
+
+    async fn connect<Input: GrpcEndpoint>(
+        &self,
+        authority: &Authority,
+        source: Input,
+        info: &ClientHandshakeInfo,
+        runtime: &GrpcRuntime,
+        _: Token,
+    ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
+        (**self)
+            .dyn_connect(authority, Box::new(source), info, runtime)
+            .await
+    }
+
+    fn get_call_credentials(&self, _: Token) -> Option<&Arc<dyn CallCredentials>> {
+        (**self).get_call_credentials()
+    }
+
+    fn info(&self) -> &ProtocolInfo {
+        (**self).info()
+    }
 }
 
 // Bridge trait for type erasure.
 #[async_trait]
 pub(crate) trait DynServerCredentials: Send + Sync {
-    async fn accept(
+    async fn dyn_accept(
         &self,
         source: BoxEndpoint,
         runtime: GrpcRuntime,
@@ -104,7 +139,7 @@ where
     T: ServerCredentials,
     T::Output<BoxEndpoint>: GrpcEndpoint,
 {
-    async fn accept(
+    async fn dyn_accept(
         &self,
         source: BoxEndpoint,
         runtime: GrpcRuntime,
@@ -131,7 +166,6 @@ mod tests {
     use crate::credentials::InsecureServerCredentials;
     use crate::credentials::SecurityLevel;
     use crate::credentials::client::ClientHandshakeInfo;
-    use crate::credentials::common::Authority;
     use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::rt::AsyncIoAdapter;
     use crate::rt::TcpOptions;
@@ -142,8 +176,7 @@ mod tests {
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
 
-        let creds = InsecureChannelCredentials::new();
-        let dyn_creds: Box<dyn DynChannelCredentials> = Box::new(creds);
+        let dyn_creds = InsecureChannelCredentials::new_arc() as Arc<dyn DynChannelCredentials>;
 
         let authority = Authority::new("localhost".to_string(), Some(addr.port()));
 
@@ -154,7 +187,9 @@ mod tests {
             .unwrap();
         let info = ClientHandshakeInfo::default();
 
-        let result = dyn_creds.connect(&authority, source, info, runtime).await;
+        let result = dyn_creds
+            .dyn_connect(&authority, source, &info, &runtime)
+            .await;
 
         assert!(result.is_ok());
         let output = result.unwrap();
@@ -217,7 +252,7 @@ mod tests {
 
         let (server_stream, _) = listener.accept().await.unwrap();
 
-        let result = dyn_creds.accept(server_stream, runtime).await;
+        let result = dyn_creds.dyn_accept(server_stream, runtime).await;
 
         assert!(result.is_ok());
         let output = result.unwrap();

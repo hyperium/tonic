@@ -22,8 +22,11 @@
  *
  */
 
+use std::fs;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::Once;
 use std::time::Duration;
 
 use bytes::Buf;
@@ -35,12 +38,15 @@ use tokio::time::timeout;
 use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::wrappers::TcpListenerStream;
 use tonic::Response;
-use tonic::Status;
 use tonic::async_trait;
+use tonic::metadata::MetadataMap;
 use tonic::transport::Server;
 use tonic_prost::prost::Message as ProstMessage;
 
+use crate::Status;
+use crate::StatusCode;
 use crate::client::CallOptions;
 use crate::client::Channel;
 use crate::client::Invoke as _;
@@ -48,19 +54,67 @@ use crate::client::RecvStream as _;
 use crate::client::SendOptions;
 use crate::client::SendStream as _;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportOptions;
 use crate::client::transport::registry::GLOBAL_TRANSPORT_REGISTRY;
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
+use crate::core::ResponseHeaders;
 use crate::core::SendMessage;
+use crate::core::Trailers;
+use crate::credentials::CompositeChannelCredentials;
 use crate::credentials::InsecureChannelCredentials;
+use crate::credentials::LocalChannelCredentials;
+use crate::credentials::SecurityLevel;
+use crate::credentials::call::CallCredentials;
+use crate::credentials::call::CallDetails;
+use crate::credentials::call::ClientConnectionSecurityInfo;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::common::Authority;
+use crate::credentials::rustls::RootCertificates;
+use crate::credentials::rustls::StaticProvider;
+use crate::credentials::rustls::client::ClientTlsConfig;
+use crate::credentials::rustls::client::RustlsClientTlsCredendials;
 use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
 use crate::echo_pb::echo_server::EchoServer;
 use crate::rt::GrpcRuntime;
 use crate::rt::tokio::TokioRuntime;
+
+#[derive(Debug)]
+struct MockCallCredentials {
+    metadata: Vec<(&'static str, &'static str)>,
+    min_security_level: SecurityLevel,
+    should_fail: Option<crate::Status>,
+}
+
+#[async_trait]
+impl CallCredentials for MockCallCredentials {
+    async fn get_metadata(
+        &self,
+        _call_details: &CallDetails,
+        _auth_info: &ClientConnectionSecurityInfo,
+        metadata: &mut MetadataMap,
+    ) -> Result<(), crate::Status> {
+        if let Some(status) = &self.should_fail {
+            return Err(status.clone());
+        }
+        for (key, val) in &self.metadata {
+            metadata.insert(
+                key.parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()
+                    .unwrap(),
+                val.parse().unwrap(),
+            );
+        }
+        Ok(())
+    }
+
+    fn minimum_channel_security_level(&self) -> SecurityLevel {
+        self.min_security_level
+    }
+}
 
 const DEFAULT_TEST_DURATION: Duration = Duration::from_secs(10);
 const DEFAULT_TEST_SHORT_DURATION: Duration = Duration::from_millis(10);
@@ -80,7 +134,7 @@ pub(crate) async fn tonic_transport_rpc() {
         let _ = Server::builder()
             .add_service(svc)
             .serve_with_incoming_shutdown(
-                tokio_stream::wrappers::TcpListenerStream::new(listener),
+                TcpListenerStream::new(listener),
                 shutdown_notify_copy.notified(),
             )
             .await;
@@ -90,10 +144,16 @@ pub(crate) async fn tonic_transport_rpc() {
         .get_transport(TCP_IP_NETWORK_TYPE)
         .unwrap();
     let config = Arc::new(TransportOptions::default());
-    let (conn, mut disconnection_listener) = builder
+    let securty_opts = SecurityOpts {
+        credentials: InsecureChannelCredentials::new_arc(),
+        authority: Authority::new("localhost".to_string(), None),
+        handshake_info: ClientHandshakeInfo::default(),
+    };
+    let (conn, _sec_info, mut disconnection_listener) = builder
         .dyn_connect(
             addr.to_string(),
             GrpcRuntime::new(TokioRuntime::default()),
+            &securty_opts,
             &config,
         )
         .await
@@ -177,7 +237,7 @@ async fn grpc_invoke_tonic_unary() {
         let _ = Server::builder()
             .add_service(svc)
             .serve_with_incoming_shutdown(
-                tokio_stream::wrappers::TcpListenerStream::new(listener),
+                TcpListenerStream::new(listener),
                 shutdown_notify_copy.notified(),
             )
             .await;
@@ -187,11 +247,186 @@ async fn grpc_invoke_tonic_unary() {
     let target = format!("dns:///{}", addr);
     let channel = Channel::new(
         &target,
-        InsecureChannelCredentials::new(),
+        InsecureChannelCredentials::new_arc(),
         Default::default(),
     );
 
-    // Start the call.
+    let (_, resp, trailers) = perform_unary_echo(&channel, "hello interop").await;
+    assert_eq!(resp.message, "hello interop");
+
+    assert_eq!(
+        trailers.status().code(),
+        StatusCode::Ok,
+        "RPC failed: {:?}",
+        trailers.status()
+    );
+
+    shutdown_notify.notify_one();
+    server_handle.await.unwrap();
+}
+
+static INIT: Once = Once::new();
+
+fn init_provider() {
+    INIT.call_once(|| {
+        let _ = rustls::crypto::ring::default_provider().install_default();
+    });
+}
+
+#[tokio::test]
+async fn grpc_invoke_tonic_unary_tls() {
+    init_provider();
+    // Register DNS & Tonic.
+    super::reg();
+    crate::client::name_resolution::dns::reg();
+
+    let certs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples/data/tls");
+
+    let server_cert = fs::read(certs_path.join("server.pem")).expect("failed to read server.pem");
+    let server_key = fs::read(certs_path.join("server.key")).expect("failed to read server.key");
+    let ca_cert = fs::read(certs_path.join("ca.pem")).expect("failed to read ca.pem");
+
+    let identity = tonic::transport::Identity::from_pem(server_cert, server_key);
+    let tls_config = tonic::transport::ServerTlsConfig::new().identity(identity);
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let shutdown_notify = Arc::new(Notify::new());
+    let shutdown_notify_copy = shutdown_notify.clone();
+
+    // Spawn a task for the server.
+    let server_handle = tokio::spawn(async move {
+        let echo_server = EchoService {};
+        let svc = EchoServer::new(echo_server);
+        let _ = Server::builder()
+            .tls_config(tls_config)
+            .expect("failed to set tls config")
+            .add_service(svc)
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(listener),
+                shutdown_notify_copy.notified(),
+            )
+            .await;
+    });
+
+    // Create the channel.
+    let root_certs = RootCertificates::from_pem(ca_cert);
+    let root_provider = StaticProvider::new(root_certs);
+    let config = ClientTlsConfig::new().with_root_certificates_provider(root_provider);
+    let creds = RustlsClientTlsCredendials::new(config).unwrap();
+    let call_creds = Arc::new(MockCallCredentials {
+        metadata: vec![("x-test-metadata", "test-value")],
+        min_security_level: SecurityLevel::PrivacyAndIntegrity,
+        should_fail: None,
+    });
+    let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+
+    let target = format!("dns:///{}", addr);
+    let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
+
+    let (headers, resp, trilers) = perform_unary_echo(&channel, "hello interop tls").await;
+    assert_eq!(
+        headers.metadata().get("x-test-metadata-echo").unwrap(),
+        "test-value"
+    );
+    assert_eq!(resp.message, "hello interop tls");
+
+    assert_eq!(
+        trilers.status().code(),
+        StatusCode::Ok,
+        "RPC failed: {:?}",
+        trilers.status()
+    );
+
+    shutdown_notify.notify_one();
+    server_handle.await.unwrap();
+}
+
+#[tokio::test]
+async fn grpc_invoke_failure_cases() {
+    super::reg();
+    crate::client::name_resolution::dns::reg();
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let shutdown_notify = Arc::new(Notify::new());
+    let shutdown_notify_copy = shutdown_notify.clone();
+
+    tokio::spawn(async move {
+        let echo_server = EchoService {};
+        let svc = EchoServer::new(echo_server);
+        let _ = Server::builder()
+            .add_service(svc)
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(listener),
+                shutdown_notify_copy.notified(),
+            )
+            .await;
+    });
+
+    let target = format!("dns:///{}", addr);
+
+    // Security level mismatch (MockCallCredentials requires PrivacyAndIntegrity,
+    // but LocalChannelCredentials provides NoSecurity over TCP).
+    {
+        let creds = LocalChannelCredentials::new();
+        let call_creds = Arc::new(MockCallCredentials {
+            metadata: vec![],
+            min_security_level: SecurityLevel::PrivacyAndIntegrity,
+            should_fail: None,
+        });
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
+
+        let trailers = perform_unary_echo_failure(&channel).await;
+        assert_eq!(trailers.status().code(), StatusCode::Unauthenticated);
+    }
+
+    // Call credentials return error
+    {
+        let creds = LocalChannelCredentials::new();
+        let call_creds = Arc::new(MockCallCredentials {
+            metadata: vec![],
+            min_security_level: SecurityLevel::NoSecurity,
+            should_fail: Some(crate::Status::new(
+                StatusCode::PermissionDenied,
+                "test message",
+            )),
+        });
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
+
+        let trailers = perform_unary_echo_failure(&channel).await;
+        assert_eq!(trailers.status().code(), StatusCode::PermissionDenied);
+        assert!(trailers.status().message().contains("test message"));
+    }
+
+    // Call credentials return restricted control plane code (mapped to Internal)
+    {
+        let creds = LocalChannelCredentials::new();
+        let call_creds = Arc::new(MockCallCredentials {
+            metadata: vec![],
+            min_security_level: SecurityLevel::NoSecurity,
+            should_fail: Some(Status::new(StatusCode::InvalidArgument, "test message")),
+        });
+        let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
+        let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
+
+        let trailers = perform_unary_echo_failure(&channel).await;
+        assert_eq!(trailers.status().code(), StatusCode::Internal);
+        assert!(trailers.status().message().contains("test message"));
+    }
+
+    shutdown_notify.notify_one();
+}
+
+async fn perform_unary_echo(
+    channel: &Channel,
+    message: &str,
+) -> (ResponseHeaders, EchoResponse, Trailers) {
     let (mut tx, mut rx) = channel
         .invoke(
             RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
@@ -199,9 +434,8 @@ async fn grpc_invoke_tonic_unary() {
         )
         .await;
 
-    // Send the request.
     let req = WrappedEchoRequest(EchoRequest {
-        message: "hello interop".into(),
+        message: message.into(),
     });
     tx.send(
         &req,
@@ -213,31 +447,37 @@ async fn grpc_invoke_tonic_unary() {
     .await
     .unwrap();
 
-    // Response should be Headers, Message ("hello interop"), Trailers (OK).
     let mut resp = WrappedEchoResponse(EchoResponse::default());
 
-    let ClientResponseStreamItem::Headers(_) = rx.next(&mut resp).await else {
+    let ClientResponseStreamItem::Headers(headers) = rx.next(&mut resp).await else {
         panic!("Expected Headers first");
     };
 
     let ClientResponseStreamItem::Message(()) = rx.next(&mut resp).await else {
         panic!("Expected Message after Headers");
     };
-    assert_eq!(resp.0.message, "hello interop");
+    let echo_resp = std::mem::take(&mut resp.0);
 
-    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
+    let ClientResponseStreamItem::Trailers(trailers) = rx.next(&mut resp).await else {
         panic!("Expected Trailers, got StreamClosed or other item");
     };
 
-    assert_eq!(
-        t.status().code(),
-        crate::StatusCode::Ok,
-        "RPC failed: {:?}",
-        t.status()
-    );
+    (headers, echo_resp, trailers)
+}
 
-    shutdown_notify.notify_one();
-    server_handle.await.unwrap();
+async fn perform_unary_echo_failure(channel: &Channel) -> Trailers {
+    let (_tx, mut rx) = channel
+        .invoke(
+            RequestHeaders::new().with_method_name("/grpc.examples.echo.Echo/UnaryEcho"),
+            CallOptions::default(),
+        )
+        .await;
+
+    let mut resp = WrappedEchoResponse(EchoResponse::default());
+    let ClientResponseStreamItem::Trailers(t) = rx.next(&mut resp).await else {
+        panic!("Expected Trailers due to failure");
+    };
+    t
 }
 
 struct WrappedEchoRequest(EchoRequest);
@@ -266,11 +506,18 @@ impl Echo for EchoService {
         &self,
         request: tonic::Request<EchoRequest>,
     ) -> std::result::Result<tonic::Response<EchoResponse>, tonic::Status> {
+        let metadata = request.metadata().clone();
         let message = request.into_inner().message;
-        Ok(tonic::Response::new(EchoResponse { message }))
+        let mut response = tonic::Response::new(EchoResponse { message });
+        if let Some(val) = metadata.get("x-test-metadata") {
+            response
+                .metadata_mut()
+                .insert("x-test-metadata-echo", val.clone());
+        }
+        Ok(response)
     }
 
-    type ServerStreamingEchoStream = ReceiverStream<Result<EchoResponse, Status>>;
+    type ServerStreamingEchoStream = ReceiverStream<Result<EchoResponse, tonic::Status>>;
 
     async fn server_streaming_echo(
         &self,
@@ -286,13 +533,19 @@ impl Echo for EchoService {
         unimplemented!()
     }
     type BidirectionalStreamingEchoStream =
-        Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + 'static>>;
+        Pin<Box<dyn Stream<Item = Result<EchoResponse, tonic::Status>> + Send + 'static>>;
 
     async fn bidirectional_streaming_echo(
         &self,
         request: tonic::Request<tonic::Streaming<EchoRequest>>,
     ) -> std::result::Result<tonic::Response<Self::BidirectionalStreamingEchoStream>, tonic::Status>
     {
+        let metadata = request.metadata().clone();
+        if let Some(val) = metadata.get("x-test-metadata")
+            && val == "test-value"
+        {
+            println!("Server received expected metadata");
+        }
         let mut inbound = request.into_inner();
 
         // Map each request to a corresponding EchoResponse

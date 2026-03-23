@@ -46,7 +46,7 @@ impl ResponseValidator {
     /// exactly one message or an error).
     ///
     /// Note that wrapping an entire channel with this interceptor is likely
-    /// inappropraite if `unary` is set.
+    /// inappropriate if `unary` is set.
     pub fn new(unary: bool) -> Self {
         Self { unary }
     }

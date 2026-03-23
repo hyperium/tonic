@@ -104,8 +104,8 @@ impl ChannelCredentials for LocalChannelCredentials {
         &self,
         _authority: &Authority,
         source: Input,
-        _info: ClientHandshakeInfo,
-        _runtime: GrpcRuntime,
+        _info: &ClientHandshakeInfo,
+        _runtime: &GrpcRuntime,
         _token: Token,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         let security_level =
@@ -228,7 +228,7 @@ mod test {
         let handshake_info = ClientHandshakeInfo::default();
 
         let output = creds
-            .connect(&authority, endpoint, handshake_info, runtime, Token)
+            .connect(&authority, endpoint, &handshake_info, &runtime, Token)
             .await
             .unwrap();
 

@@ -83,8 +83,8 @@ pub trait ChannelCredentials: Sync + 'static {
         &self,
         authority: &Authority,
         source: Input,
-        info: ClientHandshakeInfo,
-        runtime: GrpcRuntime,
+        info: &ClientHandshakeInfo,
+        runtime: &GrpcRuntime,
         token: Token,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 }
@@ -132,14 +132,18 @@ pub enum SecurityLevel {
 pub(crate) mod common {
     /// Represents the value passed as the `:authority` pseudo-header, typically
     /// in the form `host:port`.
+    #[derive(Clone, PartialEq, Debug)]
     pub struct Authority {
         host: String,
         port: Option<u16>,
     }
 
     impl Authority {
-        pub fn new(host: String, port: Option<u16>) -> Self {
-            Self { host, port }
+        pub fn new(host: impl Into<String>, port: Option<u16>) -> Self {
+            Self {
+                host: host.into(),
+                port,
+            }
         }
 
         pub fn host(&self) -> &str {
