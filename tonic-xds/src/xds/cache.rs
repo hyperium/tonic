@@ -317,6 +317,14 @@ mod tests {
         cache.update_endpoints("c1", make_endpoints("c1"));
 
         handle.await.unwrap();
+
+        let cluster = cache.watch_cluster("c1").next().await.unwrap();
+        assert_eq!(cluster.name, "c1");
+        assert_eq!(cluster.lb_policy, LbPolicy::RoundRobin);
+
+        let eps = cache.watch_endpoints("c1").next().await.unwrap();
+        assert_eq!(eps.cluster_name, "c1");
+        assert_eq!(eps.localities.len(), 1);
     }
 
     #[tokio::test]
