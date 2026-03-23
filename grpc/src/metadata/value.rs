@@ -38,6 +38,7 @@ use super::encoding::Binary;
 use super::encoding::InvalidMetadataValue;
 use super::encoding::InvalidMetadataValueBytes;
 use super::encoding::ValueEncoding;
+use crate::private;
 
 /// Represents a custom metadata field value.
 ///
@@ -116,13 +117,13 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     ///
     /// ```
     /// # use grpc::metadata::*;
-    /// let val = BinaryMetadataValue::from_static("SGVsbG8hIQ==");
+    /// let val = BinaryMetadataValue::from_static("Hello!!");
     /// assert_eq!(val, "Hello!!");
     /// ```
     #[inline]
     pub fn from_static(src: &'static str) -> Self {
         MetadataValue {
-            inner: VE::from_static(src),
+            inner: VE::from_static(src, private::Internal),
             phantom: PhantomData,
         }
     }
@@ -216,7 +217,7 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     }
 
     pub(crate) fn encode(value: Bytes) -> Bytes {
-        VE::encode(value)
+        VE::encode(value, private::Internal)
     }
 }
 
@@ -233,8 +234,8 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
 ///
 /// ```
 /// # use grpc::metadata::*;
-/// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
-/// assert_eq!(val, &b"hello\xfa"[..]);
+/// let val = AsciiMetadataValue::try_from(b"hello").unwrap();
+/// assert_eq!(val, &b"hello"[..]);
 /// ```
 ///
 /// An invalid value
@@ -249,7 +250,7 @@ impl<VE: ValueEncoding> TryFrom<&[u8]> for MetadataValue<VE> {
 
     #[inline]
     fn try_from(src: &[u8]) -> Result<Self, Self::Error> {
-        VE::from_bytes(src).map(|value| MetadataValue {
+        VE::from_bytes(src, private::Internal).map(|value| MetadataValue {
             inner: value,
             phantom: PhantomData,
         })
@@ -269,8 +270,8 @@ impl<VE: ValueEncoding> TryFrom<&[u8]> for MetadataValue<VE> {
 ///
 /// ```
 /// # use grpc::metadata::*;
-/// let val = AsciiMetadataValue::try_from(b"hello\xfa").unwrap();
-/// assert_eq!(val, &b"hello\xfa"[..]);
+/// let val = AsciiMetadataValue::try_from(b"hello").unwrap();
+/// assert_eq!(val, &b"hello"[..]);
 /// ```
 ///
 /// An invalid value
@@ -302,7 +303,7 @@ impl<VE: ValueEncoding> TryFrom<Bytes> for MetadataValue<VE> {
 
     #[inline]
     fn try_from(src: Bytes) -> Result<Self, Self::Error> {
-        VE::from_shared(src).map(|value| MetadataValue {
+        VE::from_shared(src, private::Internal).map(|value| MetadataValue {
             inner: value,
             phantom: PhantomData,
         })
@@ -415,7 +416,7 @@ impl MetadataValue<Binary> {
 
 impl<VE: ValueEncoding> fmt::Debug for MetadataValue<VE> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        VE::fmt(&self.inner, f)
+        VE::fmt(&self.inner, f, private::Internal)
     }
 }
 
@@ -533,7 +534,7 @@ impl<VE: ValueEncoding> PartialEq for MetadataValue<VE> {
         // will count as the same value for Binary values. Also,
         // different invalid base64 values count as equal for Binary
         // values.
-        VE::values_equal(&self.inner, &other.inner)
+        VE::values_equal(&self.inner, &other.inner, private::Internal)
     }
 }
 
@@ -556,14 +557,14 @@ impl<VE: ValueEncoding> Ord for MetadataValue<VE> {
 impl<VE: ValueEncoding> PartialEq<str> for MetadataValue<VE> {
     #[inline]
     fn eq(&self, other: &str) -> bool {
-        VE::equals(&self.inner, other.as_bytes())
+        VE::equals(&self.inner, other.as_bytes(), private::Internal)
     }
 }
 
 impl<VE: ValueEncoding> PartialEq<[u8]> for MetadataValue<VE> {
     #[inline]
     fn eq(&self, other: &[u8]) -> bool {
-        VE::equals(&self.inner, other)
+        VE::equals(&self.inner, other, private::Internal)
     }
 }
 

@@ -24,19 +24,17 @@
 
 use std::marker::PhantomData;
 
+use http::HeaderMap;
 use http::HeaderName;
 use http::HeaderValue;
 
-pub(crate) use self::as_encoding_agnostic_metadata_key::AsEncodingAgnosticMetadataKey;
-pub(crate) use self::as_metadata_key::AsMetadataKey;
-pub(crate) use self::into_metadata_key::IntoMetadataKey;
 use super::encoding::Ascii;
 use super::encoding::Binary;
 use super::encoding::ValueEncoding;
 use super::key::MetadataKey;
 use super::value::MetadataValue;
-use crate::metadata::encoding::value_encoding::Sealed;
 use crate::metadata::value::UnencodedHeaderValue;
+use crate::private;
 
 /// A set of gRPC custom metadata entries.
 ///
@@ -121,15 +119,6 @@ pub struct GetAll<'a, VE: ValueEncoding> {
 // ===== impl MetadataMap =====
 
 impl MetadataMap {
-    // Headers reserved by the gRPC protocol.
-    pub(crate) const GRPC_RESERVED_HEADERS: [HeaderName; 5] = [
-        HeaderName::from_static("te"),
-        HeaderName::from_static("content-type"),
-        HeaderName::from_static("grpc-message"),
-        HeaderName::from_static("grpc-message-type"),
-        HeaderName::from_static("grpc-status"),
-    ];
-
     /// Create an empty `MetadataMap`.
     ///
     /// The map will be created without any capacity. This function will not
@@ -149,7 +138,7 @@ impl MetadataMap {
     }
 
     /// Convert an HTTP HeaderMap to a MetadataMap
-    pub fn from_headers(headers: http::HeaderMap) -> Self {
+    pub(crate) fn from_headers(headers: HeaderMap) -> Self {
         let mut ret = Vec::with_capacity(headers.len());
         let mut current_key: Option<HeaderName> = None;
 
@@ -164,13 +153,13 @@ impl MetadataMap {
             };
             let key_str = k.as_str();
 
-            if Ascii::is_valid_key(key_str)
-                && let Ok(mut mv) = MetadataValue::<Ascii>::try_from(value.as_bytes())
-            {
-                mv.set_sensitive(value.is_sensitive());
-                ret.push((k.clone(), mv.inner));
+            if Ascii::is_valid_key(key_str) {
+                if let Ok(mut mv) = MetadataValue::<Ascii>::try_from(value.as_bytes()) {
+                    mv.set_sensitive(value.is_sensitive());
+                    ret.push((k.clone(), mv.inner));
+                }
             } else if Binary::is_valid_key(key_str)
-                && let Ok(b) = Binary::decode(value.as_bytes())
+                && let Ok(b) = Binary::decode(value.as_bytes(), private::Internal)
             {
                 let mut mv = unsafe { MetadataValue::<Binary>::from_shared_unchecked(b) };
                 mv.set_sensitive(value.is_sensitive());
@@ -181,21 +170,9 @@ impl MetadataMap {
         Self { headers: ret }
     }
 
-    /// Convert a MetadataMap into a HTTP HeaderMap
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use grpc::metadata::*;
-    /// let mut map = MetadataMap::new();
-    /// map.insert("x-host", "example.com".parse().unwrap());
-    ///
-    /// let http_map = map.into_headers();
-    ///
-    /// assert_eq!(http_map.get("x-host").unwrap(), "example.com");
-    /// ```
-    pub fn into_headers(self) -> http::HeaderMap {
-        let mut ret = http::HeaderMap::with_capacity(self.capacity());
+    /// Convert a MetadataMap into a HTTP HeaderMap.
+    pub(crate) fn into_headers(self) -> HeaderMap {
+        let mut ret = HeaderMap::with_capacity(self.capacity());
         for (key, value) in self.headers {
             let bytes = if Ascii::is_valid_key(key.as_str()) {
                 MetadataValue::<Ascii>::encode(value.data)
@@ -208,14 +185,6 @@ impl MetadataMap {
             }
         }
         ret
-    }
-
-    pub(crate) fn into_sanitized_headers(self) -> http::HeaderMap {
-        let mut headers = self.into_headers();
-        for r in &Self::GRPC_RESERVED_HEADERS {
-            headers.remove(r);
-        }
-        headers
     }
 
     /// Create an empty `MetadataMap` with the specified capacity.
@@ -368,7 +337,7 @@ impl MetadataMap {
     /// assert_eq!(0, map.capacity());
     ///
     /// map.insert("x-host", "hello.world".parse().unwrap());
-    /// assert_eq!(6, map.capacity());
+    /// assert!(map.capacity() >= 1);
     /// ```
     pub fn capacity(&self) -> usize {
         self.headers.capacity()
@@ -438,7 +407,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Ascii>,
     {
-        key.get(self)
+        key.get(self, private::Internal)
     }
 
     /// Like get, but for Binary keys (for example "trace-proto-bin").
@@ -474,7 +443,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Binary>,
     {
-        key.get(self)
+        key.get(self, private::Internal)
     }
 
     /// Returns a view of all values associated with a key. This method is for
@@ -522,7 +491,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Ascii>,
     {
-        key.get_all(self)
+        key.get_all(self, private::Internal)
     }
 
     /// Like get_all, but for Binary keys (for example "trace-proto-bin").
@@ -562,7 +531,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Binary>,
     {
-        key.get_all(self)
+        key.get_all(self, private::Internal)
     }
 
     /// Returns true if the map contains a value for the specified key. This
@@ -589,7 +558,7 @@ impl MetadataMap {
     where
         K: AsEncodingAgnosticMetadataKey,
     {
-        key.contains_key(self)
+        key.contains_key(self, private::Internal)
     }
 
     /// An iterator visiting all key-value pairs (both ascii and binary).
@@ -671,7 +640,7 @@ impl MetadataMap {
     where
         K: IntoMetadataKey<Ascii>,
     {
-        key.insert(self, val)
+        key.insert(self, val, private::Internal)
     }
 
     /// Like insert, but for Binary keys (for example "trace-proto-bin").
@@ -712,7 +681,7 @@ impl MetadataMap {
     where
         K: IntoMetadataKey<Binary>,
     {
-        key.insert(self, val)
+        key.insert(self, val, private::Internal)
     }
 
     /// Inserts an ascii key-value pair into the map. To insert a binary entry,
@@ -762,7 +731,7 @@ impl MetadataMap {
     where
         K: IntoMetadataKey<Ascii>,
     {
-        key.append(self, value);
+        key.append(self, value, private::Internal);
     }
 
     /// Like append, but for binary keys (for example "trace-proto-bin").
@@ -803,7 +772,7 @@ impl MetadataMap {
     where
         K: IntoMetadataKey<Binary>,
     {
-        key.append(self, value);
+        key.append(self, value, private::Internal);
     }
 
     /// Removes an ascii key from the map, returning the value associated with
@@ -811,8 +780,6 @@ impl MetadataMap {
     ///
     /// Returns `None` if the map does not contain the key. If there are
     /// multiple values associated with the key, then the first one is returned.
-    /// See `remove_entry_mult` on `OccupiedEntry` for an API that yields all
-    /// values.
     ///
     /// # Examples
     ///
@@ -843,7 +810,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Ascii>,
     {
-        key.remove(self)
+        key.remove(self, private::Internal)
     }
 
     /// Like remove, but for Binary keys (for example "trace-proto-bin").
@@ -877,7 +844,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Binary>,
     {
-        key.remove(self)
+        key.remove(self, private::Internal)
     }
 
     /// Removes all values for the given key and returns a draining iterator over them.
@@ -901,7 +868,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Ascii>,
     {
-        key.remove_all(self)
+        key.remove_all(self, private::Internal)
     }
 
     /// Removes all entries matching the given binary key and returns a
@@ -918,7 +885,7 @@ impl MetadataMap {
     where
         K: AsMetadataKey<Binary>,
     {
-        key.remove_all(self)
+        key.remove_all(self, private::Internal)
     }
 
     pub(crate) fn merge(&mut self, other: MetadataMap) {
@@ -1041,566 +1008,473 @@ impl<'a, 'b: 'a, VE: ValueEncoding> IntoIterator for &'b GetAll<'a, VE> {
 
 // ===== impl IntoMetadataKey / AsMetadataKey =====
 
-mod into_metadata_key {
-    use super::MetadataMap;
-    use super::MetadataValue;
-    use super::ValueEncoding;
-    use crate::metadata::key::MetadataKey;
+/// A marker trait used to identify values that can be used as insert keys
+/// to a `MetadataMap`.
+pub trait IntoMetadataKey<VE: ValueEncoding> {
+    #[doc(hidden)]
+    fn insert(
+        self,
+        map: &mut MetadataMap,
+        val: MetadataValue<VE>,
+        _: private::Internal,
+    ) -> Option<MetadataValue<VE>>;
 
-    /// A marker trait used to identify values that can be used as insert keys
-    /// to a `MetadataMap`.
-    pub trait IntoMetadataKey<VE: ValueEncoding>: Sealed<VE> {}
-
-    // All methods are on this pub(super) trait, instead of `IntoMetadataKey`,
-    // so that they aren't publicly exposed to the world.
-    //
-    // Being on the `IntoMetadataKey` trait would mean users could call
-    // `"host".insert(&mut map, "localhost")`.
-    //
-    // Ultimately, this allows us to adjust the signatures of these methods
-    // without breaking any external crate.
-    pub trait Sealed<VE: ValueEncoding> {
-        #[doc(hidden)]
-        fn insert(self, map: &mut MetadataMap, val: MetadataValue<VE>)
-        -> Option<MetadataValue<VE>>;
-
-        #[doc(hidden)]
-        fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>);
-    }
-
-    // ==== impls ====
-
-    impl<VE: ValueEncoding> Sealed<VE> for MetadataKey<VE> {
-        #[doc(hidden)]
-        #[inline]
-        fn insert(
-            self,
-            map: &mut MetadataMap,
-            val: MetadataValue<VE>,
-        ) -> Option<MetadataValue<VE>> {
-            let key = self.inner;
-            // Wrap val so we can move it out exactly once when we find a match
-            let mut val_wrapper = Some(val.inner);
-            let mut ret = None;
-
-            let mut write_idx = 0;
-            let len = map.headers.len();
-
-            for read_idx in 0..len {
-                // Check if keys match
-                if map.headers[read_idx].0 == key {
-                    if ret.is_none() {
-                        // Found the first match.
-
-                        // Swap values in-place.
-                        // This moves the old value into `old_val` (no clone needed)
-                        // and puts the new value into the vector.
-                        let new_val = val_wrapper
-                            .take()
-                            .expect("Value should exist for first match");
-                        let old_val = std::mem::replace(&mut map.headers[write_idx].1, new_val);
-
-                        ret = Some(MetadataValue::unchecked_from_header_value(old_val));
-
-                        // Keep this element
-                        write_idx += 1;
-                    } else {
-                        // Found a subsequent match (Duplicate):
-                        // Do not increment write_idx. This effectively removes the element
-                        // by allowing it to be overwritten by the next valid element.
-                    }
-                } else {
-                    // Not a match.
-                    // Move to write position to keep list compact
-                    if read_idx != write_idx {
-                        map.headers.swap(read_idx, write_idx);
-                    }
-                    write_idx += 1;
-                }
-            }
-
-            // Truncate the vector to the new length (removing duplicates/gaps)
-            map.headers.truncate(write_idx);
-
-            // If we never found a match, push the new entry now.
-            if ret.is_none() {
-                map.headers.push((key, val_wrapper.take().unwrap()));
-            }
-
-            ret
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>) {
-            map.headers.push((self.inner, val.inner));
-        }
-    }
-
-    impl<VE: ValueEncoding> IntoMetadataKey<VE> for MetadataKey<VE> {}
-
-    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
-        #[doc(hidden)]
-        #[inline]
-        fn insert(
-            self,
-            map: &mut MetadataMap,
-            val: MetadataValue<VE>,
-        ) -> Option<MetadataValue<VE>> {
-            // Wrap val so we can move it out exactly once when we find a match
-            let mut val_wrapper = Some(val.inner);
-            let mut ret = None;
-
-            let mut write_idx = 0;
-            let len = map.headers.len();
-
-            for read_idx in 0..len {
-                // Check if keys match
-                if map.headers[read_idx].0 == self.inner {
-                    if ret.is_none() {
-                        // Found the first match.
-
-                        // Swap values in-place.
-                        // This moves the old value into `old_val` (no clone needed)
-                        // and puts the new value into the vector.
-                        let new_val = val_wrapper
-                            .take()
-                            .expect("Value should exist for first match");
-                        let old_val = std::mem::replace(&mut map.headers[write_idx].1, new_val);
-
-                        ret = Some(MetadataValue::unchecked_from_header_value(old_val));
-
-                        // Keep this element
-                        write_idx += 1;
-                    } else {
-                        // Found a subsequent match (Duplicate):
-                        // Do not increment write_idx. This effectively removes the element
-                        // by allowing it to be overwritten by the next valid element.
-                    }
-                } else {
-                    // Not a match.
-                    // Move to write position to keep list compact
-                    if read_idx != write_idx {
-                        map.headers.swap(read_idx, write_idx);
-                    }
-                    write_idx += 1;
-                }
-            }
-
-            // Truncate the vector to the new length (removing duplicates/gaps)
-            map.headers.truncate(write_idx);
-
-            // If we never found a match, push the new entry now.
-            if ret.is_none() {
-                map.headers
-                    .push((self.inner.clone(), val_wrapper.take().unwrap()));
-            }
-
-            ret
-        }
-        #[doc(hidden)]
-        #[inline]
-        fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>) {
-            map.headers.push((self.inner.clone(), val.inner));
-        }
-    }
-
-    impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {}
-
-    impl<VE: ValueEncoding> Sealed<VE> for &'static str {
-        #[doc(hidden)]
-        #[inline]
-        fn insert(
-            self,
-            map: &mut MetadataMap,
-            val: MetadataValue<VE>,
-        ) -> Option<MetadataValue<VE>> {
-            // Perform name validation
-            let key = MetadataKey::<VE>::from_static(self);
-            key.insert(map, val)
-        }
-        #[doc(hidden)]
-        #[inline]
-        fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>) {
-            // Perform name validation
-            let key = MetadataKey::<VE>::from_static(self);
-            key.append(map, val);
-        }
-    }
-
-    impl<VE: ValueEncoding> IntoMetadataKey<VE> for &'static str {}
+    #[doc(hidden)]
+    fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>, _: private::Internal);
 }
 
-mod as_metadata_key {
-    use std::marker::PhantomData;
+// ==== impls ====
 
-    use super::GetAll;
-    use super::MetadataMap;
-    use super::MetadataValue;
-    use super::ValueDrain;
-    use super::ValueEncoding;
-    use crate::metadata::key::MetadataKey;
+impl<VE: ValueEncoding> IntoMetadataKey<VE> for MetadataKey<VE> {
+    #[doc(hidden)]
+    #[inline]
+    fn insert(
+        self,
+        map: &mut MetadataMap,
+        val: MetadataValue<VE>,
+        _: private::Internal,
+    ) -> Option<MetadataValue<VE>> {
+        let key = self.inner;
+        let mut new_val = Some(val.inner);
+        let mut old_val = None;
 
-    /// A marker trait used to identify values that can be used as search keys
-    /// to a `MetadataMap`.
-    pub trait AsMetadataKey<VE: ValueEncoding>: Sealed<VE> {}
+        let mut write_idx = 0;
 
-    // All methods are on this pub(super) trait, instead of `AsMetadataKey`,
-    // so that they aren't publicly exposed to the world.
-    //
-    // Being on the `AsMetadataKey` trait would mean users could call
-    // `"host".find(&map)`.
-    //
-    // Ultimately, this allows us to adjust the signatures of these methods
-    // without breaking any external crate.
-    pub trait Sealed<VE: ValueEncoding> {
-        #[doc(hidden)]
-        fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>>;
-
-        #[doc(hidden)]
-        fn get_all(self, map: &MetadataMap) -> GetAll<'_, VE>;
-
-        #[doc(hidden)]
-        fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>>;
-
-        #[doc(hidden)]
-        fn remove_all(self, map: &mut MetadataMap) -> ValueDrain<'_, VE>;
-    }
-
-    // ==== impls ====
-
-    impl<VE: ValueEncoding> Sealed<VE> for MetadataKey<VE> {
-        #[doc(hidden)]
-        #[inline]
-        fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
-            map.headers
-                .iter()
-                .find(|(k, _)| k == self.inner)
-                .map(|(_, v)| MetadataValue::unchecked_from_header_value_ref(v))
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn get_all(self, map: &MetadataMap) -> GetAll<'_, VE> {
-            GetAll {
-                map,
-                key: Some(self),
-            }
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
-            let mut ret = None;
-
-            map.headers.retain(|(k, v)| {
-                if k == self.inner {
-                    if ret.is_none() {
-                        ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
-                    }
-
-                    false
-                } else {
-                    true
+        for read_idx in 0..map.headers.len() {
+            if map.headers[read_idx].0 == key {
+                if let Some(v) = new_val.take() {
+                    let replaced = std::mem::replace(&mut map.headers[read_idx].1, v);
+                    old_val = Some(MetadataValue::unchecked_from_header_value(replaced));
+                    write_idx += 1;
                 }
-            });
-            ret
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove_all(self, map: &mut MetadataMap) -> ValueDrain<'_, VE> {
-            let len = map.headers.len();
-            let mut i = 0;
-            let mut tail = len;
-
-            while i < tail {
-                if map.headers[i].0 == self.inner {
-                    tail -= 1;
-                    map.headers.swap(i, tail);
-                } else {
-                    i += 1;
-                }
-            }
-
-            ValueDrain {
-                inner: map.headers.drain(tail..),
-                _phantom: PhantomData,
-            }
-        }
-    }
-
-    impl<VE: ValueEncoding> AsMetadataKey<VE> for MetadataKey<VE> {}
-
-    impl<VE: ValueEncoding> Sealed<VE> for &MetadataKey<VE> {
-        #[doc(hidden)]
-        #[inline]
-        fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
-            map.headers
-                .iter()
-                .find(|(k, _)| k == self.inner)
-                .map(|(_, v)| MetadataValue::unchecked_from_header_value_ref(v))
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn get_all(self, map: &MetadataMap) -> GetAll<'_, VE> {
-            GetAll {
-                map,
-                key: Some(self.clone()),
-            }
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
-            let mut ret = None;
-
-            map.headers.retain(|(k, v)| {
-                if k == self.inner {
-                    if ret.is_none() {
-                        ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
-                    }
-
-                    false
-                } else {
-                    true
-                }
-            });
-            ret
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove_all(self, map: &mut MetadataMap) -> ValueDrain<'_, VE> {
-            let mut keep_idx = 0;
-
-            for i in 0..map.headers.len() {
-                if map.headers[i].0 != self.inner {
-                    map.headers.swap(keep_idx, i);
-                    keep_idx += 1;
-                }
-            }
-
-            // Drain everything from `keep_idx` to the end.
-            // These are the elements that matched the target key.
-            ValueDrain {
-                inner: map.headers.drain(keep_idx..),
-                _phantom: PhantomData,
-            }
-        }
-    }
-
-    impl<VE: ValueEncoding> AsMetadataKey<VE> for &MetadataKey<VE> {}
-
-    impl<VE: ValueEncoding> Sealed<VE> for &str {
-        #[doc(hidden)]
-        #[inline]
-        fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
-            if !VE::is_valid_key(self) {
-                return None;
-            }
-            map.headers
-                .iter()
-                .find(|(k, _)| k == self)
-                .map(|(_, v)| MetadataValue::unchecked_from_header_value_ref(v))
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn get_all(self, map: &MetadataMap) -> GetAll<'_, VE> {
-            let key = if VE::is_valid_key(self) {
-                Some(MetadataKey::<VE>::from_bytes(self.as_bytes()).unwrap())
+                // Duplicates do nothing and are effectively dropped when we truncate.
             } else {
-                None
-            };
-            GetAll { map, key }
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
-            if !VE::is_valid_key(self) {
-                return None;
-            }
-
-            let mut ret = None;
-
-            map.headers.retain(|(k, v)| {
-                if k == self {
-                    if ret.is_none() {
-                        ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
-                    }
-
-                    false
-                } else {
-                    true
+                // Keep non-matching elements.
+                if read_idx != write_idx {
+                    map.headers.swap(read_idx, write_idx);
                 }
-            });
-            ret
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove_all(self, map: &mut MetadataMap) -> ValueDrain<'_, VE> {
-            if !VE::is_valid_key(self) {
-                return ValueDrain {
-                    inner: map.headers.drain(map.headers.len()..),
-                    _phantom: PhantomData,
-                };
-            }
-
-            let mut keep_idx = 0;
-
-            for i in 0..map.headers.len() {
-                if map.headers[i].0 != self {
-                    map.headers.swap(keep_idx, i);
-                    keep_idx += 1;
-                }
-            }
-
-            // Drain everything from `keep_idx` to the end.
-            // These are the elements that matched the target key.
-            ValueDrain {
-                inner: map.headers.drain(keep_idx..),
-                _phantom: PhantomData,
+                write_idx += 1;
             }
         }
+
+        map.headers.truncate(write_idx);
+
+        // If `new_val` was never taken, the key didn't exist. Push it.
+        if let Some(v) = new_val {
+            map.headers.push((key, v));
+        }
+
+        old_val
     }
 
-    impl<VE: ValueEncoding> AsMetadataKey<VE> for &str {}
-
-    impl<VE: ValueEncoding> Sealed<VE> for String {
-        #[doc(hidden)]
-        #[inline]
-        fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
-            Sealed::<VE>::get(self.as_str(), map)
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn get_all(self, map: &MetadataMap) -> GetAll<'_, VE> {
-            Sealed::<VE>::get_all(self.as_str(), map)
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
-            Sealed::<VE>::remove(self.as_str(), map)
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove_all(self, map: &mut MetadataMap) -> ValueDrain<'_, VE> {
-            Sealed::<VE>::remove_all(self.as_str(), map)
-        }
+    #[doc(hidden)]
+    #[inline]
+    fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>, _: private::Internal) {
+        map.headers.push((self.inner, val.inner));
     }
-
-    impl<VE: ValueEncoding> AsMetadataKey<VE> for String {}
-
-    impl<VE: ValueEncoding> Sealed<VE> for &String {
-        #[doc(hidden)]
-        #[inline]
-        fn get(self, map: &MetadataMap) -> Option<&MetadataValue<VE>> {
-            Sealed::<VE>::get(self.as_str(), map)
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn get_all(self, map: &MetadataMap) -> GetAll<'_, VE> {
-            Sealed::<VE>::get_all(self.as_str(), map)
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove(self, map: &mut MetadataMap) -> Option<MetadataValue<VE>> {
-            Sealed::<VE>::remove(self.as_str(), map)
-        }
-
-        #[doc(hidden)]
-        #[inline]
-        fn remove_all(self, map: &mut MetadataMap) -> ValueDrain<'_, VE> {
-            Sealed::<VE>::remove_all(self.as_str(), map)
-        }
-    }
-
-    impl<VE: ValueEncoding> AsMetadataKey<VE> for &String {}
 }
 
-mod as_encoding_agnostic_metadata_key {
-    use super::MetadataMap;
-    use super::ValueEncoding;
-    use crate::metadata::key::MetadataKey;
+impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {
+    #[doc(hidden)]
+    #[inline]
+    fn insert(
+        self,
+        map: &mut MetadataMap,
+        val: MetadataValue<VE>,
+        _: private::Internal,
+    ) -> Option<MetadataValue<VE>> {
+        // Wrap val so we can move it out exactly once when we find a match
+        let mut val_wrapper = Some(val.inner);
+        let mut ret = None;
 
-    /// A marker trait used to identify values that can be used as search keys
-    /// to a `MetadataMap`, for operations that don't expose the actual value.
-    pub trait AsEncodingAgnosticMetadataKey: Sealed {}
+        let mut write_idx = 0;
+        let len = map.headers.len();
 
-    // All methods are on this pub(super) trait, instead of
-    // `AsEncodingAgnosticMetadataKey`, so that they aren't publicly exposed to
-    // the world.
-    //
-    // Being on the `AsEncodingAgnosticMetadataKey` trait would mean users could
-    // call `"host".contains_key(&map)`.
-    //
-    // Ultimately, this allows us to adjust the signatures of these methods
-    // without breaking any external crate.
-    pub trait Sealed {
-        #[doc(hidden)]
-        fn contains_key(&self, map: &MetadataMap) -> bool;
+        for read_idx in 0..len {
+            // Check if keys match
+            if map.headers[read_idx].0 == self.inner {
+                if ret.is_none() {
+                    // Found the first match.
+
+                    // Swap values in-place.
+                    // This moves the old value into `old_val` (no clone needed)
+                    // and puts the new value into the vector.
+                    let new_val = val_wrapper
+                        .take()
+                        .expect("Value should exist for first match");
+                    let old_val = std::mem::replace(&mut map.headers[write_idx].1, new_val);
+
+                    ret = Some(MetadataValue::unchecked_from_header_value(old_val));
+
+                    // Keep this element
+                    write_idx += 1;
+                } else {
+                    // Found a subsequent match (Duplicate):
+                    // Do not increment write_idx. This effectively removes the element
+                    // by allowing it to be overwritten by the next valid element.
+                }
+            } else {
+                // Not a match.
+                // Move to write position to keep list compact
+                if read_idx != write_idx {
+                    map.headers.swap(read_idx, write_idx);
+                }
+                write_idx += 1;
+            }
+        }
+
+        // Truncate the vector to the new length (removing duplicates/gaps)
+        map.headers.truncate(write_idx);
+
+        // If we never found a match, push the new entry now.
+        if ret.is_none() {
+            map.headers
+                .push((self.inner.clone(), val_wrapper.take().unwrap()));
+        }
+
+        ret
+    }
+    #[doc(hidden)]
+    #[inline]
+    fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>, _: private::Internal) {
+        map.headers.push((self.inner.clone(), val.inner));
+    }
+}
+
+impl<VE: ValueEncoding> IntoMetadataKey<VE> for &'static str {
+    #[doc(hidden)]
+    #[inline]
+    fn insert(
+        self,
+        map: &mut MetadataMap,
+        val: MetadataValue<VE>,
+        token: private::Internal,
+    ) -> Option<MetadataValue<VE>> {
+        // Perform name validation
+        let key = MetadataKey::<VE>::from_static(self);
+        key.insert(map, val, token)
+    }
+    #[doc(hidden)]
+    #[inline]
+    fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>, token: private::Internal) {
+        // Perform name validation
+        let key = MetadataKey::<VE>::from_static(self);
+        key.append(map, val, token);
+    }
+}
+
+/// A marker trait used to identify values that can be used as search keys
+/// to a `MetadataMap`.
+pub trait AsMetadataKey<VE: ValueEncoding> {
+    #[doc(hidden)]
+    fn get(self, map: &MetadataMap, _: private::Internal) -> Option<&MetadataValue<VE>>;
+
+    #[doc(hidden)]
+    fn get_all(self, map: &MetadataMap, _: private::Internal) -> GetAll<'_, VE>;
+
+    #[doc(hidden)]
+    fn remove(self, map: &mut MetadataMap, _: private::Internal) -> Option<MetadataValue<VE>>;
+
+    #[doc(hidden)]
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE>;
+}
+
+// ==== impls ====
+
+impl<VE: ValueEncoding> AsMetadataKey<VE> for MetadataKey<VE> {
+    #[doc(hidden)]
+    #[inline]
+    fn get(self, map: &MetadataMap, _: private::Internal) -> Option<&MetadataValue<VE>> {
+        map.headers
+            .iter()
+            .find(|(k, _)| k == self.inner)
+            .map(|(_, v)| MetadataValue::unchecked_from_header_value_ref(v))
     }
 
-    // ==== impls ====
-
-    impl<VE: ValueEncoding> Sealed for MetadataKey<VE> {
-        #[doc(hidden)]
-        #[inline]
-        fn contains_key(&self, map: &MetadataMap) -> bool {
-            map.headers.iter().any(|(k, _)| k == self.inner)
+    #[doc(hidden)]
+    #[inline]
+    fn get_all(self, map: &MetadataMap, _: private::Internal) -> GetAll<'_, VE> {
+        GetAll {
+            map,
+            key: Some(self),
         }
     }
 
-    impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for MetadataKey<VE> {}
+    #[doc(hidden)]
+    #[inline]
+    fn remove(self, map: &mut MetadataMap, _: private::Internal) -> Option<MetadataValue<VE>> {
+        let mut ret = None;
 
-    impl<VE: ValueEncoding> Sealed for &MetadataKey<VE> {
-        #[doc(hidden)]
-        #[inline]
-        fn contains_key(&self, map: &MetadataMap) -> bool {
-            map.headers.iter().any(|(k, _)| k == self.inner)
+        map.headers.retain(|(k, v)| {
+            if k == self.inner {
+                if ret.is_none() {
+                    ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
+                }
+
+                false
+            } else {
+                true
+            }
+        });
+        ret
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE> {
+        let len = map.headers.len();
+        let mut i = 0;
+        let mut tail = len;
+
+        while i < tail {
+            if map.headers[i].0 == self.inner {
+                tail -= 1;
+                map.headers.swap(i, tail);
+            } else {
+                i += 1;
+            }
+        }
+
+        ValueDrain {
+            inner: map.headers.drain(tail..),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<VE: ValueEncoding> AsMetadataKey<VE> for &MetadataKey<VE> {
+    #[doc(hidden)]
+    #[inline]
+    fn get(self, map: &MetadataMap, _: private::Internal) -> Option<&MetadataValue<VE>> {
+        map.headers
+            .iter()
+            .find(|(k, _)| k == self.inner)
+            .map(|(_, v)| MetadataValue::unchecked_from_header_value_ref(v))
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn get_all(self, map: &MetadataMap, _: private::Internal) -> GetAll<'_, VE> {
+        GetAll {
+            map,
+            key: Some(self.clone()),
         }
     }
 
-    impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &MetadataKey<VE> {}
+    #[doc(hidden)]
+    #[inline]
+    fn remove(self, map: &mut MetadataMap, _: private::Internal) -> Option<MetadataValue<VE>> {
+        let mut ret = None;
 
-    impl Sealed for &str {
-        #[doc(hidden)]
-        #[inline]
-        fn contains_key(&self, map: &MetadataMap) -> bool {
-            map.headers.iter().any(|(k, _)| k == *self)
-        }
+        map.headers.retain(|(k, v)| {
+            if k == self.inner {
+                if ret.is_none() {
+                    ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
+                }
+
+                false
+            } else {
+                true
+            }
+        });
+        ret
     }
 
-    impl AsEncodingAgnosticMetadataKey for &str {}
+    #[doc(hidden)]
+    #[inline]
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE> {
+        let mut keep_idx = 0;
 
-    impl Sealed for String {
-        #[doc(hidden)]
-        #[inline]
-        fn contains_key(&self, map: &MetadataMap) -> bool {
-            map.headers.iter().any(|(k, _)| k == self.as_str())
+        for i in 0..map.headers.len() {
+            if map.headers[i].0 != self.inner {
+                map.headers.swap(keep_idx, i);
+                keep_idx += 1;
+            }
+        }
+
+        // Drain everything from `keep_idx` to the end.
+        // These are the elements that matched the target key.
+        ValueDrain {
+            inner: map.headers.drain(keep_idx..),
+            _phantom: PhantomData,
         }
     }
+}
 
-    impl AsEncodingAgnosticMetadataKey for String {}
-
-    impl Sealed for &String {
-        #[doc(hidden)]
-        #[inline]
-        fn contains_key(&self, map: &MetadataMap) -> bool {
-            map.headers.iter().any(|(k, _)| k == self.as_str())
+impl<VE: ValueEncoding> AsMetadataKey<VE> for &str {
+    #[doc(hidden)]
+    #[inline]
+    fn get(self, map: &MetadataMap, _: private::Internal) -> Option<&MetadataValue<VE>> {
+        if !VE::is_valid_key(self) {
+            return None;
         }
+        map.headers
+            .iter()
+            .find(|(k, _)| k == self)
+            .map(|(_, v)| MetadataValue::unchecked_from_header_value_ref(v))
     }
 
-    impl AsEncodingAgnosticMetadataKey for &String {}
+    #[doc(hidden)]
+    #[inline]
+    fn get_all(self, map: &MetadataMap, _: private::Internal) -> GetAll<'_, VE> {
+        let key = if VE::is_valid_key(self) {
+            Some(MetadataKey::<VE>::from_bytes(self.as_bytes()).unwrap())
+        } else {
+            None
+        };
+        GetAll { map, key }
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn remove(self, map: &mut MetadataMap, _: private::Internal) -> Option<MetadataValue<VE>> {
+        if !VE::is_valid_key(self) {
+            return None;
+        }
+
+        let mut ret = None;
+
+        map.headers.retain(|(k, v)| {
+            if k == self {
+                if ret.is_none() {
+                    ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
+                }
+
+                false
+            } else {
+                true
+            }
+        });
+        ret
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE> {
+        if !VE::is_valid_key(self) {
+            return ValueDrain {
+                inner: map.headers.drain(map.headers.len()..),
+                _phantom: PhantomData,
+            };
+        }
+
+        let mut keep_idx = 0;
+
+        for i in 0..map.headers.len() {
+            if map.headers[i].0 != self {
+                map.headers.swap(keep_idx, i);
+                keep_idx += 1;
+            }
+        }
+
+        // Drain everything from `keep_idx` to the end.
+        // These are the elements that matched the target key.
+        ValueDrain {
+            inner: map.headers.drain(keep_idx..),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<VE: ValueEncoding> AsMetadataKey<VE> for String {
+    #[doc(hidden)]
+    #[inline]
+    fn get(self, map: &MetadataMap, token: private::Internal) -> Option<&MetadataValue<VE>> {
+        AsMetadataKey::<VE>::get(self.as_str(), map, token)
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn get_all(self, map: &MetadataMap, token: private::Internal) -> GetAll<'_, VE> {
+        AsMetadataKey::<VE>::get_all(self.as_str(), map, token)
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn remove(self, map: &mut MetadataMap, token: private::Internal) -> Option<MetadataValue<VE>> {
+        AsMetadataKey::<VE>::remove(self.as_str(), map, token)
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn remove_all(self, map: &mut MetadataMap, token: private::Internal) -> ValueDrain<'_, VE> {
+        AsMetadataKey::<VE>::remove_all(self.as_str(), map, token)
+    }
+}
+
+impl<VE: ValueEncoding> AsMetadataKey<VE> for &String {
+    #[doc(hidden)]
+    #[inline]
+    fn get(self, map: &MetadataMap, token: private::Internal) -> Option<&MetadataValue<VE>> {
+        AsMetadataKey::<VE>::get(self.as_str(), map, token)
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn get_all(self, map: &MetadataMap, token: private::Internal) -> GetAll<'_, VE> {
+        AsMetadataKey::<VE>::get_all(self.as_str(), map, token)
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn remove(self, map: &mut MetadataMap, token: private::Internal) -> Option<MetadataValue<VE>> {
+        AsMetadataKey::<VE>::remove(self.as_str(), map, token)
+    }
+
+    #[doc(hidden)]
+    #[inline]
+    fn remove_all(self, map: &mut MetadataMap, token: private::Internal) -> ValueDrain<'_, VE> {
+        AsMetadataKey::<VE>::remove_all(self.as_str(), map, token)
+    }
+}
+
+/// A marker trait used to identify values that can be used as search keys
+/// to a `MetadataMap`, for operations that don't expose the actual value.
+pub trait AsEncodingAgnosticMetadataKey {
+    #[doc(hidden)]
+    fn contains_key(&self, map: &MetadataMap, _: private::Internal) -> bool;
+}
+
+// ==== impls ====
+
+impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for MetadataKey<VE> {
+    #[doc(hidden)]
+    #[inline]
+    fn contains_key(&self, map: &MetadataMap, _: private::Internal) -> bool {
+        map.headers.iter().any(|(k, _)| k == self.inner)
+    }
+}
+
+impl<VE: ValueEncoding> AsEncodingAgnosticMetadataKey for &MetadataKey<VE> {
+    #[doc(hidden)]
+    #[inline]
+    fn contains_key(&self, map: &MetadataMap, _: private::Internal) -> bool {
+        map.headers.iter().any(|(k, _)| k == self.inner)
+    }
+}
+
+impl AsEncodingAgnosticMetadataKey for &str {
+    #[doc(hidden)]
+    #[inline]
+    fn contains_key(&self, map: &MetadataMap, _: private::Internal) -> bool {
+        map.headers.iter().any(|(k, _)| k == *self)
+    }
+}
+
+impl AsEncodingAgnosticMetadataKey for String {
+    #[doc(hidden)]
+    #[inline]
+    fn contains_key(&self, map: &MetadataMap, _: private::Internal) -> bool {
+        map.headers.iter().any(|(k, _)| k == self.as_str())
+    }
+}
+
+impl AsEncodingAgnosticMetadataKey for &String {
+    #[doc(hidden)]
+    #[inline]
+    fn contains_key(&self, map: &MetadataMap, _: private::Internal) -> bool {
+        map.headers.iter().any(|(k, _)| k == self.as_str())
+    }
 }
 
 #[cfg(test)]

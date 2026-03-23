@@ -28,7 +28,6 @@ use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
-use bytes::Bytes;
 use http::header::HeaderName;
 
 use super::encoding::Ascii;
@@ -153,17 +152,6 @@ impl<VE: ValueEncoding> MetadataKey<VE> {
     pub(crate) fn unchecked_from_header_name_ref(header_name: &HeaderName) -> &Self {
         unsafe { &*(header_name as *const HeaderName as *const Self) }
     }
-
-    /// Converts a HeaderName reference to a MetadataKey. This method assumes
-    /// that the caller has made sure that the header name has the correct
-    /// "-bin" or non-"-bin" suffix, it does not validate its input.
-    #[inline]
-    pub(crate) fn unchecked_from_header_name(name: HeaderName) -> Self {
-        MetadataKey {
-            inner: name,
-            phantom: PhantomData,
-        }
-    }
 }
 
 impl<VE: ValueEncoding> FromStr for MetadataKey<VE> {
@@ -205,8 +193,7 @@ impl<VE: ValueEncoding> fmt::Display for MetadataKey<VE> {
 }
 
 impl InvalidMetadataKey {
-    #[doc(hidden)]
-    pub fn new() -> InvalidMetadataKey {
+    fn new() -> InvalidMetadataKey {
         Self::default()
     }
 }
@@ -214,13 +201,6 @@ impl InvalidMetadataKey {
 impl<'a, VE: ValueEncoding> From<&'a MetadataKey<VE>> for MetadataKey<VE> {
     fn from(src: &'a MetadataKey<VE>) -> MetadataKey<VE> {
         src.clone()
-    }
-}
-
-impl<VE: ValueEncoding> From<MetadataKey<VE>> for Bytes {
-    #[inline]
-    fn from(name: MetadataKey<VE>) -> Bytes {
-        Bytes::copy_from_slice(name.inner.as_ref())
     }
 }
 

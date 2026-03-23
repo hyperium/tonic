@@ -57,3 +57,9 @@ mod echo_pb {
         "/src/generated/grpc_examples_echo.rs"
     ));
 }
+
+mod private {
+    /// A private token used to seal traits.
+    #[derive(Debug)]
+    pub struct Internal;
+}
