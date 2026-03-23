@@ -8,7 +8,6 @@ use integration_tests::pb::{
 };
 use integration_tests::BoxFuture;
 use std::error::Error;
-use std::task::{Context as StdContext, Poll as StdPoll};
 use std::task::{Context, Poll};
 use std::time::Duration;
 use tokio::{net::TcpListener, sync::oneshot};
@@ -357,136 +356,94 @@ async fn message_and_then_status_from_server_stream() {
 // Bug fix: HTTP 200 response with no grpc-status trailer must surface as
 // Unknown, not silently treated as a clean end-of-stream.
 //
-// We simulate this by interposing a tower layer that replaces the real
-// server response body with one that immediately ends (no frames, no
-// trailers) while keeping the HTTP 200 status code.
+// We simulate the exact scenario described in `infer_grpc_status`: a proxy or
+// load-balancer that issues RST_STREAM(NO_ERROR) — e.g. an Envoy timeout —
+// without ever sending a grpc-status trailer.  hyper converts
+// RST_STREAM(NO_ERROR) into a clean end-of-stream (Poll::Ready(None)), so
+// tonic's only signal is the absence of the trailer on an HTTP 200 response.
+//
+// We use the `h2` crate directly to drive a raw HTTP/2 server that:
+//   1. Completes the HTTP/2 handshake
+//   2. Sends HTTP 200 + `content-type: application/grpc` response headers
+//   3. Sends RST_STREAM with reason NO_ERROR (no data, no trailers)
 // ---------------------------------------------------------------------------
-
-/// A body that yields no frames and ends immediately, simulating a stream
-/// that was truncated before any trailers were sent.
-struct TruncatedBody;
-
-impl http_body::Body for TruncatedBody {
-    type Data = Bytes;
-    type Error = tonic::Status;
-
-    fn poll_frame(
-        self: std::pin::Pin<&mut Self>,
-        _cx: &mut StdContext<'_>,
-    ) -> StdPoll<Option<Result<http_body::Frame<Self::Data>, Self::Error>>> {
-        // Immediately signal end-of-stream with no trailers.
-        StdPoll::Ready(None)
-    }
-}
 
 #[tokio::test]
 async fn missing_grpc_status_trailer_is_unknown_error() {
     integration_tests::trace_init();
 
-    struct Svc;
-
-    #[tonic::async_trait]
-    impl test_stream_server::TestStream for Svc {
-        type StreamCallStream = std::pin::Pin<
-            Box<
-                dyn tokio_stream::Stream<Item = Result<OutputStream, tonic::Status>>
-                    + Send
-                    + 'static,
-            >,
-        >;
-
-        async fn stream_call(
-            &self,
-            _: tonic::Request<InputStream>,
-        ) -> Result<tonic::Response<Self::StreamCallStream>, tonic::Status> {
-            // This stream would normally send one message and then a proper
-            // grpc-status trailer.  The intercept layer below replaces the
-            // response body before it ever reaches the client.
-            let s = tokio_stream::iter(vec![Ok(OutputStream {})]);
-            Ok(tonic::Response::new(Box::pin(s)))
-        }
-    }
-
-    // Tower layer that swaps out the response body with TruncatedBody,
-    // keeping the 200 status so the client enters the streaming path but
-    // never receives a grpc-status trailer.
-    #[derive(Clone)]
-    struct TruncateLayer;
-
-    impl<S> tower::Layer<S> for TruncateLayer {
-        type Service = TruncateService<S>;
-        fn layer(&self, inner: S) -> Self::Service {
-            TruncateService(inner)
-        }
-    }
-
-    #[derive(Clone)]
-    struct TruncateService<S>(S);
-
-    impl<S> tower::Service<http::Request<tonic::body::Body>> for TruncateService<S>
-    where
-        S: tower::Service<
-                http::Request<tonic::body::Body>,
-                Response = http::Response<tonic::body::Body>,
-                Error = std::convert::Infallible,
-            > + Clone
-            + Send
-            + 'static,
-        S::Future: Send + 'static,
-    {
-        type Response = http::Response<tonic::body::Body>;
-        type Error = std::convert::Infallible;
-        type Future = BoxFuture<'static, Result<Self::Response, Self::Error>>;
-
-        fn poll_ready(&mut self, cx: &mut StdContext<'_>) -> StdPoll<Result<(), Self::Error>> {
-            self.0.poll_ready(cx)
-        }
-
-        fn call(&mut self, req: http::Request<tonic::body::Body>) -> Self::Future {
-            let fut = self.0.call(req);
-            Box::pin(async move {
-                let resp = fut.await.unwrap();
-                // Keep status 200, replace body with one that ends without trailers.
-                let (parts, _original_body) = resp.into_parts();
-                let truncated = tonic::body::Body::new(TruncatedBody);
-                Ok(http::Response::from_parts(parts, truncated))
-            })
-        }
-    }
-
-    let svc = test_stream_server::TestStreamServer::new(Svc);
-
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let incoming = tonic::transport::server::TcpIncoming::from(listener).with_nodelay(Some(true));
+
+    // Oneshot channel: client signals the server once `stream_call().await`
+    // has returned, i.e. the response HEADERS have been received and the
+    // client is about to enter the body-reading loop.  The server delays
+    // `send_reset` until it receives this signal so that:
+    //
+    //   1. RST_STREAM is queued only AFTER the HEADERS frame has already
+    //      been flushed over the wire (h2's `send_reset` calls `clear_queue`
+    //      which would otherwise discard any still-pending DATA frames, but
+    //      here there are none — only the already-flushed HEADERS matter).
+    //
+    //   2. The client is inside `Incoming::poll_data` (or about to enter it)
+    //      when RST_STREAM arrives.  That is exactly the branch where hyper
+    //      converts `Reset(NO_ERROR)` to `Poll::Ready(None)` (a clean
+    //      end-of-stream) rather than surfacing it as an error:
+    //
+    //        Some(Err(e)) => match e.reason() {
+    //            Some(h2::Reason::NO_ERROR) | Some(h2::Reason::CANCEL)
+    //                => Poll::Ready(None),   // ← taken here
+    //            _   => Poll::Ready(Some(Err(...))),
+    //        }
+    //
+    //      tonic's decoder sees None with an empty buffer, calls
+    //      `infer_grpc_status(trailers=None, status=200)`, and returns
+    //      `Code::Unknown` — the expected behaviour.
+    let (headers_acked_tx, headers_acked_rx) = tokio::sync::oneshot::channel::<()>();
 
     tokio::spawn(async move {
-        tonic::transport::Server::builder()
-            .layer(TruncateLayer)
-            .add_service(svc)
-            .serve_with_incoming(incoming)
-            .await
-            .unwrap();
-    });
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut conn = h2::server::handshake(socket).await.unwrap();
 
-    tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        // Accept the single gRPC request and send HTTP 200 + grpc headers.
+        let mut send_stream = if let Some(Ok((_request, mut respond))) = conn.accept().await {
+            let response = http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header("content-type", "application/grpc")
+                .body(())
+                .unwrap();
+            respond.send_response(response, false).unwrap()
+        } else {
+            return;
+        };
+
+        // Wait until the client confirms it received the HEADERS, then send
+        // RST_STREAM(NO_ERROR) with no grpc-status trailer.
+        tokio::spawn(async move {
+            headers_acked_rx.await.ok();
+            send_stream.send_reset(h2::Reason::NO_ERROR);
+        });
+
+        // Drive the connection until it closes, flushing HEADERS and (later) RST_STREAM.
+        while conn.accept().await.is_some() {}
+    });
 
     let mut client = test_stream_client::TestStreamClient::connect(format!("http://{addr}"))
         .await
         .unwrap();
 
-    let mut stream = client
-        .stream_call(InputStream {})
-        .await
-        .unwrap()
-        .into_inner();
+    // Wait for response HEADERS (stream_call completes the HTTP/2 header phase).
+    // Then immediately tell the server we are about to read the body.
+    let response = client.stream_call(InputStream {}).await.unwrap();
+    headers_acked_tx.send(()).ok();
+    let mut stream = response.into_inner();
 
     // The stream must surface as an Unknown error — NOT silently return None.
     let err = stream.message().await.unwrap_err();
     assert_eq!(
         err.code(),
         tonic::Code::Unknown,
-        "expected Unknown for missing grpc-status trailer, got: {:?}",
+        "expected Unknown for RST_STREAM(NO_ERROR) without grpc-status trailer, got: {:?}",
         err
     );
     assert!(
