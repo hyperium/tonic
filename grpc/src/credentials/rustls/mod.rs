@@ -30,7 +30,7 @@ use rustls_pki_types::CertificateDer;
 use tokio::sync::watch;
 
 use crate::credentials::ProtocolInfo;
-use crate::private::Token;
+use crate::private;
 
 pub mod client;
 mod key_log;
@@ -98,7 +98,7 @@ pub trait Provider<T> {
     /// This allows the consumer to observe the current value and await
     /// future updates.
     #[doc(hidden)]
-    fn get_receiver(self, token: Token) -> watch::Receiver<T>;
+    fn get_receiver(self, _token: private::Internal) -> watch::Receiver<T>;
 }
 
 /// A provider that supplies a constant, immutable value.
@@ -114,7 +114,7 @@ impl<T> StaticProvider<T> {
 }
 
 impl<T> Provider<T> for StaticProvider<T> {
-    fn get_receiver(self, _: Token) -> watch::Receiver<T> {
+    fn get_receiver(self, _token: private::Internal) -> watch::Receiver<T> {
         // We drop the sender (_) immediately.
         // This ensures the receiver sees the initial value but knows
         // no future updates will arrive.

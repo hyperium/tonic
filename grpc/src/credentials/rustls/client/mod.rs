@@ -53,7 +53,7 @@ use crate::credentials::rustls::parse_certs;
 use crate::credentials::rustls::parse_key;
 use crate::credentials::rustls::sanitize_crypto_provider;
 use crate::credentials::rustls::tls_stream::TlsStream;
-use crate::private::Token;
+use crate::private;
 use crate::rt::AsyncIoAdapter;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
@@ -86,7 +86,7 @@ impl ClientTlsConfig {
     where
         R: Provider<RootCertificates>,
     {
-        self.pem_roots_provider = Some(provider.get_receiver(Token));
+        self.pem_roots_provider = Some(provider.get_receiver(private::Internal));
         self
     }
 
@@ -99,7 +99,7 @@ impl ClientTlsConfig {
     where
         I: Provider<Identity>,
     {
-        self.identity_provider = Some(provider.get_receiver(Token));
+        self.identity_provider = Some(provider.get_receiver(private::Internal));
         self
     }
 
@@ -225,7 +225,7 @@ impl ChannelCredentials for RustlsClientTlsCredendials {
         source: Input,
         _info: &ClientHandshakeInfo,
         _rt: &GrpcRuntime,
-        _token: Token,
+        _token: private::Internal,
     ) -> Result<HandshakeOutput<TlsStream<Input>, ClientTlsSecContext>, String> {
         let server_name = ServerName::try_from(authority.host())
             .map_err(|e| format!("invalid authority: {}", e))?
@@ -271,7 +271,7 @@ impl ChannelCredentials for RustlsClientTlsCredendials {
         &TLS_PROTO_INFO
     }
 
-    fn get_call_credentials(&self, _: Token) -> Option<&Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
         None
     }
 }

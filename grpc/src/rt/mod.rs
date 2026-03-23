@@ -37,7 +37,7 @@ use ::tokio::io::AsyncRead;
 use ::tokio::io::AsyncWrite;
 use ::tokio::io::ReadBuf;
 
-use crate::private::Token;
+use crate::private;
 
 pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]
@@ -137,7 +137,7 @@ pub trait GrpcEndpoint: Send + Unpin + 'static {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<()>>;
 
     #[doc(hidden)]
@@ -145,21 +145,21 @@ pub trait GrpcEndpoint: Send + Unpin + 'static {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<usize>>;
 
     #[doc(hidden)]
     fn poll_flush_private(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<()>>;
 
     #[doc(hidden)]
     fn poll_shutdown_private(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<()>>;
 
     #[doc(hidden)]
@@ -167,7 +167,7 @@ pub trait GrpcEndpoint: Send + Unpin + 'static {
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<usize>> {
         let buf = bufs
             .iter()
@@ -177,7 +177,7 @@ pub trait GrpcEndpoint: Send + Unpin + 'static {
     }
 
     #[doc(hidden)]
-    fn is_write_vectored_private(&self, _: Token) -> bool {
+    fn is_write_vectored_private(&self, _: private::Internal) -> bool {
         false
     }
 }
@@ -205,7 +205,7 @@ impl<T: GrpcEndpoint> AsyncRead for AsyncIoAdapter<T> {
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
     ) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_read_private(cx, buf, Token)
+        Pin::new(&mut self.inner).poll_read_private(cx, buf, private::Internal)
     }
 }
 
@@ -215,15 +215,15 @@ impl<T: GrpcEndpoint> AsyncWrite for AsyncIoAdapter<T> {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write_private(cx, buf, Token)
+        Pin::new(&mut self.inner).poll_write_private(cx, buf, private::Internal)
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_flush_private(cx, Token)
+        Pin::new(&mut self.inner).poll_flush_private(cx, private::Internal)
     }
 
     fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        Pin::new(&mut self.inner).poll_shutdown_private(cx, Token)
+        Pin::new(&mut self.inner).poll_shutdown_private(cx, private::Internal)
     }
 
     fn poll_write_vectored(
@@ -231,11 +231,11 @@ impl<T: GrpcEndpoint> AsyncWrite for AsyncIoAdapter<T> {
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
     ) -> Poll<io::Result<usize>> {
-        Pin::new(&mut self.inner).poll_write_vectored_private(cx, bufs, Token)
+        Pin::new(&mut self.inner).poll_write_vectored_private(cx, bufs, private::Internal)
     }
 
     fn is_write_vectored(&self) -> bool {
-        self.inner.is_write_vectored_private(Token)
+        self.inner.is_write_vectored_private(private::Internal)
     }
 }
 
@@ -256,7 +256,7 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<()>> {
         Pin::new(&mut **self).poll_read_private(cx, buf, token)
     }
@@ -265,7 +265,7 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<usize>> {
         Pin::new(&mut **self).poll_write_private(cx, buf, token)
     }
@@ -273,7 +273,7 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
     fn poll_flush_private(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<()>> {
         Pin::new(&mut **self).poll_flush_private(cx, token)
     }
@@ -281,7 +281,7 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
     fn poll_shutdown_private(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        token: Token,
+        token: private::Internal,
     ) -> Poll<io::Result<()>> {
         Pin::new(&mut **self).poll_shutdown_private(cx, token)
     }

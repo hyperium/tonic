@@ -52,7 +52,7 @@ use crate::credentials::rustls::sanitize_crypto_provider;
 use crate::credentials::rustls::tls_stream::TlsStream;
 use crate::credentials::server::HandshakeOutput;
 use crate::credentials::server::ServerConnectionSecurityInfo;
-use crate::private::Token;
+use crate::private;
 use crate::rt::AsyncIoAdapter;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
@@ -148,12 +148,12 @@ impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType
             }
             TlsClientCertificateRequestType::RequestAndVerify { roots_provider } => {
                 InnerClientCertificateRequestType::RequestClientCertificateAndVerify {
-                    roots_provider: roots_provider.get_receiver(Token),
+                    roots_provider: roots_provider.get_receiver(private::Internal),
                 }
             }
             TlsClientCertificateRequestType::RequireAndVerify { roots_provider } => {
                 InnerClientCertificateRequestType::RequestAndRequireClientCertificateAndVerify {
-                    roots_provider: roots_provider.get_receiver(Token),
+                    roots_provider: roots_provider.get_receiver(private::Internal),
                 }
             }
         }
@@ -178,7 +178,7 @@ impl ServerTlsConfig {
         I: Provider<IdentityList>,
     {
         ServerTlsConfig {
-            identities_provider: identities_provider.get_receiver(Token),
+            identities_provider: identities_provider.get_receiver(private::Internal),
             request_type: TlsClientCertificateRequestType::DontRequest.into(),
             key_log_path: None,
         }
@@ -327,7 +327,7 @@ impl ServerCredentials for RustlsServerTlsCredendials {
         &self,
         source: Input,
         _runtime: GrpcRuntime,
-        _token: Token,
+        _token: private::Internal,
     ) -> Result<HandshakeOutput<Self::Output<Input>>, String> {
         let input_io = AsyncIoAdapter::new(source);
         let tls_stream = self

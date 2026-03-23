@@ -33,7 +33,7 @@ use hyper::rt::Executor;
 use hyper::rt::Timer;
 use pin_project_lite::pin_project;
 
-use crate::private::Token;
+use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -117,7 +117,11 @@ impl hyper::rt::Read for HyperStream {
     ) -> Poll<Result<(), io::Error>> {
         let n = unsafe {
             let mut tbuf = tokio::io::ReadBuf::uninit(buf.as_mut());
-            match self.project().inner.poll_read_private(cx, &mut tbuf, Token) {
+            match self
+                .project()
+                .inner
+                .poll_read_private(cx, &mut tbuf, private::Internal)
+            {
                 Poll::Ready(Ok(())) => tbuf.filled().len(),
                 other => return other,
             }
@@ -136,19 +140,25 @@ impl hyper::rt::Write for HyperStream {
         cx: &mut Context<'_>,
         buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
-        self.project().inner.poll_write_private(cx, buf, Token)
+        self.project()
+            .inner
+            .poll_write_private(cx, buf, private::Internal)
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.project().inner.poll_flush_private(cx, Token)
+        self.project()
+            .inner
+            .poll_flush_private(cx, private::Internal)
     }
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        self.project().inner.poll_shutdown_private(cx, Token)
+        self.project()
+            .inner
+            .poll_shutdown_private(cx, private::Internal)
     }
 
     fn is_write_vectored(&self) -> bool {
-        self.inner.is_write_vectored_private(Token)
+        self.inner.is_write_vectored_private(private::Internal)
     }
 
     fn poll_write_vectored(
@@ -158,6 +168,6 @@ impl hyper::rt::Write for HyperStream {
     ) -> Poll<Result<usize, io::Error>> {
         self.project()
             .inner
-            .poll_write_vectored_private(cx, bufs, Token)
+            .poll_write_vectored_private(cx, bufs, private::Internal)
     }
 }

@@ -32,7 +32,7 @@ use crate::credentials::call::CallCredentials;
 use crate::credentials::call::CompositeCallCredentials;
 use crate::credentials::common::Authority;
 use crate::credentials::insecure;
-use crate::private::Token;
+use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -158,13 +158,13 @@ impl<T: ChannelCredentials> CompositeChannelCredentials<T> {
             return Err("using tokens on an insecure credentials is disallowed".to_string());
         }
 
-        let combined_call_creds = if let Some(existing) = channel_creds.get_call_credentials(Token)
-        {
-            let composite_creds = CompositeCallCredentials::new(existing.clone(), call_creds);
-            Arc::new(composite_creds)
-        } else {
-            call_creds
-        };
+        let combined_call_creds =
+            if let Some(existing) = channel_creds.get_call_credentials(private::Internal) {
+                let composite_creds = CompositeCallCredentials::new(existing.clone(), call_creds);
+                Arc::new(composite_creds)
+            } else {
+                call_creds
+            };
 
         Ok(Self {
             channel_creds,
@@ -183,7 +183,7 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
         source: Input,
         info: &ClientHandshakeInfo,
         runtime: &GrpcRuntime,
-        token: Token,
+        token: private::Internal,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         self.channel_creds
             .connect(authority, source, info, runtime, token)
@@ -194,7 +194,7 @@ impl<T: ChannelCredentials> ChannelCredentials for CompositeChannelCredentials<T
         self.channel_creds.info()
     }
 
-    fn get_call_credentials(&self, _: Token) -> Option<&Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
         Some(&self.call_creds)
     }
 }
@@ -266,7 +266,7 @@ mod tests {
         let composite2 = CompositeChannelCredentials::new(composite1, call_creds2).unwrap();
 
         // Verify call credentials
-        let combined_call_creds = composite2.get_call_credentials(Token).unwrap();
+        let combined_call_creds = composite2.get_call_credentials(private::Internal).unwrap();
         let call_details = CallDetails::new("service".to_string(), "method".to_string());
         let auth_info = ClientConnectionSecurityInfo::new(
             "local",
@@ -306,7 +306,7 @@ mod tests {
                 endpoint,
                 &ClientHandshakeInfo::default(),
                 &runtime,
-                Token,
+                private::Internal,
             )
             .await
             .unwrap();

@@ -49,7 +49,7 @@ use crate::credentials::rustls::RootCertificates;
 use crate::credentials::rustls::StaticProvider;
 use crate::credentials::rustls::client::ClientTlsConfig;
 use crate::credentials::rustls::client::RustlsClientTlsCredendials;
-use crate::private::Token;
+use crate::private;
 use crate::rt;
 use crate::rt::AsyncIoAdapter;
 use crate::rt::TcpOptions;
@@ -176,7 +176,7 @@ async fn test_tls_key_log() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            Token,
+            private::Internal,
         )
         .await
         .expect("Handshake failed");
@@ -231,7 +231,7 @@ async fn test_tls_handshake_wrong_server_name() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            Token,
+            private::Internal,
         )
         .await;
 
@@ -284,7 +284,7 @@ async fn test_tls_validate_authority() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            Token,
+            private::Internal,
         )
         .await
         .expect("Handshake failed");
@@ -333,7 +333,7 @@ async fn test_mtls_handshake_no_identity() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            Token,
+            private::Internal,
         )
         .await
         .expect("Client handshake expected to succeed with TLS 1.3");
@@ -381,7 +381,7 @@ async fn test_mtls_handshake_with_identitiy() {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            Token,
+            private::Internal,
         )
         .await
         .expect("Handshake failed with client identity");
@@ -438,7 +438,7 @@ async fn check_client_resumption_disabled(
                 endpoint,
                 &ClientHandshakeInfo::default(),
                 &runtime,
-                Token,
+                private::Internal,
             )
             .await
             .expect("Handshake failed");
@@ -613,7 +613,7 @@ async fn run_handshake_test(server_alpn: Vec<Vec<u8>>, expect_success: bool) {
             endpoint,
             &ClientHandshakeInfo::default(),
             &runtime,
-            Token,
+            private::Internal,
         )
         .await;
 

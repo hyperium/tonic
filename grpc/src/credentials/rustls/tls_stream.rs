@@ -32,7 +32,7 @@ use tokio::io::AsyncWrite;
 use tokio::io::ReadBuf;
 use tokio_rustls::TlsStream as RustlsStream;
 
-use crate::private::Token;
+use crate::private;
 use crate::rt::AsyncIoAdapter;
 use crate::rt::GrpcEndpoint;
 
@@ -69,7 +69,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &mut ReadBuf<'_>,
-        token: Token,
+        _token: private::Internal,
     ) -> Poll<std::io::Result<()>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_read(cx, buf)
@@ -79,7 +79,7 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         buf: &[u8],
-        token: Token,
+        _token: private::Internal,
     ) -> Poll<Result<usize, std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_write(cx, buf)
@@ -88,7 +88,7 @@ where
     fn poll_flush_private(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        token: Token,
+        _token: private::Internal,
     ) -> Poll<Result<(), std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_flush(cx)
@@ -97,7 +97,7 @@ where
     fn poll_shutdown_private(
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        token: Token,
+        _token: private::Internal,
     ) -> Poll<Result<(), std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_shutdown(cx)
@@ -107,13 +107,13 @@ where
         self: Pin<&mut Self>,
         cx: &mut Context<'_>,
         bufs: &[IoSlice<'_>],
-        token: Token,
+        _token: private::Internal,
     ) -> Poll<Result<usize, std::io::Error>> {
         let pinned = Pin::new(&mut self.get_mut().inner);
         pinned.poll_write_vectored(cx, bufs)
     }
 
-    fn is_write_vectored_private(&self, token: Token) -> bool {
+    fn is_write_vectored_private(&self, _token: private::Internal) -> bool {
         self.inner.is_write_vectored()
     }
 }

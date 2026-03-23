@@ -37,7 +37,7 @@ use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
 use crate::credentials::server::ServerConnectionSecurityInfo;
 use crate::credentials::server::{self};
-use crate::private::Token;
+use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -84,7 +84,7 @@ impl ChannelCredentials for InsecureChannelCredentials {
         source: Input,
         _info: &ClientHandshakeInfo,
         _runtime: &GrpcRuntime,
-        _token: Token,
+        _token: private::Internal,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         Ok(HandshakeOutput {
             endpoint: source,
@@ -102,7 +102,7 @@ impl ChannelCredentials for InsecureChannelCredentials {
         &INFO
     }
 
-    fn get_call_credentials(&self, _: Token) -> Option<&Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
         None
     }
 }
@@ -126,7 +126,7 @@ impl ServerCredentials for InsecureServerCredentials {
         &self,
         source: Input,
         _runtime: GrpcRuntime,
-        _token: Token,
+        _token: private::Internal,
     ) -> Result<server::HandshakeOutput<Self::Output<Input>>, String> {
         Ok(server::HandshakeOutput {
             endpoint: source,
@@ -184,7 +184,13 @@ mod test {
         let handshake_info = ClientHandshakeInfo::default();
 
         let output = creds
-            .connect(&authority, endpoint, &handshake_info, &runtime, Token)
+            .connect(
+                &authority,
+                endpoint,
+                &handshake_info,
+                &runtime,
+                private::Internal,
+            )
             .await
             .unwrap();
 
@@ -246,7 +252,10 @@ mod test {
 
         let (server_stream, _) = listener.accept().await.unwrap();
 
-        let output = creds.accept(server_stream, runtime, Token).await.unwrap();
+        let output = creds
+            .accept(server_stream, runtime, private::Internal)
+            .await
+            .unwrap();
         let endpoint = output.endpoint;
         let security_info = output.security;
 

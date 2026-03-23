@@ -35,7 +35,7 @@ use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
 use crate::credentials::server::HandshakeOutput as ServerHandshakeOutput;
-use crate::private::Token;
+use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 use crate::send_future::SendFuture;
@@ -73,7 +73,7 @@ where
     ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>
     {
         let output = self
-            .connect(authority, source, info, runtime, Token)
+            .connect(authority, source, info, runtime, private::Internal)
             .make_send()
             .await?;
 
@@ -91,7 +91,7 @@ where
     }
 
     fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
-        self.get_call_credentials(Token)
+        self.get_call_credentials(private::Internal)
     }
 }
 
@@ -105,14 +105,14 @@ impl ChannelCredentials for Arc<dyn DynChannelCredentials> {
         source: Input,
         info: &ClientHandshakeInfo,
         runtime: &GrpcRuntime,
-        _: Token,
+        _token: private::Internal,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         (**self)
             .dyn_connect(authority, Box::new(source), info, runtime)
             .await
     }
 
-    fn get_call_credentials(&self, _: Token) -> Option<&Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
         (**self).get_call_credentials()
     }
 
@@ -144,7 +144,7 @@ where
         source: BoxEndpoint,
         runtime: GrpcRuntime,
     ) -> Result<ServerHandshakeOutput<BoxEndpoint>, String> {
-        let output = SendFuture::make_send(self.accept(source, runtime, Token)).await?;
+        let output = SendFuture::make_send(self.accept(source, runtime, private::Internal)).await?;
         Ok(ServerHandshakeOutput {
             endpoint: Box::new(output.endpoint),
             security: output.security,

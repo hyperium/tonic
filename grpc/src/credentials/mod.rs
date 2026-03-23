@@ -44,7 +44,7 @@ use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
-use crate::private::Token;
+use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -62,7 +62,7 @@ pub trait ChannelCredentials: Sync + 'static {
 
     /// Returns call credentials to be used for all RPCs made on a connection.
     #[doc(hidden)]
-    fn get_call_credentials(&self, token: Token) -> Option<&Arc<dyn CallCredentials>>;
+    fn get_call_credentials(&self, token: private::Internal) -> Option<&Arc<dyn CallCredentials>>;
 
     /// Performs the client-side authentication handshake on a raw endpoint.
     ///
@@ -85,7 +85,7 @@ pub trait ChannelCredentials: Sync + 'static {
         source: Input,
         info: &ClientHandshakeInfo,
         runtime: &GrpcRuntime,
-        token: Token,
+        token: private::Internal,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 }
 
@@ -106,7 +106,7 @@ pub trait ServerCredentials: Sync + 'static {
         &self,
         source: Input,
         runtime: GrpcRuntime,
-        token: Token,
+        token: private::Internal,
     ) -> Result<server::HandshakeOutput<Self::Output<Input>>, String>;
 }
 
