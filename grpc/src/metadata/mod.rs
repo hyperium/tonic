@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2025 gRPC authors.
+ * Copyright 2026 gRPC authors.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -22,33 +22,35 @@
  *
  */
 
-//! The official Rust implementation of [gRPC], a high performance, open source,
-//! universal RPC framework
-//!
-//! This version is in progress and not recommended for any production use.  All
-//! APIs are unstable.  Proceed at your own risk.
-//!
-//! [gRPC]: https://grpc.io
-#![allow(dead_code, unused_variables)]
+//! Contains data structures and utilities for handling gRPC custom metadata.
 
-pub mod client;
-pub mod credentials;
-pub mod inmemory;
-mod macros;
-mod status;
-pub use status::{ServerStatus, Status, StatusCode};
-pub mod rt;
-pub mod server;
-pub mod service;
+mod encoding;
+mod key;
+mod map;
+mod util;
+mod value;
 
-pub(crate) mod attributes;
-pub(crate) mod byte_str;
-pub(crate) mod codec;
-pub mod metadata;
-#[cfg(test)]
-pub(crate) mod echo_pb {
-    include!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/generated/grpc_examples_echo.rs"
-    ));
+pub use self::encoding::Ascii;
+pub use self::encoding::Binary;
+pub use self::key::AsciiMetadataKey;
+pub use self::key::BinaryMetadataKey;
+pub use self::key::MetadataKey;
+pub use self::map::GetAll;
+pub use self::map::Iter;
+pub use self::map::Key;
+pub use self::map::KeyAndValueRef;
+pub use self::map::MetadataMap;
+pub use self::map::ValueDrain;
+pub use self::map::ValueIter;
+pub use self::value::AsciiMetadataValue;
+pub use self::value::BinaryMetadataValue;
+pub use self::value::MetadataValue;
+
+/// The metadata::errors module contains types for errors that can occur
+/// while handling gRPC custom metadata.
+pub mod errors {
+    pub use super::encoding::InvalidMetadataValue;
+    pub use super::encoding::InvalidMetadataValueBytes;
+    pub use super::key::InvalidMetadataKey;
+    pub use super::value::ToStrError;
 }

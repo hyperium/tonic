@@ -32,6 +32,7 @@ _runtime-tokio = [
 tower = ["_runtime-tokio"]
 
 [dependencies]
+base64 = "0.22"
 bytes = "1.10.1"
 hickory-resolver = { version = "0.25.1", optional = true }
 http = "1.1.0"
@@ -58,6 +59,7 @@ url = "2.5.0"
 
 [dev-dependencies]
 async-stream = "0.3.6"
+criterion = "0.5"
 hickory-server = "0.25.2"
 prost = "0.14.0"
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
@@ -65,3 +67,7 @@ tonic = { version = "0.14.0", path = "../tonic", default-features = false, featu
     "router",
 ] }
 tonic-prost = { version = "0.14.0", path = "../tonic-prost" }
+
+[[bench]]
+name = "metadata"
+harness = false
