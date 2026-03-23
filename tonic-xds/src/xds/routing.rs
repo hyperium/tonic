@@ -144,16 +144,15 @@ fn match_fraction(fraction: Option<u32>) -> bool {
 
 /// Select a cluster from weighted clusters using accumulated weights and random selection.
 ///
-/// # Panics
-///
-/// Panics if `clusters` is empty. Callers rely on `validate_route_action`
-/// rejecting empty weighted cluster lists.
-pub(crate) fn select_weighted_cluster(clusters: &[WeightedCluster]) -> &str {
-    debug_assert!(!clusters.is_empty());
+/// Returns `None` if `clusters` is empty.
+pub(crate) fn select_weighted_cluster(clusters: &[WeightedCluster]) -> Option<&str> {
+    if clusters.is_empty() {
+        return None;
+    }
 
     let total: u64 = clusters.iter().map(|c| c.weight as u64).sum();
     if total == 0 {
-        return &clusters[fastrand::usize(0..clusters.len())].name;
+        return Some(&clusters[fastrand::usize(0..clusters.len())].name);
     }
 
     let random = fastrand::u64(0..total);
@@ -161,7 +160,7 @@ pub(crate) fn select_weighted_cluster(clusters: &[WeightedCluster]) -> &str {
     for cluster in clusters {
         acc += cluster.weight as u64;
         if random < acc {
-            return &cluster.name;
+            return Some(&cluster.name);
         }
     }
     // random is in [0, total) and acc reaches total, so the loop always returns.
@@ -658,12 +657,17 @@ mod tests {
     }
 
     #[test]
+    fn select_weighted_cluster_empty() {
+        assert_eq!(select_weighted_cluster(&[]), None);
+    }
+
+    #[test]
     fn select_weighted_cluster_single() {
         let clusters = vec![WeightedCluster {
             name: "only".into(),
             weight: 100,
         }];
-        assert_eq!(select_weighted_cluster(&clusters), "only");
+        assert_eq!(select_weighted_cluster(&clusters).unwrap(), "only");
     }
 
     #[test]
@@ -678,7 +682,7 @@ mod tests {
                 weight: 0,
             },
         ];
-        let name = select_weighted_cluster(&clusters);
+        let name = select_weighted_cluster(&clusters).unwrap();
         assert!(name == "a" || name == "b");
     }
 
@@ -695,7 +699,7 @@ mod tests {
             },
         ];
         for _ in 0..1000 {
-            assert_eq!(select_weighted_cluster(&clusters), "winner");
+            assert_eq!(select_weighted_cluster(&clusters).unwrap(), "winner");
         }
     }
 
