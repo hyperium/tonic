@@ -181,6 +181,7 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".to_string()),
                         headers: vec![],
                         case_sensitive: true,
+                        match_fraction: None,
                     },
                     action: RouteConfigAction::Cluster("cluster-1".to_string()),
                 }],
