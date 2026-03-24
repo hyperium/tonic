@@ -19,6 +19,10 @@ use crate::xds::cache::CacheWatch;
 use crate::xds::resource::EndpointsResource;
 use crate::xds::xds_manager::BoxDiscover;
 
+/// Buffer capacity for the endpoint change channel between the diff loop
+/// and Tower's load balancer.
+const ENDPOINT_CHANNEL_CAPACITY: usize = 64;
+
 /// Converts endpoint cache watches into incremental [`Change`] streams.
 ///
 /// `EndpointManager` is a pure diff-and-connect component: the caller
@@ -45,7 +49,7 @@ impl<S: Send + 'static> EndpointManager<S> {
         watch: CacheWatch<EndpointsResource>,
     ) -> BoxDiscover<EndpointAddress, S> {
         let connector = self.connector.clone();
-        let (tx, rx) = mpsc::channel(64);
+        let (tx, rx) = mpsc::channel(ENDPOINT_CHANNEL_CAPACITY);
 
         // The spawned task exits naturally when either:
         // - The CacheWatch closes (cache.remove_endpoints() drops the watch sender)
@@ -59,8 +63,8 @@ impl<S: Send + 'static> EndpointManager<S> {
 /// Background task: watches endpoint snapshots and emits incremental changes.
 ///
 /// Each time a new [`EndpointsResource`] arrives from the cache, we diff
-/// `healthy_endpoints()` against the previous set and emit `Remove` for
-/// gone endpoints followed by `Insert` for new ones.
+/// `healthy_endpoints()` against the previous set and emit `Insert` for
+/// new endpoints followed by `Remove` for gone ones.
 async fn diff_loop<S: Send + 'static>(
     mut watch: CacheWatch<EndpointsResource>,
     connector: Arc<dyn Fn(&EndpointAddress) -> S + Send + Sync>,
@@ -74,12 +78,6 @@ async fn diff_loop<S: Send + 'static>(
             .map(|ep| ep.address.clone())
             .collect();
 
-        for removed in active.difference(&new_set) {
-            if tx.send(Ok(Change::Remove(removed.clone()))).await.is_err() {
-                return;
-            }
-        }
-
         for added in new_set.difference(&active) {
             let svc = connector(added);
             if tx
@@ -87,6 +85,12 @@ async fn diff_loop<S: Send + 'static>(
                 .await
                 .is_err()
             {
+                return;
+            }
+        }
+
+        for removed in active.difference(&new_set) {
+            if tx.send(Ok(Change::Remove(removed.clone()))).await.is_err() {
                 return;
             }
         }
@@ -261,7 +265,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn endpoint_swap_emits_remove_then_insert() {
+    async fn endpoint_swap_emits_insert_then_remove() {
         let cache = XdsCache::new();
         let manager = EndpointManager::new(test_connector());
 
