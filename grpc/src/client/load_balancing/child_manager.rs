@@ -157,7 +157,8 @@ where
     ) {
         // Add all created subchannels into the subchannel_child_map.
         for csc in channel_controller.created_subchannels {
-            self.subchannel_to_child_idx.insert(csc.into(), child_idx);
+            self.subchannel_to_child_idx
+                .insert((&csc).into(), child_idx);
         }
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
@@ -636,7 +637,7 @@ mod test {
                     });
                 },
             )),
-            work: None,
+            ..Default::default()
         }
     }
 
@@ -865,7 +866,6 @@ mod test {
                 }
                 Ok(())
             })),
-            subchannel_update: None,
             work: Some(Arc::new(move |data, _controller| {
                 println!("work called for {name}");
                 let stubdata = data
@@ -876,6 +876,7 @@ mod test {
                     .unwrap();
                 stubdata.requested_work = false;
             })),
+            ..Default::default()
         }
     }
 
