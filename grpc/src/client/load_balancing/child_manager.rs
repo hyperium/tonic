@@ -25,10 +25,6 @@
 //! A utility which helps parent LB policies manage multiple children for the
 //! purposes of forwarding channel updates.
 
-// TODO: This is mainly provided as a fairly complex example of the current LB
-// policy in use.  Complete tests must be written before it can be used in
-// production.
-
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
@@ -40,15 +36,15 @@ use std::sync::Mutex;
 
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
-use crate::client::load_balancing::LbConfig;
-use crate::client::load_balancing::LbPolicy;
-use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::DynLbConfig;
+use crate::client::load_balancing::DynLbPolicy;
+use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
 use crate::client::load_balancing::Subchannel;
 use crate::client::load_balancing::SubchannelState;
-use crate::client::load_balancing::WeakSubchannel;
 use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::subchannel::WeakSubchannel;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::rt::GrpcRuntime;
@@ -68,26 +64,26 @@ pub(crate) struct ChildManager<T: Debug> {
 #[derive(Debug)]
 pub(crate) struct Child<T> {
     pub identifier: T,
-    pub builder: Arc<dyn LbPolicyBuilder>,
+    pub builder: Arc<DynLbPolicyBuilder>,
     pub state: LbState,
-    policy: Box<dyn LbPolicy>,
+    policy: Box<DynLbPolicy>,
     work_scheduler: Arc<ChildWorkScheduler>,
 }
 
 /// A collection of data sent to a child of the ChildManager.
-pub(crate) struct ChildUpdate<T> {
+pub(crate) struct ChildUpdate<'a, T> {
     /// The identifier the ChildManager should use for this child.
     pub child_identifier: T,
     /// The builder the ChildManager should use to create this child if it does
     /// not exist.  The child_policy_builder's name is effectively a part of the
     /// child_identifier.  If two identifiers are identical but have different
     /// builder names, they are treated as different children.
-    pub child_policy_builder: Arc<dyn LbPolicyBuilder>,
+    pub child_policy_builder: Arc<DynLbPolicyBuilder>,
     /// The relevant ResolverUpdate and LbConfig to send to this child.  If
     /// None, then resolver_update will not be called on the child.  Should
     /// generally be Some for any new children, otherwise they will not be
     /// called.
-    pub child_update: Option<(ResolverUpdate, Option<LbConfig>)>,
+    pub child_update: Option<(ResolverUpdate, Option<&'a DynLbConfig>)>,
 }
 
 impl<T> ChildManager<T>
@@ -182,7 +178,7 @@ where
     /// ignored.
     pub fn retain_children(
         &mut self,
-        ids_builders: impl IntoIterator<Item = (T, Arc<dyn LbPolicyBuilder>)>,
+        ids_builders: impl IntoIterator<Item = (T, Arc<DynLbPolicyBuilder>)>,
     ) {
         self.reset_children(ids_builders, true);
     }
@@ -193,7 +189,7 @@ where
     /// otherwise a new child will be built for it.
     fn reset_children(
         &mut self,
-        ids_builders: impl IntoIterator<Item = (T, Arc<dyn LbPolicyBuilder>)>,
+        ids_builders: impl IntoIterator<Item = (T, Arc<DynLbPolicyBuilder>)>,
         retain_only: bool,
     ) {
         // Hold the lock to prevent new work requests during this operation and
@@ -292,11 +288,11 @@ where
     /// for each item), how to construct them if they don't already, and what to
     /// send to their `resolver_update` methods, if anything.  Any existing
     /// children not present in child_updates will be removed.
-    pub fn update(
+    pub fn update<'a>(
         &mut self,
-        child_updates: impl IntoIterator<Item = ChildUpdate<T>>,
+        child_updates: impl IntoIterator<Item = ChildUpdate<'a, T>>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         // Split the child updates into the IDs and builders, and the
         // ResolverUpdates/LbConfigs.
         let mut errs = vec![];
@@ -316,11 +312,11 @@ where
                 continue;
             };
             let mut channel_controller = WrappedController::new(channel_controller);
-            if let Err(err) = child.policy.resolver_update(
-                resolver_update,
-                config.as_ref(),
-                &mut channel_controller,
-            ) {
+            if let Err(err) =
+                child
+                    .policy
+                    .resolver_update(resolver_update, config, &mut channel_controller)
+            {
                 errs.push(err);
             }
             self.resolve_child_controller(channel_controller, child_idx);
@@ -333,7 +329,7 @@ where
                 .map(|e| e.to_string())
                 .collect::<Vec<_>>()
                 .join("; ");
-            Err(err.into())
+            Err(err)
         }
     }
 
@@ -343,7 +339,7 @@ where
     pub fn resolver_update(
         &mut self,
         resolver_update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&DynLbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut errs = Vec::with_capacity(self.children.len());
@@ -476,10 +472,18 @@ impl ChildWorkScheduler {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashMap;
+    use std::panic;
+    use std::sync::Arc;
+    use std::sync::Mutex;
+
+    use tokio::sync::mpsc;
+
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::DynLbConfig;
+    use crate::client::load_balancing::DynLbPolicyBuilder;
     use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
-    use crate::client::load_balancing::LbPolicyBuilder;
     use crate::client::load_balancing::LbState;
     use crate::client::load_balancing::QueuingPicker;
     use crate::client::load_balancing::Subchannel;
@@ -494,14 +498,7 @@ mod test {
     use crate::client::name_resolution::Address;
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverUpdate;
-    use crate::client::service_config::LbConfig;
     use crate::rt::default_runtime;
-    use std::collections::HashMap;
-    use std::error::Error;
-    use std::panic;
-    use std::sync::Arc;
-    use std::sync::Mutex;
-    use tokio::sync::mpsc;
 
     // Sets up the test environment.
     //
@@ -560,9 +557,9 @@ mod test {
     fn send_resolver_update_to_policy(
         child_manager: &mut ChildManager<Endpoint>,
         endpoints: Vec<Endpoint>,
-        builder: Arc<dyn LbPolicyBuilder>,
+        builder: Arc<DynLbPolicyBuilder>,
         tcc: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         let updates = endpoints.iter().map(|e| ChildUpdate {
             child_identifier: e.clone(),
             child_policy_builder: builder.clone(),
@@ -651,7 +648,7 @@ mod test {
         let test_name = "stub-childmanager_aggregate_state_is_ready_if_any_child_is_ready";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
 
         let endpoints = create_n_endpoints_with_k_addresses(4, 1);
         send_resolver_update_to_policy(
@@ -706,7 +703,7 @@ mod test {
         let test_name = "stub-childmanager_aggregate_state_is_connecting_if_no_child_is_ready";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
         let endpoints = create_n_endpoints_with_k_addresses(3, 1);
         send_resolver_update_to_policy(
             &mut child_manager,
@@ -757,7 +754,7 @@ mod test {
         let test_name = "stub-childmanager_aggregate_state_is_idle_if_only_idle_and_failure";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
 
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
         send_resolver_update_to_policy(
@@ -800,7 +797,7 @@ mod test {
             "stub-childmanager_aggregate_state_is_transient_failure_if_all_children_are";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
         send_resolver_update_to_policy(
             &mut child_manager,
@@ -857,7 +854,7 @@ mod test {
                 assert!(!stubdata.requested_work);
                 if lbcfg
                     .unwrap()
-                    .convert_to::<Mutex<HashMap<&'static str, ()>>>()
+                    .downcast_ref::<Mutex<HashMap<&'static str, ()>>>()
                     .unwrap()
                     .lock()
                     .unwrap()
@@ -901,20 +898,20 @@ mod test {
             ChildManager::new(default_runtime(), Arc::new(TestWorkScheduler { tx_events }));
 
         // Request that child one requests work.
-        let cfg = LbConfig::new(Mutex::new(HashMap::<&'static str, ()>::new()));
+        let cfg = Arc::new(Mutex::new(HashMap::<&'static str, ()>::new())) as DynLbConfig;
         let children = cfg
-            .convert_to::<Mutex<HashMap<&'static str, ()>>>()
+            .downcast_ref::<Mutex<HashMap<&'static str, ()>>>()
             .unwrap();
         children.lock().unwrap().insert(name1, ());
 
         let updates = names.iter().map(|name| {
-            let child_policy_builder: Arc<dyn LbPolicyBuilder> =
+            let child_policy_builder: Arc<DynLbPolicyBuilder> =
                 GLOBAL_LB_REGISTRY.get_policy(name).unwrap();
 
             ChildUpdate {
                 child_identifier: (),
                 child_policy_builder,
-                child_update: Some((ResolverUpdate::default(), Some(cfg.clone()))),
+                child_update: Some((ResolverUpdate::default(), Some(&cfg))),
             }
         });
         child_manager.update(updates.clone(), &mut tcc).unwrap();

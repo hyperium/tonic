@@ -46,20 +46,20 @@ use crate::client::DynInvoke;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
 use crate::client::Invoke;
-use crate::client::load_balancing::ExternalSubchannel;
+use crate::client::load_balancing::DynLbPolicy;
+use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
-use crate::client::load_balancing::LbPolicy;
-use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
 use crate::client::load_balancing::ParsedJsonLbConfig;
 use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
-use crate::client::load_balancing::Subchannel;
-use crate::client::load_balancing::SubchannelState;
 use crate::client::load_balancing::WorkScheduler;
 use crate::client::load_balancing::pick_first;
 use crate::client::load_balancing::round_robin;
+use crate::client::load_balancing::subchannel::ExternalSubchannel;
+use crate::client::load_balancing::subchannel::Subchannel;
+use crate::client::load_balancing::subchannel::SubchannelState;
 use crate::client::load_balancing::{self};
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
@@ -535,8 +535,8 @@ impl load_balancing::ChannelController for InternalChannelController {
 // A channel that is not idle (connecting, ready, or erroring).
 #[derive(Debug)]
 pub(super) struct LbController {
-    pub(super) policy: Mutex<Option<Box<dyn LbPolicy>>>,
-    policy_builder: Mutex<Option<Arc<dyn LbPolicyBuilder>>>,
+    pub(super) policy: Mutex<Option<Box<DynLbPolicy>>>,
+    policy_builder: Mutex<Option<Arc<DynLbPolicyBuilder>>>,
     runtime: GrpcRuntime,
     work_scheduler: Arc<LbWorkScheduler>,
 }
@@ -582,7 +582,7 @@ impl LbController {
         self: &Arc<Self>,
         update: ResolverUpdate,
         controller: &mut InternalChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         let mut policy_name = pick_first::POLICY_NAME;
         if let Ok(Some(service_config)) = update.service_config.as_ref()
             && service_config
