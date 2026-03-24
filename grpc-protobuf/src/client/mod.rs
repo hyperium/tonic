@@ -193,7 +193,7 @@ pub trait CallBuilder<C: InvokeOnce>: Sized {
         self
     }
 
-    /// Attaches `interceptor` to the call.
+    /// Attaches a multi-use `interceptor` to the call.
     fn with_interceptor<I: Intercept<C>>(
         self,
         interceptor: I,
@@ -201,7 +201,7 @@ pub trait CallBuilder<C: InvokeOnce>: Sized {
         self.rebuild(|c| c.with_interceptor(interceptor), Internal)
     }
 
-    /// Attaches `interceptor` to the call.
+    /// Attaches a single-use `interceptor` to the call.
     fn with_once_interceptor<I: InterceptOnce<C>>(
         self,
         interceptor: I,
