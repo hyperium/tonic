@@ -1388,6 +1388,26 @@ mod tests {
     }
 
     #[test]
+    fn test_into_headers() {
+        let mut map = MetadataMap::new();
+
+        map.insert("x-host", "example.com".parse().unwrap());
+        map.append("x-host", "google.com".parse().unwrap());
+        map.insert_bin("trace-proto-bin", MetadataValue::from_bytes(b"Hello!!"));
+
+        let headers = map.into_headers();
+
+        assert_eq!(headers.len(), 3);
+
+        let hosts: Vec<_> = headers.get_all("x-host").iter().collect();
+        assert_eq!(hosts.len(), 2);
+        assert_eq!(hosts[0], "example.com");
+        assert_eq!(hosts[1], "google.com");
+
+        assert_eq!(headers.get("trace-proto-bin").unwrap(), "SGVsbG8hIQ");
+    }
+
+    #[test]
     fn test_iter_categorizes_ascii_entries() {
         let mut map = MetadataMap::new();
 
