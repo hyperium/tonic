@@ -351,3 +351,108 @@ async fn message_and_then_status_from_server_stream() {
     assert_eq!(stream.message().await.unwrap_err().message(), "foo");
     assert_eq!(stream.message().await.unwrap(), None);
 }
+
+// ---------------------------------------------------------------------------
+// Bug fix: HTTP 200 response with no grpc-status trailer must surface as
+// Unknown, not silently treated as a clean end-of-stream.
+//
+// We simulate the exact scenario described in `infer_grpc_status`: a proxy or
+// load-balancer that issues RST_STREAM(NO_ERROR) — e.g. an Envoy timeout —
+// without ever sending a grpc-status trailer.  hyper converts
+// RST_STREAM(NO_ERROR) into a clean end-of-stream (Poll::Ready(None)), so
+// tonic's only signal is the absence of the trailer on an HTTP 200 response.
+//
+// We use the `h2` crate directly to drive a raw HTTP/2 server that:
+//   1. Completes the HTTP/2 handshake
+//   2. Sends HTTP 200 + `content-type: application/grpc` response headers
+//   3. Sends RST_STREAM with reason NO_ERROR (no data, no trailers)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn missing_grpc_status_trailer_is_unknown_error() {
+    integration_tests::trace_init();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+
+    // Oneshot channel: client signals the server once `stream_call().await`
+    // has returned, i.e. the response HEADERS have been received and the
+    // client is about to enter the body-reading loop.  The server delays
+    // `send_reset` until it receives this signal so that:
+    //
+    //   1. RST_STREAM is queued only AFTER the HEADERS frame has already
+    //      been flushed over the wire (h2's `send_reset` calls `clear_queue`
+    //      which would otherwise discard any still-pending DATA frames, but
+    //      here there are none — only the already-flushed HEADERS matter).
+    //
+    //   2. The client is inside `Incoming::poll_data` (or about to enter it)
+    //      when RST_STREAM arrives.  That is exactly the branch where hyper
+    //      converts `Reset(NO_ERROR)` to `Poll::Ready(None)` (a clean
+    //      end-of-stream) rather than surfacing it as an error:
+    //
+    //        Some(Err(e)) => match e.reason() {
+    //            Some(h2::Reason::NO_ERROR) | Some(h2::Reason::CANCEL)
+    //                => Poll::Ready(None),   // ← taken here
+    //            _   => Poll::Ready(Some(Err(...))),
+    //        }
+    //
+    //      tonic's decoder sees None with an empty buffer, calls
+    //      `infer_grpc_status(trailers=None, status=200)`, and returns
+    //      `Code::Unknown` because it is not able to observe the
+    //      RST_STREAM(NO_ERROR) at this time and only sees a stream end
+    //      successfully but without trailers containing grpc-status.
+    //      TODO: this should expect Code::Internal instead.
+
+    let (headers_acked_tx, headers_acked_rx) = tokio::sync::oneshot::channel::<()>();
+
+    tokio::spawn(async move {
+        let (socket, _) = listener.accept().await.unwrap();
+        let mut conn = h2::server::handshake(socket).await.unwrap();
+
+        // Accept the single gRPC request and send HTTP 200 + grpc headers.
+        let mut send_stream = if let Some(Ok((_request, mut respond))) = conn.accept().await {
+            let response = http::Response::builder()
+                .status(http::StatusCode::OK)
+                .header("content-type", "application/grpc")
+                .body(())
+                .unwrap();
+            respond.send_response(response, false).unwrap()
+        } else {
+            return;
+        };
+
+        // Wait until the client confirms it received the HEADERS, then send
+        // RST_STREAM(NO_ERROR) with no grpc-status trailer.
+        tokio::spawn(async move {
+            headers_acked_rx.await.ok();
+            send_stream.send_reset(h2::Reason::NO_ERROR);
+        });
+
+        // Drive the connection until it closes, flushing HEADERS and (later) RST_STREAM.
+        while conn.accept().await.is_some() {}
+    });
+
+    let mut client = test_stream_client::TestStreamClient::connect(format!("http://{addr}"))
+        .await
+        .unwrap();
+
+    // Wait for response HEADERS (stream_call completes the HTTP/2 header phase).
+    // Then immediately tell the server we are about to read the body.
+    let response = client.stream_call(InputStream {}).await.unwrap();
+    headers_acked_tx.send(()).ok();
+    let mut stream = response.into_inner();
+
+    // The stream must surface as an Unknown error — NOT silently return None.
+    let err = stream.message().await.unwrap_err();
+    assert_eq!(
+        err.code(),
+        tonic::Code::Unknown,
+        "expected Unknown for RST_STREAM(NO_ERROR) without grpc-status trailer, got: {:?}",
+        err
+    );
+    assert!(
+        err.message().contains("missing grpc-status trailer"),
+        "unexpected error message: {}",
+        err.message()
+    );
+}
