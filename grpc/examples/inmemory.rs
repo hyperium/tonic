@@ -24,6 +24,7 @@
 
 use bytes::Buf;
 use bytes::Bytes;
+use grpc::StatusCode;
 use grpc::client;
 use grpc::client::CallOptions;
 use grpc::client::Channel;
@@ -203,7 +204,9 @@ async fn run_rpc(chan: &Channel) -> String {
                     server_id = id.to_string();
                 }
             }
-            ClientResponseStreamItem::Trailers(_) => break,
+            ClientResponseStreamItem::Trailers(trailers) => {
+                assert_eq!(trailers.status().code(), StatusCode::Ok);
+            }
             ClientResponseStreamItem::StreamClosed => break,
         }
     }
