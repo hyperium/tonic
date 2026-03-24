@@ -22,7 +22,6 @@
  *
  */
 
-use std::error::Error;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -30,7 +29,7 @@ use tonic::metadata::MetadataMap;
 
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
-use crate::client::load_balancing::LbConfig;
+use crate::client::load_balancing::FailingPicker;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
@@ -48,17 +47,19 @@ use crate::rt::GrpcRuntime;
 
 pub(crate) static POLICY_NAME: &str = "pick_first";
 
-#[derive(Debug)]
-struct Builder {}
+#[derive(Debug, Default)]
+pub(crate) struct Builder {}
 
 impl LbPolicyBuilder for Builder {
-    fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        Box::new(PickFirstPolicy {
+    type LbPolicy = PickFirstPolicy;
+
+    fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy {
+        PickFirstPolicy {
             work_scheduler: options.work_scheduler,
             subchannel: None,
             next_addresses: Vec::default(),
             runtime: options.runtime,
-        })
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -71,7 +72,7 @@ pub(crate) fn reg() {
 }
 
 #[derive(Debug)]
-struct PickFirstPolicy {
+pub(crate) struct PickFirstPolicy {
     work_scheduler: Arc<dyn WorkScheduler>,
     subchannel: Option<Arc<dyn Subchannel>>,
     next_addresses: Vec<Address>,
@@ -79,12 +80,14 @@ struct PickFirstPolicy {
 }
 
 impl LbPolicy for PickFirstPolicy {
+    type LbConfig = ();
+
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&Self::LbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         let mut addresses = update
             .endpoints
             .unwrap()
@@ -123,6 +126,14 @@ impl LbPolicy for PickFirstPolicy {
                 connectivity_state: ConnectivityState::Ready,
                 picker: Arc::new(OneSubchannelPicker {
                     sc: self.subchannel.as_ref().unwrap().clone(),
+                }),
+            });
+        } else if state.connectivity_state == ConnectivityState::TransientFailure {
+            let err = state.last_connection_error.clone().unwrap();
+            channel_controller.update_picker(LbState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                picker: Arc::new(FailingPicker {
+                    error: err.to_string(),
                 }),
             });
         }

@@ -1,4 +1,4 @@
-# tonic-protobuf-build
+# grpc-protobuf-build
 
 Compiles proto files via protobuf rust and generates service stubs and proto
 definitions for use with tonic.
@@ -14,7 +14,7 @@ protobuf = "<protobuf-version>"
 tonic-protobuf =  "<tonic-version>"
 
 [build-dependencies]
-tonic-protobuf-build = "<tonic-version>"
+grpc-protobuf-build = "<tonic-version>"
 ```
 
 You must ensure you have the following programs in your PATH:
@@ -23,13 +23,13 @@ You must ensure you have the following programs in your PATH:
 
 ## Getting Started
 
-`tonic-protobuf-build` works by being included as a [`build.rs` file](https://doc.rust-lang.org/cargo/reference/build-scripts.html) at the root of the binary/library.
+`grpc-protobuf-build` works by being included as a [`build.rs` file](https://doc.rust-lang.org/cargo/reference/build-scripts.html) at the root of the binary/library.
 
 You can rely on the defaults via
 
 ```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    tonic_protobuf_build::CodeGen::new()
+    grpc_protobuf_build::CodeGen::new()
         .include("proto")
         .inputs(["service.proto"])
         .compile()?;
@@ -41,13 +41,13 @@ Or configure the generated code deeper via
 
 ```rust,no_run
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let dependency = tonic_protobuf_build::Dependency::builder()
+    let dependency = grpc_protobuf_build::Dependency::builder()
         .crate_name("external_protos".to_string())
         .proto_import_paths(vec![PathBuf::from("external/message.proto")])
         .proto_files(vec!["message.proto".to_string()])
         .build()?;
 
-    tonic_protobuf_build::CodeGen::new()
+    grpc_protobuf_build::CodeGen::new()
         .generate_message_code(false)
         .inputs(["proto/helloworld/helloworld.proto"])
         .include("external")

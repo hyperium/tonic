@@ -28,7 +28,7 @@ The binaries will be in `build/bin/`:
 
 ## Usage
 
-**Note:** It's generally recommended to use `tonic_protobuf_build::CodeGen` and/or `protobuf_codegen::CodeGen` instead of invoking `protoc` directly.
+**Note:** It's generally recommended to use `grpc_protobuf_build::CodeGen` and/or `protobuf_codegen::CodeGen` instead of invoking `protoc` directly.
 
 ```bash
 # Add the plugin to PATH
