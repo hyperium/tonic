@@ -272,7 +272,7 @@ fn validate_header_matcher(
         Some(HeaderMatchSpecifier::PresentMatch(_)) => (HeaderMatchSpecifierConfig::Present, false),
         Some(HeaderMatchSpecifier::StringMatch(sm)) => {
             let ignore_case = sm.ignore_case;
-            let lower = |v: String| -> String {
+            let normalize = |v: String| -> String {
                 if ignore_case {
                     v.to_ascii_lowercase()
                 } else {
@@ -281,11 +281,15 @@ fn validate_header_matcher(
             };
             (
                 match sm.match_pattern {
-                    Some(MatchPattern::Exact(v)) => HeaderMatchSpecifierConfig::Exact(lower(v)),
-                    Some(MatchPattern::Prefix(v)) => HeaderMatchSpecifierConfig::Prefix(lower(v)),
-                    Some(MatchPattern::Suffix(v)) => HeaderMatchSpecifierConfig::Suffix(lower(v)),
+                    Some(MatchPattern::Exact(v)) => HeaderMatchSpecifierConfig::Exact(normalize(v)),
+                    Some(MatchPattern::Prefix(v)) => {
+                        HeaderMatchSpecifierConfig::Prefix(normalize(v))
+                    }
+                    Some(MatchPattern::Suffix(v)) => {
+                        HeaderMatchSpecifierConfig::Suffix(normalize(v))
+                    }
                     Some(MatchPattern::Contains(v)) => {
-                        HeaderMatchSpecifierConfig::Contains(lower(v))
+                        HeaderMatchSpecifierConfig::Contains(normalize(v))
                     }
                     Some(MatchPattern::SafeRegex(r)) => {
                         let re = Regex::new(&r.regex).map_err(|e| {
