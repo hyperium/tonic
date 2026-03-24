@@ -39,7 +39,6 @@ pub use self::map::Iter;
 pub use self::map::Key;
 pub use self::map::KeyAndValueRef;
 pub use self::map::MetadataMap;
-pub use self::map::ValueDrain;
 pub use self::map::ValueIter;
 pub use self::value::AsciiMetadataValue;
 pub use self::value::BinaryMetadataValue;

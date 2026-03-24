@@ -22,8 +22,6 @@
  *
  */
 
-use std::marker::PhantomData;
-
 use http::HeaderMap;
 use http::HeaderName;
 use http::HeaderValue;
@@ -81,12 +79,6 @@ pub enum KeyAndValueRef<'a> {
     Ascii(&'a MetadataKey<Ascii>, &'a MetadataValue<Ascii>),
     /// A binary metadata key and value.
     Binary(&'a MetadataKey<Binary>, &'a MetadataValue<Binary>),
-}
-
-#[derive(Debug)]
-pub struct ValueDrain<'a, VE: ValueEncoding> {
-    inner: std::vec::Drain<'a, (HeaderName, UnencodedHeaderValue)>,
-    _phantom: PhantomData<&'a VE>,
 }
 
 /// Reference to a key in a `MetadataMap`. It can point
@@ -849,11 +841,7 @@ impl MetadataMap {
         key.remove(self, private::Internal)
     }
 
-    /// Removes all values for the given key and returns a draining iterator over them.
-    ///
-    /// **Note:** While the relative order of the remaining elements in the map
-    /// is preserved, the order of the yielded elements is not guaranteed to
-    /// match their original insertion order.
+    /// Removes all values for the given key.
     ///
     /// # Examples
     ///
@@ -863,27 +851,22 @@ impl MetadataMap {
     /// map.insert("x-host", "example.com".parse().unwrap());
     /// map.append("x-host", "another.com".parse().unwrap());
     ///
-    /// let values: Vec<_> = map.remove_all("x-host").collect();
-    /// assert_eq!(2, values.len());
+    /// map.remove_all("x-host");
+    /// assert!(map.is_empty());
     /// ```
-    pub fn remove_all<K>(&mut self, key: K) -> ValueDrain<'_, Ascii>
+    pub fn remove_all<K>(&mut self, key: K)
     where
         K: AsMetadataKey<Ascii>,
     {
         key.remove_all(self, private::Internal)
     }
 
-    /// Removes all entries matching the given binary key and returns a
-    /// draining iterator.
+    /// Removes all entries matching the given binary key.
     ///
     /// This is the binary-key equivalent of [`remove_all`].
     ///
-    /// **Note:** While the order of the remaining elements is preserved, the
-    /// order of the yielded elements is not guaranteed to match their original
-    /// insertion order.
-    ///
     /// [`remove_all`]: Self::remove_all
-    pub fn remove_all_bin<K>(&mut self, key: K) -> ValueDrain<'_, Binary>
+    pub fn remove_all_bin<K>(&mut self, key: K)
     where
         K: AsMetadataKey<Binary>,
     {
@@ -918,18 +901,6 @@ impl<'a> Iterator for Iter<'a> {
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.inner.size_hint()
-    }
-}
-
-// ===== impl ValueDrain =====
-
-impl<VE: ValueEncoding> Iterator for ValueDrain<'_, VE> {
-    type Item = MetadataValue<VE>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner
-            .next()
-            .map(|(_, v)| MetadataValue::unchecked_from_header_value(v))
     }
 }
 
@@ -1178,7 +1149,7 @@ pub trait AsMetadataKey<VE: ValueEncoding> {
     fn remove(self, map: &mut MetadataMap, _: private::Internal) -> Option<MetadataValue<VE>>;
 
     #[doc(hidden)]
-    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE>;
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal);
 }
 
 // ==== impls ====
@@ -1223,24 +1194,8 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for MetadataKey<VE> {
 
     #[doc(hidden)]
     #[inline]
-    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE> {
-        let len = map.headers.len();
-        let mut i = 0;
-        let mut tail = len;
-
-        while i < tail {
-            if map.headers[i].0 == self.inner {
-                tail -= 1;
-                map.headers.swap(i, tail);
-            } else {
-                i += 1;
-            }
-        }
-
-        ValueDrain {
-            inner: map.headers.drain(tail..),
-            _phantom: PhantomData,
-        }
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) {
+        map.headers.retain(|h| h.0 != self.inner);
     }
 }
 
@@ -1284,22 +1239,8 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for &MetadataKey<VE> {
 
     #[doc(hidden)]
     #[inline]
-    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE> {
-        let mut keep_idx = 0;
-
-        for i in 0..map.headers.len() {
-            if map.headers[i].0 != self.inner {
-                map.headers.swap(keep_idx, i);
-                keep_idx += 1;
-            }
-        }
-
-        // Drain everything from `keep_idx` to the end.
-        // These are the elements that matched the target key.
-        ValueDrain {
-            inner: map.headers.drain(keep_idx..),
-            _phantom: PhantomData,
-        }
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) {
+        map.headers.retain(|h| h.0 != self.inner);
     }
 }
 
@@ -1352,29 +1293,11 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for &str {
 
     #[doc(hidden)]
     #[inline]
-    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) -> ValueDrain<'_, VE> {
+    fn remove_all(self, map: &mut MetadataMap, _: private::Internal) {
         if !VE::is_valid_key(self) {
-            return ValueDrain {
-                inner: map.headers.drain(map.headers.len()..),
-                _phantom: PhantomData,
-            };
+            return;
         }
-
-        let mut keep_idx = 0;
-
-        for i in 0..map.headers.len() {
-            if map.headers[i].0 != self {
-                map.headers.swap(keep_idx, i);
-                keep_idx += 1;
-            }
-        }
-
-        // Drain everything from `keep_idx` to the end.
-        // These are the elements that matched the target key.
-        ValueDrain {
-            inner: map.headers.drain(keep_idx..),
-            _phantom: PhantomData,
-        }
+        map.headers.retain(|h| h.0 != self);
     }
 }
 
@@ -1399,7 +1322,7 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for String {
 
     #[doc(hidden)]
     #[inline]
-    fn remove_all(self, map: &mut MetadataMap, token: private::Internal) -> ValueDrain<'_, VE> {
+    fn remove_all(self, map: &mut MetadataMap, token: private::Internal) {
         AsMetadataKey::<VE>::remove_all(self.as_str(), map, token)
     }
 }
@@ -1425,7 +1348,7 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for &String {
 
     #[doc(hidden)]
     #[inline]
-    fn remove_all(self, map: &mut MetadataMap, token: private::Internal) -> ValueDrain<'_, VE> {
+    fn remove_all(self, map: &mut MetadataMap, token: private::Internal) {
         AsMetadataKey::<VE>::remove_all(self.as_str(), map, token)
     }
 }
@@ -1588,12 +1511,7 @@ mod tests {
             MetadataValue::from_bytes(b"[binary data 2]"),
         );
         map.insert("x-host", "example.com".parse().unwrap());
-
-        let mut bin_entries: Vec<_> = map.remove_all_bin("trace-proto-bin").collect();
-        assert_eq!(2, bin_entries.len());
-        bin_entries.sort();
-        assert!(bin_entries.iter().any(|v| v == &b"[binary data]"[..]));
-        assert!(bin_entries.iter().any(|v| v == &b"[binary data 2]"[..]));
+        map.remove_all_bin("trace-proto-bin");
 
         assert!(map.get_bin("trace-proto-bin").is_none());
         assert!(map.get("x-host").is_some());
@@ -1615,15 +1533,5 @@ mod tests {
         assert!(map.contains_key("x-host"));
         assert!(!map.contains_key("x-number"));
         assert!(!map.contains_key("trace-proto-bin"));
-    }
-
-    #[allow(dead_code)]
-    fn value_drain_is_send_sync() {
-        fn is_send_sync<T: Send + Sync>() {}
-
-        is_send_sync::<Iter<'_>>();
-
-        is_send_sync::<ValueDrain<'_, Ascii>>();
-        is_send_sync::<ValueDrain<'_, Binary>>();
     }
 }
