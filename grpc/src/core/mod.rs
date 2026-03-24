@@ -220,7 +220,7 @@ pub struct Trailers {
 }
 
 impl Trailers {
-    /// Returns a default RequestHeaders instance.
+    /// Returns a default [`Trailers`] instance.
     pub fn new(status: Status) -> Self {
         Self {
             status,
@@ -234,7 +234,7 @@ impl Trailers {
         self
     }
 
-    /// Returns a reference to the status contained in these trailers.
+    /// Returns a reference to the [`Status`] contained in these trailers.
     pub fn status(&self) -> &Status {
         &self.status
     }
@@ -253,5 +253,10 @@ impl Trailers {
     /// Returns a reference to the metadata in these trailers.
     pub fn metadata(&self) -> &MetadataMap {
         &self.metadata
+    }
+
+    /// Returns the status in the [`Trailers`], consuming the entire status.
+    pub fn into_status(self) -> Status {
+        self.status
     }
 }

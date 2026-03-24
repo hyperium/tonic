@@ -63,6 +63,7 @@ use crate::client::load_balancing::round_robin;
 use crate::client::load_balancing::{self};
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::dns;
 use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::{self};
 use crate::client::service_config::LbPolicyType;
@@ -75,6 +76,8 @@ use crate::client::subchannel::SubchannelStateWatcher;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportRegistry;
+#[cfg(feature = "_runtime-tokio")]
+use crate::client::transport::tonic as tonic_transport;
 use crate::core::RequestHeaders;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::client::ClientHandshakeInfo;
@@ -88,7 +91,7 @@ use crate::rt::default_runtime;
 #[non_exhaustive]
 pub struct ChannelOptions {
     pub transport_options: Attributes, // ?
-    pub override_authority: Option<String>,
+    pub channel_authority: Option<String>,
     pub connection_backoff: Option<TODO>,
     pub default_service_config: Option<String>,
     pub disable_proxy: bool,
@@ -123,7 +126,7 @@ impl Default for ChannelOptions {
     fn default() -> Self {
         Self {
             transport_options: Attributes::default(),
-            override_authority: None,
+            channel_authority: None,
             connection_backoff: None,
             default_service_config: None,
             disable_proxy: false,
@@ -140,9 +143,9 @@ impl ChannelOptions {
     pub fn transport_options(self, transport_options: TODO) -> Self {
         todo!(); // add to existing options.
     }
-    pub fn override_authority(self, authority: String) -> Self {
+    pub fn override_authority(self, authority: impl Into<String>) -> Self {
         Self {
-            override_authority: Some(authority),
+            channel_authority: Some(authority.into()),
             ..self
         }
     }
@@ -169,6 +172,9 @@ impl Channel {
     {
         pick_first::reg();
         round_robin::reg();
+        dns::reg();
+        #[cfg(feature = "_runtime-tokio")]
+        tonic_transport::reg();
         Self {
             inner: Arc::new(PersistentChannel::new(
                 target,
@@ -304,7 +310,10 @@ impl ActiveChannel {
         // TODO(arjan-bal): Return error here instead of panicking.
         let rb = global_registry().get(target.scheme()).unwrap();
         let target = name_resolution::Target::from(target);
-        let authority = rb.default_authority(&target).to_owned();
+        let authority = options
+            .channel_authority
+            .clone()
+            .unwrap_or_else(|| rb.default_authority(&target).to_owned());
         let security_opts = SecurityOpts {
             credentials,
             authority: parse_authority(&authority),

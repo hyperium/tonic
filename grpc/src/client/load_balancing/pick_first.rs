@@ -30,6 +30,7 @@ use tonic::metadata::MetadataMap;
 
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::FailingPicker;
 use crate::client::load_balancing::LbConfig;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
@@ -123,6 +124,14 @@ impl LbPolicy for PickFirstPolicy {
                 connectivity_state: ConnectivityState::Ready,
                 picker: Arc::new(OneSubchannelPicker {
                     sc: self.subchannel.as_ref().unwrap().clone(),
+                }),
+            });
+        } else if state.connectivity_state == ConnectivityState::TransientFailure {
+            let err = state.last_connection_error.clone().unwrap();
+            channel_controller.update_picker(LbState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                picker: Arc::new(FailingPicker {
+                    error: err.to_string(),
                 }),
             });
         }
