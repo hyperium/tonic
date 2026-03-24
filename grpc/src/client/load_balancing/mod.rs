@@ -29,9 +29,10 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use tonic::Status;
 use tonic::metadata::MetadataMap;
 
+use crate::Status;
+use crate::StatusCode;
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
@@ -45,6 +46,7 @@ pub(crate) mod graceful_switch;
 pub(crate) mod pick_first;
 pub(crate) mod round_robin;
 pub(crate) mod subchannel;
+pub(crate) mod subchannel_sharing;
 
 #[cfg(test)]
 pub(crate) mod test_utils;
@@ -276,8 +278,8 @@ impl Display for PickResult {
         match self {
             Self::Pick(_) => write!(f, "Pick"),
             Self::Queue => write!(f, "Queue"),
-            Self::Fail(st) => write!(f, "Fail({st})"),
-            Self::Drop(st) => write!(f, "Drop({st})"),
+            Self::Fail(st) => write!(f, "Fail({st:?})"),
+            Self::Drop(st) => write!(f, "Drop({st:?})"),
         }
     }
 }
@@ -338,6 +340,22 @@ impl Debug for Pick {
     }
 }
 
+/// OneSubchannelPicker always returns a single subchannel.
+#[derive(Debug)]
+pub(crate) struct OneSubchannelPicker {
+    sc: Arc<dyn Subchannel>,
+}
+
+impl Picker for OneSubchannelPicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        PickResult::Pick(Pick {
+            subchannel: self.sc.clone(),
+            metadata: MetadataMap::new(),
+            on_complete: None,
+        })
+    }
+}
+
 /// QueuingPicker always returns Queue.  LB policies that are not actively
 /// Connecting should not use this picker.
 #[derive(Debug)]
@@ -356,7 +374,7 @@ pub(crate) struct FailingPicker {
 
 impl Picker for FailingPicker {
     fn pick(&self, _: &RequestHeaders) -> PickResult {
-        PickResult::Fail(Status::unavailable(self.error.clone()))
+        PickResult::Fail(Status::new(StatusCode::Unavailable, self.error.clone()))
     }
 }
 

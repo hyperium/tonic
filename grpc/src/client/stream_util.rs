@@ -25,13 +25,18 @@
 use crate::Status;
 use crate::StatusCode;
 use crate::client::CallOptions;
+use crate::client::DynRecvStream;
+use crate::client::DynSendStream;
 use crate::client::InvokeOnce;
 use crate::client::RecvStream;
+use crate::client::SendOptions;
+use crate::client::SendStream;
 use crate::client::interceptor::Intercept;
 use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ResponseStreamItem;
+use crate::core::SendMessage;
 use crate::core::Trailers;
 
 /// An interceptor that enforces proper gRPC semantics on the response stream.
@@ -158,6 +163,40 @@ where
                 self.error("stream ended without trailers")
             }
         }
+    }
+}
+
+struct NopSendStream;
+
+impl SendStream for NopSendStream {
+    async fn send(&mut self, msg: &dyn SendMessage, options: SendOptions) -> Result<(), ()> {
+        Err(())
+    }
+}
+
+pub(crate) struct FailingRecvStream {
+    status: Option<Status>,
+}
+
+impl RecvStream for FailingRecvStream {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        match self.status.take() {
+            Some(status) => ClientResponseStreamItem::Trailers(Trailers::new(status)),
+            None => ClientResponseStreamItem::StreamClosed,
+        }
+    }
+}
+
+impl FailingRecvStream {
+    pub(crate) fn new_stream_pair(
+        status: Status,
+    ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
+        (
+            Box::new(NopSendStream),
+            Box::new(Self {
+                status: Some(status),
+            }),
+        )
     }
 }
 
