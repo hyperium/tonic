@@ -1056,39 +1056,22 @@ impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {
         val: MetadataValue<VE>,
         _: private::Internal,
     ) -> Option<MetadataValue<VE>> {
-        // Wrap val so we can move it out exactly once when we find a match
-        let mut val_wrapper = Some(val.inner);
-        let mut ret = None;
+        let key = &self.inner;
+        let mut new_val = Some(val.inner);
+        let mut old_val = None;
 
         let mut write_idx = 0;
-        let len = map.headers.len();
 
-        for read_idx in 0..len {
-            // Check if keys match
-            if map.headers[read_idx].0 == self.inner {
-                if ret.is_none() {
-                    // Found the first match.
-
-                    // Swap values in-place.
-                    // This moves the old value into `old_val` (no clone needed)
-                    // and puts the new value into the vector.
-                    let new_val = val_wrapper
-                        .take()
-                        .expect("Value should exist for first match");
-                    let old_val = std::mem::replace(&mut map.headers[write_idx].1, new_val);
-
-                    ret = Some(MetadataValue::unchecked_from_header_value(old_val));
-
-                    // Keep this element
+        for read_idx in 0..map.headers.len() {
+            if map.headers[read_idx].0 == key {
+                if let Some(v) = new_val.take() {
+                    let replaced = std::mem::replace(&mut map.headers[read_idx].1, v);
+                    old_val = Some(MetadataValue::unchecked_from_header_value(replaced));
                     write_idx += 1;
-                } else {
-                    // Found a subsequent match (Duplicate):
-                    // Do not increment write_idx. This effectively removes the element
-                    // by allowing it to be overwritten by the next valid element.
                 }
+                // Duplicates do nothing and are effectively dropped when we truncate.
             } else {
-                // Not a match.
-                // Move to write position to keep list compact
+                // Keep non-matching elements.
                 if read_idx != write_idx {
                     map.headers.swap(read_idx, write_idx);
                 }
@@ -1096,17 +1079,16 @@ impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {
             }
         }
 
-        // Truncate the vector to the new length (removing duplicates/gaps)
         map.headers.truncate(write_idx);
 
-        // If we never found a match, push the new entry now.
-        if ret.is_none() {
-            map.headers
-                .push((self.inner.clone(), val_wrapper.take().unwrap()));
+        // If `new_val` was never taken, the key didn't exist. Push it.
+        if let Some(v) = new_val {
+            map.headers.push((key.clone(), v));
         }
 
-        ret
+        old_val
     }
+
     #[doc(hidden)]
     #[inline]
     fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>, _: private::Internal) {
@@ -1175,21 +1157,8 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for MetadataKey<VE> {
 
     #[doc(hidden)]
     #[inline]
-    fn remove(self, map: &mut MetadataMap, _: private::Internal) -> Option<MetadataValue<VE>> {
-        let mut ret = None;
-
-        map.headers.retain(|(k, v)| {
-            if k == self.inner {
-                if ret.is_none() {
-                    ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
-                }
-
-                false
-            } else {
-                true
-            }
-        });
-        ret
+    fn remove(self, map: &mut MetadataMap, token: private::Internal) -> Option<MetadataValue<VE>> {
+        self.inner.as_str().remove(map, token)
     }
 
     #[doc(hidden)]
@@ -1220,21 +1189,8 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for &MetadataKey<VE> {
 
     #[doc(hidden)]
     #[inline]
-    fn remove(self, map: &mut MetadataMap, _: private::Internal) -> Option<MetadataValue<VE>> {
-        let mut ret = None;
-
-        map.headers.retain(|(k, v)| {
-            if k == self.inner {
-                if ret.is_none() {
-                    ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
-                }
-
-                false
-            } else {
-                true
-            }
-        });
-        ret
+    fn remove(self, map: &mut MetadataMap, token: private::Internal) -> Option<MetadataValue<VE>> {
+        self.inner.as_str().remove(map, token)
     }
 
     #[doc(hidden)]
@@ -1275,20 +1231,13 @@ impl<VE: ValueEncoding> AsMetadataKey<VE> for &str {
             return None;
         }
 
-        let mut ret = None;
+        let mut extracted = map.headers.extract_if(.., |(k, _v)| *k == self);
+        let first_match = extracted
+            .next()
+            .map(|(_k, v)| MetadataValue::unchecked_from_header_value(v));
 
-        map.headers.retain(|(k, v)| {
-            if k == self {
-                if ret.is_none() {
-                    ret = Some(MetadataValue::unchecked_from_header_value(v.clone()));
-                }
-
-                false
-            } else {
-                true
-            }
-        });
-        ret
+        extracted.for_each(drop);
+        first_match
     }
 
     #[doc(hidden)]
