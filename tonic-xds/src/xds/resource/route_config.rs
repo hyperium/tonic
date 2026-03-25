@@ -61,15 +61,32 @@ pub(crate) struct HeaderMatcherConfig {
 }
 
 /// Header match specifier variants.
+///
+/// String-based variants carry an `ignore_case` flag (gRFC A63).
+/// Regex, range, and presence variants do not support `ignore_case` by design.
 #[derive(Debug, Clone)]
 pub(crate) enum HeaderMatchSpecifierConfig {
-    Exact(String),
+    Exact {
+        value: String,
+        ignore_case: bool,
+    },
+    Prefix {
+        value: String,
+        ignore_case: bool,
+    },
+    Suffix {
+        value: String,
+        ignore_case: bool,
+    },
+    Contains {
+        value: String,
+        ignore_case: bool,
+    },
     SafeRegex(Regex),
-    Prefix(String),
-    Suffix(String),
-    Contains(String),
     /// Match if header is present (any value).
     Present,
+    /// Match if header is absent.
+    Absent,
     /// Match if the header value, parsed as an integer, falls within [start, end).
     Range {
         start: i64,
@@ -252,7 +269,10 @@ fn validate_header_matcher(
     use envoy_types::pb::envoy::r#type::matcher::v3::string_matcher::MatchPattern;
 
     let match_specifier = match hm.header_match_specifier {
-        Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact(v),
+        Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact {
+            value: v,
+            ignore_case: false,
+        },
         Some(HeaderMatchSpecifier::SafeRegexMatch(r)) => {
             let re = Regex::new(&r.regex).map_err(|e| {
                 Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
@@ -263,24 +283,45 @@ fn validate_header_matcher(
             start: r.start,
             end: r.end,
         },
-        Some(HeaderMatchSpecifier::PresentMatch(_)) => HeaderMatchSpecifierConfig::Present,
-        Some(HeaderMatchSpecifier::StringMatch(sm)) => match sm.match_pattern {
-            Some(MatchPattern::Exact(v)) => HeaderMatchSpecifierConfig::Exact(v),
-            Some(MatchPattern::Prefix(v)) => HeaderMatchSpecifierConfig::Prefix(v),
-            Some(MatchPattern::Suffix(v)) => HeaderMatchSpecifierConfig::Suffix(v),
-            Some(MatchPattern::Contains(v)) => HeaderMatchSpecifierConfig::Contains(v),
-            Some(MatchPattern::SafeRegex(r)) => {
-                let re = Regex::new(&r.regex).map_err(|e| {
-                    Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
-                })?;
-                HeaderMatchSpecifierConfig::SafeRegex(re)
+        Some(HeaderMatchSpecifier::PresentMatch(present)) => {
+            if present {
+                HeaderMatchSpecifierConfig::Present
+            } else {
+                HeaderMatchSpecifierConfig::Absent
             }
-            _ => {
-                return Err(Error::Validation(
-                    "unsupported StringMatcher pattern".into(),
-                ));
+        }
+        Some(HeaderMatchSpecifier::StringMatch(sm)) => {
+            let ignore_case = sm.ignore_case;
+            match sm.match_pattern {
+                Some(MatchPattern::Exact(v)) => HeaderMatchSpecifierConfig::Exact {
+                    value: v,
+                    ignore_case,
+                },
+                Some(MatchPattern::Prefix(v)) => HeaderMatchSpecifierConfig::Prefix {
+                    value: v,
+                    ignore_case,
+                },
+                Some(MatchPattern::Suffix(v)) => HeaderMatchSpecifierConfig::Suffix {
+                    value: v,
+                    ignore_case,
+                },
+                Some(MatchPattern::Contains(v)) => HeaderMatchSpecifierConfig::Contains {
+                    value: v,
+                    ignore_case,
+                },
+                Some(MatchPattern::SafeRegex(r)) => {
+                    let re = Regex::new(&r.regex).map_err(|e| {
+                        Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
+                    })?;
+                    HeaderMatchSpecifierConfig::SafeRegex(re)
+                }
+                _ => {
+                    return Err(Error::Validation(
+                        "unsupported StringMatcher pattern".into(),
+                    ));
+                }
             }
-        },
+        }
         None => HeaderMatchSpecifierConfig::Present,
         _ => {
             return Err(Error::Validation(
