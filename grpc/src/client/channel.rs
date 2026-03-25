@@ -23,7 +23,6 @@
  */
 
 use core::panic;
-use std::any::Any;
 use std::error::Error;
 use std::mem;
 use std::str::FromStr;
@@ -49,6 +48,7 @@ use crate::client::Invoke;
 use crate::client::load_balancing::DynLbPolicy;
 use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+use crate::client::load_balancing::LbPolicy as _;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
 use crate::client::load_balancing::ParsedJsonLbConfig;
@@ -57,9 +57,9 @@ use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::WorkScheduler;
 use crate::client::load_balancing::pick_first;
 use crate::client::load_balancing::round_robin;
-use crate::client::load_balancing::subchannel::ExternalSubchannel;
 use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
+use crate::client::load_balancing::subchannel_sharing::SubchannelSharing;
 use crate::client::load_balancing::{self};
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
@@ -68,11 +68,9 @@ use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::{self};
 use crate::client::service_config::LbPolicyType;
 use crate::client::service_config::ServiceConfig;
+use crate::client::stream_util::FailingRecvStream;
 use crate::client::subchannel::InternalSubchannel;
-use crate::client::subchannel::InternalSubchannelPool;
 use crate::client::subchannel::NopBackoff;
-use crate::client::subchannel::SubchannelKey;
-use crate::client::subchannel::SubchannelStateWatcher;
 use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
 use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportRegistry;
@@ -371,15 +369,8 @@ impl Invoke for Arc<ActiveChannel> {
                 let result = &p.pick(&headers);
                 match result {
                     PickResult::Pick(pr) => {
-                        if let Some(sc) = (pr.subchannel.as_ref() as &dyn Any)
-                            .downcast_ref::<ExternalSubchannel>()
-                        {
-                            return sc
-                                .isc
-                                .as_ref()
-                                .unwrap()
-                                .dyn_invoke(headers, options.clone())
-                                .await;
+                        if let Some(sc) = pr.subchannel.downcast_ref::<InternalSubchannel>() {
+                            return sc.dyn_invoke(headers, options.clone()).await;
                         } else {
                             panic!(
                                 "picked subchannel is not an implementation provided by the channel"
@@ -390,7 +381,7 @@ impl Invoke for Arc<ActiveChannel> {
                         // Continue and retry the RPC with the next picker.
                     }
                     PickResult::Fail(status) => {
-                        todo!("failed pick: {:?}", status);
+                        return FailingRecvStream::new_stream_pair(status.clone());
                     }
                     PickResult::Drop(status) => {
                         todo!("dropped pick: {:?}", status);
@@ -422,7 +413,6 @@ impl name_resolution::WorkScheduler for ResolverWorkScheduler {
 pub(crate) struct InternalChannelController {
     pub(super) lb: Arc<LbController>, // called and passes mutable parent to it, so must be Arc.
     transport_registry: TransportRegistry,
-    pub(super) subchannel_pool: Arc<InternalSubchannelPool>,
     resolve_now: Arc<Notify>,
     wqtx: WorkQueueTx,
     lb_work_scheduler: Arc<LbWorkScheduler>,
@@ -454,7 +444,6 @@ impl InternalChannelController {
         Self {
             lb,
             transport_registry,
-            subchannel_pool: Arc::new(InternalSubchannelPool::new()),
             resolve_now,
             wqtx,
             picker,
@@ -463,14 +452,6 @@ impl InternalChannelController {
             security_opts,
             lb_work_scheduler,
         }
-    }
-
-    fn new_esc_for_isc(&self, isc: Arc<InternalSubchannel>) -> Arc<dyn Subchannel> {
-        let sc = Arc::new(ExternalSubchannel::new(isc.clone(), self.wqtx.clone()));
-        let watcher = Arc::new(SubchannelStateWatcher::new(sc.clone(), self.wqtx.clone()));
-        sc.set_watcher(watcher.clone());
-        isc.register_connectivity_state_watcher(watcher.clone());
-        sc
     }
 }
 
@@ -488,34 +469,18 @@ impl name_resolution::ChannelController for InternalChannelController {
 
 impl load_balancing::ChannelController for InternalChannelController {
     fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel> {
-        let key = SubchannelKey::new(address.clone());
-        if let Some(isc) = self.subchannel_pool.lookup_subchannel(&key) {
-            return self.new_esc_for_isc(isc);
-        }
-
-        // If we get here, it means one of two things:
-        // 1. provided key is not found in the map
-        // 2. provided key points to an unpromotable value, which can occur if
-        //    its internal subchannel has been dropped but hasn't been
-        //    unregistered yet.
-
         let transport = self
             .transport_registry
             .get_transport(address.network_type)
             .unwrap();
-        let scp = self.subchannel_pool.clone();
-        let isc = InternalSubchannel::new(
-            key.clone(),
+        InternalSubchannel::new_arc(
+            address.clone(),
             transport,
             Arc::new(NopBackoff {}),
-            Box::new(move |k: SubchannelKey| {
-                scp.unregister_subchannel(&k);
-            }),
             self.runtime.clone(),
             self.security_opts.clone(),
-        );
-        let _ = self.subchannel_pool.register_subchannel(&key, isc.clone());
-        self.new_esc_for_isc(isc)
+            self.wqtx.clone(),
+        )
     }
 
     fn update_picker(&mut self, update: LbState) {
@@ -535,7 +500,7 @@ impl load_balancing::ChannelController for InternalChannelController {
 // A channel that is not idle (connecting, ready, or erroring).
 #[derive(Debug)]
 pub(super) struct LbController {
-    pub(super) policy: Mutex<Option<Box<DynLbPolicy>>>,
+    pub(super) policy: Mutex<Option<SubchannelSharing<Box<DynLbPolicy>>>>,
     policy_builder: Mutex<Option<Arc<DynLbPolicyBuilder>>>,
     runtime: GrpcRuntime,
     work_scheduler: Arc<LbWorkScheduler>,
@@ -594,13 +559,14 @@ impl LbController {
         }
         let mut p = self.policy.lock().unwrap();
         if p.is_none() {
+            // TODO: use GracefulSwitch as the child of SubchannelSharing.
             let builder = GLOBAL_LB_REGISTRY.get_policy(policy_name).unwrap();
             let newpol = builder.build(LbPolicyOptions {
                 work_scheduler: self.work_scheduler.clone(),
                 runtime: self.runtime.clone(),
             });
             *self.policy_builder.lock().unwrap() = Some(builder);
-            *p = Some(newpol);
+            *p = Some(SubchannelSharing::new(newpol));
         }
 
         // TODO: config should come from ServiceConfig.
@@ -620,8 +586,6 @@ impl LbController {
         p.as_mut()
             .unwrap()
             .resolver_update(update, config.as_ref(), controller)
-
-        // TODO: close old LB policy gracefully vs. drop?
     }
     pub(super) fn subchannel_update(
         &self,
