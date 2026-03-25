@@ -213,24 +213,50 @@ fn match_header(hm: &HeaderMatcherConfig, headers: &http::HeaderMap) -> bool {
             }
         });
 
-    // When ignore_case is true, pattern strings are already pre-lowercased at
-    // validation time, so we only need to lowercase the header value here.
-    let value = value.map(|v| {
-        if hm.ignore_case {
-            std::borrow::Cow::Owned(v.to_ascii_lowercase())
-        } else {
-            std::borrow::Cow::Borrowed(v)
-        }
-    });
-
     match &hm.match_specifier {
         HeaderMatchSpecifierConfig::Present => value.is_some(),
-        HeaderMatchSpecifierConfig::Exact(e) => value.is_some_and(|v| v.as_ref() == e),
-        HeaderMatchSpecifierConfig::Prefix(p) => value.is_some_and(|v| v.starts_with(p.as_str())),
-        HeaderMatchSpecifierConfig::Suffix(s) => value.is_some_and(|v| v.ends_with(s.as_str())),
-        HeaderMatchSpecifierConfig::Contains(c) => value.is_some_and(|v| v.contains(c.as_str())),
-        // per gRFC A63, ignore_case is not applicable to regex or range matchers.
-        HeaderMatchSpecifierConfig::SafeRegex(re) => value.is_some_and(|v| re.is_match(&v)),
+        HeaderMatchSpecifierConfig::Absent => value.is_none(),
+        HeaderMatchSpecifierConfig::Exact {
+            value: e,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.eq_ignore_ascii_case(e)
+            } else {
+                v == e
+            }
+        }),
+        HeaderMatchSpecifierConfig::Prefix {
+            value: p,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.to_ascii_lowercase().starts_with(&p.to_ascii_lowercase())
+            } else {
+                v.starts_with(p.as_str())
+            }
+        }),
+        HeaderMatchSpecifierConfig::Suffix {
+            value: s,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.to_ascii_lowercase().ends_with(&s.to_ascii_lowercase())
+            } else {
+                v.ends_with(s.as_str())
+            }
+        }),
+        HeaderMatchSpecifierConfig::Contains {
+            value: c,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.to_ascii_lowercase().contains(&c.to_ascii_lowercase())
+            } else {
+                v.contains(c.as_str())
+            }
+        }),
+        HeaderMatchSpecifierConfig::SafeRegex(re) => value.is_some_and(|v| re.is_match(v)),
         HeaderMatchSpecifierConfig::Range { start, end } => {
             value.is_some_and(|v| v.parse::<i64>().is_ok_and(|n| n >= *start && n < *end))
         }
@@ -526,9 +552,11 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "x-env".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::Exact("prod".into()),
+                            match_specifier: HeaderMatchSpecifierConfig::Exact {
+                                value: "prod".into(),
+                                ignore_case: false,
+                            },
                             invert_match: false,
-                            ignore_case: false,
                         }],
                         case_sensitive: true,
                         match_fraction: None,
@@ -638,7 +666,6 @@ mod tests {
                                 end: 10,
                             },
                             invert_match: false,
-                            ignore_case: false,
                         }],
                         case_sensitive: true,
                         match_fraction: None,
@@ -727,11 +754,11 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "content-type".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::Exact(
-                                "application/grpc".into(),
-                            ),
+                            match_specifier: HeaderMatchSpecifierConfig::Exact {
+                                value: "application/grpc".into(),
+                                ignore_case: false,
+                            },
                             invert_match: false,
-                            ignore_case: false,
                         }],
                         case_sensitive: true,
                         match_fraction: None,
@@ -754,7 +781,6 @@ mod tests {
 
     #[test]
     fn ignore_case_exact_match() {
-        // Pattern is pre-lowercased (as validation would produce).
         let rc = simple_rc(vec![VirtualHostConfig {
             name: "vh".into(),
             domains: vec!["*".into()],
@@ -763,9 +789,11 @@ mod tests {
                     path_specifier: PathSpecifierConfig::Prefix("/".into()),
                     headers: vec![HeaderMatcherConfig {
                         name: "x-env".into(),
-                        match_specifier: HeaderMatchSpecifierConfig::Exact("prod".into()),
+                        match_specifier: HeaderMatchSpecifierConfig::Exact {
+                            value: "Prod".into(),
+                            ignore_case: true,
+                        },
                         invert_match: false,
-                        ignore_case: true,
                     }],
                     case_sensitive: true,
                     match_fraction: None,
@@ -803,7 +831,6 @@ mod tests {
                                 name: "x-tag".into(),
                                 match_specifier: specifier,
                                 invert_match: false,
-                                ignore_case: true,
                             }],
                             case_sensitive: true,
                             match_fraction: None,
@@ -817,23 +844,69 @@ mod tests {
 
         let mut headers = http::HeaderMap::new();
 
-        // Patterns are pre-lowercased (as validation would produce).
-        let rc = make_route(HeaderMatchSpecifierConfig::Prefix("app".into()));
+        let rc = make_route(HeaderMatchSpecifierConfig::Prefix {
+            value: "App".into(),
+            ignore_case: true,
+        });
         headers.insert("x-tag", "APPLICATION/JSON".parse().unwrap());
         assert!(
             matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
         );
 
-        let rc = make_route(HeaderMatchSpecifierConfig::Suffix("json".into()));
+        let rc = make_route(HeaderMatchSpecifierConfig::Suffix {
+            value: "JSON".into(),
+            ignore_case: true,
+        });
         headers.insert("x-tag", "application/json".parse().unwrap());
         assert!(
             matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
         );
 
-        let rc = make_route(HeaderMatchSpecifierConfig::Contains("grpc".into()));
+        let rc = make_route(HeaderMatchSpecifierConfig::Contains {
+            value: "Grpc".into(),
+            ignore_case: true,
+        });
         headers.insert("x-tag", "APPLICATION/GRPC+PROTO".parse().unwrap());
         assert!(
             matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+    }
+
+    #[test]
+    fn safe_regex_header_match() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh".into(),
+            domains: vec!["*".into()],
+            routes: vec![
+                RouteConfig {
+                    match_criteria: RouteConfigMatch {
+                        path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                        headers: vec![HeaderMatcherConfig {
+                            name: "x-tag".into(),
+                            match_specifier: HeaderMatchSpecifierConfig::SafeRegex(
+                                regex::Regex::new("^v[0-9]+$").unwrap(),
+                            ),
+                            invert_match: false,
+                        }],
+                        case_sensitive: true,
+                        match_fraction: None,
+                    },
+                    action: RouteConfigAction::Cluster("matched".into()),
+                },
+                simple_route("/", "fallback"),
+            ],
+        }]);
+
+        let mut headers = http::HeaderMap::new();
+
+        headers.insert("x-tag", "v123".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+
+        headers.insert("x-tag", "latest".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "fallback")
         );
     }
 
@@ -848,9 +921,11 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "x-env".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::Exact("Prod".into()),
+                            match_specifier: HeaderMatchSpecifierConfig::Exact {
+                                value: "Prod".into(),
+                                ignore_case: false,
+                            },
                             invert_match: false,
-                            ignore_case: false,
                         }],
                         case_sensitive: true,
                         match_fraction: None,
