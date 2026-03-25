@@ -38,7 +38,6 @@ use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::SecurityLevel;
 use crate::credentials::call::CallCredentials;
-use crate::credentials::client;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientConnectionSecurityInfo;
 use crate::credentials::client::ClientHandshakeInfo;
@@ -54,6 +53,8 @@ use crate::credentials::rustls::parse_certs;
 use crate::credentials::rustls::parse_key;
 use crate::credentials::rustls::sanitize_crypto_provider;
 use crate::credentials::rustls::tls_stream::TlsStream;
+use crate::private;
+use crate::rt::AsyncIoAdapter;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
@@ -85,7 +86,7 @@ impl ClientTlsConfig {
     where
         R: Provider<RootCertificates>,
     {
-        self.pem_roots_provider = Some(provider.get_receiver());
+        self.pem_roots_provider = Some(provider.get_receiver(private::Internal));
         self
     }
 
@@ -98,7 +99,7 @@ impl ClientTlsConfig {
     where
         I: Provider<Identity>,
     {
-        self.identity_provider = Some(provider.get_receiver());
+        self.identity_provider = Some(provider.get_receiver(private::Internal));
         self
     }
 
@@ -214,23 +215,26 @@ impl ClientConnectionSecurityContext for ClientTlsSecContext {
     }
 }
 
-impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
+impl ChannelCredentials for RustlsClientTlsCredendials {
     type ContextType = ClientTlsSecContext;
     type Output<I> = TlsStream<I>;
+
     async fn connect<Input: GrpcEndpoint>(
         &self,
         authority: &Authority,
         source: Input,
         _info: &ClientHandshakeInfo,
         _rt: &GrpcRuntime,
+        _token: private::Internal,
     ) -> Result<HandshakeOutput<TlsStream<Input>, ClientTlsSecContext>, String> {
         let server_name = ServerName::try_from(authority.host())
             .map_err(|e| format!("invalid authority: {}", e))?
             .to_owned();
+        let input_io = AsyncIoAdapter::new(source);
 
         let tls_stream = self
             .connector
-            .connect(server_name, source)
+            .connect(server_name, input_io)
             .await
             .map_err(|e| e.to_string())?;
 
@@ -263,13 +267,11 @@ impl client::ChannelCredsInternal for RustlsClientTlsCredendials {
         })
     }
 
-    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
-        None
-    }
-}
-
-impl ChannelCredentials for RustlsClientTlsCredendials {
     fn info(&self) -> &ProtocolInfo {
         &TLS_PROTO_INFO
+    }
+
+    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
+        None
     }
 }
