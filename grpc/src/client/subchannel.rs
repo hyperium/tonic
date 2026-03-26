@@ -23,13 +23,12 @@
  */
 
 use core::panic;
-use std::collections::BTreeMap;
-use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Display;
+use std::hash::Hash;
+use std::ptr::addr_eq;
 use std::sync::Arc;
 use std::sync::Mutex;
-use std::sync::RwLock;
 use std::sync::Weak;
 use std::time::Duration;
 use std::time::Instant;
@@ -45,23 +44,19 @@ use crate::client::ConnectivityState;
 use crate::client::DynInvoke;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
-use crate::client::RecvStream;
-use crate::client::SendOptions;
-use crate::client::SendStream;
 use crate::client::channel::InternalChannelController;
 use crate::client::channel::WorkQueueItem;
 use crate::client::channel::WorkQueueTx;
-use crate::client::load_balancing::subchannel::ExternalSubchannel;
+use crate::client::load_balancing::LbPolicy as _;
+use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
+use crate::client::load_balancing::subchannel::private::Sealed;
 use crate::client::name_resolution::Address;
+use crate::client::stream_util::FailingRecvStream;
 use crate::client::transport::DynTransport;
 use crate::client::transport::SecurityOpts;
 use crate::client::transport::TransportOptions;
-use crate::core::ClientResponseStreamItem;
-use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
-use crate::core::SendMessage;
-use crate::core::Trailers;
 use crate::credentials::call::CallDetails;
 use crate::credentials::call::ClientConnectionSecurityInfo as CallClientConnectionSecurityInfo;
 use crate::credentials::client::ClientConnectionSecurityContext;
@@ -117,13 +112,10 @@ impl<'a> From<&'a InternalSubchannelState> for SubchannelState {
                 connectivity_state: ConnectivityState::Ready,
                 last_connection_error: None,
             },
-            InternalSubchannelState::TransientFailure(err) => {
-                let arc_err: Arc<dyn Error + Send + Sync> = Arc::from(Box::from(err.clone()));
-                SubchannelState {
-                    connectivity_state: ConnectivityState::TransientFailure,
-                    last_connection_error: Some(arc_err),
-                }
-            }
+            InternalSubchannelState::TransientFailure(err) => SubchannelState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                last_connection_error: Some(err.clone()),
+            },
         }
     }
 }
@@ -203,10 +195,7 @@ impl DynInvoke for InternalSubchannel {
         };
 
         let fail_with = |status| -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
-            (
-                Box::new(FailingSendStream {}),
-                Box::new(FailingRecvStream::new(status)),
-            )
+            FailingRecvStream::new_stream_pair(status)
         };
 
         if let Some(call_creds) = call_creds {
@@ -250,8 +239,7 @@ impl DynInvoke for InternalSubchannel {
 }
 
 pub(crate) struct InternalSubchannel {
-    unregister_fn: Option<Box<dyn FnOnce(SubchannelKey) + Send + Sync>>,
-    key: SubchannelKey,
+    address: Address,
     inner: InnerSubchannel,
     on_drop: Arc<Notify>,
 }
@@ -264,84 +252,100 @@ struct InnerSubchannel {
 struct SharedInnerSubchannelData {
     address: String,
     state: InternalSubchannelState,
-    watchers: Vec<Arc<SubchannelStateWatcher>>, // TODO(easwars): Revisit the choice for this data structure.
+    work_queue: WorkQueueTx,
     on_drop: Arc<Notify>,
     transport_builder: Arc<dyn DynTransport>,
     backoff: Arc<dyn Backoff>,
     runtime: GrpcRuntime,
     transport_options: TransportOptions,
     security_opts: SecurityOpts,
+    weak_self: Weak<InternalSubchannel>,
 }
 
 impl SharedInnerSubchannelData {
     fn update_state(&mut self, state: InternalSubchannelState) {
         self.state = state;
         let state: SubchannelState = (&self.state).into();
-        for w in &self.watchers {
-            w.on_state_change(state.clone());
-        }
+
+        let Some(strong) = self.weak_self.upgrade() else {
+            return;
+        };
+
+        let _ = self.work_queue.send(WorkQueueItem::Closure(Box::new(
+            move |c: &mut InternalChannelController| {
+                c.lb.clone()
+                    .policy
+                    .lock()
+                    .unwrap()
+                    .as_mut()
+                    .unwrap()
+                    .subchannel_update(strong, &state, c);
+            },
+        )));
+    }
+}
+
+impl Sealed for InternalSubchannel {}
+
+impl Subchannel for InternalSubchannel {
+    fn address(&self) -> Address {
+        self.address.clone()
+    }
+
+    fn connect(&self) {
+        self.inner.begin_connecting();
+    }
+}
+
+impl Eq for InternalSubchannel {}
+
+impl Hash for InternalSubchannel {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.address.hash(state);
+    }
+}
+
+impl PartialEq for InternalSubchannel {
+    fn eq(&self, other: &Self) -> bool {
+        addr_eq(self, other)
     }
 }
 
 impl InternalSubchannel {
-    pub(super) fn new(
-        key: SubchannelKey,
+    pub(super) fn new_arc(
+        address: Address,
         transport: Arc<dyn DynTransport>,
         backoff: Arc<dyn Backoff>,
-        unregister_fn: Box<dyn FnOnce(SubchannelKey) + Send + Sync>,
         runtime: GrpcRuntime,
         security_opts: SecurityOpts,
-    ) -> Arc<InternalSubchannel> {
-        println!("creating new internal subchannel for: {:?}", &key);
-        let address = key.address.address.to_string();
+        work_queue: WorkQueueTx,
+    ) -> Arc<dyn Subchannel> {
         let on_drop = Arc::new(Notify::new());
-        Arc::new(Self {
-            key,
+        let address_string = address.address.to_string();
+        let this = Arc::new_cyclic(|weak_self| Self {
+            address,
             on_drop: on_drop.clone(),
-            unregister_fn: Some(unregister_fn),
             inner: InnerSubchannel {
                 data: Arc::new(Mutex::new(SharedInnerSubchannelData {
-                    address,
+                    address: address_string,
                     transport_builder: transport,
                     backoff,
+                    weak_self: weak_self.clone(),
                     runtime,
                     state: InternalSubchannelState::Idle,
-                    watchers: Vec::new(),
+                    work_queue,
                     on_drop,
                     transport_options: TransportOptions::default(), // TODO: should be configurable
                     security_opts,
                 })),
             },
-        })
+        });
+        this.inner.move_to_idle();
+        this
     }
 
     pub(super) fn address(&self) -> Address {
-        self.key.address.clone()
-    }
-
-    /// Begins connecting the subchannel asynchronously.  Does nothing if the
-    /// subchannel is not currently idle.
-    pub(super) fn connect(self: &Arc<Self>) {
-        self.inner.begin_connecting();
-    }
-
-    pub(super) fn register_connectivity_state_watcher(&self, watcher: Arc<SubchannelStateWatcher>) {
-        let mut data = self.inner.data.lock().unwrap();
-        data.watchers.push(watcher.clone());
-        let state = (&data.state).into();
-        watcher.on_state_change(state);
-    }
-
-    pub(super) fn unregister_connectivity_state_watcher(
-        &self,
-        watcher: Arc<SubchannelStateWatcher>,
-    ) {
-        self.inner
-            .data
-            .lock()
-            .unwrap()
-            .watchers
-            .retain(|x| !Arc::ptr_eq(x, &watcher));
+        self.address.clone()
     }
 }
 
@@ -453,146 +457,7 @@ impl InnerSubchannel {
 
 impl Drop for InternalSubchannel {
     fn drop(&mut self) {
-        let unregister_fn = self.unregister_fn.take();
-        unregister_fn.unwrap()(self.key.clone());
         self.on_drop.notify_waiters();
-    }
-}
-
-// SubchannelKey uniiquely identifies a subchannel in the pool.
-#[derive(PartialEq, PartialOrd, Eq, Ord, Clone)]
-
-pub(crate) struct SubchannelKey {
-    address: Address,
-}
-
-impl SubchannelKey {
-    pub(crate) fn new(address: Address) -> Self {
-        Self { address }
-    }
-}
-
-impl Display for SubchannelKey {
-    #[allow(clippy::to_string_in_format_args)]
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.address.address.to_string())
-    }
-}
-
-impl Debug for SubchannelKey {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.address)
-    }
-}
-
-pub(super) struct InternalSubchannelPool {
-    subchannels: RwLock<BTreeMap<SubchannelKey, Weak<InternalSubchannel>>>,
-}
-
-impl InternalSubchannelPool {
-    pub(super) fn new() -> Self {
-        Self {
-            subchannels: RwLock::new(BTreeMap::new()),
-        }
-    }
-
-    pub(super) fn lookup_subchannel(&self, key: &SubchannelKey) -> Option<Arc<InternalSubchannel>> {
-        println!("looking up subchannel for: {key:?} in the pool");
-        if let Some(weak_isc) = self.subchannels.read().unwrap().get(key)
-            && let Some(isc) = weak_isc.upgrade()
-        {
-            return Some(isc);
-        }
-        None
-    }
-
-    pub(super) fn register_subchannel(
-        &self,
-        key: &SubchannelKey,
-        isc: Arc<InternalSubchannel>,
-    ) -> Arc<InternalSubchannel> {
-        println!("registering subchannel for: {key:?} with the pool");
-        self.subchannels
-            .write()
-            .unwrap()
-            .insert(key.clone(), Arc::downgrade(&isc));
-        isc
-    }
-
-    pub(super) fn unregister_subchannel(&self, key: &SubchannelKey) {
-        let mut subchannels = self.subchannels.write().unwrap();
-        if let Some(weak_isc) = subchannels.get(key) {
-            if let Some(isc) = weak_isc.upgrade() {
-                return;
-            }
-            println!("removing subchannel for: {key:?} from the pool");
-            subchannels.remove(key);
-            return;
-        }
-        panic!("attempt to unregister subchannel for unknown key {:?}", key);
-    }
-}
-
-#[derive(Clone)]
-pub(super) struct SubchannelStateWatcher {
-    subchannel: Weak<ExternalSubchannel>,
-    work_scheduler: WorkQueueTx,
-}
-
-impl SubchannelStateWatcher {
-    pub(super) fn new(sc: Arc<ExternalSubchannel>, work_scheduler: WorkQueueTx) -> Self {
-        Self {
-            subchannel: Arc::downgrade(&sc),
-            work_scheduler,
-        }
-    }
-
-    fn on_state_change(&self, state: SubchannelState) {
-        // Ignore internal subchannel state changes if the external subchannel
-        // was dropped but its state watcher is still pending unregistration;
-        // such updates are inconsequential.
-        if let Some(sc) = self.subchannel.upgrade() {
-            let _ = self.work_scheduler.send(WorkQueueItem::Closure(Box::new(
-                move |c: &mut InternalChannelController| {
-                    c.lb.clone()
-                        .policy
-                        .lock()
-                        .unwrap()
-                        .as_mut()
-                        .unwrap()
-                        .subchannel_update(sc, &state, c);
-                },
-            )));
-        }
-    }
-}
-
-struct FailingSendStream {}
-
-impl SendStream for FailingSendStream {
-    async fn send(&mut self, _msg: &dyn SendMessage, _options: SendOptions) -> Result<(), ()> {
-        Err(())
-    }
-}
-
-struct FailingRecvStream {
-    status: Option<Status>,
-}
-
-impl RecvStream for FailingRecvStream {
-    async fn next(&mut self, _msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
-        match self.status.take() {
-            Some(status) => ClientResponseStreamItem::Trailers(Trailers::new(status)),
-            None => ClientResponseStreamItem::StreamClosed,
-        }
-    }
-}
-
-impl FailingRecvStream {
-    fn new(status: Status) -> Self {
-        FailingRecvStream {
-            status: Some(status),
-        }
     }
 }
 
