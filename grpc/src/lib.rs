@@ -35,6 +35,7 @@ pub mod client;
 pub mod core;
 pub mod credentials;
 pub mod inmemory;
+pub mod metadata;
 pub mod server;
 
 mod macros;
@@ -64,4 +65,10 @@ mod echo_pb {
         env!("CARGO_MANIFEST_DIR"),
         "/src/generated/grpc_examples_echo.rs"
     ));
+}
+
+mod private {
+    /// A private token used to seal traits.
+    #[derive(Debug)]
+    pub struct Internal;
 }
