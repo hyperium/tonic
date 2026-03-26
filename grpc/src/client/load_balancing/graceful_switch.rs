@@ -249,14 +249,11 @@ impl GracefulSwitchPolicy {
 mod test {
     use std::panic;
     use std::sync::Arc;
+    use std::sync::mpsc;
     use std::time::Duration;
 
-    use tokio::select;
-    use tokio::sync::mpsc::UnboundedReceiver;
-    use tokio::sync::mpsc::{self};
     use tonic::metadata::MetadataMap;
 
-    use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::LbPolicy;
     use crate::client::load_balancing::LbState;
@@ -293,7 +290,7 @@ mod test {
                 subchannels: Vec::new(),
             };
             for address in addresses {
-                let sc = channel_controller.new_subchannel(address);
+                let (sc, _state) = channel_controller.new_subchannel(address);
                 scl.subchannels.push(sc.clone());
             }
             scl
@@ -322,7 +319,7 @@ mod test {
                         address: self.name.to_string().into(),
                         ..Default::default()
                     },
-                    mpsc::unbounded_channel().0,
+                    mpsc::channel().0,
                 )),
                 metadata: MetadataMap::new(),
                 on_complete: None,
@@ -399,11 +396,11 @@ mod test {
     //    test.
     // 3. The controller to pass to the LB policy as part of the updates.
     fn setup() -> (
-        mpsc::UnboundedReceiver<TestEvent>,
+        mpsc::Receiver<TestEvent>,
         GracefulSwitchPolicy,
         Box<dyn ChannelController>,
     ) {
-        let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
+        let (tx_events, rx_events) = mpsc::channel::<TestEvent>();
         let work_scheduler = Arc::new(TestWorkScheduler {
             tx_events: tx_events.clone(),
         });
@@ -429,10 +426,10 @@ mod test {
 
     // Verifies that the next event on rx_events channel is NewSubchannel.
     // Returns the subchannel created.
-    async fn verify_subchannel_creation_from_policy(
-        rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
+    fn verify_subchannel_creation_from_policy(
+        rx_events: &mut mpsc::Receiver<TestEvent>,
     ) -> Arc<dyn Subchannel> {
-        match rx_events.recv().await.unwrap() {
+        match rx_events.recv().unwrap() {
             TestEvent::NewSubchannel(sc) => sc,
             other => panic!("unexpected event {:?}", other),
         }
@@ -442,12 +439,9 @@ mod test {
     // given subchannel.
     //
     // Returns the picker for tests to make more picks, if required.
-    async fn verify_correct_picker_from_policy(
-        rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
-        name: &str,
-    ) {
+    fn verify_correct_picker_from_policy(rx_events: &mut mpsc::Receiver<TestEvent>, name: &str) {
         println!("verify ready picker");
-        let event = rx_events.recv().await.unwrap();
+        let event = rx_events.recv().unwrap();
         let TestEvent::UpdatePicker(update) = event else {
             panic!("unexpected event {:?}", event);
         };
@@ -470,22 +464,15 @@ mod test {
         lb_policy: &mut impl LbPolicy,
         subchannel: Arc<dyn Subchannel>,
         tcc: &mut dyn ChannelController,
-        state: ConnectivityState,
+        state: &SubchannelState,
     ) {
-        lb_policy.subchannel_update(
-            subchannel,
-            &SubchannelState {
-                connectivity_state: state,
-                ..Default::default()
-            },
-            tcc,
-        );
+        lb_policy.subchannel_update(subchannel, state, tcc);
     }
 
     // Tests that the gracefulswitch policy correctly sets a child and sends
     // updates to that child when it receives its first config.
-    #[tokio::test]
-    async fn gracefulswitch_successful_first_update() {
+    #[test]
+    fn gracefulswitch_successful_first_update() {
         reg_stub_policy(
             "stub-gracefulswitch_successful_first_update-one",
             create_funcs_for_gracefulswitch_tests(
@@ -520,24 +507,23 @@ mod test {
             .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
-        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             subchannel,
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_successful_first_update-one",
-        )
-        .await;
+        );
     }
 
     // Tests that the gracefulswitch policy correctly sets a pending child and
     // sends subchannel updates to that child when it receives a new config.
-    #[tokio::test]
-    async fn gracefulswitch_switching_to_resolver_update() {
+    #[test]
+    fn gracefulswitch_switching_to_resolver_update() {
         let (mut rx_events, mut graceful_switch, mut tcc) = setup();
         reg_stub_policy(
             "stub-gracefulswitch_switching_to_resolver_update-one",
@@ -572,20 +558,19 @@ mod test {
             .unwrap();
 
         // Subchannel creation and ready
-        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             subchannel,
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
 
         // Assert picker is TestPickerOne by checking subchannel address
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_switching_to_resolver_update-one",
-        )
-        .await;
+        );
 
         // 2. Switch to mock_policy_two as pending
         let new_service_config = serde_json::json!([
@@ -601,35 +586,29 @@ mod test {
             .unwrap();
 
         // Simulate subchannel creation and ready for pending
-        let subchannel_two = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let subchannel_two = verify_subchannel_creation_from_policy(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             subchannel_two,
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         // Assert picker is TestPickerTwo by checking subchannel address
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_switching_to_resolver_update-two",
-        )
-        .await;
-        assert_channel_empty(&mut rx_events).await;
+        );
+        assert_channel_empty(&mut rx_events);
     }
 
-    async fn assert_channel_empty(rx_events: &mut UnboundedReceiver<TestEvent>) {
-        select! {
-            event = rx_events.recv() => {
-                panic!("Received unexpected event from policy: {event:?}");
-            }
-            _ = tokio::time::sleep(DEFAULT_TEST_SHORT_TIMEOUT) => {}
-        };
+    fn assert_channel_empty(rx_events: &mut mpsc::Receiver<TestEvent>) {
+        assert!(rx_events.try_recv().is_err());
     }
 
     // Tests that the gracefulswitch policy should do nothing when it receives a
     // new config of the same policy that it received before.
-    #[tokio::test]
-    async fn gracefulswitch_two_policies_same_type() {
+    #[test]
+    fn gracefulswitch_two_policies_same_type() {
         let (mut rx_events, mut graceful_switch, mut tcc) = setup();
         reg_stub_policy(
             "stub-gracefulswitch_two_policies_same_type-one",
@@ -652,18 +631,17 @@ mod test {
         graceful_switch
             .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
-        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             subchannel,
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_two_policies_same_type-one",
-        )
-        .await;
+        );
 
         let service_config2 = serde_json::json!(
             [
@@ -677,15 +655,15 @@ mod test {
         graceful_switch
             .resolver_update(update.clone(), Some(&parsed_config2), &mut *tcc)
             .unwrap();
-        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         assert_eq!(&*subchannel.address().address, "127.0.0.1:1234");
-        assert_channel_empty(&mut rx_events).await;
+        assert_channel_empty(&mut rx_events);
     }
 
     // Tests that the gracefulswitch policy should replace the current child
     // with the pending child if the current child isn't ready.
-    #[tokio::test]
-    async fn gracefulswitch_current_not_ready_pending_update() {
+    #[test]
+    fn gracefulswitch_current_not_ready_pending_update() {
         let (mut rx_events, mut graceful_switch, mut tcc) = setup();
         reg_stub_policy(
             "stub-gracefulswitch_current_not_ready_pending_update-one",
@@ -722,8 +700,8 @@ mod test {
             .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
-        let current_subchannels = verify_subchannel_creation_from_policy(&mut rx_events).await;
-        assert_channel_empty(&mut rx_events).await;
+        let current_subchannels = verify_subchannel_creation_from_policy(&mut rx_events);
+        assert_channel_empty(&mut rx_events);
 
         let new_service_config = serde_json::json!([
                 { "stub-gracefulswitch_current_not_ready_pending_update-two": serde_json::json!({ "shuffleAddressList": false }) },
@@ -741,27 +719,26 @@ mod test {
             .resolver_update(second_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
 
-        let second_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
-        assert_channel_empty(&mut rx_events).await;
+        let second_subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
+        assert_channel_empty(&mut rx_events);
 
         move_subchannel_to_state(
             &mut graceful_switch,
             second_subchannel,
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_current_not_ready_pending_update-two",
-        )
-        .await;
-        assert_channel_empty(&mut rx_events).await;
+        );
+        assert_channel_empty(&mut rx_events);
     }
 
     // Tests that the gracefulswitch policy should replace the current child
     // with the pending child if the current child was ready but then leaves ready.
-    #[tokio::test]
-    async fn gracefulswitch_current_leaving_ready() {
+    #[test]
+    fn gracefulswitch_current_leaving_ready() {
         let (mut rx_events, mut graceful_switch, mut tcc) = setup();
         reg_stub_policy(
             "stub-gracefulswitch_current_leaving_ready-one",
@@ -792,18 +769,17 @@ mod test {
             .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
-        let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             current_subchannel.clone(),
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_current_leaving_ready-one",
-        )
-        .await;
+        );
         let new_service_config = serde_json::json!(
             [
                 { "stub-gracefulswitch_current_leaving_ready-two": serde_json::json!({}) },
@@ -822,33 +798,32 @@ mod test {
             .resolver_update(new_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
 
-        let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
 
         move_subchannel_to_state(
             &mut graceful_switch,
             pending_subchannel,
             tcc.as_mut(),
-            ConnectivityState::Connecting,
+            &SubchannelState::connecting(),
         );
         // This should not produce an update.
-        assert_channel_empty(&mut rx_events).await;
+        assert_channel_empty(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             current_subchannel,
             tcc.as_mut(),
-            ConnectivityState::Connecting,
+            &SubchannelState::connecting(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_current_leaving_ready-two",
-        )
-        .await;
+        );
     }
 
     // Tests that the gracefulswitch policy should replace the current child
     // with the pending child if the pending child leaves connecting.
-    #[tokio::test]
-    async fn gracefulswitch_pending_leaving_connecting() {
+    #[test]
+    fn gracefulswitch_pending_leaving_connecting() {
         let (mut rx_events, mut graceful_switch, mut tcc) = setup();
         reg_stub_policy(
             "stub-gracefulswitch_current_leaving_ready-one",
@@ -879,18 +854,17 @@ mod test {
             .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
-        let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             current_subchannel,
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_current_leaving_ready-one",
-        )
-        .await;
+        );
         let new_service_config = serde_json::json!(
             [
                 { "stub-gracefulswitch_current_leaving_ready-two": serde_json::json!({}) },
@@ -909,36 +883,34 @@ mod test {
             .resolver_update(new_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
 
-        let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
 
         move_subchannel_to_state(
             &mut graceful_switch,
             pending_subchannel.clone(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_current_leaving_ready-two",
-        )
-        .await;
+        );
         move_subchannel_to_state(
             &mut graceful_switch,
             pending_subchannel,
             tcc.as_mut(),
-            ConnectivityState::Connecting,
+            &SubchannelState::connecting(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_current_leaving_ready-two",
-        )
-        .await;
+        );
     }
 
     // Tests that the gracefulswitch policy should remove the current child's
     // subchannels after swapping.
-    #[tokio::test]
-    async fn gracefulswitch_subchannels_removed_after_current_child_swapped() {
+    #[test]
+    fn gracefulswitch_subchannels_removed_after_current_child_swapped() {
         let (mut rx_events, mut graceful_switch, mut tcc) = setup();
         reg_stub_policy(
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-one",
@@ -970,18 +942,17 @@ mod test {
             .resolver_update(update.clone(), Some(&parsed_config), &mut *tcc)
             .unwrap();
 
-        let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         move_subchannel_to_state(
             &mut graceful_switch,
             current_subchannel.clone(),
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-one",
-        )
-        .await;
+        );
         let new_service_config = serde_json::json!(
             [
                 { "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-two": serde_json::json!({ "shuffleAddressList": false }) },
@@ -999,19 +970,18 @@ mod test {
         graceful_switch
             .resolver_update(second_update.clone(), Some(&new_parsed_config), &mut *tcc)
             .unwrap();
-        let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
+        let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events);
         println!("moving subchannel to idle");
         move_subchannel_to_state(
             &mut graceful_switch,
             pending_subchannel,
             tcc.as_mut(),
-            ConnectivityState::Idle,
+            &SubchannelState::idle(),
         );
         verify_correct_picker_from_policy(
             &mut rx_events,
             "stub-gracefulswitch_subchannels_removed_after_current_child_swapped-two",
-        )
-        .await;
+        );
         assert!(Arc::strong_count(&current_subchannel) == 1);
     }
 }
