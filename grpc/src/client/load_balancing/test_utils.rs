@@ -69,7 +69,7 @@ impl TestSubchannel {
 }
 
 impl ForwardingSubchannel for TestSubchannel {
-    fn delegate(&self) -> Arc<dyn Subchannel> {
+    fn delegate(&self) -> &Arc<dyn Subchannel> {
         panic!("unsupported operation on a test subchannel");
     }
 
@@ -178,14 +178,17 @@ type SubchannelUpdateFn = Arc<
         + Sync,
 >;
 
+type ExitIdleFn = Arc<dyn Fn(&mut StubPolicyData, &mut dyn ChannelController) + Send + Sync>;
+
 type WorkFn = Arc<dyn Fn(&mut StubPolicyData, &mut dyn ChannelController) + Send + Sync>;
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
     pub subchannel_update: Option<SubchannelUpdateFn>,
+    pub exit_idle: Option<ExitIdleFn>,
     pub work: Option<WorkFn>,
 }
 
@@ -246,12 +249,23 @@ impl LbPolicy for StubPolicy {
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        todo!("Implement exit_idle for StubPolicy")
+        if let Some(f) = &self.funcs.exit_idle {
+            f(&mut self.data, channel_controller);
+        }
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         if let Some(f) = &self.funcs.work {
             f(&mut self.data, channel_controller);
+        }
+    }
+}
+
+impl StubPolicy {
+    pub(crate) fn new(funcs: StubPolicyFuncs, options: LbPolicyOptions) -> Self {
+        Self {
+            funcs,
+            data: StubPolicyData::new(options),
         }
     }
 }
