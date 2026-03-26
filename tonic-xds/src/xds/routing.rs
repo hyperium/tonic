@@ -52,11 +52,9 @@ impl Router for XdsRouter {
             let action = rc.route(&authority, path, &headers)?;
             let cluster = match action {
                 RouteConfigAction::Cluster(name) => name.clone(),
-                RouteConfigAction::WeightedClusters(clusters) => {
-                    select_weighted_cluster(clusters)
-                        .ok_or(RoutingError::EmptyWeightedClusters)?
-                        .to_string()
-                }
+                RouteConfigAction::WeightedClusters(clusters) => select_weighted_cluster(clusters)
+                    .ok_or(RoutingError::EmptyWeightedClusters)?
+                    .to_string(),
             };
             Ok(RouteDecision { cluster })
         })
