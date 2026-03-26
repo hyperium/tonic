@@ -30,6 +30,14 @@ use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ServerResponseStreamItem;
 
+pub mod message;
+pub mod stream;
+
+mod codegen_api;
+pub use codegen_api::{
+    BidiStreamingMethod, ClientStreamingMethod, ServerStreamingMethod, UnaryMethod,
+};
+
 pub struct Server {
     handler: Option<Arc<dyn DynHandle>>,
 }
