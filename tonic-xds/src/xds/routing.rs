@@ -15,8 +15,10 @@
 use std::cmp::Reverse;
 use std::sync::Arc;
 
+use arc_swap::ArcSwapOption;
+
 use crate::client::route::{RouteDecision, RouteInput, Router};
-use crate::common::async_util::BoxFuture;
+use crate::common::async_util::{AbortOnDrop, BoxFuture};
 use crate::xds::cache::XdsCache;
 use crate::xds::resource::route_config::{
     HeaderMatchSpecifierConfig, HeaderMatcherConfig, PathSpecifierConfig, RouteConfig,
@@ -25,22 +27,39 @@ use crate::xds::resource::route_config::{
 
 /// xDS-backed [`Router`] that resolves requests to cluster names.
 ///
-/// Reads the current route config directly from [`XdsCache`] on each request.
-/// No background task or local copy needed — the cache's `watch::Sender::borrow()`
-/// provides cheap atomic reads.
+/// Subscribes to route config changes from [`XdsCache`] via a background watch task
+/// and maintains a shared [`ArcSwapOption`] for lock-free reads on the hot path.
+/// The watch task is aborted when the router is dropped.
 pub(crate) struct XdsRouter {
-    cache: Arc<XdsCache>,
+    route_config: Arc<ArcSwapOption<RouteConfigResource>>,
+    _watch_task: AbortOnDrop,
 }
 
 impl XdsRouter {
-    pub(crate) fn new(cache: Arc<XdsCache>) -> Self {
-        Self { cache }
+    /// Creates a new `XdsRouter` that watches route config from the given cache.
+    ///
+    /// Spawns a background task that updates the local route config whenever
+    /// the cache publishes a new one. The task is aborted when this router
+    /// is dropped.
+    pub(crate) fn new(cache: &XdsCache) -> Self {
+        let route_config = Arc::new(ArcSwapOption::empty());
+        let rc = route_config.clone();
+        let mut watcher = cache.watch_route_config();
+        let handle = tokio::spawn(async move {
+            while let Some(config) = watcher.next().await {
+                rc.store(Some(config));
+            }
+        });
+        Self {
+            route_config,
+            _watch_task: AbortOnDrop(handle),
+        }
     }
 }
 
 impl Router for XdsRouter {
     fn route(&self, input: &RouteInput<'_>) -> BoxFuture<Result<RouteDecision, RoutingError>> {
-        let route_config = self.cache.current_route_config();
+        let route_config = self.route_config.load_full();
         let authority = input.authority.to_string();
         let headers = input.headers.clone();
         Box::pin(async move {
@@ -1006,10 +1025,11 @@ mod tests {
 
     #[tokio::test]
     async fn xds_router_routes_to_correct_cluster() {
-        let cache = Arc::new(XdsCache::new());
+        let cache = XdsCache::new();
         cache.update_route_config(make_route_config("my-cluster"));
 
-        let router = XdsRouter::new(cache);
+        let router = XdsRouter::new(&cache);
+        tokio::task::yield_now().await; // let watch task propagate
 
         let headers = http::HeaderMap::new();
         let input = RouteInput {
@@ -1022,10 +1042,11 @@ mod tests {
 
     #[tokio::test]
     async fn xds_router_updates_on_config_change() {
-        let cache = Arc::new(XdsCache::new());
+        let cache = XdsCache::new();
         cache.update_route_config(make_route_config("cluster-a"));
 
-        let router = XdsRouter::new(cache.clone());
+        let router = XdsRouter::new(&cache);
+        tokio::task::yield_now().await;
 
         let headers = http::HeaderMap::new();
         let input = RouteInput {
@@ -1037,6 +1058,7 @@ mod tests {
         assert_eq!(decision.cluster, "cluster-a");
 
         cache.update_route_config(make_route_config("cluster-b"));
+        tokio::task::yield_now().await;
 
         let decision = router.route(&input).await.unwrap();
         assert_eq!(decision.cluster, "cluster-b");
@@ -1044,8 +1066,8 @@ mod tests {
 
     #[tokio::test]
     async fn xds_router_returns_not_ready_without_config() {
-        let cache = Arc::new(XdsCache::new());
-        let router = XdsRouter::new(cache);
+        let cache = XdsCache::new();
+        let router = XdsRouter::new(&cache);
 
         let headers = http::HeaderMap::new();
         let input = RouteInput {
