@@ -1,7 +1,8 @@
-//! Per-request route matching on validated resource types.
+//! xDS routing: route matching logic and [`XdsRouter`] implementation.
 //!
-//! Operates directly on [`RouteConfigResource`] and its sub-types.
-//! The matching pipeline: domain → path → headers.
+//! This module contains both the route matching logic (domain → path → headers)
+//! and the stateful [`XdsRouter`] that subscribes to cache updates and serves
+//! routing decisions.
 //!
 //! Domain matching follows gRFC A27 priority:
 //! 1. Exact match
@@ -12,19 +13,67 @@
 //! Within each category, the most specific (longest non-wildcard part) wins.
 
 use std::cmp::Reverse;
+use std::sync::Arc;
 
+use crate::client::route::{RouteDecision, RouteInput, Router};
+use crate::common::async_util::BoxFuture;
+use crate::xds::cache::XdsCache;
 use crate::xds::resource::route_config::{
     HeaderMatchSpecifierConfig, HeaderMatcherConfig, PathSpecifierConfig, RouteConfig,
     RouteConfigAction, RouteConfigMatch, RouteConfigResource, VirtualHostConfig, WeightedCluster,
 };
 
-/// Error returned when route matching fails.
+/// xDS-backed [`Router`] that resolves requests to cluster names.
+///
+/// Reads the current route config directly from [`XdsCache`] on each request.
+/// No background task or local copy needed — the cache's `watch::Sender::borrow()`
+/// provides cheap atomic reads.
+pub(crate) struct XdsRouter {
+    cache: Arc<XdsCache>,
+}
+
+impl XdsRouter {
+    pub(crate) fn new(cache: Arc<XdsCache>) -> Self {
+        Self { cache }
+    }
+}
+
+impl Router for XdsRouter {
+    fn route(&self, input: &RouteInput<'_>) -> BoxFuture<Result<RouteDecision, RoutingError>> {
+        let route_config = self.cache.current_route_config();
+        let authority = input.authority.to_string();
+        let headers = input.headers.clone();
+        Box::pin(async move {
+            let rc = route_config.ok_or(RoutingError::NotReady)?;
+            let path = headers
+                .get(":path")
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("/");
+            let action = rc.route(&authority, path, &headers)?;
+            let cluster = match action {
+                RouteConfigAction::Cluster(name) => name.clone(),
+                RouteConfigAction::WeightedClusters(clusters) => {
+                    select_weighted_cluster(clusters)
+                        .ok_or(RoutingError::EmptyWeightedClusters)?
+                        .to_string()
+                }
+            };
+            Ok(RouteDecision { cluster })
+        })
+    }
+}
+
+/// Error returned when routing fails.
 #[derive(Debug, Clone, thiserror::Error)]
 pub(crate) enum RoutingError {
+    #[error("route config not yet available")]
+    NotReady,
     #[error("no matching virtual host for authority '{0}'")]
     NoMatchingVirtualHost(String),
     #[error("no matching route in virtual host for path '{0}'")]
     NoMatchingRoute(String),
+    #[error("weighted cluster selection failed (empty cluster list)")]
+    EmptyWeightedClusters,
 }
 
 impl RouteConfigResource {
@@ -266,6 +315,7 @@ fn match_header(hm: &HeaderMatcherConfig, headers: &http::HeaderMap) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::xds::cache::XdsCache;
     use crate::xds::resource::route_config::{
         RouteConfig, RouteConfigAction, RouteConfigMatch, VirtualHostConfig,
     };
@@ -946,5 +996,65 @@ mod tests {
         assert!(
             matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "fallback")
         );
+    }
+
+    fn make_route_config(cluster: &str) -> Arc<RouteConfigResource> {
+        Arc::new(simple_rc(vec![VirtualHostConfig {
+            name: "vh".into(),
+            domains: vec!["*".into()],
+            routes: vec![simple_route("/", cluster)],
+        }]))
+    }
+
+    #[tokio::test]
+    async fn xds_router_routes_to_correct_cluster() {
+        let cache = Arc::new(XdsCache::new());
+        cache.update_route_config(make_route_config("my-cluster"));
+
+        let router = XdsRouter::new(cache);
+
+        let headers = http::HeaderMap::new();
+        let input = RouteInput {
+            authority: "my-service",
+            headers: &headers,
+        };
+        let decision = router.route(&input).await.unwrap();
+        assert_eq!(decision.cluster, "my-cluster");
+    }
+
+    #[tokio::test]
+    async fn xds_router_updates_on_config_change() {
+        let cache = Arc::new(XdsCache::new());
+        cache.update_route_config(make_route_config("cluster-a"));
+
+        let router = XdsRouter::new(cache.clone());
+
+        let headers = http::HeaderMap::new();
+        let input = RouteInput {
+            authority: "svc",
+            headers: &headers,
+        };
+
+        let decision = router.route(&input).await.unwrap();
+        assert_eq!(decision.cluster, "cluster-a");
+
+        cache.update_route_config(make_route_config("cluster-b"));
+
+        let decision = router.route(&input).await.unwrap();
+        assert_eq!(decision.cluster, "cluster-b");
+    }
+
+    #[tokio::test]
+    async fn xds_router_returns_not_ready_without_config() {
+        let cache = Arc::new(XdsCache::new());
+        let router = XdsRouter::new(cache);
+
+        let headers = http::HeaderMap::new();
+        let input = RouteInput {
+            authority: "svc",
+            headers: &headers,
+        };
+        let err = router.route(&input).await.unwrap_err();
+        assert!(matches!(err, RoutingError::NotReady));
     }
 }

@@ -125,6 +125,11 @@ impl XdsCache {
         self.route_config_tx.send_replace(Some(config));
     }
 
+    /// Returns the current route configuration, if any.
+    pub(crate) fn current_route_config(&self) -> Option<Arc<RouteConfigResource>> {
+        self.route_config_tx.borrow().clone()
+    }
+
     /// Watches route configuration changes.
     pub(crate) fn watch_route_config(&self) -> CacheWatch<RouteConfigResource> {
         CacheWatch::new(self.route_config_tx.subscribe())
