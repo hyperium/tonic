@@ -15,9 +15,9 @@ use tower::BoxError;
 use tower::discover::Change;
 
 use crate::client::endpoint::EndpointAddress;
+use crate::client::lb::BoxDiscover;
 use crate::xds::cache::CacheWatch;
 use crate::xds::resource::EndpointsResource;
-use crate::xds::xds_manager::BoxDiscover;
 
 /// Buffer capacity for the endpoint change channel between the diff loop
 /// and Tower's load balancer.
