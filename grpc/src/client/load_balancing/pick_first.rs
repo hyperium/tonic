@@ -93,7 +93,7 @@ impl LbPolicy for PickFirstPolicy {
 
         let address = addresses.pop().ok_or("no addresses")?;
 
-        let sc = channel_controller.new_subchannel(&address);
+        let (sc, _state) = channel_controller.new_subchannel(&address);
         sc.connect();
         self.subchannel = Some(sc);
 
