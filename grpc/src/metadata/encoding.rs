@@ -121,7 +121,7 @@ impl Ascii {
 
 /// gRPC metadata values can be either ASCII strings or binary.
 /// This type should never be instantiated -- in fact, it's impossible
-/// to, because there's no variants to instantiate. Instead, it's just used as
+/// to, because there are no variants to instantiate. Instead, it's just used as
 /// a type parameter for [`MetadataKey`] and [`MetadataValue`].
 ///
 /// [`MetadataKey`]: crate::metadata::MetadataKey
