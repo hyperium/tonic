@@ -24,6 +24,7 @@ exclude = ["proto/test/*"]
 tonic = "0.14"
 http = "1"
 tower = { version = "0.5", default-features = false, features = ["discover"] }
+arc-swap = "1"
 dashmap = "6.1"
 thiserror = "2.0.17"
 url = "2.5.8"
@@ -39,6 +40,7 @@ tokio = { version = "1", features = ["sync"] }
 # Used for weighted cluster selection and fractional route matching — does not need
 # cryptographic security, only statistical uniformity for traffic distribution.
 fastrand = "2"
+tokio-stream = "0.1"
 
 [lints]
 workspace = true
@@ -47,5 +49,4 @@ workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
 tonic-prost = "0.14"
-tokio-stream = "0.1"
 tonic-prost-build = "0.14"

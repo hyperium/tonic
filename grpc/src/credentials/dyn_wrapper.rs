@@ -30,12 +30,12 @@ use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::ServerCredentials;
 use crate::credentials::call::CallCredentials;
-use crate::credentials::client::ChannelCredsInternal;
 use crate::credentials::client::ClientConnectionSecurityContext;
 use crate::credentials::client::ClientHandshakeInfo;
 use crate::credentials::client::HandshakeOutput;
 use crate::credentials::common::Authority;
 use crate::credentials::server::HandshakeOutput as ServerHandshakeOutput;
+use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 use crate::send_future::SendFuture;
@@ -73,7 +73,7 @@ where
     ) -> Result<HandshakeOutput<BoxEndpoint, Box<dyn ClientConnectionSecurityContext>>, String>
     {
         let output = self
-            .connect(authority, source, info, runtime)
+            .connect(authority, source, info, runtime, private::Internal)
             .make_send()
             .await?;
 
@@ -91,11 +91,11 @@ where
     }
 
     fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
-        self.get_call_credentials()
+        self.get_call_credentials(private::Internal)
     }
 }
 
-impl ChannelCredsInternal for Arc<dyn DynChannelCredentials> {
+impl ChannelCredentials for Arc<dyn DynChannelCredentials> {
     type ContextType = Box<dyn ClientConnectionSecurityContext>;
     type Output<I> = BoxEndpoint;
 
@@ -105,18 +105,17 @@ impl ChannelCredsInternal for Arc<dyn DynChannelCredentials> {
         source: Input,
         info: &ClientHandshakeInfo,
         runtime: &GrpcRuntime,
+        _token: private::Internal,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         (**self)
             .dyn_connect(authority, Box::new(source), info, runtime)
             .await
     }
 
-    fn get_call_credentials(&self) -> Option<&Arc<dyn CallCredentials>> {
+    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
         (**self).get_call_credentials()
     }
-}
 
-impl ChannelCredentials for Arc<dyn DynChannelCredentials> {
     fn info(&self) -> &ProtocolInfo {
         (**self).info()
     }
@@ -145,7 +144,7 @@ where
         source: BoxEndpoint,
         runtime: GrpcRuntime,
     ) -> Result<ServerHandshakeOutput<BoxEndpoint>, String> {
-        let output = SendFuture::make_send(self.accept(source, runtime)).await?;
+        let output = SendFuture::make_send(self.accept(source, runtime, private::Internal)).await?;
         Ok(ServerHandshakeOutput {
             endpoint: Box::new(output.endpoint),
             security: output.security,
@@ -168,6 +167,7 @@ mod tests {
     use crate::credentials::SecurityLevel;
     use crate::credentials::client::ClientHandshakeInfo;
     use crate::credentials::insecure::InsecureChannelCredentials;
+    use crate::rt::AsyncIoAdapter;
     use crate::rt::TcpOptions;
     use crate::rt::{self};
 
@@ -193,7 +193,7 @@ mod tests {
 
         assert!(result.is_ok());
         let output = result.unwrap();
-        let mut endpoint = output.endpoint;
+        let endpoint = output.endpoint;
         let security_info = output.security;
 
         assert!(!endpoint.get_local_address().is_empty());
@@ -210,7 +210,10 @@ mod tests {
         server_stream.write_all(test_data).await.unwrap();
 
         let mut buf = vec![0u8; test_data.len()];
-        endpoint.read_exact(&mut buf).await.unwrap();
+        AsyncIoAdapter::new(endpoint)
+            .read_exact(&mut buf)
+            .await
+            .unwrap();
         assert_eq!(buf, test_data);
 
         // Validate arbitrary authority.
@@ -253,14 +256,17 @@ mod tests {
 
         assert!(result.is_ok());
         let output = result.unwrap();
-        let mut endpoint = output.endpoint;
+        let endpoint = output.endpoint;
         let security_info = output.security;
 
         assert_eq!(security_info.security_protocol(), "insecure");
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         let mut buf = vec![0u8; 25];
-        endpoint.read_exact(&mut buf).await.unwrap();
+        AsyncIoAdapter::new(endpoint)
+            .read_exact(&mut buf)
+            .await
+            .unwrap();
         assert_eq!(&buf[..], b"hello dynamic grpc server");
 
         client_handle.abort();
