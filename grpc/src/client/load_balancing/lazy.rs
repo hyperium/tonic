@@ -219,7 +219,7 @@ mod tests {
 
         let mut lazy = Lazy::new(builder, options, &mut cc);
 
-        // Verify that the initial picker is WakeUpPicker and state is Idle.
+        // Verify that the initial picker is Idle.
         let event = rx_events.recv().await.unwrap();
         let TestEvent::UpdatePicker(lb_state) = event else {
             panic!("expected UpdatePicker event");
