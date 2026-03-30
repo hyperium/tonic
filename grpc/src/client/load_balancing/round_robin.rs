@@ -22,7 +22,7 @@
  *
  */
 
-use std::error::Error;
+use std::fmt::Debug;
 use std::sync::Arc;
 use std::sync::Once;
 use std::sync::atomic::AtomicUsize;
@@ -30,9 +30,9 @@ use std::sync::atomic::Ordering;
 
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::FailingPicker;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
-use crate::client::load_balancing::LbConfig;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
@@ -52,17 +52,23 @@ pub(crate) static POLICY_NAME: &str = "round_robin";
 static START: Once = Once::new();
 
 #[derive(Debug)]
-struct RoundRobinBuilder {}
+pub(crate) struct RoundRobinBuilder {}
 
 impl LbPolicyBuilder for RoundRobinBuilder {
-    fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
+    type LbPolicy = RoundRobinPolicy;
+
+    fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy {
         let child_manager = ChildManager::new(options.runtime, options.work_scheduler);
-        Box::new(RoundRobinPolicy::new(
+        // TODO: do we want to use the pick first builder directly instead of
+        // going through the dynamic-converting registry?  That requires either
+        // making the RR policy generic or making it non-configurable, which the
+        // current tests take advantage of.
+        RoundRobinPolicy::new(
             child_manager,
             GLOBAL_LB_REGISTRY
                 .get_policy(pick_first::POLICY_NAME)
                 .unwrap(),
-        ))
+        )
     }
 
     fn name(&self) -> &'static str {
@@ -71,15 +77,15 @@ impl LbPolicyBuilder for RoundRobinBuilder {
 }
 
 #[derive(Debug)]
-struct RoundRobinPolicy {
+pub(crate) struct RoundRobinPolicy {
     child_manager: ChildManager<Endpoint>,
-    pick_first_builder: Arc<dyn LbPolicyBuilder>,
+    pick_first_builder: Arc<DynLbPolicyBuilder>,
 }
 
 impl RoundRobinPolicy {
     fn new(
         child_manager: ChildManager<Endpoint>,
-        pick_first_builder: Arc<dyn LbPolicyBuilder>,
+        pick_first_builder: Arc<DynLbPolicyBuilder>,
     ) -> Self {
         Self {
             child_manager,
@@ -130,7 +136,7 @@ impl RoundRobinPolicy {
         &mut self,
         resolver_update: ResolverUpdate,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         let err = format!(
             "Received error from name resolver: {}",
             resolver_update.endpoints.as_ref().unwrap_err()
@@ -138,24 +144,25 @@ impl RoundRobinPolicy {
         if self.child_manager.children().next().is_none() {
             // We had no children so we must produce an erroring picker.
             self.move_to_transient_failure(err.clone(), channel_controller);
-            return Err(err.into());
+            return Err(err);
         }
         // Forward the error to each child, ignoring their responses.
         let _ = self
             .child_manager
             .resolver_update(resolver_update, None, channel_controller);
         self.update_picker(channel_controller);
-        Err(err.into())
+        Err(err)
     }
 }
 
 impl LbPolicy for RoundRobinPolicy {
+    type LbConfig = ();
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&Self::LbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         if update.endpoints.is_err() {
             return self.handle_resolver_error(update, channel_controller);
         }
@@ -171,7 +178,7 @@ impl LbPolicy for RoundRobinPolicy {
             ChildUpdate {
                 child_identifier: e.clone(),
                 child_policy_builder: self.pick_first_builder.clone(),
-                child_update: Some((update, config.cloned())),
+                child_update: Some((update, None)),
             }
         });
         self.child_manager
@@ -245,6 +252,13 @@ impl Picker for RoundRobinPicker {
 
 #[cfg(test)]
 mod test {
+    use std::collections::HashSet;
+    use std::panic;
+    use std::sync::Arc;
+
+    use tokio::sync::mpsc;
+    use tonic::metadata::MetadataMap;
+
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::FailingPicker;
@@ -272,11 +286,6 @@ mod test {
     use crate::client::name_resolution::ResolverUpdate;
     use crate::core::RequestHeaders;
     use crate::rt::default_runtime;
-    use std::collections::HashSet;
-    use std::panic;
-    use std::sync::Arc;
-    use tokio::sync::mpsc;
-    use tonic::metadata::MetadataMap;
 
     const DEFAULT_TEST_SHORT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);
 
@@ -294,11 +303,12 @@ mod test {
     //    subchannel, sending a new picker etc).
     // 2. The Round Robin to send resolver and subchannel updates from the test.
     // 3. The controller to pass to the LB policy as part of the updates.
+    #[allow(clippy::type_complexity)]
     fn setup(
         test_name: &'static str,
     ) -> (
         mpsc::UnboundedReceiver<TestEvent>,
-        impl LbPolicy,
+        RoundRobinPolicy,
         Box<dyn ChannelController>,
     ) {
         pick_first::reg();
@@ -367,7 +377,7 @@ mod test {
     }
 
     fn send_resolver_error_to_policy(
-        lb_policy: &mut impl LbPolicy,
+        lb_policy: &mut RoundRobinPolicy,
         err: String,
         tcc: &mut dyn ChannelController,
     ) {

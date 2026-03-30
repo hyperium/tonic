@@ -15,7 +15,7 @@ use std::cmp::Reverse;
 
 use crate::xds::resource::route_config::{
     HeaderMatchSpecifierConfig, HeaderMatcherConfig, PathSpecifierConfig, RouteConfig,
-    RouteConfigAction, RouteConfigMatch, RouteConfigResource, VirtualHostConfig,
+    RouteConfigAction, RouteConfigMatch, RouteConfigResource, VirtualHostConfig, WeightedCluster,
 };
 
 /// Error returned when route matching fails.
@@ -128,7 +128,43 @@ fn match_domain(authority: &str, pattern: &str) -> Option<DomainMatchScore> {
 }
 
 fn route_matches(route: &RouteConfig, path: &str, headers: &http::HeaderMap) -> bool {
-    match_path(&route.match_criteria, path) && match_headers(&route.match_criteria, headers)
+    match_path(&route.match_criteria, path)
+        && match_headers(&route.match_criteria, headers)
+        && match_fraction(route.match_criteria.match_fraction)
+}
+
+/// Probabilistic route gating per A28. Returns true if the route should be considered.
+fn match_fraction(fraction: Option<u32>) -> bool {
+    match fraction {
+        None | Some(1_000_000..) => true,
+        Some(0) => false,
+        Some(n) => fastrand::u32(0..1_000_000) < n,
+    }
+}
+
+/// Select a cluster from weighted clusters using accumulated weights and random selection.
+///
+/// Returns `None` if `clusters` is empty.
+pub(crate) fn select_weighted_cluster(clusters: &[WeightedCluster]) -> Option<&str> {
+    if clusters.is_empty() {
+        return None;
+    }
+
+    let total: u64 = clusters.iter().map(|c| c.weight as u64).sum();
+    if total == 0 {
+        return Some(&clusters[fastrand::usize(0..clusters.len())].name);
+    }
+
+    let random = fastrand::u64(0..total);
+    let mut acc = 0u64;
+    for cluster in clusters {
+        acc += cluster.weight as u64;
+        if random < acc {
+            return Some(&cluster.name);
+        }
+    }
+    // random is in [0, total) and acc reaches total, so the loop always returns.
+    unreachable!()
 }
 
 fn match_path(criteria: &RouteConfigMatch, path: &str) -> bool {
@@ -162,16 +198,68 @@ fn match_headers(criteria: &RouteConfigMatch, headers: &http::HeaderMap) -> bool
     })
 }
 
+const DEFAULT_CONTENT_TYPE: &str = "application/grpc";
+
 fn match_header(hm: &HeaderMatcherConfig, headers: &http::HeaderMap) -> bool {
-    let value = headers.get(&hm.name).and_then(|v| v.to_str().ok());
+    // Per A28: if content-type is not present, assume "application/grpc".
+    let value = headers
+        .get(&hm.name)
+        .and_then(|v| v.to_str().ok())
+        .or_else(|| {
+            if hm.name.eq_ignore_ascii_case("content-type") {
+                Some(DEFAULT_CONTENT_TYPE)
+            } else {
+                None
+            }
+        });
 
     match &hm.match_specifier {
         HeaderMatchSpecifierConfig::Present => value.is_some(),
-        HeaderMatchSpecifierConfig::Exact(e) => value.is_some_and(|v| v == e),
-        HeaderMatchSpecifierConfig::Prefix(p) => value.is_some_and(|v| v.starts_with(p.as_str())),
-        HeaderMatchSpecifierConfig::Suffix(s) => value.is_some_and(|v| v.ends_with(s.as_str())),
-        HeaderMatchSpecifierConfig::Contains(c) => value.is_some_and(|v| v.contains(c.as_str())),
+        HeaderMatchSpecifierConfig::Absent => value.is_none(),
+        HeaderMatchSpecifierConfig::Exact {
+            value: e,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.eq_ignore_ascii_case(e)
+            } else {
+                v == e
+            }
+        }),
+        HeaderMatchSpecifierConfig::Prefix {
+            value: p,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.to_ascii_lowercase().starts_with(&p.to_ascii_lowercase())
+            } else {
+                v.starts_with(p.as_str())
+            }
+        }),
+        HeaderMatchSpecifierConfig::Suffix {
+            value: s,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.to_ascii_lowercase().ends_with(&s.to_ascii_lowercase())
+            } else {
+                v.ends_with(s.as_str())
+            }
+        }),
+        HeaderMatchSpecifierConfig::Contains {
+            value: c,
+            ignore_case,
+        } => value.is_some_and(|v| {
+            if *ignore_case {
+                v.to_ascii_lowercase().contains(&c.to_ascii_lowercase())
+            } else {
+                v.contains(c.as_str())
+            }
+        }),
         HeaderMatchSpecifierConfig::SafeRegex(re) => value.is_some_and(|v| re.is_match(v)),
+        HeaderMatchSpecifierConfig::Range { start, end } => {
+            value.is_some_and(|v| v.parse::<i64>().is_ok_and(|n| n >= *start && n < *end))
+        }
     }
 }
 
@@ -188,6 +276,7 @@ mod tests {
                 path_specifier: PathSpecifierConfig::Prefix(prefix.into()),
                 headers: vec![],
                 case_sensitive: true,
+                match_fraction: None,
             },
             action: RouteConfigAction::Cluster(cluster.into()),
         }
@@ -418,6 +507,7 @@ mod tests {
                     path_specifier: PathSpecifierConfig::Path("/svc/Method".into()),
                     headers: vec![],
                     case_sensitive: true,
+                    match_fraction: None,
                 },
                 action: RouteConfigAction::Cluster("c1".into()),
             }],
@@ -440,6 +530,7 @@ mod tests {
                     ),
                     headers: vec![],
                     case_sensitive: true,
+                    match_fraction: None,
                 },
                 action: RouteConfigAction::Cluster("c1".into()),
             }],
@@ -461,10 +552,14 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "x-env".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::Exact("prod".into()),
+                            match_specifier: HeaderMatchSpecifierConfig::Exact {
+                                value: "prod".into(),
+                                ignore_case: false,
+                            },
                             invert_match: false,
                         }],
                         case_sensitive: true,
+                        match_fraction: None,
                     },
                     action: RouteConfigAction::Cluster("cluster-prod".into()),
                 },
@@ -492,6 +587,7 @@ mod tests {
                     path_specifier: PathSpecifierConfig::Prefix("/".into()),
                     headers: vec![],
                     case_sensitive: true,
+                    match_fraction: None,
                 },
                 action: RouteConfigAction::WeightedClusters(vec![
                     WeightedCluster {
@@ -507,5 +603,348 @@ mod tests {
         }]);
         let action = rc.route("host", "/", &http::HeaderMap::new()).unwrap();
         assert!(matches!(action, RouteConfigAction::WeightedClusters(wcs) if wcs.len() == 2));
+    }
+
+    #[test]
+    fn match_fraction_zero_never_matches() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh1".into(),
+            domains: vec!["*".into()],
+            routes: vec![
+                RouteConfig {
+                    match_criteria: RouteConfigMatch {
+                        path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                        headers: vec![],
+                        case_sensitive: true,
+                        match_fraction: Some(0),
+                    },
+                    action: RouteConfigAction::Cluster("never".into()),
+                },
+                simple_route("/", "fallback"),
+            ],
+        }]);
+        for _ in 0..100 {
+            let action = rc.route("host", "/foo", &http::HeaderMap::new()).unwrap();
+            assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "fallback"));
+        }
+    }
+
+    #[test]
+    fn match_fraction_million_always_matches() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh1".into(),
+            domains: vec!["*".into()],
+            routes: vec![RouteConfig {
+                match_criteria: RouteConfigMatch {
+                    path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                    headers: vec![],
+                    case_sensitive: true,
+                    match_fraction: Some(1_000_000),
+                },
+                action: RouteConfigAction::Cluster("always".into()),
+            }],
+        }]);
+        for _ in 0..100 {
+            let action = rc.route("host", "/foo", &http::HeaderMap::new()).unwrap();
+            assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "always"));
+        }
+    }
+
+    #[test]
+    fn range_match_header() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh1".into(),
+            domains: vec!["*".into()],
+            routes: vec![
+                RouteConfig {
+                    match_criteria: RouteConfigMatch {
+                        path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                        headers: vec![HeaderMatcherConfig {
+                            name: "x-version".into(),
+                            match_specifier: HeaderMatchSpecifierConfig::Range {
+                                start: 1,
+                                end: 10,
+                            },
+                            invert_match: false,
+                        }],
+                        case_sensitive: true,
+                        match_fraction: None,
+                    },
+                    action: RouteConfigAction::Cluster("versioned".into()),
+                },
+                simple_route("/", "default"),
+            ],
+        }]);
+
+        let mut headers = http::HeaderMap::new();
+        headers.insert("x-version", "5".parse().unwrap());
+        let action = rc.route("host", "/", &headers).unwrap();
+        assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "versioned"));
+
+        // end is exclusive
+        headers.insert("x-version", "10".parse().unwrap());
+        let action = rc.route("host", "/", &headers).unwrap();
+        assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "default"));
+
+        // non-integer falls through
+        headers.insert("x-version", "abc".parse().unwrap());
+        let action = rc.route("host", "/", &headers).unwrap();
+        assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "default"));
+
+        // missing header falls through
+        let action = rc.route("host", "/", &http::HeaderMap::new()).unwrap();
+        assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "default"));
+    }
+
+    #[test]
+    fn select_weighted_cluster_empty() {
+        assert_eq!(select_weighted_cluster(&[]), None);
+    }
+
+    #[test]
+    fn select_weighted_cluster_single() {
+        let clusters = vec![WeightedCluster {
+            name: "only".into(),
+            weight: 100,
+        }];
+        assert_eq!(select_weighted_cluster(&clusters).unwrap(), "only");
+    }
+
+    #[test]
+    fn select_weighted_cluster_zero_weights() {
+        let clusters = vec![
+            WeightedCluster {
+                name: "a".into(),
+                weight: 0,
+            },
+            WeightedCluster {
+                name: "b".into(),
+                weight: 0,
+            },
+        ];
+        let name = select_weighted_cluster(&clusters).unwrap();
+        assert!(name == "a" || name == "b");
+    }
+
+    #[test]
+    fn select_weighted_cluster_weight_1_vs_0() {
+        let clusters = vec![
+            WeightedCluster {
+                name: "winner".into(),
+                weight: 1,
+            },
+            WeightedCluster {
+                name: "loser".into(),
+                weight: 0,
+            },
+        ];
+        for _ in 0..1000 {
+            assert_eq!(select_weighted_cluster(&clusters).unwrap(), "winner");
+        }
+    }
+
+    #[test]
+    fn content_type_defaults_to_grpc() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh1".into(),
+            domains: vec!["*".into()],
+            routes: vec![
+                RouteConfig {
+                    match_criteria: RouteConfigMatch {
+                        path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                        headers: vec![HeaderMatcherConfig {
+                            name: "content-type".into(),
+                            match_specifier: HeaderMatchSpecifierConfig::Exact {
+                                value: "application/grpc".into(),
+                                ignore_case: false,
+                            },
+                            invert_match: false,
+                        }],
+                        case_sensitive: true,
+                        match_fraction: None,
+                    },
+                    action: RouteConfigAction::Cluster("grpc".into()),
+                },
+                simple_route("/", "fallback"),
+            ],
+        }]);
+        // Per A28: content-type defaults to "application/grpc" when absent.
+        let action = rc.route("host", "/", &http::HeaderMap::new()).unwrap();
+        assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "grpc"));
+
+        // Non-grpc content-type should not match the first route.
+        let mut headers = http::HeaderMap::new();
+        headers.insert("content-type", "application/json".parse().unwrap());
+        let action = rc.route("host", "/", &headers).unwrap();
+        assert!(matches!(action, RouteConfigAction::Cluster(c) if c == "fallback"));
+    }
+
+    #[test]
+    fn ignore_case_exact_match() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh".into(),
+            domains: vec!["*".into()],
+            routes: vec![RouteConfig {
+                match_criteria: RouteConfigMatch {
+                    path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                    headers: vec![HeaderMatcherConfig {
+                        name: "x-env".into(),
+                        match_specifier: HeaderMatchSpecifierConfig::Exact {
+                            value: "Prod".into(),
+                            ignore_case: true,
+                        },
+                        invert_match: false,
+                    }],
+                    case_sensitive: true,
+                    match_fraction: None,
+                },
+                action: RouteConfigAction::Cluster("matched".into()),
+            }],
+        }]);
+
+        let mut headers = http::HeaderMap::new();
+        headers.insert("x-env", "prod".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+
+        headers.insert("x-env", "PROD".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+
+        headers.insert("x-env", "staging".parse().unwrap());
+        assert!(rc.route("host", "/", &headers).is_err());
+    }
+
+    #[test]
+    fn ignore_case_prefix_suffix_contains() {
+        let make_route = |specifier: HeaderMatchSpecifierConfig| -> RouteConfigResource {
+            simple_rc(vec![VirtualHostConfig {
+                name: "vh".into(),
+                domains: vec!["*".into()],
+                routes: vec![
+                    RouteConfig {
+                        match_criteria: RouteConfigMatch {
+                            path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                            headers: vec![HeaderMatcherConfig {
+                                name: "x-tag".into(),
+                                match_specifier: specifier,
+                                invert_match: false,
+                            }],
+                            case_sensitive: true,
+                            match_fraction: None,
+                        },
+                        action: RouteConfigAction::Cluster("matched".into()),
+                    },
+                    simple_route("/", "fallback"),
+                ],
+            }])
+        };
+
+        let mut headers = http::HeaderMap::new();
+
+        let rc = make_route(HeaderMatchSpecifierConfig::Prefix {
+            value: "App".into(),
+            ignore_case: true,
+        });
+        headers.insert("x-tag", "APPLICATION/JSON".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+
+        let rc = make_route(HeaderMatchSpecifierConfig::Suffix {
+            value: "JSON".into(),
+            ignore_case: true,
+        });
+        headers.insert("x-tag", "application/json".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+
+        let rc = make_route(HeaderMatchSpecifierConfig::Contains {
+            value: "Grpc".into(),
+            ignore_case: true,
+        });
+        headers.insert("x-tag", "APPLICATION/GRPC+PROTO".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+    }
+
+    #[test]
+    fn safe_regex_header_match() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh".into(),
+            domains: vec!["*".into()],
+            routes: vec![
+                RouteConfig {
+                    match_criteria: RouteConfigMatch {
+                        path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                        headers: vec![HeaderMatcherConfig {
+                            name: "x-tag".into(),
+                            match_specifier: HeaderMatchSpecifierConfig::SafeRegex(
+                                regex::Regex::new("^v[0-9]+$").unwrap(),
+                            ),
+                            invert_match: false,
+                        }],
+                        case_sensitive: true,
+                        match_fraction: None,
+                    },
+                    action: RouteConfigAction::Cluster("matched".into()),
+                },
+                simple_route("/", "fallback"),
+            ],
+        }]);
+
+        let mut headers = http::HeaderMap::new();
+
+        headers.insert("x-tag", "v123".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+
+        headers.insert("x-tag", "latest".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "fallback")
+        );
+    }
+
+    #[test]
+    fn ignore_case_false_is_case_sensitive() {
+        let rc = simple_rc(vec![VirtualHostConfig {
+            name: "vh".into(),
+            domains: vec!["*".into()],
+            routes: vec![
+                RouteConfig {
+                    match_criteria: RouteConfigMatch {
+                        path_specifier: PathSpecifierConfig::Prefix("/".into()),
+                        headers: vec![HeaderMatcherConfig {
+                            name: "x-env".into(),
+                            match_specifier: HeaderMatchSpecifierConfig::Exact {
+                                value: "Prod".into(),
+                                ignore_case: false,
+                            },
+                            invert_match: false,
+                        }],
+                        case_sensitive: true,
+                        match_fraction: None,
+                    },
+                    action: RouteConfigAction::Cluster("matched".into()),
+                },
+                simple_route("/", "fallback"),
+            ],
+        }]);
+
+        let mut headers = http::HeaderMap::new();
+        headers.insert("x-env", "Prod".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
+        );
+
+        headers.insert("x-env", "prod".parse().unwrap());
+        assert!(
+            matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "fallback")
+        );
     }
 }

@@ -15,6 +15,7 @@ tonic-prost = {path = "../../tonic-prost"}
 tracing-subscriber = {version = "0.3"}
 
 [dev-dependencies]
+h2 = "0.4"
 http = "1"
 http-body = "1"
 hyper-util = "0.1"

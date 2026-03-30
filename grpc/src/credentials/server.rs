@@ -24,27 +24,6 @@
 
 use crate::attributes::Attributes;
 use crate::credentials::SecurityLevel;
-use crate::rt::GrpcEndpoint;
-use crate::rt::GrpcRuntime;
-
-#[trait_variant::make(Send)]
-pub trait ServerCredsInternal {
-    type Output<I>;
-    /// Performs the server-side authentication handshake.
-    ///
-    /// This method wraps the incoming raw `source` connection with the configured
-    /// security protocol (e.g., TLS).
-    ///
-    /// # Returns
-    ///
-    /// A tuple containing:
-    /// 1. The authenticated endpoint (ready for reading/writing frames).
-    async fn accept<Input: GrpcEndpoint>(
-        &self,
-        source: Input,
-        runtime: GrpcRuntime,
-    ) -> Result<HandshakeOutput<Self::Output<Input>>, String>;
-}
 
 pub struct HandshakeOutput<T> {
     pub endpoint: T,

@@ -39,7 +39,7 @@ mod registry;
 // Using tower/buffer enables tokio's rt feature even though it's possible to
 // create Buffers with a user provided executor.
 #[cfg(feature = "_runtime-tokio")]
-mod tonic;
+pub(crate) mod tonic;
 
 use ::tonic::async_trait;
 pub(crate) use registry::GLOBAL_TRANSPORT_REGISTRY;

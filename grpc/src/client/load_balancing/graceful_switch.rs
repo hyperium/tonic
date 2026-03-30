@@ -23,15 +23,14 @@
  */
 
 use std::collections::HashMap;
-use std::error::Error;
 use std::sync::Arc;
 
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::DynLbConfig;
+use crate::client::load_balancing::DynLbPolicyBuilder;
 use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
-use crate::client::load_balancing::LbConfig;
 use crate::client::load_balancing::LbPolicy;
-use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbState;
 use crate::client::load_balancing::ParsedJsonLbConfig;
 use crate::client::load_balancing::Subchannel;
@@ -42,10 +41,10 @@ use crate::client::load_balancing::child_manager::ChildUpdate;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::rt::GrpcRuntime;
 
-#[derive(Debug, Clone)]
-struct GracefulSwitchLbConfig {
-    child_builder: Arc<dyn LbPolicyBuilder>,
-    child_config: Option<LbConfig>,
+#[derive(Debug)]
+pub(crate) struct GracefulSwitchLbConfig {
+    child_builder: Arc<DynLbPolicyBuilder>,
+    child_config: Option<DynLbConfig>,
 }
 
 /// A graceful switching load balancing policy.  In graceful switch, there is
@@ -59,20 +58,19 @@ struct GracefulSwitchLbConfig {
 pub(crate) struct GracefulSwitchPolicy {
     child_manager: ChildManager<()>, // Child ID empty - only the name of the child LB policy matters.
     last_update: Option<LbState>, // Saves the last output LbState to determine if an update is needed.
-    active_child_builder: Option<Arc<dyn LbPolicyBuilder>>,
+    active_child_builder: Option<Arc<DynLbPolicyBuilder>>,
 }
 
 impl LbPolicy for GracefulSwitchPolicy {
+    type LbConfig = GracefulSwitchLbConfig;
+
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&Self::LbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
-        let config = config
-            .ok_or("graceful switch received no config")?
-            .convert_to::<GracefulSwitchLbConfig>()
-            .ok_or_else(|| format!("invalid config: {config:?}"))?;
+    ) -> Result<(), String> {
+        let config = config.ok_or("graceful switch received no config")?;
 
         if self.active_child_builder.is_none() {
             // When there are no children yet, the current update immediately
@@ -87,7 +85,7 @@ impl LbPolicy for GracefulSwitchPolicy {
         children.push(ChildUpdate {
             child_policy_builder: config.child_builder.clone(),
             child_identifier: (),
-            child_update: Some((update, config.child_config.clone())),
+            child_update: Some((update, config.child_config.as_ref())),
         });
 
         // Include the active child if it does not match the updated child so
@@ -148,13 +146,11 @@ impl GracefulSwitchPolicy {
     /// policy names + configs matching the format of the "loadBalancingConfig"
     /// field in the gRPC ServiceConfig. It returns a type that should be passed
     /// to resolver_update in the LbConfig.config field.
-    pub fn parse_config(
-        config: &ParsedJsonLbConfig,
-    ) -> Result<LbConfig, Box<dyn Error + Send + Sync>> {
+    pub fn parse_config(config: &ParsedJsonLbConfig) -> Result<GracefulSwitchLbConfig, String> {
         let cfg: Vec<HashMap<String, serde_json::Value>> = match config.convert_to() {
             Ok(c) => c,
             Err(e) => {
-                return Err(format!("failed to parse JSON config: {}", e).into());
+                return Err(format!("failed to parse JSON config: {}", e));
             }
         };
         for c in cfg {
@@ -162,8 +158,7 @@ impl GracefulSwitchPolicy {
                 return Err(format!(
                     "Each element in array must contain exactly one policy name/config; found {:?}",
                     c.keys()
-                )
-                .into());
+                ));
             }
             let (policy_name, policy_config) = c.into_iter().next().unwrap();
             let Some(child_builder) = GLOBAL_LB_REGISTRY.get_policy(policy_name.as_str()) else {
@@ -177,7 +172,7 @@ impl GracefulSwitchPolicy {
                 child_builder,
                 child_config,
             };
-            return Ok(LbConfig::new(gsb_config));
+            return Ok(gsb_config);
         }
         Err("no supported policies found in config".into())
     }
@@ -252,6 +247,15 @@ impl GracefulSwitchPolicy {
 
 #[cfg(test)]
 mod test {
+    use std::panic;
+    use std::sync::Arc;
+    use std::time::Duration;
+
+    use tokio::select;
+    use tokio::sync::mpsc::UnboundedReceiver;
+    use tokio::sync::mpsc::{self};
+    use tonic::metadata::MetadataMap;
+
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::LbPolicy;
@@ -276,13 +280,6 @@ mod test {
     use crate::client::name_resolution::ResolverUpdate;
     use crate::core::RequestHeaders;
     use crate::rt::default_runtime;
-    use std::panic;
-    use std::sync::Arc;
-    use std::time::Duration;
-    use tokio::select;
-    use tokio::sync::mpsc::UnboundedReceiver;
-    use tokio::sync::mpsc::{self};
-    use tonic::metadata::MetadataMap;
 
     const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 
@@ -403,7 +400,7 @@ mod test {
     // 3. The controller to pass to the LB policy as part of the updates.
     fn setup() -> (
         mpsc::UnboundedReceiver<TestEvent>,
-        Box<GracefulSwitchPolicy>,
+        GracefulSwitchPolicy,
         Box<dyn ChannelController>,
     ) {
         let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
@@ -417,7 +414,7 @@ mod test {
 
         let graceful_switch =
             GracefulSwitchPolicy::new(default_runtime(), Arc::new(TestWorkScheduler { tx_events }));
-        (rx_events, Box::new(graceful_switch), tcc)
+        (rx_events, graceful_switch, tcc)
     }
 
     fn create_endpoint_with_one_address(addr: String) -> Endpoint {
@@ -470,7 +467,7 @@ mod test {
     }
 
     fn move_subchannel_to_state(
-        lb_policy: &mut dyn LbPolicy,
+        lb_policy: &mut impl LbPolicy,
         subchannel: Arc<dyn Subchannel>,
         tcc: &mut dyn ChannelController,
         state: ConnectivityState,
@@ -525,7 +522,7 @@ mod test {
 
         let subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             subchannel,
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -577,7 +574,7 @@ mod test {
         // Subchannel creation and ready
         let subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             subchannel,
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -606,7 +603,7 @@ mod test {
         // Simulate subchannel creation and ready for pending
         let subchannel_two = verify_subchannel_creation_from_policy(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             subchannel_two,
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -657,7 +654,7 @@ mod test {
             .unwrap();
         let subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             subchannel,
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -748,7 +745,7 @@ mod test {
         assert_channel_empty(&mut rx_events).await;
 
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             second_subchannel,
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -797,7 +794,7 @@ mod test {
 
         let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             current_subchannel.clone(),
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -828,7 +825,7 @@ mod test {
         let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
 
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             pending_subchannel,
             tcc.as_mut(),
             ConnectivityState::Connecting,
@@ -836,7 +833,7 @@ mod test {
         // This should not produce an update.
         assert_channel_empty(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             current_subchannel,
             tcc.as_mut(),
             ConnectivityState::Connecting,
@@ -884,7 +881,7 @@ mod test {
 
         let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             current_subchannel,
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -915,7 +912,7 @@ mod test {
         let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
 
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             pending_subchannel.clone(),
             tcc.as_mut(),
             ConnectivityState::TransientFailure,
@@ -926,7 +923,7 @@ mod test {
         )
         .await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             pending_subchannel,
             tcc.as_mut(),
             ConnectivityState::Connecting,
@@ -975,7 +972,7 @@ mod test {
 
         let current_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             current_subchannel.clone(),
             tcc.as_mut(),
             ConnectivityState::Ready,
@@ -1005,7 +1002,7 @@ mod test {
         let pending_subchannel = verify_subchannel_creation_from_policy(&mut rx_events).await;
         println!("moving subchannel to idle");
         move_subchannel_to_state(
-            &mut *graceful_switch,
+            &mut graceful_switch,
             pending_subchannel,
             tcc.as_mut(),
             ConnectivityState::Idle,

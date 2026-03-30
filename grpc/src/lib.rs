@@ -50,6 +50,15 @@ mod byte_str;
 mod rt;
 mod send_future;
 
+mod private {
+    /// A zero-sized type used to seal methods on a public trait.
+    ///
+    /// Because this type is private to this crate, it cannot be constructed or
+    /// named by external crates. As a result, any method requiring an `Internal`
+    /// argument becomes uncallable from outside the crate.
+    pub struct Internal;
+}
+
 #[cfg(test)]
 mod echo_pb {
     include!(concat!(

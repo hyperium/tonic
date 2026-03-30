@@ -23,7 +23,6 @@
  */
 
 use std::any::Any;
-use std::error::Error;
 use std::fmt::Debug;
 use std::hash::Hash;
 use std::sync::Arc;
@@ -34,7 +33,8 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc;
 
 use crate::client::load_balancing::ChannelController;
-use crate::client::load_balancing::ForwardingSubchannel;
+use crate::client::load_balancing::DynLbConfig;
+use crate::client::load_balancing::DynLbPolicy;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
@@ -43,9 +43,9 @@ use crate::client::load_balancing::ParsedJsonLbConfig;
 use crate::client::load_balancing::Subchannel;
 use crate::client::load_balancing::SubchannelState;
 use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::subchannel::ForwardingSubchannel;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
-use crate::client::service_config::LbConfig;
 use crate::core::RequestHeaders;
 
 pub(crate) fn new_request_headers() -> RequestHeaders {
@@ -164,9 +164,9 @@ type ResolverUpdateFn = Arc<
     dyn Fn(
             &mut StubPolicyData,
             ResolverUpdate,
-            Option<&LbConfig>,
+            Option<&DynLbConfig>,
             &mut dyn ChannelController,
-        ) -> Result<(), Box<dyn Error + Send + Sync>>
+        ) -> Result<(), String>
         + Send
         + Sync,
 >;
@@ -220,12 +220,14 @@ pub(crate) struct StubPolicy {
 }
 
 impl LbPolicy for StubPolicy {
+    type LbConfig = DynLbConfig;
+
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&DynLbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         if let Some(f) = &mut self.funcs.resolver_update {
             return f(&mut self.data, update, config, channel_controller);
         }
@@ -268,7 +270,9 @@ pub(super) struct MockConfig {
 }
 
 impl LbPolicyBuilder for StubPolicyBuilder {
-    fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
+    type LbPolicy = Box<DynLbPolicy>;
+
+    fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy {
         let data = StubPolicyData::new(options);
         Box::new(StubPolicy {
             funcs: self.funcs.clone(),
@@ -280,20 +284,17 @@ impl LbPolicyBuilder for StubPolicyBuilder {
         self.name
     }
 
-    fn parse_config(
-        &self,
-        config: &ParsedJsonLbConfig,
-    ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
+    fn parse_config(&self, config: &ParsedJsonLbConfig) -> Result<Option<DynLbConfig>, String> {
         let cfg: MockConfig = match config.convert_to() {
             Ok(c) => c,
             Err(e) => {
-                return Err(format!("failed to parse JSON config: {}", e).into());
+                return Err(format!("failed to parse JSON config: {}", e));
             }
         };
-        Ok(Some(LbConfig::new(cfg)))
+        Ok(Some(Arc::new(cfg)))
     }
 }
 
 pub(crate) fn reg_stub_policy(name: &'static str, funcs: StubPolicyFuncs) {
-    super::GLOBAL_LB_REGISTRY.add_builder(StubPolicyBuilder { name, funcs })
+    super::GLOBAL_LB_REGISTRY.add_dyn_builder(Arc::new(StubPolicyBuilder { name, funcs }))
 }
