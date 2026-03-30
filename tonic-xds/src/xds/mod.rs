@@ -10,4 +10,3 @@ pub(crate) mod resource;
 #[allow(dead_code)]
 pub(crate) mod routing;
 pub(crate) mod uri;
-pub(crate) mod xds_manager;

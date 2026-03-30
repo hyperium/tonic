@@ -12,8 +12,10 @@ use tower::{BoxError, Service, load::Load, util::BoxCloneService};
 
 #[cfg(test)]
 use {
-    crate::client::cluster::ClusterClientRegistryGrpc, crate::client::route::XdsRoutingLayer,
-    crate::xds::xds_manager::XdsManager, tower::ServiceBuilder,
+    crate::client::cluster::ClusterClientRegistryGrpc,
+    crate::client::lb::ClusterDiscovery,
+    crate::client::route::{Router, XdsRoutingLayer},
+    tower::ServiceBuilder,
 };
 
 /// Configuration for building [`XdsChannel`] / [`XdsChannelGrpc`].
@@ -162,18 +164,16 @@ impl XdsChannelBuilder {
         BoxCloneService::new(self.build_tonic_grpc_channel())
     }
 
-    /// Builds an `XdsChannelGrpc` from the given xDS manager dependencies.
-    /// This is primarily intended for testing purposes for now.
-    /// [`XdsChannelBuilder::build_grpc_channel`] should build [`XdsManager`](crate::xds::xds_manager::XdsManager)
-    /// as part of constructing `XdsChannelGrpc`.
+    /// Builds an `XdsChannelGrpc` from the given router and cluster discovery.
     #[cfg(test)]
-    pub(crate) fn build_grpc_channel_from_xds_manager(
+    pub(crate) fn build_grpc_channel_from_parts(
         &self,
-        xds_manager: Arc<dyn XdsManager<EndpointAddress, EndpointChannel<Channel>>>,
+        router: Arc<dyn Router>,
+        discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>>,
     ) -> XdsChannelGrpc {
-        let routing_layer = XdsRoutingLayer::new(xds_manager.clone());
+        let routing_layer = XdsRoutingLayer::new(router);
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
-        let lb_service = XdsLbService::new(cluster_registry, xds_manager.clone());
+        let lb_service = XdsLbService::new(cluster_registry, discovery);
         let service = ServiceBuilder::new()
             .layer(routing_layer)
             .service(lb_service);
@@ -191,14 +191,14 @@ mod tests {
     use crate::client::channel::XdsChannelGrpc;
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
+    use crate::client::lb::{BoxDiscover, ClusterDiscovery};
     use crate::client::route::RouteDecision;
     use crate::client::route::RouteInput;
+    use crate::client::route::Router;
     use crate::common::async_util::BoxFuture;
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::TestServer;
-    use crate::xds::xds_manager::BoxDiscover;
-    use crate::xds::xds_manager::{XdsClusterDiscovery, XdsRouter};
     use std::sync::Arc;
     use tokio::sync::mpsc;
     use tonic::transport::Channel;
@@ -245,17 +245,20 @@ mod tests {
         }
     }
 
-    impl XdsRouter for MockXdsManager {
-        fn route(&self, _input: &RouteInput<'_>) -> BoxFuture<RouteDecision> {
+    impl Router for MockXdsManager {
+        fn route(
+            &self,
+            _input: &RouteInput<'_>,
+        ) -> BoxFuture<Result<RouteDecision, crate::xds::routing::RoutingError>> {
             Box::pin(async move {
-                RouteDecision {
+                Ok(RouteDecision {
                     cluster: "test-cluster".to_string(),
-                }
+                })
             })
         }
     }
 
-    impl XdsClusterDiscovery<EndpointAddress, EndpointChannel<Channel>> for MockXdsManager {
+    impl ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>> for MockXdsManager {
         fn discover_cluster(
             &self,
             _cluster_name: &str,
@@ -330,8 +333,8 @@ mod tests {
         let xds_manager = Arc::new(MockXdsManager::from_test_servers(&servers));
 
         let xds_channel_builder = XdsChannelBuilder::with_config(XdsChannelConfig::default());
-        let xds_channel =
-            xds_channel_builder.build_grpc_channel_from_xds_manager(xds_manager.clone());
+        let xds_channel = xds_channel_builder
+            .build_grpc_channel_from_parts(xds_manager.clone(), xds_manager.clone());
 
         let client = GreeterClient::new(xds_channel);
 
