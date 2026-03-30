@@ -259,6 +259,7 @@ mod test {
     use tokio::sync::mpsc;
     use tonic::metadata::MetadataMap;
 
+    use crate::StatusCode;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::FailingPicker;
@@ -303,14 +304,13 @@ mod test {
     //    subchannel, sending a new picker etc).
     // 2. The Round Robin to send resolver and subchannel updates from the test.
     // 3. The controller to pass to the LB policy as part of the updates.
-    #[allow(clippy::type_complexity)]
-    fn setup(
-        test_name: &'static str,
-    ) -> (
+    type SetupResult = (
         mpsc::UnboundedReceiver<TestEvent>,
         RoundRobinPolicy,
         Box<dyn ChannelController>,
-    ) {
+    );
+
+    fn setup(test_name: &'static str) -> SetupResult {
         pick_first::reg();
         round_robin::reg();
         test_utils::reg_stub_policy(test_name, create_funcs_for_roundrobin_tests());
@@ -414,7 +414,7 @@ mod test {
             subchannel,
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: Some(Arc::from(Box::from(err.to_owned()))),
+                last_connection_error: Some(err.into()),
             },
             tcc,
         );
@@ -558,7 +558,7 @@ mod test {
                     }
                 },
             )),
-            work: None,
+            ..Default::default()
         }
     }
 
@@ -683,7 +683,7 @@ mod test {
                 let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Fail(status) => {
-                        assert!(status.code() == tonic::Code::Unavailable);
+                        assert!(status.code() == StatusCode::Unavailable);
                         dbg!(status.message());
                         dbg!(&want_error);
                         assert!(status.message().contains(&want_error));
