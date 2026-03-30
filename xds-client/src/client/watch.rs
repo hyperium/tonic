@@ -52,6 +52,14 @@ impl ProcessingDone {
         let (tx, rx) = oneshot::channel();
         (Self(Some(tx)), rx)
     }
+
+    /// Creates a no-op token that signals nothing when dropped.
+    ///
+    /// Requires the `test-util` feature.
+    #[cfg(feature = "test-util")]
+    pub fn noop() -> Self {
+        Self(None)
+    }
 }
 
 impl Drop for ProcessingDone {

@@ -167,4 +167,16 @@ impl XdsClient {
 
         ResourceWatcher::new(event_rx, watcher_id, self.command_tx.clone())
     }
+
+    /// Creates a disconnected client with no backing worker.
+    ///
+    /// `watch()` calls will succeed but the returned watchers immediately
+    /// yield `None` (the worker receiver is dropped).
+    ///
+    /// Requires the `test-util` feature.
+    #[cfg(feature = "test-util")]
+    pub fn disconnected() -> Self {
+        let (tx, _rx) = mpsc::channel(1);
+        Self { command_tx: tx }
+    }
 }
