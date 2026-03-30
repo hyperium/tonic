@@ -41,18 +41,17 @@ use super::encoding::ValueEncoding;
 /// [`MetadataMap`]: crate::metadata::MetadataMap
 #[derive(Clone, Eq, PartialEq, Hash)]
 #[repr(transparent)]
-pub struct MetadataKey<VE: ValueEncoding> {
+pub struct MetadataKey<VE> {
     // Note: There are unsafe transmutes that assume that the memory layout
     // of MetadataKey is identical to HeaderName
-    pub(crate) inner: http::header::HeaderName,
-    phantom: PhantomData<VE>,
+    pub(crate) inner: HeaderName,
+    _phantom: PhantomData<VE>,
 }
 
 /// A possible error when converting a `MetadataKey` from another type.
 #[derive(Debug, Default)]
-pub struct InvalidMetadataKey {
-    _priv: (),
-}
+#[non_exhaustive]
+pub struct InvalidMetadataKey {}
 
 /// An ascii metadata key.
 pub type AsciiMetadataKey = MetadataKey<Ascii>;
@@ -72,7 +71,7 @@ impl<VE: ValueEncoding> MetadataKey<VE> {
 
                 Ok(MetadataKey {
                     inner: name,
-                    phantom: PhantomData,
+                    _phantom: PhantomData,
                 })
             }
             Err(_) => Err(InvalidMetadataKey::new()),
@@ -132,7 +131,7 @@ impl<VE: ValueEncoding> MetadataKey<VE> {
 
         MetadataKey {
             inner: name,
-            phantom: PhantomData,
+            _phantom: PhantomData,
         }
     }
 

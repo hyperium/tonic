@@ -341,6 +341,11 @@ impl MetadataMap {
     /// inserted into the `MetadataMap`.
     ///
     /// The metadata map may reserve more space to avoid frequent reallocations.
+    /// The capacity is reserved relative to the existing length. After calling
+    /// `reserve`, capacity will be greater than or equal to
+    /// `self.len() + additional`. Does nothing if capacity is already
+    /// sufficient.
+    ///
     /// Like with `with_capacity`, this will be a "best effort" to avoid
     /// allocations until `additional` more custom metadata is inserted. Certain
     /// usage patterns could cause additional allocations before the number is

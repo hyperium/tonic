@@ -25,12 +25,14 @@
 use std::cmp;
 use std::error::Error;
 use std::fmt;
+use std::fmt::Write;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
 use bytes::Bytes;
+use bytes::BytesMut;
 use http::HeaderValue;
 
 use super::encoding::Ascii;
@@ -51,7 +53,7 @@ pub struct MetadataValue<VE: ValueEncoding> {
     // Note: There are unsafe transmutes that assume that the memory layout
     // of MetadataValue is identical to UnencodedHeaderValue.
     pub(crate) inner: UnencodedHeaderValue,
-    phantom: PhantomData<VE>,
+    _phantom: PhantomData<VE>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -83,9 +85,8 @@ impl fmt::Debug for UnencodedHeaderValue {
 /// Metadata field values may contain opaque bytes, in which case it is not
 /// possible to represent the value as a string.
 #[derive(Debug)]
-pub struct ToStrError {
-    _priv: (),
-}
+#[non_exhaustive]
+pub struct ToStrError {}
 
 /// An ascii metadata value.
 pub type AsciiMetadataValue = MetadataValue<Ascii>;
@@ -123,7 +124,7 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     pub fn from_static(src: &'static str) -> Self {
         MetadataValue {
             inner: VE::from_static(src, private::Internal),
-            phantom: PhantomData,
+            _phantom: PhantomData,
         }
     }
 
@@ -137,7 +138,7 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     pub unsafe fn from_shared_unchecked(src: Bytes) -> Self {
         MetadataValue {
             inner: UnencodedHeaderValue::from_bytes(src),
-            phantom: PhantomData,
+            _phantom: PhantomData,
         }
     }
 
@@ -193,7 +194,7 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     pub(crate) fn unchecked_from_header_value(value: UnencodedHeaderValue) -> Self {
         MetadataValue {
             inner: value,
-            phantom: PhantomData,
+            _phantom: PhantomData,
         }
     }
 
@@ -251,7 +252,7 @@ impl<VE: ValueEncoding> TryFrom<&[u8]> for MetadataValue<VE> {
     fn try_from(src: &[u8]) -> Result<Self, Self::Error> {
         VE::from_bytes(src, private::Internal).map(|value| MetadataValue {
             inner: value,
-            phantom: PhantomData,
+            _phantom: PhantomData,
         })
     }
 }
@@ -304,7 +305,7 @@ impl<VE: ValueEncoding> TryFrom<Bytes> for MetadataValue<VE> {
     fn try_from(src: Bytes) -> Result<Self, Self::Error> {
         VE::from_shared(src, private::Internal).map(|value| MetadataValue {
             inner: value,
-            phantom: PhantomData,
+            _phantom: PhantomData,
         })
     }
 }
@@ -422,10 +423,16 @@ impl<VE: ValueEncoding> fmt::Debug for MetadataValue<VE> {
 macro_rules! from_integers {
     ($($name:ident: $t:ident => $max_len:expr),*) => {$(
         impl From<$t> for MetadataValue<Ascii> {
-            fn from(num: $t) -> MetadataValue<Ascii> {
+            fn from(num: $t) -> MetadataValue<Ascii>  {
+                let mut buf = BytesMut::with_capacity($max_len);
+                let _ = buf.write_str(itoa::Buffer::new().format(num));
+                let inner = UnencodedHeaderValue {
+                    data: buf.freeze(),
+                    is_sensitive: false,
+                };
                 MetadataValue {
-                    inner: UnencodedHeaderValue::from_bytes(Bytes::from(num.to_string())),
-                    phantom: PhantomData,
+                    inner,
+                    _phantom: PhantomData,
                 }
             }
         }
@@ -497,12 +504,6 @@ impl<'a, VE: ValueEncoding> From<&'a MetadataValue<VE>> for MetadataValue<VE> {
 }
 
 // ===== ToStrError =====
-
-impl ToStrError {
-    pub(crate) fn new() -> Self {
-        ToStrError { _priv: () }
-    }
-}
 
 impl fmt::Display for ToStrError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {

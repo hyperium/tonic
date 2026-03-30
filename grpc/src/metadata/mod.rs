@@ -29,20 +29,20 @@ mod key;
 mod map;
 mod value;
 
-pub use self::encoding::Ascii;
-pub use self::encoding::Binary;
-pub use self::key::AsciiMetadataKey;
-pub use self::key::BinaryMetadataKey;
-pub use self::key::MetadataKey;
-pub use self::map::GetAll;
-pub use self::map::Iter;
-pub use self::map::Key;
-pub use self::map::KeyAndValueRef;
-pub use self::map::MetadataMap;
-pub use self::map::ValueIter;
-pub use self::value::AsciiMetadataValue;
-pub use self::value::BinaryMetadataValue;
-pub use self::value::MetadataValue;
+pub use encoding::Ascii;
+pub use encoding::Binary;
+pub use key::AsciiMetadataKey;
+pub use key::BinaryMetadataKey;
+pub use key::MetadataKey;
+pub use map::GetAll;
+pub use map::Iter;
+pub use map::Key;
+pub use map::KeyAndValueRef;
+pub use map::MetadataMap;
+pub use map::ValueIter;
+pub use value::AsciiMetadataValue;
+pub use value::BinaryMetadataValue;
+pub use value::MetadataValue;
 
 /// The metadata::errors module contains types for errors that can occur
 /// while handling gRPC custom metadata.

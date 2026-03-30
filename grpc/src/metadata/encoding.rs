@@ -35,9 +35,8 @@ use crate::private;
 /// A possible error when converting a `MetadataValue` from a string or byte
 /// slice.
 #[derive(Debug, Hash)]
-pub struct InvalidMetadataValue {
-    _priv: (),
-}
+#[non_exhaustive]
+pub struct InvalidMetadataValue {}
 
 pub trait ValueEncoding: Clone + Eq + PartialEq + Hash {
     /// Returns true if the provided key is valid for this ValueEncoding type.
@@ -87,7 +86,7 @@ pub trait ValueEncoding: Clone + Eq + PartialEq + Hash {
 /// gRPC metadata values can be either ASCII strings or binary. Note that only
 /// visible ASCII characters (32-127) are permitted.
 /// This type should never be instantiated -- in fact, it's impossible
-/// to, because there's no variants to instantiate. Instead, it's just used as
+/// to, because there are no variants to instantiate. Instead, it's just used as
 /// a type parameter for [`MetadataKey`] and [`MetadataValue`].
 ///
 /// [`MetadataKey`]: crate::metadata::MetadataKey
@@ -318,7 +317,7 @@ impl ValueEncoding for Binary {
 
 impl InvalidMetadataValue {
     pub(crate) fn new() -> Self {
-        InvalidMetadataValue { _priv: () }
+        InvalidMetadataValue {}
     }
 }
 
