@@ -39,6 +39,7 @@ tokio = { version = "1", features = ["sync"] }
 # Used for weighted cluster selection and fractional route matching — does not need
 # cryptographic security, only statistical uniformity for traffic distribution.
 fastrand = "2"
+tokio-stream = "0.1"
 
 [lints]
 workspace = true
@@ -47,5 +48,4 @@ workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
 tonic-prost = "0.14"
-tokio-stream = "0.1"
 tonic-prost-build = "0.14"
