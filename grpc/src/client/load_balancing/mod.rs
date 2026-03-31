@@ -89,7 +89,7 @@ pub(crate) trait LbPolicyBuilder: Send + Sync + Debug + 'static {
 /// LB policies are responsible for creating connections (modeled as
 /// Subchannels) and producing Picker instances for picking connections for
 /// RPCs.
-pub(crate) trait LbPolicy: Send + Debug + 'static {
+pub(crate) trait LbPolicy: Send + Sync + Debug + 'static {
     type LbConfig: Any + Send + Sync + Debug + 'static;
 
     /// Called by the channel when the name resolver produces a new set of
@@ -360,7 +360,7 @@ impl Picker for OneSubchannelPicker {
 /// QueuingPicker always returns Queue.  LB policies that are not actively
 /// Connecting should not use this picker.
 #[derive(Debug)]
-pub(crate) struct QueuingPicker {}
+pub(crate) struct QueuingPicker;
 
 impl Picker for QueuingPicker {
     fn pick(&self, _request: &RequestHeaders) -> PickResult {
