@@ -464,15 +464,6 @@ impl ResolverChannelController {
     }
 }
 
-struct LbChannelController {
-    lb_work_scheduler: Arc<LbWorkScheduler>, // Holds `pending` bool (??)
-    transport_registry: TransportRegistry,   // For creating subchannels
-    wqtx: WorkQueueTx,                       // To queue subchannel state updates
-    lb_watcher: Arc<Watcher<LbState>>,
-    runtime: GrpcRuntime, // For creating subchanenls
-    security_opts: SecurityOpts,
-}
-
 impl name_resolution::ChannelController for ResolverChannelController {
     fn update(&mut self, update: ResolverUpdate) -> Result<(), String> {
         let json_config = if let Ok(Some(service_config)) = update.service_config.as_ref()
@@ -498,6 +489,15 @@ impl name_resolution::ChannelController for ResolverChannelController {
     fn parse_service_config(&self, config: &str) -> Result<ServiceConfig, String> {
         Err("service configs not supported".to_string())
     }
+}
+
+struct LbChannelController {
+    lb_work_scheduler: Arc<LbWorkScheduler>, // Holds `pending` bool (??)
+    transport_registry: TransportRegistry,   // For creating subchannels
+    wqtx: WorkQueueTx,                       // To queue subchannel state updates
+    lb_watcher: Arc<Watcher<LbState>>,
+    runtime: GrpcRuntime, // For creating subchanenls
+    security_opts: SecurityOpts,
 }
 
 impl load_balancing::ChannelController for LbChannelController {
