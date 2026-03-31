@@ -25,8 +25,6 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use tonic::metadata::MetadataMap;
-
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
@@ -34,15 +32,12 @@ use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbPolicyBuilder;
 use crate::client::load_balancing::LbPolicyOptions;
 use crate::client::load_balancing::LbState;
-use crate::client::load_balancing::Pick;
-use crate::client::load_balancing::PickResult;
-use crate::client::load_balancing::Picker;
+use crate::client::load_balancing::OneSubchannelPicker;
 use crate::client::load_balancing::Subchannel;
 use crate::client::load_balancing::SubchannelState;
 use crate::client::load_balancing::WorkScheduler;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
-use crate::core::RequestHeaders;
 use crate::rt::GrpcRuntime;
 
 pub(crate) static POLICY_NAME: &str = "pick_first";
@@ -120,22 +115,25 @@ impl LbPolicy for PickFirstPolicy {
         state: &SubchannelState,
         channel_controller: &mut dyn ChannelController,
     ) {
-        // Assume the update is for our subchannel.
-        if state.connectivity_state == ConnectivityState::Ready {
-            channel_controller.update_picker(LbState {
-                connectivity_state: ConnectivityState::Ready,
-                picker: Arc::new(OneSubchannelPicker {
-                    sc: self.subchannel.as_ref().unwrap().clone(),
-                }),
-            });
-        } else if state.connectivity_state == ConnectivityState::TransientFailure {
-            let err = state.last_connection_error.clone().unwrap();
-            channel_controller.update_picker(LbState {
-                connectivity_state: ConnectivityState::TransientFailure,
-                picker: Arc::new(FailingPicker {
-                    error: err.to_string(),
-                }),
-            });
+        match state.connectivity_state {
+            // Assume the update is for our subchannel.
+            ConnectivityState::Ready => {
+                channel_controller.update_picker(LbState {
+                    connectivity_state: ConnectivityState::Ready,
+                    picker: Arc::new(OneSubchannelPicker {
+                        sc: self.subchannel.clone().unwrap(),
+                    }),
+                });
+            }
+            ConnectivityState::TransientFailure => {
+                channel_controller.update_picker(LbState {
+                    connectivity_state: ConnectivityState::TransientFailure,
+                    picker: Arc::new(FailingPicker {
+                        error: state.last_connection_error.clone().unwrap(),
+                    }),
+                });
+            }
+            _ => {}
         }
     }
 
@@ -143,21 +141,5 @@ impl LbPolicy for PickFirstPolicy {
 
     fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
         todo!("implement exit_idle")
-    }
-}
-
-#[derive(Debug)]
-struct OneSubchannelPicker {
-    sc: Arc<dyn Subchannel>,
-}
-
-impl Picker for OneSubchannelPicker {
-    fn pick(&self, _: &RequestHeaders) -> PickResult {
-        PickResult::Pick(Pick {
-            subchannel: self.sc.clone(),
-            // on_complete: None,
-            metadata: MetadataMap::new(),
-            on_complete: None,
-        })
     }
 }

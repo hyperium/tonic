@@ -379,7 +379,7 @@ mod test {
                     });
                 },
             )),
-            work: None,
+            ..Default::default()
         }
     }
 
