@@ -880,7 +880,6 @@ mod tests {
         let addr_clone = addr.clone();
         tx_work
             .send(Box::new(move |cc| {
-                dbg!();
                 let (sc, state) = cc.new_subchannel(&addr_clone);
                 assert_eq!(state.connectivity_state, ConnectivityState::Ready);
             }))
