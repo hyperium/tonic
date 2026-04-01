@@ -429,10 +429,10 @@ impl<'a> WrappedController<'a> {
 }
 
 impl ChannelController for WrappedController<'_> {
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel> {
-        let subchannel = self.channel_controller.new_subchannel(address);
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState) {
+        let (subchannel, state) = self.channel_controller.new_subchannel(address);
         self.created_subchannels.push(subchannel.clone());
-        subchannel
+        (subchannel, state)
     }
 
     fn update_picker(&mut self, update: LbState) {
@@ -477,8 +477,7 @@ mod test {
     use std::panic;
     use std::sync::Arc;
     use std::sync::Mutex;
-
-    use tokio::sync::mpsc;
+    use std::sync::mpsc;
 
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
@@ -522,12 +521,12 @@ mod test {
         funcs: StubPolicyFuncs,
         test_name: &'static str,
     ) -> (
-        mpsc::UnboundedReceiver<TestEvent>,
+        mpsc::Receiver<TestEvent>,
         ChildManager<Endpoint>,
         Box<dyn ChannelController>,
     ) {
         test_utils::reg_stub_policy(test_name, funcs);
-        let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
+        let (tx_events, rx_events) = mpsc::channel::<TestEvent>();
         let tcc = Box::new(TestChannelController {
             tx_events: tx_events.clone(),
         });
@@ -582,27 +581,20 @@ mod test {
         child_manager: &mut ChildManager<Endpoint>,
         subchannel: Arc<dyn Subchannel>,
         tcc: &mut dyn ChannelController,
-        state: ConnectivityState,
+        state: &SubchannelState,
     ) {
-        child_manager.subchannel_update(
-            subchannel,
-            &SubchannelState {
-                connectivity_state: state,
-                ..Default::default()
-            },
-            tcc,
-        );
+        child_manager.subchannel_update(subchannel, state, tcc);
     }
 
     // Verifies that the expected number of subchannels is created. Returns the
     // subchannels created.
-    async fn verify_subchannel_creation_from_policy(
-        rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
+    fn verify_subchannel_creation_from_policy(
+        rx_events: &mut mpsc::Receiver<TestEvent>,
         number_of_subchannels: usize,
     ) -> Vec<Arc<dyn Subchannel>> {
         let mut subchannels = Vec::new();
         for _ in 0..number_of_subchannels {
-            match rx_events.recv().await.unwrap() {
+            match rx_events.recv().unwrap() {
                 TestEvent::NewSubchannel(sc) => {
                     subchannels.push(sc);
                 }
@@ -644,8 +636,8 @@ mod test {
     // Tests the scenario where one child is READY and the rest are in
     // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report READY.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_ready_if_any_child_is_ready() {
+    #[test]
+    fn childmanager_aggregate_state_is_ready_if_any_child_is_ready() {
         let test_name = "stub-childmanager_aggregate_state_is_ready_if_any_child_is_ready";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
@@ -663,7 +655,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -673,25 +664,25 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Idle,
+            &SubchannelState::idle(),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Connecting,
+            &SubchannelState::connecting(),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
     }
@@ -699,8 +690,8 @@ mod test {
     // Tests the scenario where no children are READY and the children are in
     // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report CONNECTING.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_connecting_if_no_child_is_ready() {
+    #[test]
+    fn childmanager_aggregate_state_is_connecting_if_no_child_is_ready() {
         let test_name = "stub-childmanager_aggregate_state_is_connecting_if_no_child_is_ready";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
@@ -717,7 +708,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -726,19 +716,19 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Idle,
+            &SubchannelState::idle(),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Connecting,
+            &SubchannelState::connecting(),
         );
 
         assert_eq!(
@@ -750,8 +740,8 @@ mod test {
     // Tests the scenario where no children are READY or CONNECTING and the
     // children are in IDLE, or TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report IDLE.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_idle_if_only_idle_and_failure() {
+    #[test]
+    fn childmanager_aggregate_state_is_idle_if_only_idle_and_failure() {
         let test_name = "stub-childmanager_aggregate_state_is_idle_if_only_idle_and_failure";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
@@ -769,7 +759,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -778,13 +767,13 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Idle,
+            &SubchannelState::idle(),
         );
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Idle);
     }
@@ -792,8 +781,8 @@ mod test {
     // Tests the scenario where no children are READY, CONNECTING, or IDLE and
     // all children are in TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report TRANSIENT FAILURE.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_transient_failure_if_all_children_are() {
+    #[test]
+    fn childmanager_aggregate_state_is_transient_failure_if_all_children_are() {
         let test_name =
             "stub-childmanager_aggregate_state_is_transient_failure_if_all_children_are";
         let (mut rx_events, mut child_manager, mut tcc) =
@@ -811,7 +800,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -820,13 +808,13 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         assert_eq!(
             child_manager.aggregate_states(),
@@ -882,14 +870,14 @@ mod test {
 
     // Tests that the child manager properly delegates to the children that
     // called schedule_work when work is called.
-    #[tokio::test]
-    async fn childmanager_schedule_work_works() {
+    #[test]
+    fn childmanager_schedule_work_works() {
         let name1 = "childmanager_schedule_work_works-one";
         let name2 = "childmanager_schedule_work_works-two";
         test_utils::reg_stub_policy(name1, create_funcs_for_schedule_work_tests(name1));
         test_utils::reg_stub_policy(name2, create_funcs_for_schedule_work_tests(name2));
 
-        let (tx_events, mut rx_events) = mpsc::unbounded_channel::<TestEvent>();
+        let (tx_events, rx_events) = mpsc::channel::<TestEvent>();
         let mut tcc = TestChannelController {
             tx_events: tx_events.clone(),
         };
@@ -918,7 +906,7 @@ mod test {
         child_manager.update(updates.clone(), &mut tcc).unwrap();
 
         // Confirm that child one has requested work.
-        match rx_events.recv().await.unwrap() {
+        match rx_events.recv().unwrap() {
             TestEvent::ScheduleWork => {}
             other => panic!("unexpected event {:?}", other),
         };
@@ -942,7 +930,7 @@ mod test {
         child_manager.update(updates.clone(), &mut tcc).unwrap();
 
         // Confirm that both children requested work.
-        match rx_events.recv().await.unwrap() {
+        match rx_events.recv().unwrap() {
             TestEvent::ScheduleWork => {}
             other => panic!("unexpected event {:?}", other),
         };

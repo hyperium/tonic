@@ -45,11 +45,32 @@ pub(crate) struct SubchannelState {
     pub last_connection_error: Option<String>,
 }
 
-impl Default for SubchannelState {
-    fn default() -> Self {
+impl SubchannelState {
+    pub(crate) fn idle() -> Self {
         Self {
             connectivity_state: ConnectivityState::Idle,
             last_connection_error: None,
+        }
+    }
+
+    pub(crate) fn ready() -> Self {
+        Self {
+            connectivity_state: ConnectivityState::Ready,
+            last_connection_error: None,
+        }
+    }
+
+    pub(crate) fn connecting() -> Self {
+        Self {
+            connectivity_state: ConnectivityState::Connecting,
+            last_connection_error: None,
+        }
+    }
+
+    pub(crate) fn transient_failure(last_connection_error: impl Into<String>) -> Self {
+        Self {
+            connectivity_state: ConnectivityState::TransientFailure,
+            last_connection_error: Some(last_connection_error.into()),
         }
     }
 }
