@@ -134,13 +134,12 @@ impl ListenerWatchState {
                 // Cascading watches registered above; dropping signals the xds-client to ACK.
                 drop(done);
             }
-            ResourceEvent::ResourceChanged { result: Err(_), .. } => {
-                self.rds_watcher = None;
-                self.rds_name = None;
-                self.remove_all_clusters(cache);
-            }
-            // Per gRFC A88: transient error (e.g. connectivity); keep using cached resources.
-            ResourceEvent::AmbientError { .. } => {}
+            // Per gRFC A88: data errors (NACK, resource deletion) with a previously
+            // cached resource are treated as ambient — keep using the cached resource
+            // to avoid unnecessary outages. Downstream layers (routing, LB) retain
+            // their own snapshots independently.
+            ResourceEvent::ResourceChanged { result: Err(_), .. }
+            | ResourceEvent::AmbientError { .. } => {}
         }
     }
 
@@ -159,10 +158,9 @@ impl ListenerWatchState {
                 self.reconcile_clusters(&rc, xds_client, cache).await;
                 drop(done);
             }
-            ResourceEvent::ResourceChanged { result: Err(_), .. } => {
-                self.remove_all_clusters(cache);
-            }
-            ResourceEvent::AmbientError { .. } => {}
+            // Per gRFC A88: keep using cached resources on data errors.
+            ResourceEvent::ResourceChanged { result: Err(_), .. }
+            | ResourceEvent::AmbientError { .. } => {}
         }
     }
 
@@ -187,15 +185,6 @@ impl ListenerWatchState {
             let state = ClusterWatchState::start(name.clone(), xds_client, Arc::clone(cache)).await;
             self.cluster_watches.insert(name.clone(), state);
         }
-    }
-
-    /// Removes all cluster watches and cleans up cache entries.
-    fn remove_all_clusters(&mut self, cache: &Arc<XdsCache>) {
-        for name in self.cluster_watches.keys() {
-            cache.remove_cluster(name);
-            cache.remove_endpoints(name);
-        }
-        self.cluster_watches.clear();
     }
 }
 
@@ -264,13 +253,9 @@ async fn run_cluster_watch(
 
                 drop(done);
             }
-            ResourceEvent::ResourceChanged { result: Err(_), .. } => {
-                cache.remove_cluster(&cluster_name);
-                cache.remove_endpoints(&cluster_name);
-                _eds_task = None;
-                current_eds_name = None;
-            }
-            ResourceEvent::AmbientError { .. } => {}
+            // Per gRFC A88: keep using cached resources on data errors.
+            ResourceEvent::ResourceChanged { result: Err(_), .. }
+            | ResourceEvent::AmbientError { .. } => {}
         }
     }
 }
@@ -289,10 +274,9 @@ async fn run_eds_watch(
             } => {
                 cache.update_endpoints(&cluster_name, endpoints);
             }
-            ResourceEvent::ResourceChanged { result: Err(_), .. } => {
-                cache.remove_endpoints(&cluster_name);
-            }
-            ResourceEvent::AmbientError { .. } => {}
+            // Per gRFC A88: keep using cached resources on data errors.
+            ResourceEvent::ResourceChanged { result: Err(_), .. }
+            | ResourceEvent::AmbientError { .. } => {}
         }
     }
 }
@@ -300,7 +284,6 @@ async fn run_eds_watch(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::xds::resource::LbPolicy;
     use crate::xds::resource::route_config::{
         PathSpecifierConfig, RouteConfig, RouteConfigAction, RouteConfigMatch, VirtualHostConfig,
     };
@@ -390,30 +373,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn remove_all_clusters_clears_cache_and_watches() {
-        let cache = test_cache();
-        cache.update_cluster(
-            "c1",
-            Arc::new(ClusterResource {
-                name: "c1".into(),
-                eds_service_name: None,
-                lb_policy: LbPolicy::RoundRobin,
-            }),
-        );
-
-        let mut state = ListenerWatchState::new();
-        state.cluster_watches.insert(
-            "c1".into(),
-            ClusterWatchState {
-                _cds_task: AbortOnDrop(tokio::spawn(async {})),
-            },
-        );
-
-        state.remove_all_clusters(&cache);
-        assert!(state.cluster_watches.is_empty());
-    }
-
-    #[tokio::test]
     async fn reconcile_adds_new_clusters() {
         let cache = test_cache();
         let client = test_client();
@@ -476,7 +435,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_rds_err_removes_all_clusters() {
+    async fn handle_rds_err_preserves_state() {
         let cache = test_cache();
         let client = test_client();
         let mut state = ListenerWatchState::new();
@@ -485,8 +444,9 @@ mod tests {
         state.handle_rds(ok_event(rc), &client, &cache).await;
         assert_eq!(state.cluster_watches.len(), 1);
 
+        // Per gRFC A88: data errors preserve cached state.
         state.handle_rds(err_event(), &client, &cache).await;
-        assert!(state.cluster_watches.is_empty());
+        assert_eq!(state.cluster_watches.len(), 1);
     }
 
     #[tokio::test]
@@ -590,7 +550,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn handle_lds_err_clears_everything() {
+    async fn handle_lds_err_preserves_state() {
         let cache = test_cache();
         let client = test_client();
         let mut state = ListenerWatchState::new();
@@ -605,10 +565,11 @@ mod tests {
             .await;
         assert!(state.rds_watcher.is_some());
 
+        // Per gRFC A88: data errors preserve cached state.
         state.handle_lds(err_event(), &client, &cache).await;
-        assert!(state.rds_watcher.is_none());
-        assert!(state.rds_name.is_none());
-        assert!(state.cluster_watches.is_empty());
+        assert!(state.rds_watcher.is_some());
+        assert_eq!(state.rds_name.as_deref(), Some("rc"));
+        assert!(state.cluster_watches.contains_key("c1"));
     }
 
     #[tokio::test]
