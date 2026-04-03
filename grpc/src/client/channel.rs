@@ -501,18 +501,21 @@ struct LbChannelController {
 }
 
 impl load_balancing::ChannelController for LbChannelController {
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel> {
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState) {
         let transport = self
             .transport_registry
             .get_transport(address.network_type)
             .unwrap();
-        InternalSubchannel::new_arc(
-            address.clone(),
-            transport,
-            Arc::new(NopBackoff {}),
-            self.runtime.clone(),
-            self.security_opts.clone(),
-            self.wqtx.clone(),
+        (
+            InternalSubchannel::new_arc(
+                address.clone(),
+                transport,
+                Arc::new(NopBackoff {}),
+                self.runtime.clone(),
+                self.security_opts.clone(),
+                self.wqtx.clone(),
+            ),
+            SubchannelState::idle(),
         )
     }
 

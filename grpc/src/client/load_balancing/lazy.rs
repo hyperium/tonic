@@ -184,8 +184,7 @@ impl Picker for WakeUpPicker {
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
-
-    use tokio::sync::mpsc;
+    use std::sync::mpsc;
 
     use super::*;
     use crate::client::load_balancing::test_utils::TestChannelController;
@@ -204,11 +203,11 @@ mod tests {
 
     // Tests that the delegate policy is constructed only after exit_idle is
     // called and latches the previous resolver update.
-    #[tokio::test]
-    async fn test_lazy_build_on_exit_idle() {
-        let (builder, mut rx) = MockPolicy::new();
+    #[test]
+    fn test_lazy_build_on_exit_idle() {
+        let (builder, rx) = MockPolicy::new();
 
-        let (tx_events, mut rx_events) = mpsc::unbounded_channel();
+        let (tx_events, rx_events) = mpsc::channel();
         let mut cc = TestChannelController {
             tx_events: tx_events.clone(),
         };
@@ -220,7 +219,7 @@ mod tests {
         let mut lazy = Lazy::new(builder, options, &mut cc);
 
         // Verify that the initial picker is Idle.
-        let event = rx_events.recv().await.unwrap();
+        let event = rx_events.recv().unwrap();
         let TestEvent::UpdatePicker(lb_state) = event else {
             panic!("expected UpdatePicker event");
         };
@@ -237,20 +236,20 @@ mod tests {
         lazy.exit_idle(&mut cc);
 
         // Verify delegate was built.
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::Build);
+        assert_eq!(rx.recv().unwrap(), MockEvent::Build);
         // Verify delegate received the cached update.
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::ResolverUpdate);
+        assert_eq!(rx.recv().unwrap(), MockEvent::ResolverUpdate);
         // Verify no more events.
         assert!(rx.try_recv().is_err());
     }
 
     // Tests that the delegate policy is constructed only after the picker is
     // called and latches the previous resolver update.
-    #[tokio::test]
-    async fn test_lazy_build_on_pick() {
-        let (builder, mut rx) = MockPolicy::new();
+    #[test]
+    fn test_lazy_build_on_pick() {
+        let (builder, rx) = MockPolicy::new();
 
-        let (tx_events, mut rx_events) = mpsc::unbounded_channel();
+        let (tx_events, rx_events) = mpsc::channel();
         let mut cc = TestChannelController {
             tx_events: tx_events.clone(),
         };
@@ -262,7 +261,7 @@ mod tests {
         let mut lazy = Lazy::new(builder, options, &mut cc);
 
         // Get the initial picker so we can send it a pick.
-        let event = rx_events.recv().await.unwrap();
+        let event = rx_events.recv().unwrap();
         let TestEvent::UpdatePicker(lb_state) = event else {
             panic!("expected UpdatePicker event");
         };
@@ -278,26 +277,26 @@ mod tests {
         assert!(matches!(res, PickResult::Queue));
 
         // Picking should have scheduled work.
-        let event = rx_events.recv().await.unwrap();
+        let event = rx_events.recv().unwrap();
         assert!(matches!(event, TestEvent::ScheduleWork));
 
         // Call work on lazy to honor its request.
         lazy.work(&mut cc);
 
         // Verify delegate was built and received the pending update.
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::Build);
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::ResolverUpdate);
+        assert_eq!(rx.recv().unwrap(), MockEvent::Build);
+        assert_eq!(rx.recv().unwrap(), MockEvent::ResolverUpdate);
         // Verify no more events.
         assert!(rx.try_recv().is_err());
     }
 
     // Tests that the delegate policy is constructed only after exit_idle is
     // called even when there is no pending resolver update.
-    #[tokio::test]
-    async fn test_lazy_exit_idle_without_update() {
-        let (builder, mut rx) = MockPolicy::new();
+    #[test]
+    fn test_lazy_exit_idle_without_update() {
+        let (builder, rx) = MockPolicy::new();
 
-        let (tx_events, mut rx_events) = mpsc::unbounded_channel();
+        let (tx_events, rx_events) = mpsc::channel();
         let mut cc = TestChannelController {
             tx_events: tx_events.clone(),
         };
@@ -310,7 +309,7 @@ mod tests {
 
         // Lazy always produces an UpdatePicker immediately.
         assert!(matches!(
-            rx_events.recv().await.unwrap(),
+            rx_events.recv().unwrap(),
             TestEvent::UpdatePicker(_)
         ));
 
@@ -318,19 +317,19 @@ mod tests {
         lazy.exit_idle(&mut cc);
 
         // Verify delegate was built and received the exit_idle call.
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::Build);
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::ExitIdle);
+        assert_eq!(rx.recv().unwrap(), MockEvent::Build);
+        assert_eq!(rx.recv().unwrap(), MockEvent::ExitIdle);
         // Verify no more events.
         assert!(rx.try_recv().is_err());
     }
 
     // Tests that the delegate policy is constructed only after the picker is
     // called and sees exit_idle, when there is no pending resolver update.
-    #[tokio::test]
-    async fn test_lazy_build_on_pick_without_update() {
-        let (builder, mut rx) = MockPolicy::new();
+    #[test]
+    fn test_lazy_build_on_pick_without_update() {
+        let (builder, rx) = MockPolicy::new();
 
-        let (tx_events, mut rx_events) = mpsc::unbounded_channel();
+        let (tx_events, rx_events) = mpsc::channel();
         let mut cc = TestChannelController {
             tx_events: tx_events.clone(),
         };
@@ -342,7 +341,7 @@ mod tests {
         let mut lazy = Lazy::new(builder, options, &mut cc);
 
         // Get the initial picker so we can send it a pick.
-        let event = rx_events.recv().await.unwrap();
+        let event = rx_events.recv().unwrap();
         let TestEvent::UpdatePicker(lb_state) = event else {
             panic!("expected UpdatePicker event");
         };
@@ -354,15 +353,15 @@ mod tests {
         assert!(matches!(res, PickResult::Queue));
 
         // Picking should have scheduled work.
-        let event = rx_events.recv().await.unwrap();
+        let event = rx_events.recv().unwrap();
         assert!(matches!(event, TestEvent::ScheduleWork));
 
         // Call work on lazy to honor its request.
         lazy.work(&mut cc);
 
         // Verify delegate was built and received an exit_idle call.
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::Build);
-        assert_eq!(rx.recv().await.unwrap(), MockEvent::ExitIdle);
+        assert_eq!(rx.recv().unwrap(), MockEvent::Build);
+        assert_eq!(rx.recv().unwrap(), MockEvent::ExitIdle);
         // Verify no more events.
         assert!(rx.try_recv().is_err());
     }
@@ -371,12 +370,12 @@ mod tests {
     /// channel.
     #[derive(Debug, Clone)]
     struct MockPolicy {
-        tx: mpsc::UnboundedSender<MockEvent>,
+        tx: mpsc::Sender<MockEvent>,
     }
 
     impl MockPolicy {
-        fn new() -> (Self, mpsc::UnboundedReceiver<MockEvent>) {
-            let (tx, rx) = mpsc::unbounded_channel();
+        fn new() -> (Self, mpsc::Receiver<MockEvent>) {
+            let (tx, rx) = mpsc::channel();
             (Self { tx }, rx)
         }
     }

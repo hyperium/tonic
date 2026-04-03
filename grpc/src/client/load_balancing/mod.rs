@@ -180,8 +180,8 @@ impl ParsedJsonLbConfig {
 
 /// Controls channel behaviors.
 pub(crate) trait ChannelController: Send + Sync {
-    /// Creates a new subchannel in IDLE state.
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel>;
+    /// Creates a new subchannel and returns its current state.
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState);
 
     /// Provides a new snapshot of the LB policy's state to the channel.
     fn update_picker(&mut self, update: LbState);
