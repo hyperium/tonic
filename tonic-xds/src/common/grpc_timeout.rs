@@ -182,6 +182,16 @@ mod tests {
     }
 
     #[test]
+    fn test_extract_non_ascii_header() {
+        let mut req = http::Request::builder().body(()).unwrap();
+        req.headers_mut().insert(
+            "grpc-timeout",
+            http::HeaderValue::from_bytes(b"5\xc0S").unwrap(),
+        );
+        assert_eq!(extract_grpc_timeout(&req), None);
+    }
+
+    #[test]
     fn test_extract_invalid_header() {
         let req = http::Request::builder()
             .header("grpc-timeout", "badvalue")
