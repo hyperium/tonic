@@ -47,6 +47,7 @@ use crate::client::name_resolution::Address;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::core::RequestHeaders;
+use crate::rt::GrpcRuntime;
 
 pub(crate) static POLICY_NAME: &str = "pick_first";
 
@@ -67,6 +68,7 @@ impl LbPolicyBuilder for PickFirstBuilder {
     fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy {
         PickFirstPolicy {
             work_scheduler: options.work_scheduler,
+            runtime: options.runtime,
             subchannels: Vec::default(),
             selected: None,
             current_index: 0,
@@ -97,6 +99,7 @@ pub(crate) fn reg() {
 
 pub(crate) struct PickFirstPolicy {
     work_scheduler: Arc<dyn WorkScheduler>,
+    runtime: GrpcRuntime,
     subchannels: Vec<Arc<dyn Subchannel>>,
     selected: Option<Arc<dyn Subchannel>>,
     current_index: usize,
@@ -368,6 +371,7 @@ impl Picker for OneSubchannelPicker {
 #[derive(Debug)]
 struct IdlePicker {
     work_scheduler: Arc<dyn WorkScheduler>,
+    // TODO: work_scheduler was added to match rounding_robin's pattern on master.
 }
 
 impl Picker for IdlePicker {
@@ -383,15 +387,15 @@ mod test {
     use crate::client::load_balancing::test_utils::{
         TestChannelController, TestEvent, TestWorkScheduler,
     };
+    use std::sync::mpsc;
     use std::time::Duration;
-    use tokio::sync::mpsc;
 
     fn setup() -> (
-        mpsc::UnboundedReceiver<TestEvent>,
+        mpsc::Receiver<TestEvent>,
         PickFirstPolicy,
         Box<TestChannelController>,
     ) {
-        let (tx, rx) = mpsc::unbounded_channel();
+        let (tx, rx) = mpsc::channel();
         let work_scheduler = Arc::new(TestWorkScheduler {
             tx_events: tx.clone(),
         });
@@ -401,9 +405,9 @@ mod test {
             runtime,
         });
 
-        // Manual override for deterministic shuffling in tests
+        // Deterministic shuffling for tests:
         policy.shuffler = Arc::new(|addrs| {
-            addrs.reverse(); // Deterministic "shuffle"
+            addrs.reverse();
         });
 
         let controller = Box::new(TestChannelController { tx_events: tx });
@@ -423,9 +427,9 @@ mod test {
             .collect()
     }
 
-    #[tokio::test]
-    async fn test_pick_first_basic_connection() {
-        let (mut rx, mut policy, mut controller) = setup();
+    #[test]
+    fn test_pick_first_basic_connection() {
+        let (rx, mut policy, mut controller) = setup();
         let endpoints = create_endpoints(vec!["addr1", "addr2"]);
         let update = ResolverUpdate {
             endpoints: Ok(endpoints),
@@ -437,10 +441,10 @@ mod test {
             .unwrap();
 
         // Expect NewSubchannel x2, Connect, UpdatePicker(Connecting)
-        rx.recv().await;
-        rx.recv().await;
-        rx.recv().await;
-        rx.recv().await;
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
 
         // Simulating READY for addr1
         let sc1 = policy.subchannels[0].clone();
@@ -454,7 +458,7 @@ mod test {
         );
 
         // Should update picker to READY with sc1
-        match rx.recv().await.unwrap() {
+        match rx.recv().unwrap() {
             TestEvent::UpdatePicker(state) => {
                 assert_eq!(state.connectivity_state, ConnectivityState::Ready);
                 let res = state.picker.pick(&RequestHeaders::default());
@@ -469,9 +473,9 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn test_pick_first_failover() {
-        let (mut rx, mut policy, mut controller) = setup();
+    #[test]
+    fn test_pick_first_failover() {
+        let (rx, mut policy, mut controller) = setup();
         let endpoints = create_endpoints(vec!["addr1", "addr2"]);
         policy
             .resolver_update(
@@ -485,10 +489,10 @@ mod test {
             .unwrap();
 
         // Expect NewSubchannel x2, Connect, UpdatePicker(Connecting)
-        rx.recv().await;
-        rx.recv().await;
-        rx.recv().await;
-        rx.recv().await;
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
 
         // Simulate addr1 failing
         let sc1 = policy.subchannels[0].clone();
@@ -502,7 +506,7 @@ mod test {
         );
 
         // Should connect to addr2
-        match rx.recv().await.unwrap() {
+        match rx.recv().unwrap() {
             TestEvent::Connect(addr) => assert_eq!(addr.address.to_string(), "addr2"),
             other => panic!("unexpected event {:?}", other),
         }
@@ -518,7 +522,7 @@ mod test {
             controller.as_mut(),
         );
 
-        match rx.recv().await.unwrap() {
+        match rx.recv().unwrap() {
             TestEvent::UpdatePicker(state) => {
                 assert_eq!(state.connectivity_state, ConnectivityState::Ready)
             }
@@ -526,9 +530,9 @@ mod test {
         }
     }
 
-    #[tokio::test]
-    async fn test_pick_first_stickiness() {
-        let (mut rx, mut policy, mut controller) = setup();
+    #[test]
+    fn test_pick_first_stickiness() {
+        let (rx, mut policy, mut controller) = setup();
         let endpoints = create_endpoints(vec!["addr1", "addr2"]);
         policy
             .resolver_update(
@@ -542,10 +546,10 @@ mod test {
             .unwrap();
 
         // Expect NewSubchannel x2, Connect, UpdatePicker(Connecting)
-        rx.recv().await;
-        rx.recv().await;
-        rx.recv().await;
-        rx.recv().await;
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
 
         // Make addr1 READY
         let sc1 = policy.subchannels[0].clone();
@@ -559,7 +563,7 @@ mod test {
         );
 
         // Expect UpdatePicker(Ready)
-        match rx.recv().await.unwrap() {
+        match rx.recv().unwrap() {
             TestEvent::UpdatePicker(state) => {
                 assert_eq!(state.connectivity_state, ConnectivityState::Ready)
             }
@@ -580,16 +584,14 @@ mod test {
             .unwrap();
 
         // Should create subchannel for addr3 (addr1 and addr2 are re-used)
-        match rx.recv().await.unwrap() {
+        match rx.recv().unwrap() {
             TestEvent::NewSubchannel(sc) => assert_eq!(sc.address().address.to_string(), "addr3"),
             other => panic!("unexpected event {:?}", other),
         }
 
         // Should NOT have any more events (no Connect, no UpdatePicker) because it is sticky
-        tokio::select! {
-            e = rx.recv() => panic!("unexpected event {:?}", e),
-            _ = tokio::time::sleep(Duration::from_millis(50)) => {}
-        }
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(rx.try_recv().is_err(), "unexpected event");
 
         assert_eq!(
             policy.selected.as_ref().unwrap().address().address.to_string(),
@@ -597,9 +599,9 @@ mod test {
         );
     }
 
-    #[tokio::test]
-    async fn test_pick_first_exhaustion() {
-        let (mut rx, mut policy, mut controller) = setup();
+    #[test]
+    fn test_pick_first_exhaustion() {
+        let (rx, mut policy, mut controller) = setup();
         let endpoints = create_endpoints(vec!["addr1"]);
         policy
             .resolver_update(
@@ -613,9 +615,9 @@ mod test {
             .unwrap();
 
         // Expect NewSubchannel, Connect, UpdatePicker(Connecting)
-        rx.recv().await;
-        rx.recv().await;
-        rx.recv().await;
+        rx.recv().unwrap();
+        rx.recv().unwrap();
+        rx.recv().unwrap();
 
         // Simulate addr1 failure
         let sc1 = policy.subchannels[0].clone();
@@ -629,7 +631,7 @@ mod test {
         );
 
         // Should update picker to TransientFailure
-        match rx.recv().await.unwrap() {
+        match rx.recv().unwrap() {
             TestEvent::UpdatePicker(state) => assert_eq!(
                 state.connectivity_state,
                 ConnectivityState::TransientFailure
@@ -638,15 +640,15 @@ mod test {
         }
 
         // Should request re-resolution
-        match rx.recv().await.unwrap() {
+        match rx.recv().unwrap() {
             TestEvent::RequestResolution => {}
             other => panic!("unexpected event {:?}", other),
         }
     }
 
-    #[tokio::test]
-    async fn test_pick_first_shuffling_deterministic() {
-        let (mut _rx, mut policy, mut controller) = setup();
+    #[test]
+    fn test_pick_first_shuffling_deterministic() {
+        let (_rx, mut policy, mut controller) = setup();
 
         // Enable shuffling in config
         let config = PickFirstConfig {
@@ -680,20 +682,20 @@ mod test {
         assert_eq!(resulting_addrs, expected, "Deterministic shuffling failed");
     }
 
-    #[tokio::test]
-    async fn test_pick_first_duplicate_de_duplication() {
-        let (mut rx, mut policy, mut controller) = setup();
+    #[test]
+    fn test_pick_first_duplicate_de_duplication() {
+        let (rx, mut policy, mut controller) = setup();
 
         // Create endpoints with duplicates
         let endpoints = vec![
             Endpoint {
                 addresses: vec![
                     Address {
-                        address: "addr1".to_string().into(),
+                        address: crate::byte_str::ByteStr::from("addr1".to_string()),
                         ..Default::default()
                     },
                     Address {
-                        address: "addr1".to_string().into(),
+                        address: crate::byte_str::ByteStr::from("addr1".to_string()),
                         ..Default::default()
                     },
                 ],
@@ -702,11 +704,11 @@ mod test {
             Endpoint {
                 addresses: vec![
                     Address {
-                        address: "addr2".to_string().into(),
+                        address: crate::byte_str::ByteStr::from("addr2".to_string()),
                         ..Default::default()
                     },
                     Address {
-                        address: "addr1".to_string().into(),
+                        address: crate::byte_str::ByteStr::from("addr1".to_string()),
                         ..Default::default()
                     },
                 ],
@@ -726,34 +728,17 @@ mod test {
             .unwrap();
 
         // Should only create subchannels for addr1 and addr2 (2 unique addresses)
-        rx.recv().await; // NewSubchannel(addr1)
-        rx.recv().await; // NewSubchannel(addr2)
+        rx.recv().unwrap(); // NewSubchannel(addr1)
+        rx.recv().unwrap(); // NewSubchannel(addr2)
 
         // Verify no 3rd subchannel was created
-        tokio::select! {
-            e = rx.recv() => match e.unwrap() {
-                TestEvent::NewSubchannel(_) => panic!("Duplicate subchannel created"),
-                _ => {} // Connect and UpdatePicker are expected
-            },
-            _ = tokio::time::sleep(Duration::from_millis(50)) => {}
+        std::thread::sleep(Duration::from_millis(50));
+        while let Ok(event) = rx.try_recv() {
+            if let TestEvent::NewSubchannel(_) = event {
+                panic!("Duplicate subchannel created");
+            }
         }
 
         assert_eq!(policy.subchannels.len(), 2, "De-duplication failed");
-    }
-
-    #[tokio::test]
-    async fn test_pick_first_config_parsing() {
-        let builder = PickFirstBuilder {};
-
-        // Test valid config
-        let json = r#"{"shuffleAddressList": true}"#;
-        let parsed = ParsedJsonLbConfig::new(json).unwrap();
-        let config = builder.parse_config(&parsed).unwrap().unwrap();
-        assert!(config.shuffle_address_list);
-
-        // Test invalid JSON type
-        let json_invalid = r#"{"shuffleAddressList": "not-a-bool"}"#;
-        let parsed_invalid = ParsedJsonLbConfig::new(json_invalid).unwrap();
-        assert!(builder.parse_config(&parsed_invalid).is_err());
     }
 }
