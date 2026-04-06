@@ -2,6 +2,7 @@
 
 use std::marker::PhantomData;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
 use tokio::sync::{mpsc, oneshot};
 
@@ -172,8 +173,22 @@ impl<T: Resource> ResourceWatcher<T> {
     /// ```
     pub async fn next(&mut self) -> Option<ResourceEvent<T>> {
         let event = self.event_rx.recv().await?;
+        Some(Self::downcast_event(event))
+    }
 
-        Some(match event {
+    /// Polls for the next resource event.
+    ///
+    /// This is the non-async equivalent of [`next()`](Self::next), for use
+    /// in manual `Future`/`Stream` implementations.
+    pub fn poll_next(&mut self, cx: &mut Context<'_>) -> Poll<Option<ResourceEvent<T>>> {
+        self.event_rx
+            .poll_recv(cx)
+            .map(|opt| opt.map(Self::downcast_event))
+    }
+
+    /// Converts a raw `DecodedResource` event into a typed `ResourceEvent<T>`.
+    fn downcast_event(event: ResourceEvent<DecodedResource>) -> ResourceEvent<T> {
+        match event {
             ResourceEvent::ResourceChanged { result, done } => {
                 let typed_result = match result {
                     Ok(resource) => match resource.downcast::<T>() {
@@ -194,7 +209,7 @@ impl<T: Resource> ResourceWatcher<T> {
             ResourceEvent::AmbientError { error, done } => {
                 ResourceEvent::AmbientError { error, done }
             }
-        })
+        }
     }
 }
 

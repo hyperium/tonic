@@ -17,9 +17,13 @@
 //! for removed ones.
 
 use std::collections::{HashMap, HashSet};
+use std::pin::Pin;
 use std::sync::Arc;
+use std::task::{Context, Poll};
 
-use xds_client::{ResourceEvent, ResourceWatcher, XdsClient};
+use futures_core::Stream;
+use tokio_stream::{StreamExt, StreamMap};
+use xds_client::{Resource, ResourceEvent, ResourceWatcher, XdsClient};
 
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::cache::XdsCache;
@@ -28,12 +32,25 @@ use crate::xds::resource::{
     ClusterResource, EndpointsResource, ListenerResource, RouteConfigResource,
 };
 
+/// Adapter to use [`ResourceWatcher`] with [`StreamMap`].
+struct WatcherStream<T: Resource>(ResourceWatcher<T>);
+
+impl<T: Resource> Unpin for WatcherStream<T> {}
+
+impl<T: Resource> Stream for WatcherStream<T> {
+    type Item = ResourceEvent<T>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        self.get_mut().0.poll_next(cx)
+    }
+}
+
 /// Manages the LDS -> RDS -> CDS -> EDS cascade.
 ///
 /// Subscribes to xDS resources via [`XdsClient::watch()`] and writes validated
-/// resources into [`XdsCache`]. Dropping the manager aborts all background tasks.
+/// resources into [`XdsCache`]. Dropping the manager aborts the background task.
 pub(crate) struct XdsResourceManager {
-    _lds_task: AbortOnDrop,
+    _task: AbortOnDrop,
 }
 
 impl XdsResourceManager {
@@ -44,39 +61,53 @@ impl XdsResourceManager {
     /// * `cache` - The shared cache to write resources into
     /// * `listener_name` - The LDS resource name to watch (from target URI)
     pub(crate) fn new(xds_client: XdsClient, cache: Arc<XdsCache>, listener_name: String) -> Self {
-        let state = ListenerWatchState::new();
+        let state = CascadeState::new();
         let handle = tokio::spawn(state.run(xds_client, cache, listener_name));
         Self {
-            _lds_task: AbortOnDrop(handle),
+            _task: AbortOnDrop(handle),
         }
     }
 }
 
-/// Mutable state for a single LDS watch and its downstream RDS/CDS/EDS watches.
-struct ListenerWatchState {
+/// Mutable state for the entire LDS -> RDS -> CDS -> EDS cascade.
+///
+/// All four resource levels are polled in a single task via [`run`](Self::run).
+struct CascadeState {
     /// Active RDS watcher — `None` if the listener uses inline routes.
     rds_watcher: Option<ResourceWatcher<RouteConfigResource>>,
     /// Active RDS name to detect changes across LDS updates.
     rds_name: Option<String>,
-    /// Per-cluster CDS+EDS watcher tasks, keyed by cluster name.
-    cluster_watches: HashMap<String, ClusterWatchState>,
+    /// Per-cluster CDS watchers, keyed by cluster name.
+    cds_watchers: StreamMap<String, WatcherStream<ClusterResource>>,
+    /// Per-cluster EDS watchers, keyed by cluster name.
+    eds_watchers: StreamMap<String, WatcherStream<EndpointsResource>>,
+    /// Current EDS service name per cluster, to detect when the name changes.
+    eds_names: HashMap<String, String>,
 }
 
-impl ListenerWatchState {
+impl CascadeState {
     fn new() -> Self {
         Self {
             rds_watcher: None,
             rds_name: None,
-            cluster_watches: HashMap::new(),
+            cds_watchers: StreamMap::new(),
+            eds_watchers: StreamMap::new(),
+            eds_names: HashMap::new(),
         }
     }
 
-    /// Runs the LDS watch and manages the downstream RDS/CDS/EDS cascade.
+    /// Runs the cascade select loop. All resource events are processed here.
+    ///
+    /// Biased so higher-level events (LDS/RDS) are processed before
+    /// lower-level ones (CDS/EDS), avoiding wasted work on clusters
+    /// about to be removed.
     async fn run(mut self, xds_client: XdsClient, cache: Arc<XdsCache>, listener_name: String) {
         let mut lds_watcher = xds_client.watch::<ListenerResource>(&listener_name).await;
 
         loop {
             tokio::select! {
+                biased;
+
                 lds_event = lds_watcher.next() => {
                     // None means xds-client shut down; exit the cascade.
                     let Some(event) = lds_event else { break };
@@ -97,6 +128,18 @@ impl ListenerWatchState {
                         continue;
                     };
                     self.handle_rds(event, &xds_client, &cache).await;
+                }
+
+                Some((name, event)) = self.cds_watchers.next(),
+                    if !self.cds_watchers.is_empty() =>
+                {
+                    self.handle_cds(&name, event, &xds_client, &cache).await;
+                }
+
+                Some((name, event)) = self.eds_watchers.next(),
+                    if !self.eds_watchers.is_empty() =>
+                {
+                    self.handle_eds(&name, event, &cache);
                 }
             }
         }
@@ -164,93 +207,30 @@ impl ListenerWatchState {
         }
     }
 
-    /// Diffs the current cluster set against the route config's cluster names
-    /// and starts/stops per-cluster watcher tasks accordingly.
-    async fn reconcile_clusters(
+    async fn handle_cds(
         &mut self,
-        route_config: &RouteConfigResource,
+        cluster_name: &str,
+        event: ResourceEvent<ClusterResource>,
         xds_client: &XdsClient,
         cache: &Arc<XdsCache>,
     ) {
-        let new_clusters = route_config.cluster_names();
-        let old_clusters: HashSet<String> = self.cluster_watches.keys().cloned().collect();
-
-        for name in old_clusters.difference(&new_clusters) {
-            self.cluster_watches.remove(name);
-            cache.remove_cluster(name);
-            cache.remove_endpoints(name);
-        }
-
-        for name in new_clusters.difference(&old_clusters) {
-            let state = ClusterWatchState::start(name.clone(), xds_client, Arc::clone(cache)).await;
-            self.cluster_watches.insert(name.clone(), state);
-        }
-    }
-}
-
-/// State for a per-cluster watcher task.
-///
-/// Dropping this aborts the CDS watch task, which in turn aborts its child EDS task.
-struct ClusterWatchState {
-    _cds_task: AbortOnDrop,
-}
-
-impl ClusterWatchState {
-    /// Spawns a task that manages CDS and EDS watches for a single cluster.
-    async fn start(cluster_name: String, xds_client: &XdsClient, cache: Arc<XdsCache>) -> Self {
-        let cds_watcher = xds_client.watch::<ClusterResource>(&cluster_name).await;
-        let xds_client = xds_client.clone();
-
-        let handle = tokio::spawn(run_cluster_watch(
-            cluster_name,
-            cds_watcher,
-            xds_client,
-            cache,
-        ));
-
-        Self {
-            _cds_task: AbortOnDrop(handle),
-        }
-    }
-}
-
-/// Runs CDS watch for a single cluster and manages its child EDS watch.
-///
-/// Restarts the EDS watch if the cluster's EDS service name changes.
-// `_eds_task` is held for its AbortOnDrop side effect — assignments are intentional.
-#[allow(unused_assignments)]
-async fn run_cluster_watch(
-    cluster_name: String,
-    mut cds_watcher: ResourceWatcher<ClusterResource>,
-    xds_client: XdsClient,
-    cache: Arc<XdsCache>,
-) {
-    let mut current_eds_name: Option<String> = None;
-    let mut _eds_task: Option<AbortOnDrop> = None;
-
-    while let Some(event) = cds_watcher.next().await {
         match event {
             ResourceEvent::ResourceChanged {
                 result: Ok(cluster),
                 done,
             } => {
-                cache.update_cluster(&cluster_name, Arc::clone(&cluster));
+                cache.update_cluster(cluster_name, Arc::clone(&cluster));
 
                 let eds_name = cluster.eds_service_name().to_string();
+                if self.eds_names.get(cluster_name).map(|s| s.as_str()) != Some(&eds_name) {
+                    self.eds_watchers.remove(cluster_name);
 
-                if current_eds_name.as_deref() != Some(&eds_name) {
-                    _eds_task = None;
-
-                    let eds_watcher = xds_client.watch::<EndpointsResource>(&eds_name).await;
-                    let handle = tokio::spawn(run_eds_watch(
-                        cluster_name.clone(),
-                        eds_watcher,
-                        Arc::clone(&cache),
-                    ));
-                    _eds_task = Some(AbortOnDrop(handle));
-                    current_eds_name = Some(eds_name);
+                    let watcher = xds_client.watch::<EndpointsResource>(&eds_name).await;
+                    let cluster_key = cluster_name.to_string();
+                    self.eds_watchers
+                        .insert(cluster_key.clone(), WatcherStream(watcher));
+                    self.eds_names.insert(cluster_key, eds_name);
                 }
-
                 drop(done);
             }
             // Per gRFC A88: keep using cached resources on data errors.
@@ -258,25 +238,49 @@ async fn run_cluster_watch(
             | ResourceEvent::AmbientError { .. } => {}
         }
     }
-}
 
-/// Runs EDS watch for a single cluster, writing endpoint snapshots to the cache.
-async fn run_eds_watch(
-    cluster_name: String,
-    mut eds_watcher: ResourceWatcher<EndpointsResource>,
-    cache: Arc<XdsCache>,
-) {
-    while let Some(event) = eds_watcher.next().await {
+    fn handle_eds(
+        &self,
+        cluster_name: &str,
+        event: ResourceEvent<EndpointsResource>,
+        cache: &Arc<XdsCache>,
+    ) {
         match event {
             ResourceEvent::ResourceChanged {
                 result: Ok(endpoints),
                 ..
             } => {
-                cache.update_endpoints(&cluster_name, endpoints);
+                cache.update_endpoints(cluster_name, endpoints);
             }
             // Per gRFC A88: keep using cached resources on data errors.
             ResourceEvent::ResourceChanged { result: Err(_), .. }
             | ResourceEvent::AmbientError { .. } => {}
+        }
+    }
+
+    /// Diffs the current cluster set against the route config's cluster names
+    /// and starts/stops per-cluster watchers accordingly.
+    async fn reconcile_clusters(
+        &mut self,
+        route_config: &RouteConfigResource,
+        xds_client: &XdsClient,
+        cache: &Arc<XdsCache>,
+    ) {
+        let new_clusters = route_config.cluster_names();
+        let old_clusters: HashSet<String> = self.cds_watchers.keys().cloned().collect();
+
+        for name in old_clusters.difference(&new_clusters) {
+            self.cds_watchers.remove(name);
+            self.eds_watchers.remove(name);
+            self.eds_names.remove(name);
+            cache.remove_cluster(name);
+            cache.remove_endpoints(name);
+        }
+
+        for name in new_clusters.difference(&old_clusters) {
+            let watcher = xds_client.watch::<ClusterResource>(name).await;
+            self.cds_watchers
+                .insert(name.clone(), WatcherStream(watcher));
         }
     }
 }
@@ -376,21 +380,21 @@ mod tests {
     async fn reconcile_adds_new_clusters() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         let rc = make_route_config("rc", &["a", "b"]);
         state.reconcile_clusters(&rc, &client, &cache).await;
 
-        assert!(state.cluster_watches.contains_key("a"));
-        assert!(state.cluster_watches.contains_key("b"));
-        assert_eq!(state.cluster_watches.len(), 2);
+        assert!(state.cds_watchers.contains_key("a"));
+        assert!(state.cds_watchers.contains_key("b"));
+        assert_eq!(state.cds_watchers.keys().count(), 2);
     }
 
     #[tokio::test]
     async fn reconcile_removes_old_clusters() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         let rc1 = make_route_config("rc", &["a", "b"]);
         state.reconcile_clusters(&rc1, &client, &cache).await;
@@ -398,76 +402,76 @@ mod tests {
         let rc2 = make_route_config("rc", &["b", "c"]);
         state.reconcile_clusters(&rc2, &client, &cache).await;
 
-        assert!(!state.cluster_watches.contains_key("a"));
-        assert!(state.cluster_watches.contains_key("b"));
-        assert!(state.cluster_watches.contains_key("c"));
-        assert_eq!(state.cluster_watches.len(), 2);
+        assert!(!state.cds_watchers.contains_key("a"));
+        assert!(state.cds_watchers.contains_key("b"));
+        assert!(state.cds_watchers.contains_key("c"));
+        assert_eq!(state.cds_watchers.keys().count(), 2);
     }
 
     #[tokio::test]
     async fn reconcile_to_empty_removes_all() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         let rc1 = make_route_config("rc", &["a"]);
         state.reconcile_clusters(&rc1, &client, &cache).await;
-        assert_eq!(state.cluster_watches.len(), 1);
+        assert_eq!(state.cds_watchers.keys().count(), 1);
 
         let rc2 = make_route_config("rc", &[]);
         state.reconcile_clusters(&rc2, &client, &cache).await;
-        assert!(state.cluster_watches.is_empty());
+        assert_eq!(state.cds_watchers.keys().count(), 0);
     }
 
     #[tokio::test]
     async fn handle_rds_ok_updates_cache_and_reconciles() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         let rc = make_route_config("rc-1", &["cluster-a", "cluster-b"]);
         state.handle_rds(ok_event(rc), &client, &cache).await;
 
         let config = cache.watch_route_config().next().await.unwrap();
         assert_eq!(config.name, "rc-1");
-        assert!(state.cluster_watches.contains_key("cluster-a"));
-        assert!(state.cluster_watches.contains_key("cluster-b"));
+        assert!(state.cds_watchers.contains_key("cluster-a"));
+        assert!(state.cds_watchers.contains_key("cluster-b"));
     }
 
     #[tokio::test]
     async fn handle_rds_err_preserves_state() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         let rc = make_route_config("rc", &["c1"]);
         state.handle_rds(ok_event(rc), &client, &cache).await;
-        assert_eq!(state.cluster_watches.len(), 1);
+        assert_eq!(state.cds_watchers.keys().count(), 1);
 
         // Per gRFC A88: data errors preserve cached state.
         state.handle_rds(err_event(), &client, &cache).await;
-        assert_eq!(state.cluster_watches.len(), 1);
+        assert_eq!(state.cds_watchers.keys().count(), 1);
     }
 
     #[tokio::test]
     async fn handle_rds_ambient_error_preserves_state() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         let rc = make_route_config("rc", &["c1"]);
         state.handle_rds(ok_event(rc), &client, &cache).await;
-        assert_eq!(state.cluster_watches.len(), 1);
+        assert_eq!(state.cds_watchers.keys().count(), 1);
 
         state.handle_rds(ambient_event(), &client, &cache).await;
-        assert_eq!(state.cluster_watches.len(), 1);
+        assert_eq!(state.cds_watchers.keys().count(), 1);
     }
 
     #[tokio::test]
     async fn handle_lds_inline_writes_route_config() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         state
             .handle_lds(ok_event(make_listener_inline(&["c1"])), &client, &cache)
@@ -477,14 +481,14 @@ mod tests {
         assert_eq!(config.name, "inline-rc");
         assert!(state.rds_watcher.is_none());
         assert!(state.rds_name.is_none());
-        assert!(state.cluster_watches.contains_key("c1"));
+        assert!(state.cds_watchers.contains_key("c1"));
     }
 
     #[tokio::test]
     async fn handle_lds_inline_clears_existing_rds() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         state
             .handle_lds(ok_event(make_listener_rds("rc-1")), &client, &cache)
@@ -503,7 +507,7 @@ mod tests {
     async fn handle_lds_rds_sets_watcher_and_name() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         state
             .handle_lds(ok_event(make_listener_rds("my-route")), &client, &cache)
@@ -517,7 +521,7 @@ mod tests {
     async fn handle_lds_rds_same_name_reuses_watcher() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         state
             .handle_lds(ok_event(make_listener_rds("rc")), &client, &cache)
@@ -536,7 +540,7 @@ mod tests {
     async fn handle_lds_rds_different_name_replaces_watcher() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         state
             .handle_lds(ok_event(make_listener_rds("rc-1")), &client, &cache)
@@ -553,12 +557,12 @@ mod tests {
     async fn handle_lds_err_preserves_state() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         state
             .handle_lds(ok_event(make_listener_inline(&["c1"])), &client, &cache)
             .await;
-        assert!(state.cluster_watches.contains_key("c1"));
+        assert!(state.cds_watchers.contains_key("c1"));
 
         state
             .handle_lds(ok_event(make_listener_rds("rc")), &client, &cache)
@@ -569,14 +573,14 @@ mod tests {
         state.handle_lds(err_event(), &client, &cache).await;
         assert!(state.rds_watcher.is_some());
         assert_eq!(state.rds_name.as_deref(), Some("rc"));
-        assert!(state.cluster_watches.contains_key("c1"));
+        assert!(state.cds_watchers.contains_key("c1"));
     }
 
     #[tokio::test]
     async fn handle_lds_ambient_error_preserves_state() {
         let cache = test_cache();
         let client = test_client();
-        let mut state = ListenerWatchState::new();
+        let mut state = CascadeState::new();
 
         state
             .handle_lds(ok_event(make_listener_rds("rc")), &client, &cache)
