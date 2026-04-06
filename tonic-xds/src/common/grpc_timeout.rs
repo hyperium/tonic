@@ -143,6 +143,16 @@ mod tests {
     }
 
     #[test]
+    fn test_non_ascii_splits_at_utf8_boundary() {
+        // "5§" is 3 bytes [0x35, 0xC2, 0xA7]; len-1=2 lands inside the § char,
+        // so split_at_checked returns None → InvalidFormat
+        assert_eq!(
+            parse_grpc_timeout("5§"),
+            Err(GrpcTimeoutParseError::InvalidFormat("5§"))
+        );
+    }
+
+    #[test]
     fn test_timeout_value_too_big() {
         // 9 digits exceeds the gRPC spec limit of 8
         assert_eq!(
