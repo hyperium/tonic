@@ -22,6 +22,7 @@ exclude = ["proto/test/*"]
 
 [dependencies]
 tonic = "0.14"
+tracing = "0.1"
 http = "1"
 tower = { version = "0.5", default-features = false, features = ["discover"] }
 arc-swap = "1"

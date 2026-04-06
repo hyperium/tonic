@@ -63,7 +63,13 @@ pub(crate) fn parse_grpc_timeout(s: &str) -> Result<Duration, GrpcTimeoutParseEr
 pub(crate) fn extract_grpc_timeout<B>(req: &http::Request<B>) -> Option<Duration> {
     let header_value = req.headers().get("grpc-timeout")?;
     let s = header_value.to_str().ok()?;
-    parse_grpc_timeout(s).ok()
+    match parse_grpc_timeout(s) {
+        Ok(d) => Some(d),
+        Err(e) => {
+            tracing::trace!("Error parsing `grpc-timeout` header: {e}");
+            None
+        }
+    }
 }
 
 #[cfg(test)]
