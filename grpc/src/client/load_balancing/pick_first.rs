@@ -22,6 +22,8 @@
  *
  */
 
+use std::collections::HashMap;
+use std::collections::HashSet;
 use std::fmt::Debug;
 use std::sync::Arc;
 
@@ -51,7 +53,7 @@ use crate::rt::GrpcRuntime;
 
 pub(crate) static POLICY_NAME: &str = "pick_first";
 
-type ShufflerFn = dyn Fn(&mut [Address]) + Send + Sync + 'static;
+type ShufflerFn = dyn Fn(&mut [Endpoint]) + Send + Sync + 'static;
 
 #[derive(Debug, serde::Deserialize, Clone)]
 pub struct PickFirstConfig {
@@ -73,12 +75,11 @@ impl LbPolicyBuilder for PickFirstBuilder {
             selected: None,
             current_index: 0,
             connectivity_state: ConnectivityState::Connecting,
-            config: None,
             last_resolver_error: None,
             last_connection_error: None,
-            shuffler: Arc::new(|addrs| {
+            shuffler: Arc::new(|endpoints| {
                 let mut rng = rand::rng();
-                addrs.shuffle(&mut rng);
+                endpoints.shuffle(&mut rng);
             }),
         }
     }
@@ -104,7 +105,6 @@ pub(crate) struct PickFirstPolicy {
     selected: Option<Arc<dyn Subchannel>>,
     current_index: usize,
     connectivity_state: ConnectivityState,
-    config: Option<PickFirstConfig>,
 
     // Detailed error tracking inspired by PR #2340
     last_resolver_error: Option<String>,
@@ -121,7 +121,6 @@ impl Debug for PickFirstPolicy {
             .field("selected", &self.selected)
             .field("current_index", &self.current_index)
             .field("connectivity_state", &self.connectivity_state)
-            .field("config", &self.config)
             .field("last_resolver_error", &self.last_resolver_error)
             .field("last_connection_error", &self.last_connection_error)
             .finish()
@@ -132,21 +131,14 @@ impl PickFirstPolicy {
     fn start_connection_pass(&mut self, channel_controller: &mut dyn ChannelController) {
         self.current_index = 0;
         self.selected = None;
-        if let Some(sc) = self.subchannels.get(0) {
-            self.connectivity_state = ConnectivityState::Connecting;
-            sc.connect();
-            channel_controller.update_picker(LbState {
-                connectivity_state: ConnectivityState::Connecting,
-                picker: Arc::new(QueuingPicker {}),
-            });
-        } else {
-            let error = self
-                .last_resolver_error
-                .clone()
-                .unwrap_or_else(|| "no addresses available".to_string());
-            self.set_transient_failure(channel_controller, error)
-                .unwrap_or(());
-        }
+        let sc = self.subchannels.get(self.current_index).unwrap(); // We are guaranteed to have at least one subchannel if we are in this method, and should panic if this is not true.
+
+        self.connectivity_state = ConnectivityState::Connecting;
+        sc.connect();
+        channel_controller.update_picker(LbState {
+            connectivity_state: ConnectivityState::Connecting,
+            picker: Arc::new(QueuingPicker {}),
+        });
     }
 
     fn rebuild_subchannels(
@@ -155,7 +147,7 @@ impl PickFirstPolicy {
         channel_controller: &mut dyn ChannelController,
     ) {
         // Map existing subchannels by address.
-        let mut existing_map: std::collections::HashMap<Address, Arc<dyn Subchannel>> = self
+        let mut existing_map: HashMap<Address, Arc<dyn Subchannel>> = self
             .subchannels
             .drain(..)
             .map(|sc| (sc.address(), sc))
@@ -172,22 +164,26 @@ impl PickFirstPolicy {
             .collect();
     }
 
-    fn update_config(&mut self, config: Option<&PickFirstConfig>) -> Result<(), String> {
-        if let Some(lb_config) = config {
-            self.config = Some(lb_config.clone());
-        }
-        Ok(())
-    }
-
     // Converts the update endpoints to an address list.
-    // Includes de-duplication logic inspired by PR #2340
+    // Shuffles endpoints (if enabled) before flattening and de-duplication.
     fn compile_address(
         &mut self,
         endpoints: Vec<Endpoint>,
+        config: Option<&PickFirstConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<Vec<Address>, String> {
+        let mut endpoints = endpoints;
+
+        if config
+            .as_ref()
+            .map(|c| c.shuffle_address_list)
+            .unwrap_or(false)
+        {
+            (self.shuffler)(&mut endpoints);
+        }
+
         let mut addresses = Vec::new();
-        let mut seen = std::collections::HashSet::new();
+        let mut seen = HashSet::new();
 
         for endpoint in endpoints {
             for address in endpoint.addresses {
@@ -197,7 +193,10 @@ impl PickFirstPolicy {
             }
         }
 
+        // Empty address list is an error, but also clears previous subchannels.
         if addresses.is_empty() {
+            self.subchannels.clear();
+            self.selected = None;
             let error = self
                 .last_resolver_error
                 .clone()
@@ -205,15 +204,6 @@ impl PickFirstPolicy {
             return self
                 .set_transient_failure(channel_controller, error)
                 .map(|_| vec![]);
-        }
-
-        if self
-            .config
-            .as_ref()
-            .map(|c| c.shuffle_address_list)
-            .unwrap_or(false)
-        {
-            (self.shuffler)(&mut addresses);
         }
 
         Ok(addresses)
@@ -246,11 +236,9 @@ impl LbPolicy for PickFirstPolicy {
         config: Option<&Self::LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), String> {
-        self.update_config(config)?;
-
         match update.endpoints {
             Ok(endpoints) => {
-                let new_addresses = self.compile_address(endpoints, channel_controller)?;
+                let new_addresses = self.compile_address(endpoints, config, channel_controller)?;
 
                 // Stickiness: Check if currently selected subchannel is in the new list.
                 if let Some(ref selected) = self.selected {
@@ -371,7 +359,6 @@ impl Picker for OneSubchannelPicker {
 #[derive(Debug)]
 struct IdlePicker {
     work_scheduler: Arc<dyn WorkScheduler>,
-    // TODO: work_scheduler was added to match rounding_robin's pattern on master.
 }
 
 impl Picker for IdlePicker {
@@ -405,9 +392,9 @@ mod test {
             runtime,
         });
 
-        // Deterministic shuffling for tests:
-        policy.shuffler = Arc::new(|addrs| {
-            addrs.reverse();
+        // Deterministic shuffling for tests: reverse the endpoints
+        policy.shuffler = Arc::new(|endpoints| {
+            endpoints.reverse();
         });
 
         let controller = Box::new(TestChannelController { tx_events: tx });
@@ -594,7 +581,13 @@ mod test {
         assert!(rx.try_recv().is_err(), "unexpected event");
 
         assert_eq!(
-            policy.selected.as_ref().unwrap().address().address.to_string(),
+            policy
+                .selected
+                .as_ref()
+                .unwrap()
+                .address()
+                .address
+                .to_string(),
             "addr1"
         );
     }
@@ -655,9 +648,35 @@ mod test {
             shuffle_address_list: true,
         };
 
-        // Provide addresses in order
-        let addrs = vec!["addr1", "addr2", "addr3"];
-        let endpoints = create_endpoints(addrs.clone());
+        // Provide two endpoints, each with two addresses
+        let endpoints = vec![
+            Endpoint {
+                addresses: vec![
+                    Address {
+                        address: crate::byte_str::ByteStr::from("addr1a".to_string()),
+                        ..Default::default()
+                    },
+                    Address {
+                        address: crate::byte_str::ByteStr::from("addr1b".to_string()),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+            Endpoint {
+                addresses: vec![
+                    Address {
+                        address: crate::byte_str::ByteStr::from("addr2a".to_string()),
+                        ..Default::default()
+                    },
+                    Address {
+                        address: crate::byte_str::ByteStr::from("addr2b".to_string()),
+                        ..Default::default()
+                    },
+                ],
+                ..Default::default()
+            },
+        ];
 
         policy
             .resolver_update(
@@ -676,10 +695,14 @@ mod test {
             .map(|sc| sc.address().address.to_string())
             .collect();
 
-        // Our mock shuffler reverses the list
-        let mut expected = addrs.clone();
-        expected.reverse();
-        assert_eq!(resulting_addrs, expected, "Deterministic shuffling failed");
+        // Our mock shuffler reverses the list of endpoints.
+        // Original: [EP1, EP2] -> Reversed: [EP2, EP1]
+        // Flattened: [addr2a, addr2b, addr1a, addr1b]
+        let expected = vec!["addr2a", "addr2b", "addr1a", "addr1b"];
+        assert_eq!(
+            resulting_addrs, expected,
+            "Deterministic shuffling of endpoints failed"
+        );
     }
 
     #[test]
@@ -740,5 +763,69 @@ mod test {
         }
 
         assert_eq!(policy.subchannels.len(), 2, "De-duplication failed");
+    }
+
+    #[test]
+    fn test_pick_first_empty_update_clears_state() {
+        let (rx, mut policy, mut controller) = setup();
+        let endpoints = create_endpoints(vec!["addr1", "addr2"]);
+
+        // Initial update with addresses
+        policy
+            .resolver_update(
+                ResolverUpdate {
+                    endpoints: Ok(endpoints),
+                    ..Default::default()
+                },
+                None,
+                controller.as_mut(),
+            )
+            .unwrap();
+
+        assert_eq!(policy.subchannels.len(), 2);
+
+        // Make addr1 READY so it becomes selected
+        let sc1 = policy.subchannels[0].clone();
+        policy.subchannel_update(
+            sc1,
+            &SubchannelState {
+                connectivity_state: ConnectivityState::Ready,
+                last_connection_error: None,
+            },
+            controller.as_mut(),
+        );
+        assert!(policy.selected.is_some());
+
+        // Drain events (NewSubchannel x2, Connect, UpdatePicker x2)
+        while rx.try_recv().is_ok() {}
+
+        // Send empty update
+        let res = policy.resolver_update(
+            ResolverUpdate {
+                endpoints: Ok(vec![]),
+                ..Default::default()
+            },
+            None,
+            controller.as_mut(),
+        );
+
+        assert!(res.is_err());
+        assert_eq!(policy.subchannels.len(), 0);
+        assert!(policy.selected.is_none());
+
+        // Should have updated picker to TransientFailure and requested resolution
+        match rx.recv().unwrap() {
+            TestEvent::UpdatePicker(state) => {
+                assert_eq!(
+                    state.connectivity_state,
+                    ConnectivityState::TransientFailure
+                );
+            }
+            other => panic!("unexpected event {:?}", other),
+        }
+        match rx.recv().unwrap() {
+            TestEvent::RequestResolution => {}
+            other => panic!("unexpected event {:?}", other),
+        }
     }
 }
