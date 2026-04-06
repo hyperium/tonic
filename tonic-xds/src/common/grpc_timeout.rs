@@ -4,7 +4,7 @@ use std::time::Duration;
 
 /// Errors that can occur when parsing a gRPC timeout header value.
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
-pub enum GrpcTimeoutError<'a> {
+pub(crate) enum GrpcTimeoutError<'a> {
     /// The header value is empty.
     #[error("empty timeout header")]
     Empty,
@@ -25,7 +25,7 @@ pub enum GrpcTimeoutError<'a> {
 /// Parse a gRPC timeout header value (e.g. "1S", "500m", "100u").
 /// Format per gRPC spec: `<value><unit>` where unit is one of
 /// H (hours), M (minutes), S (seconds), m (millis), u (micros), n (nanos).
-pub fn parse_grpc_timeout(s: &str) -> Result<Duration, GrpcTimeoutError<'_>> {
+pub(crate) fn parse_grpc_timeout(s: &str) -> Result<Duration, GrpcTimeoutError<'_>> {
     if s.is_empty() {
         return Err(GrpcTimeoutError::Empty);
     }
@@ -56,7 +56,7 @@ pub fn parse_grpc_timeout(s: &str) -> Result<Duration, GrpcTimeoutError<'_>> {
 
 /// Extract the timeout from a request's `grpc-timeout` header.
 /// Returns `None` if the header is missing, non-ASCII, or cannot be parsed.
-pub fn extract_grpc_timeout<B>(req: &http::Request<B>) -> Option<Duration> {
+pub(crate) fn extract_grpc_timeout<B>(req: &http::Request<B>) -> Option<Duration> {
     let header_value = req.headers().get("grpc-timeout")?;
     let s = header_value.to_str().ok()?;
     parse_grpc_timeout(s).ok()
