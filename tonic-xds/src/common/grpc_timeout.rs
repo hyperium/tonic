@@ -32,7 +32,9 @@ pub fn parse_grpc_timeout(s: &str) -> Result<Duration, GrpcTimeoutError<'_>> {
     let (digits, unit) = s
         .split_at_checked(s.len() - 1)
         .ok_or(GrpcTimeoutError::InvalidFormat(s))?;
-    let value: u64 = digits.parse().map_err(|_| GrpcTimeoutError::NonDigitValue)?;
+    let value: u64 = digits
+        .parse()
+        .map_err(|_| GrpcTimeoutError::NonDigitValue)?;
     let unit_char = unit
         .chars()
         .next()
@@ -76,18 +78,12 @@ mod tests {
 
     #[test]
     fn test_minutes() {
-        assert_eq!(
-            parse_grpc_timeout("1M").unwrap(),
-            Duration::from_secs(60)
-        );
+        assert_eq!(parse_grpc_timeout("1M").unwrap(), Duration::from_secs(60));
     }
 
     #[test]
     fn test_seconds() {
-        assert_eq!(
-            parse_grpc_timeout("42S").unwrap(),
-            Duration::from_secs(42)
-        );
+        assert_eq!(parse_grpc_timeout("42S").unwrap(), Duration::from_secs(42));
     }
 
     #[test]
@@ -100,18 +96,12 @@ mod tests {
 
     #[test]
     fn test_microseconds() {
-        assert_eq!(
-            parse_grpc_timeout("2u").unwrap(),
-            Duration::from_micros(2)
-        );
+        assert_eq!(parse_grpc_timeout("2u").unwrap(), Duration::from_micros(2));
     }
 
     #[test]
     fn test_nanoseconds() {
-        assert_eq!(
-            parse_grpc_timeout("82n").unwrap(),
-            Duration::from_nanos(82)
-        );
+        assert_eq!(parse_grpc_timeout("82n").unwrap(), Duration::from_nanos(82));
     }
 
     // --- Error path tests ---
