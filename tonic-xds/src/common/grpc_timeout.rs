@@ -17,9 +17,9 @@ pub(crate) enum GrpcTimeoutParseError<'a> {
     /// The unit character is not one of the valid gRPC timeout units.
     #[error("invalid timeout unit: {0}")]
     InvalidUnit(char),
-    /// Arithmetic overflow when converting to Duration.
-    #[error("timeout value overflow")]
-    Overflow,
+    /// The timeout value exceeds the gRPC spec limit of 8 digits.
+    #[error("timeout value too big")]
+    TimeoutValueTooBig,
 }
 
 /// Parse a gRPC timeout header value (e.g. "1S", "500m", "100u").
@@ -35,21 +35,17 @@ pub(crate) fn parse_grpc_timeout(s: &str) -> Result<Duration, GrpcTimeoutParseEr
     let value: u64 = digits
         .parse()
         .map_err(|_| GrpcTimeoutParseError::NonDigitValue)?;
+    // gRPC spec: TimeoutValue is at most 8 digits
+    if digits.len() > 8 {
+        return Err(GrpcTimeoutParseError::TimeoutValueTooBig);
+    }
     let unit_char = unit
         .chars()
         .next()
         .ok_or(GrpcTimeoutParseError::InvalidFormat(s))?;
     match unit_char {
-        'H' => Ok(Duration::from_secs(
-            value
-                .checked_mul(3600)
-                .ok_or(GrpcTimeoutParseError::Overflow)?,
-        )),
-        'M' => Ok(Duration::from_secs(
-            value
-                .checked_mul(60)
-                .ok_or(GrpcTimeoutParseError::Overflow)?,
-        )),
+        'H' => Ok(Duration::from_secs(value * 3600)),
+        'M' => Ok(Duration::from_secs(value * 60)),
         'S' => Ok(Duration::from_secs(value)),
         'm' => Ok(Duration::from_millis(value)),
         'u' => Ok(Duration::from_micros(value)),
@@ -147,20 +143,20 @@ mod tests {
     }
 
     #[test]
-    fn test_overflow_hours() {
-        let big = format!("{}H", u64::MAX);
+    fn test_timeout_value_too_big() {
+        // 9 digits exceeds the gRPC spec limit of 8
         assert_eq!(
-            parse_grpc_timeout(&big),
-            Err(GrpcTimeoutParseError::Overflow)
+            parse_grpc_timeout("123456789H"),
+            Err(GrpcTimeoutParseError::TimeoutValueTooBig)
         );
     }
 
     #[test]
-    fn test_overflow_minutes() {
-        let big = format!("{}M", u64::MAX);
+    fn test_max_8_digit_value() {
+        // 8 digits is the max allowed
         assert_eq!(
-            parse_grpc_timeout(&big),
-            Err(GrpcTimeoutParseError::Overflow)
+            parse_grpc_timeout("99999999S").unwrap(),
+            Duration::from_secs(99999999)
         );
     }
 
