@@ -261,7 +261,7 @@ impl XdsChannelBuilder {
 
     /// Builds an `XdsChannelGrpc`, which is a type-erased gRPC channel.
     pub fn build_grpc_channel(&self) -> Result<XdsChannelGrpc, BuildError> {
-        Ok(self.build_tonic_grpc_channel()?)
+        self.build_tonic_grpc_channel()
     }
 
     /// Builds an `XdsChannelGrpc` from the given router, cluster discovery, and retry policy.
@@ -521,8 +521,11 @@ mod tests {
                 .num_retries(1),
         );
 
-        let xds_channel = XdsChannelBuilder::new(test_config())
-            .build_grpc_channel_from_parts(xds_manager.clone(), xds_manager.clone(), retry_policy);
+        let xds_channel = XdsChannelBuilder::new(test_config()).build_grpc_channel_from_parts(
+            xds_manager.clone(),
+            xds_manager.clone(),
+            retry_policy,
+        );
 
         let mut client = GreeterClient::new(xds_channel);
 

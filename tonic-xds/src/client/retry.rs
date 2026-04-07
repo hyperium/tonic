@@ -159,7 +159,8 @@ impl GrpcRetryPolicyConfig {
     /// Set the number of retries (total attempts = num_retries + 1).
     /// Values of 0 are clamped to 1. Values that would exceed 5 total attempts are capped.
     pub(crate) fn num_retries(mut self, num_retries: u32) -> Self {
-        self.num_retries = num_retries.max(1).min(MAX_ATTEMPTS - 1);
+        // Safety: clamp panics if min > max. Here min=1, max=MAX_ATTEMPTS-1=4 (const).
+        self.num_retries = num_retries.clamp(1, MAX_ATTEMPTS - 1);
         self
     }
 
