@@ -416,11 +416,7 @@ mod tests {
         );
 
         let xds_channel = XdsChannelBuilder::with_config(XdsChannelConfig::default())
-            .build_grpc_channel_from_parts(
-                xds_manager.clone(),
-                xds_manager.clone(),
-                retry_policy,
-            );
+            .build_grpc_channel_from_parts(xds_manager.clone(), xds_manager.clone(), retry_policy);
 
         let mut client = GreeterClient::new(xds_channel);
 

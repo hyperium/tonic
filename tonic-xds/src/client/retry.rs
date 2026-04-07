@@ -7,13 +7,13 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use backoff::backoff::Backoff;
 use backoff::ExponentialBackoffBuilder;
+use backoff::backoff::Backoff;
 use http::{Request, Response};
 use http_body::Body;
 use shared_http_body::{SharedBody, SharedBodyExt};
-use tower::retry::Retry;
 use tower::retry::Policy;
+use tower::retry::Retry;
 use tower::{Layer, Service};
 
 /// Check if an error's source chain contains a retryable connection-level error.
@@ -121,8 +121,7 @@ impl GrpcRetryBackoffConfig {
 
 impl Default for GrpcRetryBackoffConfig {
     fn default() -> Self {
-        Self::new(Duration::from_millis(25))
-            .max_interval(Duration::from_millis(250))
+        Self::new(Duration::from_millis(25)).max_interval(Duration::from_millis(250))
     }
 }
 
@@ -342,7 +341,9 @@ where
 {
     type Response = S::Response;
     type Error = S::Error;
-    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
@@ -459,8 +460,7 @@ mod tests {
 
     #[test]
     fn test_is_retryable_grpc_status_via_result() {
-        let policy = GrpcRetryPolicyConfig::new()
-            .retry_on(vec![tonic::Code::Unavailable]);
+        let policy = GrpcRetryPolicyConfig::new().retry_on(vec![tonic::Code::Unavailable]);
         let response = http::Response::builder()
             .header("grpc-status", "14") // UNAVAILABLE
             .body(())
@@ -471,8 +471,7 @@ mod tests {
 
     #[test]
     fn test_is_not_retryable_ok_response() {
-        let policy = GrpcRetryPolicyConfig::new()
-            .retry_on(vec![tonic::Code::Unavailable]);
+        let policy = GrpcRetryPolicyConfig::new().retry_on(vec![tonic::Code::Unavailable]);
         let response = http::Response::builder()
             .header("grpc-status", "0") // OK
             .body(())
@@ -483,8 +482,7 @@ mod tests {
 
     #[test]
     fn test_is_not_retryable_no_grpc_status_header() {
-        let policy = GrpcRetryPolicyConfig::new()
-            .retry_on(vec![tonic::Code::Unavailable]);
+        let policy = GrpcRetryPolicyConfig::new().retry_on(vec![tonic::Code::Unavailable]);
         let response = http::Response::builder().body(()).unwrap();
         let result: Result<http::Response<()>, tower::BoxError> = Ok(response);
         assert!(!is_retryable(&result, &policy));
@@ -530,8 +528,8 @@ mod tests {
 
     #[test]
     fn test_backoff_custom_multiplier() {
-        let backoff = GrpcRetryBackoffConfig::new(Duration::from_millis(25))
-            .backoff_multiplier(1.5);
+        let backoff =
+            GrpcRetryBackoffConfig::new(Duration::from_millis(25)).backoff_multiplier(1.5);
         assert_eq!(backoff.backoff_multiplier, 1.5);
     }
 
@@ -568,7 +566,10 @@ mod tests {
     fn test_policy_retry_on() {
         let policy = GrpcRetryPolicyConfig::new()
             .retry_on(vec![tonic::Code::Unavailable, tonic::Code::Cancelled]);
-        assert_eq!(policy.retry_on, vec![tonic::Code::Unavailable, tonic::Code::Cancelled]);
+        assert_eq!(
+            policy.retry_on,
+            vec![tonic::Code::Unavailable, tonic::Code::Cancelled]
+        );
     }
 
     #[test]
@@ -584,8 +585,7 @@ mod tests {
 
     #[test]
     fn test_policy_load_config() {
-        let config = GrpcRetryPolicyConfig::new()
-            .retry_on(vec![tonic::Code::Unavailable]);
+        let config = GrpcRetryPolicyConfig::new().retry_on(vec![tonic::Code::Unavailable]);
         let policy = GrpcRetryPolicy::new(config);
         let loaded = policy.load_config();
         assert_eq!(loaded.retry_on, vec![tonic::Code::Unavailable]);
