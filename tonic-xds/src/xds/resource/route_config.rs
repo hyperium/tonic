@@ -276,6 +276,9 @@ fn validate_header_matcher(
             value: v,
             ignore_case: false,
         },
+        // TODO: Remove this arm once SafeRegexMatch is fully removed from envoy-types.
+        // SafeRegexMatch is deprecated in favor of StringMatch, which is handled below.
+        #[allow(deprecated)]
         Some(HeaderMatchSpecifier::SafeRegexMatch(r)) => {
             let re = Regex::new(&r.regex).map_err(|e| {
                 Error::Validation(format!("invalid header regex '{}': {e}", r.regex))
