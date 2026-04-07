@@ -1,6 +1,20 @@
 //! gRPC retry utilities.
 
+use std::fmt::Debug;
 use std::io;
+use std::sync::Arc;
+use std::task::{Context, Poll};
+use std::time::Duration;
+
+use arc_swap::ArcSwap;
+use backoff::backoff::Backoff;
+use backoff::ExponentialBackoffBuilder;
+use http::{Request, Response};
+use http_body::Body;
+use shared_http_body::{SharedBody, SharedBodyExt};
+use tower::retry::Retry;
+use tower::retry::Policy;
+use tower::{Layer, Service};
 
 /// Check if an error's source chain contains a retryable connection-level error.
 ///
@@ -33,16 +47,19 @@ pub(crate) fn is_retryable_grpc_status_code(
 
 /// Check if a request should be retried, either because of a retryable connection error
 /// or because the gRPC response status code is in the retryable set.
-pub(crate) fn is_retryable<E: std::error::Error + 'static>(
-    result: &Result<&http::Response<()>, &E>,
-    retryable_codes: &[tonic::Code],
+/// TODO: gRPC retriability is based on gRPC status code by default, in practice this may
+/// cause non-idempotent methods to be retried. It might be better to allow customizing
+/// retryability checks in the future.
+pub(crate) fn is_retryable<Res>(
+    result: &Result<http::Response<Res>, tower::BoxError>,
+    policy: &GrpcRetryPolicyConfig,
 ) -> bool {
     match result {
-        Err(err) => is_retryable_connection_error(*err),
+        Err(err) => is_retryable_connection_error(err.as_ref()),
         Ok(response) => {
             let status = tonic::Status::from_header_map(response.headers());
             match status {
-                Some(status) => is_retryable_grpc_status_code(status.code(), retryable_codes),
+                Some(status) => is_retryable_grpc_status_code(status.code(), &policy.retry_on),
                 // No grpc-status header means success
                 None => false,
             }
@@ -50,10 +67,296 @@ pub(crate) fn is_retryable<E: std::error::Error + 'static>(
     }
 }
 
+/// Maximum number of retry attempts allowed by the gRPC retry spec.
+/// Any `num_retries` value that would result in more than 5 total attempts
+/// is capped to `MAX_ATTEMPTS - 1 = 4`.
+const MAX_ATTEMPTS: u32 = 5;
+
+/// Minimum floor for backoff durations. Values below this are clamped up.
+const MIN_BACKOFF: Duration = Duration::from_millis(1);
+
+/// Backoff configuration for gRPC retries.
+///
+/// Build via [`GrpcRetryBackoffConfig::new`], which requires `base_interval`.
+/// `max_interval` and `backoff_multiplier` are optional with sensible defaults.
+///
+/// # Guardrails
+/// - `base_interval` and `max_interval` must be > 0; values < 1ms are treated as 1ms.
+/// - `max_interval` defaults to `10 * base_interval`.
+/// - `max_interval` must be >= `base_interval`; if not, it is clamped to `base_interval`.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct GrpcRetryBackoffConfig {
+    pub(crate) base_interval: Duration,
+    pub(crate) max_interval: Duration,
+    pub(crate) backoff_multiplier: f64,
+}
+
+impl GrpcRetryBackoffConfig {
+    /// Create a new backoff config with the given `base_interval`.
+    /// `max_interval` defaults to `10 * base_interval`.
+    /// `backoff_multiplier` defaults to `2.0`.
+    pub(crate) fn new(base_interval: Duration) -> Self {
+        let base_interval = base_interval.max(MIN_BACKOFF);
+        Self {
+            max_interval: base_interval * 10,
+            base_interval,
+            backoff_multiplier: 2.0,
+        }
+    }
+
+    /// Set the maximum backoff interval.
+    /// Values < 1ms are treated as 1ms. Values < `base_interval` are clamped to `base_interval`.
+    pub(crate) fn max_interval(mut self, max_interval: Duration) -> Self {
+        let max_interval = max_interval.max(MIN_BACKOFF);
+        self.max_interval = max_interval.max(self.base_interval);
+        self
+    }
+
+    /// Set the backoff multiplier (default: 2.0).
+    pub(crate) fn backoff_multiplier(mut self, multiplier: f64) -> Self {
+        self.backoff_multiplier = multiplier;
+        self
+    }
+}
+
+impl Default for GrpcRetryBackoffConfig {
+    fn default() -> Self {
+        Self::new(Duration::from_millis(25))
+            .max_interval(Duration::from_millis(250))
+    }
+}
+
+/// gRPC retry policy configuration.
+///
+/// Built via [`GrpcRetryPolicyConfig::new`] with defaults, then customized via builder methods.
+///
+/// # Defaults
+/// - `num_retries`: 1 (2 total attempts)
+/// - `retry_on`: empty (no status codes retried)
+/// - `retry_backoff`: base_interval=25ms, max_interval=250ms, multiplier=2.0
+///
+/// # Guardrails
+/// - `num_retries` must be >= 1. Values of 0 are clamped to 1.
+/// - `num_retries` is capped so total attempts (num_retries + 1) never exceed 5.
+#[derive(Debug, Clone)]
+pub(crate) struct GrpcRetryPolicyConfig {
+    pub(crate) retry_on: Vec<tonic::Code>,
+    pub(crate) num_retries: u32,
+    pub(crate) retry_backoff: GrpcRetryBackoffConfig,
+}
+
+impl GrpcRetryPolicyConfig {
+    /// Create a new retry policy with defaults.
+    pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// Set the list of retryable gRPC status codes.
+    pub(crate) fn retry_on(mut self, codes: Vec<tonic::Code>) -> Self {
+        self.retry_on = codes;
+        self
+    }
+
+    /// Set the number of retries (total attempts = num_retries + 1).
+    /// Values of 0 are clamped to 1. Values that would exceed 5 total attempts are capped.
+    pub(crate) fn num_retries(mut self, num_retries: u32) -> Self {
+        self.num_retries = num_retries.max(1).min(MAX_ATTEMPTS - 1);
+        self
+    }
+
+    /// Set the backoff configuration.
+    pub(crate) fn retry_backoff(mut self, backoff: GrpcRetryBackoffConfig) -> Self {
+        self.retry_backoff = backoff;
+        self
+    }
+}
+
+impl Default for GrpcRetryPolicyConfig {
+    fn default() -> Self {
+        Self {
+            retry_on: Vec::new(),
+            num_retries: 1,
+            retry_backoff: GrpcRetryBackoffConfig::default(),
+        }
+    }
+}
+
+/// gRPC header for tracking retry attempts per the gRPC spec.
+const GRPC_PREVIOUS_RPC_ATTEMPTS: &str = "grpc-previous-rpc-attempts";
+
+/// Create a [`backoff::ExponentialBackoff`] from a [`GrpcRetryBackoffConfig`].
+fn make_backoff(config: &GrpcRetryBackoffConfig) -> backoff::ExponentialBackoff {
+    ExponentialBackoffBuilder::default()
+        .with_initial_interval(config.base_interval)
+        .with_max_interval(config.max_interval)
+        .with_multiplier(config.backoff_multiplier)
+        .with_randomization_factor(0.0)
+        .with_max_elapsed_time(None)
+        .build()
+}
+
+/// gRPC retry policy with support for lock-free hot-swapping of configuration.
+///
+/// Wraps a [`GrpcRetryPolicyConfig`] behind an [`ArcSwap`] so that configuration
+/// can be atomically updated (e.g. from xDS) without blocking in-flight requests.
+///
+/// Implements [`tower::retry::Policy`]. Tower's `Retry` service clones the policy
+/// for each request, so `backoff` and `attempts` track per-request retry state
+/// while the shared config is read from `ArcSwap` on each retry decision.
+#[derive(Clone, Debug)]
+pub(crate) struct GrpcRetryPolicy {
+    config: Arc<ArcSwap<GrpcRetryPolicyConfig>>,
+    /// Backoff state for the current request, created from config on first retry.
+    backoff: Option<backoff::ExponentialBackoff>,
+    /// Number of retry attempts made so far for the current request.
+    attempts: u32,
+}
+
+impl GrpcRetryPolicy {
+    /// Create a new retry policy with the given configuration.
+    pub(crate) fn new(config: GrpcRetryPolicyConfig) -> Self {
+        Self {
+            config: Arc::new(ArcSwap::from(Arc::new(config))),
+            backoff: None,
+            attempts: 0,
+        }
+    }
+
+    /// Atomically swap the configuration with a new one.
+    pub(crate) fn update_config(&self, config: GrpcRetryPolicyConfig) {
+        self.config.store(Arc::new(config));
+    }
+
+    /// Load the current configuration.
+    pub(crate) fn load_config(&self) -> Arc<GrpcRetryPolicyConfig> {
+        self.config.load_full()
+    }
+
+    /// Get or create the backoff, and advance it to the next delay.
+    fn backoff_next(&mut self, backoff_config: &GrpcRetryBackoffConfig) -> Duration {
+        let backoff = self
+            .backoff
+            .get_or_insert_with(|| make_backoff(backoff_config));
+        backoff
+            .next_backoff()
+            .unwrap_or(backoff_config.max_interval)
+    }
+}
+
+impl Default for GrpcRetryPolicy {
+    fn default() -> Self {
+        Self::new(GrpcRetryPolicyConfig::default())
+    }
+}
+
+impl<Req, Res> Policy<Request<Req>, Response<Res>, tower::BoxError> for GrpcRetryPolicy
+where
+    Req: Clone,
+{
+    type Future = tokio::time::Sleep;
+
+    fn retry(
+        &mut self,
+        req: &mut Request<Req>,
+        result: &mut Result<Response<Res>, tower::BoxError>,
+    ) -> Option<Self::Future> {
+        let config = self.load_config();
+
+        if self.attempts >= config.num_retries {
+            return None;
+        }
+
+        if !is_retryable(result, &config) {
+            return None;
+        }
+
+        let delay = self.backoff_next(&config.retry_backoff);
+        self.attempts += 1;
+
+        // Per gRPC spec: set grpc-previous-rpc-attempts header
+        req.headers_mut().insert(
+            GRPC_PREVIOUS_RPC_ATTEMPTS,
+            http::HeaderValue::from(self.attempts),
+        );
+
+        Some(tokio::time::sleep(delay))
+    }
+
+    fn clone_request(&mut self, req: &Request<Req>) -> Option<Request<Req>> {
+        Some(req.clone())
+    }
+}
+
+/// Tower [`Layer`] that wraps a service with retry support.
+///
+/// Converts the request body into a [`SharedBody`] (cloneable) and constructs
+/// a fresh [`tower::retry::Retry`] service per request so that each request
+/// gets its own retry state.
+///
+/// This layer is generic over the retry policy — it is not tied to gRPC.
+/// The gRPC-specific behavior lives in the [`Policy`] implementation
+/// (e.g. [`GrpcRetryPolicy`]).
+#[derive(Clone)]
+pub(crate) struct RetryLayer<P> {
+    policy: P,
+}
+
+impl<P> RetryLayer<P> {
+    /// Create a new retry layer with the given policy.
+    pub(crate) fn new(policy: P) -> Self {
+        Self { policy }
+    }
+}
+
+impl<P: Clone, S> Layer<S> for RetryLayer<P> {
+    type Service = RetryService<P, S>;
+
+    fn layer(&self, service: S) -> Self::Service {
+        RetryService {
+            inner: service,
+            policy: self.policy.clone(),
+        }
+    }
+}
+
+/// Service that converts request bodies to [`SharedBody`] and retries via
+/// [`tower::retry::Retry`] with the given policy.
+#[derive(Clone)]
+pub(crate) struct RetryService<P, S> {
+    inner: S,
+    policy: P,
+}
+
+impl<P, S, B, Res> Service<Request<B>> for RetryService<P, S>
+where
+    P: Policy<Request<SharedBody<B>>, Response<Res>, S::Error> + Clone + Send + 'static,
+    P::Future: Send,
+    S: Service<Request<SharedBody<B>>, Response = Response<Res>> + Clone + Send + 'static,
+    S::Error: Debug + Send + 'static,
+    S::Response: Send + 'static,
+    S::Future: Send + 'static,
+    B: Body + Unpin + Send + 'static,
+    B::Data: Clone + Send + Sync,
+    B::Error: Clone + Send + Sync,
+    Res: Send + 'static,
+{
+    type Response = S::Response;
+    type Error = S::Error;
+    type Future = std::pin::Pin<Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, request: Request<B>) -> Self::Future {
+        let mut retry_svc = Retry::new(self.policy.clone(), self.inner.clone());
+        let shared_request = request.map(|b| b.into_shared());
+        Box::pin(retry_svc.call(shared_request))
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use super::*;
 
     // --- is_retryable_connection_error tests ---
@@ -147,35 +450,160 @@ mod tests {
 
     #[test]
     fn test_is_retryable_connection_error_via_result() {
-        let err = io::Error::new(io::ErrorKind::ConnectionRefused, "refused");
-        let result: Result<&http::Response<()>, &io::Error> = Err(&err);
-        assert!(is_retryable(&result, &[]));
+        let policy = GrpcRetryPolicyConfig::new();
+        let err: tower::BoxError =
+            Box::new(io::Error::new(io::ErrorKind::ConnectionRefused, "refused"));
+        let result: Result<http::Response<()>, tower::BoxError> = Err(err);
+        assert!(is_retryable(&result, &policy));
     }
 
     #[test]
     fn test_is_retryable_grpc_status_via_result() {
+        let policy = GrpcRetryPolicyConfig::new()
+            .retry_on(vec![tonic::Code::Unavailable]);
         let response = http::Response::builder()
             .header("grpc-status", "14") // UNAVAILABLE
             .body(())
             .unwrap();
-        let result: Result<&http::Response<()>, &io::Error> = Ok(&response);
-        assert!(is_retryable(&result, &[tonic::Code::Unavailable]));
+        let result: Result<http::Response<()>, tower::BoxError> = Ok(response);
+        assert!(is_retryable(&result, &policy));
     }
 
     #[test]
     fn test_is_not_retryable_ok_response() {
+        let policy = GrpcRetryPolicyConfig::new()
+            .retry_on(vec![tonic::Code::Unavailable]);
         let response = http::Response::builder()
             .header("grpc-status", "0") // OK
             .body(())
             .unwrap();
-        let result: Result<&http::Response<()>, &io::Error> = Ok(&response);
-        assert!(!is_retryable(&result, &[tonic::Code::Unavailable]));
+        let result: Result<http::Response<()>, tower::BoxError> = Ok(response);
+        assert!(!is_retryable(&result, &policy));
     }
 
     #[test]
     fn test_is_not_retryable_no_grpc_status_header() {
+        let policy = GrpcRetryPolicyConfig::new()
+            .retry_on(vec![tonic::Code::Unavailable]);
         let response = http::Response::builder().body(()).unwrap();
-        let result: Result<&http::Response<()>, &io::Error> = Ok(&response);
-        assert!(!is_retryable(&result, &[tonic::Code::Unavailable]));
+        let result: Result<http::Response<()>, tower::BoxError> = Ok(response);
+        assert!(!is_retryable(&result, &policy));
+    }
+
+    // --- GrpcRetryBackoffConfig tests ---
+
+    #[test]
+    fn test_backoff_defaults() {
+        let backoff = GrpcRetryBackoffConfig::default();
+        assert_eq!(backoff.base_interval, Duration::from_millis(25));
+        assert_eq!(backoff.max_interval, Duration::from_millis(250));
+        assert_eq!(backoff.backoff_multiplier, 2.0);
+    }
+
+    #[test]
+    fn test_backoff_new_sets_max_to_10x_base() {
+        let backoff = GrpcRetryBackoffConfig::new(Duration::from_millis(100));
+        assert_eq!(backoff.base_interval, Duration::from_millis(100));
+        assert_eq!(backoff.max_interval, Duration::from_millis(1000));
+    }
+
+    #[test]
+    fn test_backoff_base_interval_below_1ms_clamped() {
+        let backoff = GrpcRetryBackoffConfig::new(Duration::from_micros(500));
+        assert_eq!(backoff.base_interval, Duration::from_millis(1));
+        assert_eq!(backoff.max_interval, Duration::from_millis(10));
+    }
+
+    #[test]
+    fn test_backoff_max_interval_below_1ms_clamped() {
+        let backoff = GrpcRetryBackoffConfig::new(Duration::from_millis(1))
+            .max_interval(Duration::from_micros(100));
+        assert_eq!(backoff.max_interval, Duration::from_millis(1));
+    }
+
+    #[test]
+    fn test_backoff_max_interval_below_base_clamped() {
+        let backoff = GrpcRetryBackoffConfig::new(Duration::from_millis(100))
+            .max_interval(Duration::from_millis(50));
+        assert_eq!(backoff.max_interval, Duration::from_millis(100));
+    }
+
+    #[test]
+    fn test_backoff_custom_multiplier() {
+        let backoff = GrpcRetryBackoffConfig::new(Duration::from_millis(25))
+            .backoff_multiplier(1.5);
+        assert_eq!(backoff.backoff_multiplier, 1.5);
+    }
+
+    // --- GrpcRetryPolicyConfig tests ---
+
+    #[test]
+    fn test_policy_defaults() {
+        let policy = GrpcRetryPolicyConfig::new();
+        assert!(policy.retry_on.is_empty());
+        assert_eq!(policy.num_retries, 1);
+        assert_eq!(policy.retry_backoff, GrpcRetryBackoffConfig::default());
+    }
+
+    #[test]
+    fn test_policy_num_retries_zero_clamped_to_1() {
+        let policy = GrpcRetryPolicyConfig::new().num_retries(0);
+        assert_eq!(policy.num_retries, 1);
+    }
+
+    #[test]
+    fn test_policy_num_retries_capped_at_4() {
+        // max_attempts=5, so num_retries = max_attempts - 1 = 4
+        let policy = GrpcRetryPolicyConfig::new().num_retries(10);
+        assert_eq!(policy.num_retries, 4);
+    }
+
+    #[test]
+    fn test_policy_num_retries_4_is_max() {
+        let policy = GrpcRetryPolicyConfig::new().num_retries(4);
+        assert_eq!(policy.num_retries, 4);
+    }
+
+    #[test]
+    fn test_policy_retry_on() {
+        let policy = GrpcRetryPolicyConfig::new()
+            .retry_on(vec![tonic::Code::Unavailable, tonic::Code::Cancelled]);
+        assert_eq!(policy.retry_on, vec![tonic::Code::Unavailable, tonic::Code::Cancelled]);
+    }
+
+    #[test]
+    fn test_policy_custom_backoff() {
+        let backoff = GrpcRetryBackoffConfig::new(Duration::from_millis(50))
+            .max_interval(Duration::from_millis(500))
+            .backoff_multiplier(3.0);
+        let policy = GrpcRetryPolicyConfig::new().retry_backoff(backoff.clone());
+        assert_eq!(policy.retry_backoff, backoff);
+    }
+
+    // --- GrpcRetryPolicy (ArcSwap wrapper) tests ---
+
+    #[test]
+    fn test_policy_load_config() {
+        let config = GrpcRetryPolicyConfig::new()
+            .retry_on(vec![tonic::Code::Unavailable]);
+        let policy = GrpcRetryPolicy::new(config);
+        let loaded = policy.load_config();
+        assert_eq!(loaded.retry_on, vec![tonic::Code::Unavailable]);
+        assert_eq!(loaded.num_retries, 1);
+    }
+
+    #[test]
+    fn test_policy_update_config() {
+        let policy = GrpcRetryPolicy::default();
+        assert!(policy.load_config().retry_on.is_empty());
+
+        let new_config = GrpcRetryPolicyConfig::new()
+            .retry_on(vec![tonic::Code::Cancelled])
+            .num_retries(3);
+        policy.update_config(new_config);
+
+        let loaded = policy.load_config();
+        assert_eq!(loaded.retry_on, vec![tonic::Code::Cancelled]);
+        assert_eq!(loaded.num_retries, 3);
     }
 }
