@@ -123,9 +123,9 @@ pub enum BootstrapError {
     Validation(String),
 }
 
-#[allow(dead_code)] // new() and selected_credential() used by callers and A29.
 impl BootstrapConfig {
     /// Create a bootstrap configuration directly from struct fields.
+    #[allow(dead_code)] // Used by callers constructing config programmatically.
     pub(crate) fn new(
         xds_servers: Vec<XdsServerConfig>,
         node: NodeConfig,
@@ -188,6 +188,7 @@ impl BootstrapConfig {
     ///
     /// Per gRFC A27, the client stops at the first credential type it supports.
     /// Returns `None` if no supported credential type is found.
+    #[allow(dead_code)] // Used when TLS support is added (A29).
     pub(crate) fn selected_credential(&self) -> Option<&ChannelCredentialType> {
         self.xds_servers
             .first()?
