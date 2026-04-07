@@ -269,6 +269,9 @@ fn validate_header_matcher(
     use envoy_types::pb::envoy::r#type::matcher::v3::string_matcher::MatchPattern;
 
     let match_specifier = match hm.header_match_specifier {
+        // TODO: Remove this arm once ExactMatch is fully removed from envoy-types.
+        // ExactMatch is deprecated in favor of StringMatch, which is handled below.
+        #[allow(deprecated)]
         Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact {
             value: v,
             ignore_case: false,
