@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 //! xDS bootstrap configuration.
 //!
 //! Parses the bootstrap JSON from `GRPC_XDS_BOOTSTRAP` (file path) or
@@ -13,19 +12,39 @@ const ENV_BOOTSTRAP_FILE: &str = "GRPC_XDS_BOOTSTRAP";
 /// Environment variable containing inline bootstrap JSON.
 const ENV_BOOTSTRAP_CONFIG: &str = "GRPC_XDS_BOOTSTRAP_CONFIG";
 
-/// Parsed xDS bootstrap configuration.
+/// Parsed xDS bootstrap configuration per [gRFC A27].
+///
+/// The bootstrap tells the xDS client where the management server lives
+/// and what identity (node) to present. It is typically loaded from a
+/// JSON file or environment variable.
+///
+/// # Loading
+///
+/// ```rust,no_run
+/// use tonic_xds::BootstrapConfig;
+///
+/// // From environment variable (GRPC_XDS_BOOTSTRAP or GRPC_XDS_BOOTSTRAP_CONFIG):
+/// let config = BootstrapConfig::from_env().unwrap();
+///
+/// // From a JSON string:
+/// let json = r#"{"xds_servers":[{"server_uri":"xds.example.com:443"}]}"#;
+/// let config = BootstrapConfig::from_json(json).unwrap();
+/// ```
+///
+/// [gRFC A27]: https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md
 #[derive(Debug, Clone, Deserialize)]
 #[non_exhaustive]
-pub(crate) struct BootstrapConfig {
+pub struct BootstrapConfig {
     /// xDS management servers to connect to.
-    pub xds_servers: Vec<XdsServerConfig>,
+    pub(crate) xds_servers: Vec<XdsServerConfig>,
     /// Node identity sent to the xDS server.
     #[serde(default)]
-    pub node: NodeConfig,
+    pub(crate) node: NodeConfig,
 }
 
 /// Configuration for a single xDS management server.
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Fields consumed when TLS support is added (A29).
 pub(crate) struct XdsServerConfig {
     /// URI of the xDS server (e.g., `"xds.example.com:443"`).
     pub server_uri: String,
@@ -39,6 +58,7 @@ pub(crate) struct XdsServerConfig {
 
 /// A channel credential entry from the bootstrap config.
 #[derive(Debug, Clone, Deserialize)]
+#[allow(dead_code)] // Used when TLS support is added (A29).
 pub(crate) struct ChannelCredentialConfig {
     /// Credential type (e.g., `"insecure"`, `"tls"`, `"google_default"`).
     #[serde(rename = "type")]
@@ -83,20 +103,27 @@ pub(crate) struct LocalityConfig {
 
 /// Errors that can occur when loading bootstrap configuration.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum BootstrapError {
+pub enum BootstrapError {
+    /// Neither `GRPC_XDS_BOOTSTRAP` nor `GRPC_XDS_BOOTSTRAP_CONFIG` is set.
     #[error("neither {ENV_BOOTSTRAP_FILE} nor {ENV_BOOTSTRAP_CONFIG} environment variable is set")]
     NotConfigured,
+    /// Failed to read the bootstrap JSON file.
     #[error("failed to read bootstrap file '{path}': {source}")]
     ReadFile {
+        /// Path that could not be read.
         path: String,
+        /// Underlying I/O error.
         source: std::io::Error,
     },
+    /// The JSON could not be parsed.
     #[error("failed to parse bootstrap JSON: {0}")]
     InvalidJson(#[from] serde_json::Error),
+    /// The parsed config failed validation (e.g., empty `xds_servers`).
     #[error("bootstrap config validation failed: {0}")]
     Validation(String),
 }
 
+#[allow(dead_code)] // new() and selected_credential() used by callers and A29.
 impl BootstrapConfig {
     /// Create a bootstrap configuration directly from struct fields.
     pub(crate) fn new(
@@ -112,7 +139,7 @@ impl BootstrapConfig {
     ///
     /// Checks `GRPC_XDS_BOOTSTRAP` (file path) first, then falls back to
     /// `GRPC_XDS_BOOTSTRAP_CONFIG` (inline JSON).
-    pub(crate) fn from_env() -> Result<Self, BootstrapError> {
+    pub fn from_env() -> Result<Self, BootstrapError> {
         if let Ok(path) = std::env::var(ENV_BOOTSTRAP_FILE) {
             let json = std::fs::read_to_string(&path)
                 .map_err(|e| BootstrapError::ReadFile { path, source: e })?;
@@ -127,7 +154,7 @@ impl BootstrapConfig {
     }
 
     /// Parse bootstrap configuration from a JSON string.
-    pub(crate) fn from_json(json: &str) -> Result<Self, BootstrapError> {
+    pub fn from_json(json: &str) -> Result<Self, BootstrapError> {
         let config: BootstrapConfig = serde_json::from_str(json)?;
         config.validate()?;
         Ok(config)

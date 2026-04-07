@@ -81,7 +81,7 @@ pub enum DecodeResult<T> {
 /// 2. **Validation**: Transform the message into the final resource type.
 ///    If this fails, the resource name is known ([`DecodeResult::ResourceError`]).
 ///
-/// The provided [`decode`](Self::decode) method orchestrates these phases and
+/// The provided `decode` function orchestrates these phases and
 /// returns the appropriate [`DecodeResult`].
 ///
 /// # Resource Deletion in State of the World (SotW)
