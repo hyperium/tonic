@@ -61,8 +61,8 @@ use crate::core::ClientResponseStreamItem;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ResponseHeaders;
-use crate::core::ResponseStreamItem;
 use crate::core::SendMessage;
+use crate::core::ServerResponseStreamItem;
 use crate::core::Trailers;
 use crate::credentials::SecurityLevel;
 use crate::credentials::client::ClientConnectionSecurityContext;
@@ -195,17 +195,16 @@ pub struct InMemoryServerSendStream {
 impl ServerSendStream for InMemoryServerSendStream {
     async fn send<'a>(
         &mut self,
-        item: crate::core::ServerResponseStreamItem<'a>,
+        item: ServerResponseStreamItem<'a>,
         _options: ServerSendOptions,
     ) -> Result<(), ()> {
         let inmemory_item = match item {
-            ResponseStreamItem::Headers(h) => InMemoryResponseStreamItem::Headers(h),
-            ResponseStreamItem::Message(m) => {
+            ServerResponseStreamItem::Headers(h) => InMemoryResponseStreamItem::Headers(h),
+            ServerResponseStreamItem::Message(m) => {
                 let buf = m.encode().map_err(|_| ())?;
                 InMemoryResponseStreamItem::Message(buf)
             }
-            ResponseStreamItem::Trailers(t) => InMemoryResponseStreamItem::Trailers(t),
-            ResponseStreamItem::StreamClosed => InMemoryResponseStreamItem::StreamClosed,
+            ServerResponseStreamItem::Trailers(t) => InMemoryResponseStreamItem::Trailers(t),
         };
 
         self.tx.send(inmemory_item).map_err(|_| ())
@@ -217,12 +216,16 @@ pub struct InMemoryServerRecvStream {
 }
 
 impl ServerRecvStream for InMemoryServerRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
         match self.rx.recv().await {
             Some(InMemoryRequestStreamItem::Message(mut buf)) => {
-                msg.decode(&mut buf).map_err(|_| ())
+                if msg.decode(&mut buf).is_err() {
+                    return Some(Err(()));
+                }
+                Some(Ok(()))
             }
-            _ => Err(()),
+            Some(InMemoryRequestStreamItem::StreamClosed) => None,
+            None => None,
         }
     }
 }

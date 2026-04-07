@@ -80,6 +80,7 @@ impl Handle for Handler {
     async fn handle(
         &self,
         headers: RequestHeaders,
+        _options: CallOptions,
         tx: &mut impl server::SendStream,
         mut rx: impl server::RecvStream + 'static,
     ) {
@@ -94,7 +95,7 @@ impl Handle for Handler {
             .await;
 
         let mut req_msg = MyReqMessage::default();
-        while rx.next(&mut req_msg).await.is_ok() {
+        while let Some(Ok(())) = rx.next(&mut req_msg).await {
             let res_msg = MyResMessage(format!(
                 "Server {}: responding to: {}; msg: {}",
                 id, method, req_msg.0,
