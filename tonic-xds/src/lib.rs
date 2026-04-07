@@ -111,5 +111,5 @@ pub use client::channel::{
 pub use xds::bootstrap::{BootstrapConfig, BootstrapError};
 pub use xds::uri::{XdsUri, XdsUriError};
 
-#[cfg(test)]
-pub(crate) mod testutil;
+#[cfg(any(test, feature = "testutil"))]
+pub mod testutil;
