@@ -189,7 +189,7 @@ fn make_backoff(config: &GrpcRetryBackoffConfig) -> backoff::ExponentialBackoff 
         .with_initial_interval(config.base_interval)
         .with_max_interval(config.max_interval)
         .with_multiplier(config.backoff_multiplier)
-        .with_randomization_factor(0.0)
+        .with_randomization_factor(0.2)
         .with_max_elapsed_time(None)
         .build()
 }
@@ -605,5 +605,81 @@ mod tests {
         let loaded = policy.load_config();
         assert_eq!(loaded.retry_on, vec![tonic::Code::Cancelled]);
         assert_eq!(loaded.num_retries, 3);
+    }
+
+    /// Verify that two concurrent requests using the same policy get independent
+    /// retry state (attempts counter and backoff). Tower's `Retry::call` clones
+    /// the policy per request, so mutations from one request must not leak into another.
+    #[tokio::test]
+    async fn test_retry_state_is_per_request() {
+        let policy = GrpcRetryPolicy::new(
+            GrpcRetryPolicyConfig::new()
+                .retry_on(vec![tonic::Code::Unavailable])
+                .num_retries(2),
+        );
+
+        // Simulate two independent request sessions by cloning the policy
+        // (this is what tower's Retry::call does per request).
+        let mut policy_req1 = policy.clone();
+        let mut policy_req2 = policy.clone();
+
+        // Build two independent requests
+        let mut req1 = http::Request::builder().body(()).unwrap();
+        let mut req2 = http::Request::builder().body(()).unwrap();
+
+        type TestResult = Result<http::Response<()>, tower::BoxError>;
+
+        // Both should be able to clone their requests
+        let _ = Policy::<_, http::Response<()>, tower::BoxError>::clone_request(
+            &mut policy_req1,
+            &req1,
+        )
+        .expect("clone_request should succeed");
+        let _ = Policy::<_, http::Response<()>, tower::BoxError>::clone_request(
+            &mut policy_req2,
+            &req2,
+        )
+        .expect("clone_request should succeed");
+
+        // Simulate UNAVAILABLE response for req1, trigger a retry
+        let mut result1: TestResult = Ok(http::Response::builder()
+            .header("grpc-status", "14")
+            .body(())
+            .unwrap());
+        let retry1 = policy_req1.retry(&mut req1, &mut result1);
+        assert!(retry1.is_some(), "req1 should retry on first UNAVAILABLE");
+
+        // req1 has used one retry attempt. req2 should be unaffected — still
+        // has all retries available.
+        let mut result2: TestResult = Ok(http::Response::builder()
+            .header("grpc-status", "14")
+            .body(())
+            .unwrap());
+        let retry2 = policy_req2.retry(&mut req2, &mut result2);
+        assert!(retry2.is_some(), "req2 should still be able to retry");
+
+        // Retry req1 again — second retry
+        let mut result1b: TestResult = Ok(http::Response::builder()
+            .header("grpc-status", "14")
+            .body(())
+            .unwrap());
+        let retry1b = policy_req1.retry(&mut req1, &mut result1b);
+        assert!(retry1b.is_some(), "req1 should retry on second UNAVAILABLE");
+
+        // req1 is now exhausted (2 retries used out of 2)
+        let mut result1c: TestResult = Ok(http::Response::builder()
+            .header("grpc-status", "14")
+            .body(())
+            .unwrap());
+        let retry1c = policy_req1.retry(&mut req1, &mut result1c);
+        assert!(retry1c.is_none(), "req1 should be exhausted");
+
+        // req2 should still have its second retry available
+        let mut result2b: TestResult = Ok(http::Response::builder()
+            .header("grpc-status", "14")
+            .body(())
+            .unwrap());
+        let retry2b = policy_req2.retry(&mut req2, &mut result2b);
+        assert!(retry2b.is_some(), "req2 should still have retries left");
     }
 }
