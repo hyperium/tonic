@@ -268,6 +268,7 @@ fn validate_header_matcher(
     use envoy_types::pb::envoy::config::route::v3::header_matcher::HeaderMatchSpecifier;
     use envoy_types::pb::envoy::r#type::matcher::v3::string_matcher::MatchPattern;
 
+    #[allow(deprecated)]
     let match_specifier = match hm.header_match_specifier {
         Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact {
             value: v,
