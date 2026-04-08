@@ -23,7 +23,9 @@ exclude = ["proto/test/*"]
 [dependencies]
 tonic = "0.14"
 http = "1"
-tower = { version = "0.5", default-features = false, features = ["discover"] }
+http-body = "1"
+tower = { version = "0.5", default-features = false, features = ["discover", "retry"] }
+arc-swap = "1"
 dashmap = "6.1"
 thiserror = "2.0.17"
 url = "2.5.8"
@@ -40,11 +42,14 @@ tokio = { version = "1", features = ["sync"] }
 # cryptographic security, only statistical uniformity for traffic distribution.
 fastrand = "2"
 tokio-stream = "0.1"
+backoff = "0.4"
+shared_http_body = "0.1"
 
 [lints]
 workspace = true
 
 [dev-dependencies]
+xds-client = { version = "0.1.0-alpha.1", path = "../xds-client", features = ["test-util"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
 tonic-prost = "0.14"

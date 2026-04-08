@@ -12,8 +12,11 @@ use tower::{BoxError, Service, load::Load, util::BoxCloneService};
 
 #[cfg(test)]
 use {
-    crate::client::cluster::ClusterClientRegistryGrpc, crate::client::route::XdsRoutingLayer,
-    crate::xds::xds_manager::XdsManager, tower::ServiceBuilder,
+    crate::client::cluster::ClusterClientRegistryGrpc,
+    crate::client::lb::ClusterDiscovery,
+    crate::client::retry::{GrpcRetryPolicy, RetryLayer},
+    crate::client::route::{Router, XdsRoutingLayer},
+    tower::ServiceBuilder,
 };
 
 /// Configuration for building [`XdsChannel`] / [`XdsChannelGrpc`].
@@ -162,25 +165,26 @@ impl XdsChannelBuilder {
         BoxCloneService::new(self.build_tonic_grpc_channel())
     }
 
-    /// Builds an `XdsChannelGrpc` from the given xDS manager dependencies.
-    /// This is primarily intended for testing purposes for now.
-    /// [`XdsChannelBuilder::build_grpc_channel`] should build [`XdsManager`](crate::xds::xds_manager::XdsManager)
-    /// as part of constructing `XdsChannelGrpc`.
+    /// Builds an `XdsChannelGrpc` from the given router, cluster discovery, and retry policy.
     #[cfg(test)]
-    pub(crate) fn build_grpc_channel_from_xds_manager(
+    pub(crate) fn build_grpc_channel_from_parts(
         &self,
-        xds_manager: Arc<dyn XdsManager<EndpointAddress, EndpointChannel<Channel>>>,
+        router: Arc<dyn Router>,
+        discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>>,
+        retry_policy: GrpcRetryPolicy,
     ) -> XdsChannelGrpc {
-        let routing_layer = XdsRoutingLayer::new(xds_manager.clone());
+        let routing_layer = XdsRoutingLayer::new(router);
+        let retry_layer = RetryLayer::new(retry_policy);
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
-        let lb_service = XdsLbService::new(cluster_registry, xds_manager.clone());
+        let lb_service = XdsLbService::new(cluster_registry, discovery);
         let service = ServiceBuilder::new()
             .layer(routing_layer)
+            .layer(retry_layer)
+            .map_request(|req: Request<shared_http_body::SharedBody<TonicBody>>| {
+                req.map(TonicBody::new)
+            })
             .service(lb_service);
-        BoxCloneService::new(XdsChannelTonicGrpc {
-            config: self.config.clone(),
-            inner: service,
-        })
+        BoxCloneService::new(service)
     }
 }
 
@@ -191,14 +195,15 @@ mod tests {
     use crate::client::channel::XdsChannelGrpc;
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
+    use crate::client::lb::{BoxDiscover, ClusterDiscovery};
+    use crate::client::retry::GrpcRetryPolicy;
     use crate::client::route::RouteDecision;
     use crate::client::route::RouteInput;
+    use crate::client::route::Router;
     use crate::common::async_util::BoxFuture;
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::TestServer;
-    use crate::xds::xds_manager::BoxDiscover;
-    use crate::xds::xds_manager::{XdsClusterDiscovery, XdsRouter};
     use std::sync::Arc;
     use tokio::sync::mpsc;
     use tonic::transport::Channel;
@@ -245,17 +250,20 @@ mod tests {
         }
     }
 
-    impl XdsRouter for MockXdsManager {
-        fn route(&self, _input: &RouteInput<'_>) -> BoxFuture<RouteDecision> {
+    impl Router for MockXdsManager {
+        fn route(
+            &self,
+            _input: &RouteInput<'_>,
+        ) -> BoxFuture<Result<RouteDecision, crate::xds::routing::RoutingError>> {
             Box::pin(async move {
-                RouteDecision {
+                Ok(RouteDecision {
                     cluster: "test-cluster".to_string(),
-                }
+                })
             })
         }
     }
 
-    impl XdsClusterDiscovery<EndpointAddress, EndpointChannel<Channel>> for MockXdsManager {
+    impl ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>> for MockXdsManager {
         fn discover_cluster(
             &self,
             _cluster_name: &str,
@@ -330,8 +338,11 @@ mod tests {
         let xds_manager = Arc::new(MockXdsManager::from_test_servers(&servers));
 
         let xds_channel_builder = XdsChannelBuilder::with_config(XdsChannelConfig::default());
-        let xds_channel =
-            xds_channel_builder.build_grpc_channel_from_xds_manager(xds_manager.clone());
+        let xds_channel = xds_channel_builder.build_grpc_channel_from_parts(
+            xds_manager.clone(),
+            xds_manager.clone(),
+            GrpcRetryPolicy::default(),
+        );
 
         let client = GreeterClient::new(xds_channel);
 
@@ -383,5 +394,39 @@ mod tests {
             let _ = server.shutdown.send(());
             let _ = server.handle.await;
         }
+    }
+
+    #[tokio::test]
+    async fn test_retry_once_on_unavailable() {
+        use crate::client::retry::{GrpcRetryPolicy, GrpcRetryPolicyConfig};
+        use crate::testutil::grpc::spawn_fail_first_n_server;
+
+        // Server fails the first request with UNAVAILABLE, succeeds on retry.
+        let server = spawn_fail_first_n_server("retry-server", 1)
+            .await
+            .expect("Failed to spawn server");
+
+        let servers = vec![server];
+        let xds_manager = Arc::new(MockXdsManager::from_test_servers(&servers));
+
+        let retry_policy = GrpcRetryPolicy::new(
+            GrpcRetryPolicyConfig::new()
+                .retry_on(vec![tonic::Code::Unavailable])
+                .num_retries(1),
+        );
+
+        let xds_channel = XdsChannelBuilder::with_config(XdsChannelConfig::default())
+            .build_grpc_channel_from_parts(xds_manager.clone(), xds_manager.clone(), retry_policy);
+
+        let mut client = GreeterClient::new(xds_channel);
+
+        let response = client
+            .say_hello(HelloRequest {
+                name: "retry-test".to_string(),
+            })
+            .await
+            .expect("request should succeed after retry");
+
+        assert_eq!(response.into_inner().message, "retry-server: retry-test");
     }
 }

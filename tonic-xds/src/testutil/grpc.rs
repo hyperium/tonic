@@ -26,6 +26,38 @@ impl Greeter for MyGreeter {
     }
 }
 
+/// A greeter that returns UNAVAILABLE for the first N calls, then succeeds.
+pub(crate) struct FailFirstNGreeter {
+    msg: String,
+    call_count: std::sync::atomic::AtomicU32,
+    fail_first_n: u32,
+}
+
+impl FailFirstNGreeter {
+    pub(crate) fn new(msg: &str, fail_first_n: u32) -> Self {
+        Self {
+            msg: msg.to_string(),
+            call_count: std::sync::atomic::AtomicU32::new(0),
+            fail_first_n,
+        }
+    }
+}
+
+#[tonic::async_trait]
+impl Greeter for FailFirstNGreeter {
+    async fn say_hello(&self, req: Request<HelloRequest>) -> Result<Response<HelloReply>, Status> {
+        let count = self
+            .call_count
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        if count < self.fail_first_n {
+            return Err(Status::unavailable("temporarily unavailable"));
+        }
+        Ok(Response::new(HelloReply {
+            message: format!("{}: {}", self.msg, req.into_inner().name),
+        }))
+    }
+}
+
 /// A test server that runs a gRPC service and provides a channel for clients to connect.
 pub(crate) struct TestServer {
     /// The gRPC channel for talking to the test server.
@@ -89,6 +121,39 @@ pub(crate) async fn spawn_greeter_server(
         let endpoint_str = format!("http://{addr}");
         Endpoint::from_shared(endpoint_str)?.connect().await?
     };
+
+    Ok(TestServer {
+        channel,
+        shutdown: tx,
+        handle,
+        addr,
+    })
+}
+
+/// Spawns a greeter server that fails the first N requests with UNAVAILABLE.
+pub(crate) async fn spawn_fail_first_n_server(
+    msg: &str,
+    fail_first_n: u32,
+) -> Result<TestServer, Box<dyn Error>> {
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let addr = listener.local_addr()?;
+    let incoming = tokio_stream::wrappers::TcpListenerStream::new(listener);
+
+    let (tx, rx) = oneshot::channel();
+    let svc = GreeterServer::new(FailFirstNGreeter::new(msg, fail_first_n));
+
+    let handle = tokio::spawn(async move {
+        Server::builder()
+            .add_service(svc)
+            .serve_with_incoming_shutdown(incoming, async {
+                let _ = rx.await;
+            })
+            .await
+    });
+
+    let channel = Endpoint::from_shared(format!("http://{addr}"))?
+        .connect()
+        .await?;
 
     Ok(TestServer {
         channel,

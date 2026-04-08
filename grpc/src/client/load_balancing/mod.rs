@@ -29,9 +29,10 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use tonic::Status;
 use tonic::metadata::MetadataMap;
 
+use crate::Status;
+use crate::StatusCode;
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
@@ -42,9 +43,11 @@ use crate::rt::GrpcRuntime;
 
 pub(crate) mod child_manager;
 pub(crate) mod graceful_switch;
+pub(crate) mod lazy;
 pub(crate) mod pick_first;
 pub(crate) mod round_robin;
 pub(crate) mod subchannel;
+pub(crate) mod subchannel_sharing;
 
 #[cfg(test)]
 pub(crate) mod test_utils;
@@ -86,7 +89,7 @@ pub(crate) trait LbPolicyBuilder: Send + Sync + Debug + 'static {
 /// LB policies are responsible for creating connections (modeled as
 /// Subchannels) and producing Picker instances for picking connections for
 /// RPCs.
-pub(crate) trait LbPolicy: Send + Debug + 'static {
+pub(crate) trait LbPolicy: Send + Sync + Debug + 'static {
     type LbConfig: Any + Send + Sync + Debug + 'static;
 
     /// Called by the channel when the name resolver produces a new set of
@@ -177,8 +180,8 @@ impl ParsedJsonLbConfig {
 
 /// Controls channel behaviors.
 pub(crate) trait ChannelController: Send + Sync {
-    /// Creates a new subchannel in IDLE state.
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel>;
+    /// Creates a new subchannel and returns its current state.
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState);
 
     /// Provides a new snapshot of the LB policy's state to the channel.
     fn update_picker(&mut self, update: LbState);
@@ -276,8 +279,8 @@ impl Display for PickResult {
         match self {
             Self::Pick(_) => write!(f, "Pick"),
             Self::Queue => write!(f, "Queue"),
-            Self::Fail(st) => write!(f, "Fail({st})"),
-            Self::Drop(st) => write!(f, "Drop({st})"),
+            Self::Fail(st) => write!(f, "Fail({st:?})"),
+            Self::Drop(st) => write!(f, "Drop({st:?})"),
         }
     }
 }
@@ -338,10 +341,26 @@ impl Debug for Pick {
     }
 }
 
+/// OneSubchannelPicker always returns a single subchannel.
+#[derive(Debug)]
+pub(crate) struct OneSubchannelPicker {
+    sc: Arc<dyn Subchannel>,
+}
+
+impl Picker for OneSubchannelPicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        PickResult::Pick(Pick {
+            subchannel: self.sc.clone(),
+            metadata: MetadataMap::new(),
+            on_complete: None,
+        })
+    }
+}
+
 /// QueuingPicker always returns Queue.  LB policies that are not actively
 /// Connecting should not use this picker.
 #[derive(Debug)]
-pub(crate) struct QueuingPicker {}
+pub(crate) struct QueuingPicker;
 
 impl Picker for QueuingPicker {
     fn pick(&self, _request: &RequestHeaders) -> PickResult {
@@ -356,7 +375,7 @@ pub(crate) struct FailingPicker {
 
 impl Picker for FailingPicker {
     fn pick(&self, _: &RequestHeaders) -> PickResult {
-        PickResult::Fail(Status::unavailable(self.error.clone()))
+        PickResult::Fail(Status::new(StatusCode::Unavailable, self.error.clone()))
     }
 }
 

@@ -30,7 +30,6 @@ use std::sync::Arc;
 use serde::Deserialize;
 use serde::Serialize;
 use tokio::sync::Notify;
-use tokio::sync::mpsc;
 
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::DynLbConfig;
@@ -56,11 +55,11 @@ pub(crate) fn new_request_headers() -> RequestHeaders {
 // This allows tests to verify when a subchannel is asked to connect.
 pub(crate) struct TestSubchannel {
     address: Address,
-    tx_connect: mpsc::UnboundedSender<TestEvent>,
+    tx_connect: std::sync::mpsc::Sender<TestEvent>,
 }
 
 impl TestSubchannel {
-    pub fn new(address: Address, tx_connect: mpsc::UnboundedSender<TestEvent>) -> Self {
+    pub fn new(address: Address, tx_connect: std::sync::mpsc::Sender<TestEvent>) -> Self {
         Self {
             address,
             tx_connect,
@@ -69,7 +68,7 @@ impl TestSubchannel {
 }
 
 impl ForwardingSubchannel for TestSubchannel {
-    fn delegate(&self) -> Arc<dyn Subchannel> {
+    fn delegate(&self) -> &Arc<dyn Subchannel> {
         panic!("unsupported operation on a test subchannel");
     }
 
@@ -123,11 +122,11 @@ impl Debug for TestEvent {
 /// tests to verify when a channel controller is asked to create subchannels or
 /// update the picker.
 pub(crate) struct TestChannelController {
-    pub(crate) tx_events: mpsc::UnboundedSender<TestEvent>,
+    pub(crate) tx_events: std::sync::mpsc::Sender<TestEvent>,
 }
 
 impl ChannelController for TestChannelController {
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel> {
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState) {
         println!("new_subchannel called for address {}", address);
         let notify = Arc::new(Notify::new());
         let subchannel: Arc<dyn Subchannel> =
@@ -135,7 +134,7 @@ impl ChannelController for TestChannelController {
         self.tx_events
             .send(TestEvent::NewSubchannel(subchannel.clone()))
             .unwrap();
-        subchannel
+        (subchannel, SubchannelState::idle())
     }
     fn update_picker(&mut self, update: LbState) {
         println!("picker_update called with {}", update.connectivity_state);
@@ -150,7 +149,7 @@ impl ChannelController for TestChannelController {
 
 #[derive(Debug)]
 pub(crate) struct TestWorkScheduler {
-    pub(crate) tx_events: mpsc::UnboundedSender<TestEvent>,
+    pub(crate) tx_events: std::sync::mpsc::Sender<TestEvent>,
 }
 
 impl WorkScheduler for TestWorkScheduler {
@@ -178,14 +177,17 @@ type SubchannelUpdateFn = Arc<
         + Sync,
 >;
 
+type ExitIdleFn = Arc<dyn Fn(&mut StubPolicyData, &mut dyn ChannelController) + Send + Sync>;
+
 type WorkFn = Arc<dyn Fn(&mut StubPolicyData, &mut dyn ChannelController) + Send + Sync>;
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
     pub subchannel_update: Option<SubchannelUpdateFn>,
+    pub exit_idle: Option<ExitIdleFn>,
     pub work: Option<WorkFn>,
 }
 
@@ -246,12 +248,23 @@ impl LbPolicy for StubPolicy {
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        todo!("Implement exit_idle for StubPolicy")
+        if let Some(f) = &self.funcs.exit_idle {
+            f(&mut self.data, channel_controller);
+        }
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         if let Some(f) = &self.funcs.work {
             f(&mut self.data, channel_controller);
+        }
+    }
+}
+
+impl StubPolicy {
+    pub(crate) fn new(funcs: StubPolicyFuncs, options: LbPolicyOptions) -> Self {
+        Self {
+            funcs,
+            data: StubPolicyData::new(options),
         }
     }
 }

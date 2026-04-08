@@ -23,23 +23,16 @@
  */
 
 use std::any::Any;
-use std::error::Error;
 use std::fmt::Debug;
 use std::fmt::Display;
 use std::hash::Hash;
 use std::hash::Hasher;
 use std::ptr::addr_eq;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::Weak;
 
 use crate::client::ConnectivityState;
-use crate::client::channel::InternalChannelController;
-use crate::client::channel::WorkQueueItem;
-use crate::client::channel::WorkQueueTx;
 use crate::client::name_resolution::Address;
-use crate::client::subchannel::InternalSubchannel;
-use crate::client::subchannel::SubchannelStateWatcher;
 
 /// Represents the current state of a Subchannel.
 #[derive(Debug, Clone)]
@@ -49,14 +42,35 @@ pub(crate) struct SubchannelState {
     pub(crate) connectivity_state: ConnectivityState,
     // Set if connectivity state is TransientFailure to describe the most recent
     // connection error.  None for any other connectivity_state value.
-    pub(crate) last_connection_error: Option<Arc<dyn Error + Send + Sync>>,
+    pub last_connection_error: Option<String>,
 }
 
-impl Default for SubchannelState {
-    fn default() -> Self {
+impl SubchannelState {
+    pub(crate) fn idle() -> Self {
         Self {
             connectivity_state: ConnectivityState::Idle,
             last_connection_error: None,
+        }
+    }
+
+    pub(crate) fn ready() -> Self {
+        Self {
+            connectivity_state: ConnectivityState::Ready,
+            last_connection_error: None,
+        }
+    }
+
+    pub(crate) fn connecting() -> Self {
+        Self {
+            connectivity_state: ConnectivityState::Connecting,
+            last_connection_error: None,
+        }
+    }
+
+    pub(crate) fn transient_failure(last_connection_error: impl Into<String>) -> Self {
+        Self {
+            connectivity_state: ConnectivityState::TransientFailure,
+            last_connection_error: Some(last_connection_error.into()),
         }
     }
 }
@@ -95,11 +109,9 @@ impl<T: Eq + PartialEq + 'static> DynPartialEq for T {
     }
 }
 
-mod private {
+pub(crate) mod private {
     pub trait Sealed {}
 }
-
-pub(crate) trait SealedSubchannel: private::Sealed {}
 
 /// A Subchannel represents a method of communicating with a server which may be
 /// connected or disconnected many times across its lifetime.
@@ -119,7 +131,7 @@ pub(crate) trait SealedSubchannel: private::Sealed {}
 /// When a Subchannel is dropped, it is disconnected automatically, and no
 /// subsequent state updates will be provided for it to the LB policy.
 pub(crate) trait Subchannel:
-    SealedSubchannel + DynHash + DynPartialEq + Any + Send + Sync
+    private::Sealed + DynHash + DynPartialEq + Any + Send + Sync
 {
     /// Returns the address of the Subchannel.
     /// TODO: Consider whether this should really be public.
@@ -167,9 +179,9 @@ impl Display for dyn Subchannel {
 #[derive(Debug)]
 pub(crate) struct WeakSubchannel(Weak<dyn Subchannel>);
 
-impl From<Arc<dyn Subchannel>> for WeakSubchannel {
-    fn from(subchannel: Arc<dyn Subchannel>) -> Self {
-        WeakSubchannel(Arc::downgrade(&subchannel))
+impl From<&Arc<dyn Subchannel>> for WeakSubchannel {
+    fn from(subchannel: &Arc<dyn Subchannel>) -> Self {
+        WeakSubchannel(Arc::downgrade(subchannel))
     }
 }
 
@@ -180,6 +192,10 @@ impl WeakSubchannel {
 
     pub fn upgrade(&self) -> Option<Arc<dyn Subchannel>> {
         self.0.upgrade()
+    }
+
+    pub fn strong_count(&self) -> usize {
+        self.0.strong_count()
     }
 }
 
@@ -197,89 +213,8 @@ impl PartialEq for WeakSubchannel {
 
 impl Eq for WeakSubchannel {}
 
-pub(crate) struct ExternalSubchannel {
-    pub(crate) isc: Option<Arc<InternalSubchannel>>,
-    work_scheduler: WorkQueueTx,
-    watcher: Mutex<Option<Arc<SubchannelStateWatcher>>>,
-}
-
-impl ExternalSubchannel {
-    pub(in crate::client) fn new(
-        isc: Arc<InternalSubchannel>,
-        work_scheduler: WorkQueueTx,
-    ) -> Self {
-        ExternalSubchannel {
-            isc: Some(isc),
-            work_scheduler,
-            watcher: Mutex::default(),
-        }
-    }
-
-    pub(in crate::client) fn set_watcher(&self, watcher: Arc<SubchannelStateWatcher>) {
-        self.watcher.lock().unwrap().replace(watcher);
-    }
-}
-
-impl Hash for ExternalSubchannel {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.address().hash(state);
-    }
-}
-
-impl PartialEq for ExternalSubchannel {
-    fn eq(&self, other: &Self) -> bool {
-        self.address() == other.address()
-    }
-}
-
-impl Eq for ExternalSubchannel {}
-
-impl Subchannel for ExternalSubchannel {
-    fn address(&self) -> Address {
-        self.isc.as_ref().unwrap().address()
-    }
-
-    fn connect(&self) {
-        println!("connect called for subchannel: {self}");
-        self.isc.as_ref().unwrap().connect();
-    }
-}
-
-impl SealedSubchannel for ExternalSubchannel {}
-impl private::Sealed for ExternalSubchannel {}
-
-impl Drop for ExternalSubchannel {
-    fn drop(&mut self) {
-        let watcher = self.watcher.lock().unwrap().take();
-        let address = self.address().address.clone();
-        let isc = self.isc.take();
-        let _ = self.work_scheduler.send(WorkQueueItem::Closure(Box::new(
-            move |c: &mut InternalChannelController| {
-                println!("unregistering connectivity state watcher for {address:?}");
-                isc.as_ref()
-                    .unwrap()
-                    .unregister_connectivity_state_watcher(watcher.unwrap());
-            },
-            // The internal subchannel is dropped from here (i.e., from inside
-            // the work serializer), if this is the last reference to it.
-        )));
-    }
-}
-
-impl Debug for ExternalSubchannel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Subchannel {}", self.address())
-    }
-}
-
-impl Display for ExternalSubchannel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Subchannel {}", self.address())
-    }
-}
-
 pub(crate) trait ForwardingSubchannel: DynHash + DynPartialEq + Any + Send + Sync {
-    fn delegate(&self) -> Arc<dyn Subchannel>;
+    fn delegate(&self) -> &Arc<dyn Subchannel>;
 
     fn address(&self) -> Address {
         self.delegate().address()
@@ -297,5 +232,4 @@ impl<T: ForwardingSubchannel> Subchannel for T {
         self.connect()
     }
 }
-impl<T: ForwardingSubchannel> SealedSubchannel for T {}
 impl<T: ForwardingSubchannel> private::Sealed for T {}
