@@ -911,6 +911,18 @@ impl MetadataMap {
     }
 }
 
+impl From<tonic::metadata::MetadataMap> for MetadataMap {
+    fn from(tonic_map: tonic::metadata::MetadataMap) -> Self {
+        Self::from_headers(tonic_map.into_headers())
+    }
+}
+
+impl From<MetadataMap> for tonic::metadata::MetadataMap {
+    fn from(map: MetadataMap) -> Self {
+        Self::from_headers(map.into_headers())
+    }
+}
+
 // ===== impl Iter =====
 
 impl<'a> Iterator for Iter<'a> {
@@ -1535,5 +1547,22 @@ mod tests {
         assert!(map.contains_key("x-host"));
         assert!(!map.contains_key("x-number"));
         assert!(!map.contains_key("trace-proto-bin"));
+    }
+
+    #[test]
+    fn test_tonic_conversions() {
+        let mut map = MetadataMap::new();
+        map.insert("x-host", "example.com".parse().unwrap());
+        map.insert_bin("trace-proto-bin", MetadataValue::from_bytes(b"Hello!!"));
+
+        let tonic_map: tonic::metadata::MetadataMap = map.clone().into();
+        assert_eq!(tonic_map.len(), 2);
+        assert_eq!(tonic_map.get("x-host").unwrap(), "example.com");
+        assert_eq!(tonic_map.get_bin("trace-proto-bin").unwrap(), "Hello!!");
+
+        let back_map: MetadataMap = tonic_map.into();
+        assert_eq!(back_map.len(), 2);
+        assert_eq!(back_map.get("x-host").unwrap(), "example.com");
+        assert_eq!(back_map.get_bin("trace-proto-bin").unwrap(), "Hello!!");
     }
 }
