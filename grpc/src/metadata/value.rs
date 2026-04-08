@@ -33,7 +33,6 @@ use std::str::FromStr;
 
 use bytes::Bytes;
 use bytes::BytesMut;
-use http::HeaderValue;
 
 use super::encoding::Ascii;
 use super::encoding::Binary;
@@ -52,13 +51,13 @@ use crate::private;
 pub struct MetadataValue<VE> {
     // Note: There are unsafe transmutes that assume that the memory layout
     // of MetadataValue is identical to UnencodedHeaderValue.
-    pub(crate) inner: UnencodedHeaderValue,
+    inner: UnencodedHeaderValue,
     _phantom: PhantomData<VE>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct UnencodedHeaderValue {
-    pub(crate) data: Bytes,
+    data: Bytes,
     is_sensitive: bool,
 }
 
@@ -70,13 +69,45 @@ impl UnencodedHeaderValue {
             is_sensitive: false,
         }
     }
+
+    pub(crate) fn into_bytes(self) -> Bytes {
+        self.data
+    }
+
+    pub(crate) fn as_bytes(&self) -> &Bytes {
+        &self.data
+    }
+}
+
+const fn is_visible_ascii(b: u8) -> bool {
+    b >= 32 && b < 127 || b == b'\t'
 }
 
 impl fmt::Debug for UnencodedHeaderValue {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut hv = unsafe { HeaderValue::from_maybe_shared_unchecked(self.data.clone()) };
-        hv.set_sensitive(self.is_sensitive);
-        fmt::Debug::fmt(&hv, f)
+        if self.is_sensitive {
+            f.write_str("Sensitive")
+        } else {
+            f.write_str("\"")?;
+            let mut from = 0;
+            let bytes = self.as_bytes();
+            for (i, &b) in bytes.iter().enumerate() {
+                if !is_visible_ascii(b) || b == b'"' {
+                    if from != i {
+                        f.write_str(unsafe { str::from_utf8_unchecked(&bytes[from..i]) })?;
+                    }
+                    if b == b'"' {
+                        f.write_str("\\\"")?;
+                    } else {
+                        write!(f, "\\x{:x}", b)?;
+                    }
+                    from = i + 1;
+                }
+            }
+
+            f.write_str(unsafe { str::from_utf8_unchecked(&bytes[from..]) })?;
+            f.write_str("\"")
+        }
     }
 }
 
@@ -180,6 +211,10 @@ impl<VE> MetadataValue<VE> {
         header_value: &mut UnencodedHeaderValue,
     ) -> &mut Self {
         unsafe { &mut *(header_value as *mut UnencodedHeaderValue as *mut Self) }
+    }
+
+    pub(crate) fn into_inner(self) -> UnencodedHeaderValue {
+        self.inner
     }
 }
 
@@ -688,163 +723,168 @@ impl<VE: ValueEncoding> PartialOrd<MetadataValue<VE>> for &str {
     }
 }
 
-#[test]
-fn test_debug() {
-    let cases = &[
-        ("hello", "\"hello\""),
-        ("hello \"world\"", "\"hello \\\"world\\\"\""),
-    ];
+#[cfg(test)]
+mod test {
+    use super::*;
 
-    for &(value, expected) in cases {
-        let val = AsciiMetadataValue::try_from(value.as_bytes()).unwrap();
-        let actual = format!("{val:?}");
-        assert_eq!(expected, actual);
+    #[test]
+    fn test_debug() {
+        let cases = &[
+            ("hello", "\"hello\""),
+            ("hello \"world\"", "\"hello \\\"world\\\"\""),
+        ];
+
+        for &(value, expected) in cases {
+            let val = AsciiMetadataValue::try_from(value.as_bytes()).unwrap();
+            let actual = format!("{val:?}");
+            assert_eq!(expected, actual);
+        }
+
+        let mut sensitive = AsciiMetadataValue::from_static("password");
+        sensitive.set_sensitive(true);
+        assert_eq!("Sensitive", format!("{sensitive:?}"));
     }
 
-    let mut sensitive = AsciiMetadataValue::from_static("password");
-    sensitive.set_sensitive(true);
-    assert_eq!("Sensitive", format!("{sensitive:?}"));
-}
+    #[test]
+    fn test_valid_metadata_values() {
+        assert!(MetadataValue::<Ascii>::try_from("".as_bytes()).is_err());
+        assert!(MetadataValue::<Ascii>::try_from(" ".as_bytes()).is_err()); // empty after trimming.
+        assert!(MetadataValue::<Binary>::try_from("".as_bytes()).is_ok());
+        assert!(MetadataValue::<Ascii>::try_from("a".as_bytes()).is_ok());
+        assert!(MetadataValue::<Ascii>::try_from("abc".as_bytes()).is_ok());
 
-#[test]
-fn test_valid_metadata_values() {
-    assert!(MetadataValue::<Ascii>::try_from("".as_bytes()).is_err());
-    assert!(MetadataValue::<Ascii>::try_from(" ".as_bytes()).is_err()); // empty after trimming.
-    assert!(MetadataValue::<Binary>::try_from("".as_bytes()).is_ok());
-    assert!(MetadataValue::<Ascii>::try_from("a".as_bytes()).is_ok());
-    assert!(MetadataValue::<Ascii>::try_from("abc".as_bytes()).is_ok());
+        // Non-printable ASCII characters
+        assert!(MetadataValue::<Ascii>::try_from("\0".as_bytes()).is_err());
+        assert!(MetadataValue::<Ascii>::try_from("\n".as_bytes()).is_err());
+        assert!(MetadataValue::<Ascii>::try_from("\x7f".as_bytes()).is_err());
+        assert!(MetadataValue::<Binary>::try_from("\0".as_bytes()).is_ok());
+        assert!(MetadataValue::<Binary>::try_from("\n".as_bytes()).is_ok());
 
-    // Non-printable ASCII characters
-    assert!(MetadataValue::<Ascii>::try_from("\0".as_bytes()).is_err());
-    assert!(MetadataValue::<Ascii>::try_from("\n".as_bytes()).is_err());
-    assert!(MetadataValue::<Ascii>::try_from("\x7f".as_bytes()).is_err());
-    assert!(MetadataValue::<Binary>::try_from("\0".as_bytes()).is_ok());
-    assert!(MetadataValue::<Binary>::try_from("\n".as_bytes()).is_ok());
-
-    // Unicode characters
-    assert!(MetadataValue::<Ascii>::try_from("🦀".as_bytes()).is_err());
-    assert!(MetadataValue::<Ascii>::try_from("ü".as_bytes()).is_err());
-    assert!(MetadataValue::<Binary>::try_from("🦀".as_bytes()).is_ok());
-    assert!(MetadataValue::<Binary>::try_from("ü".as_bytes()).is_ok());
-}
-
-#[test]
-fn test_value_eq_value() {
-    type Bmv = BinaryMetadataValue;
-    type Amv = AsciiMetadataValue;
-
-    assert_eq!(Amv::from_static("abc"), Amv::from_static("abc"));
-    assert_ne!(Amv::from_static("abc"), Amv::from_static("ABC"));
-
-    assert_eq!(Bmv::from_bytes(b"abc"), Bmv::from_bytes(b"abc"));
-    assert_ne!(Bmv::from_bytes(b"abc"), Bmv::from_bytes(b"ABC"));
-
-    // Invalid values are all just invalid from this point of view.
-    unsafe {
-        assert_ne!(
-            Bmv::from_shared_unchecked(Bytes::from_static(b"..{}")),
-            Bmv::from_shared_unchecked(Bytes::from_static(b"{}.."))
-        );
-    }
-}
-
-#[test]
-fn test_value_eq_str() {
-    type Bmv = BinaryMetadataValue;
-    type Amv = AsciiMetadataValue;
-
-    assert_eq!(Amv::from_static("abc"), "abc");
-    assert_ne!(Amv::from_static("abc"), "ABC");
-    assert_eq!("abc", Amv::from_static("abc"));
-    assert_ne!("ABC", Amv::from_static("abc"));
-
-    assert_eq!(Bmv::from_bytes(b"abc"), "abc");
-    assert_ne!(Bmv::from_bytes(b"abc"), "ABC");
-    assert_eq!("abc", Bmv::from_bytes(b"abc"));
-    assert_ne!("ABC", Bmv::from_bytes(b"abc"));
-}
-
-#[test]
-fn test_value_eq_bytes() {
-    type Bmv = BinaryMetadataValue;
-    type Amv = AsciiMetadataValue;
-
-    assert_eq!(Amv::from_static("abc"), "abc".as_bytes());
-    assert_ne!(Amv::from_static("abc"), "ABC".as_bytes());
-    assert_eq!(*"abc".as_bytes(), Amv::from_static("abc"));
-    assert_ne!(*"ABC".as_bytes(), Amv::from_static("abc"));
-
-    assert_eq!(*"abc".as_bytes(), Bmv::from_bytes(b"abc"));
-    assert_ne!(*"ABC".as_bytes(), Bmv::from_bytes(b"abc"));
-}
-
-#[test]
-fn test_ascii_value_hash() {
-    use std::collections::hash_map::DefaultHasher;
-    type Amv = AsciiMetadataValue;
-
-    fn hash(value: Amv) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
+        // Unicode characters
+        assert!(MetadataValue::<Ascii>::try_from("🦀".as_bytes()).is_err());
+        assert!(MetadataValue::<Ascii>::try_from("ü".as_bytes()).is_err());
+        assert!(MetadataValue::<Binary>::try_from("🦀".as_bytes()).is_ok());
+        assert!(MetadataValue::<Binary>::try_from("ü".as_bytes()).is_ok());
     }
 
-    let value1 = Amv::from_static("abc");
-    let value2 = Amv::from_static("abc");
-    assert_eq!(value1, value2);
-    assert_eq!(hash(value1), hash(value2));
+    #[test]
+    fn test_value_eq_value() {
+        type Bmv = BinaryMetadataValue;
+        type Amv = AsciiMetadataValue;
 
-    let value1 = Amv::from_static("abc");
-    let value2 = Amv::from_static("xyz");
+        assert_eq!(Amv::from_static("abc"), Amv::from_static("abc"));
+        assert_ne!(Amv::from_static("abc"), Amv::from_static("ABC"));
 
-    assert_ne!(value1, value2);
-    assert_ne!(hash(value1), hash(value2));
-}
+        assert_eq!(Bmv::from_bytes(b"abc"), Bmv::from_bytes(b"abc"));
+        assert_ne!(Bmv::from_bytes(b"abc"), Bmv::from_bytes(b"ABC"));
 
-#[test]
-fn test_valid_binary_value_hash() {
-    use std::collections::hash_map::DefaultHasher;
-    type Bmv = BinaryMetadataValue;
-
-    fn hash(value: Bmv) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
+        // Invalid values are all just invalid from this point of view.
+        unsafe {
+            assert_ne!(
+                Bmv::from_shared_unchecked(Bytes::from_static(b"..{}")),
+                Bmv::from_shared_unchecked(Bytes::from_static(b"{}.."))
+            );
+        }
     }
 
-    let value1 = Bmv::from_bytes(b"abc");
-    let value2 = Bmv::from_bytes(b"abc");
-    assert_eq!(value1, value2);
-    assert_eq!(hash(value1), hash(value2));
+    #[test]
+    fn test_value_eq_str() {
+        type Bmv = BinaryMetadataValue;
+        type Amv = AsciiMetadataValue;
 
-    let value1 = Bmv::from_bytes(b"abc");
-    let value2 = Bmv::from_bytes(b"xyz");
-    assert_ne!(value1, value2);
-    assert_ne!(hash(value1), hash(value2));
-}
+        assert_eq!(Amv::from_static("abc"), "abc");
+        assert_ne!(Amv::from_static("abc"), "ABC");
+        assert_eq!("abc", Amv::from_static("abc"));
+        assert_ne!("ABC", Amv::from_static("abc"));
 
-#[test]
-fn test_invalid_binary_value_hash() {
-    use std::collections::hash_map::DefaultHasher;
-    type Bmv = BinaryMetadataValue;
-
-    fn hash(value: Bmv) -> u64 {
-        let mut hasher = DefaultHasher::new();
-        value.hash(&mut hasher);
-        hasher.finish()
+        assert_eq!(Bmv::from_bytes(b"abc"), "abc");
+        assert_ne!(Bmv::from_bytes(b"abc"), "ABC");
+        assert_eq!("abc", Bmv::from_bytes(b"abc"));
+        assert_ne!("ABC", Bmv::from_bytes(b"abc"));
     }
 
-    unsafe {
-        let value1 = Bmv::from_shared_unchecked(Bytes::from_static(b"..{}"));
-        let value2 = Bmv::from_shared_unchecked(Bytes::from_static(b"{}.."));
+    #[test]
+    fn test_value_eq_bytes() {
+        type Bmv = BinaryMetadataValue;
+        type Amv = AsciiMetadataValue;
+
+        assert_eq!(Amv::from_static("abc"), "abc".as_bytes());
+        assert_ne!(Amv::from_static("abc"), "ABC".as_bytes());
+        assert_eq!(*"abc".as_bytes(), Amv::from_static("abc"));
+        assert_ne!(*"ABC".as_bytes(), Amv::from_static("abc"));
+
+        assert_eq!(*"abc".as_bytes(), Bmv::from_bytes(b"abc"));
+        assert_ne!(*"ABC".as_bytes(), Bmv::from_bytes(b"abc"));
+    }
+
+    #[test]
+    fn test_ascii_value_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        type Amv = AsciiMetadataValue;
+
+        fn hash(value: Amv) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        let value1 = Amv::from_static("abc");
+        let value2 = Amv::from_static("abc");
+        assert_eq!(value1, value2);
+        assert_eq!(hash(value1), hash(value2));
+
+        let value1 = Amv::from_static("abc");
+        let value2 = Amv::from_static("xyz");
+
         assert_ne!(value1, value2);
         assert_ne!(hash(value1), hash(value2));
     }
 
-    unsafe {
-        let valid = Bmv::from_bytes(b"abc");
-        let invalid = Bmv::from_shared_unchecked(Bytes::from_static(b"{}.."));
-        assert_ne!(valid, invalid);
-        assert_ne!(hash(valid), hash(invalid));
+    #[test]
+    fn test_valid_binary_value_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        type Bmv = BinaryMetadataValue;
+
+        fn hash(value: Bmv) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        let value1 = Bmv::from_bytes(b"abc");
+        let value2 = Bmv::from_bytes(b"abc");
+        assert_eq!(value1, value2);
+        assert_eq!(hash(value1), hash(value2));
+
+        let value1 = Bmv::from_bytes(b"abc");
+        let value2 = Bmv::from_bytes(b"xyz");
+        assert_ne!(value1, value2);
+        assert_ne!(hash(value1), hash(value2));
+    }
+
+    #[test]
+    fn test_invalid_binary_value_hash() {
+        use std::collections::hash_map::DefaultHasher;
+        type Bmv = BinaryMetadataValue;
+
+        fn hash(value: Bmv) -> u64 {
+            let mut hasher = DefaultHasher::new();
+            value.hash(&mut hasher);
+            hasher.finish()
+        }
+
+        unsafe {
+            let value1 = Bmv::from_shared_unchecked(Bytes::from_static(b"..{}"));
+            let value2 = Bmv::from_shared_unchecked(Bytes::from_static(b"{}.."));
+            assert_ne!(value1, value2);
+            assert_ne!(hash(value1), hash(value2));
+        }
+
+        unsafe {
+            let valid = Bmv::from_bytes(b"abc");
+            let invalid = Bmv::from_shared_unchecked(Bytes::from_static(b"{}.."));
+            assert_ne!(valid, invalid);
+            assert_ne!(hash(valid), hash(invalid));
+        }
     }
 }

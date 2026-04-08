@@ -178,14 +178,14 @@ impl MetadataMap {
                 // struct doesn't provide an API to fetch the underlying `Bytes`.
                 if let Ok(mut mv) = MetadataValue::<Ascii>::try_from(value.as_bytes()) {
                     mv.set_sensitive(value.is_sensitive());
-                    ret.push((k.clone(), mv.inner));
+                    ret.push((k.clone(), mv.into_inner()));
                 }
             } else if Binary::is_valid_key(key_str)
                 && let Ok(b) = Binary::decode(value.as_bytes(), private::Internal)
             {
                 let mut mv = unsafe { MetadataValue::<Binary>::from_shared_unchecked(b) };
                 mv.set_sensitive(value.is_sensitive());
-                ret.push((k.clone(), mv.inner));
+                ret.push((k.clone(), mv.into_inner()));
             }
         }
 
@@ -197,9 +197,9 @@ impl MetadataMap {
         let mut ret = HeaderMap::with_capacity(self.capacity());
         for (key, value) in self.headers {
             let bytes = if key.as_str().ends_with("-bin") {
-                MetadataValue::<Binary>::encode(value.data)
+                MetadataValue::<Binary>::encode(value.into_bytes())
             } else {
-                MetadataValue::<Ascii>::encode(value.data)
+                MetadataValue::<Ascii>::encode(value.into_bytes())
             };
             // gRPC's validation is stricter than HTTP/2.
             unsafe {
@@ -1041,7 +1041,7 @@ impl<VE: ValueEncoding> IntoMetadataKey<VE> for MetadataKey<VE> {
         _: private::Internal,
     ) -> Option<MetadataValue<VE>> {
         let key = self.inner;
-        let mut new_val = Some(val.inner);
+        let mut new_val = Some(val.into_inner());
         let mut old_val = None;
 
         let mut write_idx = 0;
@@ -1076,7 +1076,7 @@ impl<VE: ValueEncoding> IntoMetadataKey<VE> for MetadataKey<VE> {
     #[doc(hidden)]
     #[inline]
     fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>, _: private::Internal) {
-        map.headers.push((self.inner, val.inner));
+        map.headers.push((self.inner, val.into_inner()));
     }
 }
 
@@ -1090,7 +1090,7 @@ impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {
         _: private::Internal,
     ) -> Option<MetadataValue<VE>> {
         let key = &self.inner;
-        let mut new_val = Some(val.inner);
+        let mut new_val = Some(val.into_inner());
         let mut old_val = None;
 
         let mut write_idx = 0;
@@ -1125,7 +1125,7 @@ impl<VE: ValueEncoding> IntoMetadataKey<VE> for &MetadataKey<VE> {
     #[doc(hidden)]
     #[inline]
     fn append(self, map: &mut MetadataMap, val: MetadataValue<VE>, _: private::Internal) {
-        map.headers.push((self.inner.clone(), val.inner));
+        map.headers.push((self.inner.clone(), val.into_inner()));
     }
 }
 

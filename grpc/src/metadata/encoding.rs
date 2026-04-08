@@ -192,7 +192,7 @@ impl ValueEncoding for Ascii {
     }
 
     fn equals(a: &UnencodedHeaderValue, b: &[u8], _: private::Internal) -> bool {
-        a.data.as_ref() == b
+        a.as_bytes().as_ref() == b
     }
 
     fn values_equal(
@@ -288,7 +288,7 @@ impl ValueEncoding for Binary {
     }
 
     fn equals(a: &UnencodedHeaderValue, b: &[u8], _: private::Internal) -> bool {
-        a.data.as_ref() == b
+        a.as_bytes().as_ref() == b
     }
 
     fn values_equal(
@@ -296,7 +296,7 @@ impl ValueEncoding for Binary {
         b: &UnencodedHeaderValue,
         _: private::Internal,
     ) -> bool {
-        a.data == b.data
+        a.as_bytes() == b.as_bytes()
     }
 
     fn fmt(
@@ -304,7 +304,7 @@ impl ValueEncoding for Binary {
         f: &mut fmt::Formatter<'_>,
         _: private::Internal,
     ) -> fmt::Result {
-        write!(f, "{:?}", value.data)
+        write!(f, "{:?}", value.as_bytes())
     }
 
     fn encode(value: Bytes, _: private::Internal) -> Bytes {
