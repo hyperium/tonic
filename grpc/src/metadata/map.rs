@@ -22,6 +22,9 @@
  *
  */
 
+use core::fmt;
+use std::fmt::Debug;
+
 use http::HeaderMap;
 use http::HeaderName;
 use http::HeaderValue;
@@ -92,20 +95,45 @@ pub enum Key {
 }
 
 /// An iterator of all values associated with a single metadata key.
-#[derive(Debug)]
-pub struct ValueIter<'a, VE: ValueEncoding> {
+pub struct ValueIter<'a, VE>
+where
+    MetadataKey<VE>: Debug,
+{
     inner: std::slice::Iter<'a, (HeaderName, UnencodedHeaderValue)>,
     key: Option<MetadataKey<VE>>,
+}
+
+impl<'a, VE> Debug for ValueIter<'a, VE>
+where
+    VE: ValueEncoding,
+{
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("ValueIter")
+            .field("inner", &self.inner)
+            .field("key", &self.key)
+            .finish()
+    }
 }
 
 /// A view to all values stored in a single entry.
 ///
 /// This struct is returned by `MetadataMap::get_all` and
 /// `MetadataMap::get_all_bin`.
-#[derive(Debug)]
-pub struct GetAll<'a, VE: ValueEncoding> {
+pub struct GetAll<'a, VE> {
     map: &'a MetadataMap,
     key: Option<MetadataKey<VE>>,
+}
+
+impl<'a, VE> std::fmt::Debug for GetAll<'a, VE>
+where
+    VE: ValueEncoding,
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GetAll")
+            .field("map", &self.map)
+            .field("key", &self.key)
+            .finish()
+    }
 }
 
 // ===== impl MetadataMap =====

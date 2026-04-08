@@ -49,7 +49,7 @@ use crate::private;
 /// [`MetadataMap`]: crate::metadata::MetadataMap
 #[derive(Clone)]
 #[repr(transparent)]
-pub struct MetadataValue<VE: ValueEncoding> {
+pub struct MetadataValue<VE> {
     // Note: There are unsafe transmutes that assume that the memory layout
     // of MetadataValue is identical to UnencodedHeaderValue.
     pub(crate) inner: UnencodedHeaderValue,
@@ -93,41 +93,7 @@ pub type AsciiMetadataValue = MetadataValue<Ascii>;
 /// A binary metadata value.
 pub type BinaryMetadataValue = MetadataValue<Binary>;
 
-impl<VE: ValueEncoding> MetadataValue<VE> {
-    /// Convert a static string to a `MetadataValue`.
-    ///
-    /// This function will not perform any copying, however the string is
-    /// checked to ensure that no invalid characters are present.
-    ///
-    /// For Ascii values, only visible ASCII characters (32-127) are permitted.
-    /// For Binary values, the string must be valid base64.
-    ///
-    /// # Panics
-    ///
-    /// This function panics if the argument contains invalid metadata value
-    /// characters.
-    ///
-    /// # Examples
-    ///
-    /// ```
-    /// # use grpc::metadata::*;
-    /// let val = AsciiMetadataValue::from_static("hello");
-    /// assert_eq!(val, "hello");
-    /// ```
-    ///
-    /// ```
-    /// # use grpc::metadata::*;
-    /// let val = BinaryMetadataValue::from_static("Hello!!");
-    /// assert_eq!(val, "Hello!!");
-    /// ```
-    #[inline]
-    pub fn from_static(src: &'static str) -> Self {
-        MetadataValue {
-            inner: VE::from_static(src, private::Internal),
-            _phantom: PhantomData,
-        }
-    }
-
+impl<VE> MetadataValue<VE> {
     /// Convert a `Bytes` directly into a `MetadataValue` without validating.
     ///
     /// # Safety
@@ -215,9 +181,45 @@ impl<VE: ValueEncoding> MetadataValue<VE> {
     ) -> &mut Self {
         unsafe { &mut *(header_value as *mut UnencodedHeaderValue as *mut Self) }
     }
+}
 
+impl<VE: ValueEncoding> MetadataValue<VE> {
     pub(crate) fn encode(value: Bytes) -> Bytes {
         VE::encode(value, private::Internal)
+    }
+
+    /// Convert a static string to a `MetadataValue`.
+    ///
+    /// This function will not perform any copying, however the string is
+    /// checked to ensure that no invalid characters are present.
+    ///
+    /// For Ascii values, only visible ASCII characters (32-127) are permitted.
+    /// For Binary values, the string must be valid base64.
+    ///
+    /// # Panics
+    ///
+    /// This function panics if the argument contains invalid metadata value
+    /// characters.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// # use grpc::metadata::*;
+    /// let val = AsciiMetadataValue::from_static("hello");
+    /// assert_eq!(val, "hello");
+    /// ```
+    ///
+    /// ```
+    /// # use grpc::metadata::*;
+    /// let val = BinaryMetadataValue::from_static("Hello!!");
+    /// assert_eq!(val, "Hello!!");
+    /// ```
+    #[inline]
+    pub fn from_static(src: &'static str) -> Self {
+        MetadataValue {
+            inner: VE::from_static(src, private::Internal),
+            _phantom: PhantomData,
+        }
     }
 }
 
