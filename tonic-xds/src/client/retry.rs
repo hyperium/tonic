@@ -441,7 +441,8 @@ mod tests {
 
     #[test]
     fn test_ok_should_not_be_retried() {
-        assert!(!is_retryable_grpc_status_code(tonic::Code::Ok, &[]))
+        let codes = vec![tonic::Code::Ok];
+        assert!(!is_retryable_grpc_status_code(tonic::Code::Ok, &codes))
     }
 
     #[test]
