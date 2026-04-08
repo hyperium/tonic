@@ -1,21 +1,22 @@
 //! Example: standalone gRPC greeter server for testing xDS.
 //!
-//! Starts a greeter backend on a given port. Point your xDS control plane's
-//! EDS config at this server's address, then use the `channel` example to
-//! send requests through the xDS channel.
+//! Starts a greeter backend on a given port. Used together with the
+//! `xds_server` and `channel` examples.
 //!
-//! # Usage
+//! # Quick start
 //!
 //! ```sh
-//! # Start a backend on port 50051 (default):
-//! cargo run -p tonic-xds --example greeter_server
+//! ./tonic-xds/examples/run_xds_example.sh
+//! ```
 //!
-//! # Start on a custom port:
-//! PORT=50052 cargo run -p tonic-xds --example greeter_server
+//! # Running individually
 //!
-//! # Start multiple backends:
-//! PORT=50051 cargo run -p tonic-xds --example greeter_server &
-//! PORT=50052 cargo run -p tonic-xds --example greeter_server &
+//! ```sh
+//! # Start on port 50051 (default):
+//! cargo run -p tonic-xds --example greeter_server --features testutil
+//!
+//! # Custom port:
+//! PORT=50052 cargo run -p tonic-xds --example greeter_server --features testutil
 //! ```
 
 use tonic::transport::Server;

@@ -13,6 +13,9 @@ use crate::xds::cache::XdsCache;
 use crate::xds::endpoint_manager::EndpointManager;
 
 /// Shared connector function that creates endpoint services from addresses.
+// TODO: Refactor to a trait when adding TLS support (A29). A trait can carry
+// configuration (TLS settings, timeouts) and be shared across EndpointManager,
+// ClusterDiscovery, and LB reconnect logic.
 pub(crate) type EndpointConnector =
     Arc<dyn Fn(&EndpointAddress) -> EndpointChannel<Channel> + Send + Sync>;
 

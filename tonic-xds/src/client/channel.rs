@@ -220,6 +220,8 @@ impl XdsChannelBuilder {
     }
 
     /// Builds an `XdsChannelGrpc`, which is a type-erased gRPC channel.
+    // TODO: Support HTTP and other channel types (not just gRPC). This will
+    // require a generic `build()` or separate `build_http_channel()` method.
     pub fn build_grpc_channel(&self) -> Result<XdsChannelGrpc, BuildError> {
         self.build_tonic_grpc_channel()
     }
@@ -548,9 +550,7 @@ mod tests {
     }
 
     /// Builds an XdsChannelGrpc using real XdsRouter and XdsClusterDiscovery
-    /// backed by the given cache. Yields once so the router's background watch
-    /// task processes the initial snapshot (the task is spawned during
-    /// `XdsRouter::new` and needs one poll to read from the cache watch).
+    /// backed by the given cache.
     async fn build_xds_channel_from_cache(cache: Arc<XdsCache>) -> XdsChannelGrpc {
         use crate::xds::cluster_discovery::{
             EndpointConnector, XdsClusterDiscovery, default_endpoint_connector,
@@ -561,8 +561,6 @@ mod tests {
         let connector: EndpointConnector = Arc::new(default_endpoint_connector);
         let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>> =
             Arc::new(XdsClusterDiscovery::new(cache, connector));
-
-        tokio::task::yield_now().await;
 
         let builder = XdsChannelBuilder::new(test_config());
         builder.build_grpc_channel_from_parts(router, discovery, GrpcRetryPolicy::default())

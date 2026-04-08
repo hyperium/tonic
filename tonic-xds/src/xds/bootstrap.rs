@@ -32,6 +32,10 @@ const ENV_BOOTSTRAP_CONFIG: &str = "GRPC_XDS_BOOTSTRAP_CONFIG";
 /// ```
 ///
 /// [gRFC A27]: https://github.com/grpc/proposal/blob/master/A27-xds-global-load-balancing.md
+// TODO: Design a public builder API for constructing BootstrapConfig
+// programmatically (not just from JSON). The current `new()` is pub(crate);
+// a public API should use the builder pattern to accommodate future fields
+// without breaking changes.
 #[derive(Debug, Clone, Deserialize)]
 #[non_exhaustive]
 pub struct BootstrapConfig {

@@ -4,28 +4,33 @@
 //! The channel discovers endpoints via the xDS management server and
 //! load-balances across them.
 //!
-//! # Prerequisites
+//! # Quick start
 //!
-//! 1. Start one or more greeter backends:
-//!    ```sh
-//!    PORT=50051 cargo run -p tonic-xds --example greeter_server
-//!    ```
+//! Run all three examples (greeter backend, xDS server, this client) together:
 //!
-//! 2. Start an xDS control plane (e.g., go-control-plane) configured to
-//!    return LDS/RDS/CDS/EDS pointing at the greeter backends.
+//! ```sh
+//! ./tonic-xds/examples/run_xds_example.sh
+//! ```
+//!
+//! # Running individually
+//!
+//! ```sh
+//! # Terminal 1: greeter backend
+//! PORT=50051 cargo run -p tonic-xds --example greeter_server --features testutil
+//!
+//! # Terminal 2: xDS control plane
+//! cargo run -p tonic-xds --example xds_server
+//!
+//! # Terminal 3: xDS client
+//! GRPC_XDS_BOOTSTRAP_CONFIG='{"xds_servers":[{"server_uri":"http://localhost:18000"}],"node":{"id":"test"}}' \
+//!     cargo run -p tonic-xds --example channel --features testutil
+//! ```
 //!
 //! # Configuration
 //!
 //! - `GRPC_XDS_BOOTSTRAP` — path to a bootstrap JSON file, **or**
 //! - `GRPC_XDS_BOOTSTRAP_CONFIG` — inline bootstrap JSON
 //! - `XDS_TARGET` — xDS target URI (default: `xds:///my-service`)
-//!
-//! # Usage
-//!
-//! ```sh
-//! GRPC_XDS_BOOTSTRAP_CONFIG='{"xds_servers":[{"server_uri":"localhost:18000"}],"node":{"id":"test"}}' \
-//!     cargo run -p tonic-xds --example channel
-//! ```
 
 use tonic_xds::testutil::proto::helloworld::{HelloRequest, greeter_client::GreeterClient};
 use tonic_xds::{XdsChannelBuilder, XdsChannelConfig, XdsUri};
@@ -44,8 +49,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Channel built. Sending requests (Ctrl-C to stop)...\n");
 
     for i in 1.. {
-        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-
         let request = HelloRequest {
             name: format!("request-{i}"),
         };
@@ -58,6 +61,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 eprintln!("[{i}] Error: {status}");
             }
         }
+
+        tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
     }
 
     Ok(())

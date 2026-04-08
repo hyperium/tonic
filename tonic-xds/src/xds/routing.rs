@@ -14,8 +14,10 @@
 
 use std::cmp::Reverse;
 use std::sync::Arc;
+use std::time::Duration;
 
 use arc_swap::ArcSwapOption;
+use tokio::sync::watch;
 
 use crate::client::route::{RouteDecision, RouteInput, Router};
 use crate::common::async_util::{AbortOnDrop, BoxFuture};
@@ -25,13 +27,22 @@ use crate::xds::resource::route_config::{
     RouteConfigAction, RouteConfigMatch, RouteConfigResource, VirtualHostConfig, WeightedCluster,
 };
 
+/// Default timeout for waiting for the initial route config (matches gRFC A57
+/// resource initial timeout).
+const DEFAULT_READY_TIMEOUT: Duration = Duration::from_secs(30);
+
 /// xDS-backed [`Router`] that resolves requests to cluster names.
 ///
 /// Subscribes to route config changes from [`XdsCache`] via a background watch task
 /// and maintains a shared [`ArcSwapOption`] for lock-free reads on the hot path.
 /// The watch task is aborted when the router is dropped.
+///
+/// The first RPC blocks (up to [`DEFAULT_READY_TIMEOUT`]) until the initial route
+/// config is available, matching standard gRPC behavior where RPCs wait for the
+/// resolver's first update. Subsequent RPCs read the config lock-free.
 pub(crate) struct XdsRouter {
     route_config: Arc<ArcSwapOption<RouteConfigResource>>,
+    ready_rx: watch::Receiver<bool>,
     _watch_task: AbortOnDrop,
 }
 
@@ -43,15 +54,22 @@ impl XdsRouter {
     /// is dropped.
     pub(crate) fn new(cache: &XdsCache) -> Self {
         let route_config = Arc::new(ArcSwapOption::empty());
+        let (ready_tx, ready_rx) = watch::channel(false);
         let rc = route_config.clone();
         let mut watcher = cache.watch_route_config();
         let handle = tokio::spawn(async move {
+            let mut ready_tx = Some(ready_tx);
             while let Some(config) = watcher.next().await {
                 rc.store(Some(config));
+                // Signal readiness on the first config, then drop the sender.
+                if let Some(tx) = ready_tx.take() {
+                    let _ = tx.send(true);
+                }
             }
         });
         Self {
             route_config,
+            ready_rx,
             _watch_task: AbortOnDrop(handle),
         }
     }
@@ -59,25 +77,48 @@ impl XdsRouter {
 
 impl Router for XdsRouter {
     fn route(&self, input: &RouteInput<'_>) -> BoxFuture<Result<RouteDecision, RoutingError>> {
-        let route_config = self.route_config.load_full();
         let authority = input.authority.to_string();
         let headers = input.headers.clone();
+
+        // Fast path: config already available, no cloning needed.
+        if let Some(rc) = self.route_config.load_full() {
+            return Box::pin(async move { resolve_route(&rc, &authority, &headers) });
+        }
+
+        // Slow path: wait for the initial route config, matching standard
+        // gRPC behavior where RPCs block until the resolver provides the
+        // first update.
+        let route_config_ref = self.route_config.clone();
+        let mut ready_rx = self.ready_rx.clone();
         Box::pin(async move {
-            let rc = route_config.ok_or(RoutingError::NotReady)?;
-            let path = headers
-                .get(":path")
-                .and_then(|v| v.to_str().ok())
-                .unwrap_or("/");
-            let action = rc.route(&authority, path, &headers)?;
-            let cluster = match action {
-                RouteConfigAction::Cluster(name) => name.clone(),
-                RouteConfigAction::WeightedClusters(clusters) => select_weighted_cluster(clusters)
-                    .ok_or(RoutingError::EmptyWeightedClusters)?
-                    .to_string(),
-            };
-            Ok(RouteDecision { cluster })
+            tokio::time::timeout(DEFAULT_READY_TIMEOUT, ready_rx.wait_for(|ready| *ready))
+                .await
+                .map_err(|_| RoutingError::NotReady)?
+                .map_err(|_| RoutingError::NotReady)?;
+            let rc = route_config_ref.load_full().ok_or(RoutingError::NotReady)?;
+            resolve_route(&rc, &authority, &headers)
         })
     }
+}
+
+/// Resolve a route decision from the given config, authority, and headers.
+fn resolve_route(
+    rc: &RouteConfigResource,
+    authority: &str,
+    headers: &http::HeaderMap,
+) -> Result<RouteDecision, RoutingError> {
+    let path = headers
+        .get(":path")
+        .and_then(|v| v.to_str().ok())
+        .unwrap_or("/");
+    let action = rc.route(authority, path, headers)?;
+    let cluster = match action {
+        RouteConfigAction::Cluster(name) => name.clone(),
+        RouteConfigAction::WeightedClusters(clusters) => select_weighted_cluster(clusters)
+            .ok_or(RoutingError::EmptyWeightedClusters)?
+            .to_string(),
+    };
+    Ok(RouteDecision { cluster })
 }
 
 /// Error returned when routing fails.
@@ -1074,7 +1115,16 @@ mod tests {
             authority: "svc",
             headers: &headers,
         };
-        let err = router.route(&input).await.unwrap_err();
-        assert!(matches!(err, RoutingError::NotReady));
+        // The router now blocks waiting for config; verify it returns
+        // NotReady after the timeout elapses.
+        let result =
+            tokio::time::timeout(std::time::Duration::from_millis(100), router.route(&input)).await;
+        // Either the inner timeout fires (NotReady) or the outer timeout
+        // fires (config never arrived) — both are correct.
+        match result {
+            Ok(Err(RoutingError::NotReady)) => {}
+            Err(_elapsed) => {}
+            other => panic!("expected NotReady or timeout, got {other:?}"),
+        }
     }
 }

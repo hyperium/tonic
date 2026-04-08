@@ -55,6 +55,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
 tonic-prost = "0.14"
 tonic-prost-build = "0.14"
+async-stream = "0.3"
 
 [features]
 testutil = ["dep:tonic-prost"]
@@ -66,3 +67,6 @@ required-features = ["testutil"]
 [[example]]
 name = "greeter_server"
 required-features = ["testutil"]
+
+[[example]]
+name = "xds_server"
