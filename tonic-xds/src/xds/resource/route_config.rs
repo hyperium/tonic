@@ -268,6 +268,7 @@ fn validate_header_matcher(
     use envoy_types::pb::envoy::config::route::v3::header_matcher::HeaderMatchSpecifier;
     use envoy_types::pb::envoy::r#type::matcher::v3::string_matcher::MatchPattern;
 
+    // It's common that some xDS features are marked as deprecated while they are still widely in-use.
     #[allow(deprecated)]
     let match_specifier = match hm.header_match_specifier {
         Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact {
