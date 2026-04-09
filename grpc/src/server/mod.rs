@@ -32,6 +32,7 @@ use crate::core::ServerResponseStreamItem;
 use crate::core::Trailers;
 use tokio::sync::oneshot;
 
+pub(crate) mod handler_validation;
 pub(crate) mod interceptor;
 
 pub struct Server {
@@ -120,10 +121,23 @@ impl<T: Handle> DynHandle for T {
         &self,
         headers: RequestHeaders,
         options: CallOptions,
-        mut tx: &mut dyn DynSendStream,
+        tx: &mut dyn DynSendStream,
         rx: BoxedRecvStream,
     ) -> Trailers {
-        self.handle(headers, options, &mut tx, rx).await
+        let mut tx_wrapper = SendStreamRef(tx);
+        self.handle(headers, options, &mut tx_wrapper, rx).await
+    }
+}
+
+struct SendStreamRef<'a>(&'a mut dyn DynSendStream);
+
+impl<'a> SendStream for SendStreamRef<'a> {
+    async fn send<'b>(
+        &mut self,
+        item: ServerResponseStreamItem<'b>,
+        options: SendOptions,
+    ) -> Result<(), ()> {
+        self.0.dyn_send(item, options).await
     }
 }
 
@@ -188,13 +202,13 @@ impl<T: SendStream> DynSendStream for T {
     }
 }
 
-impl<'b> SendStream for &mut (dyn DynSendStream + 'b) {
+impl<T: SendStream + ?Sized> SendStream for &mut T {
     async fn send<'a>(
         &mut self,
         item: ServerResponseStreamItem<'a>,
         options: SendOptions,
     ) -> Result<(), ()> {
-        (**self).dyn_send(item, options).await
+        (**self).send(item, options).await
     }
 }
 
