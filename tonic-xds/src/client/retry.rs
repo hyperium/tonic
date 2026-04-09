@@ -42,7 +42,7 @@ pub(crate) fn is_retryable_grpc_status_code(
     code: tonic::Code,
     retryable_codes: &[tonic::Code],
 ) -> bool {
-    retryable_codes.contains(&code)
+    code != tonic::Code::Ok && retryable_codes.contains(&code)
 }
 
 /// Check if a request should be retried, either because of a retryable connection error
@@ -437,6 +437,12 @@ mod tests {
     fn test_ok_is_not_retryable() {
         let codes = vec![tonic::Code::Unavailable, tonic::Code::Cancelled];
         assert!(!is_retryable_grpc_status_code(tonic::Code::Ok, &codes));
+    }
+
+    #[test]
+    fn test_ok_should_not_be_retried() {
+        let codes = vec![tonic::Code::Ok];
+        assert!(!is_retryable_grpc_status_code(tonic::Code::Ok, &codes))
     }
 
     #[test]
