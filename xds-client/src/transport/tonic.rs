@@ -123,8 +123,8 @@ impl TonicTransport {
 
 /// Builder for creating [`TonicTransport`] instances.
 ///
-/// This implements [`TransportBuilder`] and can be used with [`XdsClientBuilder`]
-/// to enable server fallback support.
+/// This implements [`TransportBuilder`] and can be used with
+/// [`XdsClientBuilder`](crate::XdsClientBuilder) to enable server fallback support.
 ///
 /// For connections requiring TLS or custom channel configuration, see the
 /// example in [`TonicTransport::from_channel`].

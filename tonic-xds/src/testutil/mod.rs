@@ -1,5 +1,5 @@
-#[cfg(test)]
-pub(crate) mod grpc;
+//! Test utilities and proto definitions.
 
 #[cfg(test)]
-pub(crate) mod proto;
+pub(crate) mod grpc;
+pub mod proto;

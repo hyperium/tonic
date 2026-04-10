@@ -271,10 +271,16 @@ fn validate_header_matcher(
     // It's common that some xDS features are marked as deprecated while they are still widely in-use.
     #[allow(deprecated)]
     let match_specifier = match hm.header_match_specifier {
+        // TODO: Remove this arm once ExactMatch is fully removed from envoy-types.
+        // ExactMatch is deprecated in favor of StringMatch, which is handled below.
+        #[allow(deprecated)]
         Some(HeaderMatchSpecifier::ExactMatch(v)) => HeaderMatchSpecifierConfig::Exact {
             value: v,
             ignore_case: false,
         },
+        // TODO: Remove this arm once SafeRegexMatch is fully removed from envoy-types.
+        // SafeRegexMatch is deprecated in favor of StringMatch, which is handled below.
+        #[allow(deprecated)]
         Some(HeaderMatchSpecifier::SafeRegexMatch(r)) => {
             let re = Regex::new(&r.regex).map_err(|e| {
                 Error::Validation(format!("invalid header regex '{}': {e}", r.regex))

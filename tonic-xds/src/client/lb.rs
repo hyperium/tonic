@@ -47,7 +47,6 @@ where
     S::Response: Send + 'static,
 {
     /// Creates a new `XdsLbService` with the given cluster client registry and cluster discovery.
-    #[allow(dead_code)]
     pub(crate) fn new(
         cluster_registry: Arc<ClusterClientRegistry<Req, S::Response>>,
         cluster_discovery: Arc<dyn ClusterDiscovery<Endpoint, S>>,

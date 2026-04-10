@@ -141,6 +141,7 @@ impl XdsCache {
     }
 
     /// Watches cluster resource changes for a specific cluster.
+    #[allow(dead_code)] // Will be used when LB policy dispatch is wired (A48).
     pub(crate) fn watch_cluster(&self, name: &str) -> CacheWatch<ClusterResource> {
         self.clusters.watch(name)
     }
@@ -164,7 +165,7 @@ impl XdsCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::xds::resource::LbPolicy;
+    use crate::xds::resource::cluster::LbPolicy;
 
     fn make_route_config(name: &str) -> Arc<RouteConfigResource> {
         use crate::xds::resource::route_config::{

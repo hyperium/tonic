@@ -1,70 +1,98 @@
 use crate::XdsUri;
+use crate::client::cluster::ClusterClientRegistryGrpc;
 use crate::client::endpoint::{EndpointAddress, EndpointChannel};
-use crate::client::lb::XdsLbService;
-use crate::client::route::XdsRoutingService;
-use crate::common::async_util::BoxFuture;
+use crate::client::lb::{ClusterDiscovery, XdsLbService};
+use crate::client::route::{Router, XdsRoutingLayer};
+use crate::xds::bootstrap::{BootstrapConfig, BootstrapError};
+use crate::xds::cache::XdsCache;
+use crate::xds::cluster_discovery::{
+    EndpointConnector, XdsClusterDiscovery, default_endpoint_connector,
+};
+use crate::xds::resource_manager::XdsResourceManager;
+use crate::xds::routing::XdsRouter;
 use http::Request;
 use std::fmt::Debug;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::{body::Body as TonicBody, client::GrpcService, transport::channel::Channel};
-use tower::{BoxError, Service, load::Load, util::BoxCloneService};
+use tower::{BoxError, Service, ServiceBuilder, util::BoxCloneService};
+use xds_client::{ClientConfig, Node, ProstCodec, TokioRuntime, TonicTransportBuilder, XdsClient};
 
-#[cfg(test)]
-use {
-    crate::client::cluster::ClusterClientRegistryGrpc,
-    crate::client::lb::ClusterDiscovery,
-    crate::client::retry::{GrpcRetryPolicy, RetryLayer},
-    crate::client::route::{Router, XdsRoutingLayer},
-    tower::ServiceBuilder,
-};
+use crate::client::retry::{GrpcRetryPolicy, GrpcRetryPolicyConfig, RetryLayer};
 
 /// Configuration for building [`XdsChannel`] / [`XdsChannelGrpc`].
-/// Currently, only support specifying the xDS URI for the target service.
-/// In the future, more configurations such as xDS management server address will be added.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct XdsChannelConfig {
-    target_uri: Option<XdsUri>,
+    target_uri: XdsUri,
+    bootstrap: Option<BootstrapConfig>,
 }
 
 impl XdsChannelConfig {
-    /// Sets the xDS URI for the channel.
+    /// Creates a new config with the given target URI.
     #[must_use]
-    pub fn with_target_uri(mut self, target_uri: XdsUri) -> Self {
-        self.target_uri = Some(target_uri);
+    pub fn new(target_uri: XdsUri) -> Self {
+        Self {
+            target_uri,
+            bootstrap: None,
+        }
+    }
+
+    /// Sets the bootstrap configuration.
+    ///
+    /// If not set, the builder falls back to loading from environment
+    /// variables (`GRPC_XDS_BOOTSTRAP` or `GRPC_XDS_BOOTSTRAP_CONFIG`).
+    #[must_use]
+    pub fn with_bootstrap(mut self, bootstrap: BootstrapConfig) -> Self {
+        self.bootstrap = Some(bootstrap);
         self
     }
+
+    /// Eagerly loads bootstrap configuration from environment variables.
+    ///
+    /// This is optional — [`XdsChannelBuilder::build_grpc_channel`] falls back
+    /// to env vars automatically if no bootstrap is set. Use this method when
+    /// you want to surface bootstrap errors at config time rather than build time.
+    ///
+    /// Reads from `GRPC_XDS_BOOTSTRAP` (file path) first, then falls back to
+    /// `GRPC_XDS_BOOTSTRAP_CONFIG` (inline JSON).
+    pub fn with_bootstrap_from_env(mut self) -> Result<Self, BootstrapError> {
+        self.bootstrap = Some(BootstrapConfig::from_env()?);
+        Ok(self)
+    }
+}
+
+/// Errors that can occur when building an [`XdsChannel`].
+#[derive(Debug, thiserror::Error)]
+pub enum BuildError {
+    /// Bootstrap configuration could not be loaded.
+    #[error("bootstrap: {0}")]
+    Bootstrap(#[from] BootstrapError),
+}
+
+/// Holds owned resources whose background tasks must live as long as the channel.
+///
+/// Stored as `Option<Arc<...>>` on [`XdsChannel`] so clones share ownership
+/// cheaply. When the last clone drops, the resource manager cascade task and
+/// ADS worker are aborted. The `XdsCache` is kept alive separately by
+/// `XdsClusterDiscovery` in the service stack.
+struct XdsChannelResources {
+    _resource_manager: XdsResourceManager,
+    _xds_client: XdsClient,
 }
 
 /// `XdsChannel` is an xDS-capable [`tower::Service`] implementation.
 ///
 /// It routes requests according to the xDS configuration that it fetches from the xDS management server.
 /// The routing implementation is based on the [Google gRPC xDS features](https://grpc.github.io/grpc/core/md_doc_grpc_xds_features.html).
-///
-/// # Type Parameters
-///
-/// * `Req` - The request type that this channel accepts, as an example: `http::Request<Body>`.
-/// * `Endpoint` - The endpoint identifier type used for load balancing (e.g., socket address).
-/// * `S` - The underlying [`tower::Service`] implementation that handles individual endpoint connections.
-pub struct XdsChannel<Req, Endpoint, S>
-where
-    Req: Send + 'static,
-    S: Service<Req>,
-    S::Response: Send + 'static,
-{
+pub struct XdsChannel<S> {
     config: Arc<XdsChannelConfig>,
-    // Currently the routing decision is directly executed by the XdsLbService.
-    // In the future, we will add more layers in between for retries, request mirroring, etc.
-    inner: XdsRoutingService<XdsLbService<Req, Endpoint, S>>,
+    inner: S,
+    /// Keeps background tasks alive. `None` when built from parts in tests.
+    _resources: Option<Arc<XdsChannelResources>>,
 }
 
 #[allow(clippy::missing_fields_in_debug)]
-impl<Req, Endpoint, S> Debug for XdsChannel<Req, Endpoint, S>
-where
-    Req: Send + 'static,
-    S: Service<Req>,
-    S::Response: Send + 'static,
-{
+impl<S> Debug for XdsChannel<S> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("XdsChannel")
             .field("config", &self.config)
@@ -72,97 +100,130 @@ where
     }
 }
 
-impl<Req, Endpoint, S> Clone for XdsChannel<Req, Endpoint, S>
-where
-    Req: Send + 'static,
-    S: Service<Req>,
-    S::Response: Send + 'static,
-    XdsRoutingService<XdsLbService<Req, Endpoint, S>>: Clone,
-{
+impl<S: Clone> Clone for XdsChannel<S> {
     fn clone(&self) -> Self {
         Self {
             config: self.config.clone(),
             inner: self.inner.clone(),
+            _resources: self._resources.clone(),
         }
     }
 }
 
-impl<B, Endpoint, S> Service<http::Request<B>> for XdsChannel<Request<B>, Endpoint, S>
+impl<Req, S> Service<Req> for XdsChannel<S>
 where
-    B: Send + 'static,
-    Request<B>: Send + 'static,
-    Endpoint: std::hash::Hash + Eq + Clone + Send + 'static,
-    S: Service<Request<B>> + Load + Send + 'static,
-    S::Response: Send + 'static,
-    S::Error: Into<BoxError>,
-    S::Future: Send,
-    <S as tower::load::Load>::Metric: std::fmt::Debug,
+    S: Service<Req, Error = BoxError>,
 {
     type Response = S::Response;
     type Error = BoxError;
-    type Future = BoxFuture<Result<Self::Response, Self::Error>>;
+    type Future = S::Future;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         self.inner.poll_ready(cx)
     }
 
-    fn call(&mut self, request: Request<B>) -> Self::Future {
+    fn call(&mut self, request: Req) -> Self::Future {
         self.inner.call(request)
     }
 }
-
-/// A type alias for an `XdsChannel` that uses Tonic's Channel as the underlying transport.
-pub(crate) type XdsChannelTonicGrpc =
-    XdsChannel<http::Request<TonicBody>, EndpointAddress, EndpointChannel<Channel>>;
 
 /// A [`tonic::client::GrpcService`] implementation that can route and load-balance
 /// gRPC requests based on xDS configuration.
 pub type XdsChannelGrpc =
     BoxCloneService<http::Request<TonicBody>, http::Response<TonicBody>, BoxError>;
 
-// Static assertion that XdsChannelGrpc and XdsChannelTonicGrpc implement GrpcService
+// Static assertion that XdsChannelGrpc implements GrpcService
 const _: fn() = || {
     fn assert_grpc_service<T: GrpcService<TonicBody>>() {}
     assert_grpc_service::<XdsChannelGrpc>();
-    assert_grpc_service::<XdsChannelTonicGrpc>();
 };
 
 /// Builder for creating an [`XdsChannel`] or [`XdsChannelGrpc`].
 #[derive(Clone, Debug)]
 pub struct XdsChannelBuilder {
-    #[allow(dead_code)]
     config: Arc<XdsChannelConfig>,
 }
 
 impl XdsChannelBuilder {
-    /// Create a builder from an channel configurations.
+    /// Creates a builder from a channel configuration.
     #[must_use]
-    pub fn with_config(config: XdsChannelConfig) -> Self {
+    pub fn new(config: XdsChannelConfig) -> Self {
         Self {
             config: Arc::new(config),
         }
     }
 
-    /// Builds an `XdsChannel`, which takes generic request, endpoint, and service types and can be
-    /// used for generic HTTP services.
-    #[must_use]
-    pub fn build_channel<Req, Endpoint, S>(&self) -> XdsChannel<Req, Endpoint, S>
-    where
-        Req: Send + 'static,
-        S: Service<Req>,
-        S::Response: Send + 'static,
-    {
-        todo!("Implement XdsChannel building logic");
+    fn build_tonic_grpc_channel(&self) -> Result<XdsChannelGrpc, BuildError> {
+        let bootstrap = match self.config.bootstrap.clone() {
+            Some(b) => b,
+            None => BootstrapConfig::from_env()?,
+        };
+
+        let listener_name = self.config.target_uri.target.clone();
+
+        let server_uri = bootstrap.server_uri().to_owned();
+        let node = Node::from(bootstrap.node);
+        let client_config = ClientConfig::new(node, server_uri);
+        let xds_client = XdsClient::builder(
+            client_config,
+            TonicTransportBuilder::default(),
+            ProstCodec,
+            TokioRuntime,
+        )
+        .build();
+
+        let cache = Arc::new(XdsCache::new());
+        let resource_manager =
+            XdsResourceManager::new(xds_client.clone(), cache.clone(), listener_name);
+
+        Ok(self.build_from_cache(cache, xds_client, resource_manager))
     }
 
-    pub(crate) fn build_tonic_grpc_channel(&self) -> XdsChannelTonicGrpc {
-        todo!("Implement XdsChannel building logic");
+    /// Internal builder that wires the service stack from a pre-built cache.
+    ///
+    /// Separated from `build_tonic_grpc_channel` so tests can inject a
+    /// disconnected `XdsClient` and pre-populated cache.
+    fn build_from_cache(
+        &self,
+        cache: Arc<XdsCache>,
+        xds_client: XdsClient,
+        resource_manager: XdsResourceManager,
+    ) -> XdsChannelGrpc {
+        let router: Arc<dyn Router> = Arc::new(XdsRouter::new(&cache));
+        let connector: EndpointConnector = Arc::new(default_endpoint_connector);
+        let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>> =
+            Arc::new(XdsClusterDiscovery::new(cache, connector));
+        let retry_policy = GrpcRetryPolicy::new(GrpcRetryPolicyConfig::default());
+
+        let resources = Arc::new(XdsChannelResources {
+            _resource_manager: resource_manager,
+            _xds_client: xds_client,
+        });
+
+        let routing_layer = XdsRoutingLayer::new(router);
+        let retry_layer = RetryLayer::new(retry_policy);
+        let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
+        let lb_service = XdsLbService::new(cluster_registry, discovery);
+        let inner = ServiceBuilder::new()
+            .layer(routing_layer)
+            .layer(retry_layer)
+            .map_request(|req: Request<shared_http_body::SharedBody<TonicBody>>| {
+                req.map(TonicBody::new)
+            })
+            .service(lb_service);
+
+        BoxCloneService::new(XdsChannel {
+            config: self.config.clone(),
+            inner,
+            _resources: Some(resources),
+        })
     }
 
     /// Builds an `XdsChannelGrpc`, which is a type-erased gRPC channel.
-    #[must_use]
-    pub fn build_grpc_channel(&self) -> XdsChannelGrpc {
-        BoxCloneService::new(self.build_tonic_grpc_channel())
+    // TODO: Support HTTP and other channel types (not just gRPC). This will
+    // require a generic `build()` or separate `build_http_channel()` method.
+    pub fn build_grpc_channel(&self) -> Result<XdsChannelGrpc, BuildError> {
+        self.build_tonic_grpc_channel()
     }
 
     /// Builds an `XdsChannelGrpc` from the given router, cluster discovery, and retry policy.
@@ -177,24 +238,32 @@ impl XdsChannelBuilder {
         let retry_layer = RetryLayer::new(retry_policy);
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, discovery);
-        let service = ServiceBuilder::new()
+        let inner = ServiceBuilder::new()
             .layer(routing_layer)
             .layer(retry_layer)
             .map_request(|req: Request<shared_http_body::SharedBody<TonicBody>>| {
                 req.map(TonicBody::new)
             })
             .service(lb_service);
-        BoxCloneService::new(service)
+        BoxCloneService::new(XdsChannel {
+            config: self.config.clone(),
+            inner,
+            _resources: None,
+        })
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::XdsChannelBuilder;
-    use super::XdsChannelConfig;
+    use super::{XdsChannelBuilder, XdsChannelConfig};
+    use crate::XdsUri;
     use crate::client::channel::XdsChannelGrpc;
     use crate::client::endpoint::EndpointAddress;
     use crate::client::endpoint::EndpointChannel;
+
+    fn test_config() -> XdsChannelConfig {
+        XdsChannelConfig::new(XdsUri::parse("xds:///test-service").unwrap())
+    }
     use crate::client::lb::{BoxDiscover, ClusterDiscovery};
     use crate::client::retry::GrpcRetryPolicy;
     use crate::client::route::RouteDecision;
@@ -204,6 +273,9 @@ mod tests {
     use crate::testutil::grpc::GreeterClient;
     use crate::testutil::grpc::HelloRequest;
     use crate::testutil::grpc::TestServer;
+    use crate::xds::cache::XdsCache;
+    use crate::xds::resource::EndpointsResource;
+    use crate::xds::resource::route_config::RouteConfigResource;
     use std::sync::Arc;
     use tokio::sync::mpsc;
     use tonic::transport::Channel;
@@ -337,7 +409,7 @@ mod tests {
         // Create a mock XdsManager with the test servers
         let xds_manager = Arc::new(MockXdsManager::from_test_servers(&servers));
 
-        let xds_channel_builder = XdsChannelBuilder::with_config(XdsChannelConfig::default());
+        let xds_channel_builder = XdsChannelBuilder::new(test_config());
         let xds_channel = xds_channel_builder.build_grpc_channel_from_parts(
             xds_manager.clone(),
             xds_manager.clone(),
@@ -415,8 +487,11 @@ mod tests {
                 .num_retries(1),
         );
 
-        let xds_channel = XdsChannelBuilder::with_config(XdsChannelConfig::default())
-            .build_grpc_channel_from_parts(xds_manager.clone(), xds_manager.clone(), retry_policy);
+        let xds_channel = XdsChannelBuilder::new(test_config()).build_grpc_channel_from_parts(
+            xds_manager.clone(),
+            xds_manager.clone(),
+            retry_policy,
+        );
 
         let mut client = GreeterClient::new(xds_channel);
 
@@ -428,5 +503,166 @@ mod tests {
             .expect("request should succeed after retry");
 
         assert_eq!(response.into_inner().message, "retry-server: retry-test");
+    }
+
+    /// Helper: creates a `RouteConfigResource` that routes all traffic to the given cluster.
+    fn make_test_route_config(cluster_name: &str) -> Arc<RouteConfigResource> {
+        use crate::xds::resource::route_config::*;
+
+        Arc::new(RouteConfigResource {
+            name: "test-route".to_string(),
+            virtual_hosts: vec![VirtualHostConfig {
+                name: "default".to_string(),
+                domains: vec!["*".to_string()],
+                routes: vec![RouteConfig {
+                    match_criteria: RouteConfigMatch {
+                        path_specifier: PathSpecifierConfig::Prefix(String::new()),
+                        headers: vec![],
+                        case_sensitive: false,
+                        match_fraction: None,
+                    },
+                    action: RouteConfigAction::Cluster(cluster_name.to_string()),
+                }],
+            }],
+        })
+    }
+
+    /// Helper: creates an `EndpointsResource` from test server addresses.
+    fn make_test_endpoints(cluster_name: &str, servers: &[TestServer]) -> Arc<EndpointsResource> {
+        use crate::xds::resource::endpoints::{HealthStatus, LocalityEndpoints, ResolvedEndpoint};
+
+        Arc::new(EndpointsResource {
+            cluster_name: cluster_name.to_string(),
+            localities: vec![LocalityEndpoints {
+                locality: None,
+                endpoints: servers
+                    .iter()
+                    .map(|s| ResolvedEndpoint {
+                        address: EndpointAddress::from(s.addr),
+                        health_status: HealthStatus::Healthy,
+                        load_balancing_weight: 1,
+                    })
+                    .collect(),
+                load_balancing_weight: 100,
+                priority: 0,
+            }],
+        })
+    }
+
+    /// Builds an XdsChannelGrpc using real XdsRouter and XdsClusterDiscovery
+    /// backed by the given cache.
+    async fn build_xds_channel_from_cache(cache: Arc<XdsCache>) -> XdsChannelGrpc {
+        use crate::xds::cluster_discovery::{
+            EndpointConnector, XdsClusterDiscovery, default_endpoint_connector,
+        };
+        use crate::xds::routing::XdsRouter;
+
+        let router: Arc<dyn Router> = Arc::new(XdsRouter::new(&cache));
+        let connector: EndpointConnector = Arc::new(default_endpoint_connector);
+        let discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>> =
+            Arc::new(XdsClusterDiscovery::new(cache, connector));
+
+        let builder = XdsChannelBuilder::new(test_config());
+        builder.build_grpc_channel_from_parts(router, discovery, GrpcRetryPolicy::default())
+    }
+
+    /// Tests the full xDS stack (XdsRouter + XdsClusterDiscovery) with a
+    /// pre-populated cache, validating that requests are routed and
+    /// load-balanced across real backend servers.
+    #[tokio::test]
+    async fn test_xds_channel_with_real_router_and_discovery() {
+        let num_servers = 3;
+        let num_requests = 300;
+        let cluster_name = "test-cluster";
+        let (_, servers) = setup_grpc_servers(num_servers).await;
+
+        let cache = Arc::new(XdsCache::new());
+        cache.update_route_config(make_test_route_config(cluster_name));
+        cache.update_endpoints(cluster_name, make_test_endpoints(cluster_name, &servers));
+
+        let channel = build_xds_channel_from_cache(cache).await;
+        let client = GreeterClient::new(channel);
+
+        let (successful, error_types, server_counts) =
+            send_grpc_requests(client, num_requests).await;
+
+        assert_eq!(
+            successful, num_requests,
+            "Expected 100% success rate. Errors: {error_types:?}",
+        );
+        assert_eq!(
+            server_counts.len(),
+            num_servers,
+            "Expected all {num_servers} servers to receive traffic. Counts: {server_counts:?}",
+        );
+
+        for server in servers {
+            let _ = server.shutdown.send(());
+            let _ = server.handle.await;
+        }
+    }
+
+    /// Tests that endpoint changes are picked up dynamically by the
+    /// XdsClusterDiscovery while the channel is serving requests.
+    #[tokio::test]
+    async fn test_xds_channel_handles_dynamic_endpoint_updates() {
+        let cluster_name = "test-cluster";
+        let (_, servers) = setup_grpc_servers(2).await;
+
+        let cache = Arc::new(XdsCache::new());
+        cache.update_route_config(make_test_route_config(cluster_name));
+        // Start with only the first server.
+        cache.update_endpoints(
+            cluster_name,
+            make_test_endpoints(cluster_name, &servers[..1]),
+        );
+
+        let channel = build_xds_channel_from_cache(cache.clone()).await;
+        let client = GreeterClient::new(channel.clone());
+
+        // Phase 1: all traffic goes to server-0.
+        let (successful, _, server_counts) = send_grpc_requests(client, 50).await;
+        assert_eq!(successful, 50);
+        assert_eq!(
+            server_counts.len(),
+            1,
+            "Only 1 server should receive traffic before update. Counts: {server_counts:?}",
+        );
+
+        // Add second server.
+        cache.update_endpoints(cluster_name, make_test_endpoints(cluster_name, &servers));
+        // Give the endpoint manager diff loop time to process the update.
+        tokio::time::sleep(tokio::time::Duration::from_millis(50)).await;
+
+        // Phase 2: traffic should go to both servers.
+        let client2 = GreeterClient::new(channel);
+        let (successful, _, server_counts) = send_grpc_requests(client2, 200).await;
+        assert_eq!(successful, 200);
+        assert_eq!(
+            server_counts.len(),
+            2,
+            "Both servers should receive traffic after update. Counts: {server_counts:?}",
+        );
+
+        for server in servers {
+            let _ = server.shutdown.send(());
+            let _ = server.handle.await;
+        }
+    }
+
+    /// Smoke test: verifies builder wiring with a disconnected XdsClient
+    /// doesn't panic during construction.
+    #[tokio::test]
+    async fn test_build_from_cache_smoke() {
+        use crate::xds::resource_manager::XdsResourceManager;
+
+        let cache = Arc::new(XdsCache::new());
+        let xds_client = xds_client::XdsClient::disconnected();
+        let resource_manager =
+            XdsResourceManager::new(xds_client.clone(), cache.clone(), "test-listener".into());
+
+        let builder = XdsChannelBuilder::new(test_config());
+        let _channel = builder.build_from_cache(cache, xds_client, resource_manager);
+        // Construction should succeed without panicking.
     }
 }

@@ -1,4 +1,5 @@
-#![allow(dead_code, unused_imports)]
+// TODO: remove once A48 (least-request LB) and priority LB consume all fields.
+#![allow(dead_code)]
 //! xDS resource type implementations.
 //!
 //! Each module implements [`xds_client::Resource`] for one of the four resource types:
@@ -14,7 +15,7 @@ pub(crate) mod endpoints;
 pub(crate) mod listener;
 pub(crate) mod route_config;
 
-pub(crate) use cluster::{ClusterResource, LbPolicy};
-pub(crate) use endpoints::{EndpointsResource, LocalityEndpoints, ResolvedEndpoint};
+pub(crate) use cluster::ClusterResource;
+pub(crate) use endpoints::EndpointsResource;
 pub(crate) use listener::ListenerResource;
-pub(crate) use route_config::{RouteConfigResource, VirtualHostConfig};
+pub(crate) use route_config::RouteConfigResource;
