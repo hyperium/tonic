@@ -153,3 +153,20 @@ impl<S> Load for EndpointChannel<S> {
         self.in_flight.load(Ordering::Relaxed)
     }
 }
+
+/// Factory for creating connections to endpoints.
+///
+/// Implementations capture cluster-level config (TLS, HTTP/2 settings, timeouts)
+/// at construction time. The implementation handles retries and concurrency
+/// internally — the returned future resolves when a connection is established
+/// (or is cancelled by dropping).
+pub(crate) trait Connector {
+    /// The service type produced by this connector.
+    type Service;
+
+    /// Connect to the given endpoint address.
+    fn connect(
+        &self,
+        addr: &EndpointAddress,
+    ) -> crate::common::async_util::BoxFuture<Self::Service>;
+}
