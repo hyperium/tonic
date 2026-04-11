@@ -117,7 +117,7 @@ impl<S> ReadyLbChannel<S> {
     /// Eject this channel (e.g., due to outlier detection). Consumes self.
     pub(crate) fn eject<C>(self, config: EjectionConfig, connector: Arc<C>) -> EjectedLbChannel<S>
     where
-        C: Connector<Service = S> + 'static,
+        C: Connector<Service = S> + Send + Sync + 'static,
     {
         let ejection_timer = Box::pin(tokio::time::sleep(config.timeout));
         EjectedLbChannel {
@@ -187,7 +187,10 @@ pub(crate) struct EjectedLbChannel<S> {
     /// Option to allow moving the channel out via `take()` in `poll_next`.
     channel: Option<LbChannel<S>>,
     config: EjectionConfig,
-    connector: Arc<dyn Connector<Service = S>>,
+    /// Trait object for the connector. The `Send + Sync` bounds ensure
+    /// `EjectedLbChannel<S>` is `Send + Sync` when `S` is (e.g. `tonic::Channel`),
+    /// enabling use with `StreamMap` across async task boundaries.
+    connector: Arc<dyn Connector<Service = S> + Send + Sync>,
     ejection_timer: Pin<Box<tokio::time::Sleep>>,
 }
 
@@ -354,5 +357,68 @@ mod tests {
             _ => panic!("expected UnejectedChannel::Connecting"),
         }
         assert!(ejected.next().await.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_connecting_in_stream_map() {
+        use tokio_stream::StreamMap;
+
+        let connector = MockConnector::new();
+        let connecting = IdleLbChannel::new(test_addr()).connect(connector.clone());
+
+        let mut map: StreamMap<&str, ConnectingLbChannel<MockService>> = StreamMap::new();
+        map.insert("endpoint-1", connecting);
+
+        let (key, _ready) = map.next().await.unwrap();
+        assert_eq!(key, "endpoint-1");
+        // Stream is done, removed from map — map is now empty.
+        assert!(map.next().await.is_none());
+
+        // Map can be reused: insert a new stream and it yields correctly.
+        let connecting2 = IdleLbChannel::new(test_addr()).connect(connector);
+        map.insert("endpoint-2", connecting2);
+        let (key2, _ready2) = map.next().await.unwrap();
+        assert_eq!(key2, "endpoint-2");
+        assert!(map.next().await.is_none());
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn test_ejected_in_stream_map() {
+        use tokio_stream::StreamMap;
+
+        let connector = MockConnector::new();
+        let mut connecting = IdleLbChannel::new(test_addr()).connect(connector.clone());
+        let ready = connecting.next().await.unwrap();
+
+        let config = EjectionConfig {
+            timeout: Duration::from_secs(5),
+            needs_reconnect: false,
+        };
+        let ejected = ready.eject(config, connector.clone());
+
+        let mut map: StreamMap<&str, EjectedLbChannel<MockService>> = StreamMap::new();
+        map.insert("endpoint-1", ejected);
+
+        let (key, unejected) = map.next().await.unwrap();
+        assert_eq!(key, "endpoint-1");
+        assert!(matches!(unejected, UnejectedChannel::Ready(_)));
+        // Stream is done, removed from map — map is now empty.
+        assert!(map.next().await.is_none());
+
+        // Map can be reused: insert a new ejected stream and it yields correctly.
+        let mut connecting2 = IdleLbChannel::new(test_addr()).connect(connector.clone());
+        let ready2 = connecting2.next().await.unwrap();
+        let ejected2 = ready2.eject(
+            EjectionConfig {
+                timeout: Duration::from_secs(5),
+                needs_reconnect: false,
+            },
+            connector,
+        );
+        map.insert("endpoint-2", ejected2);
+        let (key2, unejected2) = map.next().await.unwrap();
+        assert_eq!(key2, "endpoint-2");
+        assert!(matches!(unejected2, UnejectedChannel::Ready(_)));
+        assert!(map.next().await.is_none());
     }
 }
