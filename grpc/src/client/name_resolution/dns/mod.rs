@@ -52,6 +52,7 @@ use crate::client::name_resolution::backoff::BackoffConfig;
 use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
 use crate::client::name_resolution::backoff::ExponentialBackoff;
 use crate::client::name_resolution::global_registry;
+use crate::client::name_resolution::nop_resolver_for_err;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::{self};
 
@@ -385,16 +386,6 @@ fn nop_resolver_for_ip(ip: IpAddr, port: u16, options: ResolverOptions) -> Box<d
                 }],
                 ..Default::default()
             }]),
-            ..Default::default()
-        },
-    })
-}
-
-fn nop_resolver_for_err(err: String, options: ResolverOptions) -> Box<dyn Resolver> {
-    options.work_scheduler.schedule_work();
-    Box::new(NopResolver {
-        update: ResolverUpdate {
-            endpoints: Err(err),
             ..Default::default()
         },
     })
