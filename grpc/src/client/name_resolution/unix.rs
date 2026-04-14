@@ -88,6 +88,10 @@ impl ResolverBuilder for Builder {
     fn is_valid_uri(&self, uri: &super::Target) -> bool {
         parse_endpoint_and_authority(uri, self.scheme).is_ok()
     }
+
+    fn default_authority(&self, target: &Target) -> String {
+        "localhost".to_owned()
+    }
 }
 
 /// Parses a target URI into a standard or abstract UNIX domain socket address.
