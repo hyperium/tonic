@@ -1,14 +1,16 @@
 //! LbChannel: an instrumented channel wrapper with in-flight request tracking.
 
+use std::future::Future;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
 
+use pin_project_lite::pin_project;
+use tower::Service;
 use tower::load::Load;
-use tower::{BoxError, Service};
 
 use crate::client::endpoint::EndpointAddress;
-use crate::common::async_util::BoxFuture;
 
 /// RAII guard that increments an in-flight counter on creation and decrements on drop.
 /// Ensures accurate tracking even when futures are cancelled.
@@ -26,6 +28,25 @@ impl InFlightGuard {
 impl Drop for InFlightGuard {
     fn drop(&mut self) {
         self.counter.fetch_sub(1, Ordering::Relaxed);
+    }
+}
+
+pin_project! {
+    /// A future that holds an [`InFlightGuard`] for the duration of a request.
+    ///
+    /// Preserves the inner future's output type — no boxing or error mapping.
+    pub(crate) struct InFlightFuture<F> {
+        #[pin]
+        inner: F,
+        _guard: InFlightGuard,
+    }
+}
+
+impl<F: Future> Future for InFlightFuture<F> {
+    type Output = F::Output;
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        self.project().inner.poll(cx)
     }
 }
 
@@ -76,27 +97,22 @@ impl<S: Clone> Clone for LbChannel<S> {
 
 impl<S, Req> Service<Req> for LbChannel<S>
 where
-    S: Service<Req> + Clone + Send + 'static,
-    S::Future: Send + 'static,
-    S::Error: Into<BoxError>,
-    Req: Send + 'static,
+    S: Service<Req>,
 {
     type Response = S::Response;
-    type Error = BoxError;
-    type Future = BoxFuture<Result<S::Response, BoxError>>;
+    type Error = S::Error;
+    type Future = InFlightFuture<S::Future>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        self.inner.poll_ready(cx).map_err(Into::into)
+        self.inner.poll_ready(cx)
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        let mut inner = self.inner.clone();
         let guard = InFlightGuard::acquire(self.in_flight.clone());
-
-        Box::pin(async move {
-            let _guard = guard;
-            inner.call(req).await.map_err(Into::into)
-        })
+        InFlightFuture {
+            inner: self.inner.call(req),
+            _guard: guard,
+        }
     }
 }
 
@@ -123,8 +139,8 @@ mod tests {
 
     impl Service<&'static str> for MockService {
         type Response = &'static str;
-        type Error = BoxError;
-        type Future = future::Ready<Result<&'static str, BoxError>>;
+        type Error = &'static str;
+        type Future = future::Ready<Result<&'static str, &'static str>>;
 
         fn poll_ready(&mut self, _cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
             Poll::Ready(Ok(()))
