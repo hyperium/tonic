@@ -42,9 +42,16 @@ use crate::client::service_config::ServiceConfig;
 use crate::rt::GrpcRuntime;
 
 mod backoff;
-pub(crate) mod dns;
 mod registry;
+
+#[cfg(test)]
+pub(crate) mod test_utils;
+
+pub(crate) mod dns;
+#[cfg(unix)]
 pub(crate) mod unix;
+#[cfg(target_os = "linux")]
+pub(crate) mod unix_abstract;
 pub(crate) use registry::global_registry;
 
 /// Target represents a target for gRPC, as specified in:
@@ -340,25 +347,42 @@ pub(crate) static UNIX_NETWORK_TYPE: &str = "unix";
 // It can be used to return an error to the channel when a resolver fails to
 // build.
 struct NopResolver {
-    pub update: ResolverUpdate,
+    pub update: Option<ResolverUpdate>,
 }
 
 impl Resolver for NopResolver {
     fn resolve_now(&mut self) {}
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
-        let _ = channel_controller.update(self.update.clone());
+        if let Some(update) = self.update.take() {
+            let _ = channel_controller.update(update);
+        }
     }
 }
 
-fn nop_resolver_for_err(err: String, options: ResolverOptions) -> Box<dyn Resolver> {
-    options.work_scheduler.schedule_work();
-    Box::new(NopResolver {
-        update: ResolverUpdate {
-            endpoints: Err(err),
-            ..Default::default()
-        },
-    })
+impl NopResolver {
+    fn new_with_err(err: String, options: ResolverOptions) -> Box<dyn Resolver> {
+        options.work_scheduler.schedule_work();
+        Box::new(NopResolver {
+            update: Some(ResolverUpdate {
+                endpoints: Err(err),
+                ..Default::default()
+            }),
+        })
+    }
+
+    fn new_with_addr(addr: Address, options: ResolverOptions) -> Box<dyn Resolver> {
+        options.work_scheduler.schedule_work();
+        Box::new(NopResolver {
+            update: Some(ResolverUpdate {
+                endpoints: Ok(vec![Endpoint {
+                    addresses: vec![addr],
+                    ..Default::default()
+                }]),
+                ..Default::default()
+            }),
+        })
+    }
 }
 
 #[cfg(test)]

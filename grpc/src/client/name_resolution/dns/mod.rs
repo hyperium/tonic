@@ -52,7 +52,6 @@ use crate::client::name_resolution::backoff::BackoffConfig;
 use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
 use crate::client::name_resolution::backoff::ExponentialBackoff;
 use crate::client::name_resolution::global_registry;
-use crate::client::name_resolution::nop_resolver_for_err;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::{self};
 
@@ -205,7 +204,7 @@ impl ResolverBuilder for Builder {
     fn build(&self, target: &Target, options: ResolverOptions) -> Box<dyn Resolver> {
         let parsed = match parse_endpoint_and_authority(target) {
             Ok(res) => res,
-            Err(err) => return nop_resolver_for_err(err.to_string(), options),
+            Err(err) => return NopResolver::new_with_err(err.to_string(), options),
         };
         let endpoint = parsed.endpoint;
         let host = match endpoint.host {
@@ -222,7 +221,7 @@ impl ResolverBuilder for Builder {
             server_addr: authority,
         }) {
             Ok(dns) => dns,
-            Err(err) => return nop_resolver_for_err(err.to_string(), options),
+            Err(err) => return NopResolver::new_with_err(err.to_string(), options),
         };
         let dns_opts = DnsOptions {
             min_resolution_interval: get_min_resolution_interval(),
@@ -375,18 +374,10 @@ fn parse_host_port(host_and_port: &str, default_port: u16) -> Result<Option<Host
 }
 
 fn nop_resolver_for_ip(ip: IpAddr, port: u16, options: ResolverOptions) -> Box<dyn Resolver> {
-    options.work_scheduler.schedule_work();
-    Box::new(NopResolver {
-        update: ResolverUpdate {
-            endpoints: Ok(vec![Endpoint {
-                addresses: vec![Address {
-                    network_type: TCP_IP_NETWORK_TYPE,
-                    address: ByteStr::from(SocketAddr::new(ip, port).to_string()),
-                    ..Default::default()
-                }],
-                ..Default::default()
-            }]),
-            ..Default::default()
-        },
-    })
+    let addr = Address {
+        network_type: TCP_IP_NETWORK_TYPE,
+        address: ByteStr::from(SocketAddr::new(ip, port).to_string()),
+        ..Default::default()
+    };
+    NopResolver::new_with_addr(addr, options)
 }
