@@ -28,6 +28,7 @@ use std::sync::Arc;
 
 use crate::attributes::Attributes;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::name_resolution::UNIX_NETWORK_TYPE;
 use crate::credentials::ChannelCredentials;
 use crate::credentials::ProtocolInfo;
 use crate::credentials::SecurityLevel;
@@ -57,9 +58,14 @@ pub struct LocalChannelCredentials {
 }
 
 impl LocalChannelCredentials {
-    /// Creates a new instance of `InsecureChannelCredentials`.
+    /// Creates a new instance of `LocalChannelCredentials`.
     pub fn new() -> Self {
         Self { _private: () }
+    }
+
+    /// Creates a new ref-counted instance of `LocalChannelCredentials`.
+    pub fn new_arc() -> Arc<Self> {
+        Arc::new(Self { _private: () })
     }
 }
 
@@ -89,7 +95,9 @@ fn security_level_for_endpoint(
     {
         return Ok(SecurityLevel::NoSecurity);
     }
-    // TODO: Add support for unix sockets.
+    if network_type == UNIX_NETWORK_TYPE {
+        return Ok(SecurityLevel::PrivacyAndIntegrity);
+    }
     Err(format!(
         "local credentials rejected connection to non-local address {}",
         peer_addr
@@ -199,12 +207,19 @@ mod test {
             security_level_for_endpoint("[::1]:8080", TCP_IP_NETWORK_TYPE),
             Ok(SecurityLevel::NoSecurity)
         );
+        assert_eq!(
+            security_level_for_endpoint("/file/path/name.sock", UNIX_NETWORK_TYPE),
+            Ok(SecurityLevel::PrivacyAndIntegrity)
+        );
+        assert_eq!(
+            security_level_for_endpoint("\0abstract-sock", UNIX_NETWORK_TYPE),
+            Ok(SecurityLevel::PrivacyAndIntegrity)
+        );
     }
 
     #[test]
     fn test_security_level_for_endpoint_failure() {
         assert!(security_level_for_endpoint("192.168.1.1:8080", TCP_IP_NETWORK_TYPE).is_err());
-        assert!(security_level_for_endpoint("127.0.0.1:8080", "unix").is_err());
         assert!(security_level_for_endpoint("invalid", TCP_IP_NETWORK_TYPE).is_err());
     }
 

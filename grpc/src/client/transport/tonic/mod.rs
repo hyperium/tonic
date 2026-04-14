@@ -25,6 +25,7 @@
 use std::error::Error;
 use std::future::Future;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
 use std::task::Context;
@@ -71,6 +72,7 @@ use crate::client::RecvStream;
 use crate::client::SendOptions;
 use crate::client::SendStream;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
+use crate::client::name_resolution::UNIX_NETWORK_TYPE;
 use crate::client::transport::SecurityOpts;
 use crate::client::transport::Transport;
 use crate::client::transport::TransportOptions;
@@ -86,6 +88,7 @@ use crate::credentials::dyn_wrapper::DynChannelCredentials;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 use crate::rt::TcpOptions;
+use crate::rt::UnixSocketOptions;
 use crate::rt::hyper_wrapper::HyperCompatExec;
 use crate::rt::hyper_wrapper::HyperCompatTimer;
 use crate::rt::hyper_wrapper::HyperStream;
@@ -100,10 +103,29 @@ type BoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 type BoxStream<T> = Pin<Box<dyn Stream<Item = Result<T, TonicStatus>> + Send>>;
 
 pub(crate) fn reg() {
-    GLOBAL_TRANSPORT_REGISTRY.add_transport(TCP_IP_NETWORK_TYPE, TransportBuilder {});
+    GLOBAL_TRANSPORT_REGISTRY.add_transport(
+        TCP_IP_NETWORK_TYPE,
+        TransportBuilder {
+            network_type: NetworkType::Tcp,
+        },
+    );
+    GLOBAL_TRANSPORT_REGISTRY.add_transport(
+        UNIX_NETWORK_TYPE,
+        TransportBuilder {
+            network_type: NetworkType::Unix,
+        },
+    );
 }
 
-struct TransportBuilder {}
+#[derive(Debug, Copy, Clone)]
+enum NetworkType {
+    Tcp,
+    Unix,
+}
+
+struct TransportBuilder {
+    network_type: NetworkType,
+}
 
 struct TonicTransport {
     grpc: Grpc<TonicService>,
@@ -332,39 +354,47 @@ impl Transport for TransportBuilder {
             settings.max_header_list_size(val);
         }
 
-        let addr: SocketAddr = SocketAddr::from_str(&address).map_err(|err| err.to_string())?;
-        let tcp_stream_fut = runtime.tcp_stream(
-            addr,
-            TcpOptions {
-                enable_nodelay: opts.tcp_nodelay,
-                keepalive: opts.tcp_keepalive,
-            },
-        );
-        let tcp_stream = if let Some(deadline) = opts.connect_deadline {
+        let transport_fut = match self.network_type {
+            NetworkType::Tcp => {
+                let addr: SocketAddr =
+                    SocketAddr::from_str(&address).map_err(|err| err.to_string())?;
+                runtime.tcp_stream(
+                    addr,
+                    TcpOptions {
+                        enable_nodelay: opts.tcp_nodelay,
+                        keepalive: opts.tcp_keepalive,
+                    },
+                )
+            }
+            NetworkType::Unix => {
+                runtime.unix_stream(PathBuf::from(&address), UnixSocketOptions::default())
+            }
+        };
+        let transport = if let Some(deadline) = opts.connect_deadline {
             let timeout = deadline.saturating_duration_since(Instant::now());
             tokio::select! {
-            _ = runtime.sleep(timeout) => {
-                return Err("timed out waiting for TCP stream to connect".to_string())
-            }
-            tcp_stream = tcp_stream_fut => { tcp_stream? }
+                _ = runtime.sleep(timeout) => {
+                    return Err("timed out waiting for TCP stream to connect".to_string());
+                }
+                transport = transport_fut => transport?,
             }
         } else {
-            tcp_stream_fut.await?
+            transport_fut.await?
         };
         let credentials = &security_info.credentials;
         let handshake_ouput = credentials
             .dyn_connect(
                 &security_info.authority,
-                tcp_stream,
+                transport,
                 &security_info.handshake_info,
                 &runtime,
             )
             .await?;
 
-        let tcp_stream = HyperStream::new(handshake_ouput.endpoint);
+        let transport = HyperStream::new(handshake_ouput.endpoint);
 
         let (sender, connection) = settings
-            .handshake(tcp_stream)
+            .handshake(transport)
             .await
             .map_err(|err| err.to_string())?;
         let (tx, rx) = oneshot::channel();
@@ -387,8 +417,9 @@ impl Transport for TransportBuilder {
         let service = BoxService::new(service);
         let (service, worker) = Buffer::pair(service, DEFAULT_BUFFER_SIZE);
         runtime.spawn(Box::pin(worker));
-        let uri =
-            Uri::from_maybe_shared(format!("http://{}", &address)).map_err(|e| e.to_string())?; // TODO: err msg
+        let authority = &security_info.authority.host_port_string();
+        let uri = Uri::from_maybe_shared(format!("http://{}", &authority))
+            .map_err(|e| format!("failed to create URL with authority {}: {}", authority, e))?;
         let grpc = Grpc::with_origin(TonicService { inner: service }, uri);
 
         let service = TonicTransport {

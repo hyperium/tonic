@@ -23,6 +23,8 @@
  */
 
 use std::fs;
+use std::path::Component;
+use std::path::Path;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
@@ -31,7 +33,9 @@ use std::time::Duration;
 
 use bytes::Buf;
 use bytes::Bytes;
+use tempfile::tempdir;
 use tokio::net::TcpListener;
+use tokio::net::UnixListener;
 use tokio::sync::Notify;
 use tokio::sync::oneshot;
 use tokio::time::timeout;
@@ -39,6 +43,7 @@ use tokio_stream::Stream;
 use tokio_stream::StreamExt;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::wrappers::TcpListenerStream;
+use tokio_stream::wrappers::UnixListenerStream;
 use tonic::Response;
 use tonic::async_trait;
 use tonic::metadata::MetadataMap;
@@ -265,6 +270,132 @@ async fn grpc_invoke_tonic_unary() {
     server_handle.await.unwrap();
 }
 
+#[tokio::test]
+async fn grpc_invoke_tonic_unix() {
+    super::reg();
+    crate::client::name_resolution::unix::reg();
+
+    let dir = tempdir().expect("failed to create temp dir");
+
+    // Absolute path
+    {
+        println!("Testing absolute path unix socket...");
+        let socket_path = dir.path().join("absolute.sock");
+        assert!(socket_path.is_absolute());
+        let listener = UnixListener::bind(&socket_path).unwrap();
+        let shutdown_notify = Arc::new(Notify::new());
+        let shutdown_notify_copy = shutdown_notify.clone();
+
+        let server_handle = tokio::spawn(async move {
+            let echo_server = EchoService {};
+            let svc = EchoServer::new(echo_server);
+            let _ = Server::builder()
+                .add_service(svc)
+                .serve_with_incoming_shutdown(
+                    UnixListenerStream::new(listener),
+                    shutdown_notify_copy.notified(),
+                )
+                .await;
+        });
+
+        let target = format!("unix://{}", socket_path.to_str().unwrap());
+        let channel = Channel::new(
+            &target,
+            LocalChannelCredentials::new_arc(),
+            Default::default(),
+        );
+
+        let (_, resp, trailers) = perform_unary_echo(&channel, "hello absolute unix").await;
+        assert_eq!(resp.message, "hello absolute unix");
+        assert_eq!(trailers.status().code(), StatusCode::Ok);
+
+        shutdown_notify.notify_one();
+        server_handle.await.unwrap();
+        println!("Absolute path test passed.");
+    }
+
+    // Relative path
+    {
+        println!("Testing relative path unix socket...");
+        let socket_name = "relative.sock";
+        let socket_path = dir.path().join(socket_name);
+        let listener = UnixListener::bind(&socket_path).unwrap();
+
+        let current_dir = std::env::current_dir().expect("failed to fetch current directory");
+
+        let shutdown_notify = Arc::new(Notify::new());
+        let shutdown_notify_copy = shutdown_notify.clone();
+
+        let server_handle = tokio::spawn(async move {
+            let echo_server = EchoService {};
+            let svc = EchoServer::new(echo_server);
+            let _ = Server::builder()
+                .add_service(svc)
+                .serve_with_incoming_shutdown(
+                    UnixListenerStream::new(listener),
+                    shutdown_notify_copy.notified(),
+                )
+                .await;
+        });
+
+        let relative_path = get_relative_path(&socket_path, &current_dir)
+            .expect("current directory and temp directory don't share a common ancestor");
+        let target = format!("unix:{}", relative_path.display());
+        println!("grpc target: {}", target);
+        let channel = Channel::new(
+            &target,
+            InsecureChannelCredentials::new_arc(),
+            Default::default(),
+        );
+
+        let (_, resp, trailers) = perform_unary_echo(&channel, "hello relative unix").await;
+        assert_eq!(resp.message, "hello relative unix");
+        assert_eq!(trailers.status().code(), StatusCode::Ok);
+
+        shutdown_notify.notify_one();
+        server_handle.await.unwrap();
+        std::env::set_current_dir(current_dir).unwrap();
+        println!("Relative path test passed.");
+    }
+
+    // Abstract unix
+    #[cfg(target_os = "linux")]
+    {
+        println!("Testing abstract unix socket...");
+        let abstract_path = format!("grpc-test-abstract-socket-{}", rand::random::<u64>());
+        let listener = UnixListener::bind(format!("\0{}", abstract_path)).unwrap();
+        let shutdown_notify = Arc::new(Notify::new());
+        let shutdown_notify_copy = shutdown_notify.clone();
+
+        let server_handle = tokio::spawn(async move {
+            let echo_server = EchoService {};
+            let svc = EchoServer::new(echo_server);
+            let _ = Server::builder()
+                .add_service(svc)
+                .serve_with_incoming_shutdown(
+                    UnixListenerStream::new(listener),
+                    shutdown_notify_copy.notified(),
+                )
+                .await;
+        });
+
+        let target = format!("unix-abstract:{}", abstract_path);
+        let channel = Channel::new(
+            &target,
+            InsecureChannelCredentials::new_arc(),
+            Default::default(),
+        );
+
+        let (_, resp, trailers) = perform_unary_echo(&channel, "hello abstract unix").await;
+        assert_eq!(resp.message, "hello abstract unix");
+        assert_eq!(trailers.status().code(), StatusCode::Ok);
+
+        shutdown_notify.notify_one();
+        server_handle.await.unwrap();
+        println!("Abstract unix test passed.");
+    }
+}
+
 static INIT: Once = Once::new();
 
 fn init_provider() {
@@ -437,6 +568,7 @@ async fn perform_unary_echo(
     let req = WrappedEchoRequest(EchoRequest {
         message: message.into(),
     });
+
     tx.send(
         &req,
         SendOptions {
@@ -564,4 +696,48 @@ impl Echo for EchoService {
             Box::pin(outbound) as Self::BidirectionalStreamingEchoStream
         ))
     }
+}
+
+/// Calculates the relative path from a `base` directory to a `target` path.
+/// Both paths should be absolute.
+fn get_relative_path(target: &Path, base: &Path) -> Option<PathBuf> {
+    let mut target_components = target.components();
+    let mut base_components = base.components();
+
+    // Find the common prefix between the two paths.
+    let mut common_components = 0;
+    loop {
+        match (
+            target_components.clone().next(),
+            base_components.clone().next(),
+        ) {
+            (Some(t), Some(b)) if t == b => {
+                target_components.next();
+                base_components.next();
+                common_components += 1;
+            }
+            _ => break,
+        }
+    }
+
+    // If they share absolutely nothing (e.g., C:\ vs D:\ on Windows), we can't
+    // make it relative.
+    if common_components == 0 {
+        return None;
+    }
+
+    let mut relative_path = PathBuf::new();
+
+    // For every component left in the base path, we need to go up one directory
+    // ("..").
+    for _ in base_components {
+        relative_path.push(Component::ParentDir);
+    }
+
+    // Append the remaining components of the target path.
+    for component in target_components {
+        relative_path.push(component);
+    }
+
+    Some(relative_path)
 }

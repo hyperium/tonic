@@ -153,6 +153,18 @@ pub(crate) mod common {
         pub fn port(&self) -> Option<u16> {
             self.port
         }
+
+        pub fn host_port_string(&self) -> String {
+            let host_str = &self.host;
+            match self.port() {
+                None => host_str.to_string(),
+                // Add [] for IPv6 addresses.
+                Some(port) if host_str.contains(':') => {
+                    format!("[{}]:{}", host_str, port)
+                }
+                Some(port) => format!("{}:{}", host_str, port),
+            }
+        }
     }
 }
 

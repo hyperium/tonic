@@ -126,13 +126,14 @@ impl Runtime for TokioRuntime {
                     .set_tcp_keepalive(&ka)
                     .map_err(|err| err.to_string())?;
             }
-            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioTcpStream {
+            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioIoStream {
                 peer_addr: target.to_string().into_boxed_str(),
                 local_addr: stream
                     .local_addr()
                     .map_err(|err| err.to_string())?
                     .to_string()
                     .into_boxed_str(),
+                network_type: TCP_IP_NETWORK_TYPE,
                 inner: stream,
             });
             Ok(stream)
@@ -156,6 +157,33 @@ impl Runtime for TokioRuntime {
             Ok(Box::new(listener) as Box<dyn super::TcpListener>)
         })
     }
+
+    #[cfg(unix)]
+    fn unix_stream(
+        &self,
+        path: std::path::PathBuf,
+        _opts: super::UnixSocketOptions,
+    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
+        use tokio::net::UnixStream;
+
+        use crate::client::name_resolution::UNIX_NETWORK_TYPE;
+
+        Box::pin(async move {
+            let stream = UnixStream::connect(&path)
+                .await
+                .map_err(|err| err.to_string())?;
+            let peer_addr = stream.peer_addr().map_err(|err| err.to_string())?;
+            let local_addr = stream.local_addr().map_err(|err| err.to_string())?;
+
+            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioIoStream {
+                peer_addr: format!("{peer_addr:?}").into_boxed_str(),
+                local_addr: format!("{local_addr:?}").into_boxed_str(),
+                network_type: UNIX_NETWORK_TYPE,
+                inner: stream,
+            });
+            Ok(stream)
+        })
+    }
 }
 
 impl TokioDefaultDnsResolver {
@@ -167,13 +195,14 @@ impl TokioDefaultDnsResolver {
     }
 }
 
-struct TokioTcpStream {
-    inner: TcpStream,
+struct TokioIoStream<T> {
+    inner: T,
     peer_addr: Box<str>,
     local_addr: Box<str>,
+    network_type: &'static str,
 }
 
-impl super::GrpcEndpoint for TokioTcpStream {
+impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> super::GrpcEndpoint for TokioIoStream<T> {
     fn get_local_address(&self) -> &str {
         &self.local_addr
     }
@@ -183,7 +212,7 @@ impl super::GrpcEndpoint for TokioTcpStream {
     }
 
     fn get_network_type(&self) -> &'static str {
-        TCP_IP_NETWORK_TYPE
+        self.network_type
     }
 
     fn poll_read_private(
@@ -244,13 +273,14 @@ impl super::TcpListener for TokioListener {
         Box::pin(async move {
             let (stream, addr) = self.inner.accept().await.map_err(|e| e.to_string())?;
             Ok((
-                Box::new(TokioTcpStream {
+                Box::new(TokioIoStream {
                     local_addr: stream
                         .local_addr()
                         .map_err(|err| err.to_string())?
                         .to_string()
                         .into_boxed_str(),
                     peer_addr: addr.to_string().into_boxed_str(),
+                    network_type: TCP_IP_NETWORK_TYPE,
                     inner: stream,
                 }) as Box<dyn GrpcEndpoint>,
                 addr,

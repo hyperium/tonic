@@ -51,6 +51,7 @@ use crate::client::name_resolution::global_registry;
 use crate::client::service_config::ServiceConfig;
 use crate::rt::BoxFuture;
 use crate::rt::GrpcRuntime;
+use crate::rt::Runtime;
 use crate::rt::TcpOptions;
 use crate::rt::tokio::TokioRuntime;
 use crate::rt::{self};
@@ -288,7 +289,7 @@ struct FakeRuntime {
     dns: FakeDns,
 }
 
-impl rt::Runtime for FakeRuntime {
+impl Runtime for FakeRuntime {
     fn spawn(
         &self,
         task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,

@@ -27,6 +27,7 @@ use std::future::Future;
 use std::io;
 use std::io::IoSlice;
 use std::net::SocketAddr;
+use std::path::PathBuf;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::Context;
@@ -81,6 +82,18 @@ pub trait Runtime: Send + Sync + Debug {
         addr: SocketAddr,
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
+
+    /// Establishes a Unix connection to the given `path` with the specified
+    /// `opts`.
+    fn unix_stream(
+        &self,
+        path: PathBuf,
+        opts: UnixSocketOptions,
+    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
+        Box::pin(async move {
+            Err("Unix sockets are not supported by this runtime on this platform".to_string())
+        })
+    }
 }
 
 /// A future that resolves after a specified duration.
@@ -112,6 +125,11 @@ pub struct ResolverOptions {
 pub struct TcpOptions {
     pub(crate) enable_nodelay: bool,
     pub(crate) keepalive: Option<Duration>,
+}
+
+#[derive(Default)]
+pub struct UnixSocketOptions {
+    _priv: (),
 }
 
 /// GrpcEndpoint is a generic stream-oriented network connection.
@@ -324,15 +342,15 @@ impl Runtime for NoOpRuntime {
 
     fn tcp_stream(
         &self,
-        target: SocketAddr,
-        opts: TcpOptions,
+        _target: SocketAddr,
+        _opts: TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
         unimplemented!()
     }
 
     fn listen_tcp(
         &self,
-        addr: SocketAddr,
+        _addr: SocketAddr,
         _opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
         unimplemented!()
@@ -389,5 +407,13 @@ impl GrpcRuntime {
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
         self.inner.listen_tcp(addr, opts)
+    }
+
+    pub fn unix_stream(
+        &self,
+        path: PathBuf,
+        opts: UnixSocketOptions,
+    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
+        self.inner.unix_stream(path, opts)
     }
 }
