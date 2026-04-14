@@ -30,6 +30,7 @@ dashmap = "6.1"
 thiserror = "2.0.17"
 url = "2.5.8"
 futures-core = "0.3.31"
+futures-util = "0.3"
 bytes = "1"
 xds-client = { version = "0.1.0-alpha.1", path = "../xds-client" }
 serde = { version = "1", features = ["derive"] }
@@ -42,6 +43,7 @@ tokio = { version = "1", features = ["sync", "time"] }
 # cryptographic security, only statistical uniformity for traffic distribution.
 fastrand = "2"
 tokio-stream = "0.1"
+tokio-util = "0.7"
 backoff = "0.4"
 shared_http_body = "0.1"
 tonic-prost = { version = "0.14", optional = true }
