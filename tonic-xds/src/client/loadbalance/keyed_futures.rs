@@ -51,11 +51,7 @@ where
 
     /// Add a future keyed by `key`. Returns `Err(DuplicateKey)` if a future
     /// for this key is already running.
-    pub(crate) fn add<F>(
-        &mut self,
-        key: K,
-        fut: F,
-    ) -> Result<(), KeyedFuturesError<K>>
+    pub(crate) fn add<F>(&mut self, key: K, fut: F) -> Result<(), KeyedFuturesError<K>>
     where
         F: Future<Output = T> + Send + 'static,
     {
@@ -157,10 +153,7 @@ mod tests {
         tx.send(42).unwrap();
 
         // FuturesUnordered's internal waker was notified; next poll sees result.
-        assert_eq!(
-            set.poll_next(&mut noop_cx()),
-            Poll::Ready(Some(("a", 42)))
-        );
+        assert_eq!(set.poll_next(&mut noop_cx()), Poll::Ready(Some(("a", 42))));
     }
 
     #[tokio::test]

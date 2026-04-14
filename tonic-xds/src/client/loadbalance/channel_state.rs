@@ -4,16 +4,17 @@
 //! This prevents using a channel in an invalid state at compile time.
 //!
 //! ```text
-//!                +---reconnect---+
-//!                |               |
-//!                v               |
-//! Idle --> Connecting --> Ready --+--eject--> Ejected
-//!                ^                               |
-//!                +----------reconnect------------+
+//!                +-----------+
+//!                |           |
+//!                v           |
+//! Idle --> Connecting --> Ready <--+--> Ejected
+//!                ^                       |
+//!                |                       |
+//!                +-----------------------+
 //! ```
 //!
-//! State changes are all one-shot: [`ConnectingChannel`] and [`EjectedChannel`] are
-//! [`Future`]s, not streams. The caller (typically a pool) uses [`KeyedFutures`] to
+//! State changes are all one-shot. [`ConnectingChannel`] and [`EjectedChannel`] are
+//! [`Future`]. The caller (typically a pool) uses [`KeyedFutures`] to
 //! manage multiple in-flight state changes and handle cancellation by key.
 //!
 //! [`KeyedFutures`]: crate::client::loadbalance::keyed_futures::KeyedFutures
@@ -36,7 +37,7 @@ use crate::common::async_util::BoxFuture;
 pub(crate) struct EjectionConfig {
     /// How long the channel is ejected before it can return to service.
     pub timeout: Duration,
-    /// Whether the channel needs a fresh connection after ejection expires.
+    /// Whether the channel needs a fresh connection after ejection expires (e.g. after consecutive timeouts).
     pub needs_reconnect: bool,
 }
 
@@ -116,6 +117,8 @@ impl<S: Send + 'static> Future for ConnectingChannel<S> {
 ///
 /// Wraps an [`LbChannel`] and delegates [`Service`] and [`Load`] to it.
 /// State transitions consume `self` to prevent use-after-transition.
+/// ReadyChannel is `Clone` to allow reusing the same channel in load balancer.
+#[derive(Clone)]
 pub(crate) struct ReadyChannel<S> {
     pub(super) channel: LbChannel<S>,
 }
@@ -203,6 +206,7 @@ impl<S: Clone + Unpin + Send + 'static> Future for EjectedChannel<S> {
     type Output = UnejectedChannel<S>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        // get_mut() requires EjectedChannel to be Unpin, which requires S to be Unpin.
         let this = self.get_mut();
         match this.ejection_timer.as_mut().poll(cx) {
             Poll::Ready(()) => {
@@ -300,7 +304,9 @@ mod tests {
     #[tokio::test]
     async fn test_ready_to_connecting_via_reconnect() {
         let connector = MockConnector::new();
-        let ready = IdleChannel::new(test_addr()).connect(connector.clone()).await;
+        let ready = IdleChannel::new(test_addr())
+            .connect(connector.clone())
+            .await;
         let _reconnecting = ready.reconnect(connector.clone());
         assert_eq!(connector.connect_count.load(Ordering::SeqCst), 2);
     }
@@ -313,8 +319,7 @@ mod tests {
         let connecting =
             ConnectingChannel::new(Box::pin(async move { rx.await.unwrap() }), test_addr());
 
-        let mut set: KeyedFutures<EndpointAddress, ReadyChannel<MockService>> =
-            KeyedFutures::new();
+        let mut set: KeyedFutures<EndpointAddress, ReadyChannel<MockService>> = KeyedFutures::new();
         set.add(test_addr(), connecting).unwrap();
 
         // Before send: pending.
@@ -331,23 +336,18 @@ mod tests {
 
     #[tokio::test]
     async fn test_connecting_cancelled_via_keyed_futures() {
-        let connecting = ConnectingChannel::new(
-            Box::pin(future::pending::<MockService>()),
-            test_addr(),
-        );
+        let connecting =
+            ConnectingChannel::new(Box::pin(future::pending::<MockService>()), test_addr());
 
-        let mut set: KeyedFutures<EndpointAddress, ReadyChannel<MockService>> =
-            KeyedFutures::new();
+        let mut set: KeyedFutures<EndpointAddress, ReadyChannel<MockService>> = KeyedFutures::new();
         set.add(test_addr(), connecting).unwrap();
 
         assert!(matches!(set.poll_next(&mut noop_cx()), Poll::Pending));
 
         set.cancel(&test_addr()).unwrap();
-        for _ in 0..10 {
-            match set.poll_next(&mut noop_cx()) {
-                Poll::Ready(None) => return,
-                _ => tokio::task::yield_now().await,
-            }
+        match set.poll_next(&mut noop_cx()) {
+            Poll::Ready(None) => return,
+            _ => tokio::task::yield_now().await,
         }
         panic!("expected set to be empty after cancel");
     }
@@ -355,7 +355,9 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn test_ejected_in_keyed_futures_ready() {
         let connector = MockConnector::new();
-        let ready = IdleChannel::new(test_addr()).connect(connector.clone()).await;
+        let ready = IdleChannel::new(test_addr())
+            .connect(connector.clone())
+            .await;
         let ejected = ready.eject(
             EjectionConfig {
                 timeout: Duration::from_secs(5),
@@ -379,7 +381,9 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn test_ejected_in_keyed_futures_needs_reconnect() {
         let connector = MockConnector::new();
-        let ready = IdleChannel::new(test_addr()).connect(connector.clone()).await;
+        let ready = IdleChannel::new(test_addr())
+            .connect(connector.clone())
+            .await;
         let ejected = ready.eject(
             EjectionConfig {
                 timeout: Duration::from_secs(5),
