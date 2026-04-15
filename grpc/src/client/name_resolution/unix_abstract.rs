@@ -88,8 +88,6 @@ fn parse_target(target: &Target) -> Result<Address, String> {
 
 #[cfg(test)]
 mod tests {
-    use tokio::sync::mpsc;
-
     use super::*;
     use crate::client::name_resolution::ResolverOptions;
     use crate::client::name_resolution::test_utils::TestChannelController;
@@ -118,8 +116,7 @@ mod tests {
         // Wait for work to be scheduled.
         work_rx.recv().await.unwrap();
 
-        let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-        let mut channel_controller = TestChannelController::new(update_tx);
+        let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
         resolver.work(&mut channel_controller);
 
         let update = update_rx.recv().await.unwrap();

@@ -32,13 +32,13 @@ use crate::client::name_resolution::WorkScheduler;
 use crate::client::service_config::ServiceConfig;
 
 /// A work scheduler for testing.
-pub struct TestWorkScheduler {
-    pub work_tx: mpsc::UnboundedSender<()>,
+pub(crate) struct TestWorkScheduler {
+    work_tx: mpsc::UnboundedSender<()>,
 }
 
 impl TestWorkScheduler {
     /// Creates a new `TestWorkScheduler`.
-    pub fn new_pair() -> (Arc<dyn WorkScheduler>, mpsc::UnboundedReceiver<()>) {
+    pub(crate) fn new_pair() -> (Arc<dyn WorkScheduler>, mpsc::UnboundedReceiver<()>) {
         let (work_tx, work_rx) = mpsc::unbounded_channel();
         let sched = Self { work_tx };
         (Arc::new(sched), work_rx)
@@ -52,29 +52,24 @@ impl WorkScheduler for TestWorkScheduler {
 }
 
 /// A channel controller for testing.
-pub struct TestChannelController {
-    pub update_result: Result<(), String>,
-    pub update_tx: mpsc::UnboundedSender<ResolverUpdate>,
+pub(crate) struct TestChannelController {
+    update_result: Result<(), String>,
+    update_tx: mpsc::UnboundedSender<ResolverUpdate>,
 }
 
 impl TestChannelController {
     /// Creates a new `TestChannelController` that returns `Ok(())` on update.
-    pub fn new(update_tx: mpsc::UnboundedSender<ResolverUpdate>) -> Self {
-        Self {
+    pub(crate) fn new_pair() -> (Self, mpsc::UnboundedReceiver<ResolverUpdate>) {
+        let (update_tx, update_rx) = mpsc::unbounded_channel();
+        let cc = Self {
             update_result: Ok(()),
             update_tx,
-        }
+        };
+        (cc, update_rx)
     }
 
-    /// Creates a new `TestChannelController` with a specified update result.
-    pub fn new_with_result(
-        update_tx: mpsc::UnboundedSender<ResolverUpdate>,
-        update_result: Result<(), String>,
-    ) -> Self {
-        Self {
-            update_result,
-            update_tx,
-        }
+    pub(crate) fn set_update_result(&mut self, update_result: Result<(), String>) {
+        self.update_result = update_result
     }
 }
 

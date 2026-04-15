@@ -26,7 +26,6 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use tokio::sync::mpsc::{self};
 use url::Host;
 
 use crate::client::name_resolution::Resolver;
@@ -182,8 +181,7 @@ pub(crate) async fn dns_basic() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = TestChannelController::new(update_tx);
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // A successful endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -205,8 +203,7 @@ pub(crate) async fn invalid_target() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = TestChannelController::new(update_tx);
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -290,8 +287,7 @@ pub(crate) async fn dns_lookup_error() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = TestChannelController::new(update_tx);
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -325,8 +321,7 @@ pub(crate) async fn dns_lookup_timeout() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = TestChannelController::new(update_tx);
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
 
     // An error endpoint update should be received.
@@ -357,8 +352,7 @@ pub(crate) async fn rate_limit() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = TestChannelController::new(update_tx);
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // A successful endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -401,8 +395,7 @@ pub(crate) async fn re_resolution_after_success() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = TestChannelController::new(update_tx);
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // A successful endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -444,9 +437,8 @@ pub(crate) async fn backoff_on_error() {
 
     let mut resolver = DnsResolver::new(dns_client, opts, dns_opts);
 
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller =
-        TestChannelController::new_with_result(update_tx, Err("test_error".to_string()));
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
+    channel_controller.set_update_result(Err("test_error".to_string()));
 
     // As the channel returned an error to the resolver, the resolver will
     // backoff and re-attempt resolution.
@@ -458,7 +450,7 @@ pub(crate) async fn backoff_on_error() {
     }
 
     // This time the channel accepts the resolver update.
-    channel_controller.update_result = Ok(());
+    channel_controller.set_update_result(Ok(()));
     work_rx.recv().await.unwrap();
     resolver.work(&mut channel_controller);
     let update = update_rx.recv().await.unwrap();
