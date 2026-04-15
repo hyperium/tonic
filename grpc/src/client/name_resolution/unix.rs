@@ -86,8 +86,6 @@ fn parse_target(target: &Target) -> Result<Address, String> {
 
 #[cfg(test)]
 mod tests {
-    use rstest::rstest;
-
     use super::*;
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverOptions;
@@ -95,12 +93,7 @@ mod tests {
     use crate::client::name_resolution::test_utils::TestWorkScheduler;
     use crate::rt;
 
-    #[rstest]
-    #[case::relative_path("unix:path/to/socket", "path/to/socket")]
-    #[case::absolute_path("unix:/absolute/path", "/absolute/path")]
-    #[case::absolute_path_with_slashes("unix:///absolute/path", "/absolute/path")]
-    #[tokio::test]
-    async fn unix_resolver_success(#[case] input: &str, #[case] want_addr: &str) {
+    async fn run_success(input: &str, want_addr: &str) {
         reg();
 
         let target: Target = input.parse().unwrap();
@@ -129,11 +122,27 @@ mod tests {
             }],
             ..Default::default()
         };
+
         assert_eq!(
             update.endpoints,
             Ok(vec![want_endpoint]),
             "did not receive expected endpoint"
         );
+    }
+
+    #[tokio::test]
+    async fn unix_resolver_success_relative_path() {
+        run_success("unix:path/to/socket", "path/to/socket").await;
+    }
+
+    #[tokio::test]
+    async fn unix_resolver_success_absolute_path() {
+        run_success("unix:/absolute/path", "/absolute/path").await;
+    }
+
+    #[tokio::test]
+    async fn unix_resolver_success_absolute_path_with_slashes() {
+        run_success("unix:///absolute/path", "/absolute/path").await;
     }
 
     #[tokio::test]

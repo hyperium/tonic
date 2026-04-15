@@ -85,7 +85,6 @@ async-stream = "0.3.6"
 criterion = "0.5"
 hickory-server = "0.25.2"
 prost = "0.14.0"
-rstest = "0.26"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tempfile = "3.26"
 tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
