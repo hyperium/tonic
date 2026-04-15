@@ -86,79 +86,73 @@ fn parse_target(target: &Target) -> Result<Address, String> {
 
 #[cfg(test)]
 mod tests {
+    use rstest::rstest;
+
     use super::*;
     use crate::client::name_resolution::ResolverOptions;
     use crate::client::name_resolution::test_utils::TestChannelController;
     use crate::client::name_resolution::test_utils::TestWorkScheduler;
     use crate::rt;
 
+    #[rstest]
+    #[case::relative_path("unix:path/to/socket", "path/to/socket")]
+    #[case::absolute_path("unix:/absolute/path", "/absolute/path")]
+    #[case::absolute_path_with_slashes("unix:///absolute/path", "/absolute/path")]
     #[tokio::test]
-    async fn unix_resolver() {
+    async fn unix_resolver_success(#[case] input: &str, #[case] want_addr: &str) {
         reg();
 
-        struct TestCase {
-            input: &'static str,
-            scheme: &'static str,
-            want_addr: &'static str,
-            want_success: bool,
-        }
+        let target: Target = input.parse().expect("Failed to parse target");
+        let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
+        let opts = ResolverOptions {
+            authority: "ignored".to_string(),
+            runtime: rt::default_runtime(),
+            work_scheduler: work_scheduler.clone(),
+        };
 
-        let test_cases = vec![
-            TestCase {
-                input: "unix:path/to/socket",
-                scheme: "unix",
-                want_addr: "path/to/socket",
-                want_success: true,
-            },
-            TestCase {
-                input: "unix:/absolute/path",
-                scheme: "unix",
-                want_addr: "/absolute/path",
-                want_success: true,
-            },
-            TestCase {
-                input: "unix:///absolute/path",
-                scheme: "unix",
-                want_addr: "/absolute/path",
-                want_success: true,
-            },
-            TestCase {
-                input: "unix://authority/path",
-                scheme: "unix",
-                want_addr: "",
-                want_success: false,
-            },
-        ];
+        let builder = global_registry().get("unix").expect("scheme not found");
+        let mut resolver = builder.build(&target, opts);
 
-        for tc in test_cases {
-            let target: Target = tc.input.parse().expect("Failed to parse target");
-            let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
-            let opts = ResolverOptions {
-                authority: "ignored".to_string(),
-                runtime: rt::default_runtime(),
-                work_scheduler: work_scheduler.clone(),
-            };
+        // Wait for work to be scheduled.
+        work_rx.recv().await.unwrap();
 
-            let builder = global_registry().get(tc.scheme).expect("scheme not found");
-            let mut resolver = builder.build(&target, opts);
+        let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
+        resolver.work(&mut channel_controller);
 
-            // Wait for work to be scheduled.
-            work_rx.recv().await.unwrap();
+        let update = update_rx.recv().await.unwrap();
+        let endpoints = update.endpoints.expect("Should have succeeded");
+        assert_eq!(endpoints.len(), 1);
 
-            let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
-            resolver.work(&mut channel_controller);
+        let addr = &endpoints[0].addresses[0];
+        assert_eq!(addr.network_type, UNIX_NETWORK_TYPE);
+        assert_eq!(&*addr.address, want_addr);
+    }
 
-            let update = update_rx.recv().await.unwrap();
-            if tc.want_success {
-                let endpoints = update.endpoints.expect("Should have succeeded");
-                assert_eq!(endpoints.len(), 1);
-                let addr = &endpoints[0].addresses[0];
-                assert_eq!(addr.network_type, UNIX_NETWORK_TYPE);
-                assert_eq!(&*addr.address, tc.want_addr);
-            } else {
-                let err = update.endpoints.expect_err("Should have failed");
-                assert!(err.contains("invalid (non-empty) authority"));
-            }
-        }
+    #[tokio::test]
+    async fn unix_resolver_failure() {
+        reg();
+
+        let target: Target = "unix://authority/path"
+            .parse()
+            .expect("Failed to parse target");
+        let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
+        let opts = ResolverOptions {
+            authority: "ignored".to_string(),
+            runtime: rt::default_runtime(),
+            work_scheduler: work_scheduler.clone(),
+        };
+
+        let builder = global_registry().get("unix").expect("scheme not found");
+        let mut resolver = builder.build(&target, opts);
+
+        // Wait for work to be scheduled.
+        work_rx.recv().await.unwrap();
+
+        let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
+        resolver.work(&mut channel_controller);
+
+        let update = update_rx.recv().await.unwrap();
+        let err = update.endpoints.expect_err("Should have failed");
+        assert!(err.contains("invalid (non-empty) authority"));
     }
 }
