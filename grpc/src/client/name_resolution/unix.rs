@@ -89,6 +89,7 @@ mod tests {
     use rstest::rstest;
 
     use super::*;
+    use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverOptions;
     use crate::client::name_resolution::test_utils::TestChannelController;
     use crate::client::name_resolution::test_utils::TestWorkScheduler;
@@ -102,7 +103,7 @@ mod tests {
     async fn unix_resolver_success(#[case] input: &str, #[case] want_addr: &str) {
         reg();
 
-        let target: Target = input.parse().expect("Failed to parse target");
+        let target: Target = input.parse().unwrap();
         let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
         let opts = ResolverOptions {
             authority: "ignored".to_string(),
@@ -120,21 +121,26 @@ mod tests {
         resolver.work(&mut channel_controller);
 
         let update = update_rx.recv().await.unwrap();
-        let endpoints = update.endpoints.expect("Should have succeeded");
-        assert_eq!(endpoints.len(), 1);
-
-        let addr = &endpoints[0].addresses[0];
-        assert_eq!(addr.network_type, UNIX_NETWORK_TYPE);
-        assert_eq!(&*addr.address, want_addr);
+        let want_endpoint = Endpoint {
+            addresses: vec![Address {
+                network_type: UNIX_NETWORK_TYPE,
+                address: ByteStr::from(want_addr.to_owned()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            update.endpoints,
+            Ok(vec![want_endpoint]),
+            "did not receive expected endpoint"
+        );
     }
 
     #[tokio::test]
-    async fn unix_resolver_failure() {
+    async fn unix_resolver_error_with_authority() {
         reg();
 
-        let target: Target = "unix://authority/path"
-            .parse()
-            .expect("Failed to parse target");
+        let target: Target = "unix://authority/path".parse().unwrap();
         let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
         let opts = ResolverOptions {
             authority: "ignored".to_string(),
@@ -152,7 +158,7 @@ mod tests {
         resolver.work(&mut channel_controller);
 
         let update = update_rx.recv().await.unwrap();
-        let err = update.endpoints.expect_err("Should have failed");
+        let err = update.endpoints.err().unwrap();
         assert!(err.contains("invalid (non-empty) authority"));
     }
 }

@@ -89,6 +89,7 @@ fn parse_target(target: &Target) -> Result<Address, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverOptions;
     use crate::client::name_resolution::test_utils::TestChannelController;
     use crate::client::name_resolution::test_utils::TestWorkScheduler;
@@ -98,9 +99,7 @@ mod tests {
     async fn unix_abstract_resolver() {
         reg();
 
-        let target: Target = "unix-abstract:abstract_name"
-            .parse()
-            .expect("Failed to parse target");
+        let target: Target = "unix-abstract:abstract_name".parse().unwrap();
         let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
         let opts = ResolverOptions {
             authority: "ignored".to_string(),
@@ -120,10 +119,18 @@ mod tests {
         resolver.work(&mut channel_controller);
 
         let update = update_rx.recv().await.unwrap();
-        let endpoints = update.endpoints.expect("Should have succeeded");
-        assert_eq!(endpoints.len(), 1);
-        let addr = &endpoints[0].addresses[0];
-        assert_eq!(addr.network_type, UNIX_NETWORK_TYPE);
-        assert_eq!(&*addr.address, "\0abstract_name");
+        let want_endpoint = Endpoint {
+            addresses: vec![Address {
+                network_type: UNIX_NETWORK_TYPE,
+                address: ByteStr::from("\0abstract_name".to_owned()),
+                ..Default::default()
+            }],
+            ..Default::default()
+        };
+        assert_eq!(
+            update.endpoints,
+            Ok(vec![want_endpoint]),
+            "did not receive expected endpoint"
+        );
     }
 }
