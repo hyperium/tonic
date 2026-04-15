@@ -188,6 +188,7 @@ mod test {
     use crate::rt::AsyncIoAdapter;
     use crate::rt::GrpcEndpoint;
     use crate::rt::TcpOptions;
+    use crate::rt::tokio::TokioIoStream;
 
     #[test]
     fn test_security_level_for_endpoint_success() {
@@ -278,11 +279,8 @@ mod test {
 
         let addr = "127.0.0.1:0";
         let runtime = rt::default_runtime();
-        let mut listener = runtime
-            .listen_tcp(addr.parse().unwrap(), TcpOptions::default())
-            .await
-            .unwrap();
-        let server_addr = *listener.local_addr();
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
 
         let client_handle = tokio::spawn(async move {
             let mut stream = TcpStream::connect(server_addr).await.unwrap();
@@ -294,7 +292,8 @@ mod test {
             let _ = stream.read(&mut buf).await;
         });
 
-        let (server_stream, _) = listener.accept().await.unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let server_stream = TokioIoStream::new_from_tcp(stream).unwrap();
 
         let output = creds
             .accept(server_stream, runtime, private::Internal)

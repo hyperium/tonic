@@ -46,11 +46,9 @@ use crate::client::name_resolution::dns::reg;
 use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::test_utils::TestChannelController;
 use crate::client::name_resolution::test_utils::TestWorkScheduler;
-use crate::rt::BoxFuture;
+use crate::rt;
 use crate::rt::GrpcRuntime;
-use crate::rt::TcpOptions;
 use crate::rt::tokio::TokioRuntime;
-use crate::rt::{self};
 
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 
@@ -270,14 +268,6 @@ impl rt::Runtime for FakeRuntime {
         opts: rt::TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::GrpcEndpoint>, String>> + Send>> {
         self.inner.tcp_stream(target, opts)
-    }
-
-    fn listen_tcp(
-        &self,
-        _addr: std::net::SocketAddr,
-        _opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn rt::TcpListener>, String>> {
-        unimplemented!()
     }
 }
 
