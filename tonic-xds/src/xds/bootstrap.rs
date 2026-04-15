@@ -4,6 +4,8 @@
 //! `GRPC_XDS_BOOTSTRAP_CONFIG` (inline JSON) environment variables,
 //! per gRFC A27.
 
+use std::collections::HashMap;
+
 use serde::Deserialize;
 use xds_client::message::{Locality, Node};
 
@@ -44,11 +46,19 @@ pub struct BootstrapConfig {
     /// Node identity sent to the xDS server.
     #[serde(default)]
     pub(crate) node: NodeConfig,
+    /// Certificate provider plugin instances, keyed by instance name.
+    ///
+    /// Referenced by [`CertificateProviderPluginInstance`] in CDS/LDS
+    /// `UpstreamTlsContext` / `DownstreamTlsContext` resources.
+    /// See gRFC A29 for details.
+    ///
+    /// [`CertificateProviderPluginInstance`]: https://github.com/envoyproxy/envoy/blob/main/api/envoy/extensions/transport_sockets/tls/v3/common.proto
+    #[serde(default)]
+    pub(crate) certificate_providers: HashMap<String, CertProviderPluginConfig>,
 }
 
 /// Configuration for a single xDS management server.
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)] // Fields consumed when TLS support is added (A29).
 pub(crate) struct XdsServerConfig {
     /// URI of the xDS server (e.g., `"xds.example.com:443"`).
     pub server_uri: String,
@@ -62,7 +72,6 @@ pub(crate) struct XdsServerConfig {
 
 /// A channel credential entry from the bootstrap config.
 #[derive(Debug, Clone, Deserialize)]
-#[allow(dead_code)] // Used when TLS support is added (A29).
 pub(crate) struct ChannelCredentialConfig {
     /// Credential type (e.g., `"insecure"`, `"tls"`, `"google_default"`).
     #[serde(rename = "type")]
@@ -80,6 +89,23 @@ pub(crate) enum ChannelCredentialType {
     Tls,
     #[serde(untagged)]
     Unsupported(String),
+}
+
+/// A certificate provider plugin entry from the bootstrap config.
+///
+/// Holds the `plugin_name` and an opaque `config` blob. The cert provider
+/// module is responsible for dispatching on `plugin_name` and deserializing
+/// `config` into the appropriate plugin-specific type.
+///
+/// Referenced by `instance_name` in CDS/LDS `CertificateProviderPluginInstance`
+/// fields. See [gRFC A29].
+///
+/// [gRFC A29]: https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md
+#[derive(Debug, Clone, Deserialize)]
+pub(crate) struct CertProviderPluginConfig {
+    pub plugin_name: String,
+    #[serde(default)]
+    pub config: serde_json::Value,
 }
 
 /// Node identity configuration from bootstrap JSON.
@@ -134,7 +160,11 @@ impl BootstrapConfig {
         xds_servers: Vec<XdsServerConfig>,
         node: NodeConfig,
     ) -> Result<Self, BootstrapError> {
-        let config = Self { xds_servers, node };
+        let config = Self {
+            xds_servers,
+            node,
+            certificate_providers: HashMap::new(),
+        };
         config.validate()?;
         Ok(config)
     }
@@ -192,7 +222,6 @@ impl BootstrapConfig {
     ///
     /// Per gRFC A27, the client stops at the first credential type it supports.
     /// Returns `None` if no supported credential type is found.
-    #[allow(dead_code)] // Used when TLS support is added (A29).
     pub(crate) fn selected_credential(&self) -> Option<&ChannelCredentialType> {
         self.xds_servers
             .first()?
@@ -205,6 +234,11 @@ impl BootstrapConfig {
                     ChannelCredentialType::Insecure | ChannelCredentialType::Tls
                 )
             })
+    }
+
+    /// Returns `true` if the first server's selected credential is TLS.
+    pub(crate) fn use_tls(&self) -> bool {
+        self.selected_credential() == Some(&ChannelCredentialType::Tls)
     }
 }
 
@@ -396,5 +430,69 @@ mod tests {
         let config = BootstrapConfig::from_json(json).unwrap();
         let node = Node::from(config.node);
         assert!(node.id.is_none());
+    }
+
+    #[test]
+    fn parse_certificate_providers() {
+        let json = r#"{
+            "xds_servers": [{"server_uri": "localhost:5000"}],
+            "certificate_providers": {
+                "google_cloud_private_spiffe": {
+                    "plugin_name": "file_watcher",
+                    "config": {
+                        "certificate_file": "/var/run/certs/certificates.pem",
+                        "private_key_file": "/var/run/certs/private_key.pem",
+                        "ca_certificate_file": "/var/run/certs/ca_certificates.pem",
+                        "refresh_interval": "60s"
+                    }
+                }
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        assert_eq!(config.certificate_providers.len(), 1);
+
+        let plugin = &config.certificate_providers["google_cloud_private_spiffe"];
+        assert_eq!(plugin.plugin_name, "file_watcher");
+        assert_eq!(
+            plugin.config["certificate_file"],
+            "/var/run/certs/certificates.pem"
+        );
+        assert_eq!(
+            plugin.config["ca_certificate_file"],
+            "/var/run/certs/ca_certificates.pem"
+        );
+        assert_eq!(plugin.config["refresh_interval"], "60s");
+    }
+
+    #[test]
+    fn missing_certificate_providers_defaults_to_empty() {
+        let config = BootstrapConfig::from_json(minimal_json()).unwrap();
+        assert!(config.certificate_providers.is_empty());
+    }
+
+    #[test]
+    fn multiple_certificate_provider_instances() {
+        let json = r#"{
+            "xds_servers": [{"server_uri": "localhost:5000"}],
+            "certificate_providers": {
+                "identity": {
+                    "plugin_name": "file_watcher",
+                    "config": {
+                        "certificate_file": "/certs/cert.pem",
+                        "private_key_file": "/certs/key.pem"
+                    }
+                },
+                "root_ca": {
+                    "plugin_name": "file_watcher",
+                    "config": {
+                        "ca_certificate_file": "/certs/ca.pem"
+                    }
+                }
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        assert_eq!(config.certificate_providers.len(), 2);
+        assert!(config.certificate_providers.contains_key("identity"));
+        assert!(config.certificate_providers.contains_key("root_ca"));
     }
 }

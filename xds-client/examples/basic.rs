@@ -39,12 +39,12 @@ use envoy_types::pb::envoy::extensions::filters::network::http_connection_manage
     HttpConnectionManager, http_connection_manager::RouteSpecifier,
 };
 use prost::Message;
-use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
+use tonic::transport::{Certificate, ClientTlsConfig, Identity};
 
 use xds_client::resource::TypeUrl;
 use xds_client::{
-    ClientConfig, Node, ProstCodec, Resource, ResourceEvent, Result as XdsResult, ServerConfig,
-    TokioRuntime, TonicTransport, TonicTransportBuilder, TransportBuilder, XdsClient,
+    ClientConfig, Node, ProstCodec, Resource, ResourceEvent, TokioRuntime, TonicTransportBuilder,
+    XdsClient,
 };
 
 struct Args {
@@ -101,31 +101,6 @@ pub struct Listener {
     pub rds_route_config_name: Option<String>,
 }
 
-/// Custom transport builder that configures TLS on the channel.
-///
-/// This demonstrates how to implement a custom [`TransportBuilder`] when you need
-/// TLS or other custom channel configuration. The default [`TonicTransportBuilder`]
-/// creates plain (non-TLS) connections.
-struct TlsTransportBuilder {
-    tls_config: ClientTlsConfig,
-}
-
-impl TransportBuilder for TlsTransportBuilder {
-    type Transport = TonicTransport;
-
-    async fn build(&self, server: &ServerConfig) -> XdsResult<Self::Transport> {
-        let channel = Channel::from_shared(server.uri().to_string())
-            .map_err(|e| xds_client::Error::Connection(e.to_string()))?
-            .tls_config(self.tls_config.clone())
-            .map_err(|e| xds_client::Error::Connection(e.to_string()))?
-            .connect()
-            .await
-            .map_err(|e| xds_client::Error::Connection(e.to_string()))?;
-
-        Ok(TonicTransport::from_channel(channel))
-    }
-}
-
 impl Resource for Listener {
     type Message = ListenerProto;
 
@@ -167,28 +142,21 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let node = Node::new("grpc", "1.0").with_id("example-node");
     let config = ClientConfig::new(node, &args.server);
 
-    let client = match &args.ca_cert {
-        Some(ca_path) => {
-            let ca_cert = std::fs::read_to_string(ca_path)?;
-            let mut tls = ClientTlsConfig::new().ca_certificate(Certificate::from_pem(&ca_cert));
+    let mut transport_builder = TonicTransportBuilder::new();
+    if let Some(ca_path) = &args.ca_cert {
+        let ca_cert = std::fs::read_to_string(ca_path)?;
+        let mut tls = ClientTlsConfig::new().ca_certificate(Certificate::from_pem(&ca_cert));
 
-            if let (Some(cert_path), Some(key_path)) = (&args.client_cert, &args.client_key) {
-                let client_cert = std::fs::read_to_string(cert_path)?;
-                let client_key = std::fs::read_to_string(key_path)?;
-                tls = tls.identity(Identity::from_pem(client_cert, client_key));
-            }
-
-            let tls_builder = TlsTransportBuilder { tls_config: tls };
-            XdsClient::builder(config, tls_builder, ProstCodec, TokioRuntime).build()
+        if let (Some(cert_path), Some(key_path)) = (&args.client_cert, &args.client_key) {
+            let client_cert = std::fs::read_to_string(cert_path)?;
+            let client_key = std::fs::read_to_string(key_path)?;
+            tls = tls.identity(Identity::from_pem(client_cert, client_key));
         }
-        None => XdsClient::builder(
-            config,
-            TonicTransportBuilder::new(),
-            ProstCodec,
-            TokioRuntime,
-        )
-        .build(),
-    };
+
+        transport_builder = transport_builder.with_tls_config(tls);
+    }
+
+    let client = XdsClient::builder(config, transport_builder, ProstCodec, TokioRuntime).build();
 
     println!("Starting watchers...\n");
 

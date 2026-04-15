@@ -162,15 +162,31 @@ impl XdsChannelBuilder {
         let listener_name = self.config.target_uri.target.clone();
 
         let server_uri = bootstrap.server_uri().to_owned();
+
+        #[allow(unused_mut)]
+        let mut transport_builder = TonicTransportBuilder::new();
+        #[cfg(any(feature = "tls-ring", feature = "tls-aws-lc"))]
+        if bootstrap.use_tls() {
+            transport_builder = transport_builder
+                .with_tls_config(tonic::transport::ClientTlsConfig::new().with_enabled_roots());
+        }
+        #[cfg(not(any(feature = "tls-ring", feature = "tls-aws-lc")))]
+        if bootstrap.use_tls() {
+            return Err(BuildError::Bootstrap(BootstrapError::Validation(
+                "TLS requested by bootstrap but no TLS feature enabled \
+                 (enable tls-ring or tls-aws-lc)"
+                    .into(),
+            )));
+        }
+
+        // TODO(PR2/A29): Build CertProviderRegistry from bootstrap.certificate_providers
+        // and pass it to XdsClusterDiscovery so data-plane connections can use
+        // TLS/mTLS when CDS clusters specify UpstreamTlsContext.
+
         let node = Node::from(bootstrap.node);
-        let client_config = ClientConfig::new(node, server_uri);
-        let xds_client = XdsClient::builder(
-            client_config,
-            TonicTransportBuilder::default(),
-            ProstCodec,
-            TokioRuntime,
-        )
-        .build();
+        let client_config = ClientConfig::new(node, &server_uri);
+        let xds_client =
+            XdsClient::builder(client_config, transport_builder, ProstCodec, TokioRuntime).build();
 
         let cache = Arc::new(XdsCache::new());
         let resource_manager =

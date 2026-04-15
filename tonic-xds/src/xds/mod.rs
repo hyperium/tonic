@@ -1,5 +1,6 @@
 pub(crate) mod bootstrap;
 pub(crate) mod cache;
+pub(crate) mod cert_provider;
 pub(crate) mod cluster_discovery;
 pub(crate) mod endpoint_manager;
 pub(crate) mod resource;
