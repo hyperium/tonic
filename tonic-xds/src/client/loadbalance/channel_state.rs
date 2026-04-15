@@ -122,7 +122,7 @@ impl<S: Send + 'static> Future for ConnectingChannel<S> {
 #[derive(Clone)]
 pub(crate) struct ReadyChannel<S> {
     addr: EndpointAddress,
-    pub(super) inner: S,
+    inner: S,
 }
 
 impl<S> ReadyChannel<S> {
