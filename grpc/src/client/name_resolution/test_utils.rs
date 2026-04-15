@@ -22,7 +22,9 @@
  *
  */
 
-use tokio::sync::mpsc::UnboundedSender;
+use std::sync::Arc;
+
+use tokio::sync::mpsc;
 
 use crate::client::name_resolution::ChannelController;
 use crate::client::name_resolution::ResolverUpdate;
@@ -31,13 +33,15 @@ use crate::client::service_config::ServiceConfig;
 
 /// A work scheduler for testing.
 pub struct TestWorkScheduler {
-    pub work_tx: UnboundedSender<()>,
+    pub work_tx: mpsc::UnboundedSender<()>,
 }
 
 impl TestWorkScheduler {
     /// Creates a new `TestWorkScheduler`.
-    pub fn new(work_tx: UnboundedSender<()>) -> Self {
-        Self { work_tx }
+    pub fn new_pair() -> (Arc<dyn WorkScheduler>, mpsc::UnboundedReceiver<()>) {
+        let (work_tx, work_rx) = mpsc::unbounded_channel();
+        let sched = Self { work_tx };
+        (Arc::new(sched), work_rx)
     }
 }
 
@@ -50,12 +54,12 @@ impl WorkScheduler for TestWorkScheduler {
 /// A channel controller for testing.
 pub struct TestChannelController {
     pub update_result: Result<(), String>,
-    pub update_tx: UnboundedSender<ResolverUpdate>,
+    pub update_tx: mpsc::UnboundedSender<ResolverUpdate>,
 }
 
 impl TestChannelController {
     /// Creates a new `TestChannelController` that returns `Ok(())` on update.
-    pub fn new(update_tx: UnboundedSender<ResolverUpdate>) -> Self {
+    pub fn new(update_tx: mpsc::UnboundedSender<ResolverUpdate>) -> Self {
         Self {
             update_result: Ok(()),
             update_tx,
@@ -64,7 +68,7 @@ impl TestChannelController {
 
     /// Creates a new `TestChannelController` with a specified update result.
     pub fn new_with_result(
-        update_tx: UnboundedSender<ResolverUpdate>,
+        update_tx: mpsc::UnboundedSender<ResolverUpdate>,
         update_result: Result<(), String>,
     ) -> Self {
         Self {

@@ -24,7 +24,6 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 use tokio::sync::mpsc::{self};
@@ -173,8 +172,7 @@ pub(crate) async fn dns_basic() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///localhost:1234".parse().unwrap();
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx.clone()));
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -197,8 +195,7 @@ pub(crate) async fn invalid_target() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///:1234".parse().unwrap();
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx.clone()));
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -276,8 +273,7 @@ pub(crate) async fn dns_lookup_error() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///grpc.io:1234".parse().unwrap();
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx.clone()));
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let runtime = FakeRuntime {
         inner: TokioRuntime::default(),
         dns: FakeDns {
@@ -304,8 +300,7 @@ pub(crate) async fn dns_lookup_error() {
 
 #[tokio::test]
 pub(crate) async fn dns_lookup_timeout() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx.clone()));
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let runtime = FakeRuntime {
         inner: TokioRuntime::default(),
         dns: FakeDns {
@@ -341,8 +336,7 @@ pub(crate) async fn dns_lookup_timeout() {
 
 #[tokio::test]
 pub(crate) async fn rate_limit() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx.clone()));
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -386,8 +380,7 @@ pub(crate) async fn rate_limit() {
 
 #[tokio::test]
 pub(crate) async fn re_resolution_after_success() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx.clone()));
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -425,8 +418,7 @@ pub(crate) async fn re_resolution_after_success() {
 
 #[tokio::test]
 pub(crate) async fn backoff_on_error() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx.clone()));
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),

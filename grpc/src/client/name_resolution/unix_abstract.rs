@@ -88,8 +88,6 @@ fn parse_target(target: &Target) -> Result<Address, String> {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::Arc;
-
     use tokio::sync::mpsc;
 
     use super::*;
@@ -105,8 +103,7 @@ mod tests {
         let target: Target = "unix-abstract:abstract_name"
             .parse()
             .expect("Failed to parse target");
-        let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-        let work_scheduler = Arc::new(TestWorkScheduler::new(work_tx));
+        let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
         let opts = ResolverOptions {
             authority: "ignored".to_string(),
             runtime: rt::default_runtime(),
