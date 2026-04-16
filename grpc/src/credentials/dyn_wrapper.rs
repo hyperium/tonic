@@ -161,6 +161,7 @@ mod tests {
     use tokio::io::AsyncReadExt;
     use tokio::io::AsyncWriteExt;
     use tokio::net::TcpListener;
+    use tokio::net::TcpStream;
 
     use super::*;
     use crate::credentials::InsecureServerCredentials;
@@ -169,6 +170,7 @@ mod tests {
     use crate::credentials::insecure::InsecureChannelCredentials;
     use crate::rt::AsyncIoAdapter;
     use crate::rt::TcpOptions;
+    use crate::rt::tokio::TokioIoStream;
     use crate::rt::{self};
 
     #[tokio::test]
@@ -234,14 +236,11 @@ mod tests {
 
         let addr = "127.0.0.1:0";
         let runtime = rt::default_runtime();
-        let mut listener = runtime
-            .listen_tcp(addr.parse().unwrap(), TcpOptions::default())
-            .await
-            .unwrap();
-        let server_addr = *listener.local_addr();
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
 
         let client_handle = tokio::spawn(async move {
-            let mut stream = tokio::net::TcpStream::connect(server_addr).await.unwrap();
+            let mut stream = TcpStream::connect(server_addr).await.unwrap();
             let data = b"hello dynamic grpc server";
             stream.write_all(data).await.unwrap();
 
@@ -250,9 +249,12 @@ mod tests {
             let _ = stream.read(&mut buf).await;
         });
 
-        let (server_stream, _) = listener.accept().await.unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let server_stream = TokioIoStream::new_from_tcp(stream).unwrap();
 
-        let result = dyn_creds.dyn_accept(server_stream, runtime).await;
+        let result = dyn_creds
+            .dyn_accept(Box::new(server_stream) as Box<dyn GrpcEndpoint>, runtime)
+            .await;
 
         assert!(result.is_ok());
         let output = result.unwrap();

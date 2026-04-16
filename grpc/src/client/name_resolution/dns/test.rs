@@ -24,19 +24,13 @@
 
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::mpsc::UnboundedSender;
-use tokio::sync::mpsc::{self};
 use url::Host;
 
-use crate::client::name_resolution::ChannelController;
 use crate::client::name_resolution::Resolver;
 use crate::client::name_resolution::ResolverOptions;
-use crate::client::name_resolution::ResolverUpdate;
 use crate::client::name_resolution::Target;
-use crate::client::name_resolution::WorkScheduler;
 use crate::client::name_resolution::backoff::BackoffConfig;
 use crate::client::name_resolution::backoff::DEFAULT_EXPONENTIAL_CONFIG;
 use crate::client::name_resolution::dns::DnsOptions;
@@ -48,13 +42,12 @@ use crate::client::name_resolution::dns::get_resolving_timeout;
 use crate::client::name_resolution::dns::parse_endpoint_and_authority;
 use crate::client::name_resolution::dns::reg;
 use crate::client::name_resolution::global_registry;
-use crate::client::service_config::ServiceConfig;
-use crate::rt::BoxFuture;
+use crate::client::name_resolution::test_utils::TestChannelController;
+use crate::client::name_resolution::test_utils::TestWorkScheduler;
+use crate::rt;
 use crate::rt::GrpcRuntime;
 use crate::rt::Runtime;
-use crate::rt::TcpOptions;
 use crate::rt::tokio::TokioRuntime;
-use crate::rt::{self};
 
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
 
@@ -174,42 +167,12 @@ pub(crate) fn target_parsing() {
     }
 }
 
-struct FakeWorkScheduler {
-    work_tx: UnboundedSender<()>,
-}
-
-impl WorkScheduler for FakeWorkScheduler {
-    fn schedule_work(&self) {
-        self.work_tx.send(()).unwrap();
-    }
-}
-
-struct FakeChannelController {
-    update_result: Result<(), String>,
-    update_tx: UnboundedSender<ResolverUpdate>,
-}
-
-impl ChannelController for FakeChannelController {
-    fn update(&mut self, update: ResolverUpdate) -> Result<(), String> {
-        println!("Received resolver update: {:?}", &update);
-        self.update_tx.send(update).unwrap();
-        self.update_result.clone()
-    }
-
-    fn parse_service_config(&self, _: &str) -> Result<ServiceConfig, String> {
-        Err("Unimplemented".to_string())
-    }
-}
-
 #[tokio::test]
 pub(crate) async fn dns_basic() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///localhost:1234".parse().unwrap();
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(FakeWorkScheduler {
-        work_tx: work_tx.clone(),
-    });
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -219,11 +182,7 @@ pub(crate) async fn dns_basic() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = FakeChannelController {
-        update_tx,
-        update_result: Ok(()),
-    };
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // A successful endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -235,10 +194,7 @@ pub(crate) async fn invalid_target() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///:1234".parse().unwrap();
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(FakeWorkScheduler {
-        work_tx: work_tx.clone(),
-    });
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -248,11 +204,7 @@ pub(crate) async fn invalid_target() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = FakeChannelController {
-        update_tx,
-        update_result: Ok(()),
-    };
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -312,14 +264,6 @@ impl Runtime for FakeRuntime {
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::GrpcEndpoint>, String>> + Send>> {
         self.inner.tcp_stream(target, opts)
     }
-
-    fn listen_tcp(
-        &self,
-        _addr: std::net::SocketAddr,
-        _opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn rt::TcpListener>, String>> {
-        unimplemented!()
-    }
 }
 
 #[tokio::test]
@@ -327,10 +271,7 @@ pub(crate) async fn dns_lookup_error() {
     reg();
     let builder = global_registry().get("dns").unwrap();
     let target = &"dns:///grpc.io:1234".parse().unwrap();
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(FakeWorkScheduler {
-        work_tx: work_tx.clone(),
-    });
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let runtime = FakeRuntime {
         inner: TokioRuntime::default(),
         dns: FakeDns {
@@ -347,23 +288,16 @@ pub(crate) async fn dns_lookup_error() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = FakeChannelController {
-        update_tx,
-        update_result: Ok(()),
-    };
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
-    assert!(update.endpoints.err().unwrap().contains("test_error"));
+    assert!(update.endpoints.unwrap_err().contains("test_error"));
 }
 
 #[tokio::test]
 pub(crate) async fn dns_lookup_timeout() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(FakeWorkScheduler {
-        work_tx: work_tx.clone(),
-    });
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let runtime = FakeRuntime {
         inner: TokioRuntime::default(),
         dns: FakeDns {
@@ -388,24 +322,17 @@ pub(crate) async fn dns_lookup_timeout() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = FakeChannelController {
-        update_tx,
-        update_result: Ok(()),
-    };
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
 
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
-    assert!(update.endpoints.err().unwrap().contains("Timed out"));
+    assert!(update.endpoints.unwrap_err().contains("Timed out"));
 }
 
 #[tokio::test]
 pub(crate) async fn rate_limit() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(FakeWorkScheduler {
-        work_tx: work_tx.clone(),
-    });
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -426,11 +353,7 @@ pub(crate) async fn rate_limit() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = FakeChannelController {
-        update_tx,
-        update_result: Ok(()),
-    };
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // A successful endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -452,10 +375,7 @@ pub(crate) async fn rate_limit() {
 
 #[tokio::test]
 pub(crate) async fn re_resolution_after_success() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(FakeWorkScheduler {
-        work_tx: work_tx.clone(),
-    });
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -476,11 +396,7 @@ pub(crate) async fn re_resolution_after_success() {
 
     // Wait for schedule work to be called.
     work_rx.recv().await.unwrap();
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = FakeChannelController {
-        update_tx,
-        update_result: Ok(()),
-    };
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
     resolver.work(&mut channel_controller);
     // A successful endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
@@ -496,10 +412,7 @@ pub(crate) async fn re_resolution_after_success() {
 
 #[tokio::test]
 pub(crate) async fn backoff_on_error() {
-    let (work_tx, mut work_rx) = mpsc::unbounded_channel();
-    let work_scheduler = Arc::new(FakeWorkScheduler {
-        work_tx: work_tx.clone(),
-    });
+    let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
         runtime: rt::default_runtime(),
@@ -525,11 +438,8 @@ pub(crate) async fn backoff_on_error() {
 
     let mut resolver = DnsResolver::new(dns_client, opts, dns_opts);
 
-    let (update_tx, mut update_rx) = mpsc::unbounded_channel();
-    let mut channel_controller = FakeChannelController {
-        update_tx,
-        update_result: Err("test_error".to_string()),
-    };
+    let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
+    channel_controller.set_update_result(Err("test_error".to_string()));
 
     // As the channel returned an error to the resolver, the resolver will
     // backoff and re-attempt resolution.
@@ -541,7 +451,7 @@ pub(crate) async fn backoff_on_error() {
     }
 
     // This time the channel accepts the resolver update.
-    channel_controller.update_result = Ok(());
+    channel_controller.set_update_result(Ok(()));
     work_rx.recv().await.unwrap();
     resolver.work(&mut channel_controller);
     let update = update_rx.recv().await.unwrap();

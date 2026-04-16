@@ -32,6 +32,7 @@ use rustls_pki_types::ServerName;
 use tempfile::NamedTempFile;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
+use tokio::net::TcpListener;
 use tokio::net::TcpStream;
 use tokio_rustls::TlsConnector;
 
@@ -45,7 +46,7 @@ use crate::credentials::rustls::server::ServerTlsConfig;
 use crate::credentials::rustls::server::TlsClientCertificateRequestType;
 use crate::private;
 use crate::rt::AsyncIoAdapter;
-use crate::rt::TcpOptions;
+use crate::rt::tokio::TokioIoStream;
 use crate::rt::{self};
 
 static INIT: Once = Once::new();
@@ -67,14 +68,12 @@ async fn test_tls_server_handshake() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let result = creds.accept(stream, runtime, private::Internal).await;
         assert!(
             result.is_ok(),
@@ -125,14 +124,12 @@ async fn test_tls_server_handshake_no_alpn() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let result = creds.accept(stream, runtime, private::Internal).await;
         assert!(result.is_err(), "Server handshake should have failed");
     });
@@ -170,14 +167,12 @@ async fn test_tls_server_handshake_bad_alpn() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let runtime = rt::default_runtime();
         let result = creds.accept(stream, runtime, private::Internal).await;
         assert!(result.is_err(), "Server handshake should have failed");
@@ -209,16 +204,14 @@ async fn test_tls_handshake_alpn_h1_and_h2() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let runtime = rt::default_runtime();
-        let result = creds
+        creds
             .accept(stream, runtime, private::Internal)
             .await
             .unwrap();
@@ -258,14 +251,12 @@ async fn test_tls_server_mtls_require_fail() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let result = creds.accept(stream, runtime, private::Internal).await;
         assert!(result.is_err(), "Handshake should fail without client cert");
     });
@@ -311,14 +302,12 @@ async fn test_tls_server_mtls_success() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let result = creds
             .accept(stream, runtime, private::Internal)
             .await
@@ -373,14 +362,12 @@ async fn test_tls_server_mtls_optional() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let result = creds
             .accept(stream, runtime, private::Internal)
             .await
@@ -425,14 +412,12 @@ async fn test_tls_server_key_log() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         let (stream, _) = listener.accept().await.unwrap();
+        let stream = TokioIoStream::new_from_tcp(stream).unwrap();
         let result = creds
             .accept(stream, runtime, private::Internal)
             .await
@@ -480,15 +465,13 @@ async fn check_resumption_disabled(versions: Vec<&'static rustls::SupportedProto
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         for _ in 0..2 {
             let (stream, _) = listener.accept().await.unwrap();
+            let stream = TokioIoStream::new_from_tcp(stream).unwrap();
             let runtime = rt::default_runtime();
             let result = creds.accept(stream, runtime, private::Internal).await;
             assert!(result.is_ok());
@@ -558,15 +541,13 @@ async fn test_tls_server_sni() {
     let creds = RustlsServerTlsCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
-    let mut listener = runtime
-        .listen_tcp("127.0.0.1:0".parse().unwrap(), TcpOptions::default())
-        .await
-        .unwrap();
-    let addr = *listener.local_addr();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
 
     let server_task = tokio::spawn(async move {
         for _ in 0..2 {
             let (stream, _) = listener.accept().await.unwrap();
+            let stream = TokioIoStream::new_from_tcp(stream).unwrap();
             let runtime = rt::default_runtime();
             let result = creds.accept(stream, runtime, private::Internal).await;
             assert!(

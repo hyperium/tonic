@@ -47,7 +47,6 @@ pub(crate) mod tokio;
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 pub type BoxedTaskHandle = Box<dyn TaskHandle>;
 pub type BoxEndpoint = Box<dyn GrpcEndpoint>;
-pub type ScopedBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -75,13 +74,6 @@ pub trait Runtime: Send + Sync + Debug {
         target: SocketAddr,
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>>;
-
-    /// Create a new listener for the given address.
-    fn listen_tcp(
-        &self,
-        addr: SocketAddr,
-        opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
 
     /// Establishes a Unix connection to the given `path` with the specified
     /// `opts`.
@@ -305,20 +297,6 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
     }
 }
 
-/// A trait representing a TCP listener capable of accepting incoming
-/// connections.
-pub trait TcpListener: Send + Sync {
-    /// Accepts a new incoming connection.
-    ///
-    /// Returns a future that resolves to a result containing the new
-    /// `GrpcEndpoint` and the remote peer's `SocketAddr`, or an error string
-    /// if acceptance fails.
-    fn accept(&mut self) -> ScopedBoxFuture<'_, Result<(BoxEndpoint, SocketAddr), String>>;
-
-    /// Returns the local socket address this listener is bound to.
-    fn local_addr(&self) -> &SocketAddr;
-}
-
 /// A fake runtime to satisfy the compiler when no runtime is enabled. This will
 ///
 /// # Panics
@@ -345,14 +323,6 @@ impl Runtime for NoOpRuntime {
         _target: SocketAddr,
         _opts: TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
-        unimplemented!()
-    }
-
-    fn listen_tcp(
-        &self,
-        _addr: SocketAddr,
-        _opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
         unimplemented!()
     }
 }
@@ -400,15 +370,6 @@ impl GrpcRuntime {
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
         self.inner.tcp_stream(target, opts)
     }
-
-    pub fn listen_tcp(
-        &self,
-        addr: SocketAddr,
-        opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
-        self.inner.listen_tcp(addr, opts)
-    }
-
     pub fn unix_stream(
         &self,
         path: PathBuf,

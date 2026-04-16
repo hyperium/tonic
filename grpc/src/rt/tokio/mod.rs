@@ -42,7 +42,6 @@ use crate::rt::DnsResolver;
 use crate::rt::GrpcEndpoint;
 use crate::rt::ResolverOptions;
 use crate::rt::Runtime;
-use crate::rt::ScopedBoxFuture;
 use crate::rt::Sleep;
 use crate::rt::TaskHandle;
 use crate::rt::TcpOptions;
@@ -112,8 +111,8 @@ impl Runtime for TokioRuntime {
     fn tcp_stream(
         &self,
         target: SocketAddr,
-        opts: super::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::GrpcEndpoint>, String>> + Send>> {
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<BoxEndpoint, String>> {
         Box::pin(async move {
             let stream = TcpStream::connect(target)
                 .await
@@ -126,35 +125,10 @@ impl Runtime for TokioRuntime {
                     .set_tcp_keepalive(&ka)
                     .map_err(|err| err.to_string())?;
             }
-            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioIoStream {
-                peer_addr: target.to_string().into_boxed_str(),
-                local_addr: stream
-                    .local_addr()
-                    .map_err(|err| err.to_string())?
-                    .to_string()
-                    .into_boxed_str(),
-                network_type: TCP_IP_NETWORK_TYPE,
-                inner: stream,
-            });
-            Ok(stream)
-        })
-    }
 
-    fn listen_tcp(
-        &self,
-        addr: SocketAddr,
-        _opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn super::TcpListener>, String>> {
-        Box::pin(async move {
-            let listener = tokio::net::TcpListener::bind(addr)
-                .await
-                .map_err(|err| err.to_string())?;
-            let local_addr = listener.local_addr().map_err(|e| e.to_string())?;
-            let listener = TokioListener {
-                inner: listener,
-                local_addr,
-            };
-            Ok(Box::new(listener) as Box<dyn super::TcpListener>)
+            let stream: Box<dyn super::GrpcEndpoint> =
+                Box::new(TokioIoStream::new_from_tcp(stream)?);
+            Ok(stream)
         })
     }
 
@@ -195,11 +169,30 @@ impl TokioDefaultDnsResolver {
     }
 }
 
-struct TokioIoStream<T> {
+pub(crate) struct TokioIoStream<T> {
     inner: T,
     peer_addr: Box<str>,
     local_addr: Box<str>,
     network_type: &'static str,
+}
+
+impl TokioIoStream<TcpStream> {
+    pub(crate) fn new_from_tcp(stream: TcpStream) -> Result<Self, String> {
+        Ok(TokioIoStream {
+            local_addr: stream
+                .local_addr()
+                .map_err(|err| err.to_string())?
+                .to_string()
+                .into_boxed_str(),
+            peer_addr: stream
+                .peer_addr()
+                .map_err(|err| err.to_string())?
+                .to_string()
+                .into_boxed_str(),
+            network_type: TCP_IP_NETWORK_TYPE,
+            inner: stream,
+        })
+    }
 }
 
 impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> super::GrpcEndpoint for TokioIoStream<T> {
@@ -260,36 +253,6 @@ impl<T: AsyncRead + AsyncWrite + Unpin + Send + 'static> super::GrpcEndpoint for
         _token: private::Internal,
     ) -> std::task::Poll<Result<(), std::io::Error>> {
         Pin::new(&mut self.inner).poll_shutdown(cx)
-    }
-}
-
-struct TokioListener {
-    inner: tokio::net::TcpListener,
-    local_addr: SocketAddr,
-}
-
-impl super::TcpListener for TokioListener {
-    fn accept(&mut self) -> ScopedBoxFuture<'_, Result<(BoxEndpoint, SocketAddr), String>> {
-        Box::pin(async move {
-            let (stream, addr) = self.inner.accept().await.map_err(|e| e.to_string())?;
-            Ok((
-                Box::new(TokioIoStream {
-                    local_addr: stream
-                        .local_addr()
-                        .map_err(|err| err.to_string())?
-                        .to_string()
-                        .into_boxed_str(),
-                    peer_addr: addr.to_string().into_boxed_str(),
-                    network_type: TCP_IP_NETWORK_TYPE,
-                    inner: stream,
-                }) as Box<dyn GrpcEndpoint>,
-                addr,
-            ))
-        })
-    }
-
-    fn local_addr(&self) -> &SocketAddr {
-        &self.local_addr
     }
 }
 

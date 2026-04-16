@@ -51,32 +51,34 @@ impl ResolverBuilder for Builder {
     }
 
     fn scheme(&self) -> &str {
-        "unix"
+        "unix-abstract"
     }
 
     fn is_valid_uri(&self, uri: &super::Target) -> bool {
         parse_target(uri).is_ok()
     }
 
-    fn default_authority(&self, target: &Target) -> String {
+    fn default_authority(&self, _target: &Target) -> String {
         "localhost".to_owned()
     }
 }
 
-/// Parses a target URI into a standard domain socket address.
+/// Parses a target URI into an abstract UNIX domain socket address.
 ///
-/// Valid formats: `unix:path` or `unix:///absolute_path`
-/// - `path` indicates the location of the desired socket on the filesystem.
-/// - In the first form (`unix:path`), the path may be relative or absolute.
-/// - In the second form (`unix:///absolute_path`), the path must be absolute.
-///   The last of the three slashes is treated as the root of the filesystem
-///   path (e.g., `/absolute_path`).
+/// Valid format: `unix-abstract:abstract_path`
+/// - `abstract_path` indicates a socket name in the abstract namespace.
+/// - The name has no connection with filesystem pathnames and bypasses standard
+///   filesystem permissions; any process or user may access the socket.
+/// - The underlying system requires a null byte (`\0`) as the first character.
+///   This function automatically prepends the null byte; it should not be
+///   included it in `abstract_path`.
+/// - Note: Abstract sockets are a Linux-specific kernel feature.
 fn parse_target(target: &Target) -> Result<Address, String> {
     let host_port = target.authority_host_port();
     if !host_port.is_empty() {
         return Err(format!("invalid (non-empty) authority: {host_port}"));
     }
-    let addr_string = target.path().to_owned();
+    let addr_string = format!("\0{}", target.path());
     Ok(Address {
         network_type: UNIX_NETWORK_TYPE,
         address: ByteStr::from(addr_string),
@@ -93,10 +95,11 @@ mod tests {
     use crate::client::name_resolution::test_utils::TestWorkScheduler;
     use crate::rt;
 
-    async fn run_success(input: &str, want_addr: &str) {
+    #[tokio::test]
+    async fn unix_abstract_resolver() {
         reg();
 
-        let target: Target = input.parse().unwrap();
+        let target: Target = "unix-abstract:abstract_name".parse().unwrap();
         let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
         let opts = ResolverOptions {
             authority: "ignored".to_string(),
@@ -104,7 +107,9 @@ mod tests {
             work_scheduler: work_scheduler.clone(),
         };
 
-        let builder = global_registry().get("unix").expect("scheme not found");
+        let builder = global_registry()
+            .get("unix-abstract")
+            .expect("scheme not found");
         let mut resolver = builder.build(&target, opts);
 
         // Wait for work to be scheduled.
@@ -117,57 +122,15 @@ mod tests {
         let want_endpoint = Endpoint {
             addresses: vec![Address {
                 network_type: UNIX_NETWORK_TYPE,
-                address: ByteStr::from(want_addr.to_owned()),
+                address: ByteStr::from("\0abstract_name".to_owned()),
                 ..Default::default()
             }],
             ..Default::default()
         };
-
         assert_eq!(
             update.endpoints,
             Ok(vec![want_endpoint]),
             "did not receive expected endpoint"
         );
-    }
-
-    #[tokio::test]
-    async fn unix_resolver_success_relative_path() {
-        run_success("unix:path/to/socket", "path/to/socket").await;
-    }
-
-    #[tokio::test]
-    async fn unix_resolver_success_absolute_path() {
-        run_success("unix:/absolute/path", "/absolute/path").await;
-    }
-
-    #[tokio::test]
-    async fn unix_resolver_success_absolute_path_with_slashes() {
-        run_success("unix:///absolute/path", "/absolute/path").await;
-    }
-
-    #[tokio::test]
-    async fn unix_resolver_error_with_authority() {
-        reg();
-
-        let target: Target = "unix://authority/path".parse().unwrap();
-        let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
-        let opts = ResolverOptions {
-            authority: "ignored".to_string(),
-            runtime: rt::default_runtime(),
-            work_scheduler: work_scheduler.clone(),
-        };
-
-        let builder = global_registry().get("unix").expect("scheme not found");
-        let mut resolver = builder.build(&target, opts);
-
-        // Wait for work to be scheduled.
-        work_rx.recv().await.unwrap();
-
-        let (mut channel_controller, mut update_rx) = TestChannelController::new_pair();
-        resolver.work(&mut channel_controller);
-
-        let update = update_rx.recv().await.unwrap();
-        let err = update.endpoints.unwrap_err();
-        assert!(err.contains("invalid (non-empty) authority"));
     }
 }
