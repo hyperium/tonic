@@ -291,7 +291,7 @@ pub(crate) async fn dns_lookup_error() {
     resolver.work(&mut channel_controller);
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
-    assert!(update.endpoints.err().unwrap().contains("test_error"));
+    assert!(update.endpoints.unwrap_err().contains("test_error"));
 }
 
 #[tokio::test]
@@ -326,7 +326,7 @@ pub(crate) async fn dns_lookup_timeout() {
 
     // An error endpoint update should be received.
     let update = update_rx.recv().await.unwrap();
-    assert!(update.endpoints.err().unwrap().contains("Timed out"));
+    assert!(update.endpoints.unwrap_err().contains("Timed out"));
 }
 
 #[tokio::test]

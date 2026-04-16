@@ -167,7 +167,7 @@ mod tests {
         resolver.work(&mut channel_controller);
 
         let update = update_rx.recv().await.unwrap();
-        let err = update.endpoints.err().unwrap();
+        let err = update.endpoints.unwrap_err();
         assert!(err.contains("invalid (non-empty) authority"));
     }
 }
