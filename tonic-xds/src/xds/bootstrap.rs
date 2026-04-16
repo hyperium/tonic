@@ -54,6 +54,7 @@ pub struct BootstrapConfig {
     ///
     /// [`CertificateProviderPluginInstance`]: https://github.com/envoyproxy/envoy/blob/main/api/envoy/extensions/transport_sockets/tls/v3/common.proto
     #[serde(default)]
+    #[allow(dead_code)] // Consumed when CertProviderRegistry is wired in (PR2/A29).
     pub(crate) certificate_providers: HashMap<String, CertProviderPluginConfig>,
 }
 
@@ -67,6 +68,8 @@ pub(crate) struct XdsServerConfig {
     pub channel_creds: Vec<ChannelCredentialConfig>,
     /// Server features (e.g., `["xds_v3"]`).
     #[serde(default)]
+    #[allow(dead_code)]
+    // Parsed for completeness; used when server feature negotiation is added.
     pub server_features: Vec<String>,
 }
 
