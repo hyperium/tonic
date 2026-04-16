@@ -176,7 +176,6 @@ impl Channel {
         name_resolution::unix::reg();
         #[cfg(target_os = "linux")]
         name_resolution::unix_abstract::reg();
-
         #[cfg(feature = "_runtime-tokio")]
         tonic_transport::reg();
         Self {

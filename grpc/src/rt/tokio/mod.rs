@@ -39,7 +39,6 @@ use crate::rt::BoxEndpoint;
 use crate::rt::BoxFuture;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::DnsResolver;
-use crate::rt::GrpcEndpoint;
 use crate::rt::ResolverOptions;
 use crate::rt::Runtime;
 use crate::rt::Sleep;
@@ -125,7 +124,6 @@ impl Runtime for TokioRuntime {
                     .set_tcp_keepalive(&ka)
                     .map_err(|err| err.to_string())?;
             }
-
             let stream: Box<dyn super::GrpcEndpoint> =
                 Box::new(TokioIoStream::new_from_tcp(stream)?);
             Ok(stream)
@@ -137,7 +135,7 @@ impl Runtime for TokioRuntime {
         &self,
         path: std::path::PathBuf,
         _opts: super::UnixSocketOptions,
-    ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
+    ) -> BoxFuture<Result<Box<dyn super::GrpcEndpoint>, String>> {
         use tokio::net::UnixStream;
 
         use crate::client::name_resolution::UNIX_NETWORK_TYPE;

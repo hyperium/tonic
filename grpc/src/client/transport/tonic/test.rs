@@ -31,7 +31,6 @@ use std::time::Duration;
 
 use bytes::Buf;
 use bytes::Bytes;
-use tempfile::tempdir;
 use tokio::net::TcpListener;
 use tokio::sync::Notify;
 use tokio::sync::oneshot;
@@ -123,6 +122,7 @@ const DEFAULT_TEST_SHORT_DURATION: Duration = Duration::from_millis(10);
 // Tests the tonic transport by creating a bi-di stream with a tonic server.
 #[tokio::test]
 pub(crate) async fn tonic_transport_rpc() {
+    super::reg();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap(); // get the assigned address
     let shutdown_notify = Arc::new(Notify::new());
@@ -266,6 +266,7 @@ mod unix_tests {
     use std::path::Component;
     use std::path::Path;
 
+    use tempfile::tempdir;
     use tokio::net::UnixListener;
     use tokio_stream::wrappers::UnixListenerStream;
 
@@ -554,7 +555,6 @@ async fn perform_unary_echo(
     let req = WrappedEchoRequest(EchoRequest {
         message: message.into(),
     });
-
     tx.send(
         &req,
         SendOptions {
