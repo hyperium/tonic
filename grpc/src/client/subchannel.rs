@@ -440,13 +440,10 @@ fn create_call_details(authority: &Authority, full_method: &str) -> CallDetails 
     let (service, method) = full_method.rsplit_once('/').unwrap_or((full_method, ""));
     let host_str = authority.host();
 
-    let host = match authority.port() {
-        Some(443) | None => host_str.to_string(),
-        // Add [] for IPv6 addresses.
-        Some(port) if host_str.contains(':') => {
-            format!("[{}]:{}", host_str, port)
-        }
-        Some(port) => format!("{}:{}", host_str, port),
+    let host = if let Some(443) = authority.port() {
+        host_str.to_string()
+    } else {
+        authority.host_port_string()
     };
 
     CallDetails::new(format!("https://{}{}", host, service), method.to_string())

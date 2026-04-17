@@ -181,3 +181,23 @@ impl ProtocolInfo {
         self.security_protocol
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn authority_host_port_str() {
+        let authority = Authority::new("localhost", None);
+        assert_eq!(&authority.host_port_string(), "localhost");
+
+        let authority = Authority::new("localhost", Some(443));
+        assert_eq!(&authority.host_port_string(), "localhost:443");
+
+        let authority = Authority::new("::1", Some(50051));
+        assert_eq!(&authority.host_port_string(), "[::1]:50051");
+
+        let authority = Authority::new("::1", None);
+        assert_eq!(&authority.host_port_string(), "::1");
+    }
+}
