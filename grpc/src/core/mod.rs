@@ -129,9 +129,15 @@ pub enum ResponseStreamItem<M> {
 /// void as the received message is passed in via the `next` method.
 pub type ClientResponseStreamItem = ResponseStreamItem<()>;
 
-/// The server's view of a ResponseStream in a SendStream: the message type is
-/// part of the payload provided to the `send` method.
-pub type ServerResponseStreamItem<'a> = ResponseStreamItem<&'a dyn SendMessage>;
+/// The server's view of a ResponseStream in a SendStream, using references to avoid allocations.
+pub enum ServerResponseStreamItem<'a> {
+    /// Indicates the headers for the stream.
+    Headers(ResponseHeaders),
+    /// Indicates a message on the stream.
+    Message(&'a dyn SendMessage),
+    /// Indicates trailers were received on the stream and includes the trailers.
+    Trailers(Trailers),
+}
 
 /// Contains all information transmitted in the response headers of an RPC.
 #[derive(Debug, Clone, Default)]
