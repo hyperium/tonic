@@ -23,9 +23,9 @@
  */
 
 use std::sync::Arc;
-
 use tonic::async_trait;
 
+use crate::client::CallOptions;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ServerResponseStreamItem;
@@ -62,11 +62,12 @@ impl Server {
     pub async fn serve(&self, l: &impl Listener) {
         while let Some(call) = l.accept().await {
             let mut send: Box<dyn DynSendStream> = Box::new(call.send);
-            let recv: Box<dyn DynRecvStream> = Box::new(call.recv);
+            let recv = BoxedRecvStream(Box::new(call.recv));
+            let options = CallOptions::default();
             self.handler
                 .as_ref()
                 .unwrap()
-                .dyn_handle(call.headers, &mut *send, BoxedRecvStream(recv))
+                .dyn_handle(call.headers, options, &mut *send, recv)
                 .await;
         }
     }
@@ -88,6 +89,7 @@ pub trait Handle: Send + Sync {
     async fn handle(
         &self,
         headers: RequestHeaders,
+        options: CallOptions,
         tx: &mut impl SendStream,
         rx: impl RecvStream + 'static,
     );
@@ -98,21 +100,22 @@ trait DynHandle: Send + Sync {
     async fn dyn_handle(
         &self,
         headers: RequestHeaders,
+        options: CallOptions,
         tx: &mut dyn DynSendStream,
         rx: BoxedRecvStream,
     );
 }
+
 #[async_trait]
 impl<T: Handle> DynHandle for T {
     async fn dyn_handle(
         &self,
         headers: RequestHeaders,
+        options: CallOptions,
         mut tx: &mut dyn DynSendStream,
         rx: BoxedRecvStream,
     ) {
-        // Wrap `rx` in BoxedRecvStream here
-        self.handle(headers, &mut tx, BoxedRecvStream(Box::new(rx)))
-            .await
+        self.handle(headers, options, &mut tx, rx).await
     }
 }
 
@@ -131,7 +134,7 @@ struct BoxedRecvStream(Box<dyn DynRecvStream + 'static>);
 
 // Implement RecvStream for the wrapper instead of the Box directly
 impl RecvStream for BoxedRecvStream {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
         self.0.dyn_next(msg).await
     }
 }
@@ -141,7 +144,12 @@ impl RecvStream for BoxedRecvStream {
 /// order in which they must be sent.
 #[trait_variant::make(Send)]
 pub trait SendStream {
-    /// Sends the next item on the stream.
+    /// Sends the next item on the stream. Returns `Ok(())` on success, or
+    /// `Err(())` on failure. `Err(())` is a terminal state.
+    /// Sending is also considered complete after successfully sending
+    /// `ServerResponseStreamItem::Trailers`.
+    /// Calling this method after an error or after sending trailers should be
+    /// avoided and is unspecified.
     ///
     /// # Cancel safety
     ///
@@ -209,31 +217,35 @@ pub struct SendOptions {
 /// Represents the receiving side of a server stream.
 #[trait_variant::make(Send)]
 pub trait RecvStream {
-    /// Returns the next message on the stream.  If an error is returned, the
-    /// stream ended or the client closed the send side of the request stream.
+    /// Returns the next message on the stream. Returns `Some(Ok(()))` on
+    /// success, `None` on normal stream end, or `Some(Err(()))` if the stream
+    /// encountered an error before the client's final request message. Both
+    /// `None` and `Some(Err(()))` are terminal states.
+    /// Calling this method again after reaching a terminal state is unspecified
+    /// and should be avoided.
     ///
     /// # Cancel safety
     ///
     /// This method is not intended to be cancellation safe.  If the returned
     /// future is not polled to completion, the behavior of any subsequent calls
     /// to the RecvStream are undefined and data may be lost.
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()>;
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>>;
 }
 
 #[async_trait]
 trait DynRecvStream: Send {
-    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()>;
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>>;
 }
 
 #[async_trait]
 impl<T: RecvStream> DynRecvStream for T {
-    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
+    async fn dyn_next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
         self.next(msg).await
     }
 }
 
 impl<'a> RecvStream for Box<dyn DynRecvStream + 'a> {
-    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Result<(), ()> {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
         (**self).dyn_next(msg).await
     }
 }
