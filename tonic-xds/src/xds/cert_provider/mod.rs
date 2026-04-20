@@ -19,15 +19,57 @@ use serde::Deserialize;
 
 use crate::xds::bootstrap::CertProviderPluginConfig;
 
-/// Certificate material returned by a [`CertificateProvider`] plugin.
+/// PEM-encoded identity (a cert chain paired with its private key).
 #[derive(Debug, Clone)]
-pub(crate) struct CertificateData {
-    /// PEM-encoded CA certificate(s) for validating peer certificates.
-    pub root_certs: Option<Vec<u8>>,
-    /// PEM-encoded identity certificate chain.
-    pub identity_cert_chain: Option<Vec<u8>>,
-    /// PEM-encoded private key for the identity certificate.
-    pub identity_key: Option<Vec<u8>>,
+pub(crate) struct Identity {
+    pub(crate) cert_chain: Vec<u8>,
+    pub(crate) key: Vec<u8>,
+}
+
+/// Certificate material returned by a [`CertificateProvider`] plugin.
+///
+/// The variants encode two invariants from gRFC A29 and A65 at the type level:
+///
+/// 1. **Cert/key pairing** (A65): identity cert and private key are paired or
+///    absent — never one without the other. Guaranteed by [`Identity`].
+/// 2. **At least one present** (A65, for `file_watcher`): at least one of
+///    CA roots or identity must be set. Guaranteed by the absence of a
+///    `Neither` variant — every value carries roots, identity, or both.
+///
+/// Spec references:
+/// - A29: <https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md>
+/// - A65: <https://github.com/grpc/proposal/blob/master/A65-xds-mtls-creds-in-bootstrap.md>
+///   ("in the file-watcher certificate provider, at least one of the
+///   `certificate_file` or `ca_certificate_file` fields must be specified")
+#[derive(Debug, Clone)]
+pub(crate) enum CertificateData {
+    /// CA trust bundle only — used by TLS clients that don't present an
+    /// identity.
+    RootsOnly { roots: Vec<u8> },
+    /// Identity only — used by TLS servers that don't validate peers
+    /// (non-mTLS). Peer validation falls back to system roots at the
+    /// consumer layer if needed.
+    IdentityOnly { identity: Identity },
+    /// Both roots and identity — used for mTLS on either end.
+    Both { roots: Vec<u8>, identity: Identity },
+}
+
+impl CertificateData {
+    /// PEM-encoded CA trust bundle, if present.
+    pub(crate) fn roots(&self) -> Option<&[u8]> {
+        match self {
+            Self::RootsOnly { roots } | Self::Both { roots, .. } => Some(roots),
+            Self::IdentityOnly { .. } => None,
+        }
+    }
+
+    /// Identity cert chain and private key, if present.
+    pub(crate) fn identity(&self) -> Option<&Identity> {
+        match self {
+            Self::IdentityOnly { identity } | Self::Both { identity, .. } => Some(identity),
+            Self::RootsOnly { .. } => None,
+        }
+    }
 }
 
 /// Errors from certificate provider operations.
@@ -45,6 +87,16 @@ pub(crate) enum CertProviderError {
         plugin: String,
         source: serde_json::Error,
     },
+    #[error(
+        "invalid file_watcher config: 'certificate_file' and 'private_key_file' must both be \
+         set or both be unset"
+    )]
+    UnpairedCertKey,
+    #[error(
+        "invalid file_watcher config: at least one of 'certificate_file' or \
+         'ca_certificate_file' must be specified"
+    )]
+    EmptyConfig,
 }
 
 /// A certificate provider plugin.

@@ -24,7 +24,7 @@ use std::time::Duration;
 use arc_swap::ArcSwap;
 use serde::Deserialize;
 
-use super::{CertProviderError, CertificateData, CertificateProvider};
+use super::{CertProviderError, CertificateData, CertificateProvider, Identity};
 
 /// Plugin name used in the bootstrap `certificate_providers` JSON.
 pub(crate) const PLUGIN_NAME: &str = "file_watcher";
@@ -113,30 +113,34 @@ impl CertificateProvider for FileWatcherProvider {
 }
 
 /// Read certificate data from the files specified in the config.
+///
+/// This function is the single validation boundary between the permissive
+/// JSON-parsed [`FileWatcherConfig`] and the invariant-enforcing
+/// [`CertificateData`]. It checks both A65 rules:
+/// - cert/key pairing (first match)
+/// - at least one of identity/roots is set (second match)
 fn read_certificate_data(config: &FileWatcherConfig) -> Result<CertificateData, CertProviderError> {
-    let root_certs = config
+    let roots = config
         .ca_certificate_file
         .as_deref()
         .map(read_file)
         .transpose()?;
 
-    let identity_cert_chain = config
-        .certificate_file
-        .as_deref()
-        .map(read_file)
-        .transpose()?;
+    let identity = match (&config.certificate_file, &config.private_key_file) {
+        (Some(cert_path), Some(key_path)) => Some(Identity {
+            cert_chain: read_file(cert_path)?,
+            key: read_file(key_path)?,
+        }),
+        (None, None) => None,
+        (Some(_), None) | (None, Some(_)) => return Err(CertProviderError::UnpairedCertKey),
+    };
 
-    let identity_key = config
-        .private_key_file
-        .as_deref()
-        .map(read_file)
-        .transpose()?;
-
-    Ok(CertificateData {
-        root_certs,
-        identity_cert_chain,
-        identity_key,
-    })
+    match (roots, identity) {
+        (Some(roots), Some(identity)) => Ok(CertificateData::Both { roots, identity }),
+        (Some(roots), None) => Ok(CertificateData::RootsOnly { roots }),
+        (None, Some(identity)) => Ok(CertificateData::IdentityOnly { identity }),
+        (None, None) => Err(CertProviderError::EmptyConfig),
+    }
 }
 
 fn read_file(path: &Path) -> Result<Vec<u8>, CertProviderError> {
@@ -176,14 +180,13 @@ mod tests {
             FileWatcherProvider::new(make_config(ca_file.path().to_str(), None, None)).unwrap();
         let data = provider.fetch().unwrap();
 
+        assert!(matches!(*data, CertificateData::RootsOnly { .. }));
         assert!(
-            data.root_certs
-                .as_ref()
+            data.roots()
                 .unwrap()
                 .starts_with(b"-----BEGIN CERTIFICATE-----")
         );
-        assert!(data.identity_cert_chain.is_none());
-        assert!(data.identity_key.is_none());
+        assert!(data.identity().is_none());
     }
 
     #[test]
@@ -199,15 +202,11 @@ mod tests {
         .unwrap();
         let data = provider.fetch().unwrap();
 
-        assert_eq!(
-            data.identity_cert_chain.as_deref(),
-            Some(b"cert-chain-pem".as_slice())
-        );
-        assert_eq!(
-            data.identity_key.as_deref(),
-            Some(b"private-key-pem".as_slice())
-        );
-        assert!(data.root_certs.is_none());
+        assert!(matches!(*data, CertificateData::IdentityOnly { .. }));
+        let identity = data.identity().unwrap();
+        assert_eq!(identity.cert_chain.as_slice(), b"cert-chain-pem");
+        assert_eq!(identity.key.as_slice(), b"private-key-pem");
+        assert!(data.roots().is_none());
     }
 
     #[test]
@@ -224,22 +223,37 @@ mod tests {
         .unwrap();
         let data = provider.fetch().unwrap();
 
-        assert_eq!(data.root_certs.as_deref(), Some(b"ca-pem".as_slice()));
-        assert_eq!(
-            data.identity_cert_chain.as_deref(),
-            Some(b"cert-pem".as_slice())
-        );
-        assert_eq!(data.identity_key.as_deref(), Some(b"key-pem".as_slice()));
+        assert!(matches!(*data, CertificateData::Both { .. }));
+        assert_eq!(data.roots(), Some(b"ca-pem".as_slice()));
+        let identity = data.identity().unwrap();
+        assert_eq!(identity.cert_chain.as_slice(), b"cert-pem");
+        assert_eq!(identity.key.as_slice(), b"key-pem");
     }
 
     #[test]
-    fn empty_config_returns_empty_data() {
-        let provider = FileWatcherProvider::new(make_config(None, None, None)).unwrap();
-        let data = provider.fetch().unwrap();
+    fn empty_config_returns_error() {
+        let err = FileWatcherProvider::new(make_config(None, None, None))
+            .err()
+            .unwrap();
+        assert!(matches!(err, CertProviderError::EmptyConfig));
+    }
 
-        assert!(data.root_certs.is_none());
-        assert!(data.identity_cert_chain.is_none());
-        assert!(data.identity_key.is_none());
+    #[test]
+    fn cert_without_key_returns_error() {
+        let cert_file = write_temp_file(b"cert-pem");
+        let err = FileWatcherProvider::new(make_config(None, cert_file.path().to_str(), None))
+            .err()
+            .unwrap();
+        assert!(matches!(err, CertProviderError::UnpairedCertKey));
+    }
+
+    #[test]
+    fn key_without_cert_returns_error() {
+        let key_file = write_temp_file(b"key-pem");
+        let err = FileWatcherProvider::new(make_config(None, None, key_file.path().to_str()))
+            .err()
+            .unwrap();
+        assert!(matches!(err, CertProviderError::UnpairedCertKey));
     }
 
     #[test]
@@ -264,14 +278,14 @@ mod tests {
         let provider =
             FileWatcherProvider::new(make_config(ca_file.path().to_str(), None, None)).unwrap();
         assert_eq!(
-            provider.fetch().unwrap().root_certs.as_deref(),
+            provider.fetch().unwrap().roots(),
             Some(b"old-ca".as_slice())
         );
 
         std::fs::write(ca_file.path(), b"new-ca").unwrap();
         provider.refresh().unwrap();
         assert_eq!(
-            provider.fetch().unwrap().root_certs.as_deref(),
+            provider.fetch().unwrap().roots(),
             Some(b"new-ca".as_slice())
         );
     }
@@ -283,7 +297,7 @@ mod tests {
 
         let provider = FileWatcherProvider::new(make_config(Some(&path), None, None)).unwrap();
         assert_eq!(
-            provider.fetch().unwrap().root_certs.as_deref(),
+            provider.fetch().unwrap().roots(),
             Some(b"good-ca".as_slice())
         );
 
@@ -293,7 +307,7 @@ mod tests {
 
         // Cached data should still be the old value.
         assert_eq!(
-            provider.fetch().unwrap().root_certs.as_deref(),
+            provider.fetch().unwrap().roots(),
             Some(b"good-ca".as_slice())
         );
     }
@@ -378,6 +392,6 @@ mod tests {
 
         let provider = registry.get("my_certs").unwrap();
         let data = provider.fetch().unwrap();
-        assert_eq!(data.root_certs.as_deref(), Some(b"ca-data".as_slice()));
+        assert_eq!(data.roots(), Some(b"ca-data".as_slice()));
     }
 }
