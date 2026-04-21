@@ -685,8 +685,7 @@ fn load_private_key(filename: &str) -> rustls_pki_types::PrivateKeyDer<'static> 
     let path = test_certs_path().join(filename);
     let file = std::fs::File::open(path).expect("cannot open private key file");
     let mut reader = std::io::BufReader::new(file);
-    rustls_pki_types::PrivateKeyDer::from_pem_reader(&mut reader)
-        .expect("cannot read private key")
+    rustls_pki_types::PrivateKeyDer::from_pem_reader(&mut reader).expect("cannot read private key")
 }
 
 fn load_root_certs(filename: &str) -> RootCertificates {

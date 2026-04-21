@@ -571,7 +571,9 @@ mod tests {
 
     #[test]
     fn test_not_all_resources_required() {
-        const { assert!(!RouteConfigResource::ALL_RESOURCES_REQUIRED_IN_SOTW); }
+        const {
+            assert!(!RouteConfigResource::ALL_RESOURCES_REQUIRED_IN_SOTW);
+        }
     }
 
     #[test]

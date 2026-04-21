@@ -182,7 +182,9 @@ mod tests {
 
     #[test]
     fn test_all_resources_required() {
-        const { assert!(ListenerResource::ALL_RESOURCES_REQUIRED_IN_SOTW); }
+        const {
+            assert!(ListenerResource::ALL_RESOURCES_REQUIRED_IN_SOTW);
+        }
     }
 
     #[test]

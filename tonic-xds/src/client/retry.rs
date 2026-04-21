@@ -249,9 +249,7 @@ impl GrpcRetryPolicy {
         let backoff = self
             .backoff
             .get_or_insert_with(|| make_backoff(backoff_config));
-        backoff
-            .next()
-            .unwrap_or(backoff_config.max_interval)
+        backoff.next().unwrap_or(backoff_config.max_interval)
     }
 }
 

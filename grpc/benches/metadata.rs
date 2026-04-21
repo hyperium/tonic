@@ -23,12 +23,12 @@
  */
 
 use criterion::Criterion;
-use std::hint::black_box;
 use criterion::criterion_group;
 use criterion::criterion_main;
 use grpc::metadata::MetadataKey;
 use grpc::metadata::MetadataMap;
 use grpc::metadata::MetadataValue;
+use std::hint::black_box;
 use tonic::metadata::MetadataMap as TonicMetadataMap;
 
 fn bench_metadata_map_insert(c: &mut Criterion) {
