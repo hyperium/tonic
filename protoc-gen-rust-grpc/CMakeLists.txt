@@ -27,7 +27,7 @@ fetch_protobuf(${PROTOBUF_VERSION})
 
 # Download and configure abseil
 # Abseil version that's compatible with protobuf
-set(ABSEIL_VERSION "20240722.0")
+set(ABSEIL_VERSION "20260107.0")
 set(ABSEIL_URL "https://github.com/abseil/abseil-cpp/archive/refs/tags/${ABSEIL_VERSION}.tar.gz")
 
 message(STATUS "Downloading abseil-cpp ${ABSEIL_VERSION}")
@@ -35,7 +35,7 @@ message(STATUS "Downloading abseil-cpp ${ABSEIL_VERSION}")
 FetchContent_Declare(
     absl
     URL ${ABSEIL_URL}
-    URL_HASH SHA256=f50e5ac311a81382da7fa75b97310e4b9006474f9560ac46f54a9967f07d4ae3
+    URL_HASH SHA256=4c124408da902be896a2f368042729655709db5e3004ec99f57e3e14439bc1b2
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
 )
 
@@ -67,6 +67,11 @@ target_link_libraries(protoc-gen-rust-grpc
         absl::flat_hash_map
         absl::strings
         absl::string_view
+        absl::status
+        absl::statusor
+        absl::log
+        absl::log_internal_message
+        absl::log_internal_check_op
 )
 
 # Include directories
@@ -110,7 +115,7 @@ install(PROGRAMS ${CMAKE_BINARY_DIR}/bin/${PROTOC_OUTPUT_NAME}
 message(STATUS "")
 message(STATUS "protoc-gen-rust-grpc configuration summary:")
 message(STATUS "  Protobuf version: ${PROTOBUF_VERSION}")
-message(STATUS "  Abseil version: ${ABSEIL_VERSION}")
+message(STATUS "  Abseil version: ${ABSEIL_VERSION} (matches protobuf ${PROTOBUF_VERSION} internal abseil)")
 message(STATUS "  Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "  C++ standard: ${CMAKE_CXX_STANDARD}")
 message(STATUS "  Output directory: ${CMAKE_BINARY_DIR}/bin")
