@@ -7,8 +7,9 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
-use backoff::ExponentialBackoffBuilder;
-use backoff::backoff::Backoff;
+use backon::BackoffBuilder;
+use backon::ExponentialBackoff;
+use backon::ExponentialBuilder;
 use http::{Request, Response};
 use http_body::Body;
 use shared_http_body::{SharedBody, SharedBodyExt};
@@ -184,14 +185,14 @@ impl Default for GrpcRetryPolicyConfig {
 /// gRPC header for tracking retry attempts per the gRPC spec.
 const GRPC_PREVIOUS_RPC_ATTEMPTS: &str = "grpc-previous-rpc-attempts";
 
-/// Create a [`backoff::ExponentialBackoff`] from a [`GrpcRetryBackoffConfig`].
-fn make_backoff(config: &GrpcRetryBackoffConfig) -> backoff::ExponentialBackoff {
-    ExponentialBackoffBuilder::default()
-        .with_initial_interval(config.base_interval)
-        .with_max_interval(config.max_interval)
-        .with_multiplier(config.backoff_multiplier)
-        .with_randomization_factor(0.2)
-        .with_max_elapsed_time(None)
+/// Create an [`ExponentialBackoff`] iterator from a [`GrpcRetryBackoffConfig`].
+fn make_backoff(config: &GrpcRetryBackoffConfig) -> ExponentialBackoff {
+    ExponentialBuilder::default()
+        .with_min_delay(config.base_interval)
+        .with_max_delay(config.max_interval)
+        .with_factor(config.backoff_multiplier as f32)
+        .with_jitter()
+        .without_max_times()
         .build()
 }
 
@@ -203,13 +204,24 @@ fn make_backoff(config: &GrpcRetryBackoffConfig) -> backoff::ExponentialBackoff 
 /// Implements [`tower::retry::Policy`]. Tower's `Retry` service clones the policy
 /// for each request, so `backoff` and `attempts` track per-request retry state
 /// while the shared config is read from `ArcSwap` on each retry decision.
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub(crate) struct GrpcRetryPolicy {
     config: Arc<ArcSwap<GrpcRetryPolicyConfig>>,
     /// Backoff state for the current request, created from config on first retry.
-    backoff: Option<backoff::ExponentialBackoff>,
+    backoff: Option<ExponentialBackoff>,
     /// Number of retry attempts made so far for the current request.
     attempts: u32,
+}
+
+impl Clone for GrpcRetryPolicy {
+    fn clone(&self) -> Self {
+        Self {
+            config: self.config.clone(),
+            // Each cloned policy gets a fresh backoff — it's per-request state.
+            backoff: None,
+            attempts: 0,
+        }
+    }
 }
 
 impl GrpcRetryPolicy {
@@ -238,7 +250,7 @@ impl GrpcRetryPolicy {
             .backoff
             .get_or_insert_with(|| make_backoff(backoff_config));
         backoff
-            .next_backoff()
+            .next()
             .unwrap_or(backoff_config.max_interval)
     }
 }
