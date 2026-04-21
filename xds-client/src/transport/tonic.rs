@@ -111,13 +111,8 @@ impl TonicTransport {
     ///
     /// For custom configuration (TLS, timeouts, etc.), use [`from_channel`](Self::from_channel).
     pub async fn connect(uri: impl Into<String>) -> Result<Self> {
-        let uri: String = uri.into();
-        let channel = Channel::from_shared(uri)
-            .map_err(|e| Error::Connection(e.to_string()))?
-            .connect()
-            .await
-            .map_err(|e| Error::Connection(e.to_string()))?;
-        Ok(Self { channel })
+        let server = ServerConfig::new(uri.into());
+        TonicTransportBuilder::new().build(&server).await
     }
 }
 
@@ -125,9 +120,6 @@ impl TonicTransport {
 ///
 /// This implements [`TransportBuilder`] and can be used with
 /// [`XdsClientBuilder`](crate::XdsClientBuilder) to enable server fallback support.
-///
-/// For connections requiring TLS or custom channel configuration, see the
-/// example in [`TonicTransport::from_channel`].
 ///
 /// # Example
 ///
@@ -138,20 +130,43 @@ impl TonicTransport {
 /// let config = ClientConfig::new(node, "http://xds.example.com:18000");
 /// let client = XdsClient::builder(config, transport_builder, codec, runtime).build();
 /// ```
+///
+/// # TLS
+///
+/// Enable the `tls-ring` or `tls-aws-lc` feature and call [`with_tls_config`](Self::with_tls_config):
+///
+/// ```ignore
+/// use tonic::transport::ClientTlsConfig;
+/// use xds_client::TonicTransportBuilder;
+///
+/// let builder = TonicTransportBuilder::new()
+///     .with_tls_config(ClientTlsConfig::new().with_enabled_roots());
+/// ```
 #[derive(Debug, Clone, Default)]
 pub struct TonicTransportBuilder {
     // Future extensions:
-    // - TLS configuration (requires tonic TLS feature)
     // - Connection timeout settings
     // - Keep-alive configuration
     // - Connection pooling settings
     // - Per-server credential overrides (via ServerConfig.extensions)
+    #[cfg(any(feature = "tonic-tls-ring", feature = "tonic-tls-aws-lc"))]
+    tls_config: Option<tonic::transport::ClientTlsConfig>,
 }
 
 impl TonicTransportBuilder {
-    /// Create a new transport builder with default settings.
+    /// Create a new transport builder with default (plaintext) settings.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Set the TLS configuration for connections to the xDS server.
+    ///
+    /// When set, all connections created by this builder will use TLS
+    /// with the provided configuration.
+    #[cfg(any(feature = "tonic-tls-ring", feature = "tonic-tls-aws-lc"))]
+    pub fn with_tls_config(mut self, tls_config: tonic::transport::ClientTlsConfig) -> Self {
+        self.tls_config = Some(tls_config);
+        self
     }
 }
 
@@ -159,8 +174,18 @@ impl TransportBuilder for TonicTransportBuilder {
     type Transport = TonicTransport;
 
     async fn build(&self, server: &ServerConfig) -> Result<Self::Transport> {
-        let channel = Channel::from_shared(server.uri().to_string())
-            .map_err(|e| Error::Connection(e.to_string()))?
+        let endpoint = Channel::from_shared(server.uri().to_string())
+            .map_err(|e| Error::Connection(e.to_string()))?;
+
+        #[cfg(any(feature = "tonic-tls-ring", feature = "tonic-tls-aws-lc"))]
+        let endpoint = match &self.tls_config {
+            Some(tls) => endpoint
+                .tls_config(tls.clone())
+                .map_err(|e| Error::Connection(e.to_string()))?,
+            None => endpoint,
+        };
+
+        let channel = endpoint
             .connect()
             .await
             .map_err(|e| Error::Connection(e.to_string()))?;
