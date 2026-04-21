@@ -156,7 +156,7 @@ mod tests {
 
     #[test]
     fn test_all_resources_required() {
-        assert!(ClusterResource::ALL_RESOURCES_REQUIRED_IN_SOTW);
+        const { assert!(ClusterResource::ALL_RESOURCES_REQUIRED_IN_SOTW); }
     }
 
     #[test]

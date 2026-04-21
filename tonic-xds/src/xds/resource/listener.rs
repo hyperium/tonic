@@ -118,7 +118,7 @@ mod tests {
         };
         let hcm_any = Any {
             type_url: "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager".to_string(),
-            value: hcm.encode_to_vec().into(),
+            value: hcm.encode_to_vec(),
         };
         Listener {
             name: name.to_string(),
@@ -182,7 +182,7 @@ mod tests {
 
     #[test]
     fn test_all_resources_required() {
-        assert!(ListenerResource::ALL_RESOURCES_REQUIRED_IN_SOTW);
+        const { assert!(ListenerResource::ALL_RESOURCES_REQUIRED_IN_SOTW); }
     }
 
     #[test]
@@ -223,7 +223,7 @@ mod tests {
         };
         let hcm_any = Any {
             type_url: "type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager".to_string(),
-            value: hcm.encode_to_vec().into(),
+            value: hcm.encode_to_vec(),
         };
         let listener = Listener {
             name: "inline-listener".to_string(),

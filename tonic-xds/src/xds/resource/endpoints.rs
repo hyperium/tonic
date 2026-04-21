@@ -259,7 +259,7 @@ mod tests {
     fn test_eds_allows_partial_responses_in_sotw() {
         // EDS resources are per-cluster, so SotW responses may contain only a subset.
         // Unlike LDS/CDS which require all resources in every SotW response.
-        assert!(!EndpointsResource::ALL_RESOURCES_REQUIRED_IN_SOTW);
+        const { assert!(!EndpointsResource::ALL_RESOURCES_REQUIRED_IN_SOTW); }
     }
 
     #[test]

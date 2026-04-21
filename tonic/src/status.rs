@@ -778,13 +778,13 @@ pub(crate) fn infer_grpc_status(
     trailers: Option<&HeaderMap>,
     status_code: http::StatusCode,
 ) -> Result<(), Option<Status>> {
-    if let Some(trailers) = trailers {
-        if let Some(status) = Status::from_header_map(trailers) {
-            if status.code() == Code::Ok {
-                return Ok(());
-            } else {
-                return Err(status.into());
-            }
+    if let Some(trailers) = trailers
+        && let Some(status) = Status::from_header_map(trailers)
+    {
+        if status.code() == Code::Ok {
+            return Ok(());
+        } else {
+            return Err(status.into());
         }
     }
     trace!("trailers missing grpc-status");
