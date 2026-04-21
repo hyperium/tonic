@@ -22,11 +22,10 @@
  *
  */
 
-use std::io::BufReader;
-
 use rustls::crypto::CryptoProvider;
 use rustls::pki_types::PrivateKeyDer;
 use rustls_pki_types::CertificateDer;
+use rustls_pki_types::pem::PemObject;
 use tokio::sync::watch;
 
 use crate::credentials::ProtocolInfo;
@@ -154,21 +153,11 @@ fn sanitize_crypto_provider(mut crypto_provider: CryptoProvider) -> Result<Crypt
 }
 
 fn parse_certs(pem: &[u8]) -> Result<Vec<CertificateDer<'static>>, String> {
-    let mut reader = BufReader::new(pem);
-    rustls_pemfile::certs(&mut reader)
+    CertificateDer::pem_slice_iter(pem)
         .map(|result| result.map_err(|e| e.to_string()))
         .collect()
 }
 
 fn parse_key(pem: &[u8]) -> Result<PrivateKeyDer<'static>, String> {
-    let mut reader = BufReader::new(pem);
-    loop {
-        match rustls_pemfile::read_one(&mut reader).map_err(|e| e.to_string())? {
-            Some(rustls_pemfile::Item::Pkcs1Key(key)) => return Ok(key.into()),
-            Some(rustls_pemfile::Item::Pkcs8Key(key)) => return Ok(key.into()),
-            Some(rustls_pemfile::Item::Sec1Key(key)) => return Ok(key.into()),
-            None => return Err("no private key found".to_string()),
-            _ => continue,
-        }
-    }
+    PrivateKeyDer::from_pem_slice(pem).map_err(|e| e.to_string())
 }

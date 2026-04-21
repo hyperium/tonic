@@ -7,23 +7,28 @@ name = "integration-tests"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-bytes = "1.0"
+bytes = "1.11"
 prost = "0.14"
-tokio = {version = "1.0", features = ["macros", "rt-multi-thread", "net", "sync"]}
-tonic = {path = "../../tonic"}
-tonic-prost = {path = "../../tonic-prost"}
-tracing-subscriber = {version = "0.3"}
+tokio = { version = "1.52", features = [
+    "macros",
+    "rt-multi-thread",
+    "net",
+    "sync",
+] }
+tonic = { path = "../../tonic", features = ["tls-native-roots"] }
+tonic-prost = { path = "../../tonic-prost" }
+tracing-subscriber = { version = "0.3" }
 
 [dev-dependencies]
 h2 = "0.4"
 http = "1"
 http-body = "1"
 hyper-util = "0.1"
-rustls = {version = "0.23", features = ["ring"]}
-tokio-stream = {version = "0.1.5", features = ["net"]}
+rustls = { version = "0.23", features = ["ring"] }
+tokio-stream = { version = "0.1", features = ["net"] }
 tower = "0.5"
 tower-http = { version = "0.6", features = ["set-header", "trace"] }
 tower-service = "0.3"
 
 [build-dependencies]
-tonic-prost-build = {path = "../../tonic-prost-build"}
+tonic-prost-build = { path = "../../tonic-prost-build" }

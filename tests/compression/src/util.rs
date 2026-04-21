@@ -20,7 +20,7 @@ use tower_http::map_request_body::MapRequestBodyLayer;
 
 macro_rules! parametrized_tests {
     ($fn_name:ident, $($test_name:ident: $input:expr),+ $(,)?) => {
-        paste::paste! {
+        pastey::paste! {
             $(
                 #[tokio::test(flavor = "multi_thread")]
                 async fn [<$fn_name _ $test_name>]() {

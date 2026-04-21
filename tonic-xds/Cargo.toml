@@ -9,7 +9,7 @@ authors = [
     "Ankur Mittal <ankurmit2006@gmail.com>",
     "Jeff Jiang <guokeno0@gmail.com>",
     "Lucio Franco <luciofranco14@gmail.com>",
-    "Yutao Ma <ytma98@gmail.com>"
+    "Yutao Ma <ytma98@gmail.com>",
 ]
 categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
@@ -25,12 +25,15 @@ tonic = "0.14"
 http = "1"
 http-body = "1"
 pin-project-lite = "0.2"
-tower = { version = "0.5", default-features = false, features = ["discover", "retry"] }
+tower = { version = "0.5", default-features = false, features = [
+    "discover",
+    "retry",
+] }
 arc-swap = "1"
 dashmap = "6.1"
-thiserror = "2.0.17"
+thiserror = "2.0"
 url = "2.5.8"
-futures-core = "0.3.31"
+futures-core = "0.3"
 futures-util = "0.3"
 bytes = "1"
 xds-client = { version = "0.1.0-alpha.1", path = "../xds-client" }
@@ -45,7 +48,7 @@ tokio = { version = "1", features = ["sync", "time"] }
 fastrand = "2"
 tokio-stream = "0.1"
 tokio-util = "0.7"
-backoff = "0.4"
+backon = { version = "1.6", default-features = false, features = ["std"] }
 shared_http_body = "0.1"
 tonic-prost = { version = "0.14", optional = true }
 
@@ -53,9 +56,16 @@ tonic-prost = { version = "0.14", optional = true }
 workspace = true
 
 [dev-dependencies]
-xds-client = { version = "0.1.0-alpha.1", path = "../xds-client", features = ["test-util"] }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "test-util"] }
-tonic = { version = "0.14", features = [ "server", "channel", "tls-ring" ] }
+xds-client = { version = "0.1.0-alpha.1", path = "../xds-client", features = [
+    "test-util",
+] }
+tokio = { version = "1", features = [
+    "rt-multi-thread",
+    "macros",
+    "net",
+    "test-util",
+] }
+tonic = { version = "0.14", features = ["server", "channel", "tls-ring"] }
 tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 async-stream = "0.3"

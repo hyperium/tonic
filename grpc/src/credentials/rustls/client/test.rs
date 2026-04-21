@@ -32,6 +32,7 @@ use rustls::ServerConfig;
 use rustls::crypto::ring;
 use rustls_pki_types::CertificateDer;
 use rustls_pki_types::PrivateKeyDer;
+use rustls_pki_types::pem::PemObject;
 use tempfile::NamedTempFile;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -489,7 +490,7 @@ fn mtls_server_config() -> ServerConfig {
     let file = std::fs::File::open(client_ca_path).expect("cannot open client CA file");
     let mut reader = std::io::BufReader::new(file);
     let mut root_store = rustls::RootCertStore::empty();
-    for cert in rustls_pemfile::certs(&mut reader) {
+    for cert in CertificateDer::pem_reader_iter(&mut reader) {
         root_store.add(cert.unwrap()).unwrap();
     }
 
@@ -516,7 +517,7 @@ fn load_certs(filename: &str) -> Vec<CertificateDer<'static>> {
     let path = test_certs_path().join(filename);
     let file = std::fs::File::open(path).expect("cannot open certificate file");
     let mut reader = std::io::BufReader::new(file);
-    rustls_pemfile::certs(&mut reader)
+    CertificateDer::pem_reader_iter(&mut reader)
         .map(|result| result.unwrap())
         .collect()
 }
@@ -525,15 +526,7 @@ fn load_private_key(filename: &str) -> PrivateKeyDer<'static> {
     let path = test_certs_path().join(filename);
     let file = std::fs::File::open(path).expect("cannot open private key file");
     let mut reader = std::io::BufReader::new(file);
-    loop {
-        match rustls_pemfile::read_one(&mut reader).expect("cannot read private key") {
-            Some(rustls_pemfile::Item::Pkcs1Key(key)) => return key.into(),
-            Some(rustls_pemfile::Item::Pkcs8Key(key)) => return key.into(),
-            Some(rustls_pemfile::Item::Sec1Key(key)) => return key.into(),
-            None => panic!("no keys found"),
-            _ => {}
-        }
-    }
+    PrivateKeyDer::from_pem_reader(&mut reader).expect("cannot read private key")
 }
 
 fn load_root_certs(filename: &str) -> RootCertificates {

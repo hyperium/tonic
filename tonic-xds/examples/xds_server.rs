@@ -104,7 +104,7 @@ impl Snapshot {
             api_listener: Some(ApiListener {
                 api_listener: Some(Any {
                     type_url: TYPE_HCM.to_string(),
-                    value: hcm.encode_to_vec().into(),
+                    value: hcm.encode_to_vec(),
                 }),
             }),
             ..Default::default()

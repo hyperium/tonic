@@ -1,7 +1,7 @@
 use std::error::Error;
 use std::time::Duration;
 
-use rand::Rng;
+use rand::RngExt;
 use rand::rngs::ThreadRng;
 use tokio::time;
 use tonic::Request;

@@ -13,7 +13,7 @@ publish = false
 workspace = true
 
 [dependencies]
-bytes = "1.11.0"
+bytes = "1.11"
 thiserror = "2"
 tokio = { version = "1", features = ["sync", "macros"] }
 
@@ -28,22 +28,13 @@ prost = { version = "0.14", optional = true }
 
 [features]
 default = ["transport-tonic", "codegen-prost"]
-transport-tonic = [
-    "rt-tokio",
-    "dep:tonic",
-    "dep:tokio-stream",
-    "dep:http",
-]
+transport-tonic = ["rt-tokio", "dep:tonic", "dep:tokio-stream", "dep:http"]
 rt-tokio = ["tokio/rt", "tokio/time"]
 codegen-prost = ["dep:envoy-types", "dep:prost"]
 test-util = []
 
 [dev-dependencies]
-tokio = { version = "1", features = [
-    "rt-multi-thread",
-    "macros",
-    "net",
-] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
 tonic = { version = "0.14", features = ["tls-ring"] }
 async-stream = "0.3"
 envoy-types = "0.7"

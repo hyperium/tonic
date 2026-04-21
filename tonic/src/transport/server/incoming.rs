@@ -146,10 +146,10 @@ fn set_accepted_socket_options(
     nodelay: Option<bool>,
     keepalive: &Option<TcpKeepalive>,
 ) {
-    if let Some(nodelay) = nodelay {
-        if let Err(e) = stream.set_nodelay(nodelay) {
-            warn!("error trying to set TCP_NODELAY: {e}");
-        }
+    if let Some(nodelay) = nodelay
+        && let Err(e) = stream.set_nodelay(nodelay)
+    {
+        warn!("error trying to set TCP_NODELAY: {e}");
     }
 
     if let Some(keepalive) = keepalive {

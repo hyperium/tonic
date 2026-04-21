@@ -6,7 +6,7 @@ license = "MIT"
 
 [dependencies]
 base64 = "0.22"
-bytes = "1.0"
+bytes = "1.11"
 http-body-util = "0.1"
 hyper = "1"
 hyper-util = "0.1"

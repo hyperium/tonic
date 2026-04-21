@@ -380,7 +380,7 @@ mod tests {
                 cx: &mut Context<'_>,
             ) -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>> {
                 // every other call to poll_data returns data
-                let should_send = self.count % 2 == 0;
+                let should_send = self.count.is_multiple_of(2);
                 let data_len = self.data.len();
                 let partial_len = self.partial_len;
                 let count = self.count;

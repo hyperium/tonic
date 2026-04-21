@@ -4,7 +4,7 @@ fn main() {
     eprintln!("{}", grpc_protobuf_build::protoc());
     let path = std::env::var("PATH").unwrap_or_default();
     unsafe {
-        std::env::set_var("PATH", format!("{}:{}", path, grpc_protobuf_build::bin()));
+        std::env::set_var("PATH", format!("{}:{}", grpc_protobuf_build::bin(), path));
     }
 
     tonic_prost_build::compile_protos(proto).unwrap();
