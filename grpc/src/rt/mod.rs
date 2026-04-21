@@ -23,7 +23,21 @@
  */
 
 use std::fmt::Debug;
-use std::{future::Future, net::SocketAddr, pin::Pin, sync::Arc, time::Duration};
+use std::future::Future;
+use std::io;
+use std::io::IoSlice;
+use std::net::SocketAddr;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::Context;
+use std::task::Poll;
+use std::time::Duration;
+
+use ::tokio::io::AsyncRead;
+use ::tokio::io::AsyncWrite;
+use ::tokio::io::ReadBuf;
+
+use crate::private;
 
 pub(crate) mod hyper_wrapper;
 #[cfg(feature = "_runtime-tokio")]
@@ -32,7 +46,6 @@ pub(crate) mod tokio;
 pub type BoxFuture<T> = Pin<Box<dyn Future<Output = T> + Send>>;
 pub type BoxedTaskHandle = Box<dyn TaskHandle>;
 pub type BoxEndpoint = Box<dyn GrpcEndpoint>;
-pub type ScopedBoxFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 /// An abstraction over an asynchronous runtime.
 ///
@@ -60,13 +73,6 @@ pub trait Runtime: Send + Sync + Debug {
         target: SocketAddr,
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>>;
-
-    /// Create a new listener for the given address.
-    fn listen_tcp(
-        &self,
-        addr: SocketAddr,
-        opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>>;
 }
 
 /// A future that resolves after a specified duration.
@@ -100,27 +106,131 @@ pub struct TcpOptions {
     pub(crate) keepalive: Option<Duration>,
 }
 
-pub(crate) mod endpoint {
-    /// This trait is sealed since we may need to change the read and write
-    /// methods to align closely with the gRPC C++ implementations. For example,
-    /// the read method may be responsible for allocating the buffer and
-    /// returning it to enable in-place decryption. Since the libraries used
-    /// for http2 and channel credentials use AsyncRead, designing such an API
-    /// today would require adapters which would incur an extra copy, affecting
-    /// performance.
-    pub trait Sealed: tokio::io::AsyncRead + tokio::io::AsyncWrite {}
-}
-
 /// GrpcEndpoint is a generic stream-oriented network connection.
-pub trait GrpcEndpoint: endpoint::Sealed + Send + Unpin + 'static {
+// This trait is sealed since we may need to change the read and write
+// methods to align closely with the gRPC C++ implementations. For example,
+// the read method may be responsible for allocating the buffer and
+// returning it to enable in-place decryption. Since the libraries used
+// for http2 and channel credentials use AsyncRead, designing such an API
+// today would require adapters which would incur an extra copy, affecting
+// performance.
+pub trait GrpcEndpoint: Send + Unpin + 'static {
     /// Returns the local address that this stream is bound to.
     fn get_local_address(&self) -> &str;
 
     /// Returns the remote address that this stream is connected to.
     fn get_peer_address(&self) -> &str;
+
+    /// Returns the network type of the connection (e.g., "tcp", "unix").
+    fn get_network_type(&self) -> &'static str;
+
+    #[doc(hidden)]
+    fn poll_read_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+        token: private::Internal,
+    ) -> Poll<io::Result<()>>;
+
+    #[doc(hidden)]
+    fn poll_write_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        token: private::Internal,
+    ) -> Poll<io::Result<usize>>;
+
+    #[doc(hidden)]
+    fn poll_flush_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        token: private::Internal,
+    ) -> Poll<io::Result<()>>;
+
+    #[doc(hidden)]
+    fn poll_shutdown_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        token: private::Internal,
+    ) -> Poll<io::Result<()>>;
+
+    #[doc(hidden)]
+    fn poll_write_vectored_private(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+        token: private::Internal,
+    ) -> Poll<io::Result<usize>> {
+        let buf = bufs
+            .iter()
+            .find(|b| !b.is_empty())
+            .map_or(&[][..], |b| &**b);
+        self.poll_write_private(cx, buf, token)
+    }
+
+    #[doc(hidden)]
+    fn is_write_vectored_private(&self, _: private::Internal) -> bool {
+        false
+    }
 }
 
-impl endpoint::Sealed for Box<dyn GrpcEndpoint> {}
+/// An adapter that exposes `AsyncRead` and `AsyncWrite` functionality for
+/// interfacing with `hyper` and `rustls`. This type is kept private to avoid
+/// exposing its read and write methods to external crates.
+pub(crate) struct AsyncIoAdapter<T> {
+    inner: T,
+}
+
+impl<T: GrpcEndpoint> AsyncIoAdapter<T> {
+    pub(crate) fn new(inner: T) -> Self {
+        Self { inner }
+    }
+
+    pub(crate) fn get_ref(&self) -> &T {
+        &self.inner
+    }
+}
+
+impl<T: GrpcEndpoint> AsyncRead for AsyncIoAdapter<T> {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_read_private(cx, buf, private::Internal)
+    }
+}
+
+impl<T: GrpcEndpoint> AsyncWrite for AsyncIoAdapter<T> {
+    fn poll_write(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write_private(cx, buf, private::Internal)
+    }
+
+    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_flush_private(cx, private::Internal)
+    }
+
+    fn poll_shutdown(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        Pin::new(&mut self.inner).poll_shutdown_private(cx, private::Internal)
+    }
+
+    fn poll_write_vectored(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        bufs: &[IoSlice<'_>],
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut self.inner).poll_write_vectored_private(cx, bufs, private::Internal)
+    }
+
+    fn is_write_vectored(&self) -> bool {
+        self.inner.is_write_vectored_private(private::Internal)
+    }
+}
+
 impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
     fn get_local_address(&self) -> &str {
         (**self).get_local_address()
@@ -129,20 +239,44 @@ impl GrpcEndpoint for Box<dyn GrpcEndpoint> {
     fn get_peer_address(&self) -> &str {
         (**self).get_peer_address()
     }
-}
 
-/// A trait representing a TCP listener capable of accepting incoming
-/// connections.
-pub trait TcpListener: Send + Sync {
-    /// Accepts a new incoming connection.
-    ///
-    /// Returns a future that resolves to a result containing the new
-    /// `GrpcEndpoint` and the remote peer's `SocketAddr`, or an error string
-    /// if acceptance fails.
-    fn accept(&mut self) -> ScopedBoxFuture<'_, Result<(BoxEndpoint, SocketAddr), String>>;
+    fn get_network_type(&self) -> &'static str {
+        (**self).get_network_type()
+    }
 
-    /// Returns the local socket address this listener is bound to.
-    fn local_addr(&self) -> &SocketAddr;
+    fn poll_read_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+        token: private::Internal,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut **self).poll_read_private(cx, buf, token)
+    }
+
+    fn poll_write_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+        token: private::Internal,
+    ) -> Poll<io::Result<usize>> {
+        Pin::new(&mut **self).poll_write_private(cx, buf, token)
+    }
+
+    fn poll_flush_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        token: private::Internal,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut **self).poll_flush_private(cx, token)
+    }
+
+    fn poll_shutdown_private(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        token: private::Internal,
+    ) -> Poll<io::Result<()>> {
+        Pin::new(&mut **self).poll_shutdown_private(cx, token)
+    }
 }
 
 /// A fake runtime to satisfy the compiler when no runtime is enabled. This will
@@ -171,14 +305,6 @@ impl Runtime for NoOpRuntime {
         target: SocketAddr,
         opts: TcpOptions,
     ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
-        unimplemented!()
-    }
-
-    fn listen_tcp(
-        &self,
-        addr: SocketAddr,
-        _opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
         unimplemented!()
     }
 }
@@ -225,13 +351,5 @@ impl GrpcRuntime {
         opts: TcpOptions,
     ) -> BoxFuture<Result<Box<dyn GrpcEndpoint>, String>> {
         self.inner.tcp_stream(target, opts)
-    }
-
-    pub fn listen_tcp(
-        &self,
-        addr: SocketAddr,
-        opts: TcpOptions,
-    ) -> BoxFuture<Result<Box<dyn TcpListener>, String>> {
-        self.inner.listen_tcp(addr, opts)
     }
 }

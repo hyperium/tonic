@@ -25,8 +25,8 @@
 use bytes::{Buf, BufMut};
 use std::marker::PhantomData;
 use tonic::{
-    codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
     Status,
+    codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder},
 };
 
 pub use protobuf;

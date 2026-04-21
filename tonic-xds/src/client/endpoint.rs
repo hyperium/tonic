@@ -1,16 +1,27 @@
 use crate::common::async_util::BoxFuture;
 use std::net::SocketAddr;
-use std::sync::{atomic::AtomicU64, atomic::Ordering, Arc};
+use std::sync::{Arc, atomic::AtomicU64, atomic::Ordering};
 use std::task::{Context, Poll};
-use tower::{load::Load, Service};
+use tower::{Service, load::Load};
 
 /// Represents the host part of an endpoint address
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum EndpointHost {
     Ipv4(std::net::Ipv4Addr),
     Ipv6(std::net::Ipv6Addr),
-    #[allow(dead_code)]
     Hostname(String),
+}
+
+impl From<String> for EndpointHost {
+    fn from(s: String) -> Self {
+        if let Ok(ipv4) = s.parse::<std::net::Ipv4Addr>() {
+            EndpointHost::Ipv4(ipv4)
+        } else if let Ok(ipv6) = s.parse::<std::net::Ipv6Addr>() {
+            EndpointHost::Ipv6(ipv6)
+        } else {
+            EndpointHost::Hostname(s)
+        }
+    }
 }
 
 /// Represents a validated endpoint address extracted from xDS
@@ -20,6 +31,29 @@ pub(crate) struct EndpointAddress {
     host: EndpointHost,
     /// The port number
     port: u16,
+}
+
+impl EndpointAddress {
+    /// Creates a new `EndpointAddress` from a host string and port.
+    ///
+    /// Attempts to parse the host as an IP address; falls back to hostname.
+    #[allow(dead_code)]
+    pub(crate) fn new(host: impl Into<String>, port: u16) -> Self {
+        Self {
+            host: EndpointHost::from(host.into()),
+            port,
+        }
+    }
+}
+
+impl std::fmt::Display for EndpointAddress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.host {
+            EndpointHost::Ipv4(ip) => write!(f, "{ip}:{}", self.port),
+            EndpointHost::Ipv6(ip) => write!(f, "[{ip}]:{}", self.port),
+            EndpointHost::Hostname(h) => write!(f, "{h}:{}", self.port),
+        }
+    }
 }
 
 impl From<SocketAddr> for EndpointAddress {
@@ -107,8 +141,8 @@ where
         // -1 when the inner future completes
         Box::pin(async move {
             let _in_flight_guard = in_flight;
-            let res = fut.await;
-            res
+
+            fut.await
         })
     }
 }
@@ -118,4 +152,21 @@ impl<S> Load for EndpointChannel<S> {
     fn load(&self) -> Self::Metric {
         self.in_flight.load(Ordering::Relaxed)
     }
+}
+
+/// Factory for creating connections to endpoints.
+///
+/// Implementations capture cluster-level config (TLS, HTTP/2 settings, timeouts)
+/// at construction time. The implementation handles retries and concurrency
+/// internally — the returned future resolves when a connection is established
+/// (or is cancelled by dropping).
+pub(crate) trait Connector {
+    /// The service type produced by this connector.
+    type Service;
+
+    /// Connect to the given endpoint address.
+    fn connect(
+        &self,
+        addr: &EndpointAddress,
+    ) -> crate::common::async_util::BoxFuture<Self::Service>;
 }

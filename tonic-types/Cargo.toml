@@ -7,7 +7,7 @@ categories = ["web-programming", "network-programming", "asynchronous"]
 description = """
 A collection of useful protobuf types that can be used with `tonic`.
 """
-edition = "2021"
+edition = "2024"
 homepage = "https://github.com/hyperium/tonic"
 keywords = ["rpc", "grpc", "protobuf"]
 license = "MIT"

@@ -22,15 +22,24 @@
  *
  */
 
+use std::sync::Arc;
+
 use crate::attributes::Attributes;
-use crate::credentials::client::{
-    self, ClientConnectionSecurityContext, ClientConnectionSecurityInfo, ClientHandshakeInfo,
-    HandshakeOutput,
-};
-use crate::credentials::common::{Authority, SecurityLevel};
-use crate::credentials::server::{self, ServerConnectionSecurityInfo};
-use crate::credentials::{ChannelCredentials, ProtocolInfo, ServerCredentials};
-use crate::rt::{GrpcEndpoint, GrpcRuntime};
+use crate::credentials::ChannelCredentials;
+use crate::credentials::ProtocolInfo;
+use crate::credentials::SecurityLevel;
+use crate::credentials::ServerCredentials;
+use crate::credentials::call::CallCredentials;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityInfo;
+use crate::credentials::client::ClientHandshakeInfo;
+use crate::credentials::client::HandshakeOutput;
+use crate::credentials::common::Authority;
+use crate::credentials::server::ServerConnectionSecurityInfo;
+use crate::credentials::server::{self};
+use crate::private;
+use crate::rt::GrpcEndpoint;
+use crate::rt::GrpcRuntime;
 
 /// An implementation of [`ChannelCredentials`] for insecure connections.
 ///
@@ -41,10 +50,17 @@ pub struct InsecureChannelCredentials {
     _private: (),
 }
 
+pub const PROTOCOL_NAME: &str = "insecure";
+
 impl InsecureChannelCredentials {
     /// Creates a new instance of `InsecureChannelCredentials`.
     pub fn new() -> Self {
         Self { _private: () }
+    }
+
+    /// Creates a new ref-counted instance of `InsecureChannelCredentials`.
+    pub fn new_arc() -> Arc<Self> {
+        Arc::new(Self { _private: () })
     }
 }
 
@@ -58,33 +74,36 @@ impl ClientConnectionSecurityContext for InsecureConnectionSecurityContext {
     }
 }
 
-impl client::ChannelCredsInternal for InsecureChannelCredentials {
+impl ChannelCredentials for InsecureChannelCredentials {
     type ContextType = InsecureConnectionSecurityContext;
     type Output<I> = I;
 
-    async fn connect<Input: GrpcEndpoint + 'static>(
+    async fn connect<Input: GrpcEndpoint>(
         &self,
         _authority: &Authority,
         source: Input,
-        _info: ClientHandshakeInfo,
-        _runtime: GrpcRuntime,
+        _info: &ClientHandshakeInfo,
+        _runtime: &GrpcRuntime,
+        _token: private::Internal,
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String> {
         Ok(HandshakeOutput {
             endpoint: source,
             security: ClientConnectionSecurityInfo::new(
-                "insecure",
+                PROTOCOL_NAME,
                 SecurityLevel::NoSecurity,
                 InsecureConnectionSecurityContext,
-                Attributes,
+                Attributes::new(),
             ),
         })
     }
-}
 
-impl ChannelCredentials for InsecureChannelCredentials {
     fn info(&self) -> &ProtocolInfo {
-        static INFO: ProtocolInfo = ProtocolInfo::new("insecure");
+        static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
+    }
+
+    fn get_call_credentials(&self, _: private::Internal) -> Option<&Arc<dyn CallCredentials>> {
+        None
     }
 }
 
@@ -100,55 +119,58 @@ impl InsecureServerCredentials {
     }
 }
 
-impl server::ServerCredsInternal for InsecureServerCredentials {
+impl ServerCredentials for InsecureServerCredentials {
     type Output<I> = I;
 
-    async fn accept<Input: GrpcEndpoint + 'static>(
+    async fn accept<Input: GrpcEndpoint>(
         &self,
         source: Input,
         _runtime: GrpcRuntime,
+        _token: private::Internal,
     ) -> Result<server::HandshakeOutput<Self::Output<Input>>, String> {
         Ok(server::HandshakeOutput {
             endpoint: source,
             security: ServerConnectionSecurityInfo::new(
-                "insecure",
+                PROTOCOL_NAME,
                 SecurityLevel::NoSecurity,
-                Attributes,
+                Attributes::new(),
             ),
         })
     }
-}
 
-impl ServerCredentials for InsecureServerCredentials {
     fn info(&self) -> &ProtocolInfo {
-        static INFO: ProtocolInfo = ProtocolInfo::new("insecure");
+        static INFO: ProtocolInfo = ProtocolInfo::new(PROTOCOL_NAME);
         &INFO
     }
 }
 
 #[cfg(test)]
 mod test {
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    use tokio::net::{TcpListener, TcpStream};
+    use tokio::io::AsyncReadExt;
+    use tokio::io::AsyncWriteExt;
+    use tokio::net::TcpListener;
+    use tokio::net::TcpStream;
 
-    use crate::credentials::client::{
-        ChannelCredsInternal as ClientSealed, ClientConnectionSecurityContext, ClientHandshakeInfo,
-    };
-    use crate::credentials::common::{Authority, SecurityLevel};
-    use crate::credentials::server::ServerCredsInternal;
-    use crate::credentials::{
-        ChannelCredentials, InsecureChannelCredentials, InsecureServerCredentials,
-        ServerCredentials,
-    };
+    use super::*;
+    use crate::credentials::ChannelCredentials;
+    use crate::credentials::InsecureChannelCredentials;
+    use crate::credentials::InsecureServerCredentials;
+    use crate::credentials::SecurityLevel;
+    use crate::credentials::ServerCredentials;
+    use crate::credentials::client::ClientHandshakeInfo;
+    use crate::credentials::common::Authority;
+    use crate::rt::AsyncIoAdapter;
     use crate::rt::GrpcEndpoint;
-    use crate::rt::{self, TcpOptions};
+    use crate::rt::TcpOptions;
+    use crate::rt::tokio::TokioIoStream;
+    use crate::rt::{self};
 
     #[tokio::test]
     async fn test_insecure_client_credentials() {
         let creds = InsecureChannelCredentials::new();
 
         let info = creds.info();
-        assert_eq!(info.security_protocol(), "insecure");
+        assert_eq!(info.security_protocol(), PROTOCOL_NAME);
 
         let addr = "127.0.0.1:0";
         let listener = TcpListener::bind(addr).await.unwrap();
@@ -163,15 +185,21 @@ mod test {
         let handshake_info = ClientHandshakeInfo::default();
 
         let output = creds
-            .connect(&authority, endpoint, handshake_info, runtime)
+            .connect(
+                &authority,
+                endpoint,
+                &handshake_info,
+                &runtime,
+                private::Internal,
+            )
             .await
             .unwrap();
 
-        let mut endpoint = output.endpoint;
+        let endpoint = output.endpoint;
         let security_info = output.security;
 
         // Verify security info.
-        assert_eq!(security_info.security_protocol(), "insecure");
+        assert_eq!(security_info.security_protocol(), PROTOCOL_NAME);
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         // Verify data transfer.
@@ -184,13 +212,18 @@ mod test {
         server_stream.write_all(test_data).await.unwrap();
 
         let mut buf = vec![0u8; test_data.len()];
-        endpoint.read_exact(&mut buf).await.unwrap();
+        AsyncIoAdapter::new(endpoint)
+            .read_exact(&mut buf)
+            .await
+            .unwrap();
         assert_eq!(buf, test_data);
 
         // Validate arbitrary authority.
-        assert!(security_info
-            .security_context()
-            .validate_authority(&authority));
+        assert!(
+            security_info
+                .security_context()
+                .validate_authority(&authority)
+        );
     }
 
     #[tokio::test]
@@ -198,15 +231,12 @@ mod test {
         let creds = InsecureServerCredentials::new();
 
         let info = creds.info();
-        assert_eq!(info.security_protocol, "insecure");
+        assert_eq!(info.security_protocol, PROTOCOL_NAME);
 
         let addr = "127.0.0.1:0";
         let runtime = rt::default_runtime();
-        let mut listener = runtime
-            .listen_tcp(addr.parse().unwrap(), TcpOptions::default())
-            .await
-            .unwrap();
-        let server_addr = *listener.local_addr();
+        let listener = TcpListener::bind(addr).await.unwrap();
+        let server_addr = listener.local_addr().unwrap();
 
         let client_handle = tokio::spawn(async move {
             let mut stream = TcpStream::connect(server_addr).await.unwrap();
@@ -218,17 +248,24 @@ mod test {
             let _ = stream.read(&mut buf).await;
         });
 
-        let (server_stream, _) = listener.accept().await.unwrap();
+        let (stream, _) = listener.accept().await.unwrap();
+        let server_stream = TokioIoStream::new_from_tcp(stream).unwrap();
 
-        let output = creds.accept(server_stream, runtime).await.unwrap();
-        let mut endpoint = output.endpoint;
+        let output = creds
+            .accept(server_stream, runtime, private::Internal)
+            .await
+            .unwrap();
+        let endpoint = output.endpoint;
         let security_info = output.security;
 
-        assert_eq!(security_info.security_protocol(), "insecure");
+        assert_eq!(security_info.security_protocol(), PROTOCOL_NAME);
         assert_eq!(security_info.security_level(), SecurityLevel::NoSecurity);
 
         let mut buf = vec![0u8; 10];
-        endpoint.read_exact(&mut buf).await.unwrap();
+        AsyncIoAdapter::new(endpoint)
+            .read_exact(&mut buf)
+            .await
+            .unwrap();
         assert_eq!(&buf[..], b"hello grpc");
 
         client_handle.abort();

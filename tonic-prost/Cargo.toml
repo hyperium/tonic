@@ -2,7 +2,7 @@
 name = "tonic-prost"
 version = "0.14.5"
 authors = ["Lucio Franco <luciofranco14@gmail.com>"]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/hyperium/tonic"
 homepage = "https://github.com/hyperium/tonic"
@@ -10,6 +10,7 @@ description = "Prost codec implementation for tonic"
 readme = "README.md"
 categories = ["network-programming", "asynchronous"]
 keywords = ["rpc", "grpc", "prost", "protobuf", "tonic"]
+rust-version = { workspace = true }
 
 [dependencies]
 tonic = { version = "0.14.0", path = "../tonic", default-features = false }

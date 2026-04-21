@@ -1,10 +1,10 @@
-use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
+use hello_world::greeter_client::GreeterClient;
 use tonic::{
+    Request, Status,
     codegen::InterceptedService,
     service::Interceptor,
     transport::{Channel, Endpoint},
-    Request, Status,
 };
 
 pub mod hello_world {

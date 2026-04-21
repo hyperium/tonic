@@ -1,6 +1,6 @@
 /*
  *
- * Copyright 2025 gRPC authors.
+ * Copyright 2026 gRPC authors.
  *
  * Permission is hereby granted, free of charge, to any person obtaining a copy
  * of this software and associated documentation files (the "Software"), to
@@ -22,7 +22,33 @@
  *
  */
 
-/// A key-value store for arbitrary configuration data between multiple
-/// pluggable components.
-#[derive(Debug, Default, Clone, PartialEq, PartialOrd, Eq, Ord)]
-pub struct Attributes;
+//! Contains data structures and utilities for handling gRPC custom metadata.
+
+mod encoding;
+mod key;
+mod map;
+mod value;
+
+pub use encoding::Ascii;
+pub use encoding::Binary;
+pub use key::AsciiMetadataKey;
+pub use key::BinaryMetadataKey;
+pub use key::MetadataKey;
+pub use map::GetAll;
+pub use map::Iter;
+pub use map::Key;
+pub use map::KeyAndValueRef;
+pub use map::MetadataMap;
+pub use map::ValueIter;
+pub use value::AsciiMetadataValue;
+pub use value::BinaryMetadataValue;
+pub use value::MetadataValue;
+
+/// The metadata::errors module contains types for errors that can occur
+/// while handling gRPC custom metadata.
+pub mod errors {
+    pub use super::encoding::InvalidMetadataValue;
+    pub use super::encoding::InvalidMetadataValueBytes;
+    pub use super::key::InvalidMetadataKey;
+    pub use super::value::ToStrError;
+}

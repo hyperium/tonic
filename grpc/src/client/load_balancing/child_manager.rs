@@ -25,25 +25,29 @@
 //! A utility which helps parent LB policies manage multiple children for the
 //! purposes of forwarding channel updates.
 
-// TODO: This is mainly provided as a fairly complex example of the current LB
-// policy in use.  Complete tests must be written before it can be used in
-// production.
-
+use std::collections::HashMap;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fmt::Debug;
+use std::hash::Hash;
+use std::mem;
+use std::sync::Arc;
 use std::sync::Mutex;
-use std::{collections::HashMap, hash::Hash, mem, sync::Arc};
 
-use crate::client::load_balancing::{
-    ChannelController, LbConfig, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-    WeakSubchannel, WorkScheduler,
-};
-use crate::client::name_resolution::{Address, ResolverUpdate};
 use crate::client::ConnectivityState;
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::DynLbConfig;
+use crate::client::load_balancing::DynLbPolicy;
+use crate::client::load_balancing::DynLbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::subchannel::WeakSubchannel;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
 use crate::rt::GrpcRuntime;
-
-use super::{Subchannel, SubchannelState};
 
 // An LbPolicy implementation that manages multiple children.
 #[derive(Debug)]
@@ -60,26 +64,26 @@ pub(crate) struct ChildManager<T: Debug> {
 #[derive(Debug)]
 pub(crate) struct Child<T> {
     pub identifier: T,
-    pub builder: Arc<dyn LbPolicyBuilder>,
+    pub builder: Arc<DynLbPolicyBuilder>,
     pub state: LbState,
-    policy: Box<dyn LbPolicy>,
+    policy: Box<DynLbPolicy>,
     work_scheduler: Arc<ChildWorkScheduler>,
 }
 
 /// A collection of data sent to a child of the ChildManager.
-pub(crate) struct ChildUpdate<T> {
+pub(crate) struct ChildUpdate<'a, T> {
     /// The identifier the ChildManager should use for this child.
     pub child_identifier: T,
     /// The builder the ChildManager should use to create this child if it does
     /// not exist.  The child_policy_builder's name is effectively a part of the
     /// child_identifier.  If two identifiers are identical but have different
     /// builder names, they are treated as different children.
-    pub child_policy_builder: Arc<dyn LbPolicyBuilder>,
+    pub child_policy_builder: Arc<DynLbPolicyBuilder>,
     /// The relevant ResolverUpdate and LbConfig to send to this child.  If
     /// None, then resolver_update will not be called on the child.  Should
     /// generally be Some for any new children, otherwise they will not be
     /// called.
-    pub child_update: Option<(ResolverUpdate, Option<LbConfig>)>,
+    pub child_update: Option<(ResolverUpdate, Option<&'a DynLbConfig>)>,
 }
 
 impl<T> ChildManager<T>
@@ -153,7 +157,8 @@ where
     ) {
         // Add all created subchannels into the subchannel_child_map.
         for csc in channel_controller.created_subchannels {
-            self.subchannel_to_child_idx.insert(csc.into(), child_idx);
+            self.subchannel_to_child_idx
+                .insert((&csc).into(), child_idx);
         }
         // Update the tracked state if the child produced an update.
         if let Some(state) = channel_controller.picker_update {
@@ -174,7 +179,7 @@ where
     /// ignored.
     pub fn retain_children(
         &mut self,
-        ids_builders: impl IntoIterator<Item = (T, Arc<dyn LbPolicyBuilder>)>,
+        ids_builders: impl IntoIterator<Item = (T, Arc<DynLbPolicyBuilder>)>,
     ) {
         self.reset_children(ids_builders, true);
     }
@@ -185,7 +190,7 @@ where
     /// otherwise a new child will be built for it.
     fn reset_children(
         &mut self,
-        ids_builders: impl IntoIterator<Item = (T, Arc<dyn LbPolicyBuilder>)>,
+        ids_builders: impl IntoIterator<Item = (T, Arc<DynLbPolicyBuilder>)>,
         retain_only: bool,
     ) {
         // Hold the lock to prevent new work requests during this operation and
@@ -284,11 +289,11 @@ where
     /// for each item), how to construct them if they don't already, and what to
     /// send to their `resolver_update` methods, if anything.  Any existing
     /// children not present in child_updates will be removed.
-    pub fn update(
+    pub fn update<'a>(
         &mut self,
-        child_updates: impl IntoIterator<Item = ChildUpdate<T>>,
+        child_updates: impl IntoIterator<Item = ChildUpdate<'a, T>>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         // Split the child updates into the IDs and builders, and the
         // ResolverUpdates/LbConfigs.
         let mut errs = vec![];
@@ -308,11 +313,11 @@ where
                 continue;
             };
             let mut channel_controller = WrappedController::new(channel_controller);
-            if let Err(err) = child.policy.resolver_update(
-                resolver_update,
-                config.as_ref(),
-                &mut channel_controller,
-            ) {
+            if let Err(err) =
+                child
+                    .policy
+                    .resolver_update(resolver_update, config, &mut channel_controller)
+            {
                 errs.push(err);
             }
             self.resolve_child_controller(channel_controller, child_idx);
@@ -325,7 +330,7 @@ where
                 .map(|e| e.to_string())
                 .collect::<Vec<_>>()
                 .join("; ");
-            Err(err.into())
+            Err(err)
         }
     }
 
@@ -335,7 +340,7 @@ where
     pub fn resolver_update(
         &mut self,
         resolver_update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&DynLbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), Box<dyn Error + Send + Sync>> {
         let mut errs = Vec::with_capacity(self.children.len());
@@ -424,10 +429,10 @@ impl<'a> WrappedController<'a> {
 }
 
 impl ChannelController for WrappedController<'_> {
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel> {
-        let subchannel = self.channel_controller.new_subchannel(address);
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState) {
+        let (subchannel, state) = self.channel_controller.new_subchannel(address);
         self.created_subchannels.push(subchannel.clone());
-        subchannel
+        (subchannel, state)
     }
 
     fn update_picker(&mut self, update: LbState) {
@@ -468,24 +473,32 @@ impl ChildWorkScheduler {
 
 #[cfg(test)]
 mod test {
-    use crate::client::load_balancing::child_manager::{ChildManager, ChildUpdate};
-    use crate::client::load_balancing::test_utils::{
-        self, StubPolicyFuncs, TestChannelController, TestEvent, TestWorkScheduler,
-    };
-    use crate::client::load_balancing::{
-        ChannelController, LbPolicyBuilder, LbState, QueuingPicker, Subchannel, SubchannelState,
-        GLOBAL_LB_REGISTRY,
-    };
-    use crate::client::name_resolution::{Address, Endpoint, ResolverUpdate};
-    use crate::client::service_config::LbConfig;
-    use crate::client::ConnectivityState;
-    use crate::rt::default_runtime;
     use std::collections::HashMap;
-    use std::error::Error;
     use std::panic;
     use std::sync::Arc;
     use std::sync::Mutex;
-    use tokio::sync::mpsc;
+    use std::sync::mpsc;
+
+    use crate::client::ConnectivityState;
+    use crate::client::load_balancing::ChannelController;
+    use crate::client::load_balancing::DynLbConfig;
+    use crate::client::load_balancing::DynLbPolicyBuilder;
+    use crate::client::load_balancing::GLOBAL_LB_REGISTRY;
+    use crate::client::load_balancing::LbState;
+    use crate::client::load_balancing::QueuingPicker;
+    use crate::client::load_balancing::Subchannel;
+    use crate::client::load_balancing::SubchannelState;
+    use crate::client::load_balancing::child_manager::ChildManager;
+    use crate::client::load_balancing::child_manager::ChildUpdate;
+    use crate::client::load_balancing::test_utils::StubPolicyFuncs;
+    use crate::client::load_balancing::test_utils::TestChannelController;
+    use crate::client::load_balancing::test_utils::TestEvent;
+    use crate::client::load_balancing::test_utils::TestWorkScheduler;
+    use crate::client::load_balancing::test_utils::{self};
+    use crate::client::name_resolution::Address;
+    use crate::client::name_resolution::Endpoint;
+    use crate::client::name_resolution::ResolverUpdate;
+    use crate::rt::default_runtime;
 
     // Sets up the test environment.
     //
@@ -508,12 +521,12 @@ mod test {
         funcs: StubPolicyFuncs,
         test_name: &'static str,
     ) -> (
-        mpsc::UnboundedReceiver<TestEvent>,
+        mpsc::Receiver<TestEvent>,
         ChildManager<Endpoint>,
         Box<dyn ChannelController>,
     ) {
         test_utils::reg_stub_policy(test_name, funcs);
-        let (tx_events, rx_events) = mpsc::unbounded_channel::<TestEvent>();
+        let (tx_events, rx_events) = mpsc::channel::<TestEvent>();
         let tcc = Box::new(TestChannelController {
             tx_events: tx_events.clone(),
         });
@@ -544,15 +557,15 @@ mod test {
     fn send_resolver_update_to_policy(
         child_manager: &mut ChildManager<Endpoint>,
         endpoints: Vec<Endpoint>,
-        builder: Arc<dyn LbPolicyBuilder>,
+        builder: Arc<DynLbPolicyBuilder>,
         tcc: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         let updates = endpoints.iter().map(|e| ChildUpdate {
             child_identifier: e.clone(),
             child_policy_builder: builder.clone(),
             child_update: Some((
                 ResolverUpdate {
-                    attributes: crate::attributes::Attributes,
+                    attributes: crate::attributes::Attributes::default(),
                     endpoints: Ok(vec![e.clone()]),
                     service_config: Ok(None),
                     resolution_note: None,
@@ -568,27 +581,20 @@ mod test {
         child_manager: &mut ChildManager<Endpoint>,
         subchannel: Arc<dyn Subchannel>,
         tcc: &mut dyn ChannelController,
-        state: ConnectivityState,
+        state: &SubchannelState,
     ) {
-        child_manager.subchannel_update(
-            subchannel,
-            &SubchannelState {
-                connectivity_state: state,
-                ..Default::default()
-            },
-            tcc,
-        );
+        child_manager.subchannel_update(subchannel, state, tcc);
     }
 
     // Verifies that the expected number of subchannels is created. Returns the
     // subchannels created.
-    async fn verify_subchannel_creation_from_policy(
-        rx_events: &mut mpsc::UnboundedReceiver<TestEvent>,
+    fn verify_subchannel_creation_from_policy(
+        rx_events: &mut mpsc::Receiver<TestEvent>,
         number_of_subchannels: usize,
     ) -> Vec<Arc<dyn Subchannel>> {
         let mut subchannels = Vec::new();
         for _ in 0..number_of_subchannels {
-            match rx_events.recv().await.unwrap() {
+            match rx_events.recv().unwrap() {
                 TestEvent::NewSubchannel(sc) => {
                     subchannels.push(sc);
                 }
@@ -623,19 +629,19 @@ mod test {
                     });
                 },
             )),
-            work: None,
+            ..Default::default()
         }
     }
 
     // Tests the scenario where one child is READY and the rest are in
     // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report READY.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_ready_if_any_child_is_ready() {
+    #[test]
+    fn childmanager_aggregate_state_is_ready_if_any_child_is_ready() {
         let test_name = "stub-childmanager_aggregate_state_is_ready_if_any_child_is_ready";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
 
         let endpoints = create_n_endpoints_with_k_addresses(4, 1);
         send_resolver_update_to_policy(
@@ -649,7 +655,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -659,25 +664,25 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Idle,
+            &SubchannelState::idle(),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Connecting,
+            &SubchannelState::connecting(),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Ready,
+            &SubchannelState::ready(),
         );
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Ready);
     }
@@ -685,12 +690,12 @@ mod test {
     // Tests the scenario where no children are READY and the children are in
     // CONNECTING, IDLE, or TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report CONNECTING.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_connecting_if_no_child_is_ready() {
+    #[test]
+    fn childmanager_aggregate_state_is_connecting_if_no_child_is_ready() {
         let test_name = "stub-childmanager_aggregate_state_is_connecting_if_no_child_is_ready";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
         let endpoints = create_n_endpoints_with_k_addresses(3, 1);
         send_resolver_update_to_policy(
             &mut child_manager,
@@ -703,7 +708,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -712,19 +716,19 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Idle,
+            &SubchannelState::idle(),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Connecting,
+            &SubchannelState::connecting(),
         );
 
         assert_eq!(
@@ -736,12 +740,12 @@ mod test {
     // Tests the scenario where no children are READY or CONNECTING and the
     // children are in IDLE, or TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report IDLE.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_idle_if_only_idle_and_failure() {
+    #[test]
+    fn childmanager_aggregate_state_is_idle_if_only_idle_and_failure() {
         let test_name = "stub-childmanager_aggregate_state_is_idle_if_only_idle_and_failure";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
 
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
         send_resolver_update_to_policy(
@@ -755,7 +759,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -764,13 +767,13 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::Idle,
+            &SubchannelState::idle(),
         );
         assert_eq!(child_manager.aggregate_states(), ConnectivityState::Idle);
     }
@@ -778,13 +781,13 @@ mod test {
     // Tests the scenario where no children are READY, CONNECTING, or IDLE and
     // all children are in TRANSIENT FAILURE. The child manager's
     // aggregate_states function should report TRANSIENT FAILURE.
-    #[tokio::test]
-    async fn childmanager_aggregate_state_is_transient_failure_if_all_children_are() {
+    #[test]
+    fn childmanager_aggregate_state_is_transient_failure_if_all_children_are() {
         let test_name =
             "stub-childmanager_aggregate_state_is_transient_failure_if_all_children_are";
         let (mut rx_events, mut child_manager, mut tcc) =
             setup(create_verifying_funcs_for_aggregate_tests(), test_name);
-        let builder: Arc<dyn LbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
+        let builder: Arc<DynLbPolicyBuilder> = GLOBAL_LB_REGISTRY.get_policy(test_name).unwrap();
         let endpoints = create_n_endpoints_with_k_addresses(2, 1);
         send_resolver_update_to_policy(
             &mut child_manager,
@@ -797,7 +800,6 @@ mod test {
         for endpoint in endpoints {
             subchannels.push(
                 verify_subchannel_creation_from_policy(&mut rx_events, endpoint.addresses.len())
-                    .await
                     .remove(0),
             );
         }
@@ -806,13 +808,13 @@ mod test {
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         move_subchannel_to_state(
             &mut child_manager,
             subchannels.next().unwrap(),
             tcc.as_mut(),
-            ConnectivityState::TransientFailure,
+            &SubchannelState::transient_failure("n/a"),
         );
         assert_eq!(
             child_manager.aggregate_states(),
@@ -841,7 +843,7 @@ mod test {
                 assert!(!stubdata.requested_work);
                 if lbcfg
                     .unwrap()
-                    .convert_to::<Mutex<HashMap<&'static str, ()>>>()
+                    .downcast_ref::<Mutex<HashMap<&'static str, ()>>>()
                     .unwrap()
                     .lock()
                     .unwrap()
@@ -852,7 +854,6 @@ mod test {
                 }
                 Ok(())
             })),
-            subchannel_update: None,
             work: Some(Arc::new(move |data, _controller| {
                 println!("work called for {name}");
                 let stubdata = data
@@ -863,19 +864,20 @@ mod test {
                     .unwrap();
                 stubdata.requested_work = false;
             })),
+            ..Default::default()
         }
     }
 
     // Tests that the child manager properly delegates to the children that
     // called schedule_work when work is called.
-    #[tokio::test]
-    async fn childmanager_schedule_work_works() {
+    #[test]
+    fn childmanager_schedule_work_works() {
         let name1 = "childmanager_schedule_work_works-one";
         let name2 = "childmanager_schedule_work_works-two";
         test_utils::reg_stub_policy(name1, create_funcs_for_schedule_work_tests(name1));
         test_utils::reg_stub_policy(name2, create_funcs_for_schedule_work_tests(name2));
 
-        let (tx_events, mut rx_events) = mpsc::unbounded_channel::<TestEvent>();
+        let (tx_events, rx_events) = mpsc::channel::<TestEvent>();
         let mut tcc = TestChannelController {
             tx_events: tx_events.clone(),
         };
@@ -885,26 +887,26 @@ mod test {
             ChildManager::new(default_runtime(), Arc::new(TestWorkScheduler { tx_events }));
 
         // Request that child one requests work.
-        let cfg = LbConfig::new(Mutex::new(HashMap::<&'static str, ()>::new()));
+        let cfg = Arc::new(Mutex::new(HashMap::<&'static str, ()>::new())) as DynLbConfig;
         let children = cfg
-            .convert_to::<Mutex<HashMap<&'static str, ()>>>()
+            .downcast_ref::<Mutex<HashMap<&'static str, ()>>>()
             .unwrap();
         children.lock().unwrap().insert(name1, ());
 
         let updates = names.iter().map(|name| {
-            let child_policy_builder: Arc<dyn LbPolicyBuilder> =
+            let child_policy_builder: Arc<DynLbPolicyBuilder> =
                 GLOBAL_LB_REGISTRY.get_policy(name).unwrap();
 
             ChildUpdate {
                 child_identifier: (),
                 child_policy_builder,
-                child_update: Some((ResolverUpdate::default(), Some(cfg.clone()))),
+                child_update: Some((ResolverUpdate::default(), Some(&cfg))),
             }
         });
         child_manager.update(updates.clone(), &mut tcc).unwrap();
 
         // Confirm that child one has requested work.
-        match rx_events.recv().await.unwrap() {
+        match rx_events.recv().unwrap() {
             TestEvent::ScheduleWork => {}
             other => panic!("unexpected event {:?}", other),
         };
@@ -928,7 +930,7 @@ mod test {
         child_manager.update(updates.clone(), &mut tcc).unwrap();
 
         // Confirm that both children requested work.
-        match rx_events.recv().await.unwrap() {
+        match rx_events.recv().unwrap() {
             TestEvent::ScheduleWork => {}
             other => panic!("unexpected event {:?}", other),
         };

@@ -1,9 +1,9 @@
-use hello_world::greeter_client::GreeterClient;
 use hello_world::HelloRequest;
+use hello_world::greeter_client::GreeterClient;
 use service::AuthSvc;
 use tower::ServiceBuilder;
 
-use tonic::{transport::Channel, Request, Status};
+use tonic::{Request, Status, transport::Channel};
 
 pub mod hello_world {
     tonic::include_proto!("helloworld");

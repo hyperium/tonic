@@ -22,6 +22,8 @@
  *
  */
 
+use core::future::Future;
+
 /// A helper trait to enforce and explicitly bound a [`Future`] as [`Send`].
 ///
 /// This trait provides a mechanism to work around specific Rust compiler
@@ -62,14 +64,14 @@
 /// [#96865]: https://github.com/rust-lang/rust/issues/96865
 /// [`Future`]: core::future::Future
 /// [`Send`]: core::marker::Send
-pub trait SendFuture: core::future::Future {
+pub trait SendFuture: Future {
     /// Consumes the future and returns it as an opaque type that is guaranteed
     /// to be [`Send`].
     ///
     /// This is a zero-cost abstraction (it simply returns `self`) used primarily
     /// to help the compiler resolve auto-traits or to produce better error
     /// diagnostics.
-    fn make_send(self) -> impl core::future::Future<Output = Self::Output> + Send
+    fn make_send(self) -> impl Future<Output = Self::Output> + Send
     where
         Self: Sized + Send,
     {
@@ -77,4 +79,4 @@ pub trait SendFuture: core::future::Future {
     }
 }
 
-impl<T: core::future::Future> SendFuture for T {}
+impl<T: Future> SendFuture for T {}

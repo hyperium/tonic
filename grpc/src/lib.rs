@@ -32,21 +32,35 @@
 #![allow(dead_code, unused_variables)]
 
 pub mod client;
+pub mod core;
 pub mod credentials;
 pub mod inmemory;
+pub mod metadata;
+pub mod server;
+
 mod macros;
 mod status;
-pub use status::{ServerStatus, Status, StatusCode};
-pub mod server;
-pub mod service;
 
-pub(crate) mod attributes;
-pub(crate) mod byte_str;
-pub(crate) mod codec;
-pub(crate) mod rt;
-pub(crate) mod send_future;
+pub use status::ServerStatus;
+pub use status::Status;
+pub use status::StatusCode;
+
+mod attributes;
+mod byte_str;
+mod rt;
+mod send_future;
+
+mod private {
+    /// A zero-sized type used to seal methods on a public trait.
+    ///
+    /// Because this type is private to this crate, it cannot be constructed or
+    /// named by external crates. As a result, any method requiring an `Internal`
+    /// argument becomes uncallable from outside the crate.
+    pub struct Internal;
+}
+
 #[cfg(test)]
-pub(crate) mod echo_pb {
+mod echo_pb {
     include!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/src/generated/grpc_examples_echo.rs"

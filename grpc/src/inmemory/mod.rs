@@ -23,177 +23,402 @@
  */
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU32, Ordering};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::sync::Arc;
+use std::sync::LazyLock;
+use std::sync::Mutex;
+use std::sync::atomic::AtomicU64;
+use std::sync::atomic::Ordering;
 
-use crate::{
-    client::{
-        name_resolution::{
-            self, global_registry, Address, ChannelController, Endpoint, Resolver, ResolverBuilder,
-            ResolverOptions, ResolverUpdate,
-        },
-        transport::{self, ConnectedTransport, TransportOptions, GLOBAL_TRANSPORT_REGISTRY},
-    },
-    rt::GrpcRuntime,
-    server,
-    service::{Request, Response, Service},
-};
-use tokio::sync::{mpsc, oneshot, Mutex as AsyncMutex};
-use tonic::async_trait;
+use bytes::Buf;
+use tokio::sync::Mutex as TokioMutex;
+use tokio::sync::Notify;
+use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 
-pub struct Listener {
-    id: String,
-    s: Box<mpsc::Sender<Option<server::Call>>>,
-    r: Arc<AsyncMutex<mpsc::Receiver<Option<server::Call>>>>,
-    // List of notifiers to call when closed.
-    #[allow(clippy::type_complexity)]
-    closed_tx: Arc<Mutex<Vec<oneshot::Sender<Result<(), String>>>>>,
+use crate::attributes::Attributes;
+use crate::client::CallOptions;
+use crate::client::DynRecvStream as ClientDynRecvStream;
+use crate::client::DynSendStream as ClientDynSendStream;
+use crate::client::Invoke;
+use crate::client::RecvStream as ClientRecvStream;
+use crate::client::SendOptions as ClientSendOptions;
+use crate::client::SendStream as ClientSendStream;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ChannelController as ResolverChannelController;
+use crate::client::name_resolution::Endpoint;
+use crate::client::name_resolution::Resolver;
+use crate::client::name_resolution::ResolverBuilder;
+use crate::client::name_resolution::ResolverOptions;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::client::name_resolution::Target;
+use crate::client::name_resolution::global_registry as global_resolver_registry;
+use crate::client::service_config::ServiceConfig;
+use crate::client::transport::GLOBAL_TRANSPORT_REGISTRY;
+use crate::client::transport::SecurityOpts;
+use crate::client::transport::Transport;
+use crate::client::transport::TransportOptions;
+use crate::core::ClientResponseStreamItem;
+use crate::core::RecvMessage;
+use crate::core::RequestHeaders;
+use crate::core::ResponseHeaders;
+use crate::core::SendMessage;
+use crate::core::ServerResponseStreamItem;
+use crate::core::Trailers;
+use crate::credentials::SecurityLevel;
+use crate::credentials::client::ClientConnectionSecurityContext;
+use crate::credentials::client::ClientConnectionSecurityInfo;
+use crate::credentials::client::DynClientConnectionSecurityInfo;
+use crate::credentials::common::Authority;
+use crate::rt::GrpcRuntime;
+use crate::server::Call as ServerCall;
+use crate::server::Listener as ServerListener;
+use crate::server::RecvStream as ServerRecvStream;
+use crate::server::SendOptions as ServerSendOptions;
+use crate::server::SendStream as ServerSendStream;
+
+static LISTENERS: LazyLock<Mutex<HashMap<String, mpsc::Sender<InMemoryServerCall>>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+static NEXT_ID: AtomicU64 = AtomicU64::new(0);
+
+struct InMemoryServerCall {
+    headers: RequestHeaders,
+    req_rx: mpsc::UnboundedReceiver<InMemoryRequestStreamItem>,
+    resp_tx: mpsc::UnboundedSender<InMemoryResponseStreamItem>,
 }
 
-static ID: AtomicU32 = AtomicU32::new(0);
+enum InMemoryRequestStreamItem {
+    Message(Box<dyn Buf + Send + Sync>),
+    StreamClosed,
+}
 
-impl Listener {
-    pub fn new() -> Arc<Self> {
-        let (tx, rx) = mpsc::channel(1);
-        let s = Arc::new(Self {
-            id: format!("{}", ID.fetch_add(1, Ordering::Relaxed)),
-            s: Box::new(tx),
-            r: Arc::new(AsyncMutex::new(rx)),
-            closed_tx: Arc::new(Mutex::new(Vec::new())),
-        });
-        LISTENERS.lock().unwrap().insert(s.id.clone(), s.clone());
-        s
+enum InMemoryResponseStreamItem {
+    Headers(ResponseHeaders),
+    Message(Box<dyn Buf + Send + Sync>),
+    Trailers(Trailers),
+    StreamClosed,
+}
+
+#[derive(Clone)]
+pub struct InMemoryListener {
+    inner: Arc<InMemoryListenerInner>,
+}
+
+struct InMemoryListenerInner {
+    id: String,
+    r: TokioMutex<mpsc::Receiver<InMemoryServerCall>>,
+    close_notify: Arc<Notify>,
+    drop_notify: Arc<Notify>,
+}
+
+impl Drop for InMemoryListenerInner {
+    fn drop(&mut self) {
+        self.drop_notify.notify_waiters();
     }
+}
 
-    pub fn target(&self) -> String {
-        format!("inmemory:///{}", self.id)
+impl Default for InMemoryListener {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl InMemoryListener {
+    pub fn new() -> Self {
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed).to_string();
+        let (s, r) = mpsc::channel(1);
+        let mut listeners = LISTENERS.lock().unwrap();
+        listeners.insert(id.clone(), s);
+        Self {
+            inner: Arc::new(InMemoryListenerInner {
+                id,
+                r: TokioMutex::new(r),
+                close_notify: Arc::new(Notify::new()),
+                drop_notify: Arc::new(Notify::new()),
+            }),
+        }
     }
 
     pub fn id(&self) -> String {
-        self.id.clone()
+        self.inner.id.clone()
     }
 
-    pub async fn close(&self) {
-        let _ = self.s.send(None).await;
-    }
-}
+    pub async fn close(self) {
+        let id = self.inner.id.clone();
+        let drop_notify = self.inner.drop_notify.clone();
+        let weak = Arc::downgrade(&self.inner);
 
-impl Drop for Listener {
-    fn drop(&mut self) {
-        let txs = std::mem::take(&mut *self.closed_tx.lock().unwrap());
-        for rx in txs {
-            let _ = rx.send(Ok(()));
+        LISTENERS.lock().unwrap().remove(&id);
+
+        self.inner.close_notify.notify_waiters();
+
+        drop(self);
+
+        loop {
+            let notified = drop_notify.notified();
+            if weak.upgrade().is_none() {
+                return;
+            }
+            notified.await;
         }
-        LISTENERS.lock().unwrap().remove(&self.id);
+    }
+
+    pub async fn await_connection(&self) {}
+}
+
+impl ServerListener for InMemoryListener {
+    type SendStream = InMemoryServerSendStream;
+    type RecvStream = InMemoryServerRecvStream;
+
+    async fn accept(&self) -> Option<ServerCall<Self::SendStream, Self::RecvStream>> {
+        let mut r = self.inner.r.lock().await;
+        tokio::select! {
+            call = r.recv() => {
+                let call = call?;
+                Some(ServerCall {
+                    headers: call.headers,
+                    send: InMemoryServerSendStream { tx: call.resp_tx },
+                    recv: InMemoryServerRecvStream { rx: call.req_rx },
+                })
+            }
+            _ = self.inner.close_notify.notified() => {
+                None
+            }
+        }
     }
 }
 
-#[async_trait]
-impl Service for Arc<Listener> {
-    async fn call(&self, method: String, request: Request) -> Response {
-        // 1. unblock accept, giving it a func back to me
-        // 2. return what that func had
-        let (s, r) = oneshot::channel();
-        self.s.send(Some((method, request, s))).await.unwrap();
-        r.await.unwrap()
+pub struct InMemoryServerSendStream {
+    tx: mpsc::UnboundedSender<InMemoryResponseStreamItem>,
+}
+
+impl ServerSendStream for InMemoryServerSendStream {
+    async fn send<'a>(
+        &mut self,
+        item: ServerResponseStreamItem<'a>,
+        _options: ServerSendOptions,
+    ) -> Result<(), ()> {
+        let inmemory_item = match item {
+            ServerResponseStreamItem::Headers(h) => InMemoryResponseStreamItem::Headers(h),
+            ServerResponseStreamItem::Message(m) => {
+                let buf = m.encode().map_err(|_| ())?;
+                InMemoryResponseStreamItem::Message(buf)
+            }
+            ServerResponseStreamItem::Trailers(t) => InMemoryResponseStreamItem::Trailers(t),
+        };
+
+        self.tx.send(inmemory_item).map_err(|_| ())
     }
 }
 
-#[async_trait]
-impl crate::server::Listener for Arc<Listener> {
-    async fn accept(&self) -> Option<server::Call> {
-        let mut recv = self.r.lock().await;
-        let r = recv.recv().await;
-        // Listener may be closed.
-        r?
+pub struct InMemoryServerRecvStream {
+    rx: mpsc::UnboundedReceiver<InMemoryRequestStreamItem>,
+}
+
+impl ServerRecvStream for InMemoryServerRecvStream {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> Option<Result<(), ()>> {
+        match self.rx.recv().await {
+            Some(InMemoryRequestStreamItem::Message(mut buf)) => {
+                if msg.decode(&mut buf).is_err() {
+                    return Some(Err(()));
+                }
+                Some(Ok(()))
+            }
+            Some(InMemoryRequestStreamItem::StreamClosed) => None,
+            None => None,
+        }
     }
 }
 
-static LISTENERS: LazyLock<Mutex<HashMap<String, Arc<Listener>>>> = LazyLock::new(Mutex::default);
+pub struct InMemoryConnection {
+    s: mpsc::Sender<InMemoryServerCall>,
+    closed_tx: Option<oneshot::Sender<Result<(), String>>>,
+}
 
-struct ClientTransport {}
+impl Invoke for InMemoryConnection {
+    type SendStream = Box<dyn ClientDynSendStream>;
+    type RecvStream = Box<dyn ClientDynRecvStream>;
 
-impl ClientTransport {
-    fn new() -> Self {
-        Self {}
+    async fn invoke(
+        &self,
+        headers: RequestHeaders,
+        _options: CallOptions,
+    ) -> (Self::SendStream, Self::RecvStream) {
+        let (req_tx, req_rx) = mpsc::unbounded_channel::<InMemoryRequestStreamItem>();
+        let (resp_tx, resp_rx) = mpsc::unbounded_channel::<InMemoryResponseStreamItem>();
+
+        let call = InMemoryServerCall {
+            headers,
+            req_rx,
+            resp_tx,
+        };
+
+        let _ = self.s.try_send(call);
+
+        (
+            Box::new(InMemoryClientSendStream { tx: Some(req_tx) }),
+            Box::new(InMemoryClientRecvStream { rx: resp_rx }),
+        )
+    }
+}
+impl Drop for InMemoryConnection {
+    fn drop(&mut self) {
+        let _ = self.closed_tx.take().unwrap().send(Err("".into()));
     }
 }
 
-#[async_trait]
-impl transport::Transport for ClientTransport {
+pub struct InMemoryClientSendStream {
+    tx: Option<mpsc::UnboundedSender<InMemoryRequestStreamItem>>,
+}
+
+impl ClientSendStream for InMemoryClientSendStream {
+    async fn send(&mut self, msg: &dyn SendMessage, _options: ClientSendOptions) -> Result<(), ()> {
+        let buf = msg.encode().unwrap();
+
+        if self
+            .tx
+            .as_mut()
+            .unwrap()
+            .send(InMemoryRequestStreamItem::Message(buf))
+            .is_err()
+        {
+            self.tx = None;
+            return Err(());
+        }
+        Ok(())
+    }
+}
+
+impl Drop for InMemoryClientSendStream {
+    fn drop(&mut self) {
+        if let Some(tx) = self.tx.take() {
+            let _ = tx.send(InMemoryRequestStreamItem::StreamClosed);
+        }
+    }
+}
+
+pub struct InMemoryClientRecvStream {
+    rx: mpsc::UnboundedReceiver<InMemoryResponseStreamItem>,
+}
+
+impl ClientRecvStream for InMemoryClientRecvStream {
+    async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
+        match self.rx.recv().await {
+            Some(InMemoryResponseStreamItem::Headers(h)) => ClientResponseStreamItem::Headers(h),
+            Some(InMemoryResponseStreamItem::Message(mut buf)) => {
+                msg.decode(&mut buf).unwrap();
+                ClientResponseStreamItem::Message(())
+            }
+            Some(InMemoryResponseStreamItem::Trailers(t)) => ClientResponseStreamItem::Trailers(t),
+            _ => ClientResponseStreamItem::StreamClosed,
+        }
+    }
+}
+
+pub struct InMemoryTransport {}
+
+impl Transport for InMemoryTransport {
+    type Service = InMemoryConnection;
+
     async fn connect(
         &self,
-        address: String,
-        _: GrpcRuntime,
-        _: &TransportOptions,
-    ) -> Result<ConnectedTransport, String> {
-        let lis = LISTENERS
-            .lock()
-            .unwrap()
-            .get(&address)
-            .ok_or(format!("Could not find listener for address {address}"))?
-            .clone();
-        let (tx, rx) = oneshot::channel();
-        lis.closed_tx.lock().unwrap().push(tx);
-        Ok(ConnectedTransport {
-            service: Box::new(lis),
-            disconnection_listener: rx,
-        })
+        target: String,
+        _runtime: GrpcRuntime,
+        _security_opts: &SecurityOpts,
+        _options: &TransportOptions,
+    ) -> Result<
+        (
+            Self::Service,
+            DynClientConnectionSecurityInfo,
+            oneshot::Receiver<Result<(), String>>,
+        ),
+        String,
+    > {
+        let listeners = LISTENERS.lock().unwrap();
+        let s = listeners
+            .get(&target)
+            .ok_or_else(|| format!("no listener for target: {}", target))?;
+
+        let (closed_tx, closed_rx) = oneshot::channel();
+        let conn = InMemoryConnection {
+            s: s.clone(),
+            closed_tx: Some(closed_tx),
+        };
+        let sec_info = ClientConnectionSecurityInfo::new(
+            "inmemory",
+            SecurityLevel::PrivacyAndIntegrity,
+            InMemoryChannelecurityContext {},
+            Attributes::new(),
+        )
+        .into_boxed();
+
+        Ok((conn, sec_info, closed_rx))
     }
 }
 
-static INMEMORY_NETWORK_TYPE: &str = "inmemory";
+/// An implementation of [`ClientConnectionSecurityContext`] for in-memory connections.
+#[derive(Debug, Clone)]
+struct InMemoryChannelecurityContext;
 
-pub fn reg() {
-    GLOBAL_TRANSPORT_REGISTRY.add_transport(INMEMORY_NETWORK_TYPE, ClientTransport::new());
-    global_registry().add_builder(Box::new(InMemoryResolverBuilder));
-}
-
-struct InMemoryResolverBuilder;
-
-impl ResolverBuilder for InMemoryResolverBuilder {
-    fn scheme(&self) -> &'static str {
-        "inmemory"
-    }
-
-    fn build(
-        &self,
-        target: &name_resolution::Target,
-        options: ResolverOptions,
-    ) -> Box<dyn Resolver> {
-        let id = target.path().strip_prefix("/").unwrap().to_string();
-        options.work_scheduler.schedule_work();
-        Box::new(NopResolver { id })
-    }
-
-    fn is_valid_uri(&self, uri: &crate::client::name_resolution::Target) -> bool {
+impl ClientConnectionSecurityContext for InMemoryChannelecurityContext {
+    fn validate_authority(&self, _authority: &Authority) -> bool {
         true
     }
 }
 
-struct NopResolver {
-    id: String,
+pub struct InMemoryResolverBuilder {}
+
+impl ResolverBuilder for InMemoryResolverBuilder {
+    fn build(&self, target: &Target, options: ResolverOptions) -> Box<dyn Resolver> {
+        let path = target.path().strip_prefix('/').unwrap_or(target.path());
+        let ids: Vec<String> = path.split(',').map(|s| s.to_string()).collect();
+        options.work_scheduler.schedule_work();
+        Box::new(InMemoryResolver { ids })
+    }
+
+    fn scheme(&self) -> &str {
+        "inmemory"
+    }
+
+    fn is_valid_uri(&self, _uri: &Target) -> bool {
+        true
+    }
 }
 
-impl Resolver for NopResolver {
-    fn work(&mut self, channel_controller: &mut dyn ChannelController) {
-        let mut addresses: Vec<Address> = Vec::new();
-        for addr in LISTENERS.lock().unwrap().keys() {
-            addresses.push(Address {
-                network_type: INMEMORY_NETWORK_TYPE,
-                address: addr.clone().into(),
+struct InMemoryResolver {
+    ids: Vec<String>,
+}
+
+impl Resolver for InMemoryResolver {
+    fn resolve_now(&mut self) {}
+
+    fn work(&mut self, channel_controller: &mut dyn ResolverChannelController) {
+        let endpoints = self
+            .ids
+            .iter()
+            .map(|id| Endpoint {
+                addresses: vec![Address {
+                    network_type: "inmemory",
+                    address: crate::byte_str::ByteStr::from(id.clone()),
+                    ..Default::default()
+                }],
                 ..Default::default()
-            });
-        }
+            })
+            .collect();
 
         let _ = channel_controller.update(ResolverUpdate {
-            endpoints: Ok(vec![Endpoint {
-                addresses,
-                ..Default::default()
-            }]),
+            endpoints: Ok(endpoints),
+            service_config: Ok(Some(ServiceConfig {
+                load_balancing_policy: Some(
+                    crate::client::service_config::LbPolicyType::RoundRobin,
+                ),
+            })),
             ..Default::default()
         });
     }
+}
 
-    fn resolve_now(&mut self) {}
+pub fn reg() {
+    GLOBAL_TRANSPORT_REGISTRY.add_transport("inmemory", InMemoryTransport {});
+    global_resolver_registry().add_builder(Box::new(InMemoryResolverBuilder {}));
 }

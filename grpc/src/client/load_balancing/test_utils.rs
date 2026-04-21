@@ -22,37 +22,44 @@
  *
  */
 
-use crate::client::load_balancing::{
-    ChannelController, ForwardingSubchannel, LbPolicy, LbPolicyBuilder, LbPolicyOptions, LbState,
-    ParsedJsonLbConfig, Subchannel, SubchannelState, WorkScheduler,
-};
-use crate::client::name_resolution::{Address, ResolverUpdate};
-use crate::client::service_config::LbConfig;
-use crate::service::{Message, Request};
-use serde::{Deserialize, Serialize};
 use std::any::Any;
-use std::error::Error;
+use std::fmt::Debug;
 use std::hash::Hash;
-use std::{fmt::Debug, sync::Arc};
-use tokio::sync::{mpsc, Notify};
+use std::sync::Arc;
 
-#[derive(Debug)]
-pub(crate) struct EmptyMessage {}
-pub(crate) fn new_request() -> Request {
-    Request::new(Box::pin(tokio_stream::once(
-        Box::new(EmptyMessage {}) as Box<dyn Message>
-    )))
+use serde::Deserialize;
+use serde::Serialize;
+use tokio::sync::Notify;
+
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::DynLbConfig;
+use crate::client::load_balancing::DynLbPolicy;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::ParsedJsonLbConfig;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::subchannel::ForwardingSubchannel;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::core::RequestHeaders;
+
+pub(crate) fn new_request_headers() -> RequestHeaders {
+    RequestHeaders::default()
 }
 
 // A test subchannel that forwards connect calls to a channel.
 // This allows tests to verify when a subchannel is asked to connect.
 pub(crate) struct TestSubchannel {
     address: Address,
-    tx_connect: mpsc::UnboundedSender<TestEvent>,
+    tx_connect: std::sync::mpsc::Sender<TestEvent>,
 }
 
 impl TestSubchannel {
-    pub fn new(address: Address, tx_connect: mpsc::UnboundedSender<TestEvent>) -> Self {
+    pub fn new(address: Address, tx_connect: std::sync::mpsc::Sender<TestEvent>) -> Self {
         Self {
             address,
             tx_connect,
@@ -61,7 +68,7 @@ impl TestSubchannel {
 }
 
 impl ForwardingSubchannel for TestSubchannel {
-    fn delegate(&self) -> Arc<dyn Subchannel> {
+    fn delegate(&self) -> &Arc<dyn Subchannel> {
         panic!("unsupported operation on a test subchannel");
     }
 
@@ -115,11 +122,11 @@ impl Debug for TestEvent {
 /// tests to verify when a channel controller is asked to create subchannels or
 /// update the picker.
 pub(crate) struct TestChannelController {
-    pub(crate) tx_events: mpsc::UnboundedSender<TestEvent>,
+    pub(crate) tx_events: std::sync::mpsc::Sender<TestEvent>,
 }
 
 impl ChannelController for TestChannelController {
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel> {
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState) {
         println!("new_subchannel called for address {}", address);
         let notify = Arc::new(Notify::new());
         let subchannel: Arc<dyn Subchannel> =
@@ -127,7 +134,7 @@ impl ChannelController for TestChannelController {
         self.tx_events
             .send(TestEvent::NewSubchannel(subchannel.clone()))
             .unwrap();
-        subchannel
+        (subchannel, SubchannelState::idle())
     }
     fn update_picker(&mut self, update: LbState) {
         println!("picker_update called with {}", update.connectivity_state);
@@ -142,7 +149,7 @@ impl ChannelController for TestChannelController {
 
 #[derive(Debug)]
 pub(crate) struct TestWorkScheduler {
-    pub(crate) tx_events: mpsc::UnboundedSender<TestEvent>,
+    pub(crate) tx_events: std::sync::mpsc::Sender<TestEvent>,
 }
 
 impl WorkScheduler for TestWorkScheduler {
@@ -156,9 +163,9 @@ type ResolverUpdateFn = Arc<
     dyn Fn(
             &mut StubPolicyData,
             ResolverUpdate,
-            Option<&LbConfig>,
+            Option<&DynLbConfig>,
             &mut dyn ChannelController,
-        ) -> Result<(), Box<dyn Error + Send + Sync>>
+        ) -> Result<(), String>
         + Send
         + Sync,
 >;
@@ -170,14 +177,17 @@ type SubchannelUpdateFn = Arc<
         + Sync,
 >;
 
+type ExitIdleFn = Arc<dyn Fn(&mut StubPolicyData, &mut dyn ChannelController) + Send + Sync>;
+
 type WorkFn = Arc<dyn Fn(&mut StubPolicyData, &mut dyn ChannelController) + Send + Sync>;
 
 /// This struct holds `LbPolicy` trait stub functions that tests are expected to
 /// implement.
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub(crate) struct StubPolicyFuncs {
     pub resolver_update: Option<ResolverUpdateFn>,
     pub subchannel_update: Option<SubchannelUpdateFn>,
+    pub exit_idle: Option<ExitIdleFn>,
     pub work: Option<WorkFn>,
 }
 
@@ -212,12 +222,14 @@ pub(crate) struct StubPolicy {
 }
 
 impl LbPolicy for StubPolicy {
+    type LbConfig = DynLbConfig;
+
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&DynLbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         if let Some(f) = &mut self.funcs.resolver_update {
             return f(&mut self.data, update, config, channel_controller);
         }
@@ -236,12 +248,23 @@ impl LbPolicy for StubPolicy {
     }
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
-        todo!("Implement exit_idle for StubPolicy")
+        if let Some(f) = &self.funcs.exit_idle {
+            f(&mut self.data, channel_controller);
+        }
     }
 
     fn work(&mut self, channel_controller: &mut dyn ChannelController) {
         if let Some(f) = &self.funcs.work {
             f(&mut self.data, channel_controller);
+        }
+    }
+}
+
+impl StubPolicy {
+    pub(crate) fn new(funcs: StubPolicyFuncs, options: LbPolicyOptions) -> Self {
+        Self {
+            funcs,
+            data: StubPolicyData::new(options),
         }
     }
 }
@@ -260,7 +283,9 @@ pub(super) struct MockConfig {
 }
 
 impl LbPolicyBuilder for StubPolicyBuilder {
-    fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
+    type LbPolicy = Box<DynLbPolicy>;
+
+    fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy {
         let data = StubPolicyData::new(options);
         Box::new(StubPolicy {
             funcs: self.funcs.clone(),
@@ -272,20 +297,17 @@ impl LbPolicyBuilder for StubPolicyBuilder {
         self.name
     }
 
-    fn parse_config(
-        &self,
-        config: &ParsedJsonLbConfig,
-    ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
+    fn parse_config(&self, config: &ParsedJsonLbConfig) -> Result<Option<DynLbConfig>, String> {
         let cfg: MockConfig = match config.convert_to() {
             Ok(c) => c,
             Err(e) => {
-                return Err(format!("failed to parse JSON config: {}", e).into());
+                return Err(format!("failed to parse JSON config: {}", e));
             }
         };
-        Ok(Some(LbConfig::new(cfg)))
+        Ok(Some(Arc::new(cfg)))
     }
 }
 
 pub(crate) fn reg_stub_policy(name: &'static str, funcs: StubPolicyFuncs) {
-    super::GLOBAL_LB_REGISTRY.add_builder(StubPolicyBuilder { name, funcs })
+    super::GLOBAL_LB_REGISTRY.add_dyn_builder(Arc::new(StubPolicyBuilder { name, funcs }))
 }

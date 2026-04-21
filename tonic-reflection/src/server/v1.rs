@@ -82,10 +82,12 @@ impl ServerReflection for ReflectionService {
                             original_request: Some(req.clone()),
                             message_response: Some(resp_msg),
                         };
-                        resp_tx.send(Ok(resp)).await.expect("send");
+                        if resp_tx.send(Ok(resp)).await.is_err() {
+                            return;
+                        }
                     }
                     Err(status) => {
-                        resp_tx.send(Err(status)).await.expect("send");
+                        let _ = resp_tx.send(Err(status)).await;
                         return;
                     }
                 }

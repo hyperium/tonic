@@ -23,40 +23,101 @@
  */
 
 use core::panic;
-use std::{
-    any::Any,
-    error::Error,
-    fmt::{Debug, Display},
-    hash::{Hash, Hasher},
-    ptr::addr_eq,
-    sync::{Arc, Mutex, Weak},
-};
-use tonic::{metadata::MetadataMap, Status};
+use std::any::Any;
+use std::error::Error;
+use std::fmt::Debug;
+use std::fmt::Display;
+use std::sync::Arc;
 
-use crate::{
-    client::channel::WorkQueueTx,
-    rt::GrpcRuntime,
-    service::{Request, Response},
-};
+use tonic::metadata::MetadataMap;
 
-use crate::client::{
-    channel::{InternalChannelController, WorkQueueItem},
-    name_resolution::{Address, ResolverUpdate},
-    subchannel::InternalSubchannel,
-    ConnectivityState,
-};
+use crate::Status;
+use crate::StatusCode;
+use crate::client::ConnectivityState;
+use crate::client::load_balancing::subchannel::Subchannel;
+use crate::client::load_balancing::subchannel::SubchannelState;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::core::RequestHeaders;
+use crate::rt::GrpcRuntime;
 
 pub(crate) mod child_manager;
 pub(crate) mod graceful_switch;
+pub(crate) mod lazy;
 pub(crate) mod pick_first;
 pub(crate) mod round_robin;
+pub(crate) mod subchannel;
+pub(crate) mod subchannel_sharing;
 
 #[cfg(test)]
 pub(crate) mod test_utils;
 
 pub(crate) mod registry;
-use super::{service_config::LbConfig, subchannel::SubchannelStateWatcher};
 pub(crate) use registry::GLOBAL_LB_REGISTRY;
+
+/// An LB policy factory that produces LbPolicy instances used by the channel
+/// to manage connections and pick connections for RPCs.
+pub(crate) trait LbPolicyBuilder: Send + Sync + Debug + 'static {
+    type LbPolicy: LbPolicy;
+
+    /// Builds and returns a new LB policy instance.
+    ///
+    /// Note that build must not fail.  Any optional configuration is delivered
+    /// via the LbPolicy's resolver_update method.
+    ///
+    /// An LbPolicy instance is assumed to begin in a Connecting state that
+    /// queues RPCs until its first update.
+    fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy;
+
+    /// Reports the name of the LB Policy.
+    fn name(&self) -> &'static str;
+
+    /// Parses the JSON LB policy configuration into an internal representation.
+    ///
+    /// LB policies do not need to accept a configuration, in which case the
+    /// default implementation returns Ok(None).
+    fn parse_config(
+        &self,
+        _config: &ParsedJsonLbConfig,
+    ) -> Result<Option<<Self::LbPolicy as LbPolicy>::LbConfig>, String> {
+        Ok(None)
+    }
+}
+
+/// An LB policy instance.
+///
+/// LB policies are responsible for creating connections (modeled as
+/// Subchannels) and producing Picker instances for picking connections for
+/// RPCs.
+pub(crate) trait LbPolicy: Send + Sync + Debug + 'static {
+    type LbConfig: Any + Send + Sync + Debug + 'static;
+
+    /// Called by the channel when the name resolver produces a new set of
+    /// resolved addresses or a new service config.
+    fn resolver_update(
+        &mut self,
+        update: ResolverUpdate,
+        config: Option<&Self::LbConfig>,
+        channel_controller: &mut dyn ChannelController,
+    ) -> Result<(), String>;
+
+    /// Called by the channel when any subchannel created by the LB policy
+    /// changes state.
+    fn subchannel_update(
+        &mut self,
+        subchannel: Arc<dyn Subchannel>,
+        state: &SubchannelState,
+        channel_controller: &mut dyn ChannelController,
+    );
+
+    /// Called by the channel in response to a call from the LB policy to the
+    /// WorkScheduler's request_work method.
+    fn work(&mut self, channel_controller: &mut dyn ChannelController);
+
+    /// Called by the channel when an LbPolicy goes idle and the channel
+    /// wants it to start connecting to subchannels again.
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController);
+}
 
 /// A collection of data configured on the channel that is constructing this
 /// LbPolicy.
@@ -117,70 +178,10 @@ impl ParsedJsonLbConfig {
     }
 }
 
-/// An LB policy factory that produces LbPolicy instances used by the channel
-/// to manage connections and pick connections for RPCs.
-pub(crate) trait LbPolicyBuilder: Send + Sync + Debug {
-    /// Builds and returns a new LB policy instance.
-    ///
-    /// Note that build must not fail.  Any optional configuration is delivered
-    /// via the LbPolicy's resolver_update method.
-    ///
-    /// An LbPolicy instance is assumed to begin in a Connecting state that
-    /// queues RPCs until its first update.
-    fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy>;
-
-    /// Reports the name of the LB Policy.
-    fn name(&self) -> &'static str;
-
-    /// Parses the JSON LB policy configuration into an internal representation.
-    ///
-    /// LB policies do not need to accept a configuration, in which case the
-    /// default implementation returns Ok(None).
-    fn parse_config(
-        &self,
-        _config: &ParsedJsonLbConfig,
-    ) -> Result<Option<LbConfig>, Box<dyn Error + Send + Sync>> {
-        Ok(None)
-    }
-}
-
-/// An LB policy instance.
-///
-/// LB policies are responsible for creating connections (modeled as
-/// Subchannels) and producing Picker instances for picking connections for
-/// RPCs.
-pub(crate) trait LbPolicy: Send + Debug {
-    /// Called by the channel when the name resolver produces a new set of
-    /// resolved addresses or a new service config.
-    fn resolver_update(
-        &mut self,
-        update: ResolverUpdate,
-        config: Option<&LbConfig>,
-        channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>>;
-
-    /// Called by the channel when any subchannel created by the LB policy
-    /// changes state.
-    fn subchannel_update(
-        &mut self,
-        subchannel: Arc<dyn Subchannel>,
-        state: &SubchannelState,
-        channel_controller: &mut dyn ChannelController,
-    );
-
-    /// Called by the channel in response to a call from the LB policy to the
-    /// WorkScheduler's request_work method.
-    fn work(&mut self, channel_controller: &mut dyn ChannelController);
-
-    /// Called by the channel when an LbPolicy goes idle and the channel
-    /// wants it to start connecting to subchannels again.
-    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController);
-}
-
 /// Controls channel behaviors.
 pub(crate) trait ChannelController: Send + Sync {
-    /// Creates a new subchannel in IDLE state.
-    fn new_subchannel(&mut self, address: &Address) -> Arc<dyn Subchannel>;
+    /// Creates a new subchannel and returns its current state.
+    fn new_subchannel(&mut self, address: &Address) -> (Arc<dyn Subchannel>, SubchannelState);
 
     /// Provides a new snapshot of the LB policy's state to the channel.
     fn update_picker(&mut self, update: LbState);
@@ -189,36 +190,6 @@ pub(crate) trait ChannelController: Send + Sync {
     /// used when connections fail, indicating a possible change in the overall
     /// network configuration.
     fn request_resolution(&mut self);
-}
-
-/// Represents the current state of a Subchannel.
-#[derive(Debug, Clone)]
-pub(crate) struct SubchannelState {
-    /// The connectivity state of the subchannel.  See SubChannel for a
-    /// description of the various states and their valid transitions.
-    pub connectivity_state: ConnectivityState,
-    // Set if connectivity state is TransientFailure to describe the most recent
-    // connection error.  None for any other connectivity_state value.
-    pub last_connection_error: Option<Arc<dyn Error + Send + Sync>>,
-}
-
-impl Default for SubchannelState {
-    fn default() -> Self {
-        Self {
-            connectivity_state: ConnectivityState::Idle,
-            last_connection_error: None,
-        }
-    }
-}
-
-impl Display for SubchannelState {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "connectivity_state: {}", self.connectivity_state)?;
-        if let Some(err) = &self.last_connection_error {
-            write!(f, ", last_connection_error: {err}")?;
-        }
-        Ok(())
-    }
 }
 
 /// A Picker is responsible for deciding what Subchannel to use for any given
@@ -249,7 +220,7 @@ pub(crate) trait Picker: Send + Sync + Debug {
     /// time-consuming work to service this request, it should return Queue, and
     /// the Pick call will be repeated by the channel when a new Picker is
     /// produced by the LbPolicy.
-    fn pick(&self, request: &Request) -> PickResult;
+    fn pick(&self, request: &RequestHeaders) -> PickResult;
 }
 
 #[derive(Debug)]
@@ -308,12 +279,13 @@ impl Display for PickResult {
         match self {
             Self::Pick(_) => write!(f, "Pick"),
             Self::Queue => write!(f, "Queue"),
-            Self::Fail(st) => write!(f, "Fail({st})"),
-            Self::Drop(st) => write!(f, "Drop({st})"),
+            Self::Fail(st) => write!(f, "Fail({st:?})"),
+            Self::Drop(st) => write!(f, "Drop({st:?})"),
         }
     }
 }
-/// Data provided by the LB policy.
+
+/// State provided by the LB policy to the channel.
 #[derive(Clone, Debug)]
 pub(crate) struct LbState {
     pub connectivity_state: super::ConnectivityState,
@@ -347,7 +319,7 @@ impl LbState {
 }
 
 /// Type alias for the completion callback function.
-pub(crate) type CompletionCallback = Box<dyn Fn(&Response) + Send + Sync>;
+pub(crate) type CompletionCallback = Box<dyn Fn() + Send + Sync>;
 
 /// A collection of data used by the channel for routing a request.
 pub(crate) struct Pick {
@@ -369,239 +341,29 @@ impl Debug for Pick {
     }
 }
 
-pub(crate) trait DynHash {
-    #[allow(clippy::redundant_allocation)]
-    fn dyn_hash(&self, state: &mut Box<&mut dyn Hasher>);
-}
-
-impl<T: Hash> DynHash for T {
-    fn dyn_hash(&self, state: &mut Box<&mut dyn Hasher>) {
-        self.hash(state);
-    }
-}
-
-pub(crate) trait DynPartialEq {
-    fn dyn_eq(&self, other: &&dyn Any) -> bool;
-}
-
-impl<T: Eq + PartialEq + 'static> DynPartialEq for T {
-    fn dyn_eq(&self, other: &&dyn Any) -> bool {
-        let Some(other) = other.downcast_ref::<T>() else {
-            return false;
-        };
-        self.eq(other)
-    }
-}
-
-mod private {
-    pub trait Sealed {}
-}
-
-pub(crate) trait SealedSubchannel: private::Sealed {}
-
-/// A Subchannel represents a method of communicating with a server which may be
-/// connected or disconnected many times across its lifetime.
-///
-/// - Subchannels start IDLE.
-///
-/// - IDLE transitions to CONNECTING when connect() is called.
-///
-/// - CONNECTING transitions to READY on success or TRANSIENT_FAILURE on error.
-///
-/// - READY transitions to IDLE when the connection is lost.
-///
-/// - TRANSIENT_FAILURE transitions to IDLE when the reconnect backoff timer has
-///   expired.  This timer scales exponentially and is reset when the subchannel
-///   becomes READY.
-///
-/// When a Subchannel is dropped, it is disconnected automatically, and no
-/// subsequent state updates will be provided for it to the LB policy.
-pub(crate) trait Subchannel:
-    SealedSubchannel + DynHash + DynPartialEq + Any + Send + Sync
-{
-    /// Returns the address of the Subchannel.
-    /// TODO: Consider whether this should really be public.
-    fn address(&self) -> Address;
-
-    /// Notifies the Subchannel to connect.
-    fn connect(&self);
-}
-
-impl dyn Subchannel {
-    pub fn downcast_ref<T>(&self) -> Option<&T>
-    where
-        T: 'static,
-    {
-        (self as &dyn Any).downcast_ref()
-    }
-}
-
-impl Hash for dyn Subchannel {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.dyn_hash(&mut Box::new(state as &mut dyn Hasher));
-    }
-}
-
-impl PartialEq for dyn Subchannel {
-    fn eq(&self, other: &Self) -> bool {
-        self.dyn_eq(&Box::new(other as &dyn Any))
-    }
-}
-
-impl Eq for dyn Subchannel {}
-
-impl Debug for dyn Subchannel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Subchannel: {}", self.address())
-    }
-}
-
-impl Display for dyn Subchannel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Subchannel: {}", self.address())
-    }
-}
-
+/// OneSubchannelPicker always returns a single subchannel.
 #[derive(Debug)]
-struct WeakSubchannel(Weak<dyn Subchannel>);
-
-impl From<Arc<dyn Subchannel>> for WeakSubchannel {
-    fn from(subchannel: Arc<dyn Subchannel>) -> Self {
-        WeakSubchannel(Arc::downgrade(&subchannel))
-    }
+pub(crate) struct OneSubchannelPicker {
+    sc: Arc<dyn Subchannel>,
 }
 
-impl WeakSubchannel {
-    pub fn new(subchannel: &Arc<dyn Subchannel>) -> Self {
-        WeakSubchannel(Arc::downgrade(subchannel))
-    }
-
-    pub fn upgrade(&self) -> Option<Arc<dyn Subchannel>> {
-        self.0.upgrade()
-    }
-}
-
-impl Hash for WeakSubchannel {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        (self.0.as_ptr() as *const () as usize).hash(state);
+impl Picker for OneSubchannelPicker {
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        PickResult::Pick(Pick {
+            subchannel: self.sc.clone(),
+            metadata: MetadataMap::new(),
+            on_complete: None,
+        })
     }
 }
-
-impl PartialEq for WeakSubchannel {
-    fn eq(&self, other: &Self) -> bool {
-        addr_eq(self.0.as_ptr(), other.0.as_ptr())
-    }
-}
-
-impl Eq for WeakSubchannel {}
-
-pub(crate) struct ExternalSubchannel {
-    pub(crate) isc: Option<Arc<InternalSubchannel>>,
-    work_scheduler: WorkQueueTx,
-    watcher: Mutex<Option<Arc<SubchannelStateWatcher>>>,
-}
-
-impl ExternalSubchannel {
-    pub(super) fn new(isc: Arc<InternalSubchannel>, work_scheduler: WorkQueueTx) -> Self {
-        ExternalSubchannel {
-            isc: Some(isc),
-            work_scheduler,
-            watcher: Mutex::default(),
-        }
-    }
-
-    pub(super) fn set_watcher(&self, watcher: Arc<SubchannelStateWatcher>) {
-        self.watcher.lock().unwrap().replace(watcher);
-    }
-}
-
-impl Hash for ExternalSubchannel {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        self.address().hash(state);
-    }
-}
-
-impl PartialEq for ExternalSubchannel {
-    fn eq(&self, other: &Self) -> bool {
-        self.address() == other.address()
-    }
-}
-
-impl Eq for ExternalSubchannel {}
-
-impl Subchannel for ExternalSubchannel {
-    fn address(&self) -> Address {
-        self.isc.as_ref().unwrap().address()
-    }
-
-    fn connect(&self) {
-        println!("connect called for subchannel: {self}");
-        self.isc.as_ref().unwrap().connect(false);
-    }
-}
-
-impl SealedSubchannel for ExternalSubchannel {}
-impl private::Sealed for ExternalSubchannel {}
-
-impl Drop for ExternalSubchannel {
-    fn drop(&mut self) {
-        let watcher = self.watcher.lock().unwrap().take();
-        let address = self.address().address.clone();
-        let isc = self.isc.take();
-        let _ = self.work_scheduler.send(WorkQueueItem::Closure(Box::new(
-            move |c: &mut InternalChannelController| {
-                println!("unregistering connectivity state watcher for {address:?}");
-                isc.as_ref()
-                    .unwrap()
-                    .unregister_connectivity_state_watcher(watcher.unwrap());
-            },
-            // The internal subchannel is dropped from here (i.e., from inside
-            // the work serializer), if this is the last reference to it.
-        )));
-    }
-}
-
-impl Debug for ExternalSubchannel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Subchannel {}", self.address())
-    }
-}
-
-impl Display for ExternalSubchannel {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Subchannel {}", self.address())
-    }
-}
-
-pub(crate) trait ForwardingSubchannel: DynHash + DynPartialEq + Any + Send + Sync {
-    fn delegate(&self) -> Arc<dyn Subchannel>;
-
-    fn address(&self) -> Address {
-        self.delegate().address()
-    }
-    fn connect(&self) {
-        self.delegate().connect()
-    }
-}
-
-impl<T: ForwardingSubchannel> Subchannel for T {
-    fn address(&self) -> Address {
-        self.address()
-    }
-    fn connect(&self) {
-        self.connect()
-    }
-}
-impl<T: ForwardingSubchannel> SealedSubchannel for T {}
-impl<T: ForwardingSubchannel> private::Sealed for T {}
 
 /// QueuingPicker always returns Queue.  LB policies that are not actively
 /// Connecting should not use this picker.
 #[derive(Debug)]
-pub(crate) struct QueuingPicker {}
+pub(crate) struct QueuingPicker;
 
 impl Picker for QueuingPicker {
-    fn pick(&self, _request: &Request) -> PickResult {
+    fn pick(&self, _request: &RequestHeaders) -> PickResult {
         PickResult::Queue
     }
 }
@@ -612,7 +374,47 @@ pub(crate) struct FailingPicker {
 }
 
 impl Picker for FailingPicker {
-    fn pick(&self, _: &Request) -> PickResult {
-        PickResult::Fail(Status::unavailable(self.error.clone()))
+    fn pick(&self, _: &RequestHeaders) -> PickResult {
+        PickResult::Fail(Status::new(StatusCode::Unavailable, self.error.clone()))
+    }
+}
+
+/// A dynamic LB policy config implementation that can be downcast to a specific
+/// config as needed.
+pub(crate) type DynLbConfig = Arc<dyn Any + Send + Sync>;
+
+/// A builder of dynamic LB policies.
+pub(crate) type DynLbPolicyBuilder = dyn LbPolicyBuilder<LbPolicy = Box<DynLbPolicy>>;
+
+/// An LB policy that accepts dynamic configs.
+pub(crate) type DynLbPolicy = dyn LbPolicy<LbConfig = DynLbConfig>;
+
+impl<T: LbPolicy + ?Sized> LbPolicy for Box<T> {
+    type LbConfig = T::LbConfig;
+
+    fn resolver_update(
+        &mut self,
+        update: ResolverUpdate,
+        config: Option<&Self::LbConfig>,
+        channel_controller: &mut dyn ChannelController,
+    ) -> Result<(), String> {
+        (**self).resolver_update(update, config, channel_controller)
+    }
+
+    fn subchannel_update(
+        &mut self,
+        subchannel: Arc<dyn Subchannel>,
+        state: &SubchannelState,
+        channel_controller: &mut dyn ChannelController,
+    ) {
+        (**self).subchannel_update(subchannel, state, channel_controller);
+    }
+
+    fn work(&mut self, channel_controller: &mut dyn ChannelController) {
+        (**self).work(channel_controller);
+    }
+
+    fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
+        (**self).exit_idle(channel_controller)
     }
 }

@@ -1,14 +1,15 @@
 [package]
-name = "tonic-protobuf-build"
-version = "0.14.0"
-edition = "2021"
+name = "grpc-protobuf-build"
+version = "0.9.0-alpha.1"
+edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
 publish = false
+rust-version = { workspace = true }
 
 [dependencies]
 prettyplease = "0.2.35"
-protobuf-codegen = { version = "4.33.0-release" }
+protobuf-codegen = { version = "4.34.0-release" }
 syn = "2.0.104"
 
 [build-dependencies]

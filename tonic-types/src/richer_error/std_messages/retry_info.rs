@@ -5,7 +5,7 @@ use prost_types::Any;
 
 use crate::richer_error::FromAnyRef;
 
-use super::super::{pb, FromAny, IntoAny};
+use super::super::{FromAny, IntoAny, pb};
 
 /// Used to encode/decode the `RetryInfo` standard error message described in
 /// [error_details.proto]. Describes when the clients can retry a failed
@@ -144,8 +144,7 @@ mod tests {
 
         let formatted = format!("{gen_any:?}");
 
-        let expected =
-            "Any { type_url: \"type.googleapis.com/google.rpc.RetryInfo\", value: [10, 13, 8, 128, 188, 174, 206, 151, 9, 16, 255, 147, 235, 220, 3] }";
+        let expected = "Any { type_url: \"type.googleapis.com/google.rpc.RetryInfo\", value: [10, 13, 8, 128, 188, 174, 206, 151, 9, 16, 255, 147, 235, 220, 3] }";
 
         assert!(
             formatted.eq(expected),

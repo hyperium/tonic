@@ -2,8 +2,8 @@ pub mod pb {
     tonic::include_proto!("grpc.examples.unaryecho");
 }
 
-use pb::{echo_client::EchoClient, EchoRequest};
-use tonic::{metadata::MetadataValue, transport::Channel, Request};
+use pb::{EchoRequest, echo_client::EchoClient};
+use tonic::{Request, metadata::MetadataValue, transport::Channel};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {

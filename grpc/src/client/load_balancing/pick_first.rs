@@ -22,38 +22,39 @@
  *
  */
 
-use std::{error::Error, sync::Arc, time::Duration};
+use std::sync::Arc;
+use std::time::Duration;
 
-use tonic::metadata::MetadataMap;
-
-use crate::{
-    client::{
-        load_balancing::{LbPolicy, LbPolicyBuilder, LbState},
-        name_resolution::{Address, ResolverUpdate},
-        ConnectivityState,
-    },
-    rt::GrpcRuntime,
-    service::Request,
-};
-
-use super::{
-    ChannelController, LbConfig, LbPolicyOptions, Pick, PickResult, Picker, Subchannel,
-    SubchannelState, WorkScheduler,
-};
+use crate::client::ConnectivityState;
+use crate::client::load_balancing::ChannelController;
+use crate::client::load_balancing::FailingPicker;
+use crate::client::load_balancing::LbPolicy;
+use crate::client::load_balancing::LbPolicyBuilder;
+use crate::client::load_balancing::LbPolicyOptions;
+use crate::client::load_balancing::LbState;
+use crate::client::load_balancing::OneSubchannelPicker;
+use crate::client::load_balancing::Subchannel;
+use crate::client::load_balancing::SubchannelState;
+use crate::client::load_balancing::WorkScheduler;
+use crate::client::name_resolution::Address;
+use crate::client::name_resolution::ResolverUpdate;
+use crate::rt::GrpcRuntime;
 
 pub(crate) static POLICY_NAME: &str = "pick_first";
 
-#[derive(Debug)]
-struct Builder {}
+#[derive(Debug, Default)]
+pub(crate) struct Builder {}
 
 impl LbPolicyBuilder for Builder {
-    fn build(&self, options: LbPolicyOptions) -> Box<dyn LbPolicy> {
-        Box::new(PickFirstPolicy {
+    type LbPolicy = PickFirstPolicy;
+
+    fn build(&self, options: LbPolicyOptions) -> Self::LbPolicy {
+        PickFirstPolicy {
             work_scheduler: options.work_scheduler,
             subchannel: None,
             next_addresses: Vec::default(),
             runtime: options.runtime,
-        })
+        }
     }
 
     fn name(&self) -> &'static str {
@@ -66,7 +67,7 @@ pub(crate) fn reg() {
 }
 
 #[derive(Debug)]
-struct PickFirstPolicy {
+pub(crate) struct PickFirstPolicy {
     work_scheduler: Arc<dyn WorkScheduler>,
     subchannel: Option<Arc<dyn Subchannel>>,
     next_addresses: Vec<Address>,
@@ -74,12 +75,14 @@ struct PickFirstPolicy {
 }
 
 impl LbPolicy for PickFirstPolicy {
+    type LbConfig = ();
+
     fn resolver_update(
         &mut self,
         update: ResolverUpdate,
-        config: Option<&LbConfig>,
+        config: Option<&Self::LbConfig>,
         channel_controller: &mut dyn ChannelController,
-    ) -> Result<(), Box<dyn Error + Send + Sync>> {
+    ) -> Result<(), String> {
         let mut addresses = update
             .endpoints
             .unwrap()
@@ -90,7 +93,7 @@ impl LbPolicy for PickFirstPolicy {
 
         let address = addresses.pop().ok_or("no addresses")?;
 
-        let sc = channel_controller.new_subchannel(&address);
+        let (sc, _state) = channel_controller.new_subchannel(&address);
         sc.connect();
         self.subchannel = Some(sc);
 
@@ -112,14 +115,25 @@ impl LbPolicy for PickFirstPolicy {
         state: &SubchannelState,
         channel_controller: &mut dyn ChannelController,
     ) {
-        // Assume the update is for our subchannel.
-        if state.connectivity_state == ConnectivityState::Ready {
-            channel_controller.update_picker(LbState {
-                connectivity_state: ConnectivityState::Ready,
-                picker: Arc::new(OneSubchannelPicker {
-                    sc: self.subchannel.as_ref().unwrap().clone(),
-                }),
-            });
+        match state.connectivity_state {
+            // Assume the update is for our subchannel.
+            ConnectivityState::Ready => {
+                channel_controller.update_picker(LbState {
+                    connectivity_state: ConnectivityState::Ready,
+                    picker: Arc::new(OneSubchannelPicker {
+                        sc: self.subchannel.clone().unwrap(),
+                    }),
+                });
+            }
+            ConnectivityState::TransientFailure => {
+                channel_controller.update_picker(LbState {
+                    connectivity_state: ConnectivityState::TransientFailure,
+                    picker: Arc::new(FailingPicker {
+                        error: state.last_connection_error.clone().unwrap(),
+                    }),
+                });
+            }
+            _ => {}
         }
     }
 
@@ -127,21 +141,5 @@ impl LbPolicy for PickFirstPolicy {
 
     fn exit_idle(&mut self, _channel_controller: &mut dyn ChannelController) {
         todo!("implement exit_idle")
-    }
-}
-
-#[derive(Debug)]
-struct OneSubchannelPicker {
-    sc: Arc<dyn Subchannel>,
-}
-
-impl Picker for OneSubchannelPicker {
-    fn pick(&self, request: &Request) -> PickResult {
-        PickResult::Pick(Pick {
-            subchannel: self.sc.clone(),
-            // on_complete: None,
-            metadata: MetadataMap::new(),
-            on_complete: None,
-        })
     }
 }
