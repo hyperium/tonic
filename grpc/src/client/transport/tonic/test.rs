@@ -342,7 +342,7 @@ mod unix_tests {
         run_unix_test(&PathBuf::from(bind_path), &target).await;
     }
 
-    // Calculates the relative path from a `base` directory to a `target` path.
+    /// Calculates the relative path from a `base` directory to a `target` path.
     ///
     /// Both paths should be absolute. This operation is infallible on Unix
     /// systems due to the presence of a single root directory.
