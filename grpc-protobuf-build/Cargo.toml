@@ -8,9 +8,9 @@ publish = false
 rust-version = { workspace = true }
 
 [dependencies]
-prettyplease = "0.2.35"
+prettyplease = "0.2"
 protobuf-codegen = { version = "4.34.0-release" }
-syn = "2.0.104"
+syn = "2.0"
 
 [build-dependencies]
 cmake = "0.1"

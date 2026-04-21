@@ -1,7 +1,7 @@
 [package]
 authors = [
-  "James Nugent <james@jen20.com>",
-  "Samani G. Gikandi <samani@gojulas.com>",
+    "James Nugent <james@jen20.com>",
+    "Samani G. Gikandi <samani@gojulas.com>",
 ]
 categories = ["network-programming", "asynchronous"]
 description = """
@@ -26,32 +26,36 @@ default = ["server"]
 
 [dependencies]
 prost = "0.14"
-prost-types = {version = "0.14", optional = true}
-tokio = { version = "1.0", features = ["sync", "rt"], optional = true }
-tokio-stream = {version = "0.1", default-features = false, optional = true }
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
+prost-types = { version = "0.14", optional = true }
+tokio = { version = "1.52", features = ["sync", "rt"], optional = true }
+tokio-stream = { version = "0.1", default-features = false, optional = true }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+    "codegen",
+] }
 tonic-prost = { version = "0.14.0", path = "../tonic-prost", default-features = false }
 
 [dev-dependencies]
-tokio-stream = {version = "0.1", default-features = false, features = ["net"]}
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["transport"] }
+tokio-stream = { version = "0.1", default-features = false, features = ["net"] }
+tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+    "transport",
+] }
 
 [lints]
 workspace = true
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [
-  "tonic::*",
+    "tonic::*",
 
-  # major released
-  "bytes::*",
-  "http::*",
-  "http_body::*",
+    # major released
+    "bytes::*",
+    "http::*",
+    "http_body::*",
 
-  # not major released
-  "prost::*",
-  "prost_types::*",
+    # not major released
+    "prost::*",
+    "prost_types::*",
 
-  "futures_core::stream::Stream",
-  "tower_service::Service",
+    "futures_core::stream::Stream",
+    "tower_service::Service",
 ]

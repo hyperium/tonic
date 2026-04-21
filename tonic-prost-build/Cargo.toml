@@ -8,7 +8,11 @@ repository = "https://github.com/hyperium/tonic"
 homepage = "https://github.com/hyperium/tonic"
 description = "Prost build integration for tonic"
 readme = "README.md"
-categories = ["development-tools::build-utils", "network-programming", "asynchronous"]
+categories = [
+    "development-tools::build-utils",
+    "network-programming",
+    "asynchronous",
+]
 keywords = ["rpc", "grpc", "prost", "protobuf", "tonic"]
 rust-version = { workspace = true }
 
@@ -25,14 +29,10 @@ prettyplease = { version = "0.2" }
 proc-macro2 = "1.0"
 quote = "1.0"
 syn = "2.0"
-tempfile = "3.0"
+tempfile = "3.27"
 
 [dev-dependencies]
 tonic = { version = "0.14.0", path = "../tonic", default-features = false }
 
 [package.metadata.cargo_check_external_types]
-allowed_external_types = [
-  "tonic_build::*",
-  "prost_build::*",
-  "prost_types::*"
-]
+allowed_external_types = ["tonic_build::*", "prost_build::*", "prost_types::*"]
