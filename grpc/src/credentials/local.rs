@@ -96,6 +96,14 @@ fn security_level_for_endpoint(
         return Ok(SecurityLevel::NoSecurity);
     }
     if network_type == UNIX_NETWORK_TYPE {
+        // Abstract Unix sockets are not protected by file system permissions.
+        // The application is responsible for authorizing connections via
+        // SO_PEERCRED.
+        // TODO: Consider increasing the security level once gRPC supports
+        // SO_PEERCRED.
+        if peer_addr.starts_with("\0") {
+            return Ok(SecurityLevel::NoSecurity);
+        }
         return Ok(SecurityLevel::PrivacyAndIntegrity);
     }
     Err(format!(
@@ -214,7 +222,7 @@ mod test {
         );
         assert_eq!(
             security_level_for_endpoint("\0abstract-sock", UNIX_NETWORK_TYPE),
-            Ok(SecurityLevel::PrivacyAndIntegrity)
+            Ok(SecurityLevel::NoSecurity)
         );
     }
 

@@ -374,7 +374,7 @@ impl Transport for TransportBuilder {
             let timeout = deadline.saturating_duration_since(Instant::now());
             tokio::select! {
                 _ = runtime.sleep(timeout) => {
-                    return Err("timed out waiting for TCP stream to connect".to_string());
+                    return Err("timed out waiting for transport stream to connect".to_string());
                 }
                 transport = transport_fut => transport?,
             }
