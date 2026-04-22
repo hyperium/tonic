@@ -97,6 +97,7 @@
 pub mod body;
 pub mod client;
 pub mod codec;
+pub mod datadog;
 pub mod metadata;
 pub mod server;
 pub mod service;

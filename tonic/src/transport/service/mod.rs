@@ -5,6 +5,7 @@ mod discover;
 pub(crate) mod executor;
 pub(crate) mod grpc_timeout;
 mod io;
+pub(crate) mod managed_retry;
 mod reconnect;
 mod router;
 #[cfg(feature = "tls")]

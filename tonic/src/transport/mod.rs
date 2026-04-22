@@ -104,6 +104,7 @@ pub use self::error::Error;
 pub use self::server::Server;
 #[doc(inline)]
 pub use self::service::grpc_timeout::TimeoutExpired;
+pub use self::service::managed_retry::{ManagedRetryLayer, ManagedRetryService};
 #[cfg(feature = "tls")]
 #[cfg_attr(docsrs, doc(cfg(feature = "tls")))]
 pub use self::tls::Certificate;
