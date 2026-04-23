@@ -85,6 +85,7 @@ struct InMemoryServerCall {
     headers: RequestHeaders,
     req_rx: mpsc::UnboundedReceiver<InMemoryRequestStreamItem>,
     resp_tx: mpsc::UnboundedSender<InMemoryResponseStreamItem>,
+    trailer_tx: oneshot::Sender<Trailers>,
 }
 
 enum InMemoryRequestStreamItem {
@@ -95,7 +96,6 @@ enum InMemoryRequestStreamItem {
 enum InMemoryResponseStreamItem {
     Headers(ResponseHeaders),
     Message(Box<dyn Buf + Send + Sync>),
-    Trailers(Trailers),
     StreamClosed,
 }
 
@@ -179,6 +179,7 @@ impl ServerListener for InMemoryListener {
                     headers: call.headers,
                     send: InMemoryServerSendStream { tx: call.resp_tx },
                     recv: InMemoryServerRecvStream { rx: call.req_rx },
+                    trailers_tx: call.trailer_tx,
                 })
             }
             _ = self.inner.close_notify.notified() => {
@@ -204,7 +205,6 @@ impl ServerSendStream for InMemoryServerSendStream {
                 let buf = m.encode().map_err(|_| ())?;
                 InMemoryResponseStreamItem::Message(buf)
             }
-            ServerResponseStreamItem::Trailers(t) => InMemoryResponseStreamItem::Trailers(t),
         };
 
         self.tx.send(inmemory_item).map_err(|_| ())
@@ -246,18 +246,23 @@ impl Invoke for InMemoryConnection {
     ) -> (Self::SendStream, Self::RecvStream) {
         let (req_tx, req_rx) = mpsc::unbounded_channel::<InMemoryRequestStreamItem>();
         let (resp_tx, resp_rx) = mpsc::unbounded_channel::<InMemoryResponseStreamItem>();
+        let (trailer_tx, trailer_rx) = oneshot::channel();
 
         let call = InMemoryServerCall {
             headers,
             req_rx,
             resp_tx,
+            trailer_tx,
         };
 
-        let _ = self.s.try_send(call);
+        let _ = self.s.send(call).await;
 
         (
             Box::new(InMemoryClientSendStream { tx: Some(req_tx) }),
-            Box::new(InMemoryClientRecvStream { rx: resp_rx }),
+            Box::new(InMemoryClientRecvStream {
+                rx: resp_rx,
+                trailer_rx: Some(trailer_rx),
+            }),
         )
     }
 }
@@ -299,6 +304,7 @@ impl Drop for InMemoryClientSendStream {
 
 pub struct InMemoryClientRecvStream {
     rx: mpsc::UnboundedReceiver<InMemoryResponseStreamItem>,
+    trailer_rx: Option<oneshot::Receiver<Trailers>>,
 }
 
 impl ClientRecvStream for InMemoryClientRecvStream {
@@ -309,8 +315,14 @@ impl ClientRecvStream for InMemoryClientRecvStream {
                 msg.decode(&mut buf).unwrap();
                 ClientResponseStreamItem::Message(())
             }
-            Some(InMemoryResponseStreamItem::Trailers(t)) => ClientResponseStreamItem::Trailers(t),
-            _ => ClientResponseStreamItem::StreamClosed,
+            _ => {
+                if let Some(trailer_rx) = self.trailer_rx.take() {
+                    if let Ok(trailers) = trailer_rx.await {
+                        return ClientResponseStreamItem::Trailers(trailers);
+                    }
+                }
+                ClientResponseStreamItem::StreamClosed
+            }
         }
     }
 }
