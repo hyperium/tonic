@@ -136,7 +136,15 @@ impl ClientTlsConfig {
     pub(crate) fn into_tls_connector(self, uri: &Uri) -> Result<TlsConnector, crate::BoxError> {
         let domain = match &self.domain {
             Some(domain) => domain,
-            None => uri.host().ok_or_else(Error::new_invalid_uri)?,
+            None => {
+                let host = uri.host().ok_or_else(Error::new_invalid_uri)?;
+                // host() returns the host including brackets if it's an IPv6 address
+                if host.starts_with('[') && host.ends_with(']') {
+                    &host[1..host.len() - 1]
+                } else {
+                    host
+                }
+            }
         };
         TlsConnector::new(
             self.certs,
@@ -151,5 +159,41 @@ impl ClientTlsConfig {
             #[cfg(feature = "tls-webpki-roots")]
             self.with_webpki_roots,
         )
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_into_tls_connector_with_ipv4() {
+        let config = ClientTlsConfig::new();
+        let uri = "https://192.168.1.1:443".parse::<Uri>().unwrap();
+        config.into_tls_connector(&uri).unwrap();
+    }
+
+    #[test]
+    fn test_into_tls_connector_with_ipv6_() {
+        let config = ClientTlsConfig::new();
+        let uri = "https://[::1]:443".parse::<Uri>().unwrap();
+
+        config.into_tls_connector(&uri).unwrap();
+    }
+
+    #[test]
+    fn test_into_tls_connector_with_domain_name() {
+        let config = ClientTlsConfig::new();
+        let uri = "https://example.com:443".parse::<Uri>().unwrap();
+
+        config.into_tls_connector(&uri).unwrap();
+    }
+
+    #[test]
+    fn test_into_tls_connector_with_explicit_domain() {
+        let config = ClientTlsConfig::new().domain_name("example.com");
+        let uri = "https://[2001:db8::1]:443".parse::<Uri>().unwrap();
+
+        config.into_tls_connector(&uri).unwrap();
     }
 }
