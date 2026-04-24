@@ -476,8 +476,11 @@ impl Status {
         let details = match header_map.get(Self::GRPC_STATUS_DETAILS) {
             Some(header) => crate::util::base64::STANDARD
                 .decode(header.as_bytes())
-                .expect("Invalid status header, expected base64 encoded value")
-                .into(),
+                .map(Bytes::from)
+                .unwrap_or_else(|_| {
+                    warn!("error decoding grpc-status-details-bin header");
+                    Bytes::new()
+                }),
             None => Bytes::new(),
         };
 
