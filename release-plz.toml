@@ -1,0 +1,55 @@
+[workspace]
+changelog_update = true
+dependencies_update = true
+git_release_enable = true
+git_release_type = "auto"
+publish_timeout = "30m"
+pr_labels = ["release"]
+release_always = false
+semver_check = true
+
+# tonic group (shared version)
+[[package]]
+name = "tonic"
+version_group = "tonic"
+
+[[package]]
+name = "tonic-build"
+version_group = "tonic"
+
+[[package]]
+name = "tonic-prost"
+version_group = "tonic"
+
+[[package]]
+name = "tonic-prost-build"
+version_group = "tonic"
+
+[[package]]
+name = "tonic-types"
+version_group = "tonic"
+
+[[package]]
+name = "tonic-health"
+version_group = "tonic"
+
+[[package]]
+name = "tonic-reflection"
+version_group = "tonic"
+
+[[package]]
+name = "tonic-web"
+version_group = "tonic"
+
+# xds group (shared version)
+[[package]]
+name = "xds-client"
+version_group = "xds"
+
+[[package]]
+name = "tonic-xds"
+version_group = "xds"
+
+# grpc group (single crate)
+[[package]]
+name = "grpc"
