@@ -1,13 +1,45 @@
-//! Outlier-detection configuration types (gRFC A50).
+//! Validated configuration types for [gRFC A50] outlier detection.
 //!
-//! These are the validated config inputs consumed by the outlier-detection
-//! algorithm. Parsing them from `envoy.config.cluster.v3.OutlierDetection`
-//! and exposing them on `ClusterResource` lands in a follow-up PR alongside
-//! the wiring into the load-balancing pipeline.
+//! [`OutlierDetectionConfig`] is the input to the outlier-detection
+//! algorithm. The two sub-configs gate which ejection algorithms run.
+//!
+//! Note: A50 specifies outlier detection as a load-balancing policy
+//! wrapping a `child_policy`. `tonic-xds` currently runs P2C as its only
+//! load balancer and integrates outlier detection as a filter on the
+//! `Discover` stream feeding it, so there is no `child_policy` field
+//! here yet. It will be added when more balancers are supported.
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
 
 use std::time::Duration;
+
+/// A 0–100 percentage. Construction is fallible; once held, every
+/// `Percentage` is guaranteed to be in range, so the algorithm never
+/// has to re-validate.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Percentage(u8);
+
+impl Percentage {
+    /// Construct from a raw value, returning `Err` if it exceeds 100.
+    /// Accepts `u32` to match the proto wire type without forcing callers
+    /// to cast at every site.
+    pub(crate) fn new(value: u32) -> Result<Self, PercentageError> {
+        if value > 100 {
+            Err(PercentageError(value))
+        } else {
+            Ok(Self(value as u8))
+        }
+    }
+
+    /// The contained value, in `0..=100`.
+    pub(crate) fn get(self) -> u8 {
+        self.0
+    }
+}
+
+#[derive(Debug, thiserror::Error, PartialEq, Eq)]
+#[error("percentage must be in 0..=100, got {0}")]
+pub(crate) struct PercentageError(u32);
 
 /// Validated A50 outlier-detection configuration for a cluster.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,8 +52,8 @@ pub(crate) struct OutlierDetectionConfig {
     /// Upper bound on `base_ejection_time * multiplier`. The spec guarantees
     /// this is at least `base_ejection_time`.
     pub max_ejection_time: Duration,
-    /// Maximum percentage of endpoints that may be ejected at any time (0-100).
-    pub max_ejection_percent: u32,
+    /// Maximum percentage of endpoints that may be ejected at any time.
+    pub max_ejection_percent: Percentage,
     /// Success-rate ejection parameters. `None` if the algorithm is disabled.
     pub success_rate: Option<SuccessRateConfig>,
     /// Failure-percentage ejection parameters. `None` if the algorithm is
@@ -36,8 +68,8 @@ pub(crate) struct SuccessRateConfig {
     /// An endpoint is a candidate for ejection when its success rate falls
     /// below `mean - stdev * (stdev_factor / 1000.0)`.
     pub stdev_factor: u32,
-    /// Probability (0-100) that a candidate is actually ejected.
-    pub enforcement_percentage: u32,
+    /// Probability that a candidate is actually ejected.
+    pub enforcing_success_rate: Percentage,
     /// Minimum number of candidate endpoints required to run the algorithm.
     pub minimum_hosts: u32,
     /// Minimum number of requests an endpoint must have seen in the last
@@ -48,11 +80,11 @@ pub(crate) struct SuccessRateConfig {
 /// Failure-percentage ejection parameters (gRFC A50).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct FailurePercentageConfig {
-    /// Failure rate (0-100) at or above which an endpoint is a candidate
-    /// for ejection.
-    pub threshold: u32,
-    /// Probability (0-100) that a candidate is actually ejected.
-    pub enforcement_percentage: u32,
+    /// Failure rate at or above which an endpoint is a candidate for
+    /// ejection.
+    pub threshold: Percentage,
+    /// Probability that a candidate is actually ejected.
+    pub enforcing_failure_percentage: Percentage,
     /// Minimum number of candidate endpoints required to run the algorithm.
     pub minimum_hosts: u32,
     /// Minimum number of requests an endpoint must have seen in the last
@@ -77,7 +109,7 @@ mod tests {
             interval: Duration::from_secs(10),
             base_ejection_time: Duration::from_secs(30),
             max_ejection_time: Duration::from_secs(300),
-            max_ejection_percent: 10,
+            max_ejection_percent: Percentage::new(10).unwrap(),
             success_rate: None,
             failure_percentage: None,
         }
@@ -93,7 +125,7 @@ mod tests {
         let mut c = base_config();
         c.success_rate = Some(SuccessRateConfig {
             stdev_factor: 1900,
-            enforcement_percentage: 100,
+            enforcing_success_rate: Percentage::new(100).unwrap(),
             minimum_hosts: 5,
             request_volume: 100,
         });
@@ -104,11 +136,24 @@ mod tests {
     fn is_enabled_true_when_failure_percentage_present() {
         let mut c = base_config();
         c.failure_percentage = Some(FailurePercentageConfig {
-            threshold: 85,
-            enforcement_percentage: 100,
+            threshold: Percentage::new(85).unwrap(),
+            enforcing_failure_percentage: Percentage::new(100).unwrap(),
             minimum_hosts: 5,
             request_volume: 50,
         });
         assert!(c.is_enabled());
+    }
+
+    #[test]
+    fn percentage_accepts_zero_to_one_hundred() {
+        for v in [0, 1, 50, 99, 100] {
+            assert_eq!(Percentage::new(v).unwrap().get() as u32, v);
+        }
+    }
+
+    #[test]
+    fn percentage_rejects_values_above_one_hundred() {
+        assert_eq!(Percentage::new(101), Err(PercentageError(101)));
+        assert_eq!(Percentage::new(u32::MAX), Err(PercentageError(u32::MAX)));
     }
 }
