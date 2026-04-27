@@ -1,6 +1,8 @@
 use std::{env, path::PathBuf};
 
 fn main() {
+    build_grpc();
+
     tonic_prost_build::configure()
         .compile_protos(&["proto/routeguide/route_guide.proto"], &["proto"])
         .unwrap();
@@ -64,4 +66,25 @@ fn build_json_codec_service() {
         .build();
 
     tonic_prost_build::manual::Builder::new().compile(&[greeter_service]);
+}
+
+fn build_grpc() {
+    let proto = "proto/routeguide/route_guide.proto";
+
+    eprintln!("{}", grpc_protobuf_build::protoc());
+    let path = std::env::var("PATH").unwrap_or_default();
+    unsafe {
+        std::env::set_var("PATH", format!("{}:{}", path, grpc_protobuf_build::bin()));
+    }
+
+    grpc_protobuf_build::CodeGen::new()
+        .include("proto/routeguide")
+        .inputs(["route_guide.proto"])
+        .output_dir("src/grpc-routeguide/generated")
+        .client_only()
+        .compile()
+        .unwrap();
+
+    // prevent needing to rebuild if files (or deps) haven't changed
+    println!("cargo:rerun-if-changed={proto}");
 }

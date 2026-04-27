@@ -73,6 +73,8 @@ public:
           *error = std::string(crate_map.status().message());
           return false;
         }
+      } else if (opt.first == "client_only") {
+        grpc_opts.SetClientOnly(opt.second);
       }
     }
 

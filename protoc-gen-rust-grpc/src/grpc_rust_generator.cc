@@ -838,8 +838,10 @@ void GenerateService(protobuf::io::Printer &printer,
                      const GrpcOpts &opts) {
   Service service = Service(service_desc);
   client::GenerateClient(service, printer, opts);
-  printer.Print("\n");
-  server::GenerateServer(service, printer, opts);
+  if (!opts.IsClientOnly()) {
+    printer.Print("\n");
+    server::GenerateServer(service, printer, opts);
+  }
 }
 
 std::string GetRsGrpcFile(const protobuf::FileDescriptor &file) {

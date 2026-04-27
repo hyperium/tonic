@@ -123,6 +123,7 @@ pub struct CodeGen {
     // Whether to generate message code, defaults to true.
     generate_message_code: bool,
     should_format_code: bool,
+    client_only: bool,
 }
 
 impl CodeGen {
@@ -135,7 +136,13 @@ impl CodeGen {
             message_module_path: None,
             generate_message_code: true,
             should_format_code: true,
+            client_only: false,
         }
+    }
+
+    pub fn client_only(&mut self) -> &mut Self {
+        self.client_only = true;
+        self
     }
 
     /// Sets whether to generate the message code. This can be disabled if the
@@ -223,6 +230,9 @@ impl CodeGen {
 
         // Generate the service code.
         let mut cmd = std::process::Command::new("protoc");
+        if self.client_only {
+            cmd.arg("--rust-grpc_opt=client_only=true");
+        }
         for input in &self.inputs {
             cmd.arg(input);
         }

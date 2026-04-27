@@ -37,6 +37,14 @@ public:
     return message_module_path_;
   }
 
+  void SetClientOnly(const std::string client_only) {
+    if (client_only == "true") {
+      client_only_ = true;
+    }
+  }
+
+  bool IsClientOnly() const { return client_only_; }
+
   void SetImportPathToCrateName(
       const absl::flat_hash_map<std::string, std::string> mapping) {
     import_path_to_crate_name_ = std::move(mapping);
@@ -72,6 +80,7 @@ private:
   // "self", i.e. the message code and service code are present in the same
   // module.
   std::string message_module_path_ = "self";
+  bool client_only_ = false;
   absl::flat_hash_map<std::string, std::string> import_path_to_crate_name_ = {};
   std::vector<const google::protobuf::FileDescriptor *>
       files_in_current_crate_ = {};

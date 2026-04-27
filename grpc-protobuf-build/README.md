@@ -53,7 +53,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .include("external")
         .message_module_path("super::proto")
         .dependencies(vec![dependency])
-        //.out_dir("src/generated")  // you can change the generated code's location
+        //.output_dir("src/generated")  // you can change the generated code's location
         .compile()?;
    Ok(())
 }
