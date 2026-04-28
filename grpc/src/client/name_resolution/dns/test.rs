@@ -45,7 +45,13 @@ use crate::client::name_resolution::global_registry;
 use crate::client::name_resolution::test_utils::TestChannelController;
 use crate::client::name_resolution::test_utils::TestWorkScheduler;
 use crate::rt;
+use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
+use crate::rt::Runtime;
+use crate::rt::Sleep;
+use crate::rt::TaskHandle;
+use crate::rt::TcpOptions;
+use crate::rt::default_runtime;
 use crate::rt::tokio::TokioRuntime;
 
 const DEFAULT_TEST_SHORT_TIMEOUT: Duration = Duration::from_millis(10);
@@ -174,7 +180,7 @@ pub(crate) async fn dns_basic() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: rt::default_runtime(),
+        runtime: default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -196,7 +202,7 @@ pub(crate) async fn invalid_target() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: rt::default_runtime(),
+        runtime: default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let mut resolver = builder.build(target, opts);
@@ -240,11 +246,11 @@ struct FakeRuntime {
     dns: FakeDns,
 }
 
-impl rt::Runtime for FakeRuntime {
+impl Runtime for FakeRuntime {
     fn spawn(
         &self,
         task: Pin<Box<dyn Future<Output = ()> + Send + 'static>>,
-    ) -> Box<dyn rt::TaskHandle> {
+    ) -> Box<dyn TaskHandle> {
         self.inner.spawn(task)
     }
 
@@ -252,15 +258,15 @@ impl rt::Runtime for FakeRuntime {
         Ok(Box::new(self.dns.clone()))
     }
 
-    fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn rt::Sleep>> {
+    fn sleep(&self, duration: std::time::Duration) -> Pin<Box<dyn Sleep>> {
         self.inner.sleep(duration)
     }
 
     fn tcp_stream(
         &self,
         target: std::net::SocketAddr,
-        opts: rt::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn rt::GrpcEndpoint>, String>> + Send>> {
+        opts: TcpOptions,
+    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn GrpcEndpoint>, String>> + Send>> {
         self.inner.tcp_stream(target, opts)
     }
 }
@@ -334,7 +340,7 @@ pub(crate) async fn rate_limit() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: rt::default_runtime(),
+        runtime: default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_client = opts
@@ -377,7 +383,7 @@ pub(crate) async fn re_resolution_after_success() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: rt::default_runtime(),
+        runtime: default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
@@ -414,7 +420,7 @@ pub(crate) async fn backoff_on_error() {
     let (work_scheduler, mut work_rx) = TestWorkScheduler::new_pair();
     let opts = ResolverOptions {
         authority: "ignored".to_string(),
-        runtime: rt::default_runtime(),
+        runtime: default_runtime(),
         work_scheduler: work_scheduler.clone(),
     };
     let dns_opts = DnsOptions {
