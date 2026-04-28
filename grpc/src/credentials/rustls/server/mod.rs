@@ -161,7 +161,7 @@ impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType
 }
 
 #[derive(Clone)]
-pub struct RustlsServerCredendials {
+pub struct RustlsServerTlsCredendials {
     acceptor: TlsAcceptor,
 }
 
@@ -205,8 +205,8 @@ impl ServerTlsConfig {
     }
 }
 
-impl RustlsServerCredendials {
-    pub fn new(config: ServerTlsConfig) -> Result<RustlsServerCredendials, String> {
+impl RustlsServerTlsCredendials {
+    pub fn new(config: ServerTlsConfig) -> Result<RustlsServerTlsCredendials, String> {
         let provider = if let Some(p) = CryptoProvider::get_default() {
             p.as_ref().clone()
         } else {
@@ -222,7 +222,7 @@ impl RustlsServerCredendials {
     fn new_impl(
         mut config: ServerTlsConfig,
         provider: CryptoProvider,
-    ) -> Result<RustlsServerCredendials, String> {
+    ) -> Result<RustlsServerTlsCredendials, String> {
         let provider = sanitize_crypto_provider(provider)?;
         let id_list = config.identities_provider.borrow_and_update().clone();
         if id_list.is_empty() {
@@ -295,7 +295,7 @@ impl RustlsServerCredendials {
         // Install a dummy ticketer that refuses to issue tickets.
         server_config.ticketer = Arc::new(NoTicketer);
 
-        Ok(RustlsServerCredendials {
+        Ok(RustlsServerTlsCredendials {
             acceptor: TlsAcceptor::from(Arc::new(server_config)),
         })
     }
@@ -320,7 +320,7 @@ impl ProducesTickets for NoTicketer {
     }
 }
 
-impl ServerCredentials for RustlsServerCredendials {
+impl ServerCredentials for RustlsServerTlsCredendials {
     type Output<Input> = TlsStream<Input>;
 
     async fn accept<Input: GrpcEndpoint>(
