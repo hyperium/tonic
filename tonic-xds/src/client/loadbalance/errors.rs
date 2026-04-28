@@ -28,11 +28,9 @@ impl From<LbError> for tonic::Status {
     fn from(err: LbError) -> Self {
         match err {
             LbError::Unavailable => tonic::Status::unavailable("no ready endpoints available"),
-            LbError::LbChannelPollReadyError(inner) => {
-                tonic::Status::unavailable(format!(
-                    "error when polling readiness of lb channel: {inner}"
-                ))
-            }
+            LbError::LbChannelPollReadyError(inner) => tonic::Status::unavailable(format!(
+                "error when polling readiness of lb channel: {inner}"
+            )),
             LbError::Discover(source) => {
                 tonic::Status::unavailable(format!("discovery error: {source}"))
             }

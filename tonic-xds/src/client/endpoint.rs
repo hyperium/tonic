@@ -179,6 +179,7 @@ pub(crate) trait Connector {
 /// Both `Service` and `Connector` are exposed as associated types so callers
 /// can reference `MC::Service` directly without chaining through
 /// `<MC::Connector as Connector>::Service`.
+#[allow(dead_code)]
 pub(crate) trait MakeConnector: Send + Sync + 'static {
     /// The service type produced by the connector.
     type Service;

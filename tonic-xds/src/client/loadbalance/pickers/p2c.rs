@@ -23,11 +23,7 @@ where
     S: Load,
     S::Metric: PartialOrd,
 {
-    fn pick(
-        &self,
-        _req: &Req,
-        ready: &IndexMap<EndpointAddress, S>,
-    ) -> Option<usize> {
+    fn pick(&self, _req: &Req, ready: &IndexMap<EndpointAddress, S>) -> Option<usize> {
         let len = ready.len();
         match len {
             0 => None,

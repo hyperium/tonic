@@ -7,11 +7,11 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{ready, Context, Poll};
+use std::task::{Context, Poll, ready};
 
 use indexmap::IndexMap;
-use tower::discover::{Change, Discover};
 use tower::Service;
+use tower::discover::{Change, Discover};
 
 use crate::client::endpoint::{Connector, EndpointAddress};
 use crate::client::loadbalance::channel_state::{IdleChannel, ReadyChannel};
@@ -320,9 +320,8 @@ mod tests {
         Arc<MockConnector>,
     ) {
         let connector = Arc::new(MockConnector::new());
-        let picker: Arc<
-            dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync,
-        > = Arc::new(P2cPicker);
+        let picker: Arc<dyn ChannelPicker<ReadyChannel<MockService>, &'static str> + Send + Sync> =
+            Arc::new(P2cPicker);
         let lb = LoadBalancer::new(discover, connector.clone(), picker);
         (lb, connector)
     }
