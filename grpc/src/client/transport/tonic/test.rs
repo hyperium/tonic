@@ -75,7 +75,7 @@ use crate::credentials::common::Authority;
 use crate::credentials::rustls::RootCertificates;
 use crate::credentials::rustls::StaticProvider;
 use crate::credentials::rustls::client::ClientTlsConfig;
-use crate::credentials::rustls::client::RustlsChannelCredendials;
+use crate::credentials::rustls::client::RustlsClientTlsCredendials;
 use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
@@ -437,7 +437,7 @@ async fn grpc_invoke_tonic_unary_tls() {
     let root_certs = RootCertificates::from_pem(ca_cert);
     let root_provider = StaticProvider::new(root_certs);
     let config = ClientTlsConfig::new().with_root_certificates_provider(root_provider);
-    let creds = RustlsChannelCredendials::new(config).unwrap();
+    let creds = RustlsClientTlsCredendials::new(config).unwrap();
     let call_creds = Arc::new(MockCallCredentials {
         metadata: vec![("x-test-metadata", "test-value")],
         min_security_level: SecurityLevel::PrivacyAndIntegrity,
