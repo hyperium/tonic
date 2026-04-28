@@ -380,7 +380,7 @@ mod tests {
     #[tokio::test]
     async fn test_discover_remove_cancels_connecting() {
         let (tx, discover) = new_discover();
-        let (mut lb, connector) = make_lb(discover);
+        let (mut lb, _connector) = make_lb(discover);
 
         tx.send(Ok(Change::Insert(addr(8080), IdleChannel::new(addr(8080)))))
             .await
