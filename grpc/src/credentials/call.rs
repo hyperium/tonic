@@ -42,10 +42,10 @@ pub struct CallDetails {
 }
 
 impl CallDetails {
-    pub(crate) fn new(service_url: String, method_name: String) -> Self {
+    pub fn new(service_url: impl Into<String>, method_name: impl Into<String>) -> Self {
         Self {
-            service_url,
-            method_name,
+            service_url: service_url.into(),
+            method_name: method_name.into(),
         }
     }
 
@@ -68,7 +68,7 @@ pub struct ClientConnectionSecurityInfo {
 }
 
 impl ClientConnectionSecurityInfo {
-    pub(crate) fn new(
+    pub fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
         attributes: Attributes,
