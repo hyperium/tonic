@@ -22,9 +22,11 @@
  *
  */
 
-use std::fs::{self, read_to_string};
+use std::fs::read_to_string;
+use std::fs::{self};
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 
 use syn::parse_file;
 
@@ -179,7 +181,7 @@ impl CodeGen {
     }
 
     /// Add a directory for protoc to scan for .proto files.
-    pub fn includes(&mut self, includes: impl Iterator<Item = impl AsRef<Path>>) -> &mut Self {
+    pub fn includes(&mut self, includes: impl IntoIterator<Item = impl AsRef<Path>>) -> &mut Self {
         self.includes.extend(
             includes
                 .into_iter()
