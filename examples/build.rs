@@ -1,5 +1,4 @@
-use std::env;
-use std::path::PathBuf;
+use std::{env, path::PathBuf};
 
 fn main() {
     tonic_prost_build::configure()
@@ -40,27 +39,6 @@ fn main() {
         .out_dir(smallbuff_copy)
         .codec_path("crate::common::SmallBufferCodec")
         .compile_protos(&["proto/helloworld/helloworld.proto"], &["proto"])
-        .unwrap();
-
-    #[cfg(feature = "grpc-gcp")]
-    grpc_protobuf_build::CodeGen::new()
-        .includes(["proto/googleapis"])
-        .inputs([
-            "google/pubsub/v1/pubsub.proto",
-            "google/pubsub/v1/schema.proto",
-            "google/api/annotations.proto",
-            "google/api/resource.proto",
-            "google/api/http.proto",
-            "google/api/field_behavior.proto",
-            "google/api/client.proto",
-            // Well known types, bundled with protoc.
-            "google/protobuf/duration.proto",
-            "google/protobuf/empty.proto",
-            "google/protobuf/field_mask.proto",
-            "google/protobuf/timestamp.proto",
-            "google/protobuf/descriptor.proto",
-        ])
-        .compile()
         .unwrap();
 }
 

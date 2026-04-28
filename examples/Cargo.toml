@@ -108,11 +108,6 @@ path = "src/gcp/client.rs"
 required-features = ["gcp"]
 
 [[bin]]
-name = "grpc-gcp-client"
-path = "src/grpc-gcp/client.rs"
-required-features = ["grpc-gcp"]
-
-[[bin]]
 name = "tracing-client"
 path = "src/tracing/client.rs"
 required-features = ["tracing"]
@@ -276,7 +271,6 @@ tls-client-auth = ["tonic/tls-ring"]
 types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
-grpc-gcp = [ "dep:protobuf", "dep:grpc-protobuf", "dep:grpc", "dep:tonic-protobuf", "dep:grpc-google", "dep:rustls" ]
 
 full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c"]
 tower = ["dep:tower", "dep:http"]
@@ -312,15 +306,6 @@ h2 = { version = "0.4", optional = true }
 tokio-rustls = { version = "0.26.1", optional = true, features = ["ring", "tls12"], default-features = false }
 hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
 tower-http = { version = "0.6", optional = true }
-protobuf = { version = "4.34.0-release", optional = true }
-grpc-protobuf = { path = "../grpc-protobuf", optional = true }
-grpc = { path = "../grpc", optional = true }
-# TODO: Remove tonic-protobuf once the tonic server code is not longer
-# generated.
-tonic-protobuf = {path = "../tonic-protobuf", optional = true }
-grpc-google = { path = "../grpc-google", optional = true}
-rustls = { version = "0.23", default-features = false, features = ["ring"], optional = true}
 
 [build-dependencies]
 tonic-prost-build = { path = "../tonic-prost-build" }
-grpc-protobuf-build = { path = "../grpc-protobuf-build" }
