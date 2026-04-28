@@ -12,6 +12,7 @@ members = [
   "examples",
   "codegen",
   "grpc",
+  "grpc-google",
   "grpc-protobuf",
   "grpc-protobuf-build",
   "xds-client",
