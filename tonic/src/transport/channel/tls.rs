@@ -4,7 +4,9 @@ use crate::transport::{
     tls::{Certificate, Identity},
 };
 use http::Uri;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio_rustls::rustls::client::danger::ServerCertVerifier;
 use tokio_rustls::rustls::pki_types::TrustAnchor;
 
 /// Configures TLS settings for endpoints.
@@ -21,6 +23,7 @@ pub struct ClientTlsConfig {
     with_webpki_roots: bool,
     use_key_log: bool,
     timeout: Option<Duration>,
+    server_cert_verifier: Option<Arc<dyn ServerCertVerifier>>,
 }
 
 impl ClientTlsConfig {
@@ -133,6 +136,32 @@ impl ClientTlsConfig {
         }
     }
 
+    /// Replaces the default WebPKI server certificate verifier with a custom
+    /// implementation.
+    ///
+    /// **Warning:** A misconfigured verifier can silently disable peer
+    /// validation. Only use this if you understand rustls' verifier contract.
+    ///
+    /// Cannot be combined with [`ca_certificate`](Self::ca_certificate),
+    /// [`ca_certificates`](Self::ca_certificates),
+    /// [`trust_anchor`](Self::trust_anchor),
+    /// [`trust_anchors`](Self::trust_anchors),
+    /// `with_native_roots`, `with_webpki_roots`, or
+    /// [`with_enabled_roots`](Self::with_enabled_roots) — those configure the
+    /// default verifier, which is replaced when a custom one is set. Mixing
+    /// produces an error at connector-construction time.
+    ///
+    /// SNI ([`domain_name`](Self::domain_name)), client identity
+    /// ([`identity`](Self::identity)), [`timeout`](Self::timeout),
+    /// [`use_key_log`](Self::use_key_log), and
+    /// [`assume_http2`](Self::assume_http2) continue to apply.
+    pub fn server_cert_verifier(self, verifier: Arc<dyn ServerCertVerifier>) -> Self {
+        ClientTlsConfig {
+            server_cert_verifier: Some(verifier),
+            ..self
+        }
+    }
+
     pub(crate) fn into_tls_connector(self, uri: &Uri) -> Result<TlsConnector, crate::BoxError> {
         let domain = match &self.domain {
             Some(domain) => domain,
@@ -142,6 +171,7 @@ impl ClientTlsConfig {
             self.certs,
             self.trust_anchors,
             self.identity,
+            self.server_cert_verifier,
             domain,
             self.assume_http2,
             self.use_key_log,

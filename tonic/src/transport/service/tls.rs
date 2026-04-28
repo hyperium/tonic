@@ -16,6 +16,8 @@ pub(crate) enum TlsError {
     CertificateParseError,
     PrivateKeyParseError,
     HandshakeTimeout,
+    #[cfg(feature = "channel")]
+    VerifierConflict,
 }
 
 impl fmt::Display for TlsError {
@@ -31,6 +33,13 @@ impl fmt::Display for TlsError {
                 "Error parsing TLS private key - no RSA or PKCS8-encoded keys found."
             ),
             TlsError::HandshakeTimeout => write!(f, "TLS handshake timeout."),
+            #[cfg(feature = "channel")]
+            TlsError::VerifierConflict => write!(
+                f,
+                "ClientTlsConfig::server_cert_verifier cannot be combined with \
+                 ca_certificate(s), trust_anchor(s), or with_*_roots methods — those \
+                 configure the default verifier, which is replaced by the custom one."
+            ),
         }
     }
 }

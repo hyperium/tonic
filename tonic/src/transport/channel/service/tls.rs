@@ -7,7 +7,9 @@ use tokio::time;
 use tokio_rustls::{
     TlsConnector as RustlsConnector,
     rustls::{
-        ClientConfig, ConfigBuilder, RootCertStore, WantsVerifier, crypto,
+        ClientConfig, ConfigBuilder, RootCertStore, WantsVerifier,
+        client::danger::ServerCertVerifier,
+        crypto,
         pki_types::{ServerName, TrustAnchor},
     },
 };
@@ -32,6 +34,7 @@ impl TlsConnector {
         ca_certs: Vec<Certificate>,
         trust_anchors: Vec<TrustAnchor<'static>>,
         identity: Option<Identity>,
+        server_cert_verifier: Option<Arc<dyn ServerCertVerifier>>,
         domain: &str,
         assume_http2: bool,
         use_key_log: bool,
@@ -58,31 +61,61 @@ impl TlsConnector {
             _ => ClientConfig::builder(),
         };
 
-        let mut roots = RootCertStore::from_iter(trust_anchors);
+        let builder = match server_cert_verifier {
+            Some(verifier) => {
+                // A custom verifier replaces the default WebPKI verifier and
+                // its root-store config — the two are mutually exclusive.
+                #[cfg(feature = "tls-native-roots")]
+                let conflicts_native_roots = with_native_roots;
+                #[cfg(not(feature = "tls-native-roots"))]
+                let conflicts_native_roots = false;
 
-        #[cfg(feature = "tls-native-roots")]
-        if with_native_roots {
-            let rustls_native_certs::CertificateResult { certs, errors, .. } =
-                rustls_native_certs::load_native_certs();
-            if !errors.is_empty() {
-                tracing::debug!("errors occurred when loading native certs: {errors:?}");
+                #[cfg(feature = "tls-webpki-roots")]
+                let conflicts_webpki_roots = with_webpki_roots;
+                #[cfg(not(feature = "tls-webpki-roots"))]
+                let conflicts_webpki_roots = false;
+
+                if !ca_certs.is_empty()
+                    || !trust_anchors.is_empty()
+                    || conflicts_native_roots
+                    || conflicts_webpki_roots
+                {
+                    return Err(TlsError::VerifierConflict.into());
+                }
+
+                builder
+                    .dangerous()
+                    .with_custom_certificate_verifier(verifier)
             }
-            if certs.is_empty() {
-                return Err(TlsError::NativeCertsNotFound.into());
+            None => {
+                let mut roots = RootCertStore::from_iter(trust_anchors);
+
+                #[cfg(feature = "tls-native-roots")]
+                if with_native_roots {
+                    let rustls_native_certs::CertificateResult { certs, errors, .. } =
+                        rustls_native_certs::load_native_certs();
+                    if !errors.is_empty() {
+                        tracing::debug!("errors occurred when loading native certs: {errors:?}");
+                    }
+                    if certs.is_empty() {
+                        return Err(TlsError::NativeCertsNotFound.into());
+                    }
+                    roots.add_parsable_certificates(certs);
+                }
+
+                #[cfg(feature = "tls-webpki-roots")]
+                if with_webpki_roots {
+                    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+                }
+
+                for cert in ca_certs {
+                    roots.add_parsable_certificates(convert_certificate_to_pki_types(&cert)?);
+                }
+
+                builder.with_root_certificates(roots)
             }
-            roots.add_parsable_certificates(certs);
-        }
+        };
 
-        #[cfg(feature = "tls-webpki-roots")]
-        if with_webpki_roots {
-            roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
-        }
-
-        for cert in ca_certs {
-            roots.add_parsable_certificates(convert_certificate_to_pki_types(&cert)?);
-        }
-
-        let builder = builder.with_root_certificates(roots);
         let mut config = match identity {
             Some(identity) => {
                 let (client_cert, client_key) = convert_identity_to_pki_types(&identity)?;
