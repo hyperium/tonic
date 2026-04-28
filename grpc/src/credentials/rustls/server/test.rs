@@ -41,7 +41,7 @@ use crate::credentials::rustls::ALPN_PROTO_STR_H2;
 use crate::credentials::rustls::Identity;
 use crate::credentials::rustls::RootCertificates;
 use crate::credentials::rustls::StaticProvider;
-use crate::credentials::rustls::server::RustlsServerTlsCredendials;
+use crate::credentials::rustls::server::RustlsServerCredendials;
 use crate::credentials::rustls::server::ServerTlsConfig;
 use crate::credentials::rustls::server::TlsClientCertificateRequestType;
 use crate::private;
@@ -65,7 +65,7 @@ async fn test_tls_server_handshake() {
     let identity = load_identity("server.pem", "server.key");
     let identity_provider = StaticProvider::new(vec![identity]);
     let config = ServerTlsConfig::new(identity_provider);
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -121,7 +121,7 @@ async fn test_tls_server_handshake_no_alpn() {
     let identity = load_identity("server.pem", "server.key");
     let identity_provider = StaticProvider::new(vec![identity]);
     let config = ServerTlsConfig::new(identity_provider);
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -164,7 +164,7 @@ async fn test_tls_server_handshake_bad_alpn() {
     let identity = load_identity("server.pem", "server.key");
     let identity_provider = StaticProvider::new(vec![identity]);
     let config = ServerTlsConfig::new(identity_provider);
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -201,7 +201,7 @@ async fn test_tls_handshake_alpn_h1_and_h2() {
     let identity = load_identity("server.pem", "server.key");
     let identity_provider = StaticProvider::new(vec![identity]);
     let config = ServerTlsConfig::new(identity_provider);
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -248,7 +248,7 @@ async fn test_tls_server_mtls_require_fail() {
         },
     );
 
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -299,7 +299,7 @@ async fn test_tls_server_mtls_success() {
         },
     );
 
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -359,7 +359,7 @@ async fn test_tls_server_mtls_optional() {
         },
     );
 
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -409,7 +409,7 @@ async fn test_tls_server_key_log() {
     let config =
         ServerTlsConfig::new(identity_provider).insecure_with_key_log_path(key_log_file.path());
 
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -462,7 +462,7 @@ async fn check_resumption_disabled(versions: Vec<&'static rustls::SupportedProto
     let identity = load_identity("server.pem", "server.key");
     let identity_provider = StaticProvider::new(vec![identity]);
     let config = ServerTlsConfig::new(identity_provider);
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -538,7 +538,7 @@ async fn test_tls_server_sni() {
     // identity2 has *.test.com
     let identity_provider = StaticProvider::new(vec![identity1, identity2]);
     let config = ServerTlsConfig::new(identity_provider);
-    let creds = RustlsServerTlsCredendials::new(config).unwrap();
+    let creds = RustlsServerCredendials::new(config).unwrap();
 
     let runtime = rt::default_runtime();
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -651,7 +651,7 @@ async fn test_tls_server_cipher_suites_insecure() {
     // Remove all cipher suites that are considered secure by gRPC.
     provider.cipher_suites.retain(|suite| !is_secure(suite));
 
-    let creds = RustlsServerTlsCredendials::new_impl(config, provider);
+    let creds = RustlsServerCredendials::new_impl(config, provider);
     assert!(creds.err().unwrap().contains("no cipher suites matching"));
 }
 
