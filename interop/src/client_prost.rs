@@ -384,6 +384,54 @@ impl InteropTest for TestClient {
             format!("result={:?}", trailers.get_bin(key1))
         ));
     }
+
+    async fn cacheable_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let payload = Payload {
+            body: timestamp.into_bytes(),
+            ..Default::default()
+        };
+        let req = SimpleRequest {
+            response_type: PayloadType::Compressable as i32,
+            payload: Some(payload),
+            ..Default::default()
+        };
+
+        let mut req1 = Request::new(req.clone());
+        req1.metadata_mut().insert("x-user-ip", "1.2.3.4".parse().unwrap());
+
+        let result1 = self.cacheable_unary_call(req1).await;
+
+        assertions.push(test_assert!(
+            "first call must be successful",
+            result1.is_ok(),
+            format!("result={:?}", result1)
+        ));
+
+        let mut req2 = Request::new(req);
+        req2.metadata_mut().insert("x-user-ip", "1.2.3.4".parse().unwrap());
+        let result2 = self.cacheable_unary_call(req2).await;
+
+        assertions.push(test_assert!(
+            "second call must be successful",
+            result2.is_ok(),
+            format!("result={:?}", result2)
+        ));
+
+        if let (Ok(res1), Ok(res2)) = (result1, result2) {
+            let body1 = res1.into_inner();
+            let body2 = res2.into_inner();
+            assertions.push(test_assert!(
+                "payload body of both responses is the same",
+                body1 == body2,
+                format!("body1={:?}, body2={:?}", body1, body2)
+            ));
+        }
+    }
 }
 
 #[async_trait]

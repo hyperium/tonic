@@ -407,6 +407,58 @@ impl InteropTest for TestClient {
             format!("result={:?}", response_trailers.get_bin(key1))
         ));
     }
+
+    async fn cacheable_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let timestamp = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+            .to_string();
+        let req = proto!(SimpleRequest {
+            response_type: PayloadType::Compressable,
+            payload: proto!(Payload {
+                body: timestamp.into_bytes(),
+            }),
+        });
+
+        let mut md1 = MetadataMap::new();
+        md1.insert("x-user-ip", "1.2.3.4".parse().unwrap());
+        let attacher1 = AttachHeadersInterceptor::new(md1);
+
+        let result1 = self.cacheable_unary_call(req.clone())
+            .with_interceptor(attacher1)
+            .await;
+
+        assertions.push(test_assert!(
+            "first call must be successful",
+            result1.is_ok(),
+            format!("result={:?}", result1)
+        ));
+
+        let mut md2 = MetadataMap::new();
+        md2.insert("x-user-ip", "1.2.3.4".parse().unwrap());
+        let attacher2 = AttachHeadersInterceptor::new(md2);
+
+        let result2 = self.cacheable_unary_call(req)
+            .with_interceptor(attacher2)
+            .await;
+
+        assertions.push(test_assert!(
+            "second call must be successful",
+            result2.is_ok(),
+            format!("result={:?}", result2)
+        ));
+
+        if let (Ok(res1), Ok(res2)) = (result1, result2) {
+            let body1 = res1.payload().body();
+            let body2 = res2.payload().body();
+            assertions.push(test_assert!(
+                "payload body of both responses is the same",
+                body1 == body2,
+                format!("body1={:?}, body2={:?}", body1, body2)
+            ));
+        }
+    }
 }
 
 #[async_trait]

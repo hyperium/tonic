@@ -54,8 +54,13 @@ impl pb::test_service_server::TestService for TestService {
         Ok(Response::new(res))
     }
 
-    async fn cacheable_unary_call(&self, _: Request<SimpleRequest>) -> Result<SimpleResponse> {
-        unimplemented!()
+    async fn cacheable_unary_call(&self, request: Request<SimpleRequest>) -> Result<SimpleResponse> {
+        let req = request.into_inner();
+        let res = SimpleResponse {
+            payload: req.payload,
+            ..Default::default()
+        };
+        Ok(Response::new(res))
     }
 
     type StreamingOutputCallStream = Stream<StreamingOutputCallResponse>;
