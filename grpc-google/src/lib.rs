@@ -58,7 +58,7 @@ impl TokenProvider for AccessTokenCredentials {
 }
 
 impl GcpCallCredentials<AccessTokenCredentials> {
-    /// Retruns credentials according to the standard
+    /// Returns credentials according to the standard
     /// [Application Default Credentials (ADC)][ADC-link] strategy.
     ///
     /// [ADC-link]: https://cloud.google.com/docs/authentication/application-default-credentials
@@ -66,7 +66,7 @@ impl GcpCallCredentials<AccessTokenCredentials> {
         Self::new_application_default_with_scope([DEFAULT_CLOUD_PLATFORM_SCOPE])
     }
 
-    /// Retruns credentials according to the standard
+    /// Returns credentials according to the standard
     /// [Application Default Credentials (ADC)][ADC-link] strategy, with
     /// specified scopes.
     ///
@@ -124,7 +124,6 @@ impl<P: TokenProvider> CallCredentials for GcpCallCredentials<P> {
 #[cfg(test)]
 mod tests {
     use grpc::attributes::Attributes;
-    use grpc::credentials::SecurityLevel;
 
     use super::*;
 
