@@ -172,6 +172,10 @@ impl Channel {
         pick_first::reg();
         round_robin::reg();
         dns::reg();
+        #[cfg(unix)]
+        name_resolution::unix::reg();
+        #[cfg(target_os = "linux")]
+        name_resolution::unix_abstract::reg();
         #[cfg(feature = "_runtime-tokio")]
         tonic_transport::reg();
         Self {
