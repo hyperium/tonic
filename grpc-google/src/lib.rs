@@ -22,7 +22,7 @@
  *
 */
 
-//! GCP Channel Credentials implementation for gRPC.
+//! GCP Credentials implementation for gRPC.
 //!
 //! This crate provides a way to create gRPC channel credentials that
 //! automatically fetch and attach Google Cloud Platform (GCP) authentication
@@ -45,7 +45,7 @@ const DEFAULT_CLOUD_PLATFORM_SCOPE: &str = "https://www.googleapis.com/auth/clou
 
 /// An abstraction for fetching authentication tokens.
 #[trait_variant::make(Send)]
-pub trait TokenProvider: Send + Sync + Debug + 'static {
+pub trait TokenProvider: Sync + Debug + 'static {
     /// Returns an authentication token.
     async fn get_token(&self) -> Result<String, String>;
 }
@@ -58,15 +58,19 @@ impl TokenProvider for AccessTokenCredentials {
 }
 
 impl GcpCallCredentials<AccessTokenCredentials> {
-    // Returns "Application Default Credentials". For more detail, see
-    // https://developers.google.com/accounts/docs/application-default-credentials.
+    /// Retruns credentials according to the standard
+    /// [Application Default Credentials (ADC)][ADC-link] strategy.
+    ///
+    /// [ADC-link]: https://cloud.google.com/docs/authentication/application-default-credentials
     pub fn new_application_default() -> Result<Self, String> {
         Self::new_application_default_with_scope([DEFAULT_CLOUD_PLATFORM_SCOPE])
     }
 
-    /// Returns "Application Default Credentials" with the specified scopes.
-    /// For more detail, see
-    /// https://developers.google.com/accounts/docs/application-default-credentials.
+    /// Retruns credentials according to the standard
+    /// [Application Default Credentials (ADC)][ADC-link] strategy, with
+    /// specified scopes.
+    ///
+    /// [ADC-link]: https://cloud.google.com/docs/authentication/application-default-credentials
     pub fn new_application_default_with_scope<I, S>(scopes: I) -> Result<Self, String>
     where
         I: IntoIterator<Item = S>,
