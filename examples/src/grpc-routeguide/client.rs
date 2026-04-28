@@ -32,15 +32,23 @@ fn print_feature(feature: Feature) {
 }
 
 async fn get_feature<T: Invoke>(client: &RouteGuideClient<T>, point: Point) {
+    // Perform the RPC.
     let response = client.get_feature(point).await.expect("RPC failed");
+
+    // Print its response.
     print_feature(response);
 }
 
 async fn list_features<T: Invoke>(client: &RouteGuideClient<T>, rect: Rectangle) {
-    let mut response_stream = client.list_features(rect).start().await;
-    while let Some(feature) = response_stream.next().await {
+    // Start the RPC.
+    let mut response_stream = client.list_features(rect).await;
+
+    // Receive the response messages.
+    while let Some(feature) = response_stream.recv().await {
         print_feature(feature);
     }
+
+    // Confirm the status.
     let status = response_stream.status().await;
     assert_eq!(status.code(), grpc::StatusCode::Ok, "{:?}", status);
 }
@@ -53,11 +61,17 @@ async fn record_route<T: Invoke>(client: &RouteGuideClient<T>) {
         points.push(random_point());
     }
     println!("Traversing {point_count} points.");
+
+    // Start the RPC.
     let mut stream = client.record_route().await;
+
+    // Send the request messages.
     for point in points {
-        stream.send_message(&point).await.expect("RPC failed");
+        stream.send(&point).await.expect("RPC failed");
     }
-    let response = stream.await.expect("RPC failed");
+
+    // Receive the response or status.
+    let response = stream.recv().await.expect("RPC failed");
     println!(
         "Route summary: Point count: {}, Distance: {}",
         response.point_count(),
@@ -103,9 +117,13 @@ async fn route_chat<T: Invoke>(client: &RouteGuideClient<T>) {
             message: format!("Message Five"),
         }),
     ];
+
+    // Start the RPC.
     let (mut tx, mut rx) = client.route_chat().await;
+
+    // Spawn a task to receive the response messages asynchronously.
     let handle = task::spawn(async move {
-        while let Some(response) = rx.next().await {
+        while let Some(response) = rx.recv().await {
             println!(
                 "Got message {} at Point: {{{}, {}}}",
                 response.message(),
@@ -113,23 +131,33 @@ async fn route_chat<T: Invoke>(client: &RouteGuideClient<T>) {
                 response.location().longitude()
             );
         }
+        // Return the status to the main task via our JoinHandle.
+        rx.status().await
     });
+
+    // Send the request messages.
     for note in notes {
-        tx.send_message(note).await.expect("RPC errored");
+        if tx.send(note).await.is_err() {
+            break;
+        }
     }
-    // Dropping tx causes the client to send a "half close" to the server.
+
+    // Drop tx, which causes the client to send a "half close" to the server.
     drop(tx);
-    // Await the async work where we read from the server.
-    handle.await.unwrap();
+
+    // Await the async work where we read from the server and confirm the
+    // status.
+    let status = handle.await.unwrap();
+    assert_eq!(status.code(), grpc::StatusCode::Ok, "{:?}", status);
 }
 
 fn random_point() -> Point {
     let latitude = (rand::random_range(0..180) - 90) * 10_000_000;
     let longitude = (rand::random_range(0..360) - 180) * 10_000_000;
-    proto!(Point {
+    return proto!(Point {
         latitude,
         longitude
-    })
+    });
 }
 
 #[tokio::main]
