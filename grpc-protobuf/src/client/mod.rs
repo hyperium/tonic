@@ -94,6 +94,11 @@ where
             )
             .await
     }
+
+    /// Sends a "half close" signal to the server to indicate the client is done
+    /// sending by dropping self.  It is safe to just drop(self) instead; this
+    /// method is provided to be explicit.
+    pub fn close(self) {}
 }
 
 /// Provides a streaming RPC's protobuf response messages and status.

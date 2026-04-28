@@ -71,7 +71,7 @@ async fn record_route<T: Invoke>(client: &RouteGuideClient<T>) {
     }
 
     // Receive the response or status.
-    let response = stream.recv().await.expect("RPC failed");
+    let response = stream.close_and_recv().await.expect("RPC failed");
     println!(
         "Route summary: Point count: {}, Distance: {}",
         response.point_count(),
@@ -121,33 +121,37 @@ async fn route_chat<T: Invoke>(client: &RouteGuideClient<T>) {
     // Start the RPC.
     let (mut tx, mut rx) = client.route_chat().await;
 
-    // Spawn a task to receive the response messages asynchronously.
+    // Spawn a task to send the request messages asynchronously.
     let handle = task::spawn(async move {
-        while let Some(response) = rx.recv().await {
-            println!(
-                "Got message {} at Point: {{{}, {}}}",
-                response.message(),
-                response.location().latitude(),
-                response.location().longitude()
-            );
+        // Send the request messages.
+        for note in notes {
+            // Send errors (with a void error) if the stream encounters any
+            // problem, or if the server terminates the stream before the client
+            // is done sending.  We don't expect that in our RouteGuide
+            // protocol, so we can safely expect() no error.
+            tx.send(note).await.expect("RPC terminated early");
         }
-        // Return the status to the main task via our JoinHandle.
-        rx.status().await
+        // Send a "half close" signal to the server to indicate the client is
+        // done sending.  This triggers naturally if `tx` is dropped, which will
+        // happen automatically at the end of this task, but we call close()
+        // here just to be explicit.
+        tx.close();
     });
 
-    // Send the request messages.
-    for note in notes {
-        if tx.send(note).await.is_err() {
-            break;
-        }
+    while let Some(response) = rx.recv().await {
+        println!(
+            "Got message {} at Point: {{{}, {}}}",
+            response.message(),
+            response.location().latitude(),
+            response.location().longitude()
+        );
     }
 
-    // Drop tx, which causes the client to send a "half close" to the server.
-    drop(tx);
+    // Assert that spawned task did not encounter an error.
+    handle.await.expect("Sending notes failed");
 
-    // Await the async work where we read from the server and confirm the
-    // status.
-    let status = handle.await.unwrap();
+    // Confirm the status.
+    let status = rx.status().await;
     assert_eq!(status.code(), grpc::StatusCode::Ok, "{:?}", status);
 }
 

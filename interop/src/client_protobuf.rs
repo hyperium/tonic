@@ -114,7 +114,7 @@ impl InteropTest for TestClient {
             let _ = stream.send(&request).await;
         }
 
-        let result = stream.recv().await;
+        let result = stream.close_and_recv().await;
 
         assertions.push(test_assert!(
             "call must be successful",

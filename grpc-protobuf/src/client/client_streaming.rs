@@ -173,7 +173,7 @@ where
         }
     }
 
-    pub async fn recv(self) -> Result<Res, Status> {
+    pub async fn close_and_recv(self) -> Result<Res, Status> {
         let mut res = Res::default();
         let status = self.with_response_message(&mut res).await;
         if status.code() == StatusCode::Ok {
