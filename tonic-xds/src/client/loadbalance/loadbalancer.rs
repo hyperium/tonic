@@ -87,29 +87,28 @@ where
         }
     }
 
-    /// Poll the discovery stream for endpoint changes.
-    /// Returns `Err(LbError::DiscoverClosed)` when the stream is closed (None),
-    /// or `Err(LbError::DiscoverError)` on a discovery error.
-    fn poll_discover(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), LbError>> {
+    /// Drain pending discovery events. Either resolves to an error
+    /// ([`LbError::DiscoverClosed`] or [`LbError::DiscoverError`]) or stays
+    /// pending — there is no success outcome since the loop only exits on
+    /// pending or error.
+    fn poll_discover(&mut self, cx: &mut Context<'_>) -> Poll<LbError> {
         loop {
-            match ready!(Pin::new(&mut self.discovery).poll_discover(cx))
-                .transpose()
-                .map_err(|e| LbError::DiscoverError(e.into()))?
-            {
+            match ready!(Pin::new(&mut self.discovery).poll_discover(cx)) {
                 None => {
                     // tower::discover::Discover::poll_discover() returns Ready(None) when the
                     // discover object is closed, as indicated by Stream trait.
                     tracing::error!("discover object is closed");
-                    return Poll::Ready(Err(LbError::DiscoverClosed));
+                    return Poll::Ready(LbError::DiscoverClosed);
                 }
-                Some(Change::Insert(addr, idle)) => {
+                Some(Err(e)) => return Poll::Ready(LbError::DiscoverError(e.into())),
+                Some(Ok(Change::Insert(addr, idle))) => {
                     tracing::trace!("discovery: insert {addr}");
                     let _ = self.connecting.cancel(&addr);
                     self.ready.swap_remove(&addr);
                     let connecting = idle.connect(self.connector.clone());
                     let _ = self.connecting.add(addr, connecting);
                 }
-                Some(Change::Remove(addr)) => {
+                Some(Ok(Change::Remove(addr))) => {
                     tracing::trace!("discovery: remove {addr}");
                     let _ = self.connecting.cancel(&addr);
                     self.ready.swap_remove(&addr);
@@ -151,17 +150,17 @@ where
 
         // No ready endpoints. Check if we should fail fast.
         match discover_result {
-            Poll::Ready(Err(LbError::DiscoverClosed)) if self.connecting.len() == 0 => {
+            Poll::Ready(LbError::DiscoverClosed) if self.connecting.len() == 0 => {
                 // Discovery is closed and nothing is connecting — no progress is possible.
                 Poll::Ready(Err(LbError::Stagnation))
             }
-            Poll::Ready(Err(e)) => {
+            Poll::Ready(e) => {
                 // Other discovery errors (or DiscoverClosed with connecting in flight)
                 // are non-fatal — log and stay pending.
                 tracing::warn!("discovery yielded error: {e}");
                 Poll::Pending
             }
-            _ => {
+            Poll::Pending => {
                 tracing::trace!(
                     "waiting for connections, inflight={}",
                     self.connecting.len()
