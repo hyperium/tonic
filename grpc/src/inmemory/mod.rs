@@ -314,7 +314,7 @@ impl ClientRecvStream for InMemoryClientRecvStream {
             Some(InMemoryResponseStreamItem::Headers(h)) => ClientResponseStreamItem::Headers(h),
             Some(InMemoryResponseStreamItem::Message(mut buf)) => {
                 msg.decode(&mut buf).unwrap();
-                ClientResponseStreamItem::Message(())
+                ClientResponseStreamItem::Message
             }
             _ => {
                 if let Some(trailer_rx) = self.trailer_rx.take() {

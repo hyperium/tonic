@@ -194,7 +194,7 @@ pub(crate) async fn tonic_transport_rpc() {
             // Wait for the reply
             let mut recv_msg = WrappedEchoResponse(EchoResponse { message: "".into() });
             match rx.next(&mut recv_msg).await {
-                ClientResponseStreamItem::Message(()) => {
+                ClientResponseStreamItem::Message => {
                     let echo_response = recv_msg.0;
                     println!("Got response: {echo_response:?}");
                     assert_eq!(echo_response.message, message);
@@ -571,7 +571,7 @@ async fn perform_unary_echo(
         panic!("Expected Headers first");
     };
 
-    let ClientResponseStreamItem::Message(()) = rx.next(&mut resp).await else {
+    let ClientResponseStreamItem::Message = rx.next(&mut resp).await else {
         panic!("Expected Message after Headers");
     };
     let echo_resp = std::mem::take(&mut resp.0);
