@@ -237,14 +237,17 @@ fn generate_unary<T: Service>(
             &mut self,
             request: impl tonic::IntoRequest<#request>,
         ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
-           self.inner.ready().await.map_err(|e| {
-               tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
-           })?;
-           let codec = #codec_name::default();
-           let path = http::uri::PathAndQuery::from_static(#path);
-           let mut req = request.into_request();
-           req.extensions_mut().insert(GrpcMethod::new(#service_name, #method_name));
-           self.inner.unary(req, path, codec).await
+            self.inner.ready().await.map_err(|e| {
+                let e = e.into();
+                let mut status = tonic::Status::unknown(format!("Service was not ready: {}", e));
+                status.set_source(e.into());
+                status
+            })?;
+            let codec = #codec_name::default();
+            let path = http::uri::PathAndQuery::from_static(#path);
+            let mut req = request.into_request();
+            req.extensions_mut().insert(GrpcMethod::new(#service_name, #method_name));
+            self.inner.unary(req, path, codec).await
         }
     }
 }
@@ -269,7 +272,10 @@ fn generate_server_streaming<T: Service>(
             request: impl tonic::IntoRequest<#request>,
         ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+                let e = e.into();
+                let mut status = tonic::Status::unknown(format!("Service was not ready: {}", e));
+                status.set_source(e.into());
+                status
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
@@ -300,7 +306,10 @@ fn generate_client_streaming<T: Service>(
             request: impl tonic::IntoStreamingRequest<Message = #request>
         ) -> std::result::Result<tonic::Response<#response>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+                let e = e.into();
+                let mut status = tonic::Status::unknown(format!("Service was not ready: {}", e));
+                status.set_source(e.into());
+                status
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
@@ -331,7 +340,10 @@ fn generate_streaming<T: Service>(
             request: impl tonic::IntoStreamingRequest<Message = #request>
         ) -> std::result::Result<tonic::Response<tonic::codec::Streaming<#response>>, tonic::Status> {
             self.inner.ready().await.map_err(|e| {
-                tonic::Status::unknown(format!("Service was not ready: {}", e.into()))
+                let e = e.into();
+                let mut status = tonic::Status::unknown(format!("Service was not ready: {}", e));
+                status.set_source(e.into());
+                status
             })?;
             let codec = #codec_name::default();
             let path = http::uri::PathAndQuery::from_static(#path);
