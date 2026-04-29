@@ -11,6 +11,8 @@
 //! [`CertificateProviderPluginInstance`]: https://github.com/envoyproxy/envoy/blob/main/api/envoy/extensions/transport_sockets/tls/v3/common.proto
 
 pub(crate) mod file_watcher;
+#[cfg(any(feature = "tls-ring", feature = "tls-aws-lc"))]
+pub(crate) mod verifier;
 
 use std::collections::HashMap;
 use std::sync::Arc;
