@@ -171,19 +171,12 @@ where
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
-        // Tower contract: poll_ready must return Ready(Ok(())) before call().
-        // If ready is empty, the caller violated the contract.
-        let Some(idx) = self.picker.pick(&req, &self.ready) else {
-            return LbFuture::Error(Some(LbError::FailedPrecondition(
-                "call() invoked without ready endpoints (poll_ready not called?)",
-            )));
+        let Some(picked) = self.picker.pick(&req, &self.ready) else {
+            return LbFuture::Error(Some(LbError::Unavailable));
         };
-        let Some((_, svc)) = self.ready.get_index_mut(idx) else {
-            return LbFuture::Error(Some(LbError::FailedPrecondition(
-                "picker returned invalid index",
-            )));
-        };
-        let mut svc = svc.clone();
+        // `picked` is a read-only borrow into `self.ready`. Clone to get an
+        // owned service we can drive in the async block.
+        let mut svc = picked.clone();
         LbFuture::Pending(Box::pin(async move {
             tower::ServiceExt::ready(&mut svc)
                 .await
@@ -550,17 +543,18 @@ mod tests {
     // -- call() tests --
 
     #[tokio::test]
-    async fn test_call_no_endpoints_returns_failed_precondition() {
+    async fn test_call_no_endpoints_returns_unavailable() {
         let (_tx, discover) = new_discover();
         let (mut lb, _connector) = make_lb(discover);
 
-        // poll_ready returns Pending — calling anyway violates tower contract.
+        // poll_ready returns Pending — calling anyway violates tower contract,
+        // but the picker returns None so call returns Unavailable.
         assert!(poll_ready_now(&mut lb).is_none());
 
         let result = lb.call("hello").await;
         assert!(
-            matches!(result, Err(LbError::FailedPrecondition(_))),
-            "expected FailedPrecondition, got {result:?}"
+            matches!(result, Err(LbError::Unavailable)),
+            "expected Unavailable, got {result:?}"
         );
     }
 

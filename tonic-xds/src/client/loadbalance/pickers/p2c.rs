@@ -23,19 +23,19 @@ where
     S: Load,
     S::Metric: PartialOrd,
 {
-    fn pick(&self, _req: &Req, ready: &IndexMap<EndpointAddress, S>) -> Option<usize> {
+    fn pick<'a>(&self, _req: &Req, ready: &'a IndexMap<EndpointAddress, S>) -> Option<&'a S> {
         let len = ready.len();
         match len {
             0 => None,
-            1 => Some(0),
+            1 => ready.get_index(0).map(|(_, s)| s),
             _ => {
                 let [a, b] = sample_floyd2(len);
                 let (_, ch_a) = ready.get_index(a)?;
                 let (_, ch_b) = ready.get_index(b)?;
                 if ch_a.load() <= ch_b.load() {
-                    Some(a)
+                    Some(ch_a)
                 } else {
-                    Some(b)
+                    Some(ch_b)
                 }
             }
         }
@@ -74,14 +74,16 @@ mod tests {
     #[test]
     fn test_pick_empty_returns_none() {
         let ready: IndexMap<EndpointAddress, MockChannel> = IndexMap::new();
-        assert_eq!(P2cPicker.pick(&(), &ready), None);
+        assert!(P2cPicker.pick(&(), &ready).is_none());
     }
 
     #[test]
-    fn test_pick_single_returns_zero() {
+    fn test_pick_single_returns_only_endpoint() {
         let mut ready = IndexMap::new();
-        ready.insert(addr(8080), MockChannel::new(0));
-        assert_eq!(P2cPicker.pick(&(), &ready), Some(0));
+        ready.insert(addr(8080), MockChannel::new(42));
+
+        let picked = P2cPicker.pick(&(), &ready).unwrap();
+        assert_eq!(picked.load(), 42);
     }
 
     #[test]
@@ -91,24 +93,26 @@ mod tests {
         ready.insert(addr(8081), MockChannel::new(0));
 
         // With only 2 endpoints, P2C always compares both.
-        // The one with load=0 should always be picked.
         for _ in 0..100 {
-            let idx = P2cPicker.pick(&(), &ready).unwrap();
-            let (_, ch) = ready.get_index(idx).unwrap();
-            assert_eq!(ch.load(), 0, "should always pick the lower-loaded endpoint");
+            let picked = P2cPicker.pick(&(), &ready).unwrap();
+            assert_eq!(
+                picked.load(),
+                0,
+                "should always pick the lower-loaded endpoint"
+            );
         }
     }
 
     #[test]
-    fn test_pick_equal_load_returns_valid_index() {
+    fn test_pick_equal_load_returns_some() {
         let mut ready = IndexMap::new();
         ready.insert(addr(8080), MockChannel::new(5));
         ready.insert(addr(8081), MockChannel::new(5));
         ready.insert(addr(8082), MockChannel::new(5));
 
         for _ in 0..100 {
-            let idx = P2cPicker.pick(&(), &ready).unwrap();
-            assert!(idx < ready.len());
+            let picked = P2cPicker.pick(&(), &ready).unwrap();
+            assert_eq!(picked.load(), 5);
         }
     }
 
@@ -116,14 +120,14 @@ mod tests {
     fn test_pick_many_endpoints_distributes() {
         let mut ready = IndexMap::new();
         for port in 8080..8090 {
-            ready.insert(addr(port), MockChannel::new(0));
+            // Encode the port in the load so we can identify which one was picked.
+            ready.insert(addr(port), MockChannel::new(port as u64));
         }
 
         let mut seen = std::collections::HashSet::new();
         for _ in 0..1000 {
-            let idx = P2cPicker.pick(&(), &ready).unwrap();
-            assert!(idx < ready.len());
-            seen.insert(idx);
+            let picked = P2cPicker.pick(&(), &ready).unwrap();
+            seen.insert(picked.load());
         }
         // With 10 endpoints and 1000 picks, we should hit most of them.
         assert!(

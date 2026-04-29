@@ -10,5 +10,5 @@ use crate::client::endpoint::EndpointAddress;
 /// The picker only needs to observe `S`'s load — it doesn't depend on any
 /// specific channel state type.
 pub(crate) trait ChannelPicker<S, Req> {
-    fn pick(&self, req: &Req, ready: &IndexMap<EndpointAddress, S>) -> Option<usize>;
+    fn pick<'a>(&self, req: &Req, ready: &'a IndexMap<EndpointAddress, S>) -> Option<&'a S>;
 }
