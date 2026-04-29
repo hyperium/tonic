@@ -35,12 +35,15 @@ use tokio::task::JoinHandle;
 
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
 use crate::private;
+use crate::rt::BoxEndpoint;
+use crate::rt::BoxFuture;
 use crate::rt::BoxedTaskHandle;
 use crate::rt::DnsResolver;
 use crate::rt::ResolverOptions;
 use crate::rt::Runtime;
 use crate::rt::Sleep;
 use crate::rt::TaskHandle;
+use crate::rt::TcpOptions;
 
 #[cfg(feature = "dns")]
 mod hickory_resolver;
@@ -107,8 +110,8 @@ impl Runtime for TokioRuntime {
     fn tcp_stream(
         &self,
         target: SocketAddr,
-        opts: super::TcpOptions,
-    ) -> Pin<Box<dyn Future<Output = Result<Box<dyn super::GrpcEndpoint>, String>> + Send>> {
+        opts: TcpOptions,
+    ) -> BoxFuture<Result<BoxEndpoint, String>> {
         Box::pin(async move {
             let stream = TcpStream::connect(target)
                 .await
@@ -123,6 +126,33 @@ impl Runtime for TokioRuntime {
             }
             let stream: Box<dyn super::GrpcEndpoint> =
                 Box::new(TokioIoStream::new_from_tcp(stream)?);
+            Ok(stream)
+        })
+    }
+
+    #[cfg(unix)]
+    fn unix_stream(
+        &self,
+        path: std::path::PathBuf,
+        _opts: super::UnixSocketOptions,
+    ) -> BoxFuture<Result<Box<dyn super::GrpcEndpoint>, String>> {
+        use tokio::net::UnixStream;
+
+        use crate::client::name_resolution::UNIX_NETWORK_TYPE;
+
+        Box::pin(async move {
+            let stream = UnixStream::connect(&path)
+                .await
+                .map_err(|err| err.to_string())?;
+            let peer_addr = stream.peer_addr().map_err(|err| err.to_string())?;
+            let local_addr = stream.local_addr().map_err(|err| err.to_string())?;
+
+            let stream: Box<dyn super::GrpcEndpoint> = Box::new(TokioIoStream {
+                peer_addr: format!("{peer_addr:?}").into_boxed_str(),
+                local_addr: format!("{local_addr:?}").into_boxed_str(),
+                network_type: UNIX_NETWORK_TYPE,
+                inner: stream,
+            });
             Ok(stream)
         })
     }

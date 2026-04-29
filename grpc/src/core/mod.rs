@@ -101,8 +101,7 @@ impl dyn RecvMessage + '_ {
     }
 }
 
-/// ResponseStreamItem represents an item in a response stream (either server
-/// sending or client receiving).
+/// ResponseStreamItem represents an item in a response stream from the client's view.
 ///
 /// A response stream must always contain items exactly as follows:
 ///
@@ -135,8 +134,6 @@ pub enum ServerResponseStreamItem<'a> {
     Headers(ResponseHeaders),
     /// Indicates a message on the stream.
     Message(&'a dyn SendMessage),
-    /// Indicates trailers were received on the stream and includes the trailers.
-    Trailers(Trailers),
 }
 
 /// Contains all information transmitted in the response headers of an RPC.
