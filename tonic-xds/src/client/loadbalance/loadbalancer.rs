@@ -514,14 +514,15 @@ mod tests {
         assert_eq!(lb.connecting.len(), 1);
         assert_eq!(lb.ready.len(), 0);
 
-        // Resolve the connection — the connecting waker fires and wakes poll_ready.
-        let c = connector.clone();
-        tokio::spawn(async move { c.resolve_all() });
+        // Resolve the connection synchronously.
+        connector.resolve_all();
 
         // Now ready.len() > 0 → poll_ready returns Ready(Ok(())).
-        futures_util::future::poll_fn(|cx| lb.poll_ready(cx))
-            .await
-            .unwrap();
+        let result = poll_ready_now(&mut lb);
+        assert!(
+            matches!(result, Some(Ok(()))),
+            "expected Ready(Ok(())), got {result:?}"
+        );
         assert_eq!(lb.ready.len(), 1);
     }
 
