@@ -101,9 +101,12 @@ pub mod echo_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
+                    let e = e.into();
+                    let mut status = tonic::Status::unknown(
+                        format!("Service was not ready: {}", e),
+                    );
+                    status.set_source(e.into());
+                    status
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
@@ -126,9 +129,12 @@ pub mod echo_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
+                    let e = e.into();
+                    let mut status = tonic::Status::unknown(
+                        format!("Service was not ready: {}", e),
+                    );
+                    status.set_source(e.into());
+                    status
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
@@ -150,9 +156,12 @@ pub mod echo_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
+                    let e = e.into();
+                    let mut status = tonic::Status::unknown(
+                        format!("Service was not ready: {}", e),
+                    );
+                    status.set_source(e.into());
+                    status
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
@@ -177,9 +186,12 @@ pub mod echo_client {
                 .ready()
                 .await
                 .map_err(|e| {
-                    tonic::Status::unknown(
-                        format!("Service was not ready: {}", e.into()),
-                    )
+                    let e = e.into();
+                    let mut status = tonic::Status::unknown(
+                        format!("Service was not ready: {}", e),
+                    );
+                    status.set_source(e.into());
+                    status
                 })?;
             let codec = tonic_prost::ProstCodec::default();
             let path = http::uri::PathAndQuery::from_static(
