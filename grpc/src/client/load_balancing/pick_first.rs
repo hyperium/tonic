@@ -440,6 +440,9 @@ impl LbPolicy for PickFirstPolicy {
             if is_in_pass {
                 self.selected = Some(subchannel.clone());
                 self.connectivity_state = ConnectivityState::Ready;
+                
+                // Keep only the successful subchannel in the list
+                self.subchannels = vec![subchannel.clone()];
 
                 // Cancel timer
                 if let Some(handle) = self.timer_handle.take() {
@@ -761,7 +764,11 @@ mod test {
             )
             .unwrap();
 
-        // Should create subchannel for addr3 (addr1 and addr2 are re-used)
+        // Should create subchannel for addr2 (was cleared by cleanup) and addr3 (new)
+        match rx.recv().unwrap() {
+            TestEvent::NewSubchannel(sc) => assert_eq!(sc.address().address.to_string(), "addr2"),
+            other => panic!("unexpected event {:?}", other),
+        }
         match rx.recv().unwrap() {
             TestEvent::NewSubchannel(sc) => assert_eq!(sc.address().address.to_string(), "addr3"),
             other => panic!("unexpected event {:?}", other),
