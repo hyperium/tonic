@@ -440,7 +440,7 @@ impl LbPolicy for PickFirstPolicy {
             if is_in_pass {
                 self.selected = Some(subchannel.clone());
                 self.connectivity_state = ConnectivityState::Ready;
-                
+
                 // Keep only the successful subchannel in the list
                 self.subchannels = vec![subchannel.clone()];
 
