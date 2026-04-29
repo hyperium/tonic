@@ -88,13 +88,20 @@ where
     }
 
     /// Poll the discovery stream for endpoint changes.
+    /// Returns `Err(LbError::DiscoverClosed)` when the stream is closed (None),
+    /// or `Err(LbError::DiscoverError)` on a discovery error.
     fn poll_discover(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), LbError>> {
         loop {
             match ready!(Pin::new(&mut self.discovery).poll_discover(cx))
                 .transpose()
-                .map_err(|e| LbError::Discover(e.into()))?
+                .map_err(|e| LbError::DiscoverError(e.into()))?
             {
-                None => return Poll::Ready(Ok(())),
+                None => {
+                    // tower::discover::Discover::poll_discover() returns Ready(None) when the
+                    // discover object is closed, as indicated by Stream trait.
+                    tracing::error!("discover object is closed");
+                    return Poll::Ready(Err(LbError::DiscoverClosed));
+                }
                 Some(Change::Insert(addr, idle)) => {
                     tracing::trace!("discovery: insert {addr}");
                     let _ = self.connecting.cancel(&addr);
@@ -135,19 +142,33 @@ where
     type Future = LbFuture<Self::Response>;
 
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        // Discovery errors are logged but don't make the LB unready —
-        // we can still serve from already-connected endpoints.
-        if let Poll::Ready(Err(e)) = self.poll_discover(cx) {
-            tracing::warn!("{e}");
-        }
+        let discover_result = self.poll_discover(cx);
         self.poll_connecting(cx);
 
-        if self.ready.is_empty() {
-            // No ready endpoints yet — stay pending until a connection completes.
-            // The waker is already registered by poll_discover / poll_connecting.
-            return Poll::Pending;
+        if !self.ready.is_empty() {
+            return Poll::Ready(Ok(()));
         }
-        Poll::Ready(Ok(()))
+
+        // No ready endpoints. Check if we should fail fast.
+        match discover_result {
+            Poll::Ready(Err(LbError::DiscoverClosed)) if self.connecting.len() == 0 => {
+                // Discovery is closed and nothing is connecting — no progress is possible.
+                Poll::Ready(Err(LbError::Stagnation))
+            }
+            Poll::Ready(Err(e)) => {
+                // Other discovery errors (or DiscoverClosed with connecting in flight)
+                // are non-fatal — log and stay pending.
+                tracing::warn!("discovery yielded error: {e}");
+                Poll::Pending
+            }
+            _ => {
+                tracing::trace!(
+                    "waiting for connections, inflight={}",
+                    self.connecting.len()
+                );
+                Poll::Pending
+            }
+        }
     }
 
     fn call(&mut self, req: Req) -> Self::Future {
@@ -330,7 +351,9 @@ mod tests {
 
     /// Poll poll_ready once synchronously. Returns `Some(Ok(()))` if ready,
     /// `Some(Err(_))` on error, `None` if pending.
-    fn poll_ready_now(lb: &mut Lb) -> Option<Result<(), LbError>> {
+    fn poll_ready_now<L: Service<&'static str, Error = LbError>>(
+        lb: &mut L,
+    ) -> Option<Result<(), LbError>> {
         futures_util::future::poll_fn(|cx| lb.poll_ready(cx)).now_or_never()
     }
 
@@ -469,6 +492,59 @@ mod tests {
         poll_ready_now(&mut lb).unwrap().unwrap();
         assert_eq!(lb.ready.len(), 1);
         assert!(lb.ready.contains_key(&addr(8080)));
+    }
+
+    /// When discovery is closed, poll_ready behaves based on connecting/ready state:
+    /// - ready.len() > 0 → Ready(Ok(()))
+    /// - ready.len() == 0 && connecting.len() == 0 → Pending forever
+    /// - ready.len() == 0 && connecting.len() > 0 → Pending, but wakes when connecting resolves
+    #[tokio::test]
+    async fn test_poll_ready_with_closed_discovery() {
+        let (tx, discover) = new_discover();
+        let (mut lb, connector) = make_lb(discover);
+
+        // Send an Insert and close the discovery stream.
+        tx.send(Ok(Change::Insert(addr(8080), IdleChannel::new(addr(8080)))))
+            .await
+            .unwrap();
+        drop(tx);
+
+        // poll_discover drains the Insert, then sees Ready(None) (closed) → returns Ready(Ok(())).
+        // ready=0, connecting=1 → Pending. Connecting waker is registered.
+        assert!(poll_ready_now(&mut lb).is_none());
+        assert_eq!(lb.connecting.len(), 1);
+        assert_eq!(lb.ready.len(), 0);
+
+        // Resolve the connection — the connecting waker fires and wakes poll_ready.
+        let c = connector.clone();
+        tokio::spawn(async move { c.resolve_all() });
+
+        // Now ready.len() > 0 → poll_ready returns Ready(Ok(())).
+        futures_util::future::poll_fn(|cx| lb.poll_ready(cx))
+            .await
+            .unwrap();
+        assert_eq!(lb.ready.len(), 1);
+    }
+
+    /// When discovery is closed and there are no connecting futures or ready
+    /// endpoints, poll_ready fails fast with Stagnation rather than hanging.
+    #[tokio::test]
+    async fn test_poll_ready_stagnation_when_closed_and_empty() {
+        let (tx, discover) = new_discover();
+        let (mut lb, _connector) = make_lb(discover);
+
+        // Close discovery without sending any Insert.
+        drop(tx);
+
+        // poll_discover returns Err(DiscoverClosed); ready=0 and connecting=0
+        // → poll_ready fails fast with Stagnation.
+        let result = poll_ready_now(&mut lb).unwrap();
+        assert!(
+            matches!(result, Err(LbError::Stagnation)),
+            "expected Stagnation, got {result:?}"
+        );
+        assert_eq!(lb.connecting.len(), 0);
+        assert_eq!(lb.ready.len(), 0);
     }
 
     // -- call() tests --
