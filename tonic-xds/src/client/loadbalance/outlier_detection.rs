@@ -178,67 +178,34 @@ impl OutlierDetector {
     /// ejection/un-ejection decisions. Pure — does no I/O. The sweep loop
     /// invokes this on each interval tick and forwards the decisions on
     /// the channel; tests call it directly.
+    ///
+    /// The order of operations follows gRFC A50:
+    /// 1. Record the timestamp.
+    /// 2. Swap each address's call-counter buckets.
+    /// 3. Run the success-rate algorithm if configured.
+    /// 4. Run the failure-percentage algorithm if configured.
+    /// 5. For each address: decrement the multiplier of non-ejected
+    ///    addresses with multiplier > 0, and un-eject ejected addresses
+    ///    whose backoff has elapsed.
     pub(crate) fn run_sweep(&self, now: Instant) -> Vec<EjectionDecision> {
         let mut state = self.state.lock().expect("outlier_detector mutex poisoned");
 
-        // Snapshot per-endpoint stats and update ejection-time multiplier
-        // bookkeeping. A50: for each endpoint that received traffic and is
-        // not currently ejected, decrement the multiplier toward zero.
-        let mut snapshots: Vec<(EndpointAddress, u64, u64)> = Vec::with_capacity(state.len());
+        // Step 2: snapshot every endpoint's counters.
+        let mut snapshots: Vec<Candidate> = Vec::with_capacity(state.len());
         for (addr, ep) in state.iter_mut() {
             let (success, failure) = ep.counters.snapshot_and_reset();
-            let total = success + failure;
-            if ep.ejected_at.is_none() && total > 0 {
-                ep.ejection_multiplier = ep.ejection_multiplier.saturating_sub(1);
-            }
-            snapshots.push((addr.clone(), success, failure));
+            snapshots.push(Candidate {
+                addr: addr.clone(),
+                success,
+                failure,
+                total: success + failure,
+            });
         }
 
-        // Un-eject endpoints whose backoff has elapsed. A50:
-        //   actual_duration = min(base * multiplier, max(base, max_ejection_time))
-        let cap = self
-            .config
-            .base_ejection_time
-            .max(self.config.max_ejection_time);
-        let mut to_uneject: Vec<EndpointAddress> = Vec::new();
-        for (addr, ep) in state.iter_mut() {
-            if let Some(at) = ep.ejected_at
-                && let Some(scaled) = self
-                    .config
-                    .base_ejection_time
-                    .checked_mul(ep.ejection_multiplier)
-                && now.duration_since(at) >= scaled.min(cap)
-            {
-                ep.ejected_at = None;
-                to_uneject.push(addr.clone());
-            }
-        }
-
-        // Build candidate list (non-ejected endpoints) once for both
-        // algorithms. A50 wants both algorithms to share the snapshot.
-        // Note: we only build the rate slice; per-algorithm filters
-        // (request_volume, minimum_hosts) are applied below.
-        let candidates: Vec<Candidate> = snapshots
-            .iter()
-            .filter_map(|(addr, success, failure)| {
-                let total = success + failure;
-                let ep = state.get(addr)?;
-                if ep.ejected_at.is_some() {
-                    return None;
-                }
-                Some(Candidate {
-                    addr: addr.clone(),
-                    success: *success,
-                    failure: *failure,
-                    total,
-                })
-            })
-            .collect();
-
-        // Compute the cap on currently-ejected endpoints. A50:
-        //   if ejected_count >= max_ejection_percent of total, stop ejecting.
-        // We compute the cap once and decrement the available budget as
-        // each algorithm ejects.
+        // Compute a cap on the number of new ejections this sweep so we
+        // don't exceed `max_ejection_percent` of the total. Per A50, the
+        // check is performed before each candidate ejection; we model that
+        // as a budget that algorithms decrement.
         let total_endpoints = state.len();
         let max_ejections = (total_endpoints as u64
             * u64::from(self.config.max_ejection_percent.get())
@@ -246,19 +213,50 @@ impl OutlierDetector {
         let already_ejected = state.values().filter(|ep| ep.ejected_at.is_some()).count();
         let mut budget = max_ejections.saturating_sub(already_ejected);
 
+        // Steps 3 & 4: run the algorithms on the snapshot. Hosts that are
+        // currently ejected naturally fail the `request_volume` gate
+        // because they receive no traffic in production, so iterating
+        // every address (per spec) and ejected-only candidates produce
+        // the same outcome on real workloads.
         let mut to_eject: Vec<EndpointAddress> = Vec::new();
 
         if let Some(sr) = self.config.success_rate.as_ref() {
-            self.run_success_rate(sr, &candidates, &mut budget, &mut to_eject);
+            self.run_success_rate(sr, &snapshots, &mut budget, &mut to_eject);
         }
         if let Some(fp) = self.config.failure_percentage.as_ref() {
-            self.run_failure_percentage(fp, &candidates, &mut budget, &mut to_eject);
+            self.run_failure_percentage(fp, &snapshots, &mut budget, &mut to_eject);
         }
 
         for addr in &to_eject {
             if let Some(ep) = state.get_mut(addr) {
                 ep.ejected_at = Some(now);
                 ep.ejection_multiplier = ep.ejection_multiplier.saturating_add(1);
+            }
+        }
+
+        // Step 5: decrement multipliers for non-ejected addresses, and
+        // un-eject any ejected addresses whose backoff has elapsed. This
+        // runs *after* re-ejection, so a same-sweep re-ejection updates
+        // `ejected_at` to `now` and the un-eject check sees zero elapsed
+        // time — no spurious uneject decision is emitted.
+        let cap = self
+            .config
+            .base_ejection_time
+            .max(self.config.max_ejection_time);
+        let mut to_uneject: Vec<EndpointAddress> = Vec::new();
+        for (addr, ep) in state.iter_mut() {
+            if let Some(at) = ep.ejected_at {
+                if let Some(scaled) = self
+                    .config
+                    .base_ejection_time
+                    .checked_mul(ep.ejection_multiplier)
+                    && now.duration_since(at) >= scaled.min(cap)
+                {
+                    ep.ejected_at = None;
+                    to_uneject.push(addr.clone());
+                }
+            } else if ep.ejection_multiplier > 0 {
+                ep.ejection_multiplier -= 1;
             }
         }
 
@@ -338,9 +336,11 @@ impl OutlierDetector {
             if *budget == 0 {
                 break;
             }
-            // failure_pct = 100 * failure / total
+            // failure_pct = 100 * failure / total. A50 specifies a strict
+            // "greater than" comparison: an address sitting exactly at
+            // the threshold is not ejected.
             let failure_pct = 100 * c.failure / c.total;
-            if failure_pct >= threshold && self.roll(cfg.enforcing_failure_percentage.get()) {
+            if failure_pct > threshold && self.roll(cfg.enforcing_failure_percentage.get()) {
                 out.push(c.addr.clone());
                 *budget -= 1;
             }
@@ -546,6 +546,24 @@ mod tests {
     }
 
     #[test]
+    fn failure_percentage_at_threshold_does_not_eject() {
+        // A50 specifies a strict "greater than" comparison: an address
+        // sitting exactly at the threshold should *not* be ejected.
+        let detector = detector_no_loop(fp_config(50, 10, 3), FixedRng::boxed(0));
+        for port in 8080..=8084 {
+            let h = detector.add_endpoint(addr(port));
+            // Exactly 50% failure rate — equal to the threshold.
+            for _ in 0..50 {
+                h.record_success();
+            }
+            for _ in 0..50 {
+                h.record_failure();
+            }
+        }
+        assert!(detector.run_sweep(Instant::now()).is_empty());
+    }
+
+    #[test]
     fn minimum_hosts_gates_failure_percentage() {
         let detector = detector_no_loop(fp_config(50, 10, 5), FixedRng::boxed(99));
         // Only 2 hosts have request_volume ≥ 10; minimum_hosts is 5 ⇒ skip.
@@ -730,14 +748,14 @@ mod tests {
             bad_h.record_failure();
         }
 
-        // Sweep 2 at t0+10: same-sweep un-eject + re-eject.
-        // Multiplier stays 1 through un-eject, then 1 → 2 on re-eject.
+        // Sweep 2 at t0+10: re-ejection happens before the un-eject
+        // housekeeping step (per A50 ordering), so `ejected_at` is
+        // refreshed to `now` and the un-eject check sees zero elapsed
+        // time. Only an Eject decision is emitted; the multiplier moves
+        // 1 → 2.
         assert_eq!(
             detector.run_sweep(t0 + Duration::from_secs(10)),
-            vec![
-                EjectionDecision::Uneject(bad.clone()),
-                EjectionDecision::Eject(bad.clone()),
-            ],
+            vec![EjectionDecision::Eject(bad.clone())],
         );
 
         // Re-ejection started at t0+10 with multiplier=2 → duration 20s.
@@ -808,6 +826,23 @@ mod tests {
         }
         // Healthy interval (some traffic, no ejection).
         h.record_success();
+        detector.run_sweep(Instant::now());
+        let state = detector.state.lock().unwrap();
+        assert_eq!(state.get(&addr(8080)).unwrap().ejection_multiplier, 2);
+    }
+
+    #[test]
+    fn multiplier_decrements_even_without_traffic() {
+        // A50: a non-ejected address with multiplier > 0 has its
+        // multiplier decremented every sweep, regardless of whether it
+        // received any RPCs that interval.
+        let detector = detector_no_loop(base_config(), FixedRng::boxed(99));
+        detector.add_endpoint(addr(8080));
+        {
+            let mut state = detector.state.lock().unwrap();
+            state.get_mut(&addr(8080)).unwrap().ejection_multiplier = 3;
+        }
+        // No traffic recorded.
         detector.run_sweep(Instant::now());
         let state = detector.state.lock().unwrap();
         assert_eq!(state.get(&addr(8080)).unwrap().ejection_multiplier, 2);
