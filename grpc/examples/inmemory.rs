@@ -188,7 +188,7 @@ async fn run_rpc(chan: &Channel) -> String {
         let mut res = MyResMessage::default();
         match rx.next(&mut res).await {
             ClientResponseStreamItem::Headers(_) => continue,
-            ClientResponseStreamItem::Message(_) => {
+            ClientResponseStreamItem::Message => {
                 println!("CALL RESPONSE: {}", res.0);
                 if let Some(id) = res
                     .0
