@@ -1,13 +1,20 @@
 //! gRFC A50 outlier-detection sweep engine.
 //!
 //! Owns per-endpoint counters and an ejection state machine. Periodically
-//! reads the counters, runs the success-rate and failure-percentage
-//! ejection algorithms, and emits [`EjectionDecision`]s. Knows nothing
-//! about the data path: callers feed it RPC outcomes via the lock-free
-//! [`EndpointCounters`] handle returned by [`OutlierDetector::add_endpoint`],
-//! and consume decisions from a channel returned by [`OutlierDetector::spawn`].
+//! reads the counters, runs the failure-percentage ejection algorithm,
+//! and emits [`EjectionDecision`]s. Knows nothing about the data path:
+//! callers feed it RPC outcomes via the lock-free [`EndpointCounters`]
+//! handle returned by [`OutlierDetector::add_endpoint`], and consume
+//! decisions from a channel returned by [`OutlierDetector::spawn`].
+//!
+//! Only the **failure-percentage** algorithm is implemented in this
+//! module. The success-rate algorithm — which adds float-math (mean
+//! and standard deviation across the qualifying hosts) — lands in a
+//! follow-up PR. If [`OutlierDetectionConfig::success_rate`] is set,
+//! it is currently ignored.
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
+//! [`OutlierDetectionConfig::success_rate`]: crate::xds::resource::outlier_detection::OutlierDetectionConfig::success_rate
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -19,9 +26,7 @@ use tokio::sync::mpsc;
 
 use crate::client::endpoint::EndpointAddress;
 use crate::common::async_util::AbortOnDrop;
-use crate::xds::resource::outlier_detection::{
-    FailurePercentageConfig, OutlierDetectionConfig, SuccessRateConfig,
-};
+use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDetectionConfig};
 
 /// Lock-free per-endpoint success/failure counter handle.
 ///
@@ -218,11 +223,11 @@ impl OutlierDetector {
         // because they receive no traffic in production, so iterating
         // every address (per spec) and ejected-only candidates produce
         // the same outcome on real workloads.
+        //
+        // Step 3 (`success_rate_ejection`) is intentionally not yet
+        // dispatched in this PR; it lands in a follow-up.
         let mut to_eject: Vec<EndpointAddress> = Vec::new();
 
-        if let Some(sr) = self.config.success_rate.as_ref() {
-            self.run_success_rate(sr, &snapshots, &mut budget, &mut to_eject);
-        }
         if let Some(fp) = self.config.failure_percentage.as_ref() {
             self.run_failure_percentage(fp, &snapshots, &mut budget, &mut to_eject);
         }
@@ -272,48 +277,6 @@ impl OutlierDetector {
         decisions
     }
 
-    /// A50 success-rate algorithm.
-    fn run_success_rate(
-        &self,
-        cfg: &SuccessRateConfig,
-        all: &[Candidate],
-        budget: &mut usize,
-        out: &mut Vec<EndpointAddress>,
-    ) {
-        // Filter to candidates with enough traffic.
-        let qualifying: Vec<&Candidate> = all
-            .iter()
-            .filter(|c| c.total >= u64::from(cfg.request_volume))
-            .collect();
-        if qualifying.len() < cfg.minimum_hosts as usize {
-            return;
-        }
-
-        // success_rate = success / total (in [0.0, 1.0]).
-        let rates: Vec<f64> = qualifying
-            .iter()
-            .map(|c| c.success as f64 / c.total as f64)
-            .collect();
-        let n = rates.len() as f64;
-        let mean = rates.iter().sum::<f64>() / n;
-        let variance = rates.iter().map(|r| (r - mean).powi(2)).sum::<f64>() / n;
-        let stdev = variance.sqrt();
-
-        // threshold = mean - stdev * (stdev_factor / 1000)
-        let factor = f64::from(cfg.stdev_factor) / 1000.0;
-        let threshold = mean - stdev * factor;
-
-        for (c, rate) in qualifying.iter().zip(rates.iter()) {
-            if *budget == 0 {
-                break;
-            }
-            if *rate < threshold && self.roll(cfg.enforcing_success_rate.get()) {
-                out.push(c.addr.clone());
-                *budget -= 1;
-            }
-        }
-    }
-
     /// A50 failure-percentage algorithm.
     fn run_failure_percentage(
         &self,
@@ -325,7 +288,6 @@ impl OutlierDetector {
         let qualifying: Vec<&Candidate> = all
             .iter()
             .filter(|c| c.total >= u64::from(cfg.request_volume))
-            .filter(|c| !out.contains(&c.addr)) // skip endpoints already ejected this sweep
             .collect();
         if qualifying.len() < cfg.minimum_hosts as usize {
             return;
@@ -607,62 +569,6 @@ mod tests {
         for port in 8080..=8084 {
             let h = detector.add_endpoint(addr(port));
             for _ in 0..100 {
-                h.record_failure();
-            }
-        }
-        assert!(detector.run_sweep(Instant::now()).is_empty());
-    }
-
-    // ----- Success-rate algorithm -----
-
-    fn sr_config(
-        stdev_factor: u32,
-        request_volume: u32,
-        minimum_hosts: u32,
-    ) -> OutlierDetectionConfig {
-        let mut c = base_config();
-        c.success_rate = Some(SuccessRateConfig {
-            stdev_factor,
-            enforcing_success_rate: pct(100),
-            minimum_hosts,
-            request_volume,
-        });
-        c
-    }
-
-    #[test]
-    fn success_rate_ejects_outlier_below_threshold() {
-        let detector = detector_no_loop(sr_config(1900, 10, 5), FixedRng::boxed(99));
-        // 4 endpoints at 99% success, 1 at 50% — outlier.
-        for port in 8080..=8083 {
-            let h = detector.add_endpoint(addr(port));
-            for _ in 0..99 {
-                h.record_success();
-            }
-            h.record_failure();
-        }
-        let bad = detector.add_endpoint(addr(8084));
-        for _ in 0..50 {
-            bad.record_success();
-        }
-        for _ in 0..50 {
-            bad.record_failure();
-        }
-        assert_eq!(
-            detector.run_sweep(Instant::now()),
-            vec![EjectionDecision::Eject(addr(8084))],
-        );
-    }
-
-    #[test]
-    fn success_rate_no_ejection_when_all_uniform() {
-        let detector = detector_no_loop(sr_config(1900, 10, 5), FixedRng::boxed(99));
-        for port in 8080..=8084 {
-            let h = detector.add_endpoint(addr(port));
-            for _ in 0..95 {
-                h.record_success();
-            }
-            for _ in 0..5 {
                 h.record_failure();
             }
         }
