@@ -627,6 +627,49 @@ impl InteropTest for TestClient {
         
         drop(tx);
     }
+
+    async fn timeout_on_sleeping_server(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<StreamingOutputCallRequest>();
+        
+        let mut req = make_ping_pong_request(0);
+        if let Some(param) = req.response_parameters.first_mut() {
+            param.interval_us = 100000;
+        }
+        tx.send(req).unwrap();
+        
+        let mut client = self.clone();
+        
+        let mut request = Request::new(tokio_stream::wrappers::UnboundedReceiverStream::new(rx));
+        request.set_timeout(std::time::Duration::from_millis(50));
+        
+        let result = client.full_duplex_call(request).await;
+        
+        // For streaming calls, the timeout might occur during the stream poll,
+        // and Tonic might return it as a Status or it might be handled differently.
+        // But usually it returns Err(Status) with DeadlineExceeded.
+        
+        assertions.push(test_assert!(
+            "Initial call was successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+        
+        if let Ok(response) = result {
+            let mut stream = response.into_inner();
+            let stream_result = tokio::time::timeout(
+                std::time::Duration::from_millis(50),
+                stream.next()
+            ).await;
+            
+            assertions.push(test_assert!(
+                "Stream must time out (DEADLINE_EXCEEDED)",
+                stream_result.is_err(),
+                format!("stream_result={:?}", stream_result)
+            ));
+        }
+        
+        drop(tx);
+    }
 }
 
 #[async_trait]

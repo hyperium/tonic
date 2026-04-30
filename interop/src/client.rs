@@ -32,6 +32,8 @@ pub trait InteropTest: Send {
     async fn cancel_after_begin(&mut self, assertions: &mut Vec<TestAssertion>);
 
     async fn cancel_after_first_response(&mut self, assertions: &mut Vec<TestAssertion>);
+
+    async fn timeout_on_sleeping_server(&mut self, assertions: &mut Vec<TestAssertion>);
 }
 
 #[async_trait]

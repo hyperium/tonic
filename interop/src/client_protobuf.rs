@@ -491,6 +491,14 @@ impl InteropTest for TestClient {
             "Not implemented".to_string()
         ));
     }
+
+    async fn timeout_on_sleeping_server(&mut self, assertions: &mut Vec<TestAssertion>) {
+        assertions.push(test_assert!(
+            "timeout_on_sleeping_server is implemented for protobuf client",
+            false,
+            "Not implemented".to_string()
+        ));
+    }
 }
 
 #[async_trait]
