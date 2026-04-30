@@ -34,6 +34,8 @@ transport-tonic = [
     "dep:tokio-stream",
     "dep:http",
 ]
+tonic-tls-ring = ["transport-tonic", "tonic/tls-ring"]
+tonic-tls-aws-lc = ["transport-tonic", "tonic/tls-aws-lc"]
 rt-tokio = ["tokio/rt", "tokio/time"]
 codegen-prost = ["dep:envoy-types", "dep:prost"]
 test-util = []
@@ -44,7 +46,7 @@ tokio = { version = "1", features = [
     "macros",
     "net",
 ] }
-tonic = { version = "0.14", features = ["tls-ring"] }
+tonic = { version = "0.14" }
 async-stream = "0.3"
 envoy-types = "0.7"
 prost = "0.14"
@@ -52,6 +54,7 @@ prost = "0.14"
 [[example]]
 name = "basic"
 path = "examples/basic.rs"
+required-features = ["tonic-tls-ring"]
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [

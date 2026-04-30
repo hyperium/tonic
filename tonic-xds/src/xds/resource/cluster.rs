@@ -61,6 +61,11 @@ impl Resource for ClusterResource {
             }
         };
 
+        // TODO(PR2/A29): Parse transport_socket → UpstreamTlsContext from the Cluster
+        // message. Extract CertificateProviderPluginInstance references (root + identity),
+        // SAN matchers, and require_client_certificate. NACK if validation_context
+        // is missing or uses unsupported fields per A29 field processing rules.
+
         Ok(ClusterResource {
             name,
             eds_service_name,

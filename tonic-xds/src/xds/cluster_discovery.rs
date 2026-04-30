@@ -49,8 +49,14 @@ impl ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>> for XdsClusterD
 /// Default connector that creates a lazily-connected [`EndpointChannel`] for
 /// each endpoint address.
 ///
-/// Uses insecure (plaintext) connections. TLS support will be added as part
-/// of gRFC A29.
+/// Uses insecure (plaintext) connections.
+// TODO(PR2/A29): Replace this with a TLS-aware connector that receives the
+// CertProviderRegistry and per-cluster UpstreamTlsContext (from ClusterResource).
+// When a cluster has transport_socket configured, the connector should:
+//   1. Look up root + identity cert provider instances from the registry
+//   2. Build ClientTlsConfig with the fetched CertificateData
+//   3. Apply SAN matching for server authorization
+//   4. Use connect() instead of connect_lazy() for TLS handshake
 pub(crate) fn default_endpoint_connector(addr: &EndpointAddress) -> EndpointChannel<Channel> {
     let uri = format!("http://{addr}");
     // Safety: EndpointAddress only holds validated Ipv4/Ipv6/Hostname + u16 port,

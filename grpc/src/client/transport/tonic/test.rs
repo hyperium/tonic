@@ -75,7 +75,7 @@ use crate::credentials::common::Authority;
 use crate::credentials::rustls::RootCertificates;
 use crate::credentials::rustls::StaticProvider;
 use crate::credentials::rustls::client::ClientTlsConfig;
-use crate::credentials::rustls::client::RustlsClientTlsCredendials;
+use crate::credentials::rustls::client::RustlsChannelCredendials;
 use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
@@ -221,10 +221,6 @@ pub(crate) async fn tonic_transport_rpc() {
 
 #[tokio::test]
 async fn grpc_invoke_tonic_unary() {
-    // Register DNS & Tonic.
-    super::reg();
-    crate::client::name_resolution::dns::reg();
-
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shutdown_notify = Arc::new(Notify::new());
@@ -265,6 +261,134 @@ async fn grpc_invoke_tonic_unary() {
     server_handle.await.unwrap();
 }
 
+#[cfg(unix)]
+mod unix_tests {
+    use std::path::Component;
+    use std::path::Path;
+
+    use tempfile::tempdir;
+    use tokio::net::UnixListener;
+    use tokio_stream::wrappers::UnixListenerStream;
+
+    use super::*;
+
+    async fn run_unix_test(bind_path: &PathBuf, target: &str) {
+        let listener = UnixListener::bind(bind_path).unwrap();
+
+        let channel = Channel::new(
+            target,
+            LocalChannelCredentials::new_arc(),
+            Default::default(),
+        );
+
+        let shutdown_notify = Arc::new(Notify::new());
+        let shutdown_notify_copy = shutdown_notify.clone();
+
+        let server_handle = tokio::spawn(async move {
+            let echo_server = EchoService {};
+            let svc = EchoServer::new(echo_server);
+            let _ = Server::builder()
+                .add_service(svc)
+                .serve_with_incoming_shutdown(
+                    UnixListenerStream::new(listener),
+                    shutdown_notify_copy.notified(),
+                )
+                .await;
+        });
+
+        let payload = "hello unix";
+        let (_, resp, trailers) = perform_unary_echo(&channel, payload).await;
+        assert_eq!(resp.message, payload);
+        assert_eq!(trailers.status().code(), StatusCode::Ok);
+
+        shutdown_notify.notify_one();
+        server_handle.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn unix_absolute_path() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let socket_path = dir.path().join("absolute.sock");
+        let target = format!("unix://{}", socket_path.to_str().unwrap());
+
+        run_unix_test(&socket_path, &target).await;
+    }
+
+    #[tokio::test]
+    async fn unix_relative_path() {
+        let dir = tempdir().expect("failed to create temp dir");
+        let socket_name = "relative.sock";
+        let socket_path = dir.path().join(socket_name);
+
+        // We calculate the socket file's path relative to the current
+        // directory to avoid changing the working directory and interfering
+        // with other tests.
+        let current_dir = std::env::current_dir().expect("failed to fetch current directory");
+        let relative_path = get_relative_path(&socket_path, &current_dir).unwrap();
+        let target = format!("unix:{}", relative_path.display());
+
+        run_unix_test(&socket_path, &target).await;
+
+        std::env::set_current_dir(current_dir).unwrap();
+    }
+
+    #[cfg(target_os = "linux")]
+    #[tokio::test]
+    async fn unix_abstract_socket() {
+        let abstract_path = format!("grpc-test-abstract-socket-{}", rand::random::<u64>());
+        let bind_path = format!("\0{}", abstract_path);
+        let target = format!("unix-abstract:{}", abstract_path);
+
+        run_unix_test(&PathBuf::from(bind_path), &target).await;
+    }
+
+    /// Calculates the relative path from a `base` directory to a `target` path.
+    ///
+    /// Both paths should be absolute. This operation is infallible on Unix
+    /// systems due to the presence of a single root directory.
+    fn get_relative_path(target: &Path, base: &Path) -> Result<PathBuf, String> {
+        let mut target_components = target.components();
+        let mut base_components = base.components();
+
+        // Find the common prefix between the two paths.
+        let mut common_components = 0;
+        loop {
+            match (
+                target_components.clone().next(),
+                base_components.clone().next(),
+            ) {
+                (Some(t), Some(b)) if t == b => {
+                    target_components.next();
+                    base_components.next();
+                    common_components += 1;
+                }
+                _ => break,
+            }
+        }
+
+        // If they share absolutely nothing (e.g., C:\ vs D:\ on Windows), we can't
+        // make it relative.
+        if common_components == 0 {
+            return Err("no common ancestor".to_owned());
+        }
+
+        let mut relative_path = PathBuf::new();
+
+        // For every component left in the base path, we need to go up one directory
+        // ("..").
+        for _ in base_components {
+            relative_path.push(Component::ParentDir);
+        }
+
+        // Append the remaining components of the target path.
+        for component in target_components {
+            relative_path.push(component);
+        }
+
+        Ok(relative_path)
+    }
+}
+
 static INIT: Once = Once::new();
 
 fn init_provider() {
@@ -276,9 +400,6 @@ fn init_provider() {
 #[tokio::test]
 async fn grpc_invoke_tonic_unary_tls() {
     init_provider();
-    // Register DNS & Tonic.
-    super::reg();
-    crate::client::name_resolution::dns::reg();
 
     let certs_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .parent()
@@ -316,7 +437,7 @@ async fn grpc_invoke_tonic_unary_tls() {
     let root_certs = RootCertificates::from_pem(ca_cert);
     let root_provider = StaticProvider::new(root_certs);
     let config = ClientTlsConfig::new().with_root_certificates_provider(root_provider);
-    let creds = RustlsClientTlsCredendials::new(config).unwrap();
+    let creds = RustlsChannelCredendials::new(config).unwrap();
     let call_creds = Arc::new(MockCallCredentials {
         metadata: vec![("x-test-metadata", "test-value")],
         min_security_level: SecurityLevel::PrivacyAndIntegrity,
@@ -347,9 +468,6 @@ async fn grpc_invoke_tonic_unary_tls() {
 
 #[tokio::test]
 async fn grpc_invoke_failure_cases() {
-    super::reg();
-    crate::client::name_resolution::dns::reg();
-
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
     let shutdown_notify = Arc::new(Notify::new());
