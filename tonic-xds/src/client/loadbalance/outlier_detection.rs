@@ -28,6 +28,22 @@ use crate::client::endpoint::EndpointAddress;
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDetectionConfig};
 
+/// Capacity of the bounded mpsc channel that carries ejection decisions
+/// from the sweep loop to the consumer.
+///
+/// Decisions are edge-triggered (`Eject`/`Uneject` transitions, not
+/// state snapshots), so the consumer must process every event in order
+/// to stay in sync with the detector. We therefore can't drop or
+/// coalesce — but we don't want unbounded growth either if the consumer
+/// stalls. With sweep cadence on the order of seconds and at most
+/// `2 * num_endpoints` decisions per sweep, 256 buffers several sweeps'
+/// worth of decisions for clusters of typical size. When the buffer
+/// fills, `tx.send().await` parks the sweep task, which naturally
+/// throttles sweep cadence to whatever rate the consumer can drain —
+/// the right behavior, since computing more decisions than the consumer
+/// can apply just widens the desync.
+const DECISIONS_CHANNEL_CAPACITY: usize = 256;
+
 /// Lock-free per-endpoint success/failure counter handle.
 ///
 /// Cloned freely. Callers (typically a request-outcome interceptor)
@@ -128,11 +144,7 @@ impl OutlierDetector {
     /// [`AbortOnDrop`] is dropped.
     pub(crate) fn spawn(
         config: OutlierDetectionConfig,
-    ) -> (
-        Arc<Self>,
-        mpsc::UnboundedReceiver<EjectionDecision>,
-        AbortOnDrop,
-    ) {
+    ) -> (Arc<Self>, mpsc::Receiver<EjectionDecision>, AbortOnDrop) {
         Self::spawn_with_rng(config, Box::new(FastRandRng))
     }
 
@@ -140,12 +152,8 @@ impl OutlierDetector {
     pub(crate) fn spawn_with_rng(
         config: OutlierDetectionConfig,
         rng: Box<dyn Rng>,
-    ) -> (
-        Arc<Self>,
-        mpsc::UnboundedReceiver<EjectionDecision>,
-        AbortOnDrop,
-    ) {
-        let (tx, rx) = mpsc::unbounded_channel();
+    ) -> (Arc<Self>, mpsc::Receiver<EjectionDecision>, AbortOnDrop) {
+        let (tx, rx) = mpsc::channel(DECISIONS_CHANNEL_CAPACITY);
         let detector = Arc::new(Self {
             config,
             state: Mutex::new(HashMap::new()),
@@ -333,7 +341,11 @@ struct Candidate {
 /// forwards each decision on the channel. The task ends (and `tx` is
 /// dropped, closing the receiver) when [`AbortOnDrop`] is dropped or
 /// when the receiver itself is dropped.
-async fn sweep_loop(detector: Arc<OutlierDetector>, tx: mpsc::UnboundedSender<EjectionDecision>) {
+///
+/// `tx.send().await` is fallible (returns `Err` if the receiver was
+/// dropped) and may park briefly when the channel is full — see
+/// [`DECISIONS_CHANNEL_CAPACITY`].
+async fn sweep_loop(detector: Arc<OutlierDetector>, tx: mpsc::Sender<EjectionDecision>) {
     let mut ticker = tokio::time::interval(detector.config.interval);
     // Skip missed ticks rather than burst-catching up — the goal is
     // periodic observation, not making up for paused time.
@@ -345,7 +357,7 @@ async fn sweep_loop(detector: Arc<OutlierDetector>, tx: mpsc::UnboundedSender<Ej
     loop {
         ticker.tick().await;
         for decision in detector.run_sweep(Instant::now()) {
-            if tx.send(decision).is_err() {
+            if tx.send(decision).await.is_err() {
                 // Receiver gone — nobody is listening.
                 return;
             }
