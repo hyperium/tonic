@@ -24,6 +24,8 @@ pub trait InteropTest: Send {
     async fn custom_metadata(&mut self, assertions: &mut Vec<TestAssertion>);
 
     async fn cacheable_unary(&mut self, assertions: &mut Vec<TestAssertion>);
+
+    async fn client_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>);
 }
 
 #[async_trait]

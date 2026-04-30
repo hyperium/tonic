@@ -130,6 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match test_case {
             Testcase::EmptyUnary => client.empty_unary(&mut test_results).await,
             Testcase::CacheableUnary => client.cacheable_unary(&mut test_results).await,
+            Testcase::ClientCompressedUnary => client.client_compressed_unary(&mut test_results).await,
             Testcase::LargeUnary => client.large_unary(&mut test_results).await,
             Testcase::ClientStreaming => client.client_streaming(&mut test_results).await,
             Testcase::ServerStreaming => client.server_streaming(&mut test_results).await,

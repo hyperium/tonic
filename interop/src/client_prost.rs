@@ -432,6 +432,64 @@ impl InteropTest for TestClient {
             ));
         }
     }
+
+    async fn client_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>) {
+        // 1. Probe
+        let req = SimpleRequest {
+            expect_compressed: Some(crate::pb::BoolValue { value: true }),
+            response_size: LARGE_RSP_SIZE,
+            payload: Some(crate::client_payload(LARGE_REQ_SIZE)),
+            ..Default::default()
+        };
+        let result = self.unary_call(Request::new(req.clone())).await;
+        assertions.push(test_assert!(
+            "First call failed with INVALID_ARGUMENT status",
+            match &result {
+                Err(status) => status.code() == Code::InvalidArgument,
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+
+        // 2. Compressed
+        let mut compressed_client = self.clone().send_compressed(tonic::codec::CompressionEncoding::Gzip);
+        let result = compressed_client.unary_call(Request::new(req.clone())).await;
+        assertions.push(test_assert!(
+            "Second call (compressed) must be successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+        if let Ok(response) = result {
+            let body = response.into_inner();
+            assertions.push(test_assert!(
+                "response payload body is 314159 bytes in size",
+                body.payload.as_ref().map_or(0, |p| p.body.len()) == LARGE_RSP_SIZE as usize,
+                format!("body.payload.len={:?}", body.payload.as_ref().map(|p| p.body.len()))
+            ));
+        }
+
+        // 3. Uncompressed
+        let req = SimpleRequest {
+            expect_compressed: Some(crate::pb::BoolValue { value: false }),
+            response_size: LARGE_RSP_SIZE,
+            payload: Some(crate::client_payload(LARGE_REQ_SIZE)),
+            ..Default::default()
+        };
+        let result = self.unary_call(Request::new(req)).await;
+        assertions.push(test_assert!(
+            "Third call (uncompressed) must be successful",
+            result.is_ok(),
+            format!("result={:?}", result)
+        ));
+        if let Ok(response) = result {
+            let body = response.into_inner();
+            assertions.push(test_assert!(
+                "response payload body is 314159 bytes in size",
+                body.payload.as_ref().map_or(0, |p| p.body.len()) == LARGE_RSP_SIZE as usize,
+                format!("body.payload.len={:?}", body.payload.as_ref().map(|p| p.body.len()))
+            ));
+        }
+    }
 }
 
 #[async_trait]

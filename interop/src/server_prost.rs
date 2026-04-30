@@ -29,7 +29,19 @@ impl pb::test_service_server::TestService for TestService {
     }
 
     async fn unary_call(&self, request: Request<SimpleRequest>) -> Result<SimpleResponse> {
+        let is_compressed = request.metadata().get("grpc-encoding")
+            == Some(&tonic::metadata::MetadataValue::from_static("gzip"));
+        
         let req = request.into_inner();
+
+        if let Some(expect_compressed) = req.expect_compressed {
+            if expect_compressed.value && !is_compressed {
+                return Err(Status::new(
+                    Code::InvalidArgument,
+                    "Requested compression but message was not compressed",
+                ));
+            }
+        }
 
         if let Some(echo_status) = req.response_status {
             let status = Status::new(Code::from_i32(echo_status.code), echo_status.message);
