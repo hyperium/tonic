@@ -473,12 +473,11 @@ impl Status {
             None => Ok(String::new()),
         };
 
-        let details = match header_map.get(Self::GRPC_STATUS_DETAILS) {
+        let details_result = match header_map.get(Self::GRPC_STATUS_DETAILS) {
             Some(header) => crate::util::base64::STANDARD
                 .decode(header.as_bytes())
-                .expect("Invalid status header, expected base64 encoded value")
-                .into(),
-            None => Bytes::new(),
+                .map(Bytes::from),
+            None => Ok(Bytes::new()),
         };
 
         let other_headers = {
@@ -489,12 +488,17 @@ impl Status {
             header_map
         };
 
-        let (code, message) = match error_message {
-            Ok(message) => (code, message),
-            Err(e) => {
+        let (code, message, details) = match (error_message, details_result) {
+            (Ok(msg), Ok(det)) => (code, msg, det),
+            (Err(e), _) => {
                 let error_message = format!("Error deserializing status message header: {e}");
                 warn!(error_message);
-                (Code::Unknown, error_message)
+                (Code::Unknown, error_message, Bytes::new())
+            }
+            (Ok(_msg), Err(e)) => {
+                let error_message = format!("Error deserializing status details header: {e}");
+                warn!(error_message);
+                (Code::Internal, error_message, Bytes::new())
             }
         };
 
@@ -1076,6 +1080,26 @@ mod tests {
         let status = Status::from_header_map(&header_map).unwrap();
 
         assert_eq!(status.details(), DETAILS);
+    }
+
+    #[test]
+    fn details_invalid_base64() {
+        let mut header_map = HeaderMap::new();
+        header_map.insert(Status::GRPC_STATUS, HeaderValue::from_static("14")); // Unavailable
+        header_map.insert(
+            Status::GRPC_STATUS_DETAILS,
+            HeaderValue::from_static("invalid base64!"),
+        );
+
+        let status = Status::from_header_map(&header_map).unwrap();
+
+        assert_eq!(status.code(), Code::Internal);
+        assert!(
+            status
+                .message()
+                .contains("Error deserializing status details header")
+        );
+        assert!(status.details().is_empty());
     }
 }
 
