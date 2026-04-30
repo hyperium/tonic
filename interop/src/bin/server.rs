@@ -59,7 +59,8 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
         Codec::Prost => {
             let test_service =
                 server_prost::TestServiceServer::new(server_prost::TestService::default())
-                    .accept_compressed(tonic::codec::CompressionEncoding::Gzip);
+                    .accept_compressed(tonic::codec::CompressionEncoding::Gzip)
+                    .send_compressed(tonic::codec::CompressionEncoding::Gzip);
             let unimplemented_service = server_prost::UnimplementedServiceServer::new(
                 server_prost::UnimplementedService::default(),
             );

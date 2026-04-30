@@ -26,6 +26,8 @@ pub trait InteropTest: Send {
     async fn cacheable_unary(&mut self, assertions: &mut Vec<TestAssertion>);
 
     async fn client_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>);
+
+    async fn server_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>);
 }
 
 #[async_trait]

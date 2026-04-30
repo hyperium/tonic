@@ -63,7 +63,12 @@ impl pb::test_service_server::TestService for TestService {
             ..Default::default()
         };
 
-        Ok(Response::new(res))
+        let mut response = Response::new(res);
+        let compress = req.response_compressed.map_or(false, |v| v.value);
+        if !compress {
+            response.disable_compression();
+        }
+        Ok(response)
     }
 
     async fn cacheable_unary_call(&self, request: Request<SimpleRequest>) -> Result<SimpleResponse> {
