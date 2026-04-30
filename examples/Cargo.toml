@@ -254,7 +254,7 @@ path = "src/codec_buffers/client.rs"
 [[bin]]
 name = "grpc-routeguide-client"
 path = "src/grpc-routeguide/client.rs"
-required-features = ["grpc-routeguide"]
+required-features = ["grpc"]
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls-ring"]
@@ -275,10 +275,9 @@ tls-client-auth = ["tonic/tls-ring"]
 types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
-grpc-routeguide = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf"]
-
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c"]
 tower = ["dep:tower", "dep:http"]
+grpc = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c"]
 default = ["full"]
 
 [dependencies]
@@ -317,4 +316,3 @@ grpc = { path = "../grpc", optional = true }
 
 [build-dependencies]
 tonic-prost-build = { path = "../tonic-prost-build" }
-grpc-protobuf-build = { path = "../grpc-protobuf-build" }
