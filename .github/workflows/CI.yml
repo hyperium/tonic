@@ -192,6 +192,32 @@ jobs:
     steps:
     - uses: actions/checkout@v6
     - uses: hecrj/setup-rust-action@v2
+    - name: Restore protoc and plugin from cache
+      id: cache-plugin
+      uses: actions/cache@v4
+      with:
+        path: ${{ runner.temp }}/protoc-plugin
+        key: ${{ runner.os }}-protoc-plugin-cmake-v4-${{ hashFiles('protoc-gen-rust-grpc/src/**', 'protoc-gen-rust-grpc/CMakeLists.txt', 'protoc-gen-rust-grpc/cmake/**') }}
+    - name: Add protoc and plugin to PATH
+      shell: bash
+      run: |
+        # Use forward slashes for all paths in bash, even on Windows
+        PROTOC_DIR="${{ runner.temp }}/protoc-plugin"
+        PROTOC_DIR="${PROTOC_DIR//\\/\/}"  # Convert backslashes to forward slashes
+
+        echo "${PROTOC_DIR}" >> $GITHUB_PATH
+
+        # Also set PROTOC for build scripts
+        if [ "${{ runner.os }}" = "Windows" ]; then
+          echo "PROTOC=${PROTOC_DIR}/protoc.exe" >> $GITHUB_ENV
+        else
+          echo "PROTOC=${PROTOC_DIR}/protoc" >> $GITHUB_ENV
+        fi
+
+        # Set the protoc include path only if it exists
+        if [ -d "${PROTOC_DIR}/include" ]; then
+          echo "PROTOC_INCLUDE=${PROTOC_DIR}/include" >> $GITHUB_ENV
+        fi
     - uses: Swatinem/rust-cache@v2
     - run: cargo run --package codegen
     - run: git diff --exit-code
