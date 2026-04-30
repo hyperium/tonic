@@ -576,6 +576,57 @@ impl InteropTest for TestClient {
         // Suppress unused variable warning for tx
         drop(tx);
     }
+
+    async fn cancel_after_first_response(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<StreamingOutputCallRequest>();
+        tx.send(make_ping_pong_request(0)).unwrap();
+        
+        let (signal_tx, mut signal_rx) = tokio::sync::mpsc::channel(1);
+        
+        let mut client = self.clone();
+        
+        let handle = tokio::spawn(async move {
+            let response = client.full_duplex_call(Request::new(
+                tokio_stream::wrappers::UnboundedReceiverStream::new(rx)
+            )).await?;
+            let mut stream = response.into_inner();
+            let first_msg = stream.next().await;
+            
+            // Notify outside
+            signal_tx.send(first_msg).await.unwrap();
+            
+            // Wait forever to be cancelled
+            std::future::pending::<()>().await;
+            
+            Ok::<_, Status>(())
+        });
+        
+        // Wait for signal
+        let first_msg = signal_rx.recv().await;
+        
+        let success = matches!(&first_msg, Some(Some(Ok(_))));
+        assertions.push(test_assert!(
+            "Received first response",
+            success,
+            format!("first_msg={:?}", first_msg)
+        ));
+        
+        // Cancel the task
+        handle.abort();
+        
+        let result = handle.await;
+        
+        assertions.push(test_assert!(
+            "Call must be cancelled",
+            match &result {
+                Err(e) => e.is_cancelled(),
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+        
+        drop(tx);
+    }
 }
 
 #[async_trait]

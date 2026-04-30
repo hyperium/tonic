@@ -483,6 +483,14 @@ impl InteropTest for TestClient {
             "Not implemented".to_string()
         ));
     }
+
+    async fn cancel_after_first_response(&mut self, assertions: &mut Vec<TestAssertion>) {
+        assertions.push(test_assert!(
+            "cancel_after_first_response is implemented for protobuf client",
+            false,
+            "Not implemented".to_string()
+        ));
+    }
 }
 
 #[async_trait]

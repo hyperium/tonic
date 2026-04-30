@@ -151,6 +151,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
             Testcase::CustomMetadata => client.custom_metadata(&mut test_results).await,
             Testcase::CancelAfterBegin => client.cancel_after_begin(&mut test_results).await,
+            Testcase::CancelAfterFirstResponse => client.cancel_after_first_response(&mut test_results).await,
             _ => unimplemented!(),
         }
 
