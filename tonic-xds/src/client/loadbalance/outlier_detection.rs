@@ -131,7 +131,7 @@ impl OutlierDetector {
         Self::spawn_with_rng(config, Box::new(FastRandRng))
     }
 
-    /// Variant of [`spawn`] that accepts an injected [`Rng`].
+    /// Variant of [`Self::spawn`] that accepts an injected [`Rng`].
     pub(crate) fn spawn_with_rng(
         config: OutlierDetectionConfig,
         rng: Box<dyn Rng>,
