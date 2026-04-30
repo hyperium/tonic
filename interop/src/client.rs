@@ -28,6 +28,8 @@ pub trait InteropTest: Send {
     async fn client_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>);
 
     async fn server_compressed_unary(&mut self, assertions: &mut Vec<TestAssertion>);
+
+    async fn cancel_after_begin(&mut self, assertions: &mut Vec<TestAssertion>);
 }
 
 #[async_trait]

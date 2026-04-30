@@ -549,6 +549,33 @@ impl InteropTest for TestClient {
             ));
         }
     }
+
+    async fn cancel_after_begin(&mut self, assertions: &mut Vec<TestAssertion>) {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<StreamingInputCallRequest>();
+        let stream = tokio_stream::wrappers::UnboundedReceiverStream::new(rx);
+        
+        let mut client = self.clone();
+        
+        let handle = tokio::spawn(async move {
+            client.streaming_input_call(Request::new(stream)).await
+        });
+        
+        handle.abort();
+        
+        let result = handle.await;
+        
+        assertions.push(test_assert!(
+            "Call must be cancelled",
+            match &result {
+                Err(e) => e.is_cancelled(),
+                _ => false,
+            },
+            format!("result={:?}", result)
+        ));
+        
+        // Suppress unused variable warning for tx
+        drop(tx);
+    }
 }
 
 #[async_trait]
