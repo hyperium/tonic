@@ -50,6 +50,7 @@ use crate::client::name_resolution::Address;
 use crate::client::name_resolution::Endpoint;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::core::RequestHeaders;
+use crate::rt::BoxedTaskHandle;
 use crate::rt::GrpcRuntime;
 
 pub(crate) static POLICY_NAME: &str = "pick_first";
@@ -120,7 +121,7 @@ pub(crate) struct PickFirstPolicy {
 
     // Timer state tracks when the last connect attempt was started.
     timer_expired: Arc<AtomicBool>,
-    timer_handle: Option<tokio::task::JoinHandle<()>>,
+    timer_handle: Option<BoxedTaskHandle>,
 
     // Steady state tracking for continuous retries after pass exhaustion.
     steady_state: Option<SteadyState>,
@@ -248,13 +249,14 @@ impl PickFirstPolicy {
         let timer_expired = self.timer_expired.clone();
         let work_scheduler = self.work_scheduler.clone();
 
-        let handle = tokio::spawn(async move {
-            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        let sleep_fut = self.runtime.sleep(std::time::Duration::from_millis(250));
+        let handle = self.runtime.spawn(Box::pin(async move {
+            sleep_fut.await;
             timer_expired.store(true, Ordering::SeqCst);
             work_scheduler.schedule_work();
-        });
+        }));
         self.timer_handle = Some(handle);
-    }
+    }O
 
     // Converts the update endpoints to an address list.
     // Shuffles endpoints (if enabled) before flattening and de-duplication.
