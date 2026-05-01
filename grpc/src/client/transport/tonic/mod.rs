@@ -273,7 +273,7 @@ impl RecvStream for TonicRecvStream {
                     Ok(()) => {
                         // More messages may remain in the stream; set receiver again.
                         self.state = StreamState::Streaming(stream);
-                        ClientResponseStreamItem::Message(())
+                        ClientResponseStreamItem::Message
                     }
                     // TODO: in this case, tonic believes the stream is still
                     // running, but our decoding failed -- do we need to terminate

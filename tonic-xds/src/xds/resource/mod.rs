@@ -13,6 +13,7 @@
 pub(crate) mod cluster;
 pub(crate) mod endpoints;
 pub(crate) mod listener;
+pub(crate) mod outlier_detection;
 pub(crate) mod route_config;
 
 pub(crate) use cluster::ClusterResource;

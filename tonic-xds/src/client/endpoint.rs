@@ -170,3 +170,22 @@ pub(crate) trait Connector {
         addr: &EndpointAddress,
     ) -> crate::common::async_util::BoxFuture<Self::Service>;
 }
+
+/// Factory for creating per-cluster [`Connector`]s.
+///
+/// The implementation can use the cluster name to look up cluster-specific
+/// config (e.g., TLS settings from xDS CDS, cert providers from A29).
+///
+/// Both `Service` and `Connector` are exposed as associated types so callers
+/// can reference `MC::Service` directly without chaining through
+/// `<MC::Connector as Connector>::Service`.
+#[allow(dead_code)]
+pub(crate) trait MakeConnector: Send + Sync + 'static {
+    /// The service type produced by the connector.
+    type Service;
+    /// The connector type produced for each cluster.
+    type Connector: Connector<Service = Self::Service>;
+
+    /// Create a connector for the given cluster.
+    fn make_connector(&self, cluster_name: &str) -> std::sync::Arc<Self::Connector>;
+}

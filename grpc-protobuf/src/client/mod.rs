@@ -144,7 +144,7 @@ where
         // 2. If we receive Trailers, we will only ever receive StreamClosed.
         match i {
             ClientResponseStreamItem::Headers(_) => unreachable!(),
-            ClientResponseStreamItem::Message(_) => Ok(()),
+            ClientResponseStreamItem::Message => Ok(()),
             ClientResponseStreamItem::Trailers(trailers) => {
                 self.status = Some(trailers.into_status());
                 Err(())

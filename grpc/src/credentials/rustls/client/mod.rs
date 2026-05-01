@@ -121,15 +121,16 @@ impl Default for ClientTlsConfig {
     }
 }
 
+/// TLS channel credentials based on Rustls.
 #[derive(Clone)]
-pub struct RustlsClientTlsCredendials {
+pub struct RustlsChannelCredendials {
     connector: TlsConnector,
 }
 
-impl RustlsClientTlsCredendials {
+impl RustlsChannelCredendials {
     /// Constructs a new `ClientTlsCredendials` instance from the provided
     /// configuration.
-    pub fn new(config: ClientTlsConfig) -> Result<RustlsClientTlsCredendials, String> {
+    pub fn new(config: ClientTlsConfig) -> Result<RustlsChannelCredendials, String> {
         let provider = if let Some(p) = CryptoProvider::get_default() {
             p.as_ref().clone()
         } else {
@@ -145,7 +146,7 @@ impl RustlsClientTlsCredendials {
     fn new_impl(
         mut config: ClientTlsConfig,
         provider: CryptoProvider,
-    ) -> Result<RustlsClientTlsCredendials, String> {
+    ) -> Result<RustlsChannelCredendials, String> {
         let provider = sanitize_crypto_provider(provider)?;
         let builder = rustls::ClientConfig::builder_with_provider(Arc::new(provider))
             .with_protocol_versions(&[&rustls::version::TLS13, &rustls::version::TLS12])
@@ -184,7 +185,7 @@ impl RustlsClientTlsCredendials {
             client_config.key_log = Arc::new(KeyLogFile::new(&path))
         }
 
-        Ok(RustlsClientTlsCredendials {
+        Ok(RustlsChannelCredendials {
             connector: TlsConnector::from(Arc::new(client_config)),
         })
     }
@@ -215,7 +216,7 @@ impl ClientConnectionSecurityContext for ClientTlsSecContext {
     }
 }
 
-impl ChannelCredentials for RustlsClientTlsCredendials {
+impl ChannelCredentials for RustlsChannelCredendials {
     type ContextType = ClientTlsSecContext;
     type Output<I> = TlsStream<I>;
 

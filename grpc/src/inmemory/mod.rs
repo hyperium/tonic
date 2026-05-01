@@ -35,6 +35,8 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
+use crate::Status;
+use crate::StatusCode;
 use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream as ClientDynRecvStream;
@@ -85,6 +87,7 @@ struct InMemoryServerCall {
     headers: RequestHeaders,
     req_rx: mpsc::UnboundedReceiver<InMemoryRequestStreamItem>,
     resp_tx: mpsc::UnboundedSender<InMemoryResponseStreamItem>,
+    trailer_tx: oneshot::Sender<Trailers>,
 }
 
 enum InMemoryRequestStreamItem {
@@ -95,8 +98,6 @@ enum InMemoryRequestStreamItem {
 enum InMemoryResponseStreamItem {
     Headers(ResponseHeaders),
     Message(Box<dyn Buf + Send + Sync>),
-    Trailers(Trailers),
-    StreamClosed,
 }
 
 #[derive(Clone)]
@@ -179,6 +180,7 @@ impl ServerListener for InMemoryListener {
                     headers: call.headers,
                     send: InMemoryServerSendStream { tx: call.resp_tx },
                     recv: InMemoryServerRecvStream { rx: call.req_rx },
+                    trailers_tx: call.trailer_tx,
                 })
             }
             _ = self.inner.close_notify.notified() => {
@@ -204,7 +206,6 @@ impl ServerSendStream for InMemoryServerSendStream {
                 let buf = m.encode().map_err(|_| ())?;
                 InMemoryResponseStreamItem::Message(buf)
             }
-            ServerResponseStreamItem::Trailers(t) => InMemoryResponseStreamItem::Trailers(t),
         };
 
         self.tx.send(inmemory_item).map_err(|_| ())
@@ -246,18 +247,23 @@ impl Invoke for InMemoryConnection {
     ) -> (Self::SendStream, Self::RecvStream) {
         let (req_tx, req_rx) = mpsc::unbounded_channel::<InMemoryRequestStreamItem>();
         let (resp_tx, resp_rx) = mpsc::unbounded_channel::<InMemoryResponseStreamItem>();
+        let (trailer_tx, trailer_rx) = oneshot::channel();
 
         let call = InMemoryServerCall {
             headers,
             req_rx,
             resp_tx,
+            trailer_tx,
         };
 
-        let _ = self.s.try_send(call);
+        let _ = self.s.send(call).await;
 
         (
             Box::new(InMemoryClientSendStream { tx: Some(req_tx) }),
-            Box::new(InMemoryClientRecvStream { rx: resp_rx }),
+            Box::new(InMemoryClientRecvStream {
+                rx: resp_rx,
+                trailer_rx: Some(trailer_rx),
+            }),
         )
     }
 }
@@ -299,6 +305,7 @@ impl Drop for InMemoryClientSendStream {
 
 pub struct InMemoryClientRecvStream {
     rx: mpsc::UnboundedReceiver<InMemoryResponseStreamItem>,
+    trailer_rx: Option<oneshot::Receiver<Trailers>>,
 }
 
 impl ClientRecvStream for InMemoryClientRecvStream {
@@ -307,10 +314,22 @@ impl ClientRecvStream for InMemoryClientRecvStream {
             Some(InMemoryResponseStreamItem::Headers(h)) => ClientResponseStreamItem::Headers(h),
             Some(InMemoryResponseStreamItem::Message(mut buf)) => {
                 msg.decode(&mut buf).unwrap();
-                ClientResponseStreamItem::Message(())
+                ClientResponseStreamItem::Message
             }
-            Some(InMemoryResponseStreamItem::Trailers(t)) => ClientResponseStreamItem::Trailers(t),
-            _ => ClientResponseStreamItem::StreamClosed,
+            _ => {
+                if let Some(trailer_rx) = self.trailer_rx.take() {
+                    match trailer_rx.await {
+                        Ok(trailers) => return ClientResponseStreamItem::Trailers(trailers),
+                        Err(_) => {
+                            return ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
+                                StatusCode::Internal,
+                                "stream ended without trailers in in-memory transport",
+                            )));
+                        }
+                    }
+                }
+                ClientResponseStreamItem::StreamClosed
+            }
         }
     }
 }
@@ -421,4 +440,49 @@ impl Resolver for InMemoryResolver {
 pub fn reg() {
     GLOBAL_TRANSPORT_REGISTRY.add_transport("inmemory", InMemoryTransport {});
     global_resolver_registry().add_builder(Box::new(InMemoryResolverBuilder {}));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::RecvMessage;
+    use bytes::Buf;
+
+    struct NopRecvMessage;
+    impl RecvMessage for NopRecvMessage {
+        fn decode(&mut self, _data: &mut dyn Buf) -> Result<(), String> {
+            Ok(())
+        }
+    }
+
+    #[tokio::test]
+    async fn test_in_memory_recv_stream_missing_trailers() {
+        let (tx, rx) = tokio::sync::mpsc::unbounded_channel::<InMemoryResponseStreamItem>();
+        // Drop sender immediately so rx returns None
+        drop(tx);
+
+        let (trailer_tx, trailer_rx) = tokio::sync::oneshot::channel::<Trailers>();
+        // Drop trailer_tx without sending to simulate failure
+        drop(trailer_tx);
+
+        let mut stream = InMemoryClientRecvStream {
+            rx,
+            trailer_rx: Some(trailer_rx),
+        };
+
+        let mut msg = NopRecvMessage;
+        let item = stream.next(&mut msg).await;
+
+        match item {
+            ClientResponseStreamItem::Trailers(t) => {
+                assert_eq!(t.status().code(), crate::StatusCode::Internal);
+                assert!(
+                    t.status()
+                        .message()
+                        .contains("stream ended without trailers")
+                );
+            }
+            _ => panic!("expected trailers with error, got {:?}", item),
+        }
+    }
 }
