@@ -45,8 +45,8 @@ use tonic::metadata::MetadataMap;
 use tonic::transport::Server;
 use tonic_prost::prost::Message as ProstMessage;
 
-use crate::Status;
 use crate::StatusCode;
+use crate::StatusErr;
 use crate::client::CallOptions;
 use crate::client::Channel;
 use crate::client::Invoke as _;
@@ -87,7 +87,7 @@ use crate::rt::tokio::TokioRuntime;
 struct MockCallCredentials {
     metadata: Vec<(&'static str, &'static str)>,
     min_security_level: SecurityLevel,
-    should_fail: Option<crate::Status>,
+    should_fail: Option<crate::StatusErr>,
 }
 
 #[async_trait]
@@ -97,7 +97,7 @@ impl CallCredentials for MockCallCredentials {
         _call_details: &CallDetails,
         _auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
-    ) -> Result<(), crate::Status> {
+    ) -> Result<(), crate::StatusErr> {
         if let Some(status) = &self.should_fail {
             return Err(status.clone());
         }
@@ -250,9 +250,8 @@ async fn grpc_invoke_tonic_unary() {
     let (_, resp, trailers) = perform_unary_echo(&channel, "hello interop").await;
     assert_eq!(resp.message, "hello interop");
 
-    assert_eq!(
-        trailers.status().code(),
-        StatusCode::Ok,
+    assert!(
+        trailers.status().is_ok(),
         "RPC failed: {:?}",
         trailers.status()
     );
@@ -299,7 +298,7 @@ mod unix_tests {
         let payload = "hello unix";
         let (_, resp, trailers) = perform_unary_echo(&channel, payload).await;
         assert_eq!(resp.message, payload);
-        assert_eq!(trailers.status().code(), StatusCode::Ok);
+        assert!(trailers.status().is_ok());
 
         shutdown_notify.notify_one();
         server_handle.await.unwrap();
@@ -455,9 +454,8 @@ async fn grpc_invoke_tonic_unary_tls() {
     );
     assert_eq!(resp.message, "hello interop tls");
 
-    assert_eq!(
-        trilers.status().code(),
-        StatusCode::Ok,
+    assert!(
+        trilers.status().is_ok(),
         "RPC failed: {:?}",
         trilers.status()
     );
@@ -500,7 +498,10 @@ async fn grpc_invoke_failure_cases() {
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
-        assert_eq!(trailers.status().code(), StatusCode::Unauthenticated);
+        assert_eq!(
+            trailers.status().as_ref().unwrap_err().code(),
+            StatusCode::Unauthenticated
+        );
     }
 
     // Call credentials return error
@@ -509,7 +510,7 @@ async fn grpc_invoke_failure_cases() {
         let call_creds = Arc::new(MockCallCredentials {
             metadata: vec![],
             min_security_level: SecurityLevel::NoSecurity,
-            should_fail: Some(crate::Status::new(
+            should_fail: Some(crate::StatusErr::new(
                 StatusCode::PermissionDenied,
                 "test message",
             )),
@@ -518,8 +519,18 @@ async fn grpc_invoke_failure_cases() {
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
-        assert_eq!(trailers.status().code(), StatusCode::PermissionDenied);
-        assert!(trailers.status().message().contains("test message"));
+        assert_eq!(
+            trailers.status().as_ref().unwrap_err().code(),
+            StatusCode::PermissionDenied
+        );
+        assert!(
+            trailers
+                .status()
+                .as_ref()
+                .unwrap_err()
+                .message()
+                .contains("test message")
+        );
     }
 
     // Call credentials return restricted control plane code (mapped to Internal)
@@ -528,14 +539,24 @@ async fn grpc_invoke_failure_cases() {
         let call_creds = Arc::new(MockCallCredentials {
             metadata: vec![],
             min_security_level: SecurityLevel::NoSecurity,
-            should_fail: Some(Status::new(StatusCode::InvalidArgument, "test message")),
+            should_fail: Some(StatusErr::new(StatusCode::InvalidArgument, "test message")),
         });
         let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
 
         let trailers = perform_unary_echo_failure(&channel).await;
-        assert_eq!(trailers.status().code(), StatusCode::Internal);
-        assert!(trailers.status().message().contains("test message"));
+        assert_eq!(
+            trailers.status().as_ref().unwrap_err().code(),
+            StatusCode::Internal
+        );
+        assert!(
+            trailers
+                .status()
+                .as_ref()
+                .unwrap_err()
+                .message()
+                .contains("test message")
+        );
     }
 
     shutdown_notify.notify_one();

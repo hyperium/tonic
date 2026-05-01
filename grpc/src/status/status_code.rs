@@ -26,7 +26,6 @@
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
 pub enum StatusCode {
-    Ok = 0,
     Cancelled = 1,
     Unknown = 2,
     InvalidArgument = 3,
@@ -48,7 +47,6 @@ pub enum StatusCode {
 impl From<i32> for StatusCode {
     fn from(i: i32) -> Self {
         match i {
-            0 => StatusCode::Ok,
             1 => StatusCode::Cancelled,
             2 => StatusCode::Unknown,
             3 => StatusCode::InvalidArgument,

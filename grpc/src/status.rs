@@ -25,31 +25,39 @@
 mod server_status;
 mod status_code;
 
-pub use server_status::ServerStatus;
+pub use server_status::ServerStatusErr;
 pub use status_code::StatusCode;
+
+/// Represents either a failing gRPC status or a successful result containing
+/// `T`.
+pub type StatusOr<T> = Result<T, StatusErr>;
+
+/// The representation of a gRPC status.  OK statuses may not contain a status
+/// message, while error values may.
+pub type Status = StatusOr<()>;
 
 /// Represents a gRPC status.
 #[derive(Debug, Clone)]
-pub struct Status {
+pub struct StatusErr {
     code: StatusCode,
     message: String,
 }
 
-impl Status {
-    /// Create a new `Status` with the given code and message.
+impl StatusErr {
+    /// Create a new `StatusErr` with the given code and message.
     pub fn new(code: StatusCode, message: impl Into<String>) -> Self {
-        Status {
+        StatusErr {
             code,
             message: message.into(),
         }
     }
 
-    /// Get the `StatusCode` of this `Status`.
+    /// Get the `StatusCode` of this `StatusErr`.
     pub fn code(&self) -> StatusCode {
         self.code
     }
 
-    /// Get the message of this `Status`.
+    /// Get the message of this `StatusErr`.
     pub fn message(&self) -> &str {
         &self.message
     }
@@ -76,17 +84,17 @@ mod tests {
 
     #[test]
     fn test_status_new() {
-        let status = Status::new(StatusCode::Ok, "ok");
-        assert_eq!(status.code(), StatusCode::Ok);
-        assert_eq!(status.message(), "ok");
+        let status = StatusErr::new(StatusCode::NotFound, "not ok");
+        assert_eq!(status.code(), StatusCode::NotFound);
+        assert_eq!(status.message(), "not ok");
     }
 
     #[test]
     fn test_status_debug() {
-        let status = Status::new(StatusCode::Ok, "ok");
+        let status = StatusErr::new(StatusCode::Cancelled, "not ok");
         let debug = format!("{:?}", status);
         assert!(debug.contains("Status"));
-        assert!(debug.contains("Ok"));
-        assert!(debug.contains("ok"));
+        assert!(debug.contains("Cancelled"));
+        assert!(debug.contains("not ok"));
     }
 }

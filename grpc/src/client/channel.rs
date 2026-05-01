@@ -37,8 +37,8 @@ use tokio::sync::mpsc;
 use tokio::sync::watch;
 use url::Url; // NOTE: http::Uri requires non-empty authority portion of URI
 
-use crate::Status;
 use crate::StatusCode;
+use crate::StatusErr;
 use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::ConnectivityState;
@@ -380,7 +380,7 @@ impl Invoke for Arc<ActiveChannel> {
         let mut i = self.lb_watcher.iter();
         loop {
             let Some(state) = i.next().await else {
-                return FailingRecvStream::new_stream_pair(Status::new(
+                return FailingRecvStream::new_stream_pair(StatusErr::new(
                     StatusCode::Internal,
                     "channel has been closed",
                 ));

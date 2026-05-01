@@ -29,8 +29,8 @@ use std::hash::Hasher;
 use std::sync::Arc;
 use std::sync::Mutex;
 
-use crate::Status;
 use crate::StatusCode;
+use crate::StatusErr;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::LbPolicy;
 use crate::client::load_balancing::LbState;
@@ -268,7 +268,7 @@ impl Picker for UnwrapPicker {
         match result {
             PickResult::Pick(mut pick) => {
                 let Some(subchannel) = pick.subchannel.downcast_ref::<SharedSubchannel>() else {
-                    return PickResult::Fail(Status::new(
+                    return PickResult::Fail(StatusErr::new(
                         StatusCode::Internal,
                         format!(
                             "received unexpected subchannel type: {:?}",

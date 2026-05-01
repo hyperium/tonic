@@ -35,8 +35,8 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
-use crate::Status;
 use crate::StatusCode;
+use crate::StatusErr;
 use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream as ClientDynRecvStream;
@@ -321,9 +321,11 @@ impl ClientRecvStream for InMemoryClientRecvStream {
                     match trailer_rx.await {
                         Ok(trailers) => return ClientResponseStreamItem::Trailers(trailers),
                         Err(_) => {
-                            return ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                                StatusCode::Internal,
-                                "stream ended without trailers in in-memory transport",
+                            return ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                                StatusErr::new(
+                                    StatusCode::Internal,
+                                    "stream ended without trailers in in-memory transport",
+                                ),
                             )));
                         }
                     }
@@ -444,9 +446,10 @@ pub fn reg() {
 
 #[cfg(test)]
 mod tests {
+    use bytes::Buf;
+
     use super::*;
     use crate::core::RecvMessage;
-    use bytes::Buf;
 
     struct NopRecvMessage;
     impl RecvMessage for NopRecvMessage {
@@ -475,9 +478,14 @@ mod tests {
 
         match item {
             ClientResponseStreamItem::Trailers(t) => {
-                assert_eq!(t.status().code(), crate::StatusCode::Internal);
+                assert_eq!(
+                    t.status().as_ref().unwrap_err().code(),
+                    crate::StatusCode::Internal
+                );
                 assert!(
                     t.status()
+                        .as_ref()
+                        .unwrap_err()
                         .message()
                         .contains("stream ended without trailers")
                 );

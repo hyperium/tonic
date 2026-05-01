@@ -50,7 +50,7 @@ async fn list_features<T: Invoke>(client: &RouteGuideClient<T>, rect: Rectangle)
 
     // Confirm the status.
     let status = response_stream.status().await;
-    assert_eq!(status.code(), grpc::StatusCode::Ok, "{:?}", status);
+    assert!(status.is_ok(), "{:?}", status);
 }
 
 async fn record_route<T: Invoke>(client: &RouteGuideClient<T>) {
@@ -152,16 +152,16 @@ async fn route_chat<T: Invoke>(client: &RouteGuideClient<T>) {
 
     // Confirm the status.
     let status = rx.status().await;
-    assert_eq!(status.code(), grpc::StatusCode::Ok, "{:?}", status);
+    assert!(status.is_ok(), "{:?}", status);
 }
 
 fn random_point() -> Point {
     let latitude = (rand::random_range(0..180) - 90) * 10_000_000;
     let longitude = (rand::random_range(0..360) - 180) * 10_000_000;
-    return proto!(Point {
+    proto!(Point {
         latitude,
         longitude
-    });
+    })
 }
 
 #[tokio::main]

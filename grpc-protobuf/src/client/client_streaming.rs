@@ -26,7 +26,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 
 use grpc::Status;
-use grpc::StatusCode;
+use grpc::StatusOr;
 use grpc::client::CallOptions;
 use grpc::client::InvokeOnce;
 use grpc::client::RecvStream;
@@ -173,13 +173,9 @@ where
         }
     }
 
-    pub async fn close_and_recv(self) -> Result<Res, Status> {
+    pub async fn close_and_recv(self) -> StatusOr<Res> {
         let mut res = Res::default();
-        let status = self.with_response_message(&mut res).await;
-        if status.code() == StatusCode::Ok {
-            Ok(res)
-        } else {
-            Err(status)
-        }
+        self.with_response_message(&mut res).await?;
+        Ok(res)
     }
 }

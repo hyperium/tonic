@@ -256,8 +256,8 @@ mod test {
     use tokio::task;
 
     use super::*;
-    use crate::Status;
     use crate::StatusCode;
+    use crate::StatusErr;
     use crate::client::CallOptions;
     use crate::client::Invoke;
     use crate::client::RecvStream;
@@ -405,9 +405,9 @@ mod test {
             .unwrap();
         assert_eq!(controller.recv_req().await.0, one);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(StatusCode::Internal, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusErr::new(StatusCode::Internal, ""),
+            ))))
             .await;
         let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
         assert_eq!(controller.recv_req().await.0, one);
@@ -416,22 +416,20 @@ mod test {
             .unwrap();
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(StatusCode::Internal, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusErr::new(StatusCode::Internal, ""),
+            ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(StatusCode::Ok, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Ok(()))))
             .await;
         let resp = handle.await.unwrap();
         let ClientResponseStreamItem::Trailers(trailers) = resp else {
             panic!("unexpected resp: {resp:?}");
         };
-        assert_eq!(trailers.status().code(), StatusCode::Ok);
+        assert!(trailers.status().is_ok());
     }
 
     // Tests that a a retry interceptor retries cached send operations but fails
@@ -450,9 +448,9 @@ mod test {
             .unwrap();
         assert_eq!(controller.recv_req().await.0, one);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(crate::StatusCode::Internal, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusErr::new(crate::StatusCode::Internal, ""),
+            ))))
             .await;
         let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
         assert_eq!(controller.recv_req().await.0, one);
@@ -461,29 +459,32 @@ mod test {
             .unwrap();
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(crate::StatusCode::Internal, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusErr::new(crate::StatusCode::Internal, ""),
+            ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(crate::StatusCode::Internal, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusErr::new(crate::StatusCode::Internal, ""),
+            ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(crate::StatusCode::Internal, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusErr::new(crate::StatusCode::Internal, ""),
+            ))))
             .await;
         let resp = handle.await.unwrap();
         let ClientResponseStreamItem::Trailers(trailers) = resp else {
             panic!("unexpected resp: {resp:?}");
         };
-        assert_eq!(trailers.status().code(), crate::StatusCode::Internal);
+        assert_eq!(
+            trailers.status().as_ref().unwrap_err().code(),
+            crate::StatusCode::Internal
+        );
     }
 
     // Tests that a a retry interceptor doesn't retry cached operations after
@@ -508,16 +509,19 @@ mod test {
         assert!(matches!(resp, ClientResponseStreamItem::Headers(_)));
 
         controller
-            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(crate::StatusCode::Internal, ""),
-            )))
+            .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusErr::new(crate::StatusCode::Internal, ""),
+            ))))
             .await;
 
         let resp = rx.next(&mut ByteRecvMsg::new()).await;
         let ClientResponseStreamItem::Trailers(trailers) = resp else {
             panic!("unexpected resp: {resp:?}");
         };
-        assert_eq!(trailers.status().code(), crate::StatusCode::Internal);
+        assert_eq!(
+            trailers.status().as_ref().unwrap_err().code(),
+            crate::StatusCode::Internal
+        );
     }
 
     /// An Invoke impl that can be controlled via its paired
@@ -692,7 +696,7 @@ mod test {
     // if it is any error status.  Any other response will commit the RPC.
     fn should_retry(i: &ClientResponseStreamItem) -> bool {
         if let ClientResponseStreamItem::Trailers(t) = &i {
-            t.status().code() != StatusCode::Ok
+            t.status().is_err()
         } else {
             false
         }
