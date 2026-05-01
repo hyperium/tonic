@@ -28,8 +28,8 @@ use crate::client::endpoint::EndpointAddress;
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDetectionConfig};
 
-/// Capacity of the bounded mpsc channel that carries ejection decisions
-/// from the sweep loop to the consumer.
+/// Default capacity of the bounded mpsc channel that carries ejection
+/// decisions from the sweep loop to the consumer.
 ///
 /// Decisions are edge-triggered (`Eject`/`Uneject` transitions, not
 /// state snapshots), so the consumer must process every event in order
@@ -42,7 +42,11 @@ use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDe
 /// throttles sweep cadence to whatever rate the consumer can drain —
 /// the right behavior, since computing more decisions than the consumer
 /// can apply just widens the desync.
-const DECISIONS_CHANNEL_CAPACITY: usize = 256;
+///
+/// Override via [`OutlierDetectorOptions::decisions_channel_capacity`]
+/// for clusters with very large endpoint sets or unusually slow
+/// consumers.
+pub(crate) const DEFAULT_DECISIONS_CHANNEL_CAPACITY: usize = 256;
 
 /// Lock-free per-endpoint success/failure counter handle.
 ///
@@ -122,6 +126,44 @@ impl EndpointState {
     }
 }
 
+/// Runtime knobs that don't come from the xDS config (`OutlierDetection`
+/// proto) — the channel capacity, the RNG, etc. Kept separate from
+/// [`OutlierDetectionConfig`] so xDS-derived state stays distinct from
+/// host-side runtime tuning.
+///
+/// New fields can be added without breaking call sites because callers
+/// typically construct via `..Default::default()`.
+pub(crate) struct OutlierDetectorOptions {
+    /// Capacity of the bounded mpsc channel that carries
+    /// [`EjectionDecision`]s from the sweep loop to the consumer.
+    /// See [`DEFAULT_DECISIONS_CHANNEL_CAPACITY`] for the rationale.
+    pub decisions_channel_capacity: usize,
+    /// Probability source for the `enforcing_*` rolls. Tests inject a
+    /// deterministic [`Rng`]; production uses `fastrand`.
+    pub rng: Box<dyn Rng>,
+}
+
+impl Default for OutlierDetectorOptions {
+    fn default() -> Self {
+        Self {
+            decisions_channel_capacity: DEFAULT_DECISIONS_CHANNEL_CAPACITY,
+            rng: Box::new(FastRandRng),
+        }
+    }
+}
+
+impl std::fmt::Debug for OutlierDetectorOptions {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("OutlierDetectorOptions")
+            .field(
+                "decisions_channel_capacity",
+                &self.decisions_channel_capacity,
+            )
+            .field("rng", &"<dyn Rng>")
+            .finish()
+    }
+}
+
 /// gRFC A50 outlier detector.
 ///
 /// `run_sweep` is pure — it returns a list of [`EjectionDecision`]s
@@ -139,25 +181,25 @@ pub(crate) struct OutlierDetector {
 }
 
 impl OutlierDetector {
-    /// Build the detector and spawn its sweep task on the current Tokio
-    /// runtime. The sweep runs every `config.interval` until the returned
-    /// [`AbortOnDrop`] is dropped.
+    /// Build the detector with default runtime options and spawn its
+    /// sweep task on the current Tokio runtime. The sweep runs every
+    /// `config.interval` until the returned [`AbortOnDrop`] is dropped.
     pub(crate) fn spawn(
         config: OutlierDetectionConfig,
     ) -> (Arc<Self>, mpsc::Receiver<EjectionDecision>, AbortOnDrop) {
-        Self::spawn_with_rng(config, Box::new(FastRandRng))
+        Self::spawn_with(config, OutlierDetectorOptions::default())
     }
 
-    /// Variant of [`Self::spawn`] that accepts an injected [`Rng`].
-    pub(crate) fn spawn_with_rng(
+    /// Variant of [`Self::spawn`] that accepts custom runtime options.
+    pub(crate) fn spawn_with(
         config: OutlierDetectionConfig,
-        rng: Box<dyn Rng>,
+        options: OutlierDetectorOptions,
     ) -> (Arc<Self>, mpsc::Receiver<EjectionDecision>, AbortOnDrop) {
-        let (tx, rx) = mpsc::channel(DECISIONS_CHANNEL_CAPACITY);
+        let (tx, rx) = mpsc::channel(options.decisions_channel_capacity);
         let detector = Arc::new(Self {
             config,
             state: Mutex::new(HashMap::new()),
-            rng,
+            rng: options.rng,
         });
         let task = tokio::spawn(sweep_loop(detector.clone(), tx));
         (detector, rx, AbortOnDrop(task))
@@ -772,8 +814,13 @@ mod tests {
     async fn sweep_loop_emits_decisions_on_tick() {
         let mut config = fp_config(50, 10, 3);
         config.interval = Duration::from_millis(100);
-        let (detector, mut rx, _abort) =
-            OutlierDetector::spawn_with_rng(config, FixedRng::boxed(99));
+        let (detector, mut rx, _abort) = OutlierDetector::spawn_with(
+            config,
+            OutlierDetectorOptions {
+                rng: FixedRng::boxed(99),
+                ..Default::default()
+            },
+        );
 
         for port in 8080..=8083 {
             let h = detector.add_endpoint(addr(port));
