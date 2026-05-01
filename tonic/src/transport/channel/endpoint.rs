@@ -49,6 +49,7 @@ pub struct Endpoint {
     pub(crate) http2_keep_alive_interval: Option<Duration>,
     pub(crate) http2_keep_alive_timeout: Option<Duration>,
     pub(crate) http2_keep_alive_while_idle: Option<bool>,
+    pub(crate) http2_header_table_size: Option<u32>,
     pub(crate) http2_max_header_list_size: Option<u32>,
     pub(crate) connect_timeout: Option<Duration>,
     pub(crate) http2_adaptive_window: Option<bool>,
@@ -96,6 +97,7 @@ impl Endpoint {
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
+            http2_header_table_size: None,
             http2_max_header_list_size: None,
             connect_timeout: None,
             http2_adaptive_window: None,
@@ -125,6 +127,7 @@ impl Endpoint {
             http2_keep_alive_interval: None,
             http2_keep_alive_timeout: None,
             http2_keep_alive_while_idle: None,
+            http2_header_table_size: None,
             http2_max_header_list_size: None,
             connect_timeout: None,
             http2_adaptive_window: None,
@@ -454,6 +457,19 @@ impl Endpoint {
     pub fn http2_adaptive_window(self, enabled: bool) -> Self {
         Endpoint {
             http2_adaptive_window: Some(enabled),
+            ..self
+        }
+    }
+
+    /// Sets the `SETTINGS_HEADER_TABLE_SIZE` option for HTTP2 connections.
+    ///
+    /// Informs the peer of the maximum size of the header compression
+    /// table used to decode header blocks, in octets.
+    ///
+    /// Default is 4,096.
+    pub fn http2_header_table_size(self, size: u32) -> Self {
+        Endpoint {
+            http2_header_table_size: Some(size),
             ..self
         }
     }

@@ -51,6 +51,10 @@ impl Connection {
             settings.adaptive_window(val);
         }
 
+        if let Some(val) = endpoint.http2_header_table_size {
+            settings.header_table_size(val);
+        }
+
         if let Some(val) = endpoint.http2_max_header_list_size {
             settings.max_header_list_size(val);
         }
