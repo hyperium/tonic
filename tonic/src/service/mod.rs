@@ -1,10 +1,13 @@
 //! Utilities for using Tower services with Tonic.
 
+pub mod circuit_breaker;
 pub mod interceptor;
 pub(crate) mod layered;
 #[cfg(feature = "router")]
 pub(crate) mod router;
 
+#[doc(inline)]
+pub use self::circuit_breaker::{CircuitBreaker, CircuitBreakerLayer};
 #[doc(inline)]
 pub use self::interceptor::{Interceptor, InterceptorLayer};
 pub use self::layered::{LayerExt, Layered};
