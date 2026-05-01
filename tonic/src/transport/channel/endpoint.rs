@@ -42,6 +42,7 @@ pub struct Endpoint {
     pub(crate) buffer_size: Option<usize>,
     pub(crate) init_stream_window_size: Option<u32>,
     pub(crate) init_connection_window_size: Option<u32>,
+    pub(crate) max_frame_size: Option<u32>,
     pub(crate) tcp_keepalive: Option<Duration>,
     pub(crate) tcp_keepalive_interval: Option<Duration>,
     pub(crate) tcp_keepalive_retries: Option<u32>,
@@ -89,6 +90,7 @@ impl Endpoint {
             buffer_size: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
+            max_frame_size: None,
             tcp_keepalive: None,
             tcp_keepalive_interval: None,
             tcp_keepalive_retries: None,
@@ -118,6 +120,7 @@ impl Endpoint {
             buffer_size: None,
             init_stream_window_size: None,
             init_connection_window_size: None,
+            max_frame_size: None,
             tcp_keepalive: None,
             tcp_keepalive_interval: None,
             tcp_keepalive_retries: None,
@@ -464,6 +467,27 @@ impl Endpoint {
     pub fn http2_max_header_list_size(self, size: u32) -> Self {
         Endpoint {
             http2_max_header_list_size: Some(size),
+            ..self
+        }
+    }
+
+    /// Sets the maximum frame size to use for HTTP2.
+    ///
+    /// Passing `None` will do nothing.
+    ///
+    /// If not set, will default from underlying transport.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// # use tonic::transport::Endpoint;
+    /// # let builder = Endpoint::from_static("https://example.com");
+    /// let endpoint = builder.max_frame_size(1024 * 1024u32);
+    /// ```
+    #[must_use]
+    pub fn max_frame_size(self, frame_size: impl Into<Option<u32>>) -> Self {
+        Endpoint {
+            max_frame_size: frame_size.into(),
             ..self
         }
     }
