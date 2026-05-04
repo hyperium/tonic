@@ -1,11 +1,10 @@
 [package]
 name = "grpc-google"
-version = "0.9.0-alpha.1"
+version = "0.0.0-alpha"
 edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
 rust-version = { workspace = true }
-publish = false
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = ["grpc::*"]

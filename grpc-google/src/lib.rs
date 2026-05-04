@@ -22,11 +22,11 @@
  *
 */
 
-//! GCP Credentials implementation for gRPC.
+//! Google Cloud Platform (GCP) Credentials implementation for gRPC.
 //!
 //! This crate provides a way to create gRPC channel credentials that
-//! automatically fetch and attach Google Cloud Platform (GCP) authentication
-//! tokens (e.g., OAuth2) using Application Default Credentials (ADC).
+//! automatically fetch and attach GCP authentication tokens (e.g., OAuth2)
+//! using Application Default Credentials (ADC).
 
 use std::fmt::Debug;
 
