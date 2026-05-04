@@ -97,8 +97,8 @@ fn codegen_grpc_routeguide(root_dir: &Path) {
     let path = std::env::var("PATH").unwrap_or_default();
     unsafe {
         std::env::set_var("PATH", format!("{}:{}", path, grpc_protobuf_build::bin()));
-        // OUT_DIR must be set in CodeGen::new, so we set it correctly here
-        // instead of using `.output_dir()` on CodeGen.
+        // TODO: Once the codegen is updated to allow the `OUT_DIR` env var to
+        // be unset, change this to use `.output_dir` instead.
         std::env::set_var("OUT_DIR", root_dir.join("src/grpc-routeguide/generated"));
     }
 

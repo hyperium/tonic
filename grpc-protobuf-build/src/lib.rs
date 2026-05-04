@@ -130,6 +130,8 @@ impl CodeGen {
     pub fn new() -> Self {
         Self {
             inputs: Vec::new(),
+            // TODO: Delay this check until the field is read in order to allow
+            // it to be set via `output_dir()` if it isn't in the environment.
             output_dir: PathBuf::from(std::env::var("OUT_DIR").unwrap()),
             includes: Vec::new(),
             dependencies: Vec::new(),
