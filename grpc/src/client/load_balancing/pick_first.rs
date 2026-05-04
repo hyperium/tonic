@@ -153,27 +153,21 @@ impl PickFirstPolicy {
             .map(|sc| (sc.address(), sc))
             .collect();
 
-        let mut new_states = HashMap::new();
-
-        self.subchannels = new_addresses
+        let (new_subchannels, new_states): (Vec<_>, HashMap<_, _>) = new_addresses
             .into_iter()
             .map(|addr| {
-                let subchannel = if let Some(sc) = existing_subchannels.remove(&addr) {
-                    sc // Reuse existing subchannel.
+                if let Some(sc) = existing_subchannels.remove(&addr) {
+                    let state = self.subchannel_states.get(&addr).unwrap().clone();
+                    (sc, (addr, state))
                 } else {
-                    // New subchannel for new address.
                     let (sc, state) = channel_controller.new_subchannel(&addr);
-                    self.subchannel_states.insert(addr.clone(), state);
-                    sc
-                };
-
-                let state = self.subchannel_states.get(&addr).unwrap().clone();
-                new_states.insert(addr.clone(), state);
-                subchannel
+                    (sc, (addr, state))
+                }
             })
-            .collect();
+            .unzip();
 
-        self.subchannel_states = new_states; // Prune old addresses.
+        self.subchannels = new_subchannels; // Prune old addresses.
+        self.subchannel_states = new_states; // Update subchannel states cache.
     }
 
     /// Starts a connection pass through the address list.
@@ -218,19 +212,21 @@ impl PickFirstPolicy {
             let state = self
                 .subchannel_states
                 .get(&addr)
-                .map(|s| s.connectivity_state);
+                .map(|s| s.connectivity_state)
+                .expect("Expected non-None subchannel state");
 
-            if state == Some(ConnectivityState::TransientFailure) {
-                self.frontier_index += 1;
-            } else {
-                return Some(sc);
+            match state {
+                // Push the frontier if sc is in TransientFailure, otherwise return the sc.
+                ConnectivityState::TransientFailure => self.frontier_index += 1,
+                _ => return Some(sc),
             }
         }
         None
     }
 
     /// Triggers a connection on the subchannel, and starts the 250ms timer.
-    /// If no connection succeeds before the timer expires, the frontier will advance to the next subchannel.
+    /// If no connection succeeds before the timer expires, the frontier will advance to
+    /// the next subchannel.
     fn trigger_subchannel_connection(
         &mut self,
         sc: Arc<dyn Subchannel>,
@@ -256,7 +252,7 @@ impl PickFirstPolicy {
             work_scheduler.schedule_work();
         }));
         self.timer_handle = Some(handle);
-    }O
+    }
 
     // Converts the update endpoints to an address list.
     // Shuffles endpoints (if enabled) before flattening and de-duplication.
@@ -281,33 +277,42 @@ impl PickFirstPolicy {
             .filter(|addr| seen.insert(addr.clone()))
             .collect();
 
+        // Partition out all 'unknown' non-TCP addresses.
+        // This is to remain consistent with similar behavior in C++ and Java.
+        let (tcp_addresses, unknown): (Vec<Address>, Vec<Address>) =
+            unique_addresses.into_iter().partition(|addr| {
+                addr.network_type == crate::client::name_resolution::TCP_IP_NETWORK_TYPE
+            });
+
         // Partition by family (Basic IPv6 detection via colon).
-        let (ipv6, ipv4): (Vec<Address>, Vec<Address>) = unique_addresses
+        let (ipv6, ipv4): (Vec<Address>, Vec<Address>) = tcp_addresses
             .into_iter()
             .partition(|addr| addr.address.contains(':'));
 
         // Interleave the two lists so ipv6 and ipv4 addresses are alternated.
-        let mut interleaved = Vec::with_capacity(ipv6.len() + ipv4.len());
+        let mut interleaved = Vec::with_capacity(ipv6.len() + ipv4.len() + unknown.len());
         let mut v6_iter = ipv6.into_iter();
         let mut v4_iter = ipv4.into_iter();
+        let mut unknown_iter = unknown.into_iter();
 
         loop {
-            match (v6_iter.next(), v4_iter.next()) {
-                (Some(v6), Some(v4)) => {
-                    interleaved.push(v6);
-                    interleaved.push(v4);
-                }
-                (Some(v6), None) => {
-                    interleaved.push(v6);
-                    interleaved.extend(v6_iter);
-                    break;
-                }
-                (None, Some(v4)) => {
-                    interleaved.push(v4);
-                    interleaved.extend(v4_iter);
-                    break;
-                }
-                (None, None) => break,
+            let mut more = false;
+
+            if let Some(v6) = v6_iter.next() {
+                interleaved.push(v6);
+                more = true;
+            }
+            if let Some(v4) = v4_iter.next() {
+                interleaved.push(v4);
+                more = true;
+            }
+            if let Some(unknown) = unknown_iter.next() {
+                interleaved.push(unknown);
+                more = true;
+            }
+
+            if !more {
+                break;
             }
         }
 
