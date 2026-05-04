@@ -4,12 +4,17 @@
 //! algorithm. The two sub-configs gate which ejection algorithms run.
 //!
 //! Note: A50 specifies outlier detection as a load-balancing policy
-//! wrapping a `child_policy`. `tonic-xds` currently runs P2C as its only
-//! load balancer and integrates outlier detection as a filter on the
-//! `Discover` stream feeding it, so there is no `child_policy` field
-//! here yet. It will be added when more balancers are supported.
+//! wrapping a `child_policy`. `tonic-xds` currently runs P2C as its
+//! only load balancer, so there is no `child_policy` field here yet —
+//! it will be added when more balancers are supported. Integration
+//! with the data path is via an mpsc channel of ejection decisions
+//! polled by the [`LoadBalancer`] tower service, which marks the
+//! corresponding [`ReadyChannel`] as ejected via [`EjectedChannel`].
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
+//! [`LoadBalancer`]: crate::client::loadbalance::loadbalancer::LoadBalancer
+//! [`ReadyChannel`]: crate::client::loadbalance::channel_state::ReadyChannel
+//! [`EjectedChannel`]: crate::client::loadbalance::channel_state::EjectedChannel
 
 use std::time::Duration;
 
@@ -68,7 +73,9 @@ pub(crate) struct SuccessRateConfig {
     /// An endpoint is a candidate for ejection when its success rate falls
     /// below `mean - stdev * (stdev_factor / 1000.0)`.
     pub stdev_factor: u32,
-    /// Probability that a candidate is actually ejected.
+    /// Probability that a flagged candidate is actually ejected — *not*
+    /// the success-rate threshold (which is derived from `stdev_factor`).
+    /// Set to 0 to disable enforcement while still computing statistics.
     pub enforcing_success_rate: Percentage,
     /// Minimum number of candidate endpoints required to run the algorithm.
     pub minimum_hosts: u32,
@@ -83,7 +90,9 @@ pub(crate) struct FailurePercentageConfig {
     /// Failure rate at or above which an endpoint is a candidate for
     /// ejection.
     pub threshold: Percentage,
-    /// Probability that a candidate is actually ejected.
+    /// Probability that a flagged candidate is actually ejected — *not*
+    /// the failure-rate threshold (that is `threshold` above). Set to 0
+    /// to disable enforcement while still computing statistics.
     pub enforcing_failure_percentage: Percentage,
     /// Minimum number of candidate endpoints required to run the algorithm.
     pub minimum_hosts: u32,
