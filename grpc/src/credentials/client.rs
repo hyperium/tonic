@@ -207,7 +207,7 @@ mod tests {
     use tonic::metadata::MetadataValue;
 
     use super::*;
-    use crate::Status;
+    use crate::StatusError;
     use crate::credentials::call::CallCredentials;
     use crate::credentials::call::CallDetails;
     use crate::credentials::call::ClientConnectionSecurityInfo;
@@ -230,7 +230,7 @@ mod tests {
             _call_details: &CallDetails,
             _auth_info: &ClientConnectionSecurityInfo,
             metadata: &mut MetadataMap,
-        ) -> Result<(), Status> {
+        ) -> Result<(), StatusError> {
             metadata.insert(
                 self.key
                     .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()

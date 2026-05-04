@@ -37,8 +37,8 @@ use tokio::sync::Notify;
 use tokio::sync::oneshot;
 use tonic::async_trait;
 
-use crate::Status;
-use crate::StatusCode;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::client::CallOptions;
 use crate::client::ConnectivityState;
 use crate::client::DynInvoke;
@@ -198,8 +198,8 @@ impl DynInvoke for InternalSubchannel {
 
         if let Some(call_creds) = call_creds {
             if call_creds.minimum_channel_security_level() > state.security_info.security_level() {
-                return fail_with(Status::new(
-                    StatusCode::Unauthenticated,
+                return fail_with(StatusError::new(
+                    StatusCodeError::Unauthenticated,
                     "transport: cannot send secure credentials on an insecure connection",
                 ));
             }
@@ -217,8 +217,8 @@ impl DynInvoke for InternalSubchannel {
                 .await
             {
                 let status = if s.is_restricted_control_plane_code() {
-                    Status::new(
-                        StatusCode::Internal,
+                    StatusError::new(
+                        StatusCodeError::Internal,
                         format!(
                             "transport: received call credentials error with illegal status: {}",
                             s.message()
