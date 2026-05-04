@@ -31,6 +31,7 @@ echo "Running for OS: ${OSTYPE}"
 case "$OSTYPE" in
   darwin*)  OS="darwin"; EXT="" ;;
   linux*)   OS="linux"; EXT="" ;;
+  cygwin*)  OS="windows"; EXT=".exe" ;;
   msys*)    OS="windows"; EXT=".exe" ;;
   *)        exit 2 ;;
 esac
