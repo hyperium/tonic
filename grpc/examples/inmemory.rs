@@ -37,6 +37,7 @@ use grpc::core::RecvMessage;
 use grpc::core::RequestHeaders;
 use grpc::core::SendMessage;
 use grpc::core::ServerResponseStreamItem;
+use grpc::core::Trailers;
 use grpc::credentials::InsecureChannelCredentials;
 use grpc::inmemory;
 use grpc::server;
@@ -84,7 +85,7 @@ impl Handle for Handler {
         _options: CallOptions,
         tx: &mut impl server::SendStream,
         mut rx: impl server::RecvStream + 'static,
-    ) {
+    ) -> Trailers {
         let method = headers.method_name().clone();
         let id = self.id.clone();
         // Send headers
@@ -108,16 +109,8 @@ impl Handle for Handler {
                 )
                 .await;
         }
-        // Send trailers
-        let _ = tx
-            .send(
-                ServerResponseStreamItem::Trailers(grpc::core::Trailers::new(grpc::Status::new(
-                    grpc::StatusCode::Ok,
-                    "OK",
-                ))),
-                server::SendOptions::default(),
-            )
-            .await;
+        // Return trailers
+        Trailers::new(grpc::Status::new(grpc::StatusCode::Ok, "OK"))
     }
 }
 
@@ -195,7 +188,7 @@ async fn run_rpc(chan: &Channel) -> String {
         let mut res = MyResMessage::default();
         match rx.next(&mut res).await {
             ClientResponseStreamItem::Headers(_) => continue,
-            ClientResponseStreamItem::Message(_) => {
+            ClientResponseStreamItem::Message => {
                 println!("CALL RESPONSE: {}", res.0);
                 if let Some(id) = res
                     .0

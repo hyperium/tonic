@@ -29,6 +29,8 @@ use crate::client::CallOptions;
 use crate::core::RecvMessage;
 use crate::core::RequestHeaders;
 use crate::core::ServerResponseStreamItem;
+use crate::core::Trailers;
+use tokio::sync::oneshot;
 
 pub struct Server {
     handler: Option<Arc<dyn DynHandle>>,
@@ -38,6 +40,7 @@ pub struct Call<SS, RS> {
     pub headers: RequestHeaders,
     pub send: SS,
     pub recv: RS,
+    pub trailers_tx: oneshot::Sender<Trailers>,
 }
 
 #[trait_variant::make(Send)]
@@ -64,11 +67,14 @@ impl Server {
             let mut send: Box<dyn DynSendStream> = Box::new(call.send);
             let recv = BoxedRecvStream(Box::new(call.recv));
             let options = CallOptions::default();
-            self.handler
+            let trailers_tx = call.trailers_tx;
+            let trailers = self
+                .handler
                 .as_ref()
                 .unwrap()
                 .dyn_handle(call.headers, options, &mut *send, recv)
                 .await;
+            let _ = trailers_tx.send(trailers);
         }
     }
 }
@@ -92,7 +98,7 @@ pub trait Handle: Send + Sync {
         options: CallOptions,
         tx: &mut impl SendStream,
         rx: impl RecvStream + 'static,
-    );
+    ) -> Trailers;
 }
 
 #[async_trait]
@@ -103,7 +109,7 @@ trait DynHandle: Send + Sync {
         options: CallOptions,
         tx: &mut dyn DynSendStream,
         rx: BoxedRecvStream,
-    );
+    ) -> Trailers;
 }
 
 #[async_trait]
@@ -114,7 +120,7 @@ impl<T: Handle> DynHandle for T {
         options: CallOptions,
         mut tx: &mut dyn DynSendStream,
         rx: BoxedRecvStream,
-    ) {
+    ) -> Trailers {
         self.handle(headers, options, &mut tx, rx).await
     }
 }
@@ -146,10 +152,7 @@ impl RecvStream for BoxedRecvStream {
 pub trait SendStream {
     /// Sends the next item on the stream. Returns `Ok(())` on success, or
     /// `Err(())` on failure. `Err(())` is a terminal state.
-    /// Sending is also considered complete after successfully sending
-    /// `ServerResponseStreamItem::Trailers`.
-    /// Calling this method after an error or after sending trailers should be
-    /// avoided and is unspecified.
+    /// Calling this method after an error should be avoided and is unspecified.
     ///
     /// # Cancel safety
     ///
