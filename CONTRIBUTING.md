@@ -394,44 +394,43 @@ _Adapted from the [Node.js contributing guide][node]_.
 
 ## Releasing
 
-Since the Tonic project consists of a number of crates, many of which depend on
-each other, releasing new versions to crates.io can involve some complexities.
-When releasing a new version of a crate, follow these steps:
+Releases are automated via [release-plz](https://release-plz.dev). The
+workspace is organized into three release groups, each with an independent
+version lineage:
 
-1. First you must pick the correct version to release, if there are breaking
-   changes make sure to select a semver compatible version bump.
+- **tonic group** (shared version): `tonic`, `tonic-build`, `tonic-prost`,
+  `tonic-prost-build`, `tonic-types`, `tonic-health`, `tonic-reflection`,
+  `tonic-web`
+- **xds group** (shared version): `xds-client`, `tonic-xds`
+- **grpc group**: `grpc`
 
-2. In general, tonic tries to keep all crates at the same version to make it
-   easy to release and figure out what sub crates you need that will work with
-   the core version of tonic. To prepare a release branch you can follow the
-   commands below:
-   ```
-   git checkout -b <release-branch-name>
-   ./prepare-release.sh <version> # where version is X.Y.Z 
-   ```
+Group membership is defined in [`release-plz.toml`](./release-plz.toml) via
+`version_group`. Crates in the same group are always released together at the
+same version.
 
-3. Once all the crate versions have been updated its time to update the
-   changelog. Tonic uses `conventional-changelog` and it's cli to generate the
-   changelog.
+### How a release happens
 
-   ```
-   conventional-changelog -p angular -i CHANGELOG.md -s
-   ```
+1. Each push to `master` runs the `release-plz` workflow, which opens or
+   updates a release PR containing pending version bumps and changelog
+   entries for any group with unreleased changes.
+2. A maintainer reviews the release PR. The version bumps and changelog can
+   be edited in the PR if needed.
+3. Merging the release PR triggers another `release-plz` run that publishes
+   the affected crates to crates.io (in dependency order), creates per-crate
+   git tags (e.g. `tonic-v0.15.0`), and creates GitHub Releases.
 
-   Once the entries have been generated, you must edit the `CHANGELOG.md` file
-   to add the version and tag to the title and edit any changelog entries. You
-   must also add any breaking changes here as sometimes they get lost.
+### Authentication
 
-4. Once the changelog has been updated you can now create a `chore: release
-   vX.Y.Z` commit and push the release branch and open a release PR.
+Publishing uses crates.io [Trusted Publishing][trusted-publishing] via GitHub
+OIDC — no long-lived API token is required. Each publishable crate must have
+`hyperium/tonic` configured as a trusted publisher with workflow
+`release-plz.yml`.
 
-5. Once the release PR has been approved and merged into `master` the following
-   command will release those changes.
+[trusted-publishing]: https://crates.io/docs/trusted-publishing
 
-   ```
-   ./publish-release.sh
-   ```
+### Forcing a specific version
 
-6. Once all the crates have been released you now must create a release on
-   github using the text from the changelog.
+If release-plz's proposed version bump is wrong, edit the version fields
+directly in the release PR before merging, or run `release-plz set-version`
+locally to override.
 
