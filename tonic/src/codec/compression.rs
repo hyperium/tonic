@@ -118,11 +118,17 @@ impl CompressionEncoding {
 
         split_by_comma(header_value_str).find_map(|value| match value {
             #[cfg(feature = "gzip")]
-            "gzip" => Some(CompressionEncoding::Gzip),
+            "gzip" if enabled_encodings.is_enabled(CompressionEncoding::Gzip) => {
+                Some(CompressionEncoding::Gzip)
+            }
             #[cfg(feature = "deflate")]
-            "deflate" => Some(CompressionEncoding::Deflate),
+            "deflate" if enabled_encodings.is_enabled(CompressionEncoding::Deflate) => {
+                Some(CompressionEncoding::Deflate)
+            }
             #[cfg(feature = "zstd")]
-            "zstd" => Some(CompressionEncoding::Zstd),
+            "zstd" if enabled_encodings.is_enabled(CompressionEncoding::Zstd) => {
+                Some(CompressionEncoding::Zstd)
+            }
             _ => None,
         })
     }
@@ -355,6 +361,41 @@ mod tests {
         };
 
         assert_eq!(encodings.into_accept_encoding_header_value().unwrap(), ZSTD);
+    }
+
+    #[test]
+    fn accept_encoding_returns_none_when_no_encodings_enabled() {
+        let mut map = http::HeaderMap::new();
+        map.insert(ACCEPT_ENCODING_HEADER, "gzip,deflate,zstd".parse().unwrap());
+
+        let enabled = EnabledCompressionEncodings::default();
+        assert!(CompressionEncoding::from_accept_encoding_header(&map, enabled).is_none());
+    }
+
+    #[test]
+    fn accept_encoding_returns_none_when_header_missing() {
+        let map = http::HeaderMap::new();
+
+        let mut enabled = EnabledCompressionEncodings::default();
+        #[cfg(feature = "gzip")]
+        enabled.enable(CompressionEncoding::Gzip);
+
+        assert!(CompressionEncoding::from_accept_encoding_header(&map, enabled).is_none());
+    }
+
+    #[test]
+    #[cfg(feature = "gzip")]
+    fn accept_encoding_picks_enabled_encoding() {
+        let mut map = http::HeaderMap::new();
+        map.insert(ACCEPT_ENCODING_HEADER, "gzip".parse().unwrap());
+
+        let mut enabled = EnabledCompressionEncodings::default();
+        enabled.enable(CompressionEncoding::Gzip);
+
+        assert_eq!(
+            CompressionEncoding::from_accept_encoding_header(&map, enabled),
+            Some(CompressionEncoding::Gzip),
+        );
     }
 
     #[test]
