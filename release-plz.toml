@@ -42,14 +42,14 @@ name = "tonic-web"
 version_group = "tonic"
 
 # xds group (shared version)
-[[package]]
-name = "xds-client"
-version_group = "xds"
+#[[package]]
+#name = "xds-client"
+#version_group = "xds"
 
-[[package]]
-name = "tonic-xds"
-version_group = "xds"
+#[[package]]
+#name = "tonic-xds"
+#version_group = "xds"
 
 # grpc group (single crate)
-[[package]]
-name = "grpc"
+#[[package]]
+#name = "grpc"
