@@ -111,10 +111,10 @@ impl InteropTest for TestClient {
         let mut stream = self.streaming_input_call().await;
 
         for request in REQUEST_LENGTHS.iter().map(make_streaming_input_request) {
-            let _ = stream.send_message(&request).await;
+            let _ = stream.send(&request).await;
         }
 
-        let result = stream.await;
+        let result = stream.close_and_recv().await;
 
         assertions.push(test_assert!(
             "call must be successful",
@@ -141,10 +141,10 @@ impl InteropTest for TestClient {
                 .map(|len| ResponseParameters::with_size(*len)),
         });
 
-        let mut rx = self.streaming_output_call(req).start().await;
+        let mut rx = self.streaming_output_call(req).await;
 
         let mut responses = Vec::new();
-        while let Some(response) = rx.next().await {
+        while let Some(response) = rx.recv().await {
             responses.push(response);
         }
 
@@ -174,20 +174,18 @@ impl InteropTest for TestClient {
 
     async fn ping_pong(&mut self, assertions: &mut Vec<TestAssertion>) {
         let (mut tx, mut rx) = self.full_duplex_call().await;
-        let _ = tx.send_message(make_ping_pong_request(0)).await;
+        let _ = tx.send(make_ping_pong_request(0)).await;
 
         let mut responses = Vec::new();
         loop {
-            match rx.next().await {
+            match rx.recv().await {
                 Some(message) => {
                     responses.push(message);
                     if responses.len() == RESPONSE_LENGTHS.len() {
                         drop(tx);
                         break;
                     } else {
-                        let _ = tx
-                            .send_message(make_ping_pong_request(responses.len()))
-                            .await;
+                        let _ = tx.send(make_ping_pong_request(responses.len())).await;
                     }
                 }
                 None => {
@@ -226,7 +224,7 @@ impl InteropTest for TestClient {
         drop(tx);
 
         let mut responses = Vec::new();
-        while let Some(response) = rx.next().await {
+        while let Some(response) = rx.recv().await {
             responses.push(response);
         }
         assertions.push(test_assert!(
@@ -285,10 +283,10 @@ impl InteropTest for TestClient {
         validate_response(result, assertions);
 
         let (mut tx, mut rx) = self.full_duplex_call().await;
-        let _ = tx.send_message(duplex_req).await;
+        let _ = tx.send(duplex_req).await;
         drop(tx);
         let mut responses = Vec::new();
-        while let Some(response) = rx.next().await {
+        while let Some(response) = rx.recv().await {
             responses.push(response);
         }
         let status = rx.status().await;
@@ -396,7 +394,7 @@ impl InteropTest for TestClient {
             .with_once_interceptor(hdr_int)
             .with_once_interceptor(trl_int)
             .await;
-        _ = tx.send_message(make_ping_pong_request(0)).await;
+        _ = tx.send(make_ping_pong_request(0)).await;
         drop(tx);
         let status = rx.status().await;
         assert_eq!(

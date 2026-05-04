@@ -154,7 +154,7 @@ where
     /// Note: success does *not* indicate successful transmission of the request
     /// or successful receipt of the request by the server.  Success only
     /// indicates that the stream has not yet terminated.
-    pub async fn send_message(&mut self, message: &impl AsView<Proxied = Req>) -> Result<(), ()> {
+    pub async fn send(&mut self, message: &impl AsView<Proxied = Req>) -> Result<(), ()> {
         let msg = ProtoSendMessage::from_view(message);
         self.tx.send(&msg, SendOptions::default()).await
     }
@@ -172,34 +172,14 @@ where
             }
         }
     }
-}
 
-impl<'a, C, Req, Res> IntoFuture for ClientStreamingCall<'a, C, Req, Res>
-where
-    C: InvokeOnce + 'a,
-    // Req is a proto message. (Ideally we could just require "Message" and
-    // protobuf would automatically include the rest.  For now we need the
-    // HRTBs.)
-    Req: Message,
-    for<'b> Req::View<'b>: MessageView<'b>,
-    // Res is a proto message. (Ideally we could just require "Message" and
-    // protobuf would automatically include the rest.  For now we need the
-    // HRTBs.)
-    Res: Message,
-    for<'b> Res::Mut<'b>: MessageMut<'b>,
-{
-    type Output = Result<Res, Status>;
-    type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
-
-    fn into_future(self) -> Self::IntoFuture {
-        Box::pin(async move {
-            let mut res = Res::default();
-            let status = self.with_response_message(&mut res).await;
-            if status.code() == StatusCode::Ok {
-                Ok(res)
-            } else {
-                Err(status)
-            }
-        })
+    pub async fn close_and_recv(self) -> Result<Res, Status> {
+        let mut res = Res::default();
+        let status = self.with_response_message(&mut res).await;
+        if status.code() == StatusCode::Ok {
+            Ok(res)
+        } else {
+            Err(status)
+        }
     }
 }

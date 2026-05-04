@@ -86,7 +86,7 @@ where
     /// Note: success does *not* indicate successful transmission of the request
     /// or successful receipt of the request by the server.  Success only
     /// indicates that the stream has not yet terminated.
-    pub async fn send_message(&mut self, message: M) -> Result<(), ()> {
+    pub async fn send(&mut self, message: M) -> Result<(), ()> {
         self.tx
             .send(
                 &ProtoSendMessage::from_view(&message),
@@ -94,6 +94,11 @@ where
             )
             .await
     }
+
+    /// Sends a "half close" signal to the server to indicate the client is done
+    /// sending by dropping self.  It is safe to just drop(self) instead; this
+    /// method is provided to be explicit.
+    pub fn close(self) {}
 }
 
 /// Provides a streaming RPC's protobuf response messages and status.
@@ -122,7 +127,7 @@ where
 
     /// Receives the next response message from the stream into `res` and
     /// returns Ok on success or Err if the stream has ended.
-    pub async fn receive_into(&mut self, res: &mut impl AsMut<MutProxied = M>) -> Result<(), ()> {
+    pub async fn recv_into(&mut self, res: &mut impl AsMut<MutProxied = M>) -> Result<(), ()> {
         let mut res_view = ProtoRecvMessage::from_mut(res);
         let mut i = self.rx.next(&mut res_view).await;
 
@@ -150,9 +155,9 @@ where
 
     /// Returns the next response message from the stream, or `None` if the
     /// stream has completed.
-    pub async fn next(&mut self) -> Option<M> {
+    pub async fn recv(&mut self) -> Option<M> {
         let mut res = M::default();
-        match self.receive_into(&mut res).await {
+        match self.recv_into(&mut res).await {
             Ok(_) => Some(res),
             Err(_) => None,
         }
