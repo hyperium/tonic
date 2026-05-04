@@ -89,7 +89,7 @@ pub(crate) trait Rng: Send + Sync + 'static {
     fn pct_roll(&self) -> u32;
 }
 
-/// Default RNG backed by `fastrand` (already a workspace dep).
+/// Default RNG backed by `fastrand`.
 struct FastRandRng;
 
 impl Rng for FastRandRng {
