@@ -40,23 +40,15 @@ use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDe
 /// Override via [`OutlierDetectorOptions::decisions_channel_capacity`].
 pub(crate) const DEFAULT_DECISIONS_CHANNEL_CAPACITY: usize = 256;
 
-/// Lock-free per-endpoint success/failure counter handle.
+/// Lock-free success/failure counter for one endpoint. The data path
+/// records RPC outcomes via `record_success` / `record_failure`; the
+/// sweep snapshots and resets atomically.
 ///
-/// Cloned freely. Callers (typically a request-outcome interceptor)
-/// invoke [`record_success`] / [`record_failure`] from the data path.
-/// The detector reads and resets the counters during each sweep.
-///
-/// Both counters are packed into a single `AtomicU64` (high 32 bits:
-/// successes, low 32 bits: failures) so each increment is a single
-/// `fetch_add` and a sweep is a single `swap(0)` — the snapshot is
-/// truly atomic across the pair. Each counter is capped at
+/// Counts are packed into a single `AtomicU64` (high 32 bits:
+/// successes, low 32 bits: failures), so each record is one `fetch_add`
+/// and a snapshot is one `swap(0)`. Each counter is capped at
 /// `u32::MAX` per sweep interval; exceeding that carries into the
-/// other counter's bits, but the cap is unreachable for realistic
-/// workloads (> 4 × 10⁹ RPCs to one endpoint within a single
-/// interval).
-///
-/// [`record_success`]: EndpointCounters::record_success
-/// [`record_failure`]: EndpointCounters::record_failure
+/// other counter's bits but is unreachable for realistic workloads.
 #[derive(Debug, Default)]
 pub(crate) struct EndpointCounters {
     /// High 32 bits: successes since last sweep.
