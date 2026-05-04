@@ -833,8 +833,12 @@ mod tests {
             bad.record_failure();
         }
 
-        // Advance just past the first sweep tick.
-        tokio::time::sleep(Duration::from_millis(150)).await;
+        // Explicitly advance virtual time past the first sweep tick.
+        // `advance` is preferred over `sleep` for paused-time tests — it
+        // moves the clock deterministically and yields until pending
+        // task wake-ups have been polled, instead of relying on the
+        // runtime's auto-advance heuristic for parked tasks.
+        tokio::time::advance(Duration::from_millis(150)).await;
 
         let decision = rx.recv().await.expect("sweep should emit a decision");
         assert_eq!(decision, EjectionDecision::Eject(addr(8084)));
@@ -846,11 +850,13 @@ mod tests {
         config.interval = Duration::from_millis(50);
         let (_detector, mut rx, abort) = OutlierDetector::spawn(config);
 
-        // Drop the AbortOnDrop; the loop must terminate.
+        // Aborting the JoinHandle wakes the spawned task synchronously;
+        // the runtime polls it, the task harness observes the abort,
+        // and the task ends — dropping its sender clone. No time
+        // advancement is needed: `rx.recv().await` parks briefly, the
+        // runtime drives the aborted task to completion, then `recv`
+        // returns `None` because the sender is gone.
         drop(abort);
-        tokio::time::sleep(Duration::from_millis(200)).await;
-
-        // Sender should be dropped along with the task; recv returns None.
         assert!(rx.recv().await.is_none());
     }
 }
