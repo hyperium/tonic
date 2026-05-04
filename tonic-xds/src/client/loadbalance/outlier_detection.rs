@@ -28,24 +28,16 @@ use crate::client::endpoint::EndpointAddress;
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDetectionConfig};
 
-/// Default capacity of the bounded mpsc channel that carries ejection
-/// decisions from the sweep loop to the consumer.
+/// Default capacity for the channel that delivers [`EjectionDecision`]s
+/// from the sweep task to its consumer.
 ///
-/// Decisions are edge-triggered (`Eject`/`Uneject` transitions, not
-/// state snapshots), so the consumer must process every event in order
-/// to stay in sync with the detector. We therefore can't drop or
-/// coalesce — but we don't want unbounded growth either if the consumer
-/// stalls. With sweep cadence on the order of seconds and at most
-/// `2 * num_endpoints` decisions per sweep, 256 buffers several sweeps'
-/// worth of decisions for clusters of typical size. When the buffer
-/// fills, `tx.send().await` parks the sweep task, which naturally
-/// throttles sweep cadence to whatever rate the consumer can drain —
-/// the right behavior, since computing more decisions than the consumer
-/// can apply just widens the desync.
+/// Sized for several sweeps' worth of decisions on typical clusters —
+/// each sweep emits at most `2 * num_endpoints`. At capacity, the sweep
+/// task waits on `send` rather than dropping or coalescing decisions:
+/// the channel is edge-triggered, so missing or merging events would
+/// desynchronize the consumer's view of which endpoints are ejected.
 ///
-/// Override via [`OutlierDetectorOptions::decisions_channel_capacity`]
-/// for clusters with very large endpoint sets or unusually slow
-/// consumers.
+/// Override via [`OutlierDetectorOptions::decisions_channel_capacity`].
 pub(crate) const DEFAULT_DECISIONS_CHANNEL_CAPACITY: usize = 256;
 
 /// Lock-free per-endpoint success/failure counter handle.
