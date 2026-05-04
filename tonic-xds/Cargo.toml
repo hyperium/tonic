@@ -50,6 +50,9 @@ tokio-util = "0.7"
 backoff = "0.4"
 shared_http_body = "0.1"
 tonic-prost = { version = "0.14", optional = true }
+rustls = { version = "0.23", default-features = false, features = ["std", "tls12"], optional = true }
+rustls-pemfile = { version = "2", optional = true }
+x509-parser = { version = "0.17", optional = true }
 
 [lints]
 workspace = true
@@ -62,13 +65,15 @@ tonic-prost = "0.14"
 tonic-prost-build = "0.14"
 async-stream = "0.3"
 tempfile = "3.27.0"
+rcgen = "0.14"
 
 [features]
 testutil = ["dep:tonic-prost"]
 
 # TLS crypto backend — pick exactly one.
-tls-ring = ["tonic/tls-ring", "xds-client/tonic-tls-ring"]
-tls-aws-lc = ["tonic/tls-aws-lc", "xds-client/tonic-tls-aws-lc"]
+_tls-any = ["dep:rustls", "dep:rustls-pemfile", "dep:x509-parser"]
+tls-ring = ["_tls-any", "tonic/tls-ring", "xds-client/tonic-tls-ring"]
+tls-aws-lc = ["_tls-any", "tonic/tls-aws-lc", "xds-client/tonic-tls-aws-lc"]
 
 [[example]]
 name = "channel"

@@ -323,47 +323,7 @@ fn match_header(hm: &HeaderMatcherConfig, headers: &http::HeaderMap) -> bool {
     match &hm.match_specifier {
         HeaderMatchSpecifierConfig::Present => value.is_some(),
         HeaderMatchSpecifierConfig::Absent => value.is_none(),
-        HeaderMatchSpecifierConfig::Exact {
-            value: e,
-            ignore_case,
-        } => value.is_some_and(|v| {
-            if *ignore_case {
-                v.eq_ignore_ascii_case(e)
-            } else {
-                v == e
-            }
-        }),
-        HeaderMatchSpecifierConfig::Prefix {
-            value: p,
-            ignore_case,
-        } => value.is_some_and(|v| {
-            if *ignore_case {
-                v.to_ascii_lowercase().starts_with(&p.to_ascii_lowercase())
-            } else {
-                v.starts_with(p.as_str())
-            }
-        }),
-        HeaderMatchSpecifierConfig::Suffix {
-            value: s,
-            ignore_case,
-        } => value.is_some_and(|v| {
-            if *ignore_case {
-                v.to_ascii_lowercase().ends_with(&s.to_ascii_lowercase())
-            } else {
-                v.ends_with(s.as_str())
-            }
-        }),
-        HeaderMatchSpecifierConfig::Contains {
-            value: c,
-            ignore_case,
-        } => value.is_some_and(|v| {
-            if *ignore_case {
-                v.to_ascii_lowercase().contains(&c.to_ascii_lowercase())
-            } else {
-                v.contains(c.as_str())
-            }
-        }),
-        HeaderMatchSpecifierConfig::SafeRegex(re) => value.is_some_and(|v| re.is_match(v)),
+        HeaderMatchSpecifierConfig::String(sm) => value.is_some_and(|v| sm.is_match(v)),
         HeaderMatchSpecifierConfig::Range { start, end } => {
             value.is_some_and(|v| v.parse::<i64>().is_ok_and(|n| n >= *start && n < *end))
         }
@@ -377,6 +337,7 @@ mod tests {
     use crate::xds::resource::route_config::{
         RouteConfig, RouteConfigAction, RouteConfigMatch, VirtualHostConfig,
     };
+    use crate::xds::resource::string_matcher::StringMatcher;
 
     fn simple_route(prefix: &str, cluster: &str) -> RouteConfig {
         RouteConfig {
@@ -660,10 +621,12 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "x-env".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::Exact {
-                                value: "prod".into(),
-                                ignore_case: false,
-                            },
+                            match_specifier: HeaderMatchSpecifierConfig::String(
+                                StringMatcher::Exact {
+                                    value: "prod".into(),
+                                    ignore_case: false,
+                                },
+                            ),
                             invert_match: false,
                         }],
                         case_sensitive: true,
@@ -862,10 +825,12 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "content-type".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::Exact {
-                                value: "application/grpc".into(),
-                                ignore_case: false,
-                            },
+                            match_specifier: HeaderMatchSpecifierConfig::String(
+                                StringMatcher::Exact {
+                                    value: "application/grpc".into(),
+                                    ignore_case: false,
+                                },
+                            ),
                             invert_match: false,
                         }],
                         case_sensitive: true,
@@ -897,10 +862,10 @@ mod tests {
                     path_specifier: PathSpecifierConfig::Prefix("/".into()),
                     headers: vec![HeaderMatcherConfig {
                         name: "x-env".into(),
-                        match_specifier: HeaderMatchSpecifierConfig::Exact {
+                        match_specifier: HeaderMatchSpecifierConfig::String(StringMatcher::Exact {
                             value: "Prod".into(),
                             ignore_case: true,
-                        },
+                        }),
                         invert_match: false,
                     }],
                     case_sensitive: true,
@@ -952,28 +917,30 @@ mod tests {
 
         let mut headers = http::HeaderMap::new();
 
-        let rc = make_route(HeaderMatchSpecifierConfig::Prefix {
+        let rc = make_route(HeaderMatchSpecifierConfig::String(StringMatcher::Prefix {
             value: "App".into(),
             ignore_case: true,
-        });
+        }));
         headers.insert("x-tag", "APPLICATION/JSON".parse().unwrap());
         assert!(
             matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
         );
 
-        let rc = make_route(HeaderMatchSpecifierConfig::Suffix {
+        let rc = make_route(HeaderMatchSpecifierConfig::String(StringMatcher::Suffix {
             value: "JSON".into(),
             ignore_case: true,
-        });
+        }));
         headers.insert("x-tag", "application/json".parse().unwrap());
         assert!(
             matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
         );
 
-        let rc = make_route(HeaderMatchSpecifierConfig::Contains {
-            value: "Grpc".into(),
-            ignore_case: true,
-        });
+        let rc = make_route(HeaderMatchSpecifierConfig::String(
+            StringMatcher::Contains {
+                value: "Grpc".into(),
+                ignore_case: true,
+            },
+        ));
         headers.insert("x-tag", "APPLICATION/GRPC+PROTO".parse().unwrap());
         assert!(
             matches!(rc.route("host", "/", &headers).unwrap(), RouteConfigAction::Cluster(c) if c == "matched")
@@ -991,8 +958,8 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "x-tag".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::SafeRegex(
-                                regex::Regex::new("^v[0-9]+$").unwrap(),
+                            match_specifier: HeaderMatchSpecifierConfig::String(
+                                StringMatcher::SafeRegex(regex::Regex::new("^v[0-9]+$").unwrap()),
                             ),
                             invert_match: false,
                         }],
@@ -1029,10 +996,12 @@ mod tests {
                         path_specifier: PathSpecifierConfig::Prefix("/".into()),
                         headers: vec![HeaderMatcherConfig {
                             name: "x-env".into(),
-                            match_specifier: HeaderMatchSpecifierConfig::Exact {
-                                value: "Prod".into(),
-                                ignore_case: false,
-                            },
+                            match_specifier: HeaderMatchSpecifierConfig::String(
+                                StringMatcher::Exact {
+                                    value: "Prod".into(),
+                                    ignore_case: false,
+                                },
+                            ),
                             invert_match: false,
                         }],
                         case_sensitive: true,

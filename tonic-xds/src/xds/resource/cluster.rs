@@ -6,6 +6,8 @@ use prost::Message;
 use xds_client::resource::TypeUrl;
 use xds_client::{Error, Resource};
 
+use super::security::{ClusterSecurityConfig, parse_transport_socket};
+
 /// Validated Cluster resource.
 #[derive(Debug, Clone)]
 pub(crate) struct ClusterResource {
@@ -15,6 +17,9 @@ pub(crate) struct ClusterResource {
     pub eds_service_name: Option<String>,
     /// The load balancing policy for this cluster.
     pub lb_policy: LbPolicy,
+    /// TLS security config parsed from `transport_socket`. `None` means the
+    /// cluster uses plaintext connections.
+    pub security: Option<ClusterSecurityConfig>,
 }
 
 /// Load balancing policies.
@@ -61,15 +66,13 @@ impl Resource for ClusterResource {
             }
         };
 
-        // TODO(PR2/A29): Parse transport_socket → UpstreamTlsContext from the Cluster
-        // message. Extract CertificateProviderPluginInstance references (root + identity),
-        // SAN matchers, and require_client_certificate. NACK if validation_context
-        // is missing or uses unsupported fields per A29 field processing rules.
+        let security = parse_transport_socket(message.transport_socket)?;
 
         Ok(ClusterResource {
             name,
             eds_service_name,
             lb_policy,
+            security,
         })
     }
 }
