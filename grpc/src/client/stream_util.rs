@@ -22,8 +22,8 @@
  *
  */
 
-use crate::Status;
-use crate::StatusCode;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
@@ -108,7 +108,10 @@ where
     /// containing the error message.
     fn error(&mut self, s: impl Into<String>) -> ClientResponseStreamItem {
         self.state = RecvStreamState::Done;
-        ClientResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Internal, s)))
+        ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+            StatusCodeError::Internal,
+            s,
+        ))))
     }
 }
 
@@ -148,7 +151,7 @@ where
             ClientResponseStreamItem::Trailers(t) => {
                 if self.unary_response
                     && !matches!(self.state, RecvStreamState::AwaitingTrailers)
-                    && t.status().code() == StatusCode::Ok
+                    && t.status().is_ok()
                 {
                     return self.error("unary stream received zero messages");
                 }
@@ -174,13 +177,13 @@ impl SendStream for NopSendStream {
 }
 
 pub(crate) struct FailingRecvStream {
-    status: Option<Status>,
+    status: Option<StatusError>,
 }
 
 impl RecvStream for FailingRecvStream {
     async fn next(&mut self, msg: &mut dyn RecvMessage) -> ClientResponseStreamItem {
         match self.status.take() {
-            Some(status) => ClientResponseStreamItem::Trailers(Trailers::new(status)),
+            Some(status) => ClientResponseStreamItem::Trailers(Trailers::new(Err(status))),
             None => ClientResponseStreamItem::StreamClosed,
         }
     }
@@ -188,7 +191,7 @@ impl RecvStream for FailingRecvStream {
 
 impl FailingRecvStream {
     pub(crate) fn new_stream_pair(
-        status: Status,
+        status: StatusError,
     ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
         (
             Box::new(NopSendStream),
@@ -218,10 +221,10 @@ mod test {
         for scenario in scenarios {
             validate_scenario(
                 &scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received messages without headers",
-                ))),
+                )))),
                 false,
             )
             .await;
@@ -247,10 +250,10 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "ended without trailers",
-                ))),
+                )))),
                 false,
             )
             .await;
@@ -275,10 +278,10 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received multiple headers",
-                ))),
+                )))),
                 false,
             )
             .await;
@@ -288,22 +291,20 @@ mod test {
     #[tokio::test]
     async fn test_validator_unary_ok_without_message() {
         let scenarios = [
-            vec![ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(StatusCode::Ok, ""),
-            ))],
+            vec![ClientResponseStreamItem::Trailers(Trailers::new(Ok(())))],
             vec![
                 ClientResponseStreamItem::Headers(ResponseHeaders::default()),
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
+                ClientResponseStreamItem::Trailers(Trailers::new(Ok(()))),
             ],
         ];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received zero messages",
-                ))),
+                )))),
                 true,
             )
             .await;
@@ -321,10 +322,10 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received multiple messages",
-                ))),
+                )))),
                 true,
             )
             .await;
@@ -338,13 +339,13 @@ mod test {
             ClientResponseStreamItem::Message,
             ClientResponseStreamItem::Message,
             ClientResponseStreamItem::Message,
-            ClientResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
+            ClientResponseStreamItem::Trailers(Trailers::new(Ok(()))),
         ]];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
+                ClientResponseStreamItem::Trailers(Trailers::new(Ok(()))),
                 false,
             )
             .await;
@@ -358,19 +359,19 @@ mod test {
             ClientResponseStreamItem::Message,
             ClientResponseStreamItem::Message,
             ClientResponseStreamItem::Message,
-            ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                StatusCode::Aborted,
+            ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                StatusCodeError::Aborted,
                 "some err",
-            ))),
+            )))),
         ]];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
-                ))),
+                )))),
                 false,
             )
             .await;
@@ -382,13 +383,13 @@ mod test {
         let scenarios = [vec![
             ClientResponseStreamItem::Headers(ResponseHeaders::default()),
             ClientResponseStreamItem::Message,
-            ClientResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
+            ClientResponseStreamItem::Trailers(Trailers::new(Ok(()))),
         ]];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(StatusCode::Ok, ""))),
+                ClientResponseStreamItem::Trailers(Trailers::new(Ok(()))),
                 true,
             )
             .await;
@@ -398,33 +399,33 @@ mod test {
     #[tokio::test]
     async fn test_validator_erroring_unary() {
         let scenarios = [
-            vec![ClientResponseStreamItem::Trailers(Trailers::new(
-                Status::new(StatusCode::Aborted, "some err"),
-            ))],
+            vec![ClientResponseStreamItem::Trailers(Trailers::new(Err(
+                StatusError::new(StatusCodeError::Aborted, "some err"),
+            )))],
             vec![
                 ClientResponseStreamItem::Headers(ResponseHeaders::default()),
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
-                ))),
+                )))),
             ],
             vec![
                 ClientResponseStreamItem::Headers(ResponseHeaders::default()),
                 ClientResponseStreamItem::Message,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
-                ))),
+                )))),
             ],
         ];
 
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Status::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
-                ))),
+                )))),
                 true,
             )
             .await;
@@ -460,15 +461,24 @@ mod test {
             let ClientResponseStreamItem::Trailers(expect_t) = expect else {
                 unreachable!(); // per matches check above
             };
-            // Assert the codes match.
-            assert_eq!(got_t.status().code(), expect_t.status().code());
-            // Assert the status received contains the expected status error message.
-            assert!(
-                got_t
-                    .status()
-                    .message()
-                    .contains(expect_t.status().message())
-            );
+            if expect_t.status().is_ok() {
+                assert!(got_t.status().is_ok());
+            } else {
+                // Assert the codes match.
+                assert_eq!(
+                    got_t.status().as_ref().unwrap_err().code(),
+                    expect_t.status().as_ref().unwrap_err().code()
+                );
+                // Assert the status received contains the expected status error message.
+                assert!(
+                    got_t
+                        .status()
+                        .as_ref()
+                        .unwrap_err()
+                        .message()
+                        .contains(expect_t.status().as_ref().unwrap_err().message())
+                );
+            }
         }
     }
 }

@@ -31,7 +31,7 @@ use std::any::TypeId;
 use bytes::Buf;
 use tonic::metadata::MetadataMap;
 
-use crate::Status;
+use crate::status::Status;
 
 #[allow(unused)]
 pub trait SendMessage: Send + Sync {
