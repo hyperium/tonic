@@ -348,6 +348,12 @@ impl OutlierDetector {
             if *budget == 0 {
                 break;
             }
+            // A50 doesn't forbid `request_volume == 0`, in which case a
+            // candidate may have `total == 0`. The spec is silent on
+            // `0/0`; skip these endpoints rather than divide by zero.
+            if c.total == 0 {
+                continue;
+            }
             // failure_pct = 100 * failure / total. A50 specifies a strict
             // "greater than" comparison: an address sitting exactly at
             // the threshold is not ejected.
