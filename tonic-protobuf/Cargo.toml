@@ -8,7 +8,7 @@ publish = false
 rust-version = { workspace = true }
 
 [dependencies]
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = ["codegen"] }
+tonic = { version = "0.14.6", path = "../tonic", default-features = false, features = ["codegen"] }
 bytes = "1"
 protobuf = { version = "4.34.0-release" }
 
