@@ -14,7 +14,28 @@ impl XdsCodec for ProstCodec {
     fn encode_request(&self, request: &DiscoveryRequest<'_>) -> Result<Bytes> {
         use envoy_types::pb::envoy::config::core::v3 as core;
         use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+        use envoy_types::pb::google::protobuf::{Struct, Value, value::Kind};
         use envoy_types::pb::google::rpc::Status;
+
+        let metadata = if request.node.metadata.is_empty() {
+            None
+        } else {
+            Some(Struct {
+                fields: request
+                    .node
+                    .metadata
+                    .iter()
+                    .map(|(k, v)| {
+                        (
+                            k.clone(),
+                            Value {
+                                kind: Some(Kind::StringValue(v.clone())),
+                            },
+                        )
+                    })
+                    .collect(),
+            })
+        };
 
         let proto_request = discovery::DiscoveryRequest {
             version_info: request.version_info.to_owned(),
@@ -30,6 +51,7 @@ impl XdsCodec for ProstCodec {
                     zone: l.zone.clone(),
                     sub_zone: l.sub_zone.clone(),
                 }),
+                metadata,
                 ..Default::default()
             }),
             resource_names: request.resource_names.to_vec(),
@@ -137,6 +159,58 @@ mod tests {
         assert_eq!(locality.region, "us-west");
         assert_eq!(locality.zone, "us-west-1a");
         assert_eq!(locality.sub_zone, "rack-1");
+    }
+
+    #[test]
+    fn test_encode_request_with_metadata() {
+        use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+        use envoy_types::pb::google::protobuf::value::Kind;
+        use std::collections::HashMap;
+
+        let codec = ProstCodec;
+        let mut metadata = HashMap::new();
+        metadata.insert("GENERATOR".to_string(), "grpc".to_string());
+        let node = Node::new("grpc", "1.0").with_metadata(metadata);
+        let resource_names: Vec<String> = Vec::new();
+        let request = DiscoveryRequest {
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster",
+            resource_names: &resource_names,
+            response_nonce: "",
+            error_detail: None,
+        };
+
+        let bytes = codec.encode_request(&request).unwrap();
+        let decoded = discovery::DiscoveryRequest::decode(bytes).unwrap();
+        let metadata_struct = decoded.node.unwrap().metadata.unwrap();
+
+        let value = metadata_struct.fields.get("GENERATOR").unwrap();
+        match &value.kind {
+            Some(Kind::StringValue(s)) => assert_eq!(s, "grpc"),
+            other => panic!("expected StringValue, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_encode_request_empty_metadata_omits_struct() {
+        use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+
+        let codec = ProstCodec;
+        let node = Node::new("grpc", "1.0");
+        let resource_names: Vec<String> = Vec::new();
+        let request = DiscoveryRequest {
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster",
+            resource_names: &resource_names,
+            response_nonce: "",
+            error_detail: None,
+        };
+
+        let bytes = codec.encode_request(&request).unwrap();
+        let decoded = discovery::DiscoveryRequest::decode(bytes).unwrap();
+        assert!(decoded.node.unwrap().metadata.is_none());
     }
 
     #[test]

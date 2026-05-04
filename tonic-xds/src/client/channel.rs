@@ -1,4 +1,5 @@
 use crate::XdsUri;
+use crate::client::add_origin::AddOriginLayer;
 use crate::client::cluster::ClusterClientRegistryGrpc;
 use crate::client::endpoint::{EndpointAddress, EndpointChannel};
 use crate::client::lb::{ClusterDiscovery, XdsLbService};
@@ -221,6 +222,9 @@ impl XdsChannelBuilder {
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, discovery);
         let inner = ServiceBuilder::new()
+            .option_layer(AddOriginLayer::for_authority(
+                &self.config.target_uri.target,
+            ))
             .layer(routing_layer)
             .layer(retry_layer)
             .map_request(|req: Request<shared_http_body::SharedBody<TonicBody>>| {
@@ -255,6 +259,9 @@ impl XdsChannelBuilder {
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, discovery);
         let inner = ServiceBuilder::new()
+            .option_layer(AddOriginLayer::for_authority(
+                &self.config.target_uri.target,
+            ))
             .layer(routing_layer)
             .layer(retry_layer)
             .map_request(|req: Request<shared_http_body::SharedBody<TonicBody>>| {

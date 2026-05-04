@@ -121,6 +121,14 @@ pub(crate) struct NodeConfig {
     pub cluster: Option<String>,
     /// Locality where the node is running.
     pub locality: Option<LocalityConfig>,
+    /// Free-form metadata sent to the xDS server (`google.protobuf.Struct`).
+    ///
+    /// Only string values are supported here; nested structs and other Value
+    /// kinds are not exposed. Some control planes vary the served config based
+    /// on metadata — e.g. Istio's istiod gates proxyless gRPC config behind
+    /// `GENERATOR = "grpc"`.
+    #[serde(default)]
+    pub metadata: HashMap<String, String>,
 }
 
 /// Locality configuration from bootstrap JSON.
@@ -261,6 +269,9 @@ impl From<NodeConfig> for Node {
                 zone: locality.zone,
                 sub_zone: locality.sub_zone,
             });
+        }
+        if !config.metadata.is_empty() {
+            node = node.with_metadata(config.metadata);
         }
 
         node
@@ -433,6 +444,45 @@ mod tests {
         let config = BootstrapConfig::from_json(json).unwrap();
         let node = Node::from(config.node);
         assert!(node.id.is_none());
+    }
+
+    #[test]
+    fn parse_node_metadata() {
+        let json = r#"{
+            "xds_servers": [{"server_uri": "localhost:5000"}],
+            "node": {
+                "id": "n1",
+                "metadata": {
+                    "GENERATOR": "grpc",
+                    "PILOT_VERSION": "1.20"
+                }
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        assert_eq!(config.node.metadata.get("GENERATOR").unwrap(), "grpc");
+        assert_eq!(config.node.metadata.get("PILOT_VERSION").unwrap(), "1.20");
+    }
+
+    #[test]
+    fn node_from_config_propagates_metadata() {
+        let json = r#"{
+            "xds_servers": [{"server_uri": "localhost:5000"}],
+            "node": {
+                "id": "n1",
+                "metadata": {"GENERATOR": "grpc"}
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        let node = Node::from(config.node);
+        assert_eq!(node.metadata.get("GENERATOR").unwrap(), "grpc");
+    }
+
+    #[test]
+    fn missing_metadata_defaults_to_empty() {
+        let config = BootstrapConfig::from_json(minimal_json()).unwrap();
+        assert!(config.node.metadata.is_empty());
+        let node = Node::from(config.node);
+        assert!(node.metadata.is_empty());
     }
 
     #[test]
