@@ -15,7 +15,7 @@ use std::fmt::Debug;
 use std::sync::Arc;
 use std::task::{Context, Poll};
 use tonic::{body::Body as TonicBody, client::GrpcService, transport::channel::Channel};
-use tower::{BoxError, Service, ServiceBuilder, util::BoxCloneService};
+use tower::{BoxError, Service, ServiceBuilder, util::BoxCloneSyncService};
 use xds_client::{ClientConfig, Node, ProstCodec, TokioRuntime, TonicTransportBuilder, XdsClient};
 
 use crate::client::retry::{GrpcRetryPolicy, GrpcRetryPolicyConfig, RetryLayer};
@@ -129,13 +129,21 @@ where
 
 /// A [`tonic::client::GrpcService`] implementation that can route and load-balance
 /// gRPC requests based on xDS configuration.
+///
+/// `Send + Sync + Clone`. Cloning is cheap (the inner service stack is
+/// reference-counted); callers that need exclusive access for
+/// [`tower::Service::call`] should clone per call site rather than share a
+/// single instance through a lock.
 pub type XdsChannelGrpc =
-    BoxCloneService<http::Request<TonicBody>, http::Response<TonicBody>, BoxError>;
+    BoxCloneSyncService<http::Request<TonicBody>, http::Response<TonicBody>, BoxError>;
 
-// Static assertion that XdsChannelGrpc implements GrpcService
+// Static assertions: XdsChannelGrpc implements GrpcService and is shareable
+// across tasks (Send + Sync).
 const _: fn() = || {
     fn assert_grpc_service<T: GrpcService<TonicBody>>() {}
+    fn assert_send_sync<T: Send + Sync>() {}
     assert_grpc_service::<XdsChannelGrpc>();
+    assert_send_sync::<XdsChannelGrpc>();
 };
 
 /// Builder for creating an [`XdsChannel`] or [`XdsChannelGrpc`].
@@ -228,7 +236,7 @@ impl XdsChannelBuilder {
             })
             .service(lb_service);
 
-        BoxCloneService::new(XdsChannel {
+        BoxCloneSyncService::new(XdsChannel {
             config: self.config.clone(),
             inner,
             _resources: Some(resources),
@@ -261,7 +269,7 @@ impl XdsChannelBuilder {
                 req.map(TonicBody::new)
             })
             .service(lb_service);
-        BoxCloneService::new(XdsChannel {
+        BoxCloneSyncService::new(XdsChannel {
             config: self.config.clone(),
             inner,
             _resources: None,
