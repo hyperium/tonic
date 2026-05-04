@@ -26,11 +26,11 @@ mod server_status;
 mod status_code;
 
 pub use server_status::ServerStatusErr;
-pub use status_code::StatusCode;
+pub use status_code::StatusCodeError;
 
 /// Represents either a failing gRPC status or a successful result containing
 /// `T`.
-pub type StatusOr<T> = Result<T, StatusErr>;
+pub type StatusOr<T> = Result<T, StatusError>;
 
 /// The representation of a gRPC status.  OK statuses may not contain a status
 /// message, while error values may.
@@ -38,22 +38,22 @@ pub type Status = StatusOr<()>;
 
 /// Represents a gRPC status.
 #[derive(Debug, Clone)]
-pub struct StatusErr {
-    code: StatusCode,
+pub struct StatusError {
+    code: StatusCodeError,
     message: String,
 }
 
-impl StatusErr {
+impl StatusError {
     /// Create a new `StatusErr` with the given code and message.
-    pub fn new(code: StatusCode, message: impl Into<String>) -> Self {
-        StatusErr {
+    pub fn new(code: StatusCodeError, message: impl Into<String>) -> Self {
+        StatusError {
             code,
             message: message.into(),
         }
     }
 
     /// Get the `StatusCode` of this `StatusErr`.
-    pub fn code(&self) -> StatusCode {
+    pub fn code(&self) -> StatusCodeError {
         self.code
     }
 
@@ -67,13 +67,13 @@ impl StatusErr {
     pub(crate) fn is_restricted_control_plane_code(&self) -> bool {
         matches!(
             self.code,
-            StatusCode::InvalidArgument
-                | StatusCode::NotFound
-                | StatusCode::AlreadyExists
-                | StatusCode::FailedPrecondition
-                | StatusCode::Aborted
-                | StatusCode::OutOfRange
-                | StatusCode::DataLoss
+            StatusCodeError::InvalidArgument
+                | StatusCodeError::NotFound
+                | StatusCodeError::AlreadyExists
+                | StatusCodeError::FailedPrecondition
+                | StatusCodeError::Aborted
+                | StatusCodeError::OutOfRange
+                | StatusCodeError::DataLoss
         )
     }
 }
@@ -84,14 +84,14 @@ mod tests {
 
     #[test]
     fn test_status_new() {
-        let status = StatusErr::new(StatusCode::NotFound, "not ok");
-        assert_eq!(status.code(), StatusCode::NotFound);
+        let status = StatusError::new(StatusCodeError::NotFound, "not ok");
+        assert_eq!(status.code(), StatusCodeError::NotFound);
         assert_eq!(status.message(), "not ok");
     }
 
     #[test]
     fn test_status_debug() {
-        let status = StatusErr::new(StatusCode::Cancelled, "not ok");
+        let status = StatusError::new(StatusCodeError::Cancelled, "not ok");
         let debug = format!("{:?}", status);
         assert!(debug.contains("Status"));
         assert!(debug.contains("Cancelled"));

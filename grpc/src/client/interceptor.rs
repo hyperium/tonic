@@ -256,8 +256,8 @@ mod test {
     use tokio::task;
 
     use super::*;
-    use crate::StatusCode;
-    use crate::StatusErr;
+    use crate::StatusCodeError;
+    use crate::StatusError;
     use crate::client::CallOptions;
     use crate::client::Invoke;
     use crate::client::RecvStream;
@@ -406,7 +406,7 @@ mod test {
         assert_eq!(controller.recv_req().await.0, one);
         controller
             .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(StatusCode::Internal, ""),
+                StatusError::new(StatusCodeError::Internal, ""),
             ))))
             .await;
         let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
@@ -417,7 +417,7 @@ mod test {
         assert_eq!(controller.recv_req().await.0, two);
         controller
             .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(StatusCode::Internal, ""),
+                StatusError::new(StatusCodeError::Internal, ""),
             ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
@@ -449,7 +449,7 @@ mod test {
         assert_eq!(controller.recv_req().await.0, one);
         controller
             .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(crate::StatusCode::Internal, ""),
+                StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
         let handle = task::spawn(async move { rx.next(&mut ByteRecvMsg::new()).await });
@@ -460,21 +460,21 @@ mod test {
         assert_eq!(controller.recv_req().await.0, two);
         controller
             .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(crate::StatusCode::Internal, ""),
+                StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
             .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(crate::StatusCode::Internal, ""),
+                StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
         assert_eq!(controller.recv_req().await.0, one);
         assert_eq!(controller.recv_req().await.0, two);
         controller
             .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(crate::StatusCode::Internal, ""),
+                StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
         let resp = handle.await.unwrap();
@@ -483,7 +483,7 @@ mod test {
         };
         assert_eq!(
             trailers.status().as_ref().unwrap_err().code(),
-            crate::StatusCode::Internal
+            crate::StatusCodeError::Internal
         );
     }
 
@@ -510,7 +510,7 @@ mod test {
 
         controller
             .send_resp(ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(crate::StatusCode::Internal, ""),
+                StatusError::new(crate::StatusCodeError::Internal, ""),
             ))))
             .await;
 
@@ -520,7 +520,7 @@ mod test {
         };
         assert_eq!(
             trailers.status().as_ref().unwrap_err().code(),
-            crate::StatusCode::Internal
+            crate::StatusCodeError::Internal
         );
     }
 

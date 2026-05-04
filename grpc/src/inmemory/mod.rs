@@ -35,8 +35,8 @@ use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 
-use crate::StatusCode;
-use crate::StatusErr;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::attributes::Attributes;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream as ClientDynRecvStream;
@@ -322,8 +322,8 @@ impl ClientRecvStream for InMemoryClientRecvStream {
                         Ok(trailers) => return ClientResponseStreamItem::Trailers(trailers),
                         Err(_) => {
                             return ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                                StatusErr::new(
-                                    StatusCode::Internal,
+                                StatusError::new(
+                                    StatusCodeError::Internal,
                                     "stream ended without trailers in in-memory transport",
                                 ),
                             )));
@@ -480,7 +480,7 @@ mod tests {
             ClientResponseStreamItem::Trailers(t) => {
                 assert_eq!(
                     t.status().as_ref().unwrap_err().code(),
-                    crate::StatusCode::Internal
+                    crate::StatusCodeError::Internal
                 );
                 assert!(
                     t.status()

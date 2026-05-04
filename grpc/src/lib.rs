@@ -43,8 +43,8 @@ mod status;
 
 pub use status::ServerStatusErr;
 pub use status::Status;
-pub use status::StatusCode;
-pub use status::StatusErr;
+pub use status::StatusCodeError;
+pub use status::StatusError;
 pub use status::StatusOr;
 
 mod attributes;

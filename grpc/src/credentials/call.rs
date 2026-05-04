@@ -28,7 +28,7 @@ use std::sync::Arc;
 use tonic::async_trait;
 use tonic::metadata::MetadataMap;
 
-use crate::StatusErr;
+use crate::StatusError;
 use crate::attributes::Attributes;
 use crate::credentials::SecurityLevel;
 
@@ -116,7 +116,7 @@ pub trait CallCredentials: Send + Sync + Debug {
         call_details: &CallDetails,
         auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
-    ) -> Result<(), StatusErr>;
+    ) -> Result<(), StatusError>;
 
     /// Indicates the minimum transport security level required to send
     /// these credentials.
@@ -157,7 +157,7 @@ impl CallCredentials for CompositeCallCredentials {
         call_details: &CallDetails,
         auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
-    ) -> Result<(), StatusErr> {
+    ) -> Result<(), StatusError> {
         for cred in &self.creds {
             cred.get_metadata(call_details, auth_info, metadata).await?;
         }
@@ -193,7 +193,7 @@ mod tests {
             _call_details: &CallDetails,
             _auth_info: &ClientConnectionSecurityInfo,
             metadata: &mut MetadataMap,
-        ) -> Result<(), StatusErr> {
+        ) -> Result<(), StatusError> {
             metadata.insert(
                 self.key
                     .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()

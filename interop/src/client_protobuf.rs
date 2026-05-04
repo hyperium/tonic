@@ -22,7 +22,7 @@
  *
  */
 
-use grpc::StatusCode;
+use grpc::StatusCodeError;
 use grpc::StatusOr;
 use grpc::client::Channel;
 use grpc::client::metadata_utils::AttachHeadersInterceptor;
@@ -249,7 +249,7 @@ impl InteropTest for TestClient {
             assertions.push(test_assert!(
                 "call must fail with unknown status code",
                 match &result {
-                    Err(status_err) => status_err.code() == StatusCode::Unknown,
+                    Err(status_err) => status_err.code() == StatusCodeError::Unknown,
                     _ => false,
                 },
                 format!("result={:?}", result)
@@ -306,7 +306,7 @@ impl InteropTest for TestClient {
         assertions.push(test_assert!(
             "call must fail with unknown status code",
             match &result {
-                Err(status) => status.code() == StatusCode::Unknown,
+                Err(status) => status.code() == StatusCodeError::Unknown,
                 _ => false,
             },
             format!("result={:?}", result)
@@ -327,7 +327,7 @@ impl InteropTest for TestClient {
         assertions.push(test_assert!(
             "call must fail with unimplemented status code",
             match &result {
-                Err(status) => status.code() == StatusCode::Unimplemented,
+                Err(status) => status.code() == StatusCodeError::Unimplemented,
                 _ => false,
             },
             format!("result={:?}", result)
@@ -416,7 +416,7 @@ impl InteropTestUnimplemented for UnimplementedClient {
         assertions.push(test_assert!(
             "call must fail with unimplemented status code",
             match &result {
-                Err(status) => status.code() == StatusCode::Unimplemented,
+                Err(status) => status.code() == StatusCodeError::Unimplemented,
                 _ => false,
             },
             format!("result={:?}", result)

@@ -25,7 +25,7 @@
 /// Represents a gRPC status code.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[repr(i32)]
-pub enum StatusCode {
+pub enum StatusCodeError {
     Cancelled = 1,
     Unknown = 2,
     InvalidArgument = 3,
@@ -44,26 +44,26 @@ pub enum StatusCode {
     Unauthenticated = 16,
 }
 
-impl From<i32> for StatusCode {
+impl From<i32> for StatusCodeError {
     fn from(i: i32) -> Self {
         match i {
-            1 => StatusCode::Cancelled,
-            2 => StatusCode::Unknown,
-            3 => StatusCode::InvalidArgument,
-            4 => StatusCode::DeadlineExceeded,
-            5 => StatusCode::NotFound,
-            6 => StatusCode::AlreadyExists,
-            7 => StatusCode::PermissionDenied,
-            8 => StatusCode::ResourceExhausted,
-            9 => StatusCode::FailedPrecondition,
-            10 => StatusCode::Aborted,
-            11 => StatusCode::OutOfRange,
-            12 => StatusCode::Unimplemented,
-            13 => StatusCode::Internal,
-            14 => StatusCode::Unavailable,
-            15 => StatusCode::DataLoss,
-            16 => StatusCode::Unauthenticated,
-            _ => StatusCode::Unknown,
+            1 => StatusCodeError::Cancelled,
+            2 => StatusCodeError::Unknown,
+            3 => StatusCodeError::InvalidArgument,
+            4 => StatusCodeError::DeadlineExceeded,
+            5 => StatusCodeError::NotFound,
+            6 => StatusCodeError::AlreadyExists,
+            7 => StatusCodeError::PermissionDenied,
+            8 => StatusCodeError::ResourceExhausted,
+            9 => StatusCodeError::FailedPrecondition,
+            10 => StatusCodeError::Aborted,
+            11 => StatusCodeError::OutOfRange,
+            12 => StatusCodeError::Unimplemented,
+            13 => StatusCodeError::Internal,
+            14 => StatusCodeError::Unavailable,
+            15 => StatusCodeError::DataLoss,
+            16 => StatusCodeError::Unauthenticated,
+            _ => StatusCodeError::Unknown,
         }
     }
 }

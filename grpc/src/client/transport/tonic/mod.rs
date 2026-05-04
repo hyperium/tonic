@@ -65,8 +65,8 @@ use tower::limit::RateLimitLayer;
 use tower::util::BoxService;
 use tower_service::Service as TowerService;
 
-use crate::StatusCode;
-use crate::StatusErr;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::client::CallOptions;
 use crate::client::Invoke;
 use crate::client::RecvStream;
@@ -157,13 +157,13 @@ impl Invoke for TonicTransport {
         *request.metadata_mut() = metadata;
 
         let Ok(path) = PathAndQuery::from_maybe_shared(method) else {
-            return err_streams(StatusErr::new(StatusCode::Internal, "invalid path"));
+            return err_streams(StatusError::new(StatusCodeError::Internal, "invalid path"));
         };
 
         let mut grpc = self.grpc.clone();
         if let Err(e) = grpc.ready().await {
-            return err_streams(StatusErr::new(
-                StatusCode::Unavailable,
+            return err_streams(StatusError::new(
+                StatusCodeError::Unavailable,
                 format!("Service was not ready: {e}"),
             ));
         }
@@ -197,8 +197,8 @@ fn trailers_from_tonic_status(
     let mut trailers = Trailers::new(if status.code() == Code::Ok {
         Ok(())
     } else {
-        Err(StatusErr::new(
-            StatusCode::from(status.code() as i32),
+        Err(StatusError::new(
+            StatusCodeError::from(status.code() as i32),
             status.message(),
         ))
     });
@@ -241,7 +241,7 @@ struct TonicRecvStream {
 }
 
 enum StreamState {
-    Error(StatusErr),
+    Error(StatusError),
     AwaitingHeaders(oneshot::Receiver<Result<tonic::Response<Streaming<Bytes>>, TonicStatus>>),
     Streaming(Streaming<Bytes>),
     Closed,
@@ -270,7 +270,7 @@ impl RecvStream for TonicRecvStream {
                 }
                 // Stay closed after sending trailers.
                 Err(_) => trailers_from_status(
-                    Err(StatusErr::new(StatusCode::Unknown, "Task cancelled")),
+                    Err(StatusError::new(StatusCodeError::Unknown, "Task cancelled")),
                     None,
                 ),
                 Ok(Err(status)) => trailers_from_tonic_status(status, None),
@@ -286,8 +286,8 @@ impl RecvStream for TonicRecvStream {
                     // running, but our decoding failed -- do we need to terminate
                     // the request stream now even though the Streaming is dropped?
                     Err(e) => trailers_from_status(
-                        Err(StatusErr::new(
-                            StatusCode::Internal,
+                        Err(StatusError::new(
+                            StatusCodeError::Internal,
                             format!("error decoding response: {e}"),
                         )),
                         None,
@@ -309,7 +309,7 @@ impl RecvStream for TonicRecvStream {
     }
 }
 
-fn err_streams(status: StatusErr) -> (TonicSendStream, TonicRecvStream) {
+fn err_streams(status: StatusError) -> (TonicSendStream, TonicRecvStream) {
     (
         TonicSendStream { sender: Err(()) },
         TonicRecvStream {

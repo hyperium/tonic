@@ -45,8 +45,8 @@ use tonic::metadata::MetadataMap;
 use tonic::transport::Server;
 use tonic_prost::prost::Message as ProstMessage;
 
-use crate::StatusCode;
-use crate::StatusErr;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::client::CallOptions;
 use crate::client::Channel;
 use crate::client::Invoke as _;
@@ -87,7 +87,7 @@ use crate::rt::tokio::TokioRuntime;
 struct MockCallCredentials {
     metadata: Vec<(&'static str, &'static str)>,
     min_security_level: SecurityLevel,
-    should_fail: Option<crate::StatusErr>,
+    should_fail: Option<crate::StatusError>,
 }
 
 #[async_trait]
@@ -97,7 +97,7 @@ impl CallCredentials for MockCallCredentials {
         _call_details: &CallDetails,
         _auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
-    ) -> Result<(), crate::StatusErr> {
+    ) -> Result<(), crate::StatusError> {
         if let Some(status) = &self.should_fail {
             return Err(status.clone());
         }
@@ -500,7 +500,7 @@ async fn grpc_invoke_failure_cases() {
         let trailers = perform_unary_echo_failure(&channel).await;
         assert_eq!(
             trailers.status().as_ref().unwrap_err().code(),
-            StatusCode::Unauthenticated
+            StatusCodeError::Unauthenticated
         );
     }
 
@@ -510,8 +510,8 @@ async fn grpc_invoke_failure_cases() {
         let call_creds = Arc::new(MockCallCredentials {
             metadata: vec![],
             min_security_level: SecurityLevel::NoSecurity,
-            should_fail: Some(crate::StatusErr::new(
-                StatusCode::PermissionDenied,
+            should_fail: Some(crate::StatusError::new(
+                StatusCodeError::PermissionDenied,
                 "test message",
             )),
         });
@@ -521,7 +521,7 @@ async fn grpc_invoke_failure_cases() {
         let trailers = perform_unary_echo_failure(&channel).await;
         assert_eq!(
             trailers.status().as_ref().unwrap_err().code(),
-            StatusCode::PermissionDenied
+            StatusCodeError::PermissionDenied
         );
         assert!(
             trailers
@@ -539,7 +539,10 @@ async fn grpc_invoke_failure_cases() {
         let call_creds = Arc::new(MockCallCredentials {
             metadata: vec![],
             min_security_level: SecurityLevel::NoSecurity,
-            should_fail: Some(StatusErr::new(StatusCode::InvalidArgument, "test message")),
+            should_fail: Some(StatusError::new(
+                StatusCodeError::InvalidArgument,
+                "test message",
+            )),
         });
         let composite_creds = CompositeChannelCredentials::new(creds, call_creds).unwrap();
         let channel = Channel::new(&target, Arc::new(composite_creds), Default::default());
@@ -547,7 +550,7 @@ async fn grpc_invoke_failure_cases() {
         let trailers = perform_unary_echo_failure(&channel).await;
         assert_eq!(
             trailers.status().as_ref().unwrap_err().code(),
-            StatusCode::Internal
+            StatusCodeError::Internal
         );
         assert!(
             trailers

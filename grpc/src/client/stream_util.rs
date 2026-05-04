@@ -22,8 +22,8 @@
  *
  */
 
-use crate::StatusCode;
-use crate::StatusErr;
+use crate::StatusCodeError;
+use crate::StatusError;
 use crate::client::CallOptions;
 use crate::client::DynRecvStream;
 use crate::client::DynSendStream;
@@ -108,8 +108,8 @@ where
     /// containing the error message.
     fn error(&mut self, s: impl Into<String>) -> ClientResponseStreamItem {
         self.state = RecvStreamState::Done;
-        ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-            StatusCode::Internal,
+        ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+            StatusCodeError::Internal,
             s,
         ))))
     }
@@ -177,7 +177,7 @@ impl SendStream for NopSendStream {
 }
 
 pub(crate) struct FailingRecvStream {
-    status: Option<StatusErr>,
+    status: Option<StatusError>,
 }
 
 impl RecvStream for FailingRecvStream {
@@ -191,7 +191,7 @@ impl RecvStream for FailingRecvStream {
 
 impl FailingRecvStream {
     pub(crate) fn new_stream_pair(
-        status: StatusErr,
+        status: StatusError,
     ) -> (Box<dyn DynSendStream>, Box<dyn DynRecvStream>) {
         (
             Box::new(NopSendStream),
@@ -221,8 +221,8 @@ mod test {
         for scenario in scenarios {
             validate_scenario(
                 &scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received messages without headers",
                 )))),
                 false,
@@ -250,8 +250,8 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "ended without trailers",
                 )))),
                 false,
@@ -278,8 +278,8 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received multiple headers",
                 )))),
                 false,
@@ -301,8 +301,8 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received zero messages",
                 )))),
                 true,
@@ -322,8 +322,8 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Internal,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Internal,
                     "received multiple messages",
                 )))),
                 true,
@@ -359,8 +359,8 @@ mod test {
             ClientResponseStreamItem::Message,
             ClientResponseStreamItem::Message,
             ClientResponseStreamItem::Message,
-            ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                StatusCode::Aborted,
+            ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                StatusCodeError::Aborted,
                 "some err",
             )))),
         ]];
@@ -368,8 +368,8 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
                 )))),
                 false,
@@ -400,20 +400,20 @@ mod test {
     async fn test_validator_erroring_unary() {
         let scenarios = [
             vec![ClientResponseStreamItem::Trailers(Trailers::new(Err(
-                StatusErr::new(StatusCode::Aborted, "some err"),
+                StatusError::new(StatusCodeError::Aborted, "some err"),
             )))],
             vec![
                 ClientResponseStreamItem::Headers(ResponseHeaders::default()),
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
                 )))),
             ],
             vec![
                 ClientResponseStreamItem::Headers(ResponseHeaders::default()),
                 ClientResponseStreamItem::Message,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
                 )))),
             ],
@@ -422,8 +422,8 @@ mod test {
         for scenario in &scenarios {
             validate_scenario(
                 scenario,
-                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusErr::new(
-                    StatusCode::Aborted,
+                ClientResponseStreamItem::Trailers(Trailers::new(Err(StatusError::new(
+                    StatusCodeError::Aborted,
                     "some err",
                 )))),
                 true,
