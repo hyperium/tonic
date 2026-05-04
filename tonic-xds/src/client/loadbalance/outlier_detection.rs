@@ -46,28 +46,44 @@ pub(crate) const DEFAULT_DECISIONS_CHANNEL_CAPACITY: usize = 256;
 /// invoke [`record_success`] / [`record_failure`] from the data path.
 /// The detector reads and resets the counters during each sweep.
 ///
+/// Both counters are packed into a single `AtomicU64` (high 32 bits:
+/// successes, low 32 bits: failures) so each increment is a single
+/// `fetch_add` and a sweep is a single `swap(0)` — the snapshot is
+/// truly atomic across the pair. Each counter is capped at
+/// `u32::MAX` per sweep interval; exceeding that carries into the
+/// other counter's bits, but the cap is unreachable for realistic
+/// workloads (> 4 × 10⁹ RPCs to one endpoint within a single
+/// interval).
+///
 /// [`record_success`]: EndpointCounters::record_success
 /// [`record_failure`]: EndpointCounters::record_failure
 #[derive(Debug, Default)]
 pub(crate) struct EndpointCounters {
-    success: AtomicU64,
-    failure: AtomicU64,
+    /// High 32 bits: successes since last sweep.
+    /// Low 32 bits: failures since last sweep.
+    packed: AtomicU64,
 }
+
+/// Increment to apply to [`EndpointCounters::packed`] for one success.
+const SUCCESS_INC: u64 = 1 << 32;
+/// Increment to apply to [`EndpointCounters::packed`] for one failure.
+const FAILURE_INC: u64 = 1;
+/// Mask for the failure half of the packed counter.
+const FAILURE_MASK: u64 = 0xFFFF_FFFF;
 
 impl EndpointCounters {
     pub(crate) fn record_success(&self) {
-        self.success.fetch_add(1, Ordering::Relaxed);
+        self.packed.fetch_add(SUCCESS_INC, Ordering::Relaxed);
     }
 
     pub(crate) fn record_failure(&self) {
-        self.failure.fetch_add(1, Ordering::Relaxed);
+        self.packed.fetch_add(FAILURE_INC, Ordering::Relaxed);
     }
 
     /// Atomically read and zero both counters. Returns `(success, failure)`.
     fn snapshot_and_reset(&self) -> (u64, u64) {
-        let s = self.success.swap(0, Ordering::Relaxed);
-        let f = self.failure.swap(0, Ordering::Relaxed);
-        (s, f)
+        let v = self.packed.swap(0, Ordering::Relaxed);
+        (v >> 32, v & FAILURE_MASK)
     }
 }
 
