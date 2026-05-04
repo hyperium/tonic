@@ -392,7 +392,7 @@ struct Candidate {
 ///
 /// `tx.send().await` is fallible (returns `Err` if the receiver was
 /// dropped) and may park briefly when the channel is full — see
-/// [`DECISIONS_CHANNEL_CAPACITY`].
+/// [`DEFAULT_DECISIONS_CHANNEL_CAPACITY`].
 async fn sweep_loop(detector: Arc<OutlierDetector>, tx: mpsc::Sender<EjectionDecision>) {
     let mut ticker = tokio::time::interval(detector.config.interval);
     // Skip missed ticks rather than burst-catching up — the goal is
