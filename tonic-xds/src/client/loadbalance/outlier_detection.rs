@@ -1,11 +1,14 @@
 //! gRFC A50 outlier-detection sweep engine.
 //!
-//! Owns per-endpoint counters and an ejection state machine. Periodically
-//! reads the counters, runs the failure-percentage ejection algorithm,
-//! and emits [`EjectionDecision`]s. Knows nothing about the data path:
+//! Owns per-endpoint counters and an ejection state machine. Runs the
+//! failure-percentage ejection algorithm on demand and returns the
+//! resulting [`EjectionDecision`]s. Knows nothing about the data path:
 //! callers feed it RPC outcomes via the lock-free [`EndpointCounters`]
-//! handle returned by [`OutlierDetector::add_endpoint`], and consume
-//! decisions from a channel returned by [`OutlierDetector::spawn`].
+//! handle returned by [`OutlierDetector::add_endpoint`], and pump the
+//! sweep by calling [`OutlierDetector::maybe_run_sweep`] from their own
+//! event loop (typically the load balancer's `poll_ready`). The wall
+//! clock supplied to `maybe_run_sweep` decides when each sweep actually
+//! runs — at most once per `config.interval`.
 //!
 //! Only the **failure-percentage** algorithm is implemented in this
 //! module. The success-rate algorithm — which adds float-math (mean
@@ -18,27 +21,11 @@
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
-use tokio::sync::mpsc;
-
 use crate::client::endpoint::EndpointAddress;
-use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDetectionConfig};
-
-/// Default capacity for the channel that delivers [`EjectionDecision`]s
-/// from the sweep task to its consumer.
-///
-/// Sized for several sweeps' worth of decisions on typical clusters —
-/// each sweep emits at most `2 * num_endpoints`. At capacity, the sweep
-/// task waits on `send` rather than dropping or coalescing decisions:
-/// the channel is edge-triggered, so missing or merging events would
-/// desynchronize the consumer's view of which endpoints are ejected.
-///
-/// Override via [`OutlierDetectorOptions::decisions_channel_capacity`].
-pub(crate) const DEFAULT_DECISIONS_CHANNEL_CAPACITY: usize = 256;
 
 /// Lock-free success/failure counter for one endpoint. The data path
 /// records RPC outcomes via `record_success` / `record_failure`; the
@@ -126,83 +113,38 @@ impl EndpointState {
     }
 }
 
-/// Runtime knobs that don't come from the xDS config (`OutlierDetection`
-/// proto) — the channel capacity, the RNG, etc. Kept separate from
-/// [`OutlierDetectionConfig`] so xDS-derived state stays distinct from
-/// host-side runtime tuning.
-///
-/// New fields can be added without breaking call sites because callers
-/// typically construct via `..Default::default()`.
-pub(crate) struct OutlierDetectorOptions {
-    /// Capacity of the bounded mpsc channel that carries
-    /// [`EjectionDecision`]s from the sweep loop to the consumer.
-    /// See [`DEFAULT_DECISIONS_CHANNEL_CAPACITY`] for the rationale.
-    pub decisions_channel_capacity: usize,
-    /// Probability source for the `enforcing_*` rolls. Tests inject a
-    /// deterministic [`Rng`]; production uses `fastrand`.
-    pub rng: Box<dyn Rng>,
-}
-
-impl Default for OutlierDetectorOptions {
-    fn default() -> Self {
-        Self {
-            decisions_channel_capacity: DEFAULT_DECISIONS_CHANNEL_CAPACITY,
-            rng: Box::new(FastRandRng),
-        }
-    }
-}
-
-impl std::fmt::Debug for OutlierDetectorOptions {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("OutlierDetectorOptions")
-            .field(
-                "decisions_channel_capacity",
-                &self.decisions_channel_capacity,
-            )
-            .field("rng", &"<dyn Rng>")
-            .finish()
-    }
-}
-
 /// gRFC A50 outlier detector.
 ///
-/// `run_sweep` is pure — it returns a list of [`EjectionDecision`]s
-/// rather than sending them. The sweep loop spawned by [`spawn`] owns
-/// the channel sender and forwards decisions to the receiver, so
-/// dropping the [`AbortOnDrop`] handle ends the loop and closes the
-/// receiver. `OutlierDetector` itself holds no I/O resources, which
-/// makes algorithm-level tests trivial to write.
-///
-/// [`spawn`]: OutlierDetector::spawn
+/// State is owned (no `Mutex`, no `Arc`): the consumer holds the
+/// detector by `&mut` and calls [`Self::maybe_run_sweep`] from its own
+/// event loop, typically the load balancer's `poll_ready`. The wall
+/// clock argument decides when each sweep actually runs — at most once
+/// per `config.interval`.
 pub(crate) struct OutlierDetector {
     config: OutlierDetectionConfig,
-    state: Mutex<HashMap<EndpointAddress, EndpointState>>,
+    state: HashMap<EndpointAddress, EndpointState>,
+    /// Wall-clock time of the last sweep that actually ran. `None`
+    /// before the first sweep, so the first call to `maybe_run_sweep`
+    /// always runs.
+    last_sweep_at: Option<Instant>,
     rng: Box<dyn Rng>,
 }
 
 impl OutlierDetector {
-    /// Build the detector with default runtime options and spawn its
-    /// sweep task on the current Tokio runtime. The sweep runs every
-    /// `config.interval` until the returned [`AbortOnDrop`] is dropped.
-    pub(crate) fn spawn(
-        config: OutlierDetectionConfig,
-    ) -> (Arc<Self>, mpsc::Receiver<EjectionDecision>, AbortOnDrop) {
-        Self::spawn_with(config, OutlierDetectorOptions::default())
+    /// Build the detector with the default RNG (`fastrand`).
+    pub(crate) fn new(config: OutlierDetectionConfig) -> Self {
+        Self::with_rng(config, Box::new(FastRandRng))
     }
 
-    /// Variant of [`Self::spawn`] that accepts custom runtime options.
-    pub(crate) fn spawn_with(
-        config: OutlierDetectionConfig,
-        options: OutlierDetectorOptions,
-    ) -> (Arc<Self>, mpsc::Receiver<EjectionDecision>, AbortOnDrop) {
-        let (tx, rx) = mpsc::channel(options.decisions_channel_capacity);
-        let detector = Arc::new(Self {
+    /// Build the detector with an injected [`Rng`]. Tests use this to
+    /// pin the `enforcing_*` rolls.
+    pub(crate) fn with_rng(config: OutlierDetectionConfig, rng: Box<dyn Rng>) -> Self {
+        Self {
             config,
-            state: Mutex::new(HashMap::new()),
-            rng: options.rng,
-        });
-        let task = tokio::spawn(sweep_loop(detector.clone(), tx));
-        (detector, rx, AbortOnDrop(task))
+            state: HashMap::new(),
+            last_sweep_at: None,
+            rng,
+        }
     }
 
     /// Register an endpoint and return its lock-free counter handle.
@@ -211,9 +153,8 @@ impl OutlierDetector {
     ///
     /// Adding an already-registered address is a no-op and returns the
     /// existing handle (so callers can re-add idempotently).
-    pub(crate) fn add_endpoint(&self, addr: EndpointAddress) -> Arc<EndpointCounters> {
-        let mut state = self.state.lock().expect("outlier_detector mutex poisoned");
-        state
+    pub(crate) fn add_endpoint(&mut self, addr: EndpointAddress) -> Arc<EndpointCounters> {
+        self.state
             .entry(addr)
             .or_insert_with(EndpointState::new)
             .counters
@@ -224,15 +165,30 @@ impl OutlierDetector {
     /// any ejection state. If the endpoint was ejected, no `Uneject`
     /// decision is emitted — the caller is expected to handle the removal
     /// directly (e.g., by dropping its slot in the load balancer).
-    pub(crate) fn remove_endpoint(&self, addr: &EndpointAddress) {
-        let mut state = self.state.lock().expect("outlier_detector mutex poisoned");
-        state.remove(addr);
+    pub(crate) fn remove_endpoint(&mut self, addr: &EndpointAddress) {
+        self.state.remove(addr);
     }
 
-    /// Run a single sweep at logical time `now` and return the resulting
-    /// ejection/un-ejection decisions. Pure — does no I/O. The sweep loop
-    /// invokes this on each interval tick and forwards the decisions on
-    /// the channel; tests call it directly.
+    /// Run a sweep at logical time `now` if at least `config.interval`
+    /// has elapsed since the last sweep, returning the resulting
+    /// ejection / un-ejection decisions. Otherwise returns an empty
+    /// vector and leaves the detector state untouched.
+    ///
+    /// The first call after construction always runs a sweep
+    /// (`last_sweep_at` starts as `None`).
+    pub(crate) fn maybe_run_sweep(&mut self, now: Instant) -> Vec<EjectionDecision> {
+        if let Some(last) = self.last_sweep_at
+            && now.duration_since(last) < self.config.interval
+        {
+            return Vec::new();
+        }
+        self.last_sweep_at = Some(now);
+        self.run_sweep(now)
+    }
+
+    /// Unconditionally run one sweep at logical time `now` and return the
+    /// resulting decisions. Used by [`Self::maybe_run_sweep`] and by tests
+    /// that want to drive sweeps without modeling the interval gate.
     ///
     /// The order of operations follows gRFC A50:
     /// 1. Record the timestamp.
@@ -242,12 +198,10 @@ impl OutlierDetector {
     /// 5. For each address: decrement the multiplier of non-ejected
     ///    addresses with multiplier > 0, and un-eject ejected addresses
     ///    whose backoff has elapsed.
-    pub(crate) fn run_sweep(&self, now: Instant) -> Vec<EjectionDecision> {
-        let mut state = self.state.lock().expect("outlier_detector mutex poisoned");
-
+    pub(crate) fn run_sweep(&mut self, now: Instant) -> Vec<EjectionDecision> {
         // Step 2: snapshot every endpoint's counters.
-        let mut snapshots: Vec<Candidate> = Vec::with_capacity(state.len());
-        for (addr, ep) in state.iter_mut() {
+        let mut snapshots: Vec<Candidate> = Vec::with_capacity(self.state.len());
+        for (addr, ep) in self.state.iter_mut() {
             let (success, failure) = ep.counters.snapshot_and_reset();
             snapshots.push(Candidate {
                 addr: addr.clone(),
@@ -262,11 +216,15 @@ impl OutlierDetector {
         // don't exceed `max_ejection_percent` of the total. Per A50, the
         // check is performed before each candidate ejection; we model that
         // as a budget that algorithms decrement.
-        let total_endpoints = state.len();
+        let total_endpoints = self.state.len();
         let max_ejections = (total_endpoints as u64
             * u64::from(self.config.max_ejection_percent.get())
             / 100) as usize;
-        let already_ejected = state.values().filter(|ep| ep.ejected_at.is_some()).count();
+        let already_ejected = self
+            .state
+            .values()
+            .filter(|ep| ep.ejected_at.is_some())
+            .count();
         let mut budget = max_ejections.saturating_sub(already_ejected);
 
         // Steps 3 & 4: run the algorithms on the snapshot. Hosts that are
@@ -280,11 +238,11 @@ impl OutlierDetector {
         let mut to_eject: Vec<EndpointAddress> = Vec::new();
 
         if let Some(fp) = self.config.failure_percentage.as_ref() {
-            self.run_failure_percentage(fp, &snapshots, &mut budget, &mut to_eject);
+            run_failure_percentage(fp, &snapshots, &mut budget, &mut to_eject, &*self.rng);
         }
 
         for addr in &to_eject {
-            if let Some(ep) = state.get_mut(addr) {
+            if let Some(ep) = self.state.get_mut(addr) {
                 ep.ejected_at = Some(now);
                 ep.ejection_multiplier = ep.ejection_multiplier.saturating_add(1);
             }
@@ -300,7 +258,7 @@ impl OutlierDetector {
             .base_ejection_time
             .max(self.config.max_ejection_time);
         let mut to_uneject: Vec<EndpointAddress> = Vec::new();
-        for (addr, ep) in state.iter_mut() {
+        for (addr, ep) in self.state.iter_mut() {
             if let Some(at) = ep.ejected_at {
                 if let Some(scaled) = self
                     .config
@@ -316,8 +274,6 @@ impl OutlierDetector {
             }
         }
 
-        drop(state);
-
         let mut decisions = Vec::with_capacity(to_uneject.len() + to_eject.len());
         for addr in to_uneject {
             decisions.push(EjectionDecision::Uneject(addr));
@@ -327,61 +283,61 @@ impl OutlierDetector {
         }
         decisions
     }
+}
 
-    /// A50 failure-percentage algorithm.
-    fn run_failure_percentage(
-        &self,
-        cfg: &FailurePercentageConfig,
-        all: &[Candidate],
-        budget: &mut usize,
-        out: &mut Vec<EndpointAddress>,
-    ) {
-        let qualifying: Vec<&Candidate> = all
-            .iter()
-            .filter(|c| c.total >= u64::from(cfg.request_volume))
-            .collect();
-        if qualifying.len() < cfg.minimum_hosts as usize {
-            return;
+/// A50 failure-percentage algorithm.
+fn run_failure_percentage(
+    cfg: &FailurePercentageConfig,
+    all: &[Candidate],
+    budget: &mut usize,
+    out: &mut Vec<EndpointAddress>,
+    rng: &dyn Rng,
+) {
+    let qualifying: Vec<&Candidate> = all
+        .iter()
+        .filter(|c| c.total >= u64::from(cfg.request_volume))
+        .collect();
+    if qualifying.len() < cfg.minimum_hosts as usize {
+        return;
+    }
+
+    let threshold = u64::from(cfg.threshold.get());
+    for c in qualifying {
+        if *budget == 0 {
+            break;
         }
-
-        let threshold = u64::from(cfg.threshold.get());
-        for c in qualifying {
-            if *budget == 0 {
-                break;
-            }
-            // A50 doesn't forbid `request_volume == 0`, in which case a
-            // candidate may have `total == 0`. The spec is silent on
-            // `0/0`; skip these endpoints rather than divide by zero.
-            if c.total == 0 {
-                continue;
-            }
-            // failure_pct = 100 * failure / total. A50 specifies a strict
-            // "greater than" comparison: an address sitting exactly at
-            // the threshold is not ejected.
-            let failure_pct = 100 * c.failure / c.total;
-            if failure_pct > threshold && self.roll(cfg.enforcing_failure_percentage.get()) {
-                out.push(c.addr.clone());
-                // Only NEW ejections consume a budget slot; re-ejecting
-                // an already-ejected address only refreshes its
-                // timestamp and multiplier, leaving the count of
-                // currently-ejected addresses unchanged.
-                if !c.already_ejected {
-                    *budget -= 1;
-                }
+        // A50 doesn't forbid `request_volume == 0`, in which case a
+        // candidate may have `total == 0`. The spec is silent on
+        // `0/0`; skip these endpoints rather than divide by zero.
+        if c.total == 0 {
+            continue;
+        }
+        // failure_pct = 100 * failure / total. A50 specifies a strict
+        // "greater than" comparison: an address sitting exactly at
+        // the threshold is not ejected.
+        let failure_pct = 100 * c.failure / c.total;
+        if failure_pct > threshold && roll(rng, cfg.enforcing_failure_percentage.get()) {
+            out.push(c.addr.clone());
+            // Only NEW ejections consume a budget slot; re-ejecting
+            // an already-ejected address only refreshes its
+            // timestamp and multiplier, leaving the count of
+            // currently-ejected addresses unchanged.
+            if !c.already_ejected {
+                *budget -= 1;
             }
         }
     }
+}
 
-    /// Return true with probability `pct / 100` (clamped at 100 ⇒ always).
-    fn roll(&self, pct: u8) -> bool {
-        if pct >= 100 {
-            return true;
-        }
-        if pct == 0 {
-            return false;
-        }
-        self.rng.pct_roll() < u32::from(pct)
+/// Return true with probability `pct / 100` (clamped at 100 ⇒ always).
+fn roll(rng: &dyn Rng, pct: u8) -> bool {
+    if pct >= 100 {
+        return true;
     }
+    if pct == 0 {
+        return false;
+    }
+    rng.pct_roll() < u32::from(pct)
 }
 
 /// Cached per-endpoint snapshot used during a sweep.
@@ -396,34 +352,6 @@ struct Candidate {
     /// the count of currently-ejected addresses, so it must not consume
     /// a `max_ejection_percent` budget slot.
     already_ejected: bool,
-}
-
-/// Background task: runs `detector.run_sweep` on each interval tick and
-/// forwards each decision on the channel. The task ends (and `tx` is
-/// dropped, closing the receiver) when [`AbortOnDrop`] is dropped or
-/// when the receiver itself is dropped.
-///
-/// `tx.send().await` is fallible (returns `Err` if the receiver was
-/// dropped) and may park briefly when the channel is full — see
-/// [`DEFAULT_DECISIONS_CHANNEL_CAPACITY`].
-async fn sweep_loop(detector: Arc<OutlierDetector>, tx: mpsc::Sender<EjectionDecision>) {
-    let mut ticker = tokio::time::interval(detector.config.interval);
-    // Skip missed ticks rather than burst-catching up — the goal is
-    // periodic observation, not making up for paused time.
-    ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
-    // The first tick fires immediately; consume it so the first real
-    // sweep is `interval` after spawn (matches A50 semantics).
-    ticker.tick().await;
-
-    loop {
-        ticker.tick().await;
-        for decision in detector.run_sweep(Instant::now()) {
-            if tx.send(decision).await.is_err() {
-                // Receiver gone — nobody is listening.
-                return;
-            }
-        }
-    }
 }
 
 #[cfg(test)]
@@ -473,14 +401,8 @@ mod tests {
         }
     }
 
-    /// Build a detector with no sweep loop running. Tests drive
-    /// `run_sweep` directly and inspect the returned decisions.
-    fn detector_no_loop(config: OutlierDetectionConfig, rng: Box<dyn Rng>) -> Arc<OutlierDetector> {
-        Arc::new(OutlierDetector {
-            config,
-            state: Mutex::new(HashMap::new()),
-            rng,
-        })
+    fn detector_with_rng(config: OutlierDetectionConfig, rng: Box<dyn Rng>) -> OutlierDetector {
+        OutlierDetector::with_rng(config, rng)
     }
 
     // ----- EndpointCounters -----
@@ -499,7 +421,7 @@ mod tests {
 
     #[test]
     fn add_endpoint_returns_shared_counter() {
-        let detector = detector_no_loop(base_config(), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(base_config(), FixedRng::boxed(99));
         let h1 = detector.add_endpoint(addr(8080));
         let h2 = detector.add_endpoint(addr(8080));
         assert!(
@@ -512,10 +434,10 @@ mod tests {
 
     #[test]
     fn remove_endpoint_drops_state() {
-        let detector = detector_no_loop(base_config(), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(base_config(), FixedRng::boxed(99));
         detector.add_endpoint(addr(8080));
         detector.remove_endpoint(&addr(8080));
-        assert!(detector.state.lock().unwrap().is_empty());
+        assert!(detector.state.is_empty());
     }
 
     // ----- Failure-percentage algorithm -----
@@ -537,7 +459,7 @@ mod tests {
 
     #[test]
     fn failure_percentage_ejects_above_threshold() {
-        let detector = detector_no_loop(fp_config(50, 10, 3), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(fp_config(50, 10, 3), FixedRng::boxed(99));
         // 4 healthy endpoints + 1 bad one.
         for port in 8080..=8083 {
             let h = detector.add_endpoint(addr(port));
@@ -559,7 +481,7 @@ mod tests {
 
     #[test]
     fn failure_percentage_skips_below_threshold() {
-        let detector = detector_no_loop(fp_config(50, 10, 3), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(fp_config(50, 10, 3), FixedRng::boxed(99));
         for port in 8080..=8084 {
             let h = detector.add_endpoint(addr(port));
             // 30% failure → below threshold of 50%.
@@ -577,7 +499,7 @@ mod tests {
     fn failure_percentage_at_threshold_does_not_eject() {
         // A50 specifies a strict "greater than" comparison: an address
         // sitting exactly at the threshold should *not* be ejected.
-        let detector = detector_no_loop(fp_config(50, 10, 3), FixedRng::boxed(0));
+        let mut detector = detector_with_rng(fp_config(50, 10, 3), FixedRng::boxed(0));
         for port in 8080..=8084 {
             let h = detector.add_endpoint(addr(port));
             // Exactly 50% failure rate — equal to the threshold.
@@ -593,7 +515,7 @@ mod tests {
 
     #[test]
     fn minimum_hosts_gates_failure_percentage() {
-        let detector = detector_no_loop(fp_config(50, 10, 5), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(fp_config(50, 10, 5), FixedRng::boxed(99));
         // Only 2 hosts have request_volume ≥ 10; minimum_hosts is 5 ⇒ skip.
         for port in 8080..=8081 {
             let h = detector.add_endpoint(addr(port));
@@ -606,7 +528,7 @@ mod tests {
 
     #[test]
     fn request_volume_filters_low_traffic_endpoints() {
-        let detector = detector_no_loop(fp_config(50, 100, 3), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(fp_config(50, 100, 3), FixedRng::boxed(99));
         // Bad endpoint, but only 5 requests — below request_volume=100.
         let bad = detector.add_endpoint(addr(8080));
         for _ in 0..5 {
@@ -631,7 +553,7 @@ mod tests {
             .enforcing_failure_percentage = pct(0);
         // Roll = 0 wouldn't trigger anyway since `roll(0)` short-circuits;
         // pin the RNG to 0 just to be explicit.
-        let detector = detector_no_loop(config, FixedRng::boxed(0));
+        let mut detector = detector_with_rng(config, FixedRng::boxed(0));
         for port in 8080..=8084 {
             let h = detector.add_endpoint(addr(port));
             for _ in 0..100 {
@@ -648,7 +570,7 @@ mod tests {
         let mut config = fp_config(50, 10, 3);
         config.base_ejection_time = Duration::from_secs(10);
         config.max_ejection_time = Duration::from_secs(60);
-        let detector = detector_no_loop(config, FixedRng::boxed(99));
+        let mut detector = detector_with_rng(config, FixedRng::boxed(99));
 
         for port in 8080..=8084 {
             let h = detector.add_endpoint(addr(port));
@@ -688,7 +610,7 @@ mod tests {
         let mut config = fp_config(50, 10, 3);
         config.base_ejection_time = Duration::from_secs(10);
         config.max_ejection_time = Duration::from_secs(60);
-        let detector = detector_no_loop(config, FixedRng::boxed(99));
+        let mut detector = detector_with_rng(config, FixedRng::boxed(99));
 
         let bad = addr(8084);
         let bad_h = detector.add_endpoint(bad.clone());
@@ -747,7 +669,7 @@ mod tests {
         let mut config = fp_config(50, 10, 3);
         config.base_ejection_time = Duration::from_secs(10);
         config.max_ejection_time = Duration::from_secs(15);
-        let detector = detector_no_loop(config, FixedRng::boxed(99));
+        let mut detector = detector_with_rng(config, FixedRng::boxed(99));
 
         for port in 8080..=8084 {
             detector.add_endpoint(addr(port));
@@ -755,8 +677,7 @@ mod tests {
         let t0 = Instant::now();
         // Force multiplier=10 directly.
         {
-            let mut state = detector.state.lock().unwrap();
-            let ep = state.get_mut(&addr(8084)).unwrap();
+            let ep = detector.state.get_mut(&addr(8084)).unwrap();
             ep.ejection_multiplier = 10;
             ep.ejected_at = Some(t0);
         }
@@ -771,7 +692,7 @@ mod tests {
         // 5 hosts, all bad, but max_ejection_percent=20 ⇒ at most 1 ejected.
         let mut config = fp_config(50, 10, 3);
         config.max_ejection_percent = pct(20);
-        let detector = detector_no_loop(config, FixedRng::boxed(99));
+        let mut detector = detector_with_rng(config, FixedRng::boxed(99));
 
         for port in 8080..=8084 {
             let h = detector.add_endpoint(addr(port));
@@ -801,7 +722,7 @@ mod tests {
         // 1 new ejection from the four bad hosts.
         let mut config = fp_config(50, 10, 3);
         config.max_ejection_percent = pct(60);
-        let detector = detector_no_loop(config, FixedRng::boxed(99));
+        let mut detector = detector_with_rng(config, FixedRng::boxed(99));
 
         // Pre-eject host 8080 directly and give it bad in-flight stats.
         let already_bad = detector.add_endpoint(addr(8080));
@@ -809,8 +730,7 @@ mod tests {
             already_bad.record_failure();
         }
         {
-            let mut state = detector.state.lock().unwrap();
-            let ep = state.get_mut(&addr(8080)).unwrap();
+            let ep = detector.state.get_mut(&addr(8080)).unwrap();
             ep.ejected_at = Some(Instant::now());
             ep.ejection_multiplier = 1;
         }
@@ -834,18 +754,21 @@ mod tests {
 
     #[test]
     fn multiplier_decrements_on_healthy_interval() {
-        let detector = detector_no_loop(base_config(), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(base_config(), FixedRng::boxed(99));
         let h = detector.add_endpoint(addr(8080));
         // Force multiplier to 3 without ejecting.
-        {
-            let mut state = detector.state.lock().unwrap();
-            state.get_mut(&addr(8080)).unwrap().ejection_multiplier = 3;
-        }
+        detector
+            .state
+            .get_mut(&addr(8080))
+            .unwrap()
+            .ejection_multiplier = 3;
         // Healthy interval (some traffic, no ejection).
         h.record_success();
         detector.run_sweep(Instant::now());
-        let state = detector.state.lock().unwrap();
-        assert_eq!(state.get(&addr(8080)).unwrap().ejection_multiplier, 2);
+        assert_eq!(
+            detector.state.get(&addr(8080)).unwrap().ejection_multiplier,
+            2,
+        );
     }
 
     #[test]
@@ -853,32 +776,47 @@ mod tests {
         // A50: a non-ejected address with multiplier > 0 has its
         // multiplier decremented every sweep, regardless of whether it
         // received any RPCs that interval.
-        let detector = detector_no_loop(base_config(), FixedRng::boxed(99));
+        let mut detector = detector_with_rng(base_config(), FixedRng::boxed(99));
         detector.add_endpoint(addr(8080));
-        {
-            let mut state = detector.state.lock().unwrap();
-            state.get_mut(&addr(8080)).unwrap().ejection_multiplier = 3;
-        }
+        detector
+            .state
+            .get_mut(&addr(8080))
+            .unwrap()
+            .ejection_multiplier = 3;
         // No traffic recorded.
         detector.run_sweep(Instant::now());
-        let state = detector.state.lock().unwrap();
-        assert_eq!(state.get(&addr(8080)).unwrap().ejection_multiplier, 2);
+        assert_eq!(
+            detector.state.get(&addr(8080)).unwrap().ejection_multiplier,
+            2,
+        );
     }
 
-    // ----- Sweep loop -----
+    // ----- maybe_run_sweep gating -----
 
-    #[tokio::test(start_paused = true)]
-    async fn sweep_loop_emits_decisions_on_tick() {
+    #[test]
+    fn maybe_run_sweep_runs_on_first_call() {
+        // `last_sweep_at` starts as `None`, so the first call always
+        // sweeps regardless of the wall clock argument.
+        let mut detector = detector_with_rng(fp_config(50, 10, 3), FixedRng::boxed(99));
+        for port in 8080..=8083 {
+            let h = detector.add_endpoint(addr(port));
+            for _ in 0..100 {
+                h.record_success();
+            }
+        }
+        let bad = detector.add_endpoint(addr(8084));
+        for _ in 0..100 {
+            bad.record_failure();
+        }
+        let decisions = detector.maybe_run_sweep(Instant::now());
+        assert_eq!(decisions, vec![EjectionDecision::Eject(addr(8084))]);
+    }
+
+    #[test]
+    fn maybe_run_sweep_skips_when_interval_not_elapsed() {
         let mut config = fp_config(50, 10, 3);
-        config.interval = Duration::from_millis(100);
-        let (detector, mut rx, _abort) = OutlierDetector::spawn_with(
-            config,
-            OutlierDetectorOptions {
-                rng: FixedRng::boxed(99),
-                ..Default::default()
-            },
-        );
-
+        config.interval = Duration::from_secs(10);
+        let mut detector = detector_with_rng(config, FixedRng::boxed(99));
         for port in 8080..=8083 {
             let h = detector.add_endpoint(addr(port));
             for _ in 0..100 {
@@ -890,30 +828,55 @@ mod tests {
             bad.record_failure();
         }
 
-        // Explicitly advance virtual time past the first sweep tick.
-        // `advance` is preferred over `sleep` for paused-time tests — it
-        // moves the clock deterministically and yields until pending
-        // task wake-ups have been polled, instead of relying on the
-        // runtime's auto-advance heuristic for parked tasks.
-        tokio::time::advance(Duration::from_millis(150)).await;
+        // First call always runs.
+        let t0 = Instant::now();
+        assert_eq!(
+            detector.maybe_run_sweep(t0),
+            vec![EjectionDecision::Eject(addr(8084))],
+        );
 
-        let decision = rx.recv().await.expect("sweep should emit a decision");
-        assert_eq!(decision, EjectionDecision::Eject(addr(8084)));
+        // Re-arm with bad stats; second call <interval after the first
+        // is a no-op even though the snapshot would otherwise eject.
+        let bad_h = detector.add_endpoint(addr(8084));
+        for _ in 0..100 {
+            bad_h.record_failure();
+        }
+        assert!(
+            detector
+                .maybe_run_sweep(t0 + Duration::from_secs(9))
+                .is_empty(),
+        );
     }
 
-    #[tokio::test(start_paused = true)]
-    async fn dropping_abort_stops_sweep_loop() {
-        let mut config = base_config();
-        config.interval = Duration::from_millis(50);
-        let (_detector, mut rx, abort) = OutlierDetector::spawn(config);
+    #[test]
+    fn maybe_run_sweep_runs_after_interval_elapsed() {
+        let mut config = fp_config(50, 10, 3);
+        config.interval = Duration::from_secs(10);
+        let mut detector = detector_with_rng(config, FixedRng::boxed(99));
+        for port in 8080..=8083 {
+            let h = detector.add_endpoint(addr(port));
+            for _ in 0..100 {
+                h.record_success();
+            }
+        }
+        // First call sets the high-water mark with no decisions.
+        let t0 = Instant::now();
+        assert!(detector.maybe_run_sweep(t0).is_empty());
 
-        // Aborting the JoinHandle wakes the spawned task synchronously;
-        // the runtime polls it, the task harness observes the abort,
-        // and the task ends — dropping its sender clone. No time
-        // advancement is needed: `rx.recv().await` parks briefly, the
-        // runtime drives the aborted task to completion, then `recv`
-        // returns `None` because the sender is gone.
-        drop(abort);
-        assert!(rx.recv().await.is_none());
+        // After interval, traffic that arrived in between is observed.
+        let bad = detector.add_endpoint(addr(8084));
+        for _ in 0..100 {
+            bad.record_failure();
+        }
+        for port in 8080..=8083 {
+            let h = detector.add_endpoint(addr(port));
+            for _ in 0..100 {
+                h.record_success();
+            }
+        }
+        assert_eq!(
+            detector.maybe_run_sweep(t0 + Duration::from_secs(10)),
+            vec![EjectionDecision::Eject(addr(8084))],
+        );
     }
 }
