@@ -1,5 +1,4 @@
 use crate::XdsUri;
-use crate::client::add_origin::AddOriginLayer;
 use crate::client::cluster::ClusterClientRegistryGrpc;
 use crate::client::endpoint::{EndpointAddress, EndpointChannel};
 use crate::client::lb::{ClusterDiscovery, XdsLbService};
@@ -225,14 +224,11 @@ impl XdsChannelBuilder {
             _xds_client: xds_client,
         });
 
-        let routing_layer = XdsRoutingLayer::new(router);
+        let routing_layer = XdsRoutingLayer::new(router, self.authority());
         let retry_layer = RetryLayer::new(retry_policy);
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, discovery);
         let inner = ServiceBuilder::new()
-            .option_layer(AddOriginLayer::for_authority(
-                &self.config.target_uri.target,
-            ))
             .layer(routing_layer)
             .layer(retry_layer)
             .map_request(|req: Request<shared_http_body::SharedBody<TonicBody>>| {
@@ -262,14 +258,11 @@ impl XdsChannelBuilder {
         discovery: Arc<dyn ClusterDiscovery<EndpointAddress, EndpointChannel<Channel>>>,
         retry_policy: GrpcRetryPolicy,
     ) -> XdsChannelGrpc {
-        let routing_layer = XdsRoutingLayer::new(router);
+        let routing_layer = XdsRoutingLayer::new(router, self.authority());
         let retry_layer = RetryLayer::new(retry_policy);
         let cluster_registry = Arc::new(ClusterClientRegistryGrpc::new());
         let lb_service = XdsLbService::new(cluster_registry, discovery);
         let inner = ServiceBuilder::new()
-            .option_layer(AddOriginLayer::for_authority(
-                &self.config.target_uri.target,
-            ))
             .layer(routing_layer)
             .layer(retry_layer)
             .map_request(|req: Request<shared_http_body::SharedBody<TonicBody>>| {
@@ -281,6 +274,12 @@ impl XdsChannelBuilder {
             inner,
             _resources: None,
         })
+    }
+
+    /// Channel-level authority used as the routing key for matching against
+    /// `VirtualHost.domains` in RDS.
+    fn authority(&self) -> Arc<str> {
+        Arc::from(self.config.target_uri.target.as_str())
     }
 }
 
