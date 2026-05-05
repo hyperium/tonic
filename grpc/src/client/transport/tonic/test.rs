@@ -41,7 +41,6 @@ use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::wrappers::TcpListenerStream;
 use tonic::Response;
 use tonic::async_trait;
-use tonic::metadata::MetadataMap;
 use tonic::transport::Server;
 use tonic_prost::prost::Message as ProstMessage;
 
@@ -80,6 +79,8 @@ use crate::echo_pb::EchoRequest;
 use crate::echo_pb::EchoResponse;
 use crate::echo_pb::echo_server::Echo;
 use crate::echo_pb::echo_server::EchoServer;
+use crate::metadata::AsciiMetadataKey;
+use crate::metadata::MetadataMap;
 use crate::rt::GrpcRuntime;
 use crate::rt::tokio::TokioRuntime;
 
@@ -103,8 +104,7 @@ impl CallCredentials for MockCallCredentials {
         }
         for (key, val) in &self.metadata {
             metadata.insert(
-                key.parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()
-                    .unwrap(),
+                key.parse::<AsciiMetadataKey>().unwrap(),
                 val.parse().unwrap(),
             );
         }

@@ -26,11 +26,11 @@ use std::fmt::Debug;
 use std::sync::Arc;
 
 use tonic::async_trait;
-use tonic::metadata::MetadataMap;
 
 use crate::StatusError;
 use crate::attributes::Attributes;
 use crate::credentials::SecurityLevel;
+use crate::metadata::MetadataMap;
 
 /// Details regarding the call.
 ///
@@ -175,9 +175,9 @@ impl CallCredentials for CompositeCallCredentials {
 
 #[cfg(test)]
 mod tests {
-    use tonic::metadata::MetadataValue;
-
     use super::*;
+    use crate::metadata::AsciiMetadataKey;
+    use crate::metadata::AsciiMetadataValue;
 
     #[derive(Debug)]
     struct MockCallCredentials {
@@ -195,10 +195,8 @@ mod tests {
             metadata: &mut MetadataMap,
         ) -> Result<(), StatusError> {
             metadata.insert(
-                self.key
-                    .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()
-                    .unwrap(),
-                MetadataValue::try_from(&self.value).unwrap(),
+                self.key.parse::<AsciiMetadataKey>().unwrap(),
+                AsciiMetadataValue::try_from(&self.value).unwrap(),
             );
             Ok(())
         }

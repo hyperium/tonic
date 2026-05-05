@@ -56,7 +56,7 @@ use tonic::codec::Codec;
 use tonic::codec::Decoder;
 use tonic::codec::EncodeBuf;
 use tonic::codec::Encoder;
-use tonic::metadata::MetadataMap;
+use tonic::metadata::MetadataMap as TonicMeta;
 use tower::ServiceBuilder;
 use tower::buffer::Buffer;
 use tower::buffer::future::ResponseFuture as BufferResponseFuture;
@@ -154,7 +154,7 @@ impl Invoke for TonicTransport {
         let request_stream = ReceiverStream::new(req_rx);
         let mut request = TonicRequest::new(Box::pin(request_stream));
         let (method, metadata) = headers.into_parts();
-        *request.metadata_mut() = metadata;
+        *request.metadata_mut() = metadata.into();
 
         let Ok(path) = PathAndQuery::from_maybe_shared(method) else {
             return err_streams(StatusError::new(StatusCodeError::Internal, "invalid path"));
@@ -192,28 +192,38 @@ impl Invoke for TonicTransport {
 // Converts from a tonic status to a trailers stream item.
 fn trailers_from_tonic_status(
     status: TonicStatus,
-    md: Option<MetadataMap>,
+    md: Option<TonicMeta>,
 ) -> ClientResponseStreamItem {
-    let mut trailers = Trailers::new(if status.code() == Code::Ok {
-        Ok(())
-    } else {
-        Err(StatusError::new(
-            StatusCodeError::from(status.code() as i32),
+    let status_res = match status.code() {
+        Code::Ok => Ok(()),
+        code => Err(StatusError::new(
+            StatusCodeError::from(code as i32),
             status.message(),
-        ))
-    });
-    if let Some(md) = md {
-        trailers = trailers.with_metadata(md);
-    }
+        )),
+    };
+
+    let trailers = match md.map(TryInto::try_into) {
+        Some(Err(e)) => Trailers::new(Err(StatusError::new(
+            StatusCodeError::Internal,
+            format!("failed to parse metadata: {e}"),
+        ))),
+        Some(Ok(metadata)) => Trailers::new(status_res).with_metadata(metadata),
+        None => Trailers::new(status_res),
+    };
+
     ClientResponseStreamItem::Trailers(trailers)
 }
 
 // Builds a trailers with a status
-fn trailers_from_status(status: Status, md: Option<MetadataMap>) -> ClientResponseStreamItem {
-    let mut trailers = Trailers::new(status);
-    if let Some(md) = md {
-        trailers = trailers.with_metadata(md);
-    }
+fn trailers_from_status(status: Status, md: Option<TonicMeta>) -> ClientResponseStreamItem {
+    let trailers = match md.map(TryInto::try_into) {
+        Some(Err(e)) => Trailers::new(Err(StatusError::new(
+            StatusCodeError::Internal,
+            format!("failed to parse metadata: {e}"),
+        ))),
+        Some(Ok(metadata)) => Trailers::new(status).with_metadata(metadata),
+        None => Trailers::new(status),
+    };
     ClientResponseStreamItem::Trailers(trailers)
 }
 
@@ -262,11 +272,32 @@ impl RecvStream for TonicRecvStream {
             StreamState::AwaitingHeaders(rx) => match rx.await {
                 Ok(Ok(response)) => {
                     let (metadata, stream, _extensions) = response.into_parts();
-                    // Start streaming and return the headers.
-                    self.state = StreamState::Streaming(stream);
-                    ClientResponseStreamItem::Headers(
-                        ResponseHeaders::new().with_metadata(metadata),
-                    )
+                    // Tonic decodes base64-encoded binary headers lazily. It
+                    // does not fail the RPC upon receiving invalid base64 data;
+                    // the error only surfaces when the application attempts to
+                    // read the metadata.
+                    // In contrast, standard gRPC implementations eagerly decode
+                    // these headers and immediately fail the RPC with an
+                    // Internal status.
+                    // TODO: in this case, tonic believes the stream is still
+                    // running, but our parsing failed -- do we need to terminate
+                    // the request stream now even though the Streaming is dropped?
+                    match metadata.try_into() {
+                        Ok(md) => {
+                            // Start streaming and return the headers.
+                            self.state = StreamState::Streaming(stream);
+                            ClientResponseStreamItem::Headers(
+                                ResponseHeaders::new().with_metadata(md),
+                            )
+                        }
+                        Err(e) => trailers_from_status(
+                            Err(StatusError::new(
+                                StatusCodeError::Internal,
+                                format!("error decoding response: {e}"),
+                            )),
+                            None,
+                        ),
+                    }
                 }
                 // Stay closed after sending trailers.
                 Err(_) => trailers_from_status(
