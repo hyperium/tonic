@@ -1,20 +1,15 @@
 //! gRFC A50 outlier-detection sweep engine.
 //!
-//! Owns per-endpoint counters and an ejection state machine. Runs the
-//! failure-percentage ejection algorithm on demand and returns the
-//! resulting [`EjectionDecision`]s. Knows nothing about the data path:
-//! callers feed it RPC outcomes via the lock-free [`EndpointCounters`]
-//! handle returned by [`OutlierDetector::add_endpoint`], and pump the
-//! sweep by calling [`OutlierDetector::maybe_run_sweep`] from their own
-//! event loop (typically the load balancer's `poll_ready`). The wall
-//! clock supplied to `maybe_run_sweep` decides when each sweep actually
-//! runs — at most once per `config.interval`.
+//! Tracks per-endpoint success/failure counters and an ejection state
+//! machine. Callers feed RPC outcomes via the lock-free
+//! [`EndpointCounters`] handle returned by
+//! [`OutlierDetector::add_endpoint`], and drive sweeps by calling
+//! [`OutlierDetector::maybe_run_sweep`] from their own event loop
+//! (typically the load balancer's `poll_ready`); a sweep runs at most
+//! once per `config.interval`.
 //!
-//! Only the **failure-percentage** algorithm is implemented in this
-//! module. The success-rate algorithm — which adds float-math (mean
-//! and standard deviation across the qualifying hosts) — lands in a
-//! follow-up PR. If [`OutlierDetectionConfig::success_rate`] is set,
-//! it is currently ignored.
+//! Only the failure-percentage algorithm is currently dispatched. If
+//! [`OutlierDetectionConfig::success_rate`] is set, it is ignored.
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
 //! [`OutlierDetectionConfig::success_rate`]: crate::xds::resource::outlier_detection::OutlierDetectionConfig::success_rate
@@ -77,8 +72,7 @@ pub(crate) enum EjectionDecision {
     Uneject(EndpointAddress),
 }
 
-/// Probability source for `enforcing_*` rolls. Abstracted so tests can
-/// inject deterministic outcomes.
+/// Probability source for `enforcing_*` rolls.
 pub(crate) trait Rng: Send + Sync + 'static {
     /// Return a uniform random `u32` in `0..100`.
     fn pct_roll(&self) -> u32;
@@ -115,11 +109,9 @@ impl EndpointState {
 
 /// gRFC A50 outlier detector.
 ///
-/// State is owned (no `Mutex`, no `Arc`): the consumer holds the
-/// detector by `&mut` and calls [`Self::maybe_run_sweep`] from its own
-/// event loop, typically the load balancer's `poll_ready`. The wall
-/// clock argument decides when each sweep actually runs — at most once
-/// per `config.interval`.
+/// Held by `&mut`; the consumer drives sweeps by calling
+/// [`Self::maybe_run_sweep`] from its own event loop (typically the
+/// load balancer's `poll_ready`).
 pub(crate) struct OutlierDetector {
     config: OutlierDetectionConfig,
     state: HashMap<EndpointAddress, EndpointState>,
@@ -136,8 +128,7 @@ impl OutlierDetector {
         Self::with_rng(config, Box::new(FastRandRng))
     }
 
-    /// Build the detector with an injected [`Rng`]. Tests use this to
-    /// pin the `enforcing_*` rolls.
+    /// Build the detector with a custom [`Rng`].
     pub(crate) fn with_rng(config: OutlierDetectionConfig, rng: Box<dyn Rng>) -> Self {
         Self {
             config,
@@ -148,11 +139,9 @@ impl OutlierDetector {
     }
 
     /// Register an endpoint and return its lock-free counter handle.
-    /// The caller wires this handle into the data-path RPC interceptor so
-    /// that completed calls increment success/failure atomics.
+    /// The caller wires this handle into the data-path RPC interceptor.
     ///
-    /// Adding an already-registered address is a no-op and returns the
-    /// existing handle (so callers can re-add idempotently).
+    /// Adding an already-registered address returns the existing handle.
     pub(crate) fn add_endpoint(&mut self, addr: EndpointAddress) -> Arc<EndpointCounters> {
         self.state
             .entry(addr)
@@ -161,21 +150,17 @@ impl OutlierDetector {
             .clone()
     }
 
-    /// Forget a previously-registered endpoint. Drops its counters and
-    /// any ejection state. If the endpoint was ejected, no `Uneject`
-    /// decision is emitted — the caller is expected to handle the removal
-    /// directly (e.g., by dropping its slot in the load balancer).
+    /// Forget a previously-registered endpoint, dropping its counters
+    /// and ejection state. No `Uneject` decision is emitted if the
+    /// endpoint was ejected; the caller handles removal directly.
     pub(crate) fn remove_endpoint(&mut self, addr: &EndpointAddress) {
         self.state.remove(addr);
     }
 
-    /// Run a sweep at logical time `now` if at least `config.interval`
-    /// has elapsed since the last sweep, returning the resulting
-    /// ejection / un-ejection decisions. Otherwise returns an empty
-    /// vector and leaves the detector state untouched.
-    ///
-    /// The first call after construction always runs a sweep
-    /// (`last_sweep_at` starts as `None`).
+    /// Run a sweep at logical time `now`, returning the resulting
+    /// decisions. Sweeps are gated to at most one per `config.interval`;
+    /// calls inside the gate return an empty vector and leave state
+    /// untouched. The first call after construction always sweeps.
     pub(crate) fn maybe_run_sweep(&mut self, now: Instant) -> Vec<EjectionDecision> {
         if let Some(last) = self.last_sweep_at
             && now.duration_since(last) < self.config.interval
@@ -186,11 +171,8 @@ impl OutlierDetector {
         self.run_sweep(now)
     }
 
-    /// Unconditionally run one sweep at logical time `now` and return the
-    /// resulting decisions. Used by [`Self::maybe_run_sweep`] and by tests
-    /// that want to drive sweeps without modeling the interval gate.
-    ///
-    /// The order of operations follows gRFC A50:
+    /// Run one sweep at logical time `now` unconditionally and return
+    /// the resulting decisions, in gRFC A50 step order:
     /// 1. Record the timestamp.
     /// 2. Swap each address's call-counter buckets.
     /// 3. Run the success-rate algorithm if configured.
@@ -212,10 +194,9 @@ impl OutlierDetector {
             });
         }
 
-        // Compute a cap on the number of new ejections this sweep so we
-        // don't exceed `max_ejection_percent` of the total. Per A50, the
-        // check is performed before each candidate ejection; we model that
-        // as a budget that algorithms decrement.
+        // Per-sweep cap on new ejections, enforced as a budget the
+        // algorithms decrement. Per A50, the check happens before each
+        // candidate.
         let total_endpoints = self.state.len();
         let max_ejections = (total_endpoints as u64
             * u64::from(self.config.max_ejection_percent.get())
@@ -227,14 +208,11 @@ impl OutlierDetector {
             .count();
         let mut budget = max_ejections.saturating_sub(already_ejected);
 
-        // Steps 3 & 4: run the algorithms on the snapshot. Hosts that are
-        // currently ejected naturally fail the `request_volume` gate
-        // because they receive no traffic in production, so iterating
-        // every address (per spec) and ejected-only candidates produce
-        // the same outcome on real workloads.
-        //
-        // Step 3 (`success_rate_ejection`) is intentionally not yet
-        // dispatched in this PR; it lands in a follow-up.
+        // Steps 3 & 4: run the algorithms on the snapshot. Ejected
+        // hosts have no in-interval traffic in production and so
+        // naturally fail the `request_volume` gate; iterating every
+        // address (per spec) is equivalent to iterating non-ejected
+        // ones. Step 3 (success-rate ejection) is not yet dispatched.
         let mut to_eject: Vec<EndpointAddress> = Vec::new();
 
         if let Some(fp) = self.config.failure_percentage.as_ref() {
@@ -248,11 +226,10 @@ impl OutlierDetector {
             }
         }
 
-        // Step 5: decrement multipliers for non-ejected addresses, and
-        // un-eject any ejected addresses whose backoff has elapsed. This
-        // runs *after* re-ejection, so a same-sweep re-ejection updates
-        // `ejected_at` to `now` and the un-eject check sees zero elapsed
-        // time — no spurious uneject decision is emitted.
+        // Step 5: decrement multipliers for non-ejected addresses;
+        // un-eject ejected addresses whose backoff has elapsed. Runs
+        // *after* re-ejection, so a same-sweep re-eject refreshes
+        // `ejected_at` and the un-eject check sees zero elapsed time.
         let cap = self
             .config
             .base_ejection_time
@@ -318,10 +295,8 @@ fn run_failure_percentage(
         let failure_pct = 100 * c.failure / c.total;
         if failure_pct > threshold && roll(rng, cfg.enforcing_failure_percentage.get()) {
             out.push(c.addr.clone());
-            // Only NEW ejections consume a budget slot; re-ejecting
-            // an already-ejected address only refreshes its
-            // timestamp and multiplier, leaving the count of
-            // currently-ejected addresses unchanged.
+            // See `Candidate::already_ejected` for why re-ejections
+            // don't consume the budget.
             if !c.already_ejected {
                 *budget -= 1;
             }
@@ -346,11 +321,11 @@ struct Candidate {
     success: u64,
     failure: u64,
     total: u64,
-    /// Whether this address was already ejected at the start of the sweep.
-    /// "Re-ejecting" an already-ejected address only refreshes its
-    /// ejection timestamp and bumps the multiplier; it does not change
-    /// the count of currently-ejected addresses, so it must not consume
-    /// a `max_ejection_percent` budget slot.
+    /// Whether this address was already ejected at the start of the
+    /// sweep. Re-ejecting an already-ejected address refreshes its
+    /// timestamp and bumps its multiplier but doesn't change the count
+    /// of currently-ejected addresses, so it must not consume a
+    /// `max_ejection_percent` budget slot.
     already_ejected: bool,
 }
 
@@ -715,11 +690,6 @@ mod tests {
         // accumulated during its backoff), four newly bad. Cap permits
         // 3 concurrently ejected hosts (60% of 5), with 1 already taken
         // by the pre-ejected host — so 2 new ejections remain in budget.
-        //
-        // This test would fail before the fix that excludes re-ejections
-        // from budget accounting: the algorithm would "re-eject" the
-        // already-ejected host (consuming the second slot), leaving only
-        // 1 new ejection from the four bad hosts.
         let mut config = fp_config(50, 10, 3);
         config.max_ejection_percent = pct(60);
         let mut detector = detector_with_rng(config, FixedRng::boxed(99));
