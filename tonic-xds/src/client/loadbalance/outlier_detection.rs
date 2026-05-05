@@ -80,7 +80,7 @@ impl EndpointCounters {
 }
 
 /// A decision emitted by an [`OutlierDetector`] sweep.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub(crate) enum EjectionDecision {
     /// Eject this endpoint from the load-balancing pool. The caller
     /// should keep its underlying connection alive (A50 requires
@@ -470,13 +470,6 @@ mod tests {
         })
     }
 
-    /// Sort a decision list deterministically so equality checks can rely
-    /// on a canonical order without coupling to `HashMap` iteration order.
-    fn sort(mut ds: Vec<EjectionDecision>) -> Vec<EjectionDecision> {
-        ds.sort_by(|a, b| format!("{a:?}").cmp(&format!("{b:?}")));
-        ds
-    }
-
     // ----- EndpointCounters -----
 
     #[test]
@@ -773,7 +766,8 @@ mod tests {
                 h.record_failure();
             }
         }
-        let decisions = sort(detector.run_sweep(Instant::now()));
+        let mut decisions = detector.run_sweep(Instant::now());
+        decisions.sort();
         let ejects = decisions
             .iter()
             .filter(|d| matches!(d, EjectionDecision::Eject(_)))
