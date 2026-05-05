@@ -254,6 +254,7 @@ impl OutlierDetector {
                 success,
                 failure,
                 total: success + failure,
+                already_ejected: ep.ejected_at.is_some(),
             });
         }
 
@@ -360,7 +361,13 @@ impl OutlierDetector {
             let failure_pct = 100 * c.failure / c.total;
             if failure_pct > threshold && self.roll(cfg.enforcing_failure_percentage.get()) {
                 out.push(c.addr.clone());
-                *budget -= 1;
+                // Only NEW ejections consume a budget slot; re-ejecting
+                // an already-ejected address only refreshes its
+                // timestamp and multiplier, leaving the count of
+                // currently-ejected addresses unchanged.
+                if !c.already_ejected {
+                    *budget -= 1;
+                }
             }
         }
     }
@@ -383,6 +390,12 @@ struct Candidate {
     success: u64,
     failure: u64,
     total: u64,
+    /// Whether this address was already ejected at the start of the sweep.
+    /// "Re-ejecting" an already-ejected address only refreshes its
+    /// ejection timestamp and bumps the multiplier; it does not change
+    /// the count of currently-ejected addresses, so it must not consume
+    /// a `max_ejection_percent` budget slot.
+    already_ejected: bool,
 }
 
 /// Background task: runs `detector.run_sweep` on each interval tick and
@@ -773,6 +786,50 @@ mod tests {
             .filter(|d| matches!(d, EjectionDecision::Eject(_)))
             .count();
         assert_eq!(ejects, 1, "max_ejection_percent=20% of 5 hosts ⇒ 1");
+    }
+
+    #[test]
+    fn already_ejected_re_ejection_does_not_consume_budget() {
+        // 5 hosts: one already ejected (with stats from in-flight RPCs
+        // accumulated during its backoff), four newly bad. Cap permits
+        // 3 concurrently ejected hosts (60% of 5), with 1 already taken
+        // by the pre-ejected host — so 2 new ejections remain in budget.
+        //
+        // This test would fail before the fix that excludes re-ejections
+        // from budget accounting: the algorithm would "re-eject" the
+        // already-ejected host (consuming the second slot), leaving only
+        // 1 new ejection from the four bad hosts.
+        let mut config = fp_config(50, 10, 3);
+        config.max_ejection_percent = pct(60);
+        let detector = detector_no_loop(config, FixedRng::boxed(99));
+
+        // Pre-eject host 8080 directly and give it bad in-flight stats.
+        let already_bad = detector.add_endpoint(addr(8080));
+        for _ in 0..100 {
+            already_bad.record_failure();
+        }
+        {
+            let mut state = detector.state.lock().unwrap();
+            let ep = state.get_mut(&addr(8080)).unwrap();
+            ep.ejected_at = Some(Instant::now());
+            ep.ejection_multiplier = 1;
+        }
+
+        // Four more bad hosts.
+        for port in 8081..=8084 {
+            let h = detector.add_endpoint(addr(port));
+            for _ in 0..100 {
+                h.record_failure();
+            }
+        }
+
+        let mut decisions = detector.run_sweep(Instant::now());
+        decisions.sort();
+        let new_ejects = decisions
+            .iter()
+            .filter(|d| matches!(d, EjectionDecision::Eject(a) if *a != addr(8080)))
+            .count();
+        assert_eq!(new_ejects, 2, "expected 2 new ejections under the cap");
     }
 
     #[test]
