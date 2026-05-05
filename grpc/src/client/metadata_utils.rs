@@ -174,8 +174,6 @@ impl<R: RecvStream> RecvStream for CaptureTrailersRecvStream<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::Status;
-    use crate::StatusCode;
     use crate::client::test_util::MockInvoker;
     use crate::client::test_util::NopRecvMessage;
     use crate::core::ClientResponseStreamItem;
@@ -265,7 +263,7 @@ mod tests {
         // Send a Trailers response on the call.
         let mut trailers_md = MetadataMap::new();
         trailers_md.insert("x-trailer", "trailer-value".parse().unwrap());
-        let mut trailers = Trailers::new(Status::new(StatusCode::Ok, "ok"));
+        let mut trailers = Trailers::new(Ok(()));
         *trailers.metadata_mut() = trailers_md;
         controller
             .send_resp(ClientResponseStreamItem::Trailers(trailers))

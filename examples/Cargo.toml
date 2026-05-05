@@ -251,6 +251,10 @@ path = "src/codec_buffers/server.rs"
 name = "codec-buffers-client"
 path = "src/codec_buffers/client.rs"
 
+[[bin]]
+name = "grpc-routeguide-client"
+path = "src/grpc-routeguide/client.rs"
+required-features = ["grpc-routeguide"]
 
 [features]
 gcp = ["dep:prost-types", "tonic/tls-ring"]
@@ -271,9 +275,9 @@ tls-client-auth = ["tonic/tls-ring"]
 types = ["dep:tonic-types"]
 h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
-
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c"]
 tower = ["dep:tower", "dep:http"]
+grpc-routeguide = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf", "dep:rand"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c", "grpc-routeguide"]
 default = ["full"]
 
 [dependencies]
@@ -306,6 +310,9 @@ h2 = { version = "0.4", optional = true }
 tokio-rustls = { version = "0.26.1", optional = true, features = ["ring", "tls12"], default-features = false }
 hyper-rustls = { version = "0.27.0", features = ["http2", "ring", "tls12"], optional = true, default-features = false }
 tower-http = { version = "0.6", optional = true }
+grpc-protobuf = { path = "../grpc-protobuf", optional = true }
+protobuf = { version = "4.34.0-release", optional = true }
+grpc = { path = "../grpc", optional = true }
 
 [build-dependencies]
 tonic-prost-build = { path = "../tonic-prost-build" }

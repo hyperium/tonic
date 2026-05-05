@@ -24,7 +24,6 @@
 
 use bytes::Buf;
 use bytes::Bytes;
-use grpc::StatusCode;
 use grpc::client;
 use grpc::client::CallOptions;
 use grpc::client::Channel;
@@ -110,7 +109,7 @@ impl Handle for Handler {
                 .await;
         }
         // Return trailers
-        Trailers::new(grpc::Status::new(grpc::StatusCode::Ok, "OK"))
+        Trailers::new(Ok(()))
     }
 }
 
@@ -199,7 +198,7 @@ async fn run_rpc(chan: &Channel) -> String {
                 }
             }
             ClientResponseStreamItem::Trailers(trailers) => {
-                assert_eq!(trailers.status().code(), StatusCode::Ok);
+                assert!(trailers.status().is_ok());
             }
             ClientResponseStreamItem::StreamClosed => break,
         }

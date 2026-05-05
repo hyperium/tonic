@@ -259,7 +259,7 @@ mod test {
 
     use tonic::metadata::MetadataMap;
 
-    use crate::StatusCode;
+    use crate::StatusCodeError;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
     use crate::client::load_balancing::FailingPicker;
@@ -674,7 +674,7 @@ mod test {
                 let req = test_utils::new_request_headers();
                 match update.picker.pick(&req) {
                     PickResult::Fail(status) => {
-                        assert!(status.code() == StatusCode::Unavailable);
+                        assert!(status.code() == StatusCodeError::Unavailable);
                         dbg!(status.message());
                         dbg!(&want_error);
                         assert!(status.message().contains(&want_error));

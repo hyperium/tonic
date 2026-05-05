@@ -81,7 +81,35 @@ fn main() {
         true,
         true,
     );
+
+    // grpc-routeguide example
+    codegen_grpc_routeguide(
+        &PathBuf::from(std::env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .unwrap()
+            .join("examples"),
+    );
+
     println!("Codgen completed: {}ms", start.elapsed().as_millis());
+}
+
+fn codegen_grpc_routeguide(root_dir: &Path) {
+    let path = std::env::var("PATH").unwrap_or_default();
+    unsafe {
+        std::env::set_var("PATH", format!("{}:{}", path, grpc_protobuf_build::bin()));
+        // TODO: Once the codegen is updated to allow the `OUT_DIR` env var to
+        // be unset, change this to use `.output_dir` instead.
+        std::env::set_var("OUT_DIR", root_dir.join("src/grpc-routeguide/generated"));
+    }
+
+    std::env::set_current_dir(root_dir).unwrap();
+
+    grpc_protobuf_build::CodeGen::new()
+        .include("proto/routeguide")
+        .inputs(["route_guide.proto"])
+        .client_only()
+        .compile()
+        .unwrap();
 }
 
 fn codegen(
