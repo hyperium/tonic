@@ -279,9 +279,6 @@ impl RecvStream for TonicRecvStream {
                     // In contrast, standard gRPC implementations eagerly decode
                     // these headers and immediately fail the RPC with an
                     // Internal status.
-                    // TODO: in this case, tonic believes the stream is still
-                    // running, but our parsing failed -- do we need to terminate
-                    // the request stream now even though the Streaming is dropped?
                     match metadata.try_into() {
                         Ok(md) => {
                             // Start streaming and return the headers.
@@ -290,6 +287,10 @@ impl RecvStream for TonicRecvStream {
                                 ResponseHeaders::new().with_metadata(md),
                             )
                         }
+                        // TODO: in this case, tonic believes the stream is
+                        // still running, but our parsing failed -- do we need
+                        // to terminate the request stream now even though the
+                        // Streaming is dropped?
                         Err(e) => trailers_from_status(
                             Err(StatusError::new(
                                 StatusCodeError::Internal,
