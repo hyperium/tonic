@@ -285,7 +285,18 @@ impl PickFirstPolicy {
                     _ = self.set_transient_failure(channel_controller, error);
 
                     self.steady_state = Some(SteadyState::new(self.subchannels.len()));
+
+                    // Trigger connection attempts on any subchannels that transitioned to IDLE
+                    // during the first pass, ensuring they don't get stuck.
+                    for sc in &self.subchannels {
+                        let is_idle = self.subchannel_states.get(&sc.address())
+                            .map_or(false, |s| s.connectivity_state == ConnectivityState::Idle);
+                        if is_idle {
+                            sc.connect();
+                        }
+                    }
                 }
+
             }
         }
     }
@@ -1350,4 +1361,80 @@ mod test {
             other => panic!("unexpected event {:?}", other),
         }
     }
+
+    #[tokio::test]
+    async fn test_pick_first_steady_state_stuck_idle_prevention() {
+        let (rx, mut policy, mut controller) = setup();
+        let endpoints = create_endpoints(vec!["addr1", "addr2"]);
+        policy
+            .resolver_update(
+                ResolverUpdate {
+                    endpoints: Ok(endpoints),
+                    ..Default::default()
+                },
+                None,
+                controller.as_mut(),
+            )
+            .unwrap();
+
+        // Expect NewSubchannel x2, Connect(addr1), UpdatePicker(Connecting)
+        rx.recv().unwrap(); // addr1
+        rx.recv().unwrap(); // addr2
+        rx.recv().unwrap(); // Connect(addr1)
+        rx.recv().unwrap(); // UpdatePicker(Connecting)
+
+        // 1. Fail addr1 to advance frontier to addr2
+        let sc1 = policy.subchannels[0].clone();
+        policy.subchannel_update(
+            sc1.clone(),
+            &SubchannelState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                last_connection_error: None,
+            },
+            controller.as_mut(),
+        );
+
+        // Expect Connect(addr2)
+        match rx.recv().unwrap() {
+            TestEvent::Connect(addr) => assert_eq!(addr.address.to_string(), "addr2"),
+            other => panic!("unexpected event {:?}", other),
+        }
+
+        // 2. Simulate addr1 backing off and transitioning to IDLE early (while addr2 is still connecting)
+        policy.subchannel_update(
+            sc1.clone(),
+            &SubchannelState {
+                connectivity_state: ConnectivityState::Idle,
+                last_connection_error: None,
+            },
+            controller.as_mut(),
+        );
+
+        // Expect NO events yet because first pass is still active and ignoring IDLE
+        std::thread::sleep(Duration::from_millis(50));
+        assert!(rx.try_recv().is_err(), "unexpected event during first pass");
+
+        // 3. Fail addr2 to exhaust the first pass
+        let sc2 = policy.subchannels[1].clone();
+        policy.subchannel_update(
+            sc2,
+            &SubchannelState {
+                connectivity_state: ConnectivityState::TransientFailure,
+                last_connection_error: None,
+            },
+            controller.as_mut(),
+        );
+
+        // Expect UpdatePicker(TransientFailure) and RequestResolution from exhaustion
+        rx.recv().unwrap(); // UpdatePicker
+        rx.recv().unwrap(); // RequestResolution
+
+        // CRUCIAL VERIFICATION: Expect an IMMEDIATE Connect(addr1) event triggered 
+        // by the exhaustion loop sweeping up the early IDLE subchannel!
+        match rx.recv().unwrap() {
+            TestEvent::Connect(addr) => assert_eq!(addr.address.to_string(), "addr1"),
+            other => panic!("unexpected event post-exhaustion {:?}", other),
+        }
+    }
 }
+
