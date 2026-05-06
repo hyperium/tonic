@@ -31,6 +31,7 @@
 //! [gRPC]: https://grpc.io
 #![allow(dead_code, unused_variables)]
 
+pub mod attributes;
 pub mod client;
 pub mod core;
 pub mod credentials;
@@ -47,7 +48,6 @@ pub use status::StatusCodeError;
 pub use status::StatusError;
 pub use status::StatusOr;
 
-mod attributes;
 mod byte_str;
 mod rt;
 mod send_future;
