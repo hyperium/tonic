@@ -256,6 +256,9 @@ impl PickFirstPolicy {
                         .map(|e| e.to_string())
                         .unwrap_or_else(|| "all addresses failed".to_string());
 
+                    // Cancel the pacing timer since this connection pass is over.
+                    self.abort_pacing_timer();
+
                     self.last_connection_error = Some(error.clone());
                     _ = self.set_transient_failure(channel_controller, error);
 
@@ -432,6 +435,13 @@ impl PickFirstPolicy {
             .map(|sc| new_addresses.contains(&sc.address()))
             .unwrap_or(false)
     }
+
+    // Cancels the connection pacing timer if it is active.
+    fn abort_pacing_timer(&mut self) {
+        if let Some(handle) = self.timer_handle.take() {
+            handle.abort();
+        }
+    }
 }
 
 impl LbPolicy for PickFirstPolicy {
@@ -443,6 +453,8 @@ impl LbPolicy for PickFirstPolicy {
         config: Option<&Self::LbConfig>,
         channel_controller: &mut dyn ChannelController,
     ) -> Result<(), String> {
+        self.abort_pacing_timer();
+
         // Reset steady state on new update
         self.steady_state = None;
 
@@ -550,6 +562,12 @@ impl LbPolicy for PickFirstPolicy {
 
     fn exit_idle(&mut self, channel_controller: &mut dyn ChannelController) {
         self.start_connection_pass(channel_controller);
+    }
+}
+
+impl Drop for PickFirstPolicy {
+    fn drop(&mut self) {
+        self.abort_pacing_timer();
     }
 }
 
