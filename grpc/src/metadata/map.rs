@@ -185,8 +185,9 @@ impl MetadataMap {
                     ret.push((k.clone(), mv.into_inner()));
                 }
             } else if Binary::is_valid_key(key_str) {
-                let b = Binary::decode(value.as_bytes(), private::Internal)
-                    .map_err(|e| format!("failed to decode base64 value: {e}"))?;
+                let b = Binary::decode(value.as_bytes(), private::Internal).map_err(|e| {
+                    format!("failed to decode base64 value for key '{key_str}': {e}")
+                })?;
                 let mut mv = unsafe { MetadataValue::<Binary>::from_shared_unchecked(b) };
                 mv.set_sensitive(value.is_sensitive());
                 ret.push((k.clone(), mv.into_inner()));
