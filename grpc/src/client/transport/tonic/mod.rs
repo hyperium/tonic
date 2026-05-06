@@ -28,6 +28,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::task::Context;
 use std::task::Poll;
 use std::time::Instant;
@@ -35,12 +36,14 @@ use std::time::Instant;
 use bytes::Buf;
 use bytes::BufMut as _;
 use bytes::Bytes;
+use futures::stream::StreamExt;
 use http::Request as HttpRequest;
 use http::Response as HttpResponse;
 use http::Uri;
 use http::uri::PathAndQuery;
 use hyper::client::conn::http2::Builder;
 use hyper::client::conn::http2::SendRequest;
+use tokio::sync::Notify;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
 use tokio_stream::Stream;
@@ -151,7 +154,15 @@ impl Invoke for TonicTransport {
         options: CallOptions,
     ) -> (Self::SendStream, Self::RecvStream) {
         let (req_tx, req_rx) = mpsc::channel(1);
-        let request_stream = ReceiverStream::new(req_rx);
+        let stop_notify = Arc::new(Notify::new());
+
+        // Tonic runs the outbound request stream in a background task. It will
+        // NOT automatically stop sending if the inbound response stream is
+        // dropped. We use `take_until` with this Notify to explicitly force the
+        // stream to yield `None`, which tells Tonic to cancel the stream.
+        let stop_notify_clone = stop_notify.clone();
+        let request_stream = ReceiverStream::new(req_rx)
+            .take_until(Box::pin(async move { stop_notify_clone.notified().await }));
         let mut request = TonicRequest::new(Box::pin(request_stream));
         let (method, metadata) = headers.into_parts();
         *request.metadata_mut() = metadata.into();
@@ -184,6 +195,7 @@ impl Invoke for TonicTransport {
             TonicSendStream { sender: Ok(req_tx) },
             TonicRecvStream {
                 state: StreamState::AwaitingHeaders(resp_rx),
+                stop_notify: Some(stop_notify),
             },
         )
     }
@@ -248,6 +260,7 @@ impl SendStream for TonicSendStream {
 
 struct TonicRecvStream {
     state: StreamState,
+    stop_notify: Option<Arc<Notify>>,
 }
 
 enum StreamState {
@@ -287,17 +300,18 @@ impl RecvStream for TonicRecvStream {
                                 ResponseHeaders::new().with_metadata(md),
                             )
                         }
-                        // TODO: in this case, tonic believes the stream is
-                        // still running, but our parsing failed -- do we need
-                        // to terminate the request stream now even though the
-                        // Streaming is dropped?
-                        Err(e) => trailers_from_status(
-                            Err(StatusError::new(
-                                StatusCodeError::Internal,
-                                format!("error decoding response: {e}"),
-                            )),
-                            None,
-                        ),
+                        Err(e) => {
+                            if let Some(notify) = self.stop_notify.take() {
+                                notify.notify_one();
+                            }
+                            trailers_from_status(
+                                Err(StatusError::new(
+                                    StatusCodeError::Internal,
+                                    format!("error decoding response: {e}"),
+                                )),
+                                None,
+                            )
+                        }
                     }
                 }
                 // Stay closed after sending trailers.
@@ -314,16 +328,18 @@ impl RecvStream for TonicRecvStream {
                         self.state = StreamState::Streaming(stream);
                         ClientResponseStreamItem::Message
                     }
-                    // TODO: in this case, tonic believes the stream is still
-                    // running, but our decoding failed -- do we need to terminate
-                    // the request stream now even though the Streaming is dropped?
-                    Err(e) => trailers_from_status(
-                        Err(StatusError::new(
-                            StatusCodeError::Internal,
-                            format!("error decoding response: {e}"),
-                        )),
-                        None,
-                    ),
+                    Err(e) => {
+                        if let Some(notify) = self.stop_notify.take() {
+                            notify.notify_one();
+                        }
+                        trailers_from_status(
+                            Err(StatusError::new(
+                                StatusCodeError::Internal,
+                                format!("error decoding response: {e}"),
+                            )),
+                            None,
+                        )
+                    }
                 },
                 // Stay closed after sending trailers.
                 Err(status) => {
@@ -346,6 +362,7 @@ fn err_streams(status: StatusError) -> (TonicSendStream, TonicRecvStream) {
         TonicSendStream { sender: Err(()) },
         TonicRecvStream {
             state: StreamState::Error(status),
+            stop_notify: None,
         },
     )
 }
