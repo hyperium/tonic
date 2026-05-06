@@ -146,7 +146,7 @@ impl PickFirstPolicy {
         &mut self,
         new_addresses: Vec<Address>,
         channel_controller: &mut dyn ChannelController,
-    ) {
+    ) -> Option<Arc<dyn Subchannel>> {
         // Map existing subchannels by address.
         let mut existing_subchannels: HashMap<Address, Arc<dyn Subchannel>> = self
             .subchannels
@@ -154,21 +154,39 @@ impl PickFirstPolicy {
             .map(|sc| (sc.address(), sc))
             .collect();
 
-        let (new_subchannels, new_states): (Vec<_>, HashMap<_, _>) = new_addresses
-            .into_iter()
-            .map(|addr| {
-                if let Some(sc) = existing_subchannels.remove(&addr) {
-                    let state = self.subchannel_states.get(&addr).unwrap().clone();
-                    (sc, (addr, state))
-                } else {
-                    let (sc, state) = channel_controller.new_subchannel(&addr);
-                    (sc, (addr, state))
-                }
-            })
-            .unzip();
+        let mut new_subchannels = Vec::with_capacity(new_addresses.len());
+        let mut new_states = HashMap::with_capacity(new_addresses.len());
+        let mut ready_subchannel = None;
 
-        self.subchannels = new_subchannels; // Prune old addresses.
+        for addr in new_addresses {
+            let (sc, state) = if let Some(sc) = existing_subchannels.remove(&addr) {
+                let state = self.subchannel_states.get(&addr).unwrap().clone();
+                (sc, state)
+            } else {
+                // Get a new subchannel handle from the controller if we don't have an existing one.
+                channel_controller.new_subchannel(&addr)
+            };
+
+            // Track the best candidate for immediate activation:
+            // 1. Absolute Priority: The currently selected subchannel if it is still READY.
+            // 2. Fallback: The first generic READY subchannel encountered.
+            if state.connectivity_state == ConnectivityState::Ready {
+                if self.subchannel_is_selected(&sc) {
+                    // Sticky channel wins immediately and overrides any fallback candidates.
+                    ready_subchannel = Some(sc.clone());
+                } else if ready_subchannel.is_none() {
+                    // Capture fallback candidate, but does not overwrite if a sticky channel was already found.
+                    ready_subchannel = Some(sc.clone());
+                }
+            }
+
+            new_subchannels.push(sc);
+            new_states.insert(addr, state);
+        }
+
+        self.subchannels = new_subchannels; // Prunes old addresses, adds new ones.
         self.subchannel_states = new_states; // Update subchannel states cache.
+        ready_subchannel
     }
 
     /// Call when the selected subchannel is dropped or loses connection.
@@ -189,6 +207,10 @@ impl PickFirstPolicy {
         subchannel: Arc<dyn Subchannel>,
         channel_controller: &mut dyn ChannelController,
     ) {
+        if self.subchannel_is_selected(&subchannel) {
+            // Already selected; skip activation.
+            return;
+        }
         self.selected = Some(subchannel.clone());
         self.connectivity_state = ConnectivityState::Ready;
         self.subchannels = vec![subchannel.clone()]; // Keep only the winner.
@@ -296,7 +318,16 @@ impl PickFirstPolicy {
         None
     }
 
+    /// Returns true if the given subchannel matches the currently selected active subchannel.
+    fn subchannel_is_selected(&self, subchannel: &Arc<dyn Subchannel>) -> bool {
+        self.selected
+            .as_ref()
+            .map_or(false, |sel| sel.address() == subchannel.address())
+    }
+
     /// Returns true if the subchannel's address is present in the most recently received address list.
+    // This compares against the current list of subchannels the LB is attempting to connect to. To
+    // see if the LB already connected to the channel, use 'subchannel_is_selected'.
     fn subchannel_is_current(&self, subchannel: &Arc<dyn Subchannel>) -> bool {
         self.subchannels
             .iter()
@@ -461,9 +492,11 @@ impl LbPolicy for PickFirstPolicy {
         match update.endpoints {
             Ok(endpoints) => {
                 let new_addresses = self.compile_address(endpoints, config, channel_controller)?;
-                let sticky = self.sticky(&new_addresses);
-                self.rebuild_subchannels(new_addresses, channel_controller);
-                if !sticky {
+                if let Some(ready_subchannel) =
+                    self.rebuild_subchannels(new_addresses, channel_controller)
+                {
+                    self.subchannel_activate(ready_subchannel, channel_controller);
+                } else {
                     self.start_connection_pass(channel_controller);
                 }
             }
