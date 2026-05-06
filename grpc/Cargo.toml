@@ -69,7 +69,7 @@ socket2 = { version = "0.6", optional = true }
 tokio = { version = "1.37.0", features = ["sync", "macros"] }
 tokio-rustls = { version = "0.26", optional = true, default-features = false }
 tokio-stream = { version = "0.1.17", default-features = false }
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+tonic = { version = "0.14.6", path = "../tonic", default-features = false, features = [
     "codegen",
 ] }
 tower = { version = "0.5.2", features = [
@@ -88,12 +88,12 @@ hickory-server = "0.25.2"
 prost = "0.14.0"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tempfile = "3.26"
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+tonic = { version = "0.14.6", path = "../tonic", default-features = false, features = [
     "server",
     "router",
     "tls-ring",
 ] }
-tonic-prost = { version = "0.14.0", path = "../tonic-prost" }
+tonic-prost = { version = "0.14.6", path = "../tonic-prost" }
 
 [[bench]]
 name = "metadata"
