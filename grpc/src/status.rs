@@ -25,31 +25,39 @@
 mod server_status;
 mod status_code;
 
-pub use server_status::ServerStatus;
-pub use status_code::StatusCode;
+pub use server_status::ServerStatusErr;
+pub use status_code::StatusCodeError;
+
+/// Represents either a failing gRPC status or a successful result containing
+/// `T`.
+pub type StatusOr<T> = Result<T, StatusError>;
+
+/// The representation of a gRPC status.  OK statuses may not contain a status
+/// message, while error values may.
+pub type Status = StatusOr<()>;
 
 /// Represents a gRPC status.
 #[derive(Debug, Clone)]
-pub struct Status {
-    code: StatusCode,
+pub struct StatusError {
+    code: StatusCodeError,
     message: String,
 }
 
-impl Status {
-    /// Create a new `Status` with the given code and message.
-    pub fn new(code: StatusCode, message: impl Into<String>) -> Self {
-        Status {
+impl StatusError {
+    /// Create a new `StatusErr` with the given code and message.
+    pub fn new(code: StatusCodeError, message: impl Into<String>) -> Self {
+        StatusError {
             code,
             message: message.into(),
         }
     }
 
-    /// Get the `StatusCode` of this `Status`.
-    pub fn code(&self) -> StatusCode {
+    /// Get the `StatusCode` of this `StatusErr`.
+    pub fn code(&self) -> StatusCodeError {
         self.code
     }
 
-    /// Get the message of this `Status`.
+    /// Get the message of this `StatusErr`.
     pub fn message(&self) -> &str {
         &self.message
     }
@@ -59,13 +67,13 @@ impl Status {
     pub(crate) fn is_restricted_control_plane_code(&self) -> bool {
         matches!(
             self.code,
-            StatusCode::InvalidArgument
-                | StatusCode::NotFound
-                | StatusCode::AlreadyExists
-                | StatusCode::FailedPrecondition
-                | StatusCode::Aborted
-                | StatusCode::OutOfRange
-                | StatusCode::DataLoss
+            StatusCodeError::InvalidArgument
+                | StatusCodeError::NotFound
+                | StatusCodeError::AlreadyExists
+                | StatusCodeError::FailedPrecondition
+                | StatusCodeError::Aborted
+                | StatusCodeError::OutOfRange
+                | StatusCodeError::DataLoss
         )
     }
 }
@@ -76,17 +84,17 @@ mod tests {
 
     #[test]
     fn test_status_new() {
-        let status = Status::new(StatusCode::Ok, "ok");
-        assert_eq!(status.code(), StatusCode::Ok);
-        assert_eq!(status.message(), "ok");
+        let status = StatusError::new(StatusCodeError::NotFound, "not ok");
+        assert_eq!(status.code(), StatusCodeError::NotFound);
+        assert_eq!(status.message(), "not ok");
     }
 
     #[test]
     fn test_status_debug() {
-        let status = Status::new(StatusCode::Ok, "ok");
+        let status = StatusError::new(StatusCodeError::Cancelled, "not ok");
         let debug = format!("{:?}", status);
         assert!(debug.contains("Status"));
-        assert!(debug.contains("Ok"));
-        assert!(debug.contains("ok"));
+        assert!(debug.contains("Cancelled"));
+        assert!(debug.contains("not ok"));
     }
 }

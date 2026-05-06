@@ -5,6 +5,7 @@ edition = "2024"
 authors = ["gRPC Authors"]
 license = "MIT"
 rust-version = { workspace = true }
+publish = false
 
 [package.metadata.cargo_check_external_types]
 allowed_external_types = [

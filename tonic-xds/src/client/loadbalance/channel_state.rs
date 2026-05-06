@@ -31,6 +31,7 @@ use std::time::Duration;
 
 use pin_project_lite::pin_project;
 use tower::Service;
+use tower::load::Load;
 
 use crate::client::endpoint::{Connector, EndpointAddress};
 use crate::common::async_util::BoxFuture;
@@ -167,6 +168,14 @@ where
 
     fn call(&mut self, req: Req) -> Self::Future {
         self.inner.call(req)
+    }
+}
+
+impl<S: Load> Load for ReadyChannel<S> {
+    type Metric = S::Metric;
+
+    fn load(&self) -> Self::Metric {
+        self.inner.load()
     }
 }
 

@@ -26,7 +26,7 @@ use std::marker::PhantomData;
 use std::pin::Pin;
 
 use grpc::Status;
-use grpc::StatusCode;
+use grpc::StatusError;
 use grpc::client::CallOptions;
 use grpc::client::InvokeOnce;
 use grpc::client::RecvStream as _;
@@ -117,18 +117,14 @@ where
     Res: Message,
     for<'b> Res::Mut<'b>: ClearAndParse + Send + Sync,
 {
-    type Output = Result<Res, Status>;
+    type Output = Result<Res, StatusError>;
     type IntoFuture = Pin<Box<dyn Future<Output = Self::Output> + Send + 'a>>;
 
     fn into_future(self) -> Self::IntoFuture {
         Box::pin(async move {
             let mut res = Res::default();
-            let status = self.with_response_message(&mut res).await;
-            if status.code() == StatusCode::Ok {
-                Ok(res)
-            } else {
-                Err(status)
-            }
+            self.with_response_message(&mut res).await?;
+            Ok(res)
         })
     }
 }

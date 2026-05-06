@@ -22,8 +22,8 @@
  *
  */
 
-use grpc::Status;
-use grpc::StatusCode;
+use grpc::StatusCodeError;
+use grpc::StatusOr;
 use grpc::client::Channel;
 use grpc::client::metadata_utils::AttachHeadersInterceptor;
 use grpc::client::metadata_utils::CaptureHeadersInterceptor;
@@ -93,7 +93,7 @@ impl InteropTest for TestClient {
 
         assertions.push(test_assert!(
             "call must be successful",
-            status.code() == StatusCode::Ok,
+            status.is_ok(),
             format!("status={status:?}")
         ));
 
@@ -111,10 +111,10 @@ impl InteropTest for TestClient {
         let mut stream = self.streaming_input_call().await;
 
         for request in REQUEST_LENGTHS.iter().map(make_streaming_input_request) {
-            let _ = stream.send_message(&request).await;
+            let _ = stream.send(&request).await;
         }
 
-        let result = stream.await;
+        let result = stream.close_and_recv().await;
 
         assertions.push(test_assert!(
             "call must be successful",
@@ -141,17 +141,17 @@ impl InteropTest for TestClient {
                 .map(|len| ResponseParameters::with_size(*len)),
         });
 
-        let mut rx = self.streaming_output_call(req).start().await;
+        let mut rx = self.streaming_output_call(req).await;
 
         let mut responses = Vec::new();
-        while let Some(response) = rx.next().await {
+        while let Some(response) = rx.recv().await {
             responses.push(response);
         }
 
         let status = rx.status().await;
         assertions.push(test_assert!(
             "call must be successful",
-            status.code() == StatusCode::Ok,
+            status.is_ok(),
             format!("result={status:?}")
         ));
 
@@ -174,20 +174,18 @@ impl InteropTest for TestClient {
 
     async fn ping_pong(&mut self, assertions: &mut Vec<TestAssertion>) {
         let (mut tx, mut rx) = self.full_duplex_call().await;
-        let _ = tx.send_message(make_ping_pong_request(0)).await;
+        let _ = tx.send(make_ping_pong_request(0)).await;
 
         let mut responses = Vec::new();
         loop {
-            match rx.next().await {
+            match rx.recv().await {
                 Some(message) => {
                     responses.push(message);
                     if responses.len() == RESPONSE_LENGTHS.len() {
                         drop(tx);
                         break;
                     } else {
-                        let _ = tx
-                            .send_message(make_ping_pong_request(responses.len()))
-                            .await;
+                        let _ = tx.send(make_ping_pong_request(responses.len())).await;
                     }
                 }
                 None => {
@@ -216,7 +214,7 @@ impl InteropTest for TestClient {
         let status = rx.status().await;
         assertions.push(test_assert!(
             "call must be successful",
-            status.code() == StatusCode::Ok,
+            status.is_ok(),
             format!("result={status:?}")
         ));
     }
@@ -226,7 +224,7 @@ impl InteropTest for TestClient {
         drop(tx);
 
         let mut responses = Vec::new();
-        while let Some(response) = rx.next().await {
+        while let Some(response) = rx.recv().await {
             responses.push(response);
         }
         assertions.push(test_assert!(
@@ -238,20 +236,20 @@ impl InteropTest for TestClient {
         let status = rx.status().await;
         assertions.push(test_assert!(
             "call must be successful",
-            status.code() == StatusCode::Ok,
+            status.is_ok(),
             format!("result={status:?}")
         ));
     }
 
     async fn status_code_and_message(&mut self, assertions: &mut Vec<TestAssertion>) {
-        fn validate_response<T>(result: Result<T, Status>, assertions: &mut Vec<TestAssertion>)
+        fn validate_response<T>(result: StatusOr<T>, assertions: &mut Vec<TestAssertion>)
         where
             T: std::fmt::Debug,
         {
             assertions.push(test_assert!(
                 "call must fail with unknown status code",
                 match &result {
-                    Err(status) => status.code() == StatusCode::Unknown,
+                    Err(status_err) => status_err.code() == StatusCodeError::Unknown,
                     _ => false,
                 },
                 format!("result={:?}", result)
@@ -260,7 +258,7 @@ impl InteropTest for TestClient {
             assertions.push(test_assert!(
                 "call must respsond with expected status message",
                 match &result {
-                    Err(status) => status.message() == TEST_STATUS_MESSAGE,
+                    Err(status_err) => status_err.message() == TEST_STATUS_MESSAGE,
                     _ => false,
                 },
                 format!("result={:?}", result)
@@ -285,19 +283,13 @@ impl InteropTest for TestClient {
         validate_response(result, assertions);
 
         let (mut tx, mut rx) = self.full_duplex_call().await;
-        let _ = tx.send_message(duplex_req).await;
+        let _ = tx.send(duplex_req).await;
         drop(tx);
         let mut responses = Vec::new();
-        while let Some(response) = rx.next().await {
+        while let Some(response) = rx.recv().await {
             responses.push(response);
         }
-        let status = rx.status().await;
-        let result = if status.code() != StatusCode::Ok {
-            Err(status)
-        } else {
-            Ok(responses)
-        };
-
+        let result = rx.status().await.map(|()| responses);
         validate_response(result, assertions);
     }
 
@@ -314,7 +306,7 @@ impl InteropTest for TestClient {
         assertions.push(test_assert!(
             "call must fail with unknown status code",
             match &result {
-                Err(status) => status.code() == StatusCode::Unknown,
+                Err(status) => status.code() == StatusCodeError::Unknown,
                 _ => false,
             },
             format!("result={:?}", result)
@@ -335,7 +327,7 @@ impl InteropTest for TestClient {
         assertions.push(test_assert!(
             "call must fail with unimplemented status code",
             match &result {
-                Err(status) => status.code() == StatusCode::Unimplemented,
+                Err(status) => status.code() == StatusCodeError::Unimplemented,
                 _ => false,
             },
             format!("result={:?}", result)
@@ -396,15 +388,10 @@ impl InteropTest for TestClient {
             .with_once_interceptor(hdr_int)
             .with_once_interceptor(trl_int)
             .await;
-        _ = tx.send_message(make_ping_pong_request(0)).await;
+        _ = tx.send(make_ping_pong_request(0)).await;
         drop(tx);
         let status = rx.status().await;
-        assert_eq!(
-            status.code(),
-            StatusCode::Ok,
-            "call should pass: {:?}",
-            status
-        );
+        assert!(status.is_ok(), "call should pass: {:?}", status);
 
         let response_headers = hdr_rx.await.expect("headers should be received");
         let response_trailers = trl_rx.await.expect("trailers should be received");
@@ -429,7 +416,7 @@ impl InteropTestUnimplemented for UnimplementedClient {
         assertions.push(test_assert!(
             "call must fail with unimplemented status code",
             match &result {
-                Err(status) => status.code() == StatusCode::Unimplemented,
+                Err(status) => status.code() == StatusCodeError::Unimplemented,
                 _ => false,
             },
             format!("result={:?}", result)
