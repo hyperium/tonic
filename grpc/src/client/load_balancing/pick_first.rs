@@ -58,13 +58,13 @@ pub(crate) static POLICY_NAME: &str = "pick_first";
 type ShufflerFn = dyn Fn(&mut [Endpoint]) + Send + Sync + 'static;
 
 #[derive(Debug, serde::Deserialize, Clone)]
-pub struct PickFirstConfig {
+pub(crate) struct PickFirstConfig {
     #[serde(rename = "shuffleAddressList")]
     pub shuffle_address_list: bool,
 }
 
 #[derive(Debug)]
-pub(crate) struct PickFirstBuilder {}
+struct PickFirstBuilder {}
 
 impl LbPolicyBuilder for PickFirstBuilder {
     type LbPolicy = PickFirstPolicy;
