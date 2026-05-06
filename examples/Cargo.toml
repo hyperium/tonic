@@ -256,6 +256,12 @@ name = "grpc-routeguide-client"
 path = "src/grpc-routeguide/client.rs"
 required-features = ["grpc-routeguide"]
 
+[[bin]]
+name = "grpc-helloworld-client"
+path = "src/grpc-helloworld/client.rs"
+required-features = ["grpc-helloworld"]
+
+
 [features]
 gcp = ["dep:prost-types", "tonic/tls-ring"]
 routeguide = ["dep:async-stream", "dep:tokio-stream", "dep:rand", "dep:serde", "dep:serde_json"]
@@ -277,7 +283,8 @@ h2c = ["dep:hyper", "dep:tower", "dep:http", "dep:hyper-util"]
 cancellation = ["dep:tokio-util"]
 tower = ["dep:tower", "dep:http"]
 grpc-routeguide = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf", "dep:rand"]
-full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c", "grpc-routeguide"]
+grpc-helloworld = ["dep:grpc", "dep:grpc-protobuf", "dep:protobuf"]
+full = ["gcp", "routeguide", "reflection", "autoreload", "health", "grpc-web", "tracing", "uds", "streaming", "mock", "json-codec", "compression", "tls", "tls-rustls", "tls-client-auth", "types", "cancellation", "h2c", "grpc-routeguide", "grpc-helloworld"]
 default = ["full"]
 
 [dependencies]
