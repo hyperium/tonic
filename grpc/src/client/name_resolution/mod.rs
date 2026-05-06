@@ -298,7 +298,7 @@ impl Hash for Endpoint {
 
 /// An Address is an identifier that indicates how to connect to a server.
 #[non_exhaustive]
-#[derive(Debug, Clone, Default, Ord, PartialOrd)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Ord, PartialOrd)]
 pub(crate) struct Address {
     /// The network type is used to identify what kind of transport to create
     /// when connecting to this address.  Typically TCP_IP_ADDRESS_TYPE.
@@ -313,15 +313,6 @@ pub(crate) struct Address {
     pub attributes: Attributes,
 }
 
-impl Eq for Address {}
-
-impl PartialEq for Address {
-    fn eq(&self, other: &Self) -> bool {
-        self.network_type == other.network_type
-            && self.address == other.address
-            && self.attributes == other.attributes
-    }
-}
 
 impl Hash for Address {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
@@ -452,4 +443,57 @@ mod test {
             assert_eq!(&target.to_string(), tc.want_str);
         }
     }
+
+    // This test ensures that the Address struct correctly maintains its asymmetric PartialEq and Hash contracts.
+    // Specifically, two addresses with the same physical coordinates but different metadata attributes must
+    // hash to the same HashMap bucket (intentional collision) but fail strict equality, forcing collection layers 
+    // (like load balancers and connection pools) to safely treat them as distinct endpoints without corrupting the map.
+    #[test]
+    fn test_address_hashmap_asymmetric_collision() {
+        use std::collections::HashMap;
+        use std::hash::{Hash, Hasher};
+        use std::collections::hash_map::DefaultHasher;
+        use crate::client::name_resolution::Address;
+        use crate::attributes::Attributes;
+        use crate::byte_str::ByteStr;
+
+        let addr_base = "127.0.0.1:8080";
+
+        // Address A: No metadata attributes
+        let addr_a = Address {
+            network_type: "tcp",
+            address: ByteStr::from(addr_base.to_string()),
+            attributes: Attributes::new(),
+        };
+
+        // Address B: Identical text/type coordinates, but WITH metadata attributes
+        let attrs = Attributes::new().add("metadata_payload".to_string());
+        let addr_b = Address {
+            network_type: "tcp",
+            address: ByteStr::from(addr_base.to_string()),
+            attributes: attrs,
+        };
+
+        // Invariant Verification: Stricter equality must say they differ
+        assert_ne!(addr_a, addr_b, "Address equality must be distinct when attributes mutate!");
+        
+        // Invariant Verification: Hashing must ignore attributes (intentional collision)
+        let mut hasher_a = DefaultHasher::new();
+        let mut hasher_b = DefaultHasher::new();
+        addr_a.hash(&mut hasher_a);
+        addr_b.hash(&mut hasher_b);
+        assert_eq!(hasher_a.finish(), hasher_b.finish(), "Address hashes MUST remain identical to ensure same HashMap memory bucket routing!");
+
+        // Map Functional Verification
+        let mut map = HashMap::new();
+        map.insert(addr_a.clone(), "subchannel_a");
+
+        // Querying or removing using B (mutated attributes) must FAIL due to asymmetric == check
+        assert!(map.remove(&addr_b).is_none(), "Flaw: HashMap incorrectly matched key despite mismatched attributes!");
+        
+        // Querying or removing using A (exact match) must SUCCEED
+        assert_eq!(map.remove(&addr_a), Some("subchannel_a"));
+        assert!(map.is_empty());
+    }
 }
+
