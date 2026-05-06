@@ -707,15 +707,11 @@ async fn tonic_transport_invalid_base64_headers() {
     };
     let req = WrappedEchoRequest(request);
 
-    tokio::time::timeout(Duration::from_secs(10), async {
-        loop {
-            if tx.send(&req, SendOptions::default()).await.is_err() {
-                break;
-            }
-        }
+    tokio::time::timeout(DEFAULT_TEST_DURATION, async {
+        while tx.send(&req, SendOptions::default()).await.is_ok() {}
     })
     .await
-    .expect("send did not fail within 10 seconds");
+    .expect("timed out waiting for stream to close");
 
     shutdown_notify.notify_one();
     server_handle.await.unwrap();
