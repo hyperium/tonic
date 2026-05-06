@@ -323,7 +323,6 @@ impl PartialEq for Address {
     }
 }
 
-
 impl Hash for Address {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.network_type.hash(state);
