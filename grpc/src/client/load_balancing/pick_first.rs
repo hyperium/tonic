@@ -31,7 +31,6 @@ use rand::seq::SliceRandom;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tonic::metadata::MetadataMap;
 
-
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
@@ -470,12 +469,32 @@ impl LbPolicy for PickFirstPolicy {
         Ok(())
     }
 
+    /// Invoked asynchronously by the outer channel infrastructure whenever any subchannel
+    /// managed by this policy experiences a connectivity state transition.
+    ///
+    /// # Parameters
+    /// * `subchannel`: The specific backend connection instance (`Arc<dyn Subchannel>`) that triggered the event.
+    ///   It identifies *which* transport lane is reporting telemetry.
+    /// * `state`: The new connectivity status snapshot (`SubchannelState`) being reported.
+    ///   It details *what* happened (e.g., transitioned to `READY`, `IDLE`, or encountered a `TransientFailure`).
+    /// * `channel_controller`: The internal control plane interface used to update the channel's RPC picker
+    ///   or signal the Name Resolver to fetch new addresses.
+    ///
+    /// # Behavioral Flow
+    /// This function drives the core load-balancing state machine. It caches the new state and executes a
+    /// routing matrix to determine whether to drop a failing active connection, finalize a successful
+    /// backend selection, pace connection attempts (First Pass), or monitor background retry health (Steady State).
     fn subchannel_update(
         &mut self,
         subchannel: Arc<dyn Subchannel>,
         state: &SubchannelState,
         channel_controller: &mut dyn ChannelController,
     ) {
+        if !self.subchannel_is_current(&subchannel) {
+            // This update is from an outdated subchannel that is no longer in the address list. Ignore it.
+            return;
+        }
+
         // Update the cache for all updates.
         self.subchannel_states
             .insert(subchannel.address(), state.clone());
@@ -498,10 +517,8 @@ impl LbPolicy for PickFirstPolicy {
                 self.subchannel_drop(channel_controller);
             }
             (false, ConnectivityState::Ready) => {
-                // The updating subchannel is READY. If it is still current, activate it.
-                if self.subchannel_is_current(&subchannel) {
-                    self.subchannel_activate(subchannel, channel_controller);
-                }
+                // The updating subchannel is READY; activate it.
+                self.subchannel_activate(subchannel, channel_controller);
             }
             (false, _) => {
                 // The updating subchannel won't be selected, so track progress based on whether we are in steady state or a first pass.
@@ -935,7 +952,6 @@ mod test {
                 ..Default::default()
             },
         ];
-
 
         policy
             .resolver_update(
