@@ -213,17 +213,7 @@ fn trailers_from_tonic_status(
             status.message(),
         )),
     };
-
-    let trailers = match md.map(TryInto::try_into) {
-        Some(Err(e)) => Trailers::new(Err(StatusError::new(
-            StatusCodeError::Internal,
-            format!("failed to parse metadata: {e}"),
-        ))),
-        Some(Ok(metadata)) => Trailers::new(status_res).with_metadata(metadata),
-        None => Trailers::new(status_res),
-    };
-
-    ClientResponseStreamItem::Trailers(trailers)
+    trailers_from_status(status_res, md)
 }
 
 // Builds a trailers with a status
