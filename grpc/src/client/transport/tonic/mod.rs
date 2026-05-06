@@ -347,6 +347,14 @@ impl RecvStream for TonicRecvStream {
     }
 }
 
+impl Drop for TonicRecvStream {
+    fn drop(&mut self) {
+        if let Some(notify) = self.stop_notify.take() {
+            notify.notify_one();
+        }
+    }
+}
+
 fn err_streams(status: StatusError) -> (TonicSendStream, TonicRecvStream) {
     (
         TonicSendStream { sender: Err(()) },

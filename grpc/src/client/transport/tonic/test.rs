@@ -717,6 +717,72 @@ async fn tonic_transport_invalid_base64_headers() {
     server_handle.await.unwrap();
 }
 
+#[tokio::test]
+async fn tonic_transport_recv_drop_cancels_send() {
+    super::reg();
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = listener.local_addr().unwrap();
+    let shutdown_notify = Arc::new(Notify::new());
+    let shutdown_notify_copy = shutdown_notify.clone();
+
+    let server_handle = tokio::spawn(async move {
+        let echo_server = EchoService {
+            response_headers: None,
+        };
+        let svc = EchoServer::new(echo_server);
+        let _ = Server::builder()
+            .add_service(svc)
+            .serve_with_incoming_shutdown(
+                TcpListenerStream::new(listener),
+                shutdown_notify_copy.notified(),
+            )
+            .await;
+    });
+
+    let builder = GLOBAL_TRANSPORT_REGISTRY
+        .get_transport(TCP_IP_NETWORK_TYPE)
+        .unwrap();
+    let config = Arc::new(TransportOptions::default());
+    let securty_opts = SecurityOpts {
+        credentials: InsecureChannelCredentials::new_arc(),
+        authority: Authority::new("localhost".to_string(), None),
+        handshake_info: ClientHandshakeInfo::default(),
+    };
+    let (conn, _sec_info, _disconnection_listener) = builder
+        .dyn_connect(
+            addr.to_string(),
+            GrpcRuntime::new(TokioRuntime::default()),
+            &securty_opts,
+            &config,
+        )
+        .await
+        .unwrap();
+
+    let (mut tx, rx) = conn
+        .dyn_invoke(
+            RequestHeaders::new()
+                .with_method_name("/grpc.examples.echo.Echo/BidirectionalStreamingEcho"),
+            CallOptions::default(),
+        )
+        .await;
+
+    drop(rx);
+
+    let request = EchoRequest {
+        message: "hello".into(),
+    };
+    let req = WrappedEchoRequest(request);
+
+    tokio::time::timeout(DEFAULT_TEST_DURATION, async {
+        while tx.send(&req, SendOptions::default()).await.is_ok() {}
+    })
+    .await
+    .expect("timed out waiting for stream to close");
+
+    shutdown_notify.notify_one();
+    server_handle.await.unwrap();
+}
+
 struct WrappedEchoRequest(EchoRequest);
 struct WrappedEchoResponse(EchoResponse);
 
