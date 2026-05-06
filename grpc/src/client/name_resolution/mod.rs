@@ -317,9 +317,12 @@ impl Eq for Address {}
 
 impl PartialEq for Address {
     fn eq(&self, other: &Self) -> bool {
-        self.network_type == other.network_type && self.address == other.address
+        self.network_type == other.network_type
+            && self.address == other.address
+            && self.attributes == other.attributes
     }
 }
+
 
 impl Hash for Address {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
