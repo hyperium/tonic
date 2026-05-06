@@ -31,6 +31,7 @@ use rand::seq::SliceRandom;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tonic::metadata::MetadataMap;
 
+
 use crate::client::ConnectivityState;
 use crate::client::load_balancing::ChannelController;
 use crate::client::load_balancing::FailingPicker;
@@ -44,6 +45,7 @@ use crate::client::load_balancing::PickResult;
 use crate::client::load_balancing::Picker;
 use crate::client::load_balancing::QueuingPicker;
 use crate::client::load_balancing::WorkScheduler;
+use crate::client::load_balancing::subchannel;
 use crate::client::load_balancing::subchannel::Subchannel;
 use crate::client::load_balancing::subchannel::SubchannelState;
 use crate::client::name_resolution::Address;
@@ -170,6 +172,39 @@ impl PickFirstPolicy {
         self.subchannel_states = new_states; // Update subchannel states cache.
     }
 
+    /// Call when the selected subchannel is dropped or loses connection.
+    // This causes the LB to go IDLE.
+    fn subchannel_drop(&mut self, channel_controller: &mut dyn ChannelController) {
+        self.selected = None;
+        self.connectivity_state = ConnectivityState::Idle;
+        channel_controller.update_picker(LbState {
+            connectivity_state: ConnectivityState::Idle,
+            picker: Arc::new(IdlePicker {
+                work_scheduler: self.work_scheduler.clone(),
+            }),
+        });
+    }
+
+    fn subchannel_activate(
+        &mut self,
+        subchannel: Arc<dyn Subchannel>,
+        channel_controller: &mut dyn ChannelController,
+    ) {
+        self.selected = Some(subchannel.clone());
+        self.connectivity_state = ConnectivityState::Ready;
+        self.subchannels = vec![subchannel.clone()]; // Keep only the winner.
+        self.steady_state = None; // Reset mode to First Pass.
+
+        if let Some(handle) = self.timer_handle.take() {
+            handle.abort();
+        }
+
+        channel_controller.update_picker(LbState {
+            connectivity_state: ConnectivityState::Ready,
+            picker: Arc::new(OneSubchannelPicker { sc: subchannel }),
+        });
+    }
+
     /// Starts a connection pass through the address list.
     // This clears the selected subchannel.
     fn start_connection_pass(&mut self, channel_controller: &mut dyn ChannelController) {
@@ -193,6 +228,41 @@ impl PickFirstPolicy {
 
             // This transition triggers a FailingPicker and requests re-resolution.
             _ = self.set_transient_failure(channel_controller, error);
+        }
+    }
+
+    /// Book-keeping for tracking progress on the first pass through the address list.
+    /// Assumes the subchannel is in a non-READY state.
+    /// If the failure is from the subchannel at the frontier, advances the frontier and triggers a connection on the next subchannel.
+    fn update_first_pass(
+        &mut self,
+        subchannel: Arc<dyn Subchannel>,
+        state: &SubchannelState,
+        channel_controller: &mut dyn ChannelController,
+    ) {
+        // Failover triggers only if the failure comes from the subchannel currently at the frontier.
+        if let Some(attempting) = self.subchannels.get(self.frontier_index) {
+            if attempting.address() == subchannel.address()
+                && state.connectivity_state == ConnectivityState::TransientFailure
+            {
+                // Advance frontier to the next available address.
+                if let Some(next_sc) = self.advance_frontier(false) {
+                    let next_sc = next_sc.clone();
+                    self.trigger_subchannel_connection(next_sc, channel_controller);
+                } else {
+                    // Pass exhausted: enter policy-level TRANSIENT_FAILURE and switch to steady state.
+                    let error = state
+                        .last_connection_error
+                        .as_ref()
+                        .map(|e| e.to_string())
+                        .unwrap_or_else(|| "all addresses failed".to_string());
+
+                    self.last_connection_error = Some(error.clone());
+                    _ = self.set_transient_failure(channel_controller, error);
+
+                    self.steady_state = Some(SteadyState::new(self.subchannels.len()));
+                }
+            }
         }
     }
 
@@ -222,6 +292,13 @@ impl PickFirstPolicy {
             }
         }
         None
+    }
+
+    /// Returns true if the subchannel's address is present in the most recently received address list.
+    fn subchannel_is_current(&self, subchannel: &Arc<dyn Subchannel>) -> bool {
+        self.subchannels
+            .iter()
+            .any(|sc| sc.address() == subchannel.address())
     }
 
     /// Triggers a connection on the subchannel, and starts the 250ms timer.
@@ -403,89 +480,35 @@ impl LbPolicy for PickFirstPolicy {
         self.subchannel_states
             .insert(subchannel.address(), state.clone());
 
-        // If we have a selected subchannel, only care about updates from it.
-        if let Some(ref selected) = self.selected {
-            if selected.address() == subchannel.address() {
-                if state.connectivity_state != ConnectivityState::Ready {
-                    // Lost connection: Go IDLE.
-                    self.selected = None;
-                    self.connectivity_state = ConnectivityState::Idle;
-                    channel_controller.update_picker(LbState {
-                        connectivity_state: ConnectivityState::Idle,
-                        picker: Arc::new(IdlePicker {
-                            work_scheduler: self.work_scheduler.clone(),
-                        }),
-                    });
-                }
-                return;
+        // If the subchannel being updated is the selected one, it affects handling.
+        let is_selected = self
+            .selected
+            .as_ref()
+            .map_or(false, |s| s.address() == subchannel.address());
+
+        match (
+            is_selected,              // Does the load balancer have an active subchannel already?
+            state.connectivity_state, // What is the updating subchannel's state?
+        ) {
+            (true, ConnectivityState::Ready) => {
+                // The selected subchannel is still ready; do nothing with this update.
             }
-        }
-
-        // Steady State Retries: Automatically connect when a subchannel goes IDLE.
-        if self.steady_state.is_some() && state.connectivity_state == ConnectivityState::Idle {
-            subchannel.connect();
-        }
-
-        // Steady State Failures: Count failures across all subchannels.
-        if let Some(ref mut ss) = self.steady_state {
-            if state.connectivity_state == ConnectivityState::TransientFailure {
-                if ss.record_failure(self.subchannels.len()) {
-                    channel_controller.request_resolution();
+            (true, _) => {
+                // The selected subchannel has failed (is no longer READY); drop the connection.
+                self.subchannel_drop(channel_controller);
+            }
+            (false, ConnectivityState::Ready) => {
+                // The updating subchannel is READY. If it is still current, activate it.
+                if self.subchannel_is_current(&subchannel) {
+                    self.subchannel_activate(subchannel, channel_controller);
                 }
             }
-        }
-
-        // If any subchannel in the current pass reports READY, select it.
-        if state.connectivity_state == ConnectivityState::Ready {
-            // Check if this subchannel is part of the current pass (index <= frontier_index)
-            let is_in_pass = self
-                .subchannels
-                .iter()
-                .take(self.frontier_index + 1)
-                .any(|sc| sc.address() == subchannel.address());
-
-            if is_in_pass {
-                self.selected = Some(subchannel.clone());
-                self.connectivity_state = ConnectivityState::Ready;
-
-                // Keep only the successful subchannel in the list
-                self.subchannels = vec![subchannel.clone()];
-
-                // Cancel timer
-                if let Some(handle) = self.timer_handle.take() {
-                    handle.abort();
-                }
-
-                channel_controller.update_picker(LbState {
-                    connectivity_state: ConnectivityState::Ready,
-                    picker: Arc::new(OneSubchannelPicker { sc: subchannel }),
-                });
-                return;
-            }
-        }
-
-        // Failover on Failure: Only if the subchannel at the exact frontier_index fails.
-        if let Some(attempting) = self.subchannels.get(self.frontier_index) {
-            if attempting.address() == subchannel.address() {
-                if state.connectivity_state == ConnectivityState::TransientFailure {
-                    // Move to next address via advance_frontier
-                    if let Some(next_sc) = self.advance_frontier(false) {
-                        let next_sc = next_sc.clone(); // Clone to avoid borrow issues
-                        self.trigger_subchannel_connection(next_sc, channel_controller);
-                    } else {
-                        // Exhausted: TRANSIENT_FAILURE and request re-resolution.
-                        let error = state
-                            .last_connection_error
-                            .as_ref()
-                            .map(|e| e.to_string())
-                            .unwrap_or_else(|| "all addresses failed".to_string());
-
-                        self.last_connection_error = Some(error.clone());
-                        _ = self.set_transient_failure(channel_controller, error);
-
-                        // Transition to steady state mode
-                        self.steady_state = Some(SteadyState::new());
-                    }
+            (false, _) => {
+                // The updating subchannel won't be selected, so track progress based on whether we are in steady state or a first pass.
+                if let Some(steady) = self.steady_state.as_mut() {
+                    steady.subchannel_nonready(channel_controller, subchannel, state);
+                } else {
+                    self.update_first_pass(subchannel, state, channel_controller);
                 }
             }
         }
@@ -547,25 +570,47 @@ fn build_shuffler() -> Arc<ShufflerFn> {
     })
 }
 
+/// Tracks a the 'steady state' pass of subchannels when looking for a ready connection.
+/// If the number of reported subchannel failures reaches the failure threshold, this will ask the Name Resolver to re-resolve.
 #[derive(Debug)]
 struct SteadyState {
+    /// The number of failures before triggering a re-resolution of addresses.
+    /// This is a rough heuristic to approximate if all subchannels have failed since we entered steady state, and can be tuned as needed.
+    failure_threshold: usize,
     /// The number of failures connecting, used to roughly approximate if a re-resolution needs to happen.
     failure_count: usize,
 }
 
 impl SteadyState {
-    fn new() -> Self {
-        Self { failure_count: 0 }
+    fn new(threshold: usize) -> Self {
+        Self {
+            failure_threshold: threshold,
+            failure_count: 0,
+        }
     }
 
-    /// Increments the failure count and returns true if re-resolution is required.
-    fn record_failure(&mut self, subchannels_len: usize) -> bool {
-        self.failure_count += 1;
-        if self.failure_count >= subchannels_len {
-            self.failure_count = 0;
-            return true;
+    /// Handles non-ready subchannel updates when the LB is in 'steady state' connection mode.
+    fn subchannel_nonready(
+        &mut self,
+        channel_controller: &mut dyn ChannelController,
+        subchannel: Arc<dyn Subchannel>,
+        state: &SubchannelState,
+    ) {
+        match state.connectivity_state {
+            ConnectivityState::Idle => {
+                // Subchannel backoff expired: trigger reconnection attempt.
+                subchannel.connect();
+            }
+            ConnectivityState::TransientFailure => {
+                // Track failures. If all known subchannels have failed, request new addresses.
+                self.failure_count += 1;
+                if self.failure_count >= self.failure_threshold {
+                    self.failure_count = 0;
+                    channel_controller.request_resolution();
+                }
+            }
+            _ => {}
         }
-        false
     }
 }
 
@@ -862,10 +907,12 @@ mod test {
                 addresses: vec![
                     Address {
                         address: crate::byte_str::ByteStr::from("::1".to_string()),
+                        network_type: crate::client::name_resolution::TCP_IP_NETWORK_TYPE,
                         ..Default::default()
                     },
                     Address {
                         address: crate::byte_str::ByteStr::from("127.0.0.1".to_string()),
+                        network_type: crate::client::name_resolution::TCP_IP_NETWORK_TYPE,
                         ..Default::default()
                     },
                 ],
@@ -874,6 +921,7 @@ mod test {
             Endpoint {
                 addresses: vec![Address {
                     address: crate::byte_str::ByteStr::from("::2".to_string()),
+                    network_type: crate::client::name_resolution::TCP_IP_NETWORK_TYPE,
                     ..Default::default()
                 }],
                 ..Default::default()
@@ -881,11 +929,13 @@ mod test {
             Endpoint {
                 addresses: vec![Address {
                     address: crate::byte_str::ByteStr::from("127.0.0.2".to_string()),
+                    network_type: crate::client::name_resolution::TCP_IP_NETWORK_TYPE,
                     ..Default::default()
                 }],
                 ..Default::default()
             },
         ];
+
 
         policy
             .resolver_update(

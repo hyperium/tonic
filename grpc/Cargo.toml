@@ -93,6 +93,8 @@ tonic = { version = "0.14.0", path = "../tonic", default-features = false, featu
     "tls-ring",
 ] }
 tonic-prost = { version = "0.14.0", path = "../tonic-prost" }
+tokio = { version = "1.37.0", features = ["test-util"] }
+
 
 [[bench]]
 name = "metadata"
