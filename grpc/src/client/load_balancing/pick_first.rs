@@ -274,9 +274,8 @@ impl PickFirstPolicy {
                     // Pass exhausted: enter policy-level TRANSIENT_FAILURE and switch to steady state.
                     let error = state
                         .last_connection_error
-                        .as_ref()
-                        .map(|e| e.to_string())
-                        .unwrap_or_else(|| "all addresses failed".to_string());
+                        .clone()
+                        .expect("gRPC Contract Violation: last_connection_error must be populated when in TransientFailure");
 
                     // Cancel the pacing timer since this connection pass is over.
                     self.abort_pacing_timer();
@@ -812,7 +811,7 @@ mod test {
             sc1,
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: None,
+                last_connection_error: Some("connection refused".to_string()),
             },
             controller.as_mut(),
         );
@@ -947,7 +946,7 @@ mod test {
             sc1,
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: None,
+                last_connection_error: Some("connection refused".to_string()),
             },
             controller.as_mut(),
         );
@@ -1247,7 +1246,7 @@ mod test {
             sc1.clone(),
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: None,
+                last_connection_error: Some("connection refused".to_string()),
             },
             controller.as_mut(),
         );
@@ -1301,7 +1300,7 @@ mod test {
             sc1.clone(),
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: None,
+                last_connection_error: Some("connection refused".to_string()),
             },
             controller.as_mut(),
         );
@@ -1333,7 +1332,7 @@ mod test {
             sc2.clone(),
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: None,
+                last_connection_error: Some("connection refused".to_string()),
             },
             controller.as_mut(),
         );
@@ -1389,7 +1388,7 @@ mod test {
             sc1.clone(),
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: None,
+                last_connection_error: Some("connection refused".to_string()),
             },
             controller.as_mut(),
         );
@@ -1420,7 +1419,7 @@ mod test {
             sc2,
             &SubchannelState {
                 connectivity_state: ConnectivityState::TransientFailure,
-                last_connection_error: None,
+                last_connection_error: Some("connection refused".to_string()),
             },
             controller.as_mut(),
         );
