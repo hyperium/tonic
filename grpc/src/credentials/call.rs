@@ -28,7 +28,7 @@ use std::sync::Arc;
 use tonic::async_trait;
 use tonic::metadata::MetadataMap;
 
-use crate::Status;
+use crate::StatusError;
 use crate::attributes::Attributes;
 use crate::credentials::SecurityLevel;
 
@@ -42,10 +42,10 @@ pub struct CallDetails {
 }
 
 impl CallDetails {
-    pub(crate) fn new(service_url: String, method_name: String) -> Self {
+    pub fn new(service_url: impl Into<String>, method_name: impl Into<String>) -> Self {
         Self {
-            service_url,
-            method_name,
+            service_url: service_url.into(),
+            method_name: method_name.into(),
         }
     }
 
@@ -68,7 +68,7 @@ pub struct ClientConnectionSecurityInfo {
 }
 
 impl ClientConnectionSecurityInfo {
-    pub(crate) fn new(
+    pub fn new(
         security_protocol: &'static str,
         security_level: SecurityLevel,
         attributes: Attributes,
@@ -116,7 +116,7 @@ pub trait CallCredentials: Send + Sync + Debug {
         call_details: &CallDetails,
         auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
-    ) -> Result<(), Status>;
+    ) -> Result<(), StatusError>;
 
     /// Indicates the minimum transport security level required to send
     /// these credentials.
@@ -157,7 +157,7 @@ impl CallCredentials for CompositeCallCredentials {
         call_details: &CallDetails,
         auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
-    ) -> Result<(), Status> {
+    ) -> Result<(), StatusError> {
         for cred in &self.creds {
             cred.get_metadata(call_details, auth_info, metadata).await?;
         }
@@ -193,7 +193,7 @@ mod tests {
             _call_details: &CallDetails,
             _auth_info: &ClientConnectionSecurityInfo,
             metadata: &mut MetadataMap,
-        ) -> Result<(), Status> {
+        ) -> Result<(), StatusError> {
             metadata.insert(
                 self.key
                     .parse::<tonic::metadata::MetadataKey<tonic::metadata::Ascii>>()
