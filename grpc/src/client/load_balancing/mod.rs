@@ -29,8 +29,6 @@ use std::fmt::Debug;
 use std::fmt::Display;
 use std::sync::Arc;
 
-use tonic::metadata::MetadataMap;
-
 use crate::StatusCodeError;
 use crate::StatusError;
 use crate::client::ConnectivityState;
@@ -39,6 +37,7 @@ use crate::client::load_balancing::subchannel::SubchannelState;
 use crate::client::name_resolution::Address;
 use crate::client::name_resolution::ResolverUpdate;
 use crate::core::RequestHeaders;
+use crate::metadata::MetadataMap;
 use crate::rt::GrpcRuntime;
 
 pub(crate) mod child_manager;
