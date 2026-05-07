@@ -28,12 +28,12 @@ use grpc::client::Channel;
 use grpc::client::metadata_utils::AttachHeadersInterceptor;
 use grpc::client::metadata_utils::CaptureHeadersInterceptor;
 use grpc::client::metadata_utils::CaptureTrailersInterceptor;
+use grpc::metadata::MetadataMap;
+use grpc::metadata::MetadataValue;
 use grpc_protobuf::CallBuilder;
 use protobuf::message_eq;
 use protobuf::proto;
 use tonic::async_trait;
-use tonic::metadata::MetadataMap;
-use tonic::metadata::MetadataValue;
 
 use crate::TestAssertion;
 use crate::client::InteropTest;
