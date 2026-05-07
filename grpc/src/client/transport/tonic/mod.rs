@@ -161,8 +161,8 @@ impl Invoke for TonicTransport {
         // dropped. We use `take_until` with this Notify to explicitly force the
         // stream to yield `None`, which tells Tonic to cancel the stream.
         let stop_notify_clone = stop_notify.clone();
-        let request_stream = ReceiverStream::new(req_rx)
-            .take_until(Box::pin(async move { stop_notify_clone.notified().await }));
+        let request_stream =
+            ReceiverStream::new(req_rx).take_until(stop_notify_clone.notified_owned());
         let mut request = TonicRequest::new(Box::pin(request_stream));
         let (method, metadata) = headers.into_parts();
         *request.metadata_mut() = metadata.into();
@@ -349,7 +349,7 @@ impl RecvStream for TonicRecvStream {
 
 impl Drop for TonicRecvStream {
     fn drop(&mut self) {
-        if let Some(notify) = self.stop_notify.take() {
+        if let Some(notify) = &self.stop_notify {
             notify.notify_one();
         }
     }
