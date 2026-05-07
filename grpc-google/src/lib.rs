@@ -37,9 +37,9 @@ use grpc::credentials::SecurityLevel;
 use grpc::credentials::call::CallCredentials;
 use grpc::credentials::call::CallDetails;
 use grpc::credentials::call::ClientConnectionSecurityInfo;
+use grpc::metadata::AsciiMetadataValue;
+use grpc::metadata::MetadataMap;
 use tonic::async_trait;
-use tonic::metadata::AsciiMetadataValue;
-use tonic::metadata::MetadataMap;
 
 const DEFAULT_CLOUD_PLATFORM_SCOPE: &str = "https://www.googleapis.com/auth/cloud-platform";
 
@@ -162,7 +162,7 @@ mod tests {
         assert!(res.is_ok());
 
         let auth_header = metadata.get("authorization").unwrap();
-        assert_eq!(auth_header.to_str().unwrap(), "Bearer valid_token");
+        assert_eq!(auth_header.to_str(), "Bearer valid_token");
     }
 
     #[tokio::test]
@@ -184,7 +184,7 @@ mod tests {
     async fn non_ascii_token_internal_error() {
         let creds = GcpCallCredentials {
             provider: MockTokenProvider {
-                result: Ok("invalid character\n".into()),
+                result: Ok("invalid\ncharacter".into()),
             },
         };
         let (cd, auth_info) = fake_args();

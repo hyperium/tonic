@@ -291,8 +291,6 @@ mod tests {
     use std::sync::Mutex;
     use std::sync::mpsc;
 
-    use tonic::metadata::MetadataMap;
-
     use super::*;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::LbPolicy;
@@ -309,6 +307,7 @@ mod tests {
     use crate::client::load_balancing::test_utils::new_request_headers;
     use crate::client::name_resolution::Address;
     use crate::client::name_resolution::ResolverUpdate;
+    use crate::metadata::MetadataMap;
     use crate::rt::default_runtime;
 
     fn test_lb_policy_options(tx_events: mpsc::Sender<TestEvent>) -> LbPolicyOptions {
