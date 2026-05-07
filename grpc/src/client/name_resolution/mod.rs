@@ -313,7 +313,6 @@ pub(crate) struct Address {
     pub attributes: Attributes,
 }
 
-
 impl Hash for Address {
     fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
         self.network_type.hash(state);
@@ -381,6 +380,12 @@ impl NopResolver {
 #[cfg(test)]
 mod test {
     use super::Target;
+    use crate::attributes::Attributes;
+    use crate::byte_str::ByteStr;
+    use crate::client::name_resolution::Address;
+    use std::collections::HashMap;
+    use std::collections::hash_map::DefaultHasher;
+    use std::hash::{Hash, Hasher};
 
     #[test]
     pub fn parse_target() {
@@ -444,29 +449,25 @@ mod test {
         }
     }
 
-    // This test ensures that the Address struct correctly maintains its asymmetric PartialEq and Hash contracts.
-    // Specifically, two addresses with the same physical coordinates but different metadata attributes must
-    // hash to the same HashMap bucket (intentional collision) but fail strict equality, forcing collection layers 
-    // (like load balancers and connection pools) to safely treat them as distinct endpoints without corrupting the map.
+    // This test ensures that the Address struct correctly maintains its
+    // asymmetric PartialEq and Hash contracts.
+    // Specifically, two addresses with the same physical coordinates but
+    // different metadata attributes must hash to the same HashMap bucket
+    // (intentional collision) but fail strict equality, forcing collection
+    // layers (e.g., load balancers and connection pools) to safely treat them
+    // as distinct endpoints without corrupting the map.
     #[test]
     fn test_address_hashmap_asymmetric_collision() {
-        use std::collections::HashMap;
-        use std::hash::{Hash, Hasher};
-        use std::collections::hash_map::DefaultHasher;
-        use crate::client::name_resolution::Address;
-        use crate::attributes::Attributes;
-        use crate::byte_str::ByteStr;
-
         let addr_base = "127.0.0.1:8080";
 
-        // Address A: No metadata attributes
+        // Address A: without metadata attributes
         let addr_a = Address {
             network_type: "tcp",
             address: ByteStr::from(addr_base.to_string()),
             attributes: Attributes::new(),
         };
 
-        // Address B: Identical text/type coordinates, but WITH metadata attributes
+        // Address B: with metadata attributes
         let attrs = Attributes::new().add("metadata_payload".to_string());
         let addr_b = Address {
             network_type: "tcp",
@@ -474,26 +475,59 @@ mod test {
             attributes: attrs,
         };
 
-        // Invariant Verification: Stricter equality must say they differ
-        assert_ne!(addr_a, addr_b, "Address equality must be distinct when attributes mutate!");
-        
-        // Invariant Verification: Hashing must ignore attributes (intentional collision)
+        // Hashing must ignore attributes (intentional collision)
         let mut hasher_a = DefaultHasher::new();
         let mut hasher_b = DefaultHasher::new();
         addr_a.hash(&mut hasher_a);
         addr_b.hash(&mut hasher_b);
-        assert_eq!(hasher_a.finish(), hasher_b.finish(), "Address hashes MUST remain identical to ensure same HashMap memory bucket routing!");
+        assert_eq!(
+            hasher_a.finish(),
+            hasher_b.finish(),
+            "Identical Address hashes must route to the same HashMap memory bucket!"
+        );
+
+        let hash_a = hasher_a.finish();
+
+        // Verify that changing network_type changes the hash
+        let addr_diff_net = Address {
+            network_type: "uds",
+            address: ByteStr::from(addr_base.to_string()),
+            attributes: Attributes::new(),
+        };
+        let mut hasher_diff_net = DefaultHasher::new();
+        addr_diff_net.hash(&mut hasher_diff_net);
+        assert_ne!(
+            hash_a,
+            hasher_diff_net.finish(),
+            "Changing network_type must change the hash!"
+        );
+
+        // Verify that changing address changes the hash
+        let addr_diff_addr = Address {
+            network_type: "tcp",
+            address: ByteStr::from("127.0.0.1:8081".to_string()),
+            attributes: Attributes::new(),
+        };
+        let mut hasher_diff_addr = DefaultHasher::new();
+        addr_diff_addr.hash(&mut hasher_diff_addr);
+        assert_ne!(
+            hash_a,
+            hasher_diff_addr.finish(),
+            "Changing address must change the hash!"
+        );
 
         // Map Functional Verification
         let mut map = HashMap::new();
         map.insert(addr_a.clone(), "subchannel_a");
 
-        // Querying or removing using B (mutated attributes) must FAIL due to asymmetric == check
-        assert!(map.remove(&addr_b).is_none(), "Flaw: HashMap incorrectly matched key despite mismatched attributes!");
-        
-        // Querying or removing using A (exact match) must SUCCEED
+        // Removing using B (different attributes) should fail.
+        assert!(
+            map.remove(&addr_b).is_none(),
+            "HashMap incorrectly matched key despite mismatched attributes!"
+        );
+
+        // Removing using A (same attributes) should succeed.
         assert_eq!(map.remove(&addr_a), Some("subchannel_a"));
         assert!(map.is_empty());
     }
 }
-
