@@ -7,7 +7,7 @@
 use std::collections::HashMap;
 
 use serde::Deserialize;
-use xds_client::message::{Locality, Node};
+use xds_client::message::{Locality, MetadataValue, Node};
 
 /// Environment variable pointing to a bootstrap JSON file path.
 const ENV_BOOTSTRAP_FILE: &str = "GRPC_XDS_BOOTSTRAP";
@@ -123,12 +123,32 @@ pub(crate) struct NodeConfig {
     pub locality: Option<LocalityConfig>,
     /// Free-form metadata sent to the xDS server (`google.protobuf.Struct`).
     ///
-    /// Only string values are supported here; nested structs and other Value
-    /// kinds are not exposed. Some control planes vary the served config based
-    /// on metadata — e.g. Istio's istiod gates proxyless gRPC config behind
-    /// `GENERATOR = "grpc"`.
+    /// Accepts any JSON value (nested objects, arrays, numbers, bools, null)
+    /// per the proto3 JSON mapping for `google.protobuf.Struct`. Some control
+    /// planes vary the served config based on metadata — e.g. Istio's istiod
+    /// gates proxyless gRPC config behind `GENERATOR = "grpc"`.
     #[serde(default)]
-    pub metadata: HashMap<String, String>,
+    pub metadata: HashMap<String, serde_json::Value>,
+}
+
+/// Convert a `serde_json::Value` to the codec-agnostic [`MetadataValue`].
+fn json_to_metadata(value: serde_json::Value) -> MetadataValue {
+    match value {
+        serde_json::Value::Null => MetadataValue::Null,
+        serde_json::Value::Bool(b) => MetadataValue::Bool(b),
+        // `as_f64` is documented to return `Some` for any `Number` parsed
+        // from valid JSON; `unwrap_or_default` is a defensive fallback.
+        serde_json::Value::Number(n) => MetadataValue::Number(n.as_f64().unwrap_or_default()),
+        serde_json::Value::String(s) => MetadataValue::String(s),
+        serde_json::Value::Array(arr) => {
+            MetadataValue::Array(arr.into_iter().map(json_to_metadata).collect())
+        }
+        serde_json::Value::Object(obj) => MetadataValue::Object(
+            obj.into_iter()
+                .map(|(k, v)| (k, json_to_metadata(v)))
+                .collect(),
+        ),
+    }
 }
 
 /// Locality configuration from bootstrap JSON.
@@ -271,7 +291,12 @@ impl From<NodeConfig> for Node {
             });
         }
         if !config.metadata.is_empty() {
-            node = node.with_metadata(config.metadata);
+            let metadata: HashMap<String, MetadataValue> = config
+                .metadata
+                .into_iter()
+                .map(|(k, v)| (k, json_to_metadata(v)))
+                .collect();
+            node = node.with_metadata(metadata);
         }
 
         node
@@ -459,8 +484,14 @@ mod tests {
             }
         }"#;
         let config = BootstrapConfig::from_json(json).unwrap();
-        assert_eq!(config.node.metadata.get("GENERATOR").unwrap(), "grpc");
-        assert_eq!(config.node.metadata.get("PILOT_VERSION").unwrap(), "1.20");
+        assert_eq!(
+            config.node.metadata.get("GENERATOR").unwrap(),
+            &serde_json::Value::String("grpc".to_string())
+        );
+        assert_eq!(
+            config.node.metadata.get("PILOT_VERSION").unwrap(),
+            &serde_json::Value::String("1.20".to_string())
+        );
     }
 
     #[test]
@@ -474,7 +505,63 @@ mod tests {
         }"#;
         let config = BootstrapConfig::from_json(json).unwrap();
         let node = Node::from(config.node);
-        assert_eq!(node.metadata.get("GENERATOR").unwrap(), "grpc");
+        assert_eq!(
+            node.metadata.get("GENERATOR").unwrap(),
+            &MetadataValue::String("grpc".to_string())
+        );
+    }
+
+    #[test]
+    fn parse_istio_style_metadata() {
+        // Real-world Istio bootstrap shape: nested objects, numbers, arrays.
+        let json = r#"{
+            "xds_servers": [{"server_uri": "unix:///etc/istio/proxy/XDS"}],
+            "node": {
+                "id": "sidecar~10.0.0.1~pod.ns~ns.svc.cluster.local",
+                "metadata": {
+                    "GENERATOR": "grpc",
+                    "ANNOTATIONS": {
+                        "inject.istio.io/templates": "grpc-agent",
+                        "istio.io/rev": "default"
+                    },
+                    "CLUSTER_ID": "Kubernetes",
+                    "ENVOY_PROMETHEUS_PORT": 15090,
+                    "PILOT_SAN": ["istiod.istio-system.svc"]
+                }
+            }
+        }"#;
+        let config = BootstrapConfig::from_json(json).unwrap();
+        let node = Node::from(config.node);
+
+        assert_eq!(
+            node.metadata.get("GENERATOR").unwrap(),
+            &MetadataValue::String("grpc".to_string())
+        );
+        assert_eq!(
+            node.metadata.get("ENVOY_PROMETHEUS_PORT").unwrap(),
+            &MetadataValue::Number(15090.0)
+        );
+
+        match node.metadata.get("ANNOTATIONS").unwrap() {
+            MetadataValue::Object(fields) => {
+                assert_eq!(
+                    fields.get("istio.io/rev").unwrap(),
+                    &MetadataValue::String("default".to_string())
+                );
+            }
+            other => panic!("expected Object, got {other:?}"),
+        }
+
+        match node.metadata.get("PILOT_SAN").unwrap() {
+            MetadataValue::Array(items) => {
+                assert_eq!(items.len(), 1);
+                assert_eq!(
+                    &items[0],
+                    &MetadataValue::String("istiod.istio-system.svc".to_string())
+                );
+            }
+            other => panic!("expected Array, got {other:?}"),
+        }
     }
 
     #[test]

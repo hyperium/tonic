@@ -70,7 +70,31 @@ pub struct Node {
     /// Some control planes use this to vary the served config — e.g. Istio
     /// reads `GENERATOR = "grpc"` to switch from sidecar-style to
     /// proxyless gRPC config (gRFC A27).
-    pub metadata: HashMap<String, String>,
+    pub metadata: HashMap<String, MetadataValue>,
+}
+
+/// A `google.protobuf.Value` mirror — any JSON-compatible value carried in
+/// `Node.metadata`.
+///
+/// Mirrors the six variants of `google.protobuf.Value` (and therefore JSON):
+/// null, bool, number, string, list, and struct. Marked `#[non_exhaustive]`
+/// as a forward-compatibility safety belt; the variant set is anchored to
+/// the JSON data model and is not expected to grow.
+#[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
+pub enum MetadataValue {
+    /// JSON `null`.
+    Null,
+    /// JSON `true` / `false`.
+    Bool(bool),
+    /// JSON number (canonical f64; precision-limited above 2^53).
+    Number(f64),
+    /// JSON string.
+    String(String),
+    /// JSON array.
+    Array(Vec<MetadataValue>),
+    /// JSON object.
+    Object(HashMap<String, MetadataValue>),
 }
 
 impl Node {
@@ -108,7 +132,7 @@ impl Node {
     }
 
     /// Replace the node metadata.
-    pub fn with_metadata(mut self, metadata: HashMap<String, String>) -> Self {
+    pub fn with_metadata(mut self, metadata: HashMap<String, MetadataValue>) -> Self {
         self.metadata = metadata;
         self
     }
