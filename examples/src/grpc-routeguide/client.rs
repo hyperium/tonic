@@ -8,6 +8,7 @@ mod generated {
     }
 }
 
+use std::env;
 use std::sync::Arc;
 
 use grpc::client::Channel;
@@ -125,11 +126,13 @@ async fn route_chat<T: Invoke>(client: &RouteGuideClient<T>) {
     let handle = task::spawn(async move {
         // Send the request messages.
         for note in notes {
-            // Send errors (with a void error) if the stream encounters any
+            // Send errors (with a unit error) if the stream encounters any
             // problem, or if the server terminates the stream before the client
-            // is done sending.  We don't expect that in our RouteGuide
-            // protocol, so we can safely expect() no error.
-            tx.send(note).await.expect("RPC terminated early");
+            // is done sending.  The response stream will provide the RPC status
+            // in this case.
+            if tx.send(note).await.is_err() {
+                return;
+            }
         }
         // Send a "half close" signal to the server to indicate the client is
         // done sending.  This triggers naturally if `tx` is dropped, which will
@@ -147,12 +150,12 @@ async fn route_chat<T: Invoke>(client: &RouteGuideClient<T>) {
         );
     }
 
-    // Assert that spawned task did not encounter an error.
-    handle.await.expect("Sending notes failed");
-
     // Confirm the status.
     let status = rx.status().await;
     assert!(status.is_ok(), "{:?}", status);
+
+    // Wait for the spawned task to complete as part of proper resource cleanup.
+    handle.await.unwrap();
 }
 
 fn random_point() -> Point {
@@ -166,9 +169,17 @@ fn random_point() -> Point {
 
 #[tokio::main]
 async fn main() {
+    let args: Vec<String> = env::args().collect();
+    let address = if args.len() > 1 {
+        args[1].clone()
+    } else {
+        "[::1]:10000".to_owned()
+    };
+    println!("Connecting to {address}...");
+
     // Create a new gRPC channel:
     let channel = Channel::new(
-        "dns:///localhost:50051",
+        format!("dns:///{address}"),
         Arc::new(LocalChannelCredentials::new()),
         ChannelOptions::default(),
     );
