@@ -24,40 +24,30 @@ use crate::xds::resource::outlier_detection::{FailurePercentageConfig, OutlierDe
 
 /// Lock-free success/failure counter for one endpoint. The data path
 /// records RPC outcomes via `record_success` / `record_failure`; the
-/// sweep snapshots and resets atomically.
-///
-/// Counts are packed into a single `AtomicU64` (high 32 bits:
-/// successes, low 32 bits: failures), so each record is one `fetch_add`
-/// and a snapshot is one `swap(0)`. Each counter is capped at
-/// `u32::MAX` per sweep interval; exceeding that carries into the
-/// other counter's bits but is unreachable for realistic workloads.
+/// sweep reads and resets between intervals.
 #[derive(Debug, Default)]
 pub(crate) struct EndpointCounters {
-    /// High 32 bits: successes since last sweep.
-    /// Low 32 bits: failures since last sweep.
-    packed: AtomicU64,
+    success: AtomicU64,
+    failure: AtomicU64,
 }
-
-/// Increment to apply to [`EndpointCounters::packed`] for one success.
-const SUCCESS_INC: u64 = 1 << 32;
-/// Increment to apply to [`EndpointCounters::packed`] for one failure.
-const FAILURE_INC: u64 = 1;
-/// Mask for the failure half of the packed counter.
-const FAILURE_MASK: u64 = 0xFFFF_FFFF;
 
 impl EndpointCounters {
     pub(crate) fn record_success(&self) {
-        self.packed.fetch_add(SUCCESS_INC, Ordering::Relaxed);
+        self.success.fetch_add(1, Ordering::Relaxed);
     }
 
     pub(crate) fn record_failure(&self) {
-        self.packed.fetch_add(FAILURE_INC, Ordering::Relaxed);
+        self.failure.fetch_add(1, Ordering::Relaxed);
     }
 
-    /// Atomically read and zero both counters. Returns `(success, failure)`.
+    /// Read and zero both counters. Returns `(success, failure)`. The
+    /// two swaps are not atomic against each other — RPCs landing
+    /// between them may bias the snapshot by a small number of events,
+    /// well below the precision of the failure-percentage threshold.
     fn snapshot_and_reset(&self) -> (u64, u64) {
-        let v = self.packed.swap(0, Ordering::Relaxed);
-        (v >> 32, v & FAILURE_MASK)
+        let s = self.success.swap(0, Ordering::Relaxed);
+        let f = self.failure.swap(0, Ordering::Relaxed);
+        (s, f)
     }
 }
 
