@@ -26,15 +26,134 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
 use std::time::Duration;
 
 use pin_project_lite::pin_project;
+use tokio::sync::watch;
 use tower::Service;
 use tower::load::Load;
 
 use crate::client::endpoint::{Connector, EndpointAddress};
 use crate::common::async_util::BoxFuture;
+
+// ---------------------------------------------------------------------------
+// EndpointCounters / OutlierChannelState
+// ---------------------------------------------------------------------------
+
+/// Lock-free success/failure counter for one endpoint. Records RPC
+/// outcomes from the data path; the outlier-detection actor reads and
+/// resets between intervals.
+#[derive(Debug, Default)]
+pub(crate) struct EndpointCounters {
+    success: AtomicU64,
+    failure: AtomicU64,
+}
+
+impl EndpointCounters {
+    pub(crate) fn record_success(&self) {
+        self.success.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub(crate) fn record_failure(&self) {
+        self.failure.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Read and zero both counters. The two swaps are not atomic against
+    /// each other — RPCs landing between them may bias the snapshot by
+    /// a small number of events, well below the precision of the
+    /// failure-percentage threshold.
+    pub(crate) fn snapshot_and_reset(&self) -> (u64, u64) {
+        let s = self.success.swap(0, Ordering::Relaxed);
+        let f = self.failure.swap(0, Ordering::Relaxed);
+        (s, f)
+    }
+}
+
+/// Per-channel outlier-detection state, shared between the data path
+/// (for outcome recording) and the outlier-detection actor (for sweeps
+/// and ejection signalling).
+///
+/// The ejection signal is edge-triggered: the actor calls [`eject`] /
+/// [`uneject`] to flip the flag; observers subscribe via
+/// [`subscribe`] and poll `Receiver::changed()` (typically inside a
+/// `FuturesUnordered`) to react in O(1) on each transition.
+///
+/// [`eject`]: Self::eject
+/// [`uneject`]: Self::uneject
+/// [`subscribe`]: Self::subscribe
+#[derive(Debug)]
+pub(crate) struct OutlierChannelState {
+    counters: EndpointCounters,
+    eject_tx: watch::Sender<bool>,
+}
+
+impl Default for OutlierChannelState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl OutlierChannelState {
+    pub(crate) fn new() -> Self {
+        let (eject_tx, _) = watch::channel(false);
+        Self {
+            counters: EndpointCounters::default(),
+            eject_tx,
+        }
+    }
+
+    pub(crate) fn record_success(&self) {
+        self.counters.record_success();
+    }
+
+    pub(crate) fn record_failure(&self) {
+        self.counters.record_failure();
+    }
+
+    /// Atomically read and zero the counters. Returns `(success, failure)`.
+    pub(crate) fn snapshot_and_reset(&self) -> (u64, u64) {
+        self.counters.snapshot_and_reset()
+    }
+
+    /// Flip the ejection flag to `true`. No-op if already ejected.
+    pub(crate) fn eject(&self) {
+        self.eject_tx.send_if_modified(|state| {
+            if *state {
+                false
+            } else {
+                *state = true;
+                true
+            }
+        });
+    }
+
+    /// Flip the ejection flag back to `false`. No-op if not ejected.
+    pub(crate) fn uneject(&self) {
+        self.eject_tx.send_if_modified(|state| {
+            if *state {
+                *state = false;
+                true
+            } else {
+                false
+            }
+        });
+    }
+
+    /// Current ejection state.
+    pub(crate) fn is_ejected(&self) -> bool {
+        *self.eject_tx.borrow()
+    }
+
+    /// Subscribe to ejection-state changes. The returned receiver's
+    /// `changed()` future resolves on each transition; consumers
+    /// typically push it into a `FuturesUnordered`.
+    #[allow(dead_code)] // wired by the LoadBalancer in a follow-up PR.
+    pub(crate) fn subscribe(&self) -> watch::Receiver<bool> {
+        self.eject_tx.subscribe()
+    }
+}
 
 /// Configuration for an ejected channel.
 #[derive(Debug, Clone)]
@@ -92,12 +211,27 @@ pub(crate) struct ConnectingChannel<S> {
 }
 
 impl<S: Send + 'static> ConnectingChannel<S> {
+    /// Start a connection, generating a fresh per-channel outlier
+    /// state. Used for first-time connects from `IdleChannel`.
     pub(crate) fn new(fut: BoxFuture<S>, addr: EndpointAddress) -> Self {
+        Self::with_outlier(fut, addr, Arc::new(OutlierChannelState::new()))
+    }
+
+    /// Start a connection that inherits an existing
+    /// [`OutlierChannelState`]. Used by reconnect paths so the
+    /// per-channel counters and ejection signal survive across the
+    /// connection cycle.
+    pub(crate) fn with_outlier(
+        fut: BoxFuture<S>,
+        addr: EndpointAddress,
+        outlier: Arc<OutlierChannelState>,
+    ) -> Self {
         Self {
             inner: Box::pin(async move {
                 ReadyChannel {
                     addr,
                     inner: fut.await,
+                    outlier,
                 }
             }),
         }
@@ -119,14 +253,23 @@ impl<S: Send + 'static> Future for ConnectingChannel<S> {
 /// A channel that is connected and ready to serve requests.
 ///
 /// Holds the raw service `S` and delegates [`Service`] calls directly,
-/// preserving `S::Future` and `S::Error` with no wrapping or type erasure.
+/// preserving `S::Future` and `S::Error` with no wrapping or type
+/// erasure. The `Arc<OutlierChannelState>` is shared with the outlier-
+/// detection actor for stats accumulation and edge-triggered ejection.
 #[derive(Clone)]
 pub(crate) struct ReadyChannel<S> {
     addr: EndpointAddress,
     inner: S,
+    outlier: Arc<OutlierChannelState>,
 }
 
 impl<S> ReadyChannel<S> {
+    /// Per-channel outlier-detection state. Cloned cheaply via `Arc`.
+    #[allow(dead_code)] // consumed by the LoadBalancer in a follow-up PR.
+    pub(crate) fn outlier(&self) -> &Arc<OutlierChannelState> {
+        &self.outlier
+    }
+
     /// Eject this channel (e.g., due to outlier detection). Consumes self.
     pub(crate) fn eject<C>(self, config: EjectionConfig, connector: Arc<C>) -> EjectedChannel<S>
     where
@@ -136,13 +279,15 @@ impl<S> ReadyChannel<S> {
         EjectedChannel {
             addr: self.addr,
             inner: self.inner,
+            outlier: self.outlier,
             config,
             connector,
             ejection_timer,
         }
     }
 
-    /// Start reconnecting. Consumes self, dropping the old connection.
+    /// Start reconnecting. Consumes self, dropping the old connection
+    /// but preserving the outlier-detection state.
     pub(crate) fn reconnect<C: Connector<Service = S>>(
         self,
         connector: Arc<C>,
@@ -150,7 +295,7 @@ impl<S> ReadyChannel<S> {
     where
         S: Send + 'static,
     {
-        ConnectingChannel::new(connector.connect(&self.addr), self.addr)
+        ConnectingChannel::with_outlier(connector.connect(&self.addr), self.addr, self.outlier)
     }
 }
 
@@ -193,6 +338,7 @@ pin_project! {
     pub(crate) struct EjectedChannel<S> {
         addr: EndpointAddress,
         inner: S,
+        outlier: Arc<OutlierChannelState>,
         config: EjectionConfig,
         connector: Arc<dyn Connector<Service = S> + Send + Sync>,
         #[pin]
@@ -209,14 +355,18 @@ impl<S: Clone + Send + 'static> Future for EjectedChannel<S> {
             Poll::Ready(()) => {
                 if this.config.needs_reconnect {
                     let fut = this.connector.connect(this.addr);
-                    Poll::Ready(UnejectedChannel::Connecting(ConnectingChannel::new(
-                        fut,
-                        this.addr.clone(),
-                    )))
+                    Poll::Ready(UnejectedChannel::Connecting(
+                        ConnectingChannel::with_outlier(
+                            fut,
+                            this.addr.clone(),
+                            this.outlier.clone(),
+                        ),
+                    ))
                 } else {
                     Poll::Ready(UnejectedChannel::Ready(ReadyChannel {
                         addr: this.addr.clone(),
                         inner: this.inner.clone(),
+                        outlier: this.outlier.clone(),
                     }))
                 }
             }
