@@ -68,7 +68,10 @@ async fn record_route<T: Invoke>(client: &RouteGuideClient<T>) {
 
     // Send the request messages.
     for point in points {
-        stream.send(&point).await.expect("RPC failed");
+        if stream.send(&point).await.is_err() {
+            // RPC error; break to read the status.
+            break;
+        }
     }
 
     // Receive the response or status.
