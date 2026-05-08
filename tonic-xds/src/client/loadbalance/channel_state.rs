@@ -26,9 +26,9 @@
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::task::{Context, Poll};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use pin_project_lite::pin_project;
 use tokio::sync::watch;
@@ -71,22 +71,37 @@ impl EndpointCounters {
     }
 }
 
-/// Per-channel outlier-detection state, shared between the data path
-/// (for outcome recording) and the outlier-detection actor (for sweeps
-/// and ejection signalling).
+/// Per-channel outlier-detection state, shared (via `Arc`) between
+/// the data path (per-RPC outcome recording + threshold-based ejection)
+/// and the outlier-detection actor (interval-based housekeeping).
 ///
-/// The ejection signal is edge-triggered: the actor calls [`eject`] /
-/// [`uneject`] to flip the flag; observers subscribe via
-/// [`subscribe`] and poll `Receiver::changed()` (typically inside a
-/// `FuturesUnordered`) to react in O(1) on each transition.
+/// Ejection is edge-triggered: callers flip the flag via [`eject`] /
+/// [`uneject`]; observers poll `Receiver::changed()` (typically inside
+/// a `FuturesUnordered`) to react in O(1) on each transition.
+///
+/// All fields are atomics or wrapped in lock-free primitives so the
+/// data path can mutate them without locking.
 ///
 /// [`eject`]: Self::eject
 /// [`uneject`]: Self::uneject
-/// [`subscribe`]: Self::subscribe
 #[derive(Debug)]
 pub(crate) struct OutlierChannelState {
     counters: EndpointCounters,
     eject_tx: watch::Sender<bool>,
+    /// Whether this channel currently contributes to the registry's
+    /// `qualifying_count`. Set when `total` first reaches
+    /// `request_volume` in the current interval; cleared on counter
+    /// reset.
+    is_qualifying: AtomicBool,
+    /// Number of times this channel has been ejected. Bumped on each
+    /// ejection; decremented (saturating) on each healthy interval.
+    ejection_multiplier: AtomicU32,
+    /// `0` when not ejected. Otherwise nanos since [`Self::epoch`] of
+    /// the current ejection's start.
+    ejected_at_nanos: AtomicU64,
+    /// Reference instant used as the origin for `ejected_at_nanos`.
+    /// Established at construction and never changes.
+    epoch: Instant,
 }
 
 impl Default for OutlierChannelState {
@@ -101,6 +116,10 @@ impl OutlierChannelState {
         Self {
             counters: EndpointCounters::default(),
             eject_tx,
+            is_qualifying: AtomicBool::new(false),
+            ejection_multiplier: AtomicU32::new(0),
+            ejected_at_nanos: AtomicU64::new(0),
+            epoch: Instant::now(),
         }
     }
 
@@ -112,14 +131,39 @@ impl OutlierChannelState {
         self.counters.record_failure();
     }
 
-    /// Atomically read and zero the counters. Returns `(success, failure)`.
+    /// Read the current counter values without resetting. Returns
+    /// `(success, failure)`. The two reads are not atomic against
+    /// each other but the difference is bounded by concurrent in-flight
+    /// RPCs and is below the precision of the failure-percentage check.
+    pub(crate) fn counters(&self) -> (u64, u64) {
+        let s = self.counters.success.load(Ordering::Relaxed);
+        let f = self.counters.failure.load(Ordering::Relaxed);
+        (s, f)
+    }
+
+    /// Read and zero the counters. Returns `(success, failure)`.
     pub(crate) fn snapshot_and_reset(&self) -> (u64, u64) {
         self.counters.snapshot_and_reset()
     }
 
-    /// Flip the ejection flag to `true`. No-op if already ejected.
-    pub(crate) fn eject(&self) {
-        self.eject_tx.send_if_modified(|state| {
+    /// Try to set `is_qualifying` to `true`. Returns `true` if this
+    /// call performed the false → true transition, so callers can
+    /// increment a registry-level counter exactly once per crossing.
+    pub(crate) fn mark_qualifying(&self) -> bool {
+        !self.is_qualifying.swap(true, Ordering::AcqRel)
+    }
+
+    /// Clear `is_qualifying`. Returns the previous value.
+    pub(crate) fn clear_qualifying(&self) -> bool {
+        self.is_qualifying.swap(false, Ordering::AcqRel)
+    }
+
+    /// Flip the ejection flag to `true`. Returns `true` if this call
+    /// performed the false → true transition (so callers can update
+    /// registry-level counters exactly once per ejection).
+    /// Records the ejection timestamp and bumps the multiplier.
+    pub(crate) fn try_eject(&self, now: Instant) -> bool {
+        let won = self.eject_tx.send_if_modified(|state| {
             if *state {
                 false
             } else {
@@ -127,11 +171,24 @@ impl OutlierChannelState {
                 true
             }
         });
+        if !won {
+            return false;
+        }
+        let nanos = now
+            .saturating_duration_since(self.epoch)
+            .as_nanos()
+            .min(u64::MAX as u128) as u64;
+        // Use 1 as a sentinel if the channel was created at exactly
+        // `now`, since 0 means "not ejected".
+        self.ejected_at_nanos.store(nanos.max(1), Ordering::Relaxed);
+        self.ejection_multiplier.fetch_add(1, Ordering::Relaxed);
+        true
     }
 
-    /// Flip the ejection flag back to `false`. No-op if not ejected.
-    pub(crate) fn uneject(&self) {
-        self.eject_tx.send_if_modified(|state| {
+    /// Flip the ejection flag back to `false`. Returns `true` if this
+    /// call performed the true → false transition.
+    pub(crate) fn try_uneject(&self) -> bool {
+        let won = self.eject_tx.send_if_modified(|state| {
             if *state {
                 *state = false;
                 true
@@ -139,11 +196,40 @@ impl OutlierChannelState {
                 false
             }
         });
+        if won {
+            self.ejected_at_nanos.store(0, Ordering::Relaxed);
+        }
+        won
     }
 
     /// Current ejection state.
     pub(crate) fn is_ejected(&self) -> bool {
         *self.eject_tx.borrow()
+    }
+
+    /// Returns the elapsed time since this channel was ejected, or
+    /// `None` if it is not currently ejected.
+    pub(crate) fn ejected_duration(&self, now: Instant) -> Option<Duration> {
+        let nanos = self.ejected_at_nanos.load(Ordering::Relaxed);
+        if nanos == 0 {
+            return None;
+        }
+        let ejected_at = self.epoch + Duration::from_nanos(nanos);
+        Some(now.saturating_duration_since(ejected_at))
+    }
+
+    /// Current ejection multiplier.
+    pub(crate) fn ejection_multiplier(&self) -> u32 {
+        self.ejection_multiplier.load(Ordering::Relaxed)
+    }
+
+    /// Decrement the multiplier saturating at zero. Called by the
+    /// actor on healthy intervals.
+    pub(crate) fn decrement_multiplier(&self) {
+        let prev = self.ejection_multiplier.load(Ordering::Relaxed);
+        if prev > 0 {
+            self.ejection_multiplier.store(prev - 1, Ordering::Relaxed);
+        }
     }
 
     /// Subscribe to ejection-state changes. The returned receiver's
@@ -152,6 +238,13 @@ impl OutlierChannelState {
     #[allow(dead_code)] // wired by the LoadBalancer in a follow-up PR.
     pub(crate) fn subscribe(&self) -> watch::Receiver<bool> {
         self.eject_tx.subscribe()
+    }
+
+    /// Test-only setter for the ejection multiplier; lets tests drive
+    /// housekeeping behavior without going through `try_eject`.
+    #[cfg(test)]
+    pub(crate) fn set_ejection_multiplier(&self, value: u32) {
+        self.ejection_multiplier.store(value, Ordering::Relaxed);
     }
 }
 
