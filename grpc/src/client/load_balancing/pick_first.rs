@@ -91,7 +91,10 @@ impl LbPolicy for PickFirstPolicy {
             .ok_or("no endpoints")?
             .addresses;
 
-        let address = addresses.pop().ok_or("no addresses")?;
+        if addresses.is_empty() {
+            return Err("no addresses".to_string());
+        }
+        let address = addresses.remove(0);
 
         let (sc, _state) = channel_controller.new_subchannel(&address);
         sc.connect();
