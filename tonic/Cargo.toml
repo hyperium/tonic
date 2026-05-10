@@ -119,7 +119,6 @@ allowed_external_types = [
   "rustls_pki_types::*",
 
   # not major released
-  "prost::*",
   "tracing::*",
 
   "async_trait::async_trait",
