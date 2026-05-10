@@ -2,6 +2,7 @@ use crate::metadata::GRPC_CONTENT_TYPE;
 use crate::metadata::MetadataMap;
 use base64::Engine as _;
 use bytes::Bytes;
+use http::Extensions;
 use http::{
     HeaderName,
     header::{HeaderMap, HeaderValue},
@@ -50,6 +51,8 @@ struct StatusInner {
     /// If the metadata contains any headers with names reserved either by the gRPC spec
     /// or by `Status` fields above, they will be ignored.
     metadata: MetadataMap,
+    /// Data for passing information from the Service to middleware
+    extensions: Extensions,
     /// Optional underlying error.
     source: Option<Arc<dyn Error + Send + Sync + 'static>>,
 }
@@ -175,6 +178,7 @@ impl Status {
             message: message.into(),
             details: Bytes::new(),
             metadata: MetadataMap::new(),
+            extensions: Extensions::new(),
             source: None,
         }
         .into_status()
@@ -504,6 +508,7 @@ impl Status {
                 message,
                 details,
                 metadata: MetadataMap::from_headers(other_headers),
+                extensions: Extensions::new(),
                 source: None,
             }
             .into_status(),
@@ -533,6 +538,16 @@ impl Status {
     /// Get a mutable reference to the custom metadata.
     pub fn metadata_mut(&mut self) -> &mut MetadataMap {
         &mut self.0.metadata
+    }
+
+    /// Get a reference to the custom extensions.
+    pub fn extensions(&self) -> &Extensions {
+        &self.0.extensions
+    }
+
+    /// Get a mutable reference to the custom extensions.
+    pub fn extensions_mut(&mut self) -> &mut Extensions {
+        &mut self.0.extensions
     }
 
     pub(crate) fn to_header_map(&self) -> Result<HeaderMap, Self> {
@@ -592,6 +607,24 @@ impl Status {
             message: message.into(),
             details,
             metadata,
+            extensions: Extensions::new(),
+            source: None,
+        }
+        .into_status()
+    }
+
+    /// Create a new `Status` with the associated code, message, and custom extensions
+    pub fn with_extensions(
+        code: Code,
+        message: impl Into<String>,
+        extensions: Extensions,
+    ) -> Status {
+        StatusInner {
+            code,
+            message: message.into(),
+            details: Bytes::new(),
+            metadata: MetadataMap::new(),
+            extensions,
             source: None,
         }
         .into_status()
@@ -610,7 +643,7 @@ impl Status {
             .headers_mut()
             .insert(http::header::CONTENT_TYPE, GRPC_CONTENT_TYPE);
         self.add_header(response.headers_mut()).unwrap();
-        response.extensions_mut().insert(self);
+        response.extensions_mut().extend(self.0.extensions);
         response
     }
 
@@ -633,6 +666,7 @@ fn find_status_in_source_chain(err: &(dyn Error + 'static)) -> Option<Status> {
                     message: status.0.message.clone(),
                     details: status.0.details.clone(),
                     metadata: status.0.metadata.clone(),
+                    extensions: status.0.extensions.clone(),
                     // Since `Status` is not `Clone`, any `source` on the original Status
                     // cannot be cloned so must remain with the original `Status`.
                     source: None,
