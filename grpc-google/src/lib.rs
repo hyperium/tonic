@@ -31,15 +31,15 @@
 use std::fmt::Debug;
 
 use google_cloud_auth::credentials::AccessTokenCredentials;
-use grpc::Status;
-use grpc::StatusCode;
+use grpc::StatusCodeError;
+use grpc::StatusError;
 use grpc::credentials::SecurityLevel;
 use grpc::credentials::call::CallCredentials;
 use grpc::credentials::call::CallDetails;
 use grpc::credentials::call::ClientConnectionSecurityInfo;
+use grpc::metadata::AsciiMetadataValue;
+use grpc::metadata::MetadataMap;
 use tonic::async_trait;
-use tonic::metadata::AsciiMetadataValue;
-use tonic::metadata::MetadataMap;
 
 const DEFAULT_CLOUD_PLATFORM_SCOPE: &str = "https://www.googleapis.com/auth/cloud-platform";
 
@@ -99,15 +99,15 @@ impl<P: TokenProvider> CallCredentials for GcpCallCredentials<P> {
         _call_details: &CallDetails,
         _auth_info: &ClientConnectionSecurityInfo,
         metadata: &mut MetadataMap,
-    ) -> Result<(), Status> {
+    ) -> Result<(), StatusError> {
         let token = self
             .provider
             .get_token()
             .await
-            .map_err(|e| Status::new(StatusCode::Unavailable, e))?;
+            .map_err(|e| StatusError::new(StatusCodeError::Unavailable, e))?;
         let mut value: AsciiMetadataValue = format!("Bearer {}", token).parse().map_err(|e| {
-            Status::new(
-                StatusCode::Internal,
+            StatusError::new(
+                StatusCodeError::Internal,
                 format!("invalid values in authorization header value: {}", e),
             )
         })?;
@@ -162,7 +162,7 @@ mod tests {
         assert!(res.is_ok());
 
         let auth_header = metadata.get("authorization").unwrap();
-        assert_eq!(auth_header.to_str().unwrap(), "Bearer valid_token");
+        assert_eq!(auth_header.to_str(), "Bearer valid_token");
     }
 
     #[tokio::test]
@@ -177,14 +177,14 @@ mod tests {
 
         let res = creds.get_metadata(&cd, &auth_info, &mut metadata).await;
         let status = res.unwrap_err();
-        assert_eq!(status.code(), grpc::StatusCode::Unavailable);
+        assert_eq!(status.code(), grpc::StatusCodeError::Unavailable);
     }
 
     #[tokio::test]
     async fn non_ascii_token_internal_error() {
         let creds = GcpCallCredentials {
             provider: MockTokenProvider {
-                result: Ok("invalid character\n".into()),
+                result: Ok("invalid\ncharacter".into()),
             },
         };
         let (cd, auth_info) = fake_args();
@@ -192,7 +192,7 @@ mod tests {
 
         let res = creds.get_metadata(&cd, &auth_info, &mut metadata).await;
         let status = res.unwrap_err();
-        assert_eq!(status.code(), grpc::StatusCode::Internal);
+        assert_eq!(status.code(), grpc::StatusCodeError::Internal);
     }
 
     #[test]
