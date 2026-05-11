@@ -27,14 +27,20 @@
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
 
+use std::collections::HashMap;
+use std::pin::Pin;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::task::{Context, Poll};
 use std::time::Instant;
 
 use dashmap::DashMap;
+use indexmap::IndexMap;
+use tokio_stream::StreamMap;
+use tokio_stream::wrappers::WatchStream;
 
 use crate::client::endpoint::EndpointAddress;
-use crate::client::loadbalance::channel_state::OutlierChannelState;
+use crate::client::loadbalance::channel_state::{OutlierChannelState, ReadyChannel};
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::OutlierDetectionConfig;
 
@@ -234,6 +240,87 @@ pub(crate) fn spawn_actor(registry: Arc<OutlierStatsRegistry>) -> AbortOnDrop {
         }
     });
     AbortOnDrop(task)
+}
+
+/// All per-LB outlier-detection state: the shared registry, the pool
+/// of currently-ejected channels (whose connections are kept alive
+/// across ejection), the per-channel ejection-signal streams
+/// aggregated for O(1) observation in `poll_ready`, and the handle to
+/// the housekeeping actor (dropped with the LB).
+///
+/// `LoadBalancer` holds this as `Option<OutlierDetector<S>>`: `None`
+/// when outlier detection is disabled, `Some` when enabled.
+pub(crate) struct OutlierDetector<S> {
+    registry: Arc<OutlierStatsRegistry>,
+    ejected: HashMap<EndpointAddress, ReadyChannel<S>>,
+    ejection_signals: StreamMap<EndpointAddress, WatchStream<bool>>,
+    _actor: AbortOnDrop,
+}
+
+impl<S> OutlierDetector<S> {
+    /// Build from a registry, spawning the housekeeping actor.
+    pub(crate) fn new(registry: Arc<OutlierStatsRegistry>) -> Self {
+        let _actor = spawn_actor(registry.clone());
+        Self {
+            registry,
+            ejected: HashMap::new(),
+            ejection_signals: StreamMap::new(),
+            _actor,
+        }
+    }
+
+    /// Shared registry handle — clone to hand to the data path.
+    pub(crate) fn registry(&self) -> &Arc<OutlierStatsRegistry> {
+        &self.registry
+    }
+
+    /// Register a newly-connected channel for tracking and subscribe
+    /// to its ejection signal. Returns the per-channel state for the
+    /// load balancer to wire into [`ReadyChannel`].
+    pub(crate) fn register(&mut self, addr: EndpointAddress) -> Arc<OutlierChannelState> {
+        let state = self.registry.add_channel(addr.clone());
+        self.ejection_signals
+            .insert(addr, WatchStream::from_changes(state.subscribe()));
+        state
+    }
+
+    /// Drop all bookkeeping for `addr`: ejection slot, signal stream,
+    /// registry entry.
+    pub(crate) fn forget(&mut self, addr: &EndpointAddress) {
+        self.ejected.remove(addr);
+        self.ejection_signals.remove(addr);
+        self.registry.remove_channel(addr);
+    }
+
+    /// Drain ejection-signal transitions, moving channels between
+    /// `ready` and the internal ejected pool. O(k) per call where k is
+    /// the number of pending signal changes.
+    pub(crate) fn poll_signals(
+        &mut self,
+        cx: &mut Context<'_>,
+        ready: &mut IndexMap<EndpointAddress, ReadyChannel<S>>,
+    ) {
+        use futures_core::Stream;
+        while let Poll::Ready(Some((addr, ejected))) =
+            Pin::new(&mut self.ejection_signals).poll_next(cx)
+        {
+            if ejected {
+                if let Some(ch) = ready.swap_remove(&addr) {
+                    tracing::debug!("outlier detection: eject {addr}");
+                    self.ejected.insert(addr, ch);
+                }
+            } else if let Some(ch) = self.ejected.remove(&addr) {
+                tracing::debug!("outlier detection: uneject {addr}");
+                ready.insert(addr, ch);
+            }
+        }
+    }
+
+    /// Number of currently-ejected channels.
+    #[cfg(test)]
+    pub(crate) fn ejected(&self) -> &HashMap<EndpointAddress, ReadyChannel<S>> {
+        &self.ejected
+    }
 }
 
 /// Return true with probability `pct / 100` (clamped at 100 ⇒ always).

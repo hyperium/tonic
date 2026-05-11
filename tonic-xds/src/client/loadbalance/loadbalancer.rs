@@ -5,21 +5,21 @@
 //! machine, and routes requests to ready endpoints via a [`ChannelPicker`].
 //!
 //! Outlier detection is integrated via an optional
-//! [`OutlierStatsRegistry`]: ejection decisions are made on the data
-//! path (per-RPC) and surfaced to `poll_ready` via per-channel
-//! `watch::Receiver<bool>` streams aggregated in a `StreamMap`. The
-//! LB then moves the corresponding [`ReadyChannel`] between its ready
-//! and ejected maps in O(1) per transition.
+//! [`OutlierDetector`], which bundles the shared
+//! [`OutlierStatsRegistry`], the ejected-channel pool, the per-channel
+//! ejection-signal streams, and the housekeeping actor handle.
+//! Ejection decisions are made on the data path (per-RPC) and surfaced
+//! to `poll_ready` via per-channel `watch::Receiver<bool>` streams
+//! aggregated in a `StreamMap`. The LB then moves the corresponding
+//! [`ReadyChannel`] between its `ready` map and the detector's ejected
+//! pool in O(1) per transition.
 
-use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll, ready};
 
 use indexmap::IndexMap;
-use tokio_stream::StreamMap;
-use tokio_stream::wrappers::WatchStream;
 use tower::Service;
 use tower::discover::{Change, Discover};
 
@@ -27,9 +27,8 @@ use crate::client::endpoint::{Connector, EndpointAddress};
 use crate::client::loadbalance::channel_state::{IdleChannel, OutlierChannelState, ReadyChannel};
 use crate::client::loadbalance::errors::LbError;
 use crate::client::loadbalance::keyed_futures::KeyedFutures;
-use crate::client::loadbalance::outlier_detection::{OutlierStatsRegistry, spawn_actor};
+use crate::client::loadbalance::outlier_detection::{OutlierDetector, OutlierStatsRegistry};
 use crate::client::loadbalance::pickers::ChannelPicker;
-use crate::common::async_util::AbortOnDrop;
 
 /// Future returned by [`LoadBalancer::call`].
 ///
@@ -76,20 +75,10 @@ pub(crate) struct LoadBalancer<D, C: Connector, Req> {
     connecting: KeyedFutures<EndpointAddress, C::Service>,
     /// Ready-to-serve channels, keyed by endpoint address.
     ready: IndexMap<EndpointAddress, ReadyChannel<C::Service>>,
-    /// Channels currently ejected by outlier detection. Their
-    /// underlying connections are kept alive so traffic can resume
-    /// without reconnecting after un-ejection.
-    ejected: HashMap<EndpointAddress, ReadyChannel<C::Service>>,
-    /// Per-channel ejection signal streams, aggregated for O(1)
-    /// observation in `poll_ready`. Present only when outlier
-    /// detection is enabled.
-    ejection_signals: StreamMap<EndpointAddress, WatchStream<bool>>,
-    /// Outlier-detection registry, shared with the spawned actor and
-    /// the data path. `None` disables outlier detection.
-    outlier: Option<Arc<OutlierStatsRegistry>>,
-    /// Handle to the outlier-detection actor task; dropped when the
-    /// LB is dropped.
-    _outlier_actor: Option<AbortOnDrop>,
+    /// All per-LB outlier-detection state — the shared registry, the
+    /// ejected pool, the ejection-signal streams, and the
+    /// housekeeping actor handle. `None` disables outlier detection.
+    outlier: Option<OutlierDetector<C::Service>>,
     /// Channel picker for load balancing.
     picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
 }
@@ -119,30 +108,23 @@ where
         picker: Arc<dyn ChannelPicker<ReadyChannel<C::Service>, Req> + Send + Sync>,
         outlier: Option<Arc<OutlierStatsRegistry>>,
     ) -> Self {
-        let _outlier_actor = outlier.as_ref().map(|reg| spawn_actor(reg.clone()));
         Self {
             discovery,
             connector,
             connecting: KeyedFutures::new(),
             ready: IndexMap::new(),
-            ejected: HashMap::new(),
-            ejection_signals: StreamMap::new(),
-            outlier,
-            _outlier_actor,
+            outlier: outlier.map(OutlierDetector::new),
             picker,
         }
     }
 
     /// Forget all per-endpoint state for `addr`: the connecting
-    /// future, the ready slot, the ejected slot, the ejection signal
-    /// stream, and the registry entry.
+    /// future, the ready slot, and any outlier bookkeeping.
     fn forget_endpoint(&mut self, addr: &EndpointAddress) {
         let _ = self.connecting.cancel(addr);
         self.ready.swap_remove(addr);
-        self.ejected.remove(addr);
-        self.ejection_signals.remove(addr);
-        if let Some(registry) = self.outlier.as_ref() {
-            registry.remove_channel(addr);
+        if let Some(o) = self.outlier.as_mut() {
+            o.forget(addr);
         }
     }
 
@@ -176,40 +158,24 @@ where
 
     /// Drain completed connection futures into the ready set. Wraps
     /// each bare service into a `ReadyChannel` using the outlier
-    /// state from the registry (or a fresh state if outlier detection
-    /// is disabled), and subscribes to the per-channel ejection
-    /// signal.
+    /// state from the detector (or a fresh state if outlier detection
+    /// is disabled).
     fn poll_connecting(&mut self, cx: &mut Context<'_>) {
         while let Poll::Ready(Some((addr, svc))) = self.connecting.poll_next(cx) {
-            let state = match self.outlier.as_ref() {
-                Some(registry) => registry.add_channel(addr.clone()),
+            let state = match self.outlier.as_mut() {
+                Some(o) => o.register(addr.clone()),
                 None => Arc::new(OutlierChannelState::new()),
             };
-            if self.outlier.is_some() {
-                self.ejection_signals
-                    .insert(addr.clone(), WatchStream::from_changes(state.subscribe()));
-            }
             let ready = ReadyChannel::new(addr.clone(), svc, state);
             self.ready.insert(addr, ready);
         }
     }
 
-    /// Drain ejection-signal transitions, moving channels between
-    /// `ready` and `ejected`. O(k) per call where k = ready signals.
-    fn poll_ejection_signals(&mut self, cx: &mut Context<'_>) {
-        use futures_core::Stream;
-        while let Poll::Ready(Some((addr, ejected))) =
-            Pin::new(&mut self.ejection_signals).poll_next(cx)
-        {
-            if ejected {
-                if let Some(ch) = self.ready.swap_remove(&addr) {
-                    tracing::debug!("outlier detection: eject {addr}");
-                    self.ejected.insert(addr, ch);
-                }
-            } else if let Some(ch) = self.ejected.remove(&addr) {
-                tracing::debug!("outlier detection: uneject {addr}");
-                self.ready.insert(addr, ch);
-            }
+    /// Drain outlier ejection-signal transitions, moving channels
+    /// between `ready` and the detector's ejected pool.
+    fn poll_outlier(&mut self, cx: &mut Context<'_>) {
+        if let Some(o) = self.outlier.as_mut() {
+            o.poll_signals(cx, &mut self.ready);
         }
     }
 }
@@ -232,7 +198,7 @@ where
     fn poll_ready(&mut self, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let discover_result = self.poll_discover(cx);
         self.poll_connecting(cx);
-        self.poll_ejection_signals(cx);
+        self.poll_outlier(cx);
 
         if !self.ready.is_empty() {
             return Poll::Ready(Ok(()));
@@ -269,7 +235,7 @@ where
         // are `Arc`-shared, so cloning is cheap.
         let mut svc = picked.clone();
         let outlier_state = picked.outlier().clone();
-        let registry = self.outlier.clone();
+        let registry = self.outlier.as_ref().map(|o| o.registry().clone());
         LbFuture::Pending(Box::pin(async move {
             tower::ServiceExt::ready(&mut svc)
                 .await
@@ -855,10 +821,11 @@ mod tests {
 
         // poll_ready drains the ejection signal and moves 8084.
         let _ = poll_ready_now(&mut lb);
+        let ejected = lb.outlier.as_ref().unwrap().ejected();
         assert!(
-            lb.ejected.contains_key(&addr(8084)),
+            ejected.contains_key(&addr(8084)),
             "8084 should be ejected; ejected map: {:?}, ready keys: {:?}",
-            lb.ejected.keys().collect::<Vec<_>>(),
+            ejected.keys().collect::<Vec<_>>(),
             lb.ready.keys().collect::<Vec<_>>(),
         );
         assert!(!lb.ready.contains_key(&addr(8084)));
@@ -882,7 +849,7 @@ mod tests {
         call_each(&mut lb, 50).await;
 
         let _ = poll_ready_now(&mut lb);
-        assert_eq!(lb.ejected.len(), 0);
+        assert_eq!(lb.outlier.as_ref().unwrap().ejected().len(), 0);
         assert_eq!(lb.ready.len(), 5);
     }
 
