@@ -22,9 +22,10 @@
  *
  */
 
-use std::fs::{self, read_to_string};
+use std::fs;
 use std::io::Write;
-use std::path::{Path, PathBuf};
+use std::path::Path;
+use std::path::PathBuf;
 
 use syn::parse_file;
 
@@ -188,7 +189,7 @@ impl CodeGen {
     }
 
     /// Add a directory for protoc to scan for .proto files.
-    pub fn includes(&mut self, includes: impl Iterator<Item = impl AsRef<Path>>) -> &mut Self {
+    pub fn includes(&mut self, includes: impl IntoIterator<Item = impl AsRef<Path>>) -> &mut Self {
         self.includes.extend(
             includes
                 .into_iter()
@@ -307,7 +308,7 @@ impl CodeGen {
             // The path may not exist if there are no services present in the
             // proto file.
             if path.exists() {
-                let src = read_to_string(path).expect("Failed to read generated file");
+                let src = fs::read_to_string(path).expect("Failed to read generated file");
                 let syntax = parse_file(&src).unwrap();
                 let formatted = prettyplease::unparse(&syntax);
                 fs::write(path, formatted).unwrap();
