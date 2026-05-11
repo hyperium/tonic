@@ -440,7 +440,7 @@ impl MetadataValue<Binary> {
     /// # Examples
     ///
     /// ```
-    /// # use tonic::metadata::*;
+    /// # use grpc::metadata::*;
     /// let val = BinaryMetadataValue::from_bytes(b"hello\xfa");
     /// assert_eq!(val, &b"hello\xfa"[..]);
     /// ```

@@ -28,6 +28,7 @@ _runtime-tokio = [
     "tokio/time",
     "dep:socket2",
     "dep:tower",
+    "dep:futures",
 ]
 # Used for testing with udeps as it wants this feature to exist
 # to be able to do its checks.
@@ -44,6 +45,7 @@ tls-rustls = [
 [dependencies]
 base64 = "0.22"
 bytes = "1.10.1"
+futures = { version = "0.3", default-features = false, optional = true }
 hickory-resolver = { version = "0.25.1", optional = true }
 http = "1.1.0"
 http-body = "1.0.1"
@@ -69,7 +71,7 @@ socket2 = { version = "0.6", optional = true }
 tokio = { version = "1.37.0", features = ["sync", "macros"] }
 tokio-rustls = { version = "0.26", optional = true, default-features = false }
 tokio-stream = { version = "0.1.17", default-features = false }
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+tonic = { version = "0.14.6", path = "../tonic", default-features = false, features = [
     "codegen",
 ] }
 tower = { version = "0.5.2", features = [
@@ -88,12 +90,12 @@ hickory-server = "0.25.2"
 prost = "0.14.0"
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
 tempfile = "3.26"
-tonic = { version = "0.14.0", path = "../tonic", default-features = false, features = [
+tonic = { version = "0.14.6", path = "../tonic", default-features = false, features = [
     "server",
     "router",
     "tls-ring",
 ] }
-tonic-prost = { version = "0.14.0", path = "../tonic-prost" }
+tonic-prost = { version = "0.14.6", path = "../tonic-prost" }
 
 [[bench]]
 name = "metadata"
