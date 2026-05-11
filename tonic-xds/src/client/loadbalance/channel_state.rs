@@ -259,8 +259,11 @@ pub(crate) struct EjectionConfig {
 
 /// Result of an ejection expiring.
 pub(crate) enum UnejectedChannel<S> {
-    /// The channel is ready to serve again (ejection expired, no reconnect needed).
-    Ready(ReadyChannel<S>),
+    /// The channel is ready to serve again (ejection expired, no
+    /// reconnect needed). The consumer wraps the bare service into a
+    /// [`ReadyChannel`] using the registry-supplied
+    /// [`OutlierChannelState`].
+    Ready(S),
     /// A fresh connection has been started.
     Connecting(ConnectingChannel<S>),
 }
@@ -295,44 +298,31 @@ impl IdleChannel {
 
 /// A channel that is in the process of connecting.
 ///
-/// Implements [`Future`] -- resolves to [`ReadyChannel`] when connected.
+/// Implements [`Future`] -- resolves to the connected service `S`
+/// when the connection completes. The consumer wraps that into a
+/// [`ReadyChannel`] (attaching its [`OutlierChannelState`]).
 /// Cancellation is handled externally via [`KeyedFutures::cancel`].
+///
+/// `ConnectingChannel` deliberately does not carry an
+/// [`OutlierChannelState`]: it does not serve traffic, so it has
+/// nothing to count or signal.
 ///
 /// [`KeyedFutures::cancel`]: crate::client::loadbalance::keyed_futures::KeyedFutures::cancel
 pub(crate) struct ConnectingChannel<S> {
-    inner: Pin<Box<dyn Future<Output = ReadyChannel<S>> + Send>>,
+    inner: Pin<Box<dyn Future<Output = S> + Send>>,
 }
 
 impl<S: Send + 'static> ConnectingChannel<S> {
-    /// Start a connection, generating a fresh per-channel outlier
-    /// state. Used for first-time connects from `IdleChannel`.
-    pub(crate) fn new(fut: BoxFuture<S>, addr: EndpointAddress) -> Self {
-        Self::with_outlier(fut, addr, Arc::new(OutlierChannelState::new()))
-    }
-
-    /// Start a connection that inherits an existing
-    /// [`OutlierChannelState`]. Used by reconnect paths so the
-    /// per-channel counters and ejection signal survive across the
-    /// connection cycle.
-    pub(crate) fn with_outlier(
-        fut: BoxFuture<S>,
-        addr: EndpointAddress,
-        outlier: Arc<OutlierChannelState>,
-    ) -> Self {
-        Self {
-            inner: Box::pin(async move {
-                ReadyChannel {
-                    addr,
-                    inner: fut.await,
-                    outlier,
-                }
-            }),
-        }
+    /// Start a connection. The address is kept by the caller (it is
+    /// typically the key in a `KeyedFutures` map); only the future is
+    /// stored here.
+    pub(crate) fn new(fut: BoxFuture<S>, _addr: EndpointAddress) -> Self {
+        Self { inner: fut }
     }
 }
 
 impl<S: Send + 'static> Future for ConnectingChannel<S> {
-    type Output = ReadyChannel<S>;
+    type Output = S;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         self.get_mut().inner.as_mut().poll(cx)
@@ -348,7 +338,9 @@ impl<S: Send + 'static> Future for ConnectingChannel<S> {
 /// Holds the raw service `S` and delegates [`Service`] calls directly,
 /// preserving `S::Future` and `S::Error` with no wrapping or type
 /// erasure. The `Arc<OutlierChannelState>` is shared with the outlier-
-/// detection actor for stats accumulation and edge-triggered ejection.
+/// detection actor for stats accumulation and edge-triggered ejection;
+/// because only `ReadyChannel` serves traffic, only `ReadyChannel`
+/// carries this state.
 #[derive(Clone)]
 pub(crate) struct ReadyChannel<S> {
     addr: EndpointAddress,
@@ -357,13 +349,26 @@ pub(crate) struct ReadyChannel<S> {
 }
 
 impl<S> ReadyChannel<S> {
+    /// Wrap a connected service `S` into a [`ReadyChannel`] using the
+    /// caller-supplied outlier state.
+    pub(crate) fn new(addr: EndpointAddress, inner: S, outlier: Arc<OutlierChannelState>) -> Self {
+        Self {
+            addr,
+            inner,
+            outlier,
+        }
+    }
+
     /// Per-channel outlier-detection state. Cloned cheaply via `Arc`.
     #[allow(dead_code)] // consumed by the LoadBalancer in a follow-up PR.
     pub(crate) fn outlier(&self) -> &Arc<OutlierChannelState> {
         &self.outlier
     }
 
-    /// Eject this channel (e.g., due to outlier detection). Consumes self.
+    /// Eject this channel (e.g., due to outlier detection). Consumes
+    /// self. The outlier state remains in the registry; only the
+    /// service and address are passed into [`EjectedChannel`] (which
+    /// just times the cooldown).
     pub(crate) fn eject<C>(self, config: EjectionConfig, connector: Arc<C>) -> EjectedChannel<S>
     where
         C: Connector<Service = S> + Send + Sync + 'static,
@@ -372,15 +377,15 @@ impl<S> ReadyChannel<S> {
         EjectedChannel {
             addr: self.addr,
             inner: self.inner,
-            outlier: self.outlier,
             config,
             connector,
             ejection_timer,
         }
     }
 
-    /// Start reconnecting. Consumes self, dropping the old connection
-    /// but preserving the outlier-detection state.
+    /// Start reconnecting. Consumes self, dropping the old connection.
+    /// The outlier state remains in the registry; the consumer
+    /// re-attaches it when the new [`ReadyChannel`] is constructed.
     pub(crate) fn reconnect<C: Connector<Service = S>>(
         self,
         connector: Arc<C>,
@@ -388,7 +393,7 @@ impl<S> ReadyChannel<S> {
     where
         S: Send + 'static,
     {
-        ConnectingChannel::with_outlier(connector.connect(&self.addr), self.addr, self.outlier)
+        ConnectingChannel::new(connector.connect(&self.addr), self.addr)
     }
 }
 
@@ -424,14 +429,19 @@ impl<S: Load> Load for ReadyChannel<S> {
 pin_project! {
     /// A channel that has been ejected and is cooling down.
     ///
-    /// The underlying connection is kept alive but cannot serve requests.
-    /// Implements [`Future`] -- resolves once the ejection timer expires to either:
+    /// The underlying connection is kept alive but cannot serve
+    /// requests. Implements [`Future`] -- resolves once the ejection
+    /// timer expires to either:
     /// - [`UnejectedChannel::Ready`] if no reconnect is needed
     /// - [`UnejectedChannel::Connecting`] if a fresh connection is required
+    ///
+    /// `EjectedChannel` deliberately does not carry an
+    /// [`OutlierChannelState`]: the state lives in the registry, keyed
+    /// by address, and the consumer re-attaches it when the channel
+    /// transitions back to [`ReadyChannel`].
     pub(crate) struct EjectedChannel<S> {
         addr: EndpointAddress,
         inner: S,
-        outlier: Arc<OutlierChannelState>,
         config: EjectionConfig,
         connector: Arc<dyn Connector<Service = S> + Send + Sync>,
         #[pin]
@@ -448,19 +458,12 @@ impl<S: Clone + Send + 'static> Future for EjectedChannel<S> {
             Poll::Ready(()) => {
                 if this.config.needs_reconnect {
                     let fut = this.connector.connect(this.addr);
-                    Poll::Ready(UnejectedChannel::Connecting(
-                        ConnectingChannel::with_outlier(
-                            fut,
-                            this.addr.clone(),
-                            this.outlier.clone(),
-                        ),
-                    ))
+                    Poll::Ready(UnejectedChannel::Connecting(ConnectingChannel::new(
+                        fut,
+                        this.addr.clone(),
+                    )))
                 } else {
-                    Poll::Ready(UnejectedChannel::Ready(ReadyChannel {
-                        addr: this.addr.clone(),
-                        inner: this.inner.clone(),
-                        outlier: this.outlier.clone(),
-                    }))
+                    Poll::Ready(UnejectedChannel::Ready(this.inner.clone()))
                 }
             }
             Poll::Pending => Poll::Pending,
@@ -529,17 +532,23 @@ mod tests {
         assert_eq!(connector.connect_count.load(Ordering::SeqCst), 1);
     }
 
+    fn wrap_ready(addr: EndpointAddress, svc: MockService) -> ReadyChannel<MockService> {
+        ReadyChannel::new(addr, svc, Arc::new(OutlierChannelState::new()))
+    }
+
     #[tokio::test]
-    async fn test_connecting_future_yields_ready() {
+    async fn test_connecting_future_yields_service() {
         let connector = MockConnector::new();
-        let ready = IdleChannel::new(test_addr()).connect(connector).await;
-        assert_eq!(ready.addr, test_addr());
+        let svc: MockService = IdleChannel::new(test_addr()).connect(connector).await;
+        // The bare service is what `ConnectingChannel` resolves to.
+        let _ready = wrap_ready(test_addr(), svc);
     }
 
     #[tokio::test]
     async fn test_ready_service_delegates() {
         let connector = MockConnector::new();
-        let mut ready = IdleChannel::new(test_addr()).connect(connector).await;
+        let svc = IdleChannel::new(test_addr()).connect(connector).await;
+        let mut ready = wrap_ready(test_addr(), svc);
         let resp: &str = ready.call("hello").await.unwrap();
         assert_eq!(resp, "ok");
     }
@@ -547,9 +556,10 @@ mod tests {
     #[tokio::test]
     async fn test_ready_to_connecting_via_reconnect() {
         let connector = MockConnector::new();
-        let ready = IdleChannel::new(test_addr())
+        let svc = IdleChannel::new(test_addr())
             .connect(connector.clone())
             .await;
+        let ready = wrap_ready(test_addr(), svc);
         let _reconnecting = ready.reconnect(connector.clone());
         assert_eq!(connector.connect_count.load(Ordering::SeqCst), 2);
     }
@@ -562,7 +572,7 @@ mod tests {
         let connecting =
             ConnectingChannel::new(Box::pin(async move { rx.await.unwrap() }), test_addr());
 
-        let mut set: KeyedFutures<EndpointAddress, ReadyChannel<MockService>> = KeyedFutures::new();
+        let mut set: KeyedFutures<EndpointAddress, MockService> = KeyedFutures::new();
         set.add(test_addr(), connecting).unwrap();
 
         assert!(matches!(set.poll_next(&mut noop_cx()), Poll::Pending));
@@ -580,7 +590,7 @@ mod tests {
         let connecting =
             ConnectingChannel::new(Box::pin(future::pending::<MockService>()), test_addr());
 
-        let mut set: KeyedFutures<EndpointAddress, ReadyChannel<MockService>> = KeyedFutures::new();
+        let mut set: KeyedFutures<EndpointAddress, MockService> = KeyedFutures::new();
         set.add(test_addr(), connecting).unwrap();
 
         assert!(matches!(set.poll_next(&mut noop_cx()), Poll::Pending));
@@ -592,9 +602,10 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn test_ejected_in_keyed_futures_ready() {
         let connector = MockConnector::new();
-        let ready = IdleChannel::new(test_addr())
+        let svc = IdleChannel::new(test_addr())
             .connect(connector.clone())
             .await;
+        let ready = wrap_ready(test_addr(), svc);
         let ejected = ready.eject(
             EjectionConfig {
                 timeout: Duration::from_secs(5),
@@ -617,9 +628,10 @@ mod tests {
     #[tokio::test(start_paused = true)]
     async fn test_ejected_in_keyed_futures_needs_reconnect() {
         let connector = MockConnector::new();
-        let ready = IdleChannel::new(test_addr())
+        let svc = IdleChannel::new(test_addr())
             .connect(connector.clone())
             .await;
+        let ready = wrap_ready(test_addr(), svc);
         let ejected = ready.eject(
             EjectionConfig {
                 timeout: Duration::from_secs(5),

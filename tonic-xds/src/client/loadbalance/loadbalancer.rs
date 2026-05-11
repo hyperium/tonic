@@ -14,7 +14,7 @@ use tower::Service;
 use tower::discover::{Change, Discover};
 
 use crate::client::endpoint::{Connector, EndpointAddress};
-use crate::client::loadbalance::channel_state::{IdleChannel, ReadyChannel};
+use crate::client::loadbalance::channel_state::{IdleChannel, OutlierChannelState, ReadyChannel};
 use crate::client::loadbalance::errors::LbError;
 use crate::client::loadbalance::keyed_futures::KeyedFutures;
 use crate::client::loadbalance::pickers::ChannelPicker;
@@ -58,7 +58,10 @@ pub(crate) struct LoadBalancer<D, C: Connector, Req> {
     /// Connector for creating connections from idle channels.
     connector: Arc<C>,
     /// In-flight connection attempts, keyed by endpoint address.
-    connecting: KeyedFutures<EndpointAddress, ReadyChannel<C::Service>>,
+    /// `ConnectingChannel` resolves to the bare service; the LB wraps
+    /// it into a `ReadyChannel` with an outlier state when it
+    /// transitions to ready.
+    connecting: KeyedFutures<EndpointAddress, C::Service>,
     /// Ready-to-serve channels, keyed by endpoint address.
     ready: IndexMap<EndpointAddress, ReadyChannel<C::Service>>,
     /// Channel picker for load balancing.
@@ -117,9 +120,15 @@ where
         }
     }
 
-    /// Drain completed connection futures into the ready set.
+    /// Drain completed connection futures into the ready set. Wraps
+    /// the bare service into a `ReadyChannel` with a fresh
+    /// `OutlierChannelState`. The outlier-detection PR will replace
+    /// the fresh state with one looked up from the
+    /// `OutlierStatsRegistry`.
     fn poll_connecting(&mut self, cx: &mut Context<'_>) {
-        while let Poll::Ready(Some((addr, ready))) = self.connecting.poll_next(cx) {
+        while let Poll::Ready(Some((addr, svc))) = self.connecting.poll_next(cx) {
+            let outlier = Arc::new(OutlierChannelState::new());
+            let ready = ReadyChannel::new(addr.clone(), svc, outlier);
             self.ready.insert(addr, ready);
         }
     }
