@@ -45,7 +45,7 @@ tokio = { version = "1", features = ["sync", "time"] }
 fastrand = "2"
 indexmap = "2"
 tracing = "0.1"
-tokio-stream = "0.1"
+tokio-stream = { version = "0.1", features = ["sync"] }
 tokio-util = "0.7"
 backoff = "0.4"
 shared_http_body = "0.1"

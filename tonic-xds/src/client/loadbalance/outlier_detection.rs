@@ -92,13 +92,16 @@ impl OutlierStatsRegistry {
         })
     }
 
-    /// Register a new channel. Returns the `Arc<OutlierChannelState>`
+    /// Register a channel and return the `Arc<OutlierChannelState>`
     /// the load balancer wires into the channel; the same `Arc` is
-    /// retained in the registry so the actor can iterate it.
+    /// retained in the registry so the actor can iterate it. If a
+    /// state for this address already exists, returns it untouched —
+    /// state continuity across reconnect cycles is preserved.
     pub(crate) fn add_channel(&self, addr: EndpointAddress) -> Arc<OutlierChannelState> {
-        let state = Arc::new(OutlierChannelState::new());
-        self.channels.insert(addr, state.clone());
-        state
+        self.channels
+            .entry(addr)
+            .or_insert_with(|| Arc::new(OutlierChannelState::new()))
+            .clone()
     }
 
     /// Forget a channel. Drops the registry's reference; cluster-wide
