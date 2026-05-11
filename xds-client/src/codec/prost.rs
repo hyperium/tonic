@@ -2,7 +2,7 @@
 
 use crate::codec::XdsCodec;
 use crate::error::{Error, Result};
-use crate::message::{DiscoveryRequest, DiscoveryResponse, ResourceAny};
+use crate::message::{DiscoveryRequest, DiscoveryResponse, MetadataValue, ResourceAny};
 use bytes::Bytes;
 use prost::Message;
 
@@ -14,7 +14,21 @@ impl XdsCodec for ProstCodec {
     fn encode_request(&self, request: &DiscoveryRequest<'_>) -> Result<Bytes> {
         use envoy_types::pb::envoy::config::core::v3 as core;
         use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+        use envoy_types::pb::google::protobuf::Struct;
         use envoy_types::pb::google::rpc::Status;
+
+        let metadata = if request.node.metadata.is_empty() {
+            None
+        } else {
+            Some(Struct {
+                fields: request
+                    .node
+                    .metadata
+                    .iter()
+                    .map(|(k, v)| (k.clone(), metadata_to_proto(v)))
+                    .collect(),
+            })
+        };
 
         let proto_request = discovery::DiscoveryRequest {
             version_info: request.version_info.to_owned(),
@@ -30,6 +44,7 @@ impl XdsCodec for ProstCodec {
                     zone: l.zone.clone(),
                     sub_zone: l.sub_zone.clone(),
                 }),
+                metadata,
                 ..Default::default()
             }),
             resource_names: request.resource_names.to_vec(),
@@ -65,6 +80,28 @@ impl XdsCodec for ProstCodec {
             nonce: proto_response.nonce,
         })
     }
+}
+
+/// Convert a [`MetadataValue`] to its `google.protobuf.Value` wire form.
+fn metadata_to_proto(value: &MetadataValue) -> envoy_types::pb::google::protobuf::Value {
+    use envoy_types::pb::google::protobuf::{ListValue, Struct, Value, value::Kind};
+
+    let kind = match value {
+        MetadataValue::Null => Kind::NullValue(0),
+        MetadataValue::Bool(b) => Kind::BoolValue(*b),
+        MetadataValue::Number(n) => Kind::NumberValue(*n),
+        MetadataValue::String(s) => Kind::StringValue(s.clone()),
+        MetadataValue::Array(items) => Kind::ListValue(ListValue {
+            values: items.iter().map(metadata_to_proto).collect(),
+        }),
+        MetadataValue::Object(fields) => Kind::StructValue(Struct {
+            fields: fields
+                .iter()
+                .map(|(k, v)| (k.clone(), metadata_to_proto(v)))
+                .collect(),
+        }),
+    };
+    Value { kind: Some(kind) }
 }
 
 #[cfg(test)]
@@ -137,6 +174,130 @@ mod tests {
         assert_eq!(locality.region, "us-west");
         assert_eq!(locality.zone, "us-west-1a");
         assert_eq!(locality.sub_zone, "rack-1");
+    }
+
+    #[test]
+    fn test_encode_request_with_metadata() {
+        use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+        use envoy_types::pb::google::protobuf::value::Kind;
+        use std::collections::HashMap;
+
+        let codec = ProstCodec;
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "GENERATOR".to_string(),
+            MetadataValue::String("grpc".to_string()),
+        );
+        let node = Node::new("grpc", "1.0").with_metadata(metadata);
+        let resource_names: Vec<String> = Vec::new();
+        let request = DiscoveryRequest {
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster",
+            resource_names: &resource_names,
+            response_nonce: "",
+            error_detail: None,
+        };
+
+        let bytes = codec.encode_request(&request).unwrap();
+        let decoded = discovery::DiscoveryRequest::decode(bytes).unwrap();
+        let metadata_struct = decoded.node.unwrap().metadata.unwrap();
+
+        let value = metadata_struct.fields.get("GENERATOR").unwrap();
+        match &value.kind {
+            Some(Kind::StringValue(s)) => assert_eq!(s, "grpc"),
+            other => panic!("expected StringValue, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_encode_request_with_nested_metadata() {
+        use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+        use envoy_types::pb::google::protobuf::value::Kind;
+        use std::collections::HashMap;
+
+        let codec = ProstCodec;
+        let mut annotations = HashMap::new();
+        annotations.insert(
+            "istio.io/rev".to_string(),
+            MetadataValue::String("default".to_string()),
+        );
+
+        let mut metadata = HashMap::new();
+        metadata.insert(
+            "ANNOTATIONS".to_string(),
+            MetadataValue::Object(annotations),
+        );
+        metadata.insert(
+            "ENVOY_PROMETHEUS_PORT".to_string(),
+            MetadataValue::Number(15090.0),
+        );
+        metadata.insert(
+            "PILOT_SAN".to_string(),
+            MetadataValue::Array(vec![MetadataValue::String(
+                "istiod.istio-system.svc".to_string(),
+            )]),
+        );
+
+        let node = Node::new("grpc", "1.0").with_metadata(metadata);
+        let resource_names: Vec<String> = Vec::new();
+        let request = DiscoveryRequest {
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster",
+            resource_names: &resource_names,
+            response_nonce: "",
+            error_detail: None,
+        };
+
+        let bytes = codec.encode_request(&request).unwrap();
+        let decoded = discovery::DiscoveryRequest::decode(bytes).unwrap();
+        let fields = decoded.node.unwrap().metadata.unwrap().fields;
+
+        match &fields.get("ANNOTATIONS").unwrap().kind {
+            Some(Kind::StructValue(s)) => match &s.fields.get("istio.io/rev").unwrap().kind {
+                Some(Kind::StringValue(v)) => assert_eq!(v, "default"),
+                other => panic!("expected StringValue, got {other:?}"),
+            },
+            other => panic!("expected StructValue, got {other:?}"),
+        }
+
+        match &fields.get("ENVOY_PROMETHEUS_PORT").unwrap().kind {
+            Some(Kind::NumberValue(n)) => assert_eq!(*n, 15090.0),
+            other => panic!("expected NumberValue, got {other:?}"),
+        }
+
+        match &fields.get("PILOT_SAN").unwrap().kind {
+            Some(Kind::ListValue(l)) => {
+                assert_eq!(l.values.len(), 1);
+                match &l.values[0].kind {
+                    Some(Kind::StringValue(s)) => assert_eq!(s, "istiod.istio-system.svc"),
+                    other => panic!("expected StringValue, got {other:?}"),
+                }
+            }
+            other => panic!("expected ListValue, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_encode_request_empty_metadata_omits_struct() {
+        use envoy_types::pb::envoy::service::discovery::v3 as discovery;
+
+        let codec = ProstCodec;
+        let node = Node::new("grpc", "1.0");
+        let resource_names: Vec<String> = Vec::new();
+        let request = DiscoveryRequest {
+            version_info: "",
+            node: &node,
+            type_url: "type.googleapis.com/envoy.config.cluster.v3.Cluster",
+            resource_names: &resource_names,
+            response_nonce: "",
+            error_detail: None,
+        };
+
+        let bytes = codec.encode_request(&request).unwrap();
+        let decoded = discovery::DiscoveryRequest::decode(bytes).unwrap();
+        assert!(decoded.node.unwrap().metadata.is_none());
     }
 
     #[test]

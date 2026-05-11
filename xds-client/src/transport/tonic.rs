@@ -13,7 +13,7 @@ use tokio::sync::mpsc;
 use tokio_stream::StreamExt as _;
 use tonic::client::Grpc;
 use tonic::codec::{Codec, DecodeBuf, Decoder, EncodeBuf, Encoder};
-use tonic::transport::Channel;
+use tonic::transport::{Channel, Endpoint};
 use tonic::{Status, Streaming};
 
 /// The gRPC path for the ADS StreamAggregatedResources RPC.
@@ -174,7 +174,9 @@ impl TransportBuilder for TonicTransportBuilder {
     type Transport = TonicTransport;
 
     async fn build(&self, server: &ServerConfig) -> Result<Self::Transport> {
-        let endpoint = Channel::from_shared(server.uri().to_string())
+        // `Endpoint::from_shared` routes `unix://` URIs to tonic's UDS connector.
+        // Required for control planes like Istio's grpc-agent that ship `unix:///etc/istio/proxy/XDS`.
+        let endpoint = Endpoint::from_shared(server.uri().to_string())
             .map_err(|e| Error::Connection(e.to_string()))?;
 
         #[cfg(any(feature = "tonic-tls-ring", feature = "tonic-tls-aws-lc"))]
