@@ -39,7 +39,6 @@ pub mod service_config;
 pub mod stream_util;
 
 pub use channel::Channel;
-pub use channel::ChannelOptions;
 
 pub(crate) mod load_balancing;
 pub(crate) mod name_resolution;
