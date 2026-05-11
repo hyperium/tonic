@@ -274,22 +274,53 @@ impl<S> OutlierDetector<S> {
         &self.registry
     }
 
-    /// Register a newly-connected channel for tracking and subscribe
-    /// to its ejection signal. Returns the per-channel state for the
-    /// load balancer to wire into [`ReadyChannel`].
+    /// Register a newly-connected channel for tracking and (on first
+    /// registration only) subscribe to its ejection signal. Returns
+    /// the per-channel state for the load balancer to wire into
+    /// [`ReadyChannel`].
+    ///
+    /// When an endpoint is re-discovered (Insert for an address whose
+    /// registry entry was preserved), the existing signal subscription
+    /// is left in place so any pending ejection transition is not
+    /// dropped.
     pub(crate) fn register(&mut self, addr: EndpointAddress) -> Arc<OutlierChannelState> {
         let state = self.registry.add_channel(addr.clone());
-        self.ejection_signals
-            .insert(addr, WatchStream::from_changes(state.subscribe()));
+        if !self.ejection_signals.contains_key(&addr) {
+            self.ejection_signals
+                .insert(addr, WatchStream::from_changes(state.subscribe()));
+        }
         state
     }
 
     /// Drop all bookkeeping for `addr`: ejection slot, signal stream,
-    /// registry entry.
+    /// registry entry. Used when the endpoint is removed from the
+    /// cluster.
     pub(crate) fn forget(&mut self, addr: &EndpointAddress) {
         self.ejected.remove(addr);
         self.ejection_signals.remove(addr);
         self.registry.remove_channel(addr);
+    }
+
+    /// Drop the ejected-pool entry for `addr` (which holds an obsolete
+    /// `ReadyChannel`) but preserve the registry entry — counters,
+    /// ejection multiplier, and ejection flag carry across the
+    /// reconnect. Used when an endpoint is re-discovered.
+    ///
+    /// Matches grpc-go (`internal/xds/balancer/outlierdetection`) and
+    /// Envoy (`BaseDynamicClusterImpl::updateDynamicHostList` reusing
+    /// existing `HostSharedPtr`s): outlier state is keyed by stable
+    /// endpoint identity and survives transient discovery flaps.
+    pub(crate) fn clear_active_slots(&mut self, addr: &EndpointAddress) {
+        self.ejected.remove(addr);
+    }
+
+    /// Place a freshly-connected channel directly into the ejected
+    /// pool. Used by the load balancer when the preserved state for a
+    /// re-discovered endpoint says it is still ejected; this avoids a
+    /// brief window of routing traffic to a logically-ejected channel
+    /// until the housekeeping actor un-ejects it.
+    pub(crate) fn place_ejected(&mut self, addr: EndpointAddress, ch: ReadyChannel<S>) {
+        self.ejected.insert(addr, ch);
     }
 
     /// Drain ejection-signal transitions, moving channels between

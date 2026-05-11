@@ -118,13 +118,33 @@ where
         }
     }
 
-    /// Forget all per-endpoint state for `addr`: the connecting
-    /// future, the ready slot, and any outlier bookkeeping.
-    fn forget_endpoint(&mut self, addr: &EndpointAddress) {
+    /// Purge all per-endpoint state for `addr`: the connecting
+    /// future, the ready slot, and **all** outlier bookkeeping
+    /// (registry entry, ejection-signal subscription, ejected slot).
+    /// Used when discovery says the endpoint is gone from the cluster.
+    fn purge_endpoint(&mut self, addr: &EndpointAddress) {
         let _ = self.connecting.cancel(addr);
         self.ready.swap_remove(addr);
         if let Some(o) = self.outlier.as_mut() {
             o.forget(addr);
+        }
+    }
+
+    /// Clear stale slots that held the old service (in-flight
+    /// connecting future, ready entry, ejected entry) but **preserve**
+    /// the outlier-detection registry entry — counters, ejection
+    /// multiplier, and ejection flag carry across the reconnect.
+    /// Used when discovery re-inserts an endpoint we already track.
+    ///
+    /// This matches grpc-go and Envoy: outlier state is keyed by
+    /// stable endpoint identity and survives a transient discovery
+    /// flap, so a brief disappearance does not wipe what we already
+    /// know about the endpoint's health.
+    fn reset_active_slots(&mut self, addr: &EndpointAddress) {
+        let _ = self.connecting.cancel(addr);
+        self.ready.swap_remove(addr);
+        if let Some(o) = self.outlier.as_mut() {
+            o.clear_active_slots(addr);
         }
     }
 
@@ -144,13 +164,13 @@ where
                 Some(Err(e)) => return Poll::Ready(LbError::DiscoverError(e.into())),
                 Some(Ok(Change::Insert(addr, idle))) => {
                     tracing::trace!("discovery: insert {addr}");
-                    self.forget_endpoint(&addr);
+                    self.reset_active_slots(&addr);
                     let connecting = idle.connect(self.connector.clone());
                     let _ = self.connecting.add(addr, connecting);
                 }
                 Some(Ok(Change::Remove(addr))) => {
                     tracing::trace!("discovery: remove {addr}");
-                    self.forget_endpoint(&addr);
+                    self.purge_endpoint(&addr);
                 }
             }
         }
@@ -160,14 +180,25 @@ where
     /// each bare service into a `ReadyChannel` using the outlier
     /// state from the detector (or a fresh state if outlier detection
     /// is disabled).
+    ///
+    /// If the preserved outlier state for a re-discovered endpoint
+    /// says it is still ejected, the new channel goes directly into
+    /// the detector's ejected pool — not the ready set — so no
+    /// traffic is routed to it until the housekeeping actor un-ejects.
     fn poll_connecting(&mut self, cx: &mut Context<'_>) {
         while let Poll::Ready(Some((addr, svc))) = self.connecting.poll_next(cx) {
             let state = match self.outlier.as_mut() {
                 Some(o) => o.register(addr.clone()),
                 None => Arc::new(OutlierChannelState::new()),
             };
+            let is_ejected = state.is_ejected();
             let ready = ReadyChannel::new(addr.clone(), svc, state);
-            self.ready.insert(addr, ready);
+            match self.outlier.as_mut() {
+                Some(o) if is_ejected => o.place_ejected(addr, ready),
+                _ => {
+                    self.ready.insert(addr, ready);
+                }
+            }
         }
     }
 
@@ -868,5 +899,122 @@ mod tests {
         let _ = poll_ready_now(&mut lb);
         assert_eq!(registry.len(), 0);
         assert_eq!(lb.ready.len(), 0);
+    }
+
+    /// Re-discovering an endpoint (Insert for an address the LB
+    /// already tracks) must preserve its outlier-detection counters
+    /// and multiplier. Matches grpc-go / Envoy behavior.
+    #[tokio::test]
+    async fn test_outlier_detection_reinsert_preserves_state() {
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_outlier(discover, fp_config(50, 5, 3));
+
+        tx.send(Ok(Change::Insert(addr(8080), IdleChannel::new(addr(8080)))))
+            .await
+            .unwrap();
+        drive_to_ready(&mut lb, &connector).await;
+        let state = registry.add_channel(addr(8080)); // idempotent — returns the existing state
+        // Drive some successes through the data path so the channel
+        // accumulates counter state worth preserving.
+        for _ in 0..3 {
+            lb.call("hello").await.unwrap();
+        }
+        let (s_before, f_before) = state.counters();
+        assert!(
+            s_before > 0,
+            "expected accumulated successes before re-insert"
+        );
+        let registry_before = Arc::as_ptr(&state);
+
+        // Re-insert the same address. State must survive.
+        tx.send(Ok(Change::Insert(addr(8080), IdleChannel::new(addr(8080)))))
+            .await
+            .unwrap();
+        drive_to_ready(&mut lb, &connector).await;
+
+        let state_after = registry.add_channel(addr(8080));
+        assert_eq!(
+            Arc::as_ptr(&state_after),
+            registry_before,
+            "registry entry should be the same Arc — state continuity preserved",
+        );
+        let (s_after, f_after) = state_after.counters();
+        assert_eq!(
+            (s_after, f_after),
+            (s_before, f_before),
+            "counters must survive re-insert",
+        );
+        assert_eq!(registry.len(), 1);
+    }
+
+    /// A re-discovered endpoint whose preserved state says "ejected"
+    /// is placed directly into the ejected pool, not the ready set, so
+    /// no traffic is routed to it until the housekeeping actor
+    /// un-ejects it.
+    #[tokio::test]
+    async fn test_outlier_detection_reinsert_while_ejected_stays_ejected() {
+        let (tx, discover) = new_discover();
+        let (mut lb, connector, registry) = make_lb_with_outlier(discover, fp_config(50, 5, 3));
+
+        // Bring up 5 endpoints; make 8084 fail enough to be ejected.
+        for port in 8080..=8084 {
+            tx.send(Ok(Change::Insert(addr(port), IdleChannel::new(addr(port)))))
+                .await
+                .unwrap();
+        }
+        drive_to_ready(&mut lb, &connector).await;
+        connector
+            .service(&addr(8084))
+            .fail_call
+            .store(true, Ordering::Relaxed);
+        for _ in 0..100 {
+            let _ = lb.call("hello").await;
+        }
+        let _ = poll_ready_now(&mut lb);
+        let state_8084 = registry.add_channel(addr(8084));
+        assert!(
+            state_8084.is_ejected(),
+            "8084 must be ejected before re-insert"
+        );
+        assert!(
+            lb.outlier
+                .as_ref()
+                .unwrap()
+                .ejected()
+                .contains_key(&addr(8084)),
+            "8084 should be in the ejected pool"
+        );
+
+        // Re-insert 8084. The ejected slot's old ReadyChannel is
+        // dropped, but the registry entry (is_ejected=true) is
+        // preserved. The new channel should land in the ejected pool,
+        // not in `ready`. Drive the steps explicitly because
+        // `lb.ready` is non-empty throughout (8080..=8083), so
+        // `drive_to_ready` may return before the new 8084 connect
+        // resolves.
+        tx.send(Ok(Change::Insert(addr(8084), IdleChannel::new(addr(8084)))))
+            .await
+            .unwrap();
+        // 1. Drain the Insert into `self.connecting`.
+        let _ = poll_ready_now(&mut lb);
+        // 2. Synchronously resolve the new connect future.
+        connector.resolve_all();
+        // 3. Drain the now-ready connecting future; `poll_connecting`
+        //    sees `state.is_ejected() == true` and calls `place_ejected`.
+        let _ = poll_ready_now(&mut lb);
+
+        assert!(
+            !lb.ready.contains_key(&addr(8084)),
+            "8084 must not be in ready while still logically ejected"
+        );
+        assert!(
+            lb.outlier
+                .as_ref()
+                .unwrap()
+                .ejected()
+                .contains_key(&addr(8084)),
+            "8084 must remain in the ejected pool after re-insert"
+        );
+        assert!(state_8084.is_ejected());
     }
 }
