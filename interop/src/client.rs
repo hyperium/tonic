@@ -1,6 +1,27 @@
 use crate::TestAssertion;
 use tonic::async_trait;
 
+#[derive(Clone)]
+pub struct MetadataInterceptor {
+    pub metadata: tonic::metadata::MetadataMap,
+}
+
+impl tonic::service::Interceptor for MetadataInterceptor {
+    fn call(&mut self, mut request: tonic::Request<()>) -> Result<tonic::Request<()>, tonic::Status> {
+        for key_and_val in self.metadata.iter() {
+            match key_and_val {
+                tonic::metadata::KeyAndValueRef::Ascii(key, val) => {
+                    request.metadata_mut().insert(key.clone(), val.clone());
+                }
+                tonic::metadata::KeyAndValueRef::Binary(key, val) => {
+                    request.metadata_mut().insert_bin(key.clone(), val.clone());
+                }
+            }
+        }
+        Ok(request)
+    }
+}
+
 #[async_trait]
 pub trait InteropTest: Send {
     async fn empty_unary(&mut self, assertions: &mut Vec<TestAssertion>);

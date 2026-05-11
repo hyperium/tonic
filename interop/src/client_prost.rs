@@ -9,8 +9,8 @@ use tonic::async_trait;
 use tonic::transport::Channel;
 use tonic::{Code, Request, Response, Status, metadata::MetadataValue};
 
-pub type TestClient = TestServiceClient<Channel>;
-pub type UnimplementedClient = UnimplementedServiceClient<Channel>;
+pub type TestClient = TestServiceClient<tonic::codegen::InterceptedService<Channel, crate::client::MetadataInterceptor>>;
+pub type UnimplementedClient = UnimplementedServiceClient<tonic::codegen::InterceptedService<Channel, crate::client::MetadataInterceptor>>;
 
 const LARGE_REQ_SIZE: usize = 271_828;
 const LARGE_RSP_SIZE: i32 = 314_159;

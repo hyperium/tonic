@@ -35,6 +35,8 @@ protobuf = { version = "4.34.0-release" }
 tonic-protobuf = {path = "../tonic-protobuf"}
 grpc-protobuf = {path = "../grpc-protobuf"}
 rustls = { version = "0.23", default-features = false, features = ["ring"] }
+base64 = "0.22"
+
 
 [build-dependencies]
 tonic-prost-build = {path = "../tonic-prost-build"}
