@@ -60,23 +60,21 @@ impl StringMatcher {
             }
             Self::Prefix { value, ignore_case } => {
                 if *ignore_case {
-                    v.to_ascii_lowercase()
-                        .starts_with(&value.to_ascii_lowercase())
+                    starts_with_ignore_ascii_case(v, value)
                 } else {
                     v.starts_with(value.as_str())
                 }
             }
             Self::Suffix { value, ignore_case } => {
                 if *ignore_case {
-                    v.to_ascii_lowercase()
-                        .ends_with(&value.to_ascii_lowercase())
+                    ends_with_ignore_ascii_case(v, value)
                 } else {
                     v.ends_with(value.as_str())
                 }
             }
             Self::Contains { value, ignore_case } => {
                 if *ignore_case {
-                    v.to_ascii_lowercase().contains(&value.to_ascii_lowercase())
+                    contains_ignore_ascii_case(v, value)
                 } else {
                     v.contains(value.as_str())
                 }
@@ -84,6 +82,26 @@ impl StringMatcher {
             Self::SafeRegex(re) => re.is_match(v),
         }
     }
+}
+
+fn starts_with_ignore_ascii_case(s: &str, pat: &str) -> bool {
+    let (s, pat) = (s.as_bytes(), pat.as_bytes());
+    s.len() >= pat.len() && s[..pat.len()].eq_ignore_ascii_case(pat)
+}
+
+fn ends_with_ignore_ascii_case(s: &str, pat: &str) -> bool {
+    let (s, pat) = (s.as_bytes(), pat.as_bytes());
+    s.len()
+        .checked_sub(pat.len())
+        .is_some_and(|start| s[start..].eq_ignore_ascii_case(pat))
+}
+
+fn contains_ignore_ascii_case(s: &str, pat: &str) -> bool {
+    let (s, pat) = (s.as_bytes(), pat.as_bytes());
+    let Some(max_start) = s.len().checked_sub(pat.len()) else {
+        return false;
+    };
+    (0..=max_start).any(|i| s[i..i + pat.len()].eq_ignore_ascii_case(pat))
 }
 
 #[cfg(test)]

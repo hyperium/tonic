@@ -1,7 +1,10 @@
 //! SAN matcher for server authorization (gRFC A29).
 //!
 //! Wraps the xDS [`SubjectAltNameMatcher`] proto: pairs a SAN type
-//! (DNS / URI / EMAIL / IP_ADDRESS / OTHER_NAME) with a [`StringMatcher`].
+//! (DNS / URI / EMAIL / IP_ADDRESS) with a [`StringMatcher`]. A29 enforces
+//! matching only for those four types. The `OTHER_NAME` and `UNSPECIFIED`
+//! variants defined by the Envoy proto are rejected at config-parse time.
+//!
 //! For IP entries A29 specifies converting the cert's IP SAN to its canonical
 //! string form (RFC 5952 — lowercase, zero-compressed for IPv6).
 //! DNS additionally honors RFC 6125 wildcard rules when the
@@ -24,7 +27,6 @@ pub(crate) enum SanMatcher {
     Uri(StringMatcher),
     Email(StringMatcher),
     IpAddress(StringMatcher),
-    OtherName { oid: String, matcher: StringMatcher },
 }
 
 /// A SAN entry extracted from a peer X.509 certificate.
@@ -37,7 +39,6 @@ pub(crate) enum SanEntry {
     Uri(String),
     Email(String),
     IpAddress(IpAddr),
-    OtherName { oid: String, value: Vec<u8> },
 }
 
 impl SanMatcher {
@@ -53,17 +54,13 @@ impl SanMatcher {
             SanType::Uri => Ok(Self::Uri(StringMatcher::from_proto(matcher_proto)?)),
             SanType::Email => Ok(Self::Email(StringMatcher::from_proto(matcher_proto)?)),
             SanType::IpAddress => Ok(Self::IpAddress(StringMatcher::from_proto(matcher_proto)?)),
-            SanType::OtherName => {
-                if proto.oid.is_empty() {
-                    return Err(Error::Validation(
-                        "OTHER_NAME SAN matcher requires 'oid' to be set".into(),
-                    ));
-                }
-                Ok(Self::OtherName {
-                    oid: proto.oid,
-                    matcher: StringMatcher::from_proto(matcher_proto)?,
-                })
-            }
+            // A29 doesn't define OTHER_NAME matching semantics; grpc-go and
+            // grpc-java reject it too. We NACK at config-parse time so a
+            // misconfigured matcher surfaces clearly instead of silently
+            // never matching against any peer cert.
+            SanType::OtherName => Err(Error::Validation(
+                "OTHER_NAME SAN matcher is not supported".into(),
+            )),
             SanType::Unspecified => Err(Error::Validation(
                 "SubjectAltNameMatcher san_type is UNSPECIFIED".into(),
             )),
@@ -84,13 +81,6 @@ impl SanMatcher {
             // (RFC 5952). `IpAddr`'s `Display` implementation already produces
             // that form (lowercase, zero-compressed IPv6).
             (Self::IpAddress(m), SanEntry::IpAddress(ip)) => m.is_match(&ip.to_string()),
-            (
-                Self::OtherName {
-                    oid: o1,
-                    matcher: m,
-                },
-                SanEntry::OtherName { oid: o2, value },
-            ) => o1 == o2 && m.is_match(&String::from_utf8_lossy(value)),
             _ => false, // type mismatch
         }
     }
@@ -128,7 +118,7 @@ fn dns_matches(matcher: &StringMatcher, cert_dns: &str) -> bool {
 
 fn strip_suffix_ignore_ascii_case<'a>(s: &'a str, suffix: &str) -> Option<&'a str> {
     let split = s.len().checked_sub(suffix.len())?;
-    let (head, tail) = s.split_at(split);
+    let (head, tail) = s.split_at_checked(split)?;
     tail.eq_ignore_ascii_case(suffix).then_some(head)
 }
 
@@ -266,33 +256,14 @@ mod tests {
     }
 
     #[test]
-    fn other_name_requires_oid() {
+    fn other_name_san_type_is_rejected() {
         let proto = SubjectAltNameMatcher {
             san_type: SanType::OtherName as i32,
             matcher: Some(exact("user@example.com")),
-            oid: String::new(),
+            oid: "1.3.6.1.4.1.311.20.2.3".into(),
         };
         let err = SanMatcher::from_proto(proto).unwrap_err();
-        assert!(err.to_string().contains("oid"));
-    }
-
-    #[test]
-    fn other_name_matches_with_oid() {
-        let proto = SubjectAltNameMatcher {
-            san_type: SanType::OtherName as i32,
-            matcher: Some(exact("user@example.com")),
-            oid: "1.3.6.1.4.1.311.20.2.3".into(),
-        };
-        let m = SanMatcher::from_proto(proto).unwrap();
-        assert!(m.matches_any(&[SanEntry::OtherName {
-            oid: "1.3.6.1.4.1.311.20.2.3".into(),
-            value: b"user@example.com".to_vec(),
-        }]));
-        // Different OID should not match.
-        assert!(!m.matches_any(&[SanEntry::OtherName {
-            oid: "1.2.3.4".into(),
-            value: b"user@example.com".to_vec(),
-        }]));
+        assert!(err.to_string().contains("OTHER_NAME"));
     }
 
     #[test]

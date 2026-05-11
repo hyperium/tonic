@@ -80,6 +80,20 @@ pub(crate) fn parse_transport_socket(
 fn parse_common_tls_context(ctx: CommonTlsContext) -> xds_client::Result<ClusterSecurityConfig> {
     reject_unsupported_common_fields(&ctx)?;
 
+    // A29: when tls_certificate_provider_instance is unset, NACK if either
+    // legacy identity field is set. When the provider is set, the legacy
+    // fields are silently ignored per spec.
+    if ctx.tls_certificate_provider_instance.is_none() {
+        reject(
+            !ctx.tls_certificates.is_empty(),
+            "tls_certificates set without tls_certificate_provider_instance",
+        )?;
+        reject(
+            !ctx.tls_certificate_sds_secret_configs.is_empty(),
+            "tls_certificate_sds_secret_configs set without tls_certificate_provider_instance",
+        )?;
+    }
+
     // Identity (mTLS client cert) — optional.
     let identity_instance_name = ctx
         .tls_certificate_provider_instance
@@ -162,14 +176,6 @@ fn parse_san_matchers(ctx: &CertificateValidationContext) -> xds_client::Result<
 fn reject_unsupported_common_fields(ctx: &CommonTlsContext) -> xds_client::Result<()> {
     reject(ctx.tls_params.is_some(), "CommonTlsContext.tls_params")?;
     reject(
-        !ctx.tls_certificates.is_empty(),
-        "CommonTlsContext.tls_certificates",
-    )?;
-    reject(
-        !ctx.tls_certificate_sds_secret_configs.is_empty(),
-        "CommonTlsContext.tls_certificate_sds_secret_configs",
-    )?;
-    reject(
         ctx.custom_handshaker.is_some(),
         "CommonTlsContext.custom_handshaker",
     )?;
@@ -205,6 +211,10 @@ fn reject_unsupported_validation_fields(
         "require_signed_certificate_timestamp",
     )?;
     reject(ctx.crl.is_some(), "crl")?;
+    reject(
+        ctx.custom_validator_config.is_some(),
+        "custom_validator_config",
+    )?;
     Ok(())
 }
 
@@ -453,7 +463,7 @@ mod tests {
     }
 
     #[test]
-    fn inline_tls_certificates_rejected() {
+    fn inline_tls_certificates_rejected_without_provider() {
         use envoy_types::pb::envoy::extensions::transport_sockets::tls::v3::TlsCertificate;
         let common = CommonTlsContext {
             tls_certificates: vec![TlsCertificate::default()],
@@ -466,6 +476,63 @@ mod tests {
         };
         let err = parse_transport_socket(Some(wrap_upstream(common))).unwrap_err();
         assert!(err.to_string().contains("tls_certificates"));
+    }
+
+    #[test]
+    fn inline_tls_certificates_ignored_when_provider_set() {
+        use envoy_types::pb::envoy::extensions::transport_sockets::tls::v3::TlsCertificate;
+        let common = CommonTlsContext {
+            tls_certificate_provider_instance: Some(provider_instance("client_id")),
+            tls_certificates: vec![TlsCertificate::default()],
+            validation_context_type: Some(
+                common_tls_context::ValidationContextType::ValidationContext(ca_validation_ctx(
+                    "root_ca",
+                )),
+            ),
+            ..Default::default()
+        };
+        let cfg = parse_transport_socket(Some(wrap_upstream(common)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(cfg.identity_instance_name.as_deref(), Some("client_id"));
+    }
+
+    #[test]
+    fn sds_tls_certificates_rejected_without_provider() {
+        use envoy_types::pb::envoy::extensions::transport_sockets::tls::v3::SdsSecretConfig;
+        let common = CommonTlsContext {
+            tls_certificate_sds_secret_configs: vec![SdsSecretConfig::default()],
+            validation_context_type: Some(
+                common_tls_context::ValidationContextType::ValidationContext(ca_validation_ctx(
+                    "root_ca",
+                )),
+            ),
+            ..Default::default()
+        };
+        let err = parse_transport_socket(Some(wrap_upstream(common))).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("tls_certificate_sds_secret_configs")
+        );
+    }
+
+    #[test]
+    fn sds_tls_certificates_ignored_when_provider_set() {
+        use envoy_types::pb::envoy::extensions::transport_sockets::tls::v3::SdsSecretConfig;
+        let common = CommonTlsContext {
+            tls_certificate_provider_instance: Some(provider_instance("client_id")),
+            tls_certificate_sds_secret_configs: vec![SdsSecretConfig::default()],
+            validation_context_type: Some(
+                common_tls_context::ValidationContextType::ValidationContext(ca_validation_ctx(
+                    "root_ca",
+                )),
+            ),
+            ..Default::default()
+        };
+        let cfg = parse_transport_socket(Some(wrap_upstream(common)))
+            .unwrap()
+            .unwrap();
+        assert_eq!(cfg.identity_instance_name.as_deref(), Some("client_id"));
     }
 
     #[test]
@@ -488,5 +555,17 @@ mod tests {
         };
         let err = parse_transport_socket(Some(wrap_upstream(common_ctx(cvc)))).unwrap_err();
         assert!(err.to_string().contains("verify_certificate_spki"));
+    }
+
+    #[test]
+    fn custom_validator_config_rejected() {
+        use envoy_types::pb::envoy::config::core::v3::TypedExtensionConfig;
+        let cvc = CertificateValidationContext {
+            ca_certificate_provider_instance: Some(provider_instance("root_ca")),
+            custom_validator_config: Some(TypedExtensionConfig::default()),
+            ..Default::default()
+        };
+        let err = parse_transport_socket(Some(wrap_upstream(common_ctx(cvc)))).unwrap_err();
+        assert!(err.to_string().contains("custom_validator_config"));
     }
 }
