@@ -257,8 +257,6 @@ mod test {
     use std::sync::Arc;
     use std::sync::mpsc;
 
-    use tonic::metadata::MetadataMap;
-
     use crate::StatusCodeError;
     use crate::client::ConnectivityState;
     use crate::client::load_balancing::ChannelController;
@@ -286,6 +284,7 @@ mod test {
     use crate::client::name_resolution::Endpoint;
     use crate::client::name_resolution::ResolverUpdate;
     use crate::core::RequestHeaders;
+    use crate::metadata::MetadataMap;
     use crate::rt::default_runtime;
 
     const DEFAULT_TEST_SHORT_TIMEOUT: std::time::Duration = std::time::Duration::from_millis(100);

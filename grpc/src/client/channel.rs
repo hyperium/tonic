@@ -164,7 +164,7 @@ impl Channel {
     /// target string is invalid, the returned channel will never connect, and
     /// will fail all RPCs.
     // TODO: should this return a Result instead?
-    pub fn new<C>(target: &str, credentials: Arc<C>, options: ChannelOptions) -> Self
+    pub fn new<C>(target: impl Into<String>, credentials: Arc<C>, options: ChannelOptions) -> Self
     where
         C: ChannelCredentials,
         C::Output<Box<dyn GrpcEndpoint>>: GrpcEndpoint + 'static,
@@ -239,13 +239,13 @@ impl PersistentChannel {
     // Channels begin idle so `new()` does not automatically connect.
     // ChannelOption contain only optional parameters.
     fn new(
-        target: &str,
+        target: impl Into<String>,
         runtime: GrpcRuntime,
         options: ChannelOptions,
         credentials: Arc<dyn DynChannelCredentials>,
     ) -> Self {
         // TODO(arjan-bal): Return errors here instead of panicking.
-        let target = Url::from_str(target).unwrap();
+        let target = Url::from_str(&target.into()).unwrap();
         let resolver_builder = global_registry().get(target.scheme()).unwrap();
         let target = name_resolution::Target::from(target);
         let authority = options

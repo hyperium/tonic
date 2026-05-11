@@ -15,7 +15,7 @@ allowed_external_types = ["grpc::*"]
 [dependencies]
 google-cloud-auth = { version = "1.9", default-features = false }
 grpc = { path = "../grpc", default-features = false }
-tonic = { version = "0.14.0", path = "../tonic", default-features = false }
+tonic = { version = "0.14.6", path = "../tonic", default-features = false }
 trait-variant = "0.1"
 
 [dev-dependencies]

@@ -39,6 +39,10 @@ impl Connection {
             .timer(TokioTimer::new())
             .clone();
 
+        if let Some(val) = endpoint.max_frame_size {
+            settings.max_frame_size(val);
+        }
+
         if let Some(val) = endpoint.http2_keep_alive_timeout {
             settings.keep_alive_timeout(val);
         }
@@ -49,6 +53,10 @@ impl Connection {
 
         if let Some(val) = endpoint.http2_adaptive_window {
             settings.adaptive_window(val);
+        }
+
+        if let Some(val) = endpoint.http2_header_table_size {
+            settings.header_table_size(val);
         }
 
         if let Some(val) = endpoint.http2_max_header_list_size {
