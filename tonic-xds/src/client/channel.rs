@@ -191,7 +191,7 @@ impl XdsChannelBuilder {
         // and pass it to XdsClusterDiscovery so data-plane connections can use
         // TLS/mTLS when CDS clusters specify UpstreamTlsContext.
 
-        let node = Node::from(bootstrap.node);
+        let node = Node::try_from(bootstrap.node)?;
         let client_config = ClientConfig::new(node, &server_uri);
         let xds_client =
             XdsClient::builder(client_config, transport_builder, ProstCodec, TokioRuntime).build();

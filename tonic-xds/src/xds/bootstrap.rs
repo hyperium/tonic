@@ -132,23 +132,25 @@ pub(crate) struct NodeConfig {
 }
 
 /// Convert a `serde_json::Value` to the codec-agnostic [`MetadataValue`].
-fn json_to_metadata(value: serde_json::Value) -> MetadataValue {
-    match value {
+fn json_to_metadata(value: serde_json::Value) -> Result<MetadataValue, BootstrapError> {
+    Ok(match value {
         serde_json::Value::Null => MetadataValue::Null,
         serde_json::Value::Bool(b) => MetadataValue::Bool(b),
-        // `as_f64` is documented to return `Some` for any `Number` parsed
-        // from valid JSON; `unwrap_or_default` is a defensive fallback.
-        serde_json::Value::Number(n) => MetadataValue::Number(n.as_f64().unwrap_or_default()),
+        serde_json::Value::Number(n) => MetadataValue::Number(n.as_f64().ok_or_else(|| {
+            BootstrapError::Validation(format!("metadata number {n} not representable as f64"))
+        })?),
         serde_json::Value::String(s) => MetadataValue::String(s),
-        serde_json::Value::Array(arr) => {
-            MetadataValue::Array(arr.into_iter().map(json_to_metadata).collect())
-        }
+        serde_json::Value::Array(arr) => MetadataValue::Array(
+            arr.into_iter()
+                .map(json_to_metadata)
+                .collect::<Result<_, _>>()?,
+        ),
         serde_json::Value::Object(obj) => MetadataValue::Object(
             obj.into_iter()
-                .map(|(k, v)| (k, json_to_metadata(v)))
-                .collect(),
+                .map(|(k, v)| json_to_metadata(v).map(|mv| (k, mv)))
+                .collect::<Result<_, _>>()?,
         ),
-    }
+    })
 }
 
 /// Locality configuration from bootstrap JSON.
@@ -273,8 +275,10 @@ impl BootstrapConfig {
     }
 }
 
-impl From<NodeConfig> for Node {
-    fn from(config: NodeConfig) -> Self {
+impl TryFrom<NodeConfig> for Node {
+    type Error = BootstrapError;
+
+    fn try_from(config: NodeConfig) -> Result<Self, Self::Error> {
         let mut node = Node::new("tonic-xds", env!("CARGO_PKG_VERSION"));
 
         if !config.id.is_empty() {
@@ -294,12 +298,12 @@ impl From<NodeConfig> for Node {
             let metadata: HashMap<String, MetadataValue> = config
                 .metadata
                 .into_iter()
-                .map(|(k, v)| (k, json_to_metadata(v)))
-                .collect();
+                .map(|(k, v)| json_to_metadata(v).map(|mv| (k, mv)))
+                .collect::<Result<_, _>>()?;
             node = node.with_metadata(metadata);
         }
 
-        node
+        Ok(node)
     }
 }
 
@@ -369,7 +373,7 @@ mod tests {
     #[test]
     fn node_from_full_config() {
         let config = BootstrapConfig::from_json(full_json()).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert_eq!(node.id.as_deref(), Some("projects/123/nodes/456"));
         assert_eq!(node.cluster.as_deref(), Some("test-cluster"));
         assert_eq!(node.user_agent_name, "tonic-xds");
@@ -383,7 +387,7 @@ mod tests {
     #[test]
     fn node_from_minimal_config() {
         let config = BootstrapConfig::from_json(minimal_json()).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert_eq!(node.id.as_deref(), Some("test-node"));
         assert!(node.cluster.is_none());
         assert!(node.locality.is_none());
@@ -467,7 +471,7 @@ mod tests {
             "xds_servers": [{"server_uri": "localhost:5000"}]
         }"#;
         let config = BootstrapConfig::from_json(json).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert!(node.id.is_none());
     }
 
@@ -504,7 +508,7 @@ mod tests {
             }
         }"#;
         let config = BootstrapConfig::from_json(json).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert_eq!(
             node.metadata.get("GENERATOR").unwrap(),
             &MetadataValue::String("grpc".to_string())
@@ -531,7 +535,7 @@ mod tests {
             }
         }"#;
         let config = BootstrapConfig::from_json(json).unwrap();
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
 
         assert_eq!(
             node.metadata.get("GENERATOR").unwrap(),
@@ -568,7 +572,7 @@ mod tests {
     fn missing_metadata_defaults_to_empty() {
         let config = BootstrapConfig::from_json(minimal_json()).unwrap();
         assert!(config.node.metadata.is_empty());
-        let node = Node::from(config.node);
+        let node = Node::try_from(config.node).unwrap();
         assert!(node.metadata.is_empty());
     }
 
