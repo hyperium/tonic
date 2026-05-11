@@ -7,6 +7,7 @@ use tonic::transport::{Identity, ServerTlsConfig};
 struct Opts {
     use_tls: bool,
     codec: Codec,
+    port: u16,
 }
 
 #[derive(Debug)]
@@ -33,6 +34,7 @@ impl Opts {
         Ok(Self {
             use_tls: pargs.contains("--use_tls"),
             codec: pargs.value_from_str("--codec")?,
+            port: pargs.opt_value_from_str("--port")?.unwrap_or(10000),
         })
     }
 }
@@ -43,7 +45,7 @@ async fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
     let matches = Opts::parse()?;
 
-    let addr = "127.0.0.1:10000".parse().unwrap();
+    let addr = format!("127.0.0.1:{}", matches.port).parse().unwrap();
 
     let mut builder = Server::builder();
 

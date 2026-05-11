@@ -21,6 +21,9 @@ struct Opts {
     use_tls: bool,
     test_case: Vec<Testcase>,
     codec: Codec,
+    server_host: String,
+    server_port: u16,
+    server_host_override: Option<String>,
 }
 
 #[derive(Debug)]
@@ -50,6 +53,11 @@ impl Opts {
                 test_case.split(',').map(Testcase::from_str).collect()
             })?,
             codec: pargs.value_from_str("--codec")?,
+            server_host: pargs
+                .opt_value_from_str("--server_host")?
+                .unwrap_or_else(|| "localhost".to_string()),
+            server_port: pargs.opt_value_from_str("--server_port")?.unwrap_or(10000),
+            server_host_override: pargs.opt_value_from_str("--server_host_override")?,
         })
     }
 }
@@ -68,17 +76,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     ) = match matches.codec {
         Codec::Prost => {
             let scheme = if matches.use_tls { "https" } else { "http" };
-            let mut endpoint = Endpoint::try_from(format!("{scheme}://localhost:10000"))?
+            let host = &matches.server_host;
+            let port = matches.server_port;
+            let mut endpoint = Endpoint::try_from(format!("{scheme}://{host}:{port}"))?
                 .timeout(Duration::from_secs(5))
                 .concurrency_limit(30);
 
             if matches.use_tls {
                 let pem = std::fs::read_to_string("interop/data/ca.pem")?;
                 let ca = Certificate::from_pem(pem);
+                let domain_name = matches
+                    .server_host_override
+                    .as_deref()
+                    .unwrap_or("foo.test.google.fr");
                 endpoint = endpoint.tls_config(
                     ClientTlsConfig::new()
                         .ca_certificate(ca)
-                        .domain_name("foo.test.google.fr"),
+                        .domain_name(domain_name),
                 )?;
             }
 
@@ -90,6 +104,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             )
         }
         Codec::Protobuf => {
+            let host = &matches.server_host;
+            let port = matches.server_port;
+            let target_uri = format!("dns:///{host}:{port}");
+
             let channel = if matches.use_tls {
                 let _ = rustls::crypto::ring::default_provider().install_default();
 
@@ -99,16 +117,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     GrpcClientTlsConfig::new()
                         .with_root_certificates_provider(StaticProvider::new(root_certs)),
                 )?;
+                let domain_name = matches
+                    .server_host_override
+                    .as_deref()
+                    .unwrap_or("test.test.google.fr");
                 let channel_options =
-                    ChannelOptions::default().override_authority("test.test.google.fr");
+                    ChannelOptions::default().override_authority(domain_name);
                 grpc::client::Channel::new(
-                    "dns:///localhost:10000",
+                    &target_uri,
                     Arc::new(creds),
                     channel_options,
                 )
             } else {
                 grpc::client::Channel::new(
-                    "dns:///localhost:10000",
+                    &target_uri,
                     Arc::new(LocalChannelCredentials::new()),
                     ChannelOptions::default(),
                 )
