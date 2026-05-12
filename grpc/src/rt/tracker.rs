@@ -88,7 +88,7 @@ pub(crate) struct TaskTracker {
 impl<R: Runtime> TrackedRuntime<R> {
     /// Creates a new tracked runtime and its associated tracker.
     ///
-    /// Callers can call `wait_for_tasks` on the returned tracker at the end of
+    /// Callers must call `wait_for_tasks` on the returned tracker at the end of
     /// the test.
     ///
     /// ```rust
@@ -240,6 +240,7 @@ mod tests {
         tracked_rt.spawn(Box::pin(async {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }));
+
         tracker.wait_for_tasks().await;
     }
 
