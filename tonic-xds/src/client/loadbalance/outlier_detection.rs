@@ -145,8 +145,8 @@ impl OutlierStatsRegistry {
     /// state continuity across reconnect cycles is preserved.
     pub(crate) fn add_channel(&self, addr: EndpointAddress) -> Arc<OutlierChannelState> {
         self.channels
-            .entry(addr)
-            .or_insert_with(|| Arc::new(OutlierChannelState::new()))
+            .entry(addr.clone())
+            .or_insert_with(|| Arc::new(OutlierChannelState::new(addr)))
             .clone()
     }
 
@@ -175,12 +175,7 @@ impl OutlierStatsRegistry {
     /// threshold; if all gates pass and the channel was not already
     /// ejected, marks it ejected and sends the address through the
     /// eject mpsc for the LB to consume.
-    pub(crate) fn record_outcome(
-        &self,
-        addr: &EndpointAddress,
-        state: &OutlierChannelState,
-        success: bool,
-    ) {
+    pub(crate) fn record_outcome(&self, state: &OutlierChannelState, success: bool) {
         if success {
             state.record_success();
         } else {
@@ -230,7 +225,7 @@ impl OutlierStatsRegistry {
             // `ReadyChannel` via `ReadyChannel::eject`. If the LB has
             // dropped its receiver (shutdown), the send fails silently
             // — the channel will be cleaned up by `forget`.
-            let _ = self.eject_tx.send(addr.clone());
+            let _ = self.eject_tx.send(state.addr().clone());
         }
     }
 
@@ -454,16 +449,15 @@ mod tests {
     /// Drive `n` outcomes through `record_outcome` for one channel.
     fn drive(
         registry: &OutlierStatsRegistry,
-        a: &EndpointAddress,
         state: &OutlierChannelState,
         successes: u64,
         failures: u64,
     ) {
         for _ in 0..successes {
-            registry.record_outcome(a, state, true);
+            registry.record_outcome(state, true);
         }
         for _ in 0..failures {
-            registry.record_outcome(a, state, false);
+            registry.record_outcome(state, false);
         }
     }
 
@@ -475,9 +469,9 @@ mod tests {
         let bad = registry.add_channel(addr(8084));
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 100, 0);
+            drive(&registry, &s, 100, 0);
         }
-        drive(&registry, &addr(8084), &bad, 10, 90);
+        drive(&registry, &bad, 10, 90);
         assert!(bad.is_ejected());
         assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
     }
@@ -489,7 +483,7 @@ mod tests {
         for port in 8080..=8084 {
             let s = registry.add_channel(addr(port));
             // 30% failure → below 50% threshold.
-            drive(&registry, &addr(port), &s, 70, 30);
+            drive(&registry, &s, 70, 30);
             all.push(s);
         }
         for s in &all {
@@ -504,7 +498,7 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8084 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 50, 50);
+            drive(&registry, &s, 50, 50);
             all.push(s);
         }
         for s in &all {
@@ -519,7 +513,7 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8081 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 0, 100);
+            drive(&registry, &s, 0, 100);
             all.push(s);
         }
         for s in &all {
@@ -531,10 +525,10 @@ mod tests {
     fn request_volume_filters_low_traffic() {
         let registry = OutlierStatsRegistry::with_rng(fp_config(50, 100, 3), FixedRng::boxed(99));
         let bad = registry.add_channel(addr(8080));
-        drive(&registry, &addr(8080), &bad, 0, 5);
+        drive(&registry, &bad, 0, 5);
         for port in 8081..=8084 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 200, 0);
+            drive(&registry, &s, 200, 0);
         }
         assert!(!bad.is_ejected());
     }
@@ -551,7 +545,7 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8084 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 0, 100);
+            drive(&registry, &s, 0, 100);
             all.push(s);
         }
         for s in &all {
@@ -567,16 +561,15 @@ mod tests {
 
         let mut all = vec![];
         for port in 8080..=8084 {
-            let a = addr(port);
-            let s = registry.add_channel(a.clone());
-            all.push((a, s));
+            let s = registry.add_channel(addr(port));
+            all.push(s);
         }
         // Drive all hosts to bad state in parallel pseudo-order.
-        for (a, s) in &all {
-            drive(&registry, a, s, 0, 100);
+        for s in &all {
+            drive(&registry, s, 0, 100);
         }
 
-        let ejected = all.iter().filter(|(_, s)| s.is_ejected()).count();
+        let ejected = all.iter().filter(|s| s.is_ejected()).count();
         // 5 hosts × 20% = 1 max ejection.
         assert_eq!(ejected, 1);
     }
@@ -587,11 +580,11 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 100, 0);
+            drive(&registry, &s, 100, 0);
             all.push(s);
         }
         let bad = registry.add_channel(addr(8084));
-        drive(&registry, &addr(8084), &bad, 0, 100);
+        drive(&registry, &bad, 0, 100);
         assert!(bad.is_ejected());
         assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
         // Each healthy host crossed request_volume; bad too. So
@@ -610,9 +603,9 @@ mod tests {
         let bad = registry.add_channel(addr(8084));
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 100, 0);
+            drive(&registry, &s, 100, 0);
         }
-        drive(&registry, &addr(8084), &bad, 10, 90);
+        drive(&registry, &bad, 10, 90);
 
         // Eject dispatched exactly once via the mpsc.
         assert_eq!(rx.try_recv(), Ok(addr(8084)));
@@ -629,7 +622,7 @@ mod tests {
         let registry = OutlierStatsRegistry::with_rng(fp_config(50, 10, 3), FixedRng::boxed(99));
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &addr(port), &s, 100, 0);
+            drive(&registry, &s, 100, 0);
         }
         assert_eq!(registry.qualifying_count.load(Ordering::Relaxed), 4);
 
@@ -821,7 +814,7 @@ mod tests {
 
     #[test]
     fn channel_state_records_and_resets() {
-        let s = OutlierChannelState::new();
+        let s = OutlierChannelState::new(addr(8080));
         s.record_success();
         s.record_success();
         s.record_failure();
@@ -831,7 +824,7 @@ mod tests {
 
     #[test]
     fn channel_state_try_eject_uneject_transitions_atomically() {
-        let s = OutlierChannelState::new();
+        let s = OutlierChannelState::new(addr(8080));
         assert!(!s.is_ejected());
         assert!(s.try_eject(Instant::now()));
         assert!(s.is_ejected());
@@ -840,5 +833,11 @@ mod tests {
         assert!(s.try_uneject());
         assert!(!s.is_ejected());
         assert!(!s.try_uneject());
+    }
+
+    #[test]
+    fn channel_state_remembers_its_address() {
+        let s = OutlierChannelState::new(addr(9090));
+        assert_eq!(s.addr(), &addr(9090));
     }
 }

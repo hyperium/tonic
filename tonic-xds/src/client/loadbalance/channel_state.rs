@@ -76,15 +76,23 @@ impl EndpointCounters {
 /// load balancer (consults `is_ejected` / `ejected_duration` on
 /// reconnect).
 ///
-/// All fields are atomics so the data path can mutate them without
-/// locking. Ejection state is encoded in [`Self::ejected_at_nanos`]:
-/// zero means not ejected, non-zero is the nanos-since-epoch of the
-/// ejection's start. [`Self::try_eject`] / [`Self::try_uneject`] use
-/// CAS to flip the field atomically and report whether the transition
-/// fired (so callers can update registry-level counters exactly once
-/// per transition).
+/// All mutable fields are atomics so the data path can mutate them
+/// without locking. Ejection state is encoded in
+/// [`Self::ejected_at_nanos`]: zero means not ejected, non-zero is the
+/// nanos-since-epoch of the ejection's start. [`Self::try_eject`] /
+/// [`Self::try_uneject`] use CAS to flip the field atomically and
+/// report whether the transition fired (so callers can update
+/// registry-level counters exactly once per transition).
+///
+/// The `addr` field is set at construction and never changes, so
+/// downstream callers (the registry's eject-mpsc dispatch in
+/// particular) can recover the address from the state alone — no
+/// need to thread `(addr, state)` pairs through the data path.
 #[derive(Debug)]
 pub(crate) struct OutlierChannelState {
+    /// Endpoint address this state belongs to. Immutable for the
+    /// lifetime of the state object.
+    addr: EndpointAddress,
     counters: EndpointCounters,
     /// Whether this channel currently contributes to the registry's
     /// `qualifying_count`. Set when `total` first reaches
@@ -103,21 +111,21 @@ pub(crate) struct OutlierChannelState {
     epoch: Instant,
 }
 
-impl Default for OutlierChannelState {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
 impl OutlierChannelState {
-    pub(crate) fn new() -> Self {
+    pub(crate) fn new(addr: EndpointAddress) -> Self {
         Self {
+            addr,
             counters: EndpointCounters::default(),
             is_qualifying: AtomicBool::new(false),
             ejection_multiplier: AtomicU32::new(0),
             ejected_at_nanos: AtomicU64::new(0),
             epoch: Instant::now(),
         }
+    }
+
+    /// Endpoint address this state belongs to.
+    pub(crate) fn addr(&self) -> &EndpointAddress {
+        &self.addr
     }
 
     pub(crate) fn record_success(&self) {
@@ -342,11 +350,6 @@ impl<S> ReadyChannel<S> {
         &self.outlier
     }
 
-    /// Endpoint address this channel was created for.
-    pub(crate) fn addr(&self) -> &EndpointAddress {
-        &self.addr
-    }
-
     /// Eject this channel (e.g., due to outlier detection). Consumes
     /// self. The outlier state remains in the registry; only the
     /// service and address are passed into [`EjectedChannel`] (which
@@ -515,7 +518,8 @@ mod tests {
     }
 
     fn wrap_ready(addr: EndpointAddress, svc: MockService) -> ReadyChannel<MockService> {
-        ReadyChannel::new(addr, svc, Arc::new(OutlierChannelState::new()))
+        let state = Arc::new(OutlierChannelState::new(addr.clone()));
+        ReadyChannel::new(addr, svc, state)
     }
 
     #[tokio::test]

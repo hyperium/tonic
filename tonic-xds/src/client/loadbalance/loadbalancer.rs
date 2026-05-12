@@ -215,7 +215,7 @@ where
         while let Poll::Ready(Some((addr, svc))) = self.connecting.poll_next(cx) {
             let state = match self.outlier.as_ref() {
                 Some(o) => o.registry().add_channel(addr.clone()),
-                None => Arc::new(OutlierChannelState::new()),
+                None => Arc::new(OutlierChannelState::new(addr.clone())),
             };
             let ready = ReadyChannel::new(addr.clone(), svc, state.clone());
             let remaining = self
@@ -318,7 +318,7 @@ where
         while let Poll::Ready(Some((addr, unejected))) = self.ejected.poll_next(cx) {
             let state = match self.outlier.as_ref() {
                 Some(o) => o.registry().add_channel(addr.clone()),
-                None => Arc::new(OutlierChannelState::new()),
+                None => Arc::new(OutlierChannelState::new(addr.clone())),
             };
             if let Some(o) = self.outlier.as_ref() {
                 o.registry().note_uneject(&state);
@@ -399,7 +399,6 @@ where
         // an owned service and outlier handle for the async block; both
         // are `Arc`-shared, so cloning is cheap.
         let mut svc = picked.clone();
-        let addr = picked.addr().clone();
         let outlier_state = picked.outlier().clone();
         let registry = self.outlier.as_ref().map(|o| o.registry().clone());
         LbFuture::Pending(Box::pin(async move {
@@ -412,7 +411,7 @@ where
                 // counter and (inside `record_outcome`) possibly
                 // dispatch an eject request to the LB. Treat any
                 // `Err` outcome as a failure for outlier purposes.
-                registry.record_outcome(&addr, &outlier_state, result.is_ok());
+                registry.record_outcome(&outlier_state, result.is_ok());
             }
             result.map_err(|e| LbError::LbChannelCallError(e.into()))
         }))
