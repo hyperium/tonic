@@ -71,9 +71,9 @@ use tower_service::Service as TowerService;
 use crate::StatusCodeError;
 use crate::StatusError;
 use crate::client::CallOptions;
-use crate::client::ResponseStreamItem;
 use crate::client::Invoke;
 use crate::client::RecvStream;
+use crate::client::ResponseStreamItem;
 use crate::client::SendOptions;
 use crate::client::SendStream;
 use crate::client::name_resolution::TCP_IP_NETWORK_TYPE;
@@ -202,10 +202,7 @@ impl Invoke for TonicTransport {
 }
 
 // Converts from a tonic status to a trailers stream item.
-fn trailers_from_tonic_status(
-    status: TonicStatus,
-    md: Option<TonicMeta>,
-) -> ResponseStreamItem {
+fn trailers_from_tonic_status(status: TonicStatus, md: Option<TonicMeta>) -> ResponseStreamItem {
     let status_res = match status.code() {
         Code::Ok => Ok(()),
         code => Err(StatusError::new(
@@ -269,9 +266,7 @@ impl RecvStream for TonicRecvStream {
             // Closed is terminal.
             StreamState::Closed => ResponseStreamItem::StreamClosed,
             // Stay closed after sending trailers.
-            StreamState::Error(error) => {
-                ResponseStreamItem::Trailers(Trailers::new(Err(error)))
-            }
+            StreamState::Error(error) => ResponseStreamItem::Trailers(Trailers::new(Err(error))),
             StreamState::AwaitingHeaders(rx) => match rx.await {
                 Ok(Ok(response)) => {
                     let (metadata, stream, _extensions) = response.into_parts();
@@ -286,9 +281,7 @@ impl RecvStream for TonicRecvStream {
                         Ok(md) => {
                             // Start streaming and return the headers.
                             self.state = StreamState::Streaming(stream);
-                            ResponseStreamItem::Headers(
-                                ResponseHeaders::new().with_metadata(md),
-                            )
+                            ResponseStreamItem::Headers(ResponseHeaders::new().with_metadata(md))
                         }
                         Err(e) => {
                             if let Some(notify) = self.stop_notify.take() {

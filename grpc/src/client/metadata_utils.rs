@@ -189,9 +189,9 @@ impl<R: RecvStream> RecvStream for CaptureTrailersRecvStream<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::client::ResponseStreamItem;
     use crate::client::test_util::MockInvoker;
     use crate::client::test_util::NopRecvMessage;
-    use crate::client::ResponseStreamItem;
     use crate::core::ResponseHeaders;
     use crate::core::Trailers;
     use crate::metadata::BinaryMetadataValue;
