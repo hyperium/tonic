@@ -66,7 +66,7 @@ impl Drop for TaskGuard {
         let mut inner = self.state.inner.lock().unwrap();
         inner.tasks.remove(&self.id);
         if inner.tasks.is_empty() {
-            self.state.notify.notify_waiters();
+            self.state.notify.notify_one();
         }
     }
 }
@@ -82,11 +82,22 @@ pub(crate) struct TrackedRuntime<R> {
 pub(crate) struct TaskTracker {
     wait_timeout: Duration,
     state: Arc<SharedState>,
-    waited: bool,
+    have_waited: bool,
 }
 
 impl<R: Runtime> TrackedRuntime<R> {
     /// Creates a new tracked runtime and its associated tracker.
+    ///
+    /// Callers can call `wait_for_tasks` on the returned tracker at the end of
+    /// the test.
+    ///
+    /// ```rust
+    /// let (tracked_rt, tracker) = TrackedRuntime::new(rt);
+    /// tracked_rt.spawn(Box::pin(async {
+    ///     // ...
+    /// }));
+    /// tracker.wait_for_tasks().await;
+    /// ```
     pub(crate) fn new(inner: R) -> (Self, TaskTracker) {
         let state = Arc::new(SharedState {
             inner: Mutex::new(SharedInnerState {
@@ -103,7 +114,7 @@ impl<R: Runtime> TrackedRuntime<R> {
             TaskTracker {
                 wait_timeout: DEFAULT_TEST_DURATION,
                 state,
-                waited: false,
+                have_waited: false,
             },
         )
     }
@@ -111,37 +122,47 @@ impl<R: Runtime> TrackedRuntime<R> {
 
 impl TaskTracker {
     /// Waits for all tracked tasks to finish or until timeout.
+    ///
+    /// It waits for 10 seconds. If the tasks do not finish within this time,
+    /// it panics and prints the backtrace of all orphaned tasks.
+    ///
+    /// Callers MUST call this method before the `TaskTracker` is dropped.
+    /// Dropping the `TaskTracker` without calling this method will result in
+    /// a panic.
     pub(crate) async fn wait_for_tasks(mut self) {
-        self.waited = true;
+        self.have_waited = true;
+        let notified = self.state.notify.notified();
 
-        loop {
-            let notified = {
-                let inner = self.state.inner.lock().unwrap();
-                if inner.tasks.is_empty() {
-                    return;
-                }
-                self.state.notify.notified()
-            };
+        if self.state.inner.lock().unwrap().tasks.is_empty() {
+            return;
+        };
 
-            tokio::select! {
-                _ = notified => {}
-                _ = tokio::time::sleep(self.wait_timeout) => {
-                    let inner = self.state.inner.lock().unwrap();
-
-                    let callsites: Vec<String> = inner
-                        .tasks
-                        .values()
-                        .map(|bt| format!("{}", bt))
-                        .collect();
-
-                    drop(inner);
-
-                    panic!(
-                        "TrackedRuntime: tasks did not end within timeout. Running tasks spawned at:\n{}",
-                        callsites.join("\n\n---\n\n"));
-                }
-            }
+        if tokio::time::timeout(self.wait_timeout, notified)
+            .await
+            .is_ok()
+        {
+            return;
         }
+
+        let callsites: Vec<String> = self
+            .state
+            .inner
+            .lock()
+            .unwrap()
+            .tasks
+            .values()
+            .map(|bt| format!("{}", bt))
+            .collect();
+
+        if callsites.is_empty() {
+            // Tasks ended after the timeout expired.
+            return;
+        }
+
+        panic!(
+            "TrackedRuntime: tasks did not end within timeout. Running tasks spawned at:\n{}",
+            callsites.join("\n\n---\n\n")
+        );
     }
 }
 
@@ -163,13 +184,10 @@ impl<R: Runtime> Runtime for TrackedRuntime<R> {
         };
 
         let tracked_task = async move {
-            // The guard takes ownership here. It will stay alive for the
-            // entire duration of the `await`.
+            // Guard stays alive during await and is dropped when done or
+            // cancelled.
             let _guard = guard;
             task.await;
-
-            // When `task.await` finishes, or if this future is cancelled/dropped
-            // by the runtime, `_guard` goes out of scope and is dropped.
         };
 
         self.inner.spawn(Box::pin(tracked_task))
@@ -203,7 +221,7 @@ impl Drop for TaskTracker {
     fn drop(&mut self) {
         // Check if wait_for_tasks was called and that we are not already
         // panicking to avoid double panics.
-        if !self.waited && !std::thread::panicking() {
+        if !self.have_waited && !std::thread::panicking() {
             panic!("TaskTracker was dropped without calling wait_for_tasks!");
         }
     }
@@ -223,27 +241,11 @@ mod tests {
             tokio::time::sleep(Duration::from_millis(1)).await;
         }));
         tracker.wait_for_tasks().await;
-
-        // assert!(tracker.wait_for_tasks().await.is_ok());
     }
 
     #[tokio::test]
     #[should_panic(expected = "TrackedRuntime: tasks did not end within timeout")]
     async fn wait_timeout() {
-        let rt = TokioRuntime::default();
-        let (tracked_rt, mut tracker) = TrackedRuntime::new(rt);
-        tracker.wait_timeout = Duration::from_millis(1);
-
-        tracked_rt.spawn(Box::pin(async {
-            tokio::time::sleep(DEFAULT_TEST_DURATION).await;
-        }));
-
-        tracker.wait_for_tasks().await;
-    }
-
-    #[tokio::test]
-    #[should_panic(expected = "TrackedRuntime: tasks did not end within timeout")]
-    async fn wait_timeout_with_callsites() {
         let rt = TokioRuntime::default();
         let (tracked_rt, mut tracker) = TrackedRuntime::new(rt);
         tracker.wait_timeout = Duration::from_millis(1);
