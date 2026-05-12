@@ -44,7 +44,7 @@ pub struct StatusError {
 }
 
 impl StatusError {
-    /// Create a new `StatusErr` with the given code and message.
+    /// Create a new [`StatusError`] with the given code and message.
     pub fn new(code: StatusCodeError, message: impl Into<String>) -> Self {
         StatusError {
             code,
@@ -52,12 +52,12 @@ impl StatusError {
         }
     }
 
-    /// Get the `StatusCode` of this `StatusErr`.
+    /// Get the [`StatusCodeError`] of this [`StatusError`].
     pub fn code(&self) -> StatusCodeError {
         self.code
     }
 
-    /// Get the message of this `StatusErr`.
+    /// Get the message of this [`StatusError`].
     pub fn message(&self) -> &str {
         &self.message
     }

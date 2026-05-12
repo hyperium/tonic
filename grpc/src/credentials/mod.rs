@@ -65,7 +65,7 @@ pub trait ChannelCredentials: Sync + 'static {
     #[doc(hidden)]
     type Output<I>;
 
-    //// Provides the ProtocolInfo of these credentials.
+    /// Provides the ProtocolInfo of these credentials.
     fn info(&self) -> &ProtocolInfo;
 
     /// Returns call credentials to be used for all RPCs made on a connection.
@@ -104,7 +104,7 @@ pub trait ServerCredentials: Sync + 'static {
     #[doc(hidden)]
     type Output<I>;
 
-    //// Provides the ProtocolInfo of this credentials.
+    /// Provides the ProtocolInfo of these credentials.
     fn info(&self) -> &ProtocolInfo;
 
     /// Performs the server-side authentication handshake.

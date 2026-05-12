@@ -27,7 +27,7 @@ use crate::status::status_code::StatusCodeError;
 
 /// Represents a gRPC status on the server.
 ///
-/// This is a separate type from `Status` to prevent accidental conversion and
+/// This is a separate type from [`StatusError`] to prevent accidental conversion and
 /// leaking of sensitive information from the server to the client.
 #[derive(Debug, Clone)]
 pub struct ServerStatusErr(StatusError);
@@ -41,17 +41,17 @@ impl std::ops::Deref for ServerStatusErr {
 }
 
 impl ServerStatusErr {
-    /// Create a new `ServerStatus` with the given code and message.
+    /// Create a new [`ServerStatusErr`] with the given code and message.
     pub fn new(code: StatusCodeError, message: impl Into<String>) -> Self {
         ServerStatusErr(StatusError::new(code, message))
     }
 
-    /// Create a new `ServerStatus` from a `Status`.
+    /// Create a new [`ServerStatusErr`] from a [`StatusError`].
     pub fn from_status(status: StatusError) -> Self {
         ServerStatusErr(status)
     }
 
-    /// Converts the `ServerStatus` to a `Status` for client responses.
+    /// Converts the [`ServerStatusErr`] to a [`StatusError`] for client responses.
     pub(crate) fn into_status(self) -> StatusError {
         self.0
     }

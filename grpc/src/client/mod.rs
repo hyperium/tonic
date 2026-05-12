@@ -71,7 +71,7 @@ pub enum ConnectivityState {
     /// Represents a channel that is actively connecting to one or more backends
     /// and has no connected backends.
     Connecting,
-    /// Rrepresents a channel that is connected to at least one backend.
+    /// Represents a channel that is connected to at least one backend.
     Ready,
     /// Represents a channel that failed to connect to its backends.
     TransientFailure,
