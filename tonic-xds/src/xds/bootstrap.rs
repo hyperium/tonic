@@ -105,6 +105,9 @@ pub(crate) enum ChannelCredentialType {
 ///
 /// [gRFC A29]: https://github.com/grpc/proposal/blob/master/A29-xds-tls-security.md
 #[derive(Debug, Clone, Deserialize)]
+// In non-TLS builds `cert_provider` is gated out, so nothing reads these
+// fields after serde populates them.
+#[cfg_attr(not(feature = "_tls-any"), allow(dead_code))]
 pub(crate) struct CertProviderPluginConfig {
     pub plugin_name: String,
     #[serde(default)]

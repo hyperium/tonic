@@ -22,6 +22,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use arc_swap::ArcSwap;
+use rustls::RootCertStore;
+use rustls::pki_types::CertificateDer;
 use serde::Deserialize;
 
 use crate::common::async_util::AbortOnDrop;
@@ -133,6 +135,11 @@ impl CertificateProvider for FileWatcherProvider {
 
 /// Read certificate data from the files specified in the config.
 ///
+/// CA roots are parsed into [`Arc<RootCertStore>`] in this function — once per
+/// refresh — so the verifier can use them directly on every TLS handshake
+/// without re-parsing. Identity bytes are kept as PEM because
+/// [`tonic::transport::Identity::from_pem`] is bytes-only on the consumer side.
+///
 /// This function is the single validation boundary between the permissive
 /// JSON-parsed [`FileWatcherConfig`] and the invariant-enforcing
 /// [`CertificateData`]. It checks both A65 rules:
@@ -142,7 +149,7 @@ fn read_certificate_data(config: &FileWatcherConfig) -> Result<CertificateData, 
     let roots = config
         .ca_certificate_file
         .as_deref()
-        .map(read_file)
+        .map(read_and_parse_roots)
         .transpose()?;
 
     let identity = match (&config.certificate_file, &config.private_key_file) {
@@ -169,11 +176,41 @@ fn read_file(path: &Path) -> Result<Vec<u8>, CertProviderError> {
     })
 }
 
+fn read_and_parse_roots(path: &Path) -> Result<Arc<RootCertStore>, CertProviderError> {
+    let pem = read_file(path)?;
+    let mut reader = std::io::Cursor::new(&pem);
+    let certs: Vec<CertificateDer<'static>> = rustls_pemfile::certs(&mut reader)
+        .collect::<Result<_, _>>()
+        .map_err(|e| CertProviderError::PemParse {
+            path: path.display().to_string(),
+            reason: e.to_string(),
+        })?;
+    let mut store = RootCertStore::empty();
+    let (added, _) = store.add_parsable_certificates(certs);
+    if added == 0 {
+        return Err(CertProviderError::PemParse {
+            path: path.display().to_string(),
+            reason: "no usable certificates in PEM".into(),
+        });
+    }
+    Ok(Arc::new(store))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::io::Write;
     use tempfile::NamedTempFile;
+
+    /// Generate a self-signed CA cert in PEM form, suitable for parsing into
+    /// a [`RootCertStore`]. Returns the raw PEM bytes.
+    fn gen_ca_pem() -> Vec<u8> {
+        let mut params = rcgen::CertificateParams::new(vec!["test-ca".into()]).unwrap();
+        params.is_ca = rcgen::IsCa::Ca(rcgen::BasicConstraints::Unconstrained);
+        let key = rcgen::KeyPair::generate().unwrap();
+        let cert = params.self_signed(&key).unwrap();
+        cert.pem().into_bytes()
+    }
 
     fn write_temp_file(content: &[u8]) -> NamedTempFile {
         let mut f = NamedTempFile::new().unwrap();
@@ -192,19 +229,15 @@ mod tests {
 
     #[tokio::test]
     async fn reads_ca_certificate() {
-        let ca_file =
-            write_temp_file(b"-----BEGIN CERTIFICATE-----\ntest-ca\n-----END CERTIFICATE-----\n");
+        let ca_file = write_temp_file(&gen_ca_pem());
 
         let provider =
             FileWatcherProvider::new(make_config(ca_file.path().to_str(), None, None)).unwrap();
         let data = provider.fetch().unwrap();
 
         assert!(matches!(*data, CertificateData::RootsOnly { .. }));
-        assert!(
-            data.roots()
-                .unwrap()
-                .starts_with(b"-----BEGIN CERTIFICATE-----")
-        );
+        let roots = data.roots().unwrap();
+        assert_eq!(roots.len(), 1);
         assert!(data.identity().is_none());
     }
 
@@ -230,7 +263,7 @@ mod tests {
 
     #[tokio::test]
     async fn reads_all_files() {
-        let ca_file = write_temp_file(b"ca-pem");
+        let ca_file = write_temp_file(&gen_ca_pem());
         let cert_file = write_temp_file(b"cert-pem");
         let key_file = write_temp_file(b"key-pem");
 
@@ -243,7 +276,7 @@ mod tests {
         let data = provider.fetch().unwrap();
 
         assert!(matches!(*data, CertificateData::Both { .. }));
-        assert_eq!(data.roots(), Some(b"ca-pem".as_slice()));
+        assert_eq!(data.roots().unwrap().len(), 1);
         let identity = data.identity().unwrap();
         assert_eq!(identity.cert_chain.as_slice(), b"cert-pem");
         assert_eq!(identity.key.as_slice(), b"key-pem");
@@ -291,28 +324,36 @@ mod tests {
 
     #[test]
     fn refresh_once_updates_cache() {
-        let ca_file = write_temp_file(b"old-ca");
+        let ca_file = write_temp_file(&gen_ca_pem());
         let config = make_config(ca_file.path().to_str(), None, None);
         let cached = ArcSwap::from_pointee(read_certificate_data(&config).unwrap());
-        assert_eq!(cached.load_full().roots(), Some(b"old-ca".as_slice()));
+        let initial = cached.load_full();
 
-        std::fs::write(ca_file.path(), b"new-ca").unwrap();
+        std::fs::write(ca_file.path(), gen_ca_pem()).unwrap();
         refresh_once(&config, &cached);
 
-        assert_eq!(cached.load_full().roots(), Some(b"new-ca".as_slice()));
+        let after = cached.load_full();
+        assert!(
+            !Arc::ptr_eq(&initial, &after),
+            "expected refresh_once to swap cached Arc",
+        );
     }
 
     #[test]
     fn refresh_once_keeps_old_data_on_failure() {
-        let ca_file = write_temp_file(b"good-ca");
+        let ca_file = write_temp_file(&gen_ca_pem());
         let config = make_config(ca_file.path().to_str(), None, None);
         let cached = ArcSwap::from_pointee(read_certificate_data(&config).unwrap());
-        assert_eq!(cached.load_full().roots(), Some(b"good-ca".as_slice()));
+        let initial = cached.load_full();
 
         drop(ca_file);
         refresh_once(&config, &cached);
 
-        assert_eq!(cached.load_full().roots(), Some(b"good-ca".as_slice()));
+        let after = cached.load_full();
+        assert!(
+            Arc::ptr_eq(&initial, &after),
+            "expected cache to keep last good data on failure",
+        );
     }
 
     #[test]
@@ -376,7 +417,7 @@ mod tests {
         use crate::xds::cert_provider::CertProviderRegistry;
         use std::collections::HashMap;
 
-        let ca_file = write_temp_file(b"ca-data");
+        let ca_file = write_temp_file(&gen_ca_pem());
 
         let mut configs = HashMap::new();
         configs.insert(
@@ -395,6 +436,6 @@ mod tests {
 
         let provider = registry.get("my_certs").unwrap();
         let data = provider.fetch().unwrap();
-        assert_eq!(data.roots(), Some(b"ca-data".as_slice()));
+        assert_eq!(data.roots().unwrap().len(), 1);
     }
 }
