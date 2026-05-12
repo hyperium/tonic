@@ -1,46 +1,51 @@
 //! gRFC A50 outlier detection.
 //!
-//! The algorithm is split between the data path and a spawned actor:
+//! The algorithm is split between the data path, the load balancer,
+//! and a spawned actor:
 //!
 //! - **Per-RPC detection** runs inline on each call completion via
 //!   [`OutlierStatsRegistry::record_outcome`]. The wrapper records the
 //!   outcome on the channel's [`OutlierChannelState`], evaluates the
-//!   failure-percentage threshold against the channel's local
-//!   counters, and ejects the channel directly by flipping its
-//!   `watch::Sender<bool>`. Cluster-wide gates (`minimum_hosts`,
-//!   `max_ejection_percent`) are enforced via two atomic counters on
-//!   the registry, kept in sync as channels cross thresholds.
+//!   failure-percentage threshold, and on transition to ejected sends
+//!   the address through an mpsc channel for the LB to consume.
+//!   Cluster-wide gates (`minimum_hosts`, `max_ejection_percent`) are
+//!   enforced via two atomic counters on the registry, kept in sync
+//!   as channels cross thresholds.
+//! - **The load balancer** drains the eject mpsc in `poll_ready`,
+//!   consumes the matching [`ReadyChannel`] via
+//!   [`ReadyChannel::eject`], and tracks the resulting
+//!   [`EjectedChannel`] in a `KeyedFutures`. Each ejected channel's
+//!   internal sleep fires at exactly `base × multiplier` (capped by
+//!   `max_ejection_time`) after ejection, yielding
+//!   [`UnejectedChannel::Ready`]; the LB drains it on the next
+//!   `poll_ready` and routes the channel back to the ready set.
 //! - **Interval-based housekeeping** runs in a spawned actor (see
 //!   [`spawn_actor`]). It resets per-channel counters at the
-//!   `config.interval` boundary, un-ejects channels whose
-//!   `base × multiplier` backoff has elapsed, and decrements
-//!   multipliers for non-ejected channels. The actor never makes
-//!   ejection decisions.
-//!
-//! `LoadBalancer::poll_ready` observes ejections in O(1) per
-//! transition by polling a `FuturesUnordered<watch::Receiver::changed()>`
-//! over each channel's signal.
+//!   `config.interval` boundary and decrements multipliers for
+//!   non-ejected channels. Un-ejection is timer-driven by
+//!   [`EjectedChannel`] — the actor never un-ejects.
 //!
 //! Only the failure-percentage algorithm is dispatched. The
 //! success-rate algorithm (cross-endpoint mean/stdev) is left to a
 //! follow-up.
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
+//! [`ReadyChannel`]: crate::client::loadbalance::channel_state::ReadyChannel
+//! [`ReadyChannel::eject`]: crate::client::loadbalance::channel_state::ReadyChannel::eject
+//! [`EjectedChannel`]: crate::client::loadbalance::channel_state::EjectedChannel
+//! [`UnejectedChannel::Ready`]: crate::client::loadbalance::channel_state::UnejectedChannel::Ready
 
-use std::collections::HashMap;
-use std::pin::Pin;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::task::{Context, Poll};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use dashmap::DashMap;
-use indexmap::IndexMap;
-use tokio_stream::StreamMap;
-use tokio_stream::wrappers::WatchStream;
+use tokio::sync::mpsc;
 
 use crate::client::endpoint::EndpointAddress;
-use crate::client::loadbalance::channel_state::{OutlierChannelState, ReadyChannel};
+use crate::client::loadbalance::channel_state::OutlierChannelState;
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::OutlierDetectionConfig;
 
@@ -65,8 +70,9 @@ impl Rng for FastRandRng {
 ///   [`Self::record_outcome`] after each RPC completion.
 /// - The spawned actor task, which calls [`Self::run_housekeeping`]
 ///   on every `config.interval` tick.
-/// - The load balancer's `poll_ready`, which subscribes to per-channel
-///   ejection signals via [`OutlierChannelState::subscribe`].
+/// - The load balancer's `poll_ready`, which drains the eject mpsc
+///   (via [`OutlierDetector::poll_eject_request`]) and calls
+///   [`Self::note_uneject`] when an `EjectedChannel`'s timer fires.
 pub(crate) struct OutlierStatsRegistry {
     /// Per-endpoint state, keyed by address. Inserted by the LB on
     /// channel creation and removed on disconnect.
@@ -79,6 +85,15 @@ pub(crate) struct OutlierStatsRegistry {
     ejected_count: AtomicU64,
     config: OutlierDetectionConfig,
     rng: Box<dyn Rng>,
+    /// Sender half of the eject signal. `record_outcome` pushes an
+    /// address through on transition to ejected; the LB's
+    /// [`OutlierDetector`] drains the receiver in `poll_ready` and
+    /// consumes the matching `ReadyChannel`.
+    eject_tx: mpsc::UnboundedSender<EndpointAddress>,
+    /// Receiver half, handed to the LB at construction time. Wrapped
+    /// in a `Mutex<Option<_>>` so [`Self::take_eject_rx`] can move it
+    /// out exactly once. Outside that hand-off there is no contention.
+    eject_rx: Mutex<Option<mpsc::UnboundedReceiver<EndpointAddress>>>,
 }
 
 impl OutlierStatsRegistry {
@@ -89,13 +104,26 @@ impl OutlierStatsRegistry {
 
     /// Build a registry with a custom [`Rng`].
     pub(crate) fn with_rng(config: OutlierDetectionConfig, rng: Box<dyn Rng>) -> Arc<Self> {
+        let (eject_tx, eject_rx) = mpsc::unbounded_channel();
         Arc::new(Self {
             channels: DashMap::new(),
             qualifying_count: AtomicU64::new(0),
             ejected_count: AtomicU64::new(0),
             config,
             rng,
+            eject_tx,
+            eject_rx: Mutex::new(Some(eject_rx)),
         })
+    }
+
+    /// Take the eject-signal receiver. Called exactly once by
+    /// [`OutlierDetector::new`].
+    fn take_eject_rx(&self) -> mpsc::UnboundedReceiver<EndpointAddress> {
+        self.eject_rx
+            .lock()
+            .expect("eject_rx mutex poisoned")
+            .take()
+            .expect("OutlierStatsRegistry::take_eject_rx called more than once")
     }
 
     /// Register a channel and return the `Arc<OutlierChannelState>`
@@ -132,8 +160,15 @@ impl OutlierStatsRegistry {
     /// Per-RPC entry point. Called by the load balancer's call wrapper
     /// after each RPC completion. Increments the channel's success or
     /// failure counter and then evaluates the failure-percentage
-    /// threshold; if all gates pass, ejects the channel inline.
-    pub(crate) fn record_outcome(&self, state: &OutlierChannelState, success: bool) {
+    /// threshold; if all gates pass and the channel was not already
+    /// ejected, marks it ejected and sends the address through the
+    /// eject mpsc for the LB to consume.
+    pub(crate) fn record_outcome(
+        &self,
+        addr: &EndpointAddress,
+        state: &OutlierChannelState,
+        success: bool,
+    ) {
         if success {
             state.record_success();
         } else {
@@ -179,20 +214,60 @@ impl OutlierStatsRegistry {
 
         if state.try_eject(Instant::now()) {
             self.ejected_count.fetch_add(1, Ordering::Relaxed);
+            // The LB drains this in `poll_ready` and consumes the
+            // `ReadyChannel` via `ReadyChannel::eject`. If the LB has
+            // dropped its receiver (shutdown), the send fails silently
+            // — the channel will be cleaned up by `forget`.
+            let _ = self.eject_tx.send(addr.clone());
         }
     }
 
-    /// Interval-boundary housekeeping. Called by the spawned actor on
-    /// each `config.interval` tick. Resets counters, un-ejects
-    /// channels whose backoff has elapsed, and decrements multipliers
-    /// for non-ejected channels.
-    pub(crate) fn run_housekeeping(&self, now: Instant) {
-        // Cap the un-ejection backoff at `max(base, max_ejection_time)`.
+    /// Clear the ejection on `state` and decrement the cluster-wide
+    /// `ejected_count`. Returns whether the transition fired (so
+    /// callers can guard against double-counting). Called by the LB
+    /// when an `EjectedChannel`'s timer fires and yields
+    /// `UnejectedChannel::Ready`.
+    pub(crate) fn note_uneject(&self, state: &OutlierChannelState) -> bool {
+        if state.try_uneject() {
+            self.ejected_count.fetch_sub(1, Ordering::Relaxed);
+            true
+        } else {
+            false
+        }
+    }
+
+    /// Compute how long `state` still has to remain ejected, or
+    /// `None` if it is not currently ejected. Returns
+    /// `Some(Duration::ZERO)` if the deadline has already passed
+    /// (caller should un-eject immediately rather than starting a
+    /// fresh sleep). Used by the LB on initial ejection and on
+    /// re-discovery to size the `EjectionConfig::timeout`.
+    pub(crate) fn remaining_ejection(
+        &self,
+        state: &OutlierChannelState,
+        now: Instant,
+    ) -> Option<Duration> {
+        let elapsed = state.ejected_duration(now)?;
+        let multiplier = state.ejection_multiplier();
         let cap = self
             .config
             .base_ejection_time
             .max(self.config.max_ejection_time);
+        let target = self
+            .config
+            .base_ejection_time
+            .checked_mul(multiplier)
+            .unwrap_or(cap)
+            .min(cap);
+        Some(target.checked_sub(elapsed).unwrap_or_default())
+    }
 
+    /// Interval-boundary housekeeping. Called by the spawned actor on
+    /// each `config.interval` tick. Resets counters and decrements
+    /// multipliers for non-ejected channels. Does **not** un-eject —
+    /// un-ejection is timer-driven by each `EjectedChannel` and
+    /// handled by the LB when the channel resolves.
+    pub(crate) fn run_housekeeping(&self) {
         for entry in self.channels.iter() {
             let state = entry.value();
 
@@ -203,16 +278,7 @@ impl OutlierStatsRegistry {
                 self.qualifying_count.fetch_sub(1, Ordering::Relaxed);
             }
 
-            if state.is_ejected() {
-                let multiplier = state.ejection_multiplier();
-                let elapsed = state.ejected_duration(now).unwrap_or_default();
-                if let Some(scaled) = self.config.base_ejection_time.checked_mul(multiplier)
-                    && elapsed >= scaled.min(cap)
-                    && state.try_uneject()
-                {
-                    self.ejected_count.fetch_sub(1, Ordering::Relaxed);
-                }
-            } else {
+            if !state.is_ejected() {
                 state.decrement_multiplier();
             }
         }
@@ -236,121 +302,57 @@ pub(crate) fn spawn_actor(registry: Arc<OutlierStatsRegistry>) -> AbortOnDrop {
         ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Skip);
         loop {
             ticker.tick().await;
-            registry.run_housekeeping(Instant::now());
+            registry.run_housekeeping();
         }
     });
     AbortOnDrop(task)
 }
 
-/// All per-LB outlier-detection state: the shared registry, the pool
-/// of currently-ejected channels (whose connections are kept alive
-/// across ejection), the per-channel ejection-signal streams
-/// aggregated for O(1) observation in `poll_ready`, and the handle to
-/// the housekeeping actor (dropped with the LB).
+/// Per-LB outlier-detection plumbing: the shared registry, the
+/// receiver half of the eject signal mpsc, and the handle to the
+/// housekeeping actor (dropped with the LB).
 ///
-/// `LoadBalancer` holds this as `Option<OutlierDetector<S>>`: `None`
-/// when outlier detection is disabled, `Some` when enabled.
-pub(crate) struct OutlierDetector<S> {
+/// `LoadBalancer` holds this as `Option<OutlierDetector>`: `None`
+/// when outlier detection is disabled, `Some` when enabled. The
+/// pool of ejected channels themselves lives directly on the LB in a
+/// `KeyedFutures<_, UnejectedChannel<_>>` — see the channel state
+/// machine in [`channel_state`] for the type-state transitions.
+///
+/// [`channel_state`]: crate::client::loadbalance::channel_state
+pub(crate) struct OutlierDetector {
     registry: Arc<OutlierStatsRegistry>,
-    ejected: HashMap<EndpointAddress, ReadyChannel<S>>,
-    ejection_signals: StreamMap<EndpointAddress, WatchStream<bool>>,
+    eject_rx: mpsc::UnboundedReceiver<EndpointAddress>,
     _actor: AbortOnDrop,
 }
 
-impl<S> OutlierDetector<S> {
-    /// Build from a registry, spawning the housekeeping actor.
+impl OutlierDetector {
+    /// Build from a registry, spawning the housekeeping actor and
+    /// taking ownership of the eject-signal receiver.
     pub(crate) fn new(registry: Arc<OutlierStatsRegistry>) -> Self {
+        let eject_rx = registry.take_eject_rx();
         let _actor = spawn_actor(registry.clone());
         Self {
             registry,
-            ejected: HashMap::new(),
-            ejection_signals: StreamMap::new(),
+            eject_rx,
             _actor,
         }
     }
 
-    /// Shared registry handle — clone to hand to the data path.
+    /// Shared registry handle.
     pub(crate) fn registry(&self) -> &Arc<OutlierStatsRegistry> {
         &self.registry
     }
 
-    /// Register a newly-connected channel for tracking and (on first
-    /// registration only) subscribe to its ejection signal. Returns
-    /// the per-channel state for the load balancer to wire into
-    /// [`ReadyChannel`].
-    ///
-    /// When an endpoint is re-discovered (Insert for an address whose
-    /// registry entry was preserved), the existing signal subscription
-    /// is left in place so any pending ejection transition is not
-    /// dropped.
-    pub(crate) fn register(&mut self, addr: EndpointAddress) -> Arc<OutlierChannelState> {
-        let state = self.registry.add_channel(addr.clone());
-        if !self.ejection_signals.contains_key(&addr) {
-            self.ejection_signals
-                .insert(addr, WatchStream::from_changes(state.subscribe()));
-        }
-        state
-    }
-
-    /// Drop all bookkeeping for `addr`: ejection slot, signal stream,
-    /// registry entry. Used when the endpoint is removed from the
-    /// cluster.
-    pub(crate) fn forget(&mut self, addr: &EndpointAddress) {
-        self.ejected.remove(addr);
-        self.ejection_signals.remove(addr);
-        self.registry.remove_channel(addr);
-    }
-
-    /// Drop the ejected-pool entry for `addr` (which holds an obsolete
-    /// `ReadyChannel`) but preserve the registry entry — counters,
-    /// ejection multiplier, and ejection flag carry across the
-    /// reconnect. Used when an endpoint is re-discovered.
-    ///
-    /// Matches grpc-go (`internal/xds/balancer/outlierdetection`) and
-    /// Envoy (`BaseDynamicClusterImpl::updateDynamicHostList` reusing
-    /// existing `HostSharedPtr`s): outlier state is keyed by stable
-    /// endpoint identity and survives transient discovery flaps.
-    pub(crate) fn clear_active_slots(&mut self, addr: &EndpointAddress) {
-        self.ejected.remove(addr);
-    }
-
-    /// Place a freshly-connected channel directly into the ejected
-    /// pool. Used by the load balancer when the preserved state for a
-    /// re-discovered endpoint says it is still ejected; this avoids a
-    /// brief window of routing traffic to a logically-ejected channel
-    /// until the housekeeping actor un-ejects it.
-    pub(crate) fn place_ejected(&mut self, addr: EndpointAddress, ch: ReadyChannel<S>) {
-        self.ejected.insert(addr, ch);
-    }
-
-    /// Drain ejection-signal transitions, moving channels between
-    /// `ready` and the internal ejected pool. O(k) per call where k is
-    /// the number of pending signal changes.
-    pub(crate) fn poll_signals(
+    /// Poll for the next address whose data path has decided to
+    /// eject. Returns `Poll::Pending` when no eject decision is
+    /// queued; returns `Poll::Ready(None)` only if the registry has
+    /// been dropped (which can't happen while this detector holds an
+    /// `Arc<OutlierStatsRegistry>`).
+    pub(crate) fn poll_eject_request(
         &mut self,
         cx: &mut Context<'_>,
-        ready: &mut IndexMap<EndpointAddress, ReadyChannel<S>>,
-    ) {
-        use futures_core::Stream;
-        while let Poll::Ready(Some((addr, ejected))) =
-            Pin::new(&mut self.ejection_signals).poll_next(cx)
-        {
-            if ejected {
-                if let Some(ch) = ready.swap_remove(&addr) {
-                    tracing::debug!("outlier detection: eject {addr}");
-                    self.ejected.insert(addr, ch);
-                }
-            } else if let Some(ch) = self.ejected.remove(&addr) {
-                tracing::debug!("outlier detection: uneject {addr}");
-                ready.insert(addr, ch);
-            }
-        }
-    }
-
-    /// Number of currently-ejected channels.
-    #[cfg(test)]
-    pub(crate) fn ejected(&self) -> &HashMap<EndpointAddress, ReadyChannel<S>> {
-        &self.ejected
+    ) -> Poll<Option<EndpointAddress>> {
+        self.eject_rx.poll_recv(cx)
     }
 }
 
@@ -426,15 +428,16 @@ mod tests {
     /// Drive `n` outcomes through `record_outcome` for one channel.
     fn drive(
         registry: &OutlierStatsRegistry,
+        a: &EndpointAddress,
         state: &OutlierChannelState,
         successes: u64,
         failures: u64,
     ) {
         for _ in 0..successes {
-            registry.record_outcome(state, true);
+            registry.record_outcome(a, state, true);
         }
         for _ in 0..failures {
-            registry.record_outcome(state, false);
+            registry.record_outcome(a, state, false);
         }
     }
 
@@ -446,9 +449,9 @@ mod tests {
         let bad = registry.add_channel(addr(8084));
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 100, 0);
+            drive(&registry, &addr(port), &s, 100, 0);
         }
-        drive(&registry, &bad, 10, 90);
+        drive(&registry, &addr(8084), &bad, 10, 90);
         assert!(bad.is_ejected());
         assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
     }
@@ -460,7 +463,7 @@ mod tests {
         for port in 8080..=8084 {
             let s = registry.add_channel(addr(port));
             // 30% failure → below 50% threshold.
-            drive(&registry, &s, 70, 30);
+            drive(&registry, &addr(port), &s, 70, 30);
             all.push(s);
         }
         for s in &all {
@@ -475,7 +478,7 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8084 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 50, 50);
+            drive(&registry, &addr(port), &s, 50, 50);
             all.push(s);
         }
         for s in &all {
@@ -490,7 +493,7 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8081 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 0, 100);
+            drive(&registry, &addr(port), &s, 0, 100);
             all.push(s);
         }
         for s in &all {
@@ -502,10 +505,10 @@ mod tests {
     fn request_volume_filters_low_traffic() {
         let registry = OutlierStatsRegistry::with_rng(fp_config(50, 100, 3), FixedRng::boxed(99));
         let bad = registry.add_channel(addr(8080));
-        drive(&registry, &bad, 0, 5);
+        drive(&registry, &addr(8080), &bad, 0, 5);
         for port in 8081..=8084 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 200, 0);
+            drive(&registry, &addr(port), &s, 200, 0);
         }
         assert!(!bad.is_ejected());
     }
@@ -522,7 +525,7 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8084 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 0, 100);
+            drive(&registry, &addr(port), &s, 0, 100);
             all.push(s);
         }
         for s in &all {
@@ -538,15 +541,16 @@ mod tests {
 
         let mut all = vec![];
         for port in 8080..=8084 {
-            let s = registry.add_channel(addr(port));
-            all.push(s);
+            let a = addr(port);
+            let s = registry.add_channel(a.clone());
+            all.push((a, s));
         }
         // Drive all hosts to bad state in parallel pseudo-order.
-        for s in &all {
-            drive(&registry, s, 0, 100);
+        for (a, s) in &all {
+            drive(&registry, a, s, 0, 100);
         }
 
-        let ejected = all.iter().filter(|s| s.is_ejected()).count();
+        let ejected = all.iter().filter(|(_, s)| s.is_ejected()).count();
         // 5 hosts × 20% = 1 max ejection.
         assert_eq!(ejected, 1);
     }
@@ -557,11 +561,11 @@ mod tests {
         let mut all = vec![];
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 100, 0);
+            drive(&registry, &addr(port), &s, 100, 0);
             all.push(s);
         }
         let bad = registry.add_channel(addr(8084));
-        drive(&registry, &bad, 0, 100);
+        drive(&registry, &addr(8084), &bad, 0, 100);
         assert!(bad.is_ejected());
         assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 1);
         // Each healthy host crossed request_volume; bad too. So
@@ -573,6 +577,25 @@ mod tests {
         assert_eq!(registry.qualifying_count.load(Ordering::Relaxed), 4);
     }
 
+    #[test]
+    fn ejection_dispatches_address_through_mpsc() {
+        let registry = OutlierStatsRegistry::with_rng(fp_config(50, 10, 3), FixedRng::boxed(99));
+        let mut rx = registry.take_eject_rx();
+        let bad = registry.add_channel(addr(8084));
+        for port in 8080..=8083 {
+            let s = registry.add_channel(addr(port));
+            drive(&registry, &addr(port), &s, 100, 0);
+        }
+        drive(&registry, &addr(8084), &bad, 10, 90);
+
+        // Eject dispatched exactly once via the mpsc.
+        assert_eq!(rx.try_recv(), Ok(addr(8084)));
+        assert!(matches!(
+            rx.try_recv(),
+            Err(mpsc::error::TryRecvError::Empty)
+        ));
+    }
+
     // ----- Housekeeping -----
 
     #[test]
@@ -580,42 +603,16 @@ mod tests {
         let registry = OutlierStatsRegistry::with_rng(fp_config(50, 10, 3), FixedRng::boxed(99));
         for port in 8080..=8083 {
             let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 100, 0);
+            drive(&registry, &addr(port), &s, 100, 0);
         }
         assert_eq!(registry.qualifying_count.load(Ordering::Relaxed), 4);
 
-        registry.run_housekeeping(Instant::now());
+        registry.run_housekeeping();
         assert_eq!(registry.qualifying_count.load(Ordering::Relaxed), 0);
         for port in 8080..=8083 {
             let s = registry.channels.get(&addr(port)).unwrap();
             assert_eq!(s.counters(), (0, 0));
         }
-    }
-
-    #[test]
-    fn housekeeping_unejects_after_base_time() {
-        let mut config = fp_config(50, 10, 3);
-        config.base_ejection_time = Duration::from_secs(10);
-        config.max_ejection_time = Duration::from_secs(60);
-        let registry = OutlierStatsRegistry::with_rng(config, FixedRng::boxed(99));
-
-        let bad = registry.add_channel(addr(8084));
-        for port in 8080..=8083 {
-            let s = registry.add_channel(addr(port));
-            drive(&registry, &s, 100, 0);
-        }
-        drive(&registry, &bad, 0, 100);
-        assert!(bad.is_ejected());
-
-        // Advance fewer than base_ejection_time ⇒ stays ejected.
-        let t0 = Instant::now();
-        registry.run_housekeeping(t0 + Duration::from_secs(9));
-        assert!(bad.is_ejected());
-
-        // After base_ejection_time × 1 elapsed ⇒ uneject.
-        registry.run_housekeeping(t0 + Duration::from_secs(20));
-        assert!(!bad.is_ejected());
-        assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 0);
     }
 
     #[test]
@@ -625,27 +622,107 @@ mod tests {
         // Force multiplier to 3 directly (no traffic, no eject).
         s.set_ejection_multiplier(3);
 
-        registry.run_housekeeping(Instant::now());
+        registry.run_housekeeping();
         assert_eq!(s.ejection_multiplier(), 2);
     }
 
     #[test]
-    fn housekeeping_caps_ejection_at_max_ejection_time() {
+    fn housekeeping_leaves_ejected_multipliers_alone() {
+        let registry = OutlierStatsRegistry::with_rng(base_config(), FixedRng::boxed(99));
+        let s = registry.add_channel(addr(8080));
+        s.try_eject(Instant::now());
+        s.set_ejection_multiplier(3);
+
+        registry.run_housekeeping();
+        // Ejected channels keep their multiplier; un-ejection is the
+        // LB's job (timer-driven via EjectedChannel).
+        assert_eq!(s.ejection_multiplier(), 3);
+        assert!(s.is_ejected());
+    }
+
+    // ----- remaining_ejection / note_uneject -----
+
+    #[test]
+    fn remaining_ejection_returns_full_duration_for_fresh_eject() {
+        let mut config = fp_config(50, 10, 3);
+        config.base_ejection_time = Duration::from_secs(10);
+        config.max_ejection_time = Duration::from_secs(60);
+        let registry = OutlierStatsRegistry::with_rng(config, FixedRng::boxed(99));
+        let s = registry.add_channel(addr(8080));
+        let t0 = Instant::now();
+        s.try_eject(t0);
+        // Multiplier is 1 after the first eject, so target = 10s.
+        let remaining = registry.remaining_ejection(&s, t0).unwrap();
+        assert_eq!(remaining, Duration::from_secs(10));
+    }
+
+    #[test]
+    fn remaining_ejection_capped_at_max_ejection_time() {
         let mut config = fp_config(50, 10, 3);
         config.base_ejection_time = Duration::from_secs(10);
         config.max_ejection_time = Duration::from_secs(15);
         let registry = OutlierStatsRegistry::with_rng(config, FixedRng::boxed(99));
-
         let s = registry.add_channel(addr(8080));
-        // Pretend 8080 was ejected long ago with a huge multiplier.
-        s.try_eject(Instant::now());
-        s.set_ejection_multiplier(10);
-        registry.ejected_count.fetch_add(0, Ordering::Relaxed); // try_eject already added 1
-
-        // base * multiplier = 100s, but cap = 15s. Sweep at 16s ⇒ uneject.
         let t0 = Instant::now();
-        registry.run_housekeeping(t0 + Duration::from_secs(16));
+        s.try_eject(t0);
+        s.set_ejection_multiplier(10); // base * 10 = 100s, but cap = 15s.
+        let remaining = registry.remaining_ejection(&s, t0).unwrap();
+        assert_eq!(remaining, Duration::from_secs(15));
+    }
+
+    #[test]
+    fn remaining_ejection_subtracts_elapsed_for_re_discovery() {
+        let mut config = fp_config(50, 10, 3);
+        config.base_ejection_time = Duration::from_secs(30);
+        config.max_ejection_time = Duration::from_secs(60);
+        let registry = OutlierStatsRegistry::with_rng(config, FixedRng::boxed(99));
+        let s = registry.add_channel(addr(8080));
+        let t0 = Instant::now();
+        s.try_eject(t0);
+        // Re-discovered 10s into the ejection — should still have 20s left.
+        let remaining = registry
+            .remaining_ejection(&s, t0 + Duration::from_secs(10))
+            .unwrap();
+        assert_eq!(remaining, Duration::from_secs(20));
+    }
+
+    #[test]
+    fn remaining_ejection_zero_past_deadline() {
+        let mut config = fp_config(50, 10, 3);
+        config.base_ejection_time = Duration::from_secs(10);
+        config.max_ejection_time = Duration::from_secs(60);
+        let registry = OutlierStatsRegistry::with_rng(config, FixedRng::boxed(99));
+        let s = registry.add_channel(addr(8080));
+        let t0 = Instant::now();
+        s.try_eject(t0);
+        // 60s have passed but target is 10s — caller should un-eject.
+        let remaining = registry
+            .remaining_ejection(&s, t0 + Duration::from_secs(60))
+            .unwrap();
+        assert_eq!(remaining, Duration::ZERO);
+    }
+
+    #[test]
+    fn remaining_ejection_none_when_not_ejected() {
+        let registry = OutlierStatsRegistry::with_rng(base_config(), FixedRng::boxed(99));
+        let s = registry.add_channel(addr(8080));
+        assert!(registry.remaining_ejection(&s, Instant::now()).is_none());
+    }
+
+    #[test]
+    fn note_uneject_clears_state_and_decrements_counter() {
+        let registry = OutlierStatsRegistry::with_rng(base_config(), FixedRng::boxed(99));
+        let s = registry.add_channel(addr(8080));
+        s.try_eject(Instant::now());
+        registry.ejected_count.fetch_add(1, Ordering::Relaxed);
+        assert!(s.is_ejected());
+
+        assert!(registry.note_uneject(&s));
         assert!(!s.is_ejected());
+        assert_eq!(registry.ejected_count.load(Ordering::Relaxed), 0);
+
+        // Second call is a no-op.
+        assert!(!registry.note_uneject(&s));
     }
 
     // ----- Spawned actor -----
@@ -687,7 +764,7 @@ mod tests {
     }
 
     #[test]
-    fn channel_state_try_eject_uneject_flips_signal() {
+    fn channel_state_try_eject_uneject_transitions_atomically() {
         let s = OutlierChannelState::new();
         assert!(!s.is_ejected());
         assert!(s.try_eject(Instant::now()));

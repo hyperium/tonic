@@ -31,7 +31,6 @@ use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 use pin_project_lite::pin_project;
-use tokio::sync::watch;
 use tower::Service;
 use tower::load::Load;
 
@@ -72,22 +71,21 @@ impl EndpointCounters {
 }
 
 /// Per-channel outlier-detection state, shared (via `Arc`) between
-/// the data path (per-RPC outcome recording + threshold-based ejection)
-/// and the outlier-detection actor (interval-based housekeeping).
+/// the data path (per-RPC outcome recording + threshold-based ejection),
+/// the outlier-detection actor (interval-based housekeeping), and the
+/// load balancer (consults `is_ejected` / `ejected_duration` on
+/// reconnect).
 ///
-/// Ejection is edge-triggered: callers flip the flag via [`eject`] /
-/// [`uneject`]; observers poll `Receiver::changed()` (typically inside
-/// a `FuturesUnordered`) to react in O(1) on each transition.
-///
-/// All fields are atomics or wrapped in lock-free primitives so the
-/// data path can mutate them without locking.
-///
-/// [`eject`]: Self::eject
-/// [`uneject`]: Self::uneject
+/// All fields are atomics so the data path can mutate them without
+/// locking. Ejection state is encoded in [`Self::ejected_at_nanos`]:
+/// zero means not ejected, non-zero is the nanos-since-epoch of the
+/// ejection's start. [`Self::try_eject`] / [`Self::try_uneject`] use
+/// CAS to flip the field atomically and report whether the transition
+/// fired (so callers can update registry-level counters exactly once
+/// per transition).
 #[derive(Debug)]
 pub(crate) struct OutlierChannelState {
     counters: EndpointCounters,
-    eject_tx: watch::Sender<bool>,
     /// Whether this channel currently contributes to the registry's
     /// `qualifying_count`. Set when `total` first reaches
     /// `request_volume` in the current interval; cleared on counter
@@ -97,7 +95,8 @@ pub(crate) struct OutlierChannelState {
     /// ejection; decremented (saturating) on each healthy interval.
     ejection_multiplier: AtomicU32,
     /// `0` when not ejected. Otherwise nanos since [`Self::epoch`] of
-    /// the current ejection's start.
+    /// the current ejection's start. Single source of truth for
+    /// "is this channel ejected right now?".
     ejected_at_nanos: AtomicU64,
     /// Reference instant used as the origin for `ejected_at_nanos`.
     /// Established at construction and never changes.
@@ -112,10 +111,8 @@ impl Default for OutlierChannelState {
 
 impl OutlierChannelState {
     pub(crate) fn new() -> Self {
-        let (eject_tx, _) = watch::channel(false);
         Self {
             counters: EndpointCounters::default(),
-            eject_tx,
             is_qualifying: AtomicBool::new(false),
             ejection_multiplier: AtomicU32::new(0),
             ejected_at_nanos: AtomicU64::new(0),
@@ -158,53 +155,39 @@ impl OutlierChannelState {
         self.is_qualifying.swap(false, Ordering::AcqRel)
     }
 
-    /// Flip the ejection flag to `true`. Returns `true` if this call
-    /// performed the false → true transition (so callers can update
-    /// registry-level counters exactly once per ejection).
-    /// Records the ejection timestamp and bumps the multiplier.
+    /// Atomically mark this channel as ejected starting at `now`.
+    /// Returns `true` if this call performed the not-ejected →
+    /// ejected transition (so callers can update registry-level
+    /// counters exactly once per ejection). Bumps the multiplier on
+    /// transition.
     pub(crate) fn try_eject(&self, now: Instant) -> bool {
-        let won = self.eject_tx.send_if_modified(|state| {
-            if *state {
-                false
-            } else {
-                *state = true;
-                true
-            }
-        });
-        if !won {
-            return false;
-        }
         let nanos = now
             .saturating_duration_since(self.epoch)
             .as_nanos()
             .min(u64::MAX as u128) as u64;
-        // Use 1 as a sentinel if the channel was created at exactly
-        // `now`, since 0 means "not ejected".
-        self.ejected_at_nanos.store(nanos.max(1), Ordering::Relaxed);
+        // 0 means "not ejected"; use 1 as a sentinel if the channel
+        // was created at exactly `now`.
+        let stamp = nanos.max(1);
+        if self
+            .ejected_at_nanos
+            .compare_exchange(0, stamp, Ordering::AcqRel, Ordering::Relaxed)
+            .is_err()
+        {
+            return false;
+        }
         self.ejection_multiplier.fetch_add(1, Ordering::Relaxed);
         true
     }
 
-    /// Flip the ejection flag back to `false`. Returns `true` if this
-    /// call performed the true → false transition.
+    /// Atomically clear the ejection. Returns `true` if this call
+    /// performed the ejected → not-ejected transition.
     pub(crate) fn try_uneject(&self) -> bool {
-        let won = self.eject_tx.send_if_modified(|state| {
-            if *state {
-                *state = false;
-                true
-            } else {
-                false
-            }
-        });
-        if won {
-            self.ejected_at_nanos.store(0, Ordering::Relaxed);
-        }
-        won
+        self.ejected_at_nanos.swap(0, Ordering::AcqRel) != 0
     }
 
     /// Current ejection state.
     pub(crate) fn is_ejected(&self) -> bool {
-        *self.eject_tx.borrow()
+        self.ejected_at_nanos.load(Ordering::Acquire) != 0
     }
 
     /// Returns the elapsed time since this channel was ejected, or
@@ -230,14 +213,6 @@ impl OutlierChannelState {
         if prev > 0 {
             self.ejection_multiplier.store(prev - 1, Ordering::Relaxed);
         }
-    }
-
-    /// Subscribe to ejection-state changes. The returned receiver's
-    /// `changed()` future resolves on each transition; consumers
-    /// typically push it into a `FuturesUnordered`.
-    #[allow(dead_code)] // wired by the LoadBalancer in a follow-up PR.
-    pub(crate) fn subscribe(&self) -> watch::Receiver<bool> {
-        self.eject_tx.subscribe()
     }
 
     /// Test-only setter for the ejection multiplier; lets tests drive
@@ -360,9 +335,13 @@ impl<S> ReadyChannel<S> {
     }
 
     /// Per-channel outlier-detection state. Cloned cheaply via `Arc`.
-    #[allow(dead_code)] // consumed by the LoadBalancer in a follow-up PR.
     pub(crate) fn outlier(&self) -> &Arc<OutlierChannelState> {
         &self.outlier
+    }
+
+    /// Endpoint address this channel was created for.
+    pub(crate) fn addr(&self) -> &EndpointAddress {
+        &self.addr
     }
 
     /// Eject this channel (e.g., due to outlier detection). Consumes
