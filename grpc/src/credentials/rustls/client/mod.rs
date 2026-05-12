@@ -22,6 +22,8 @@
  *
  */
 
+//! Client-side gRPC [`rustls`] [`ChannelCredentials`] implementation.
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -121,7 +123,7 @@ impl Default for ClientTlsConfig {
     }
 }
 
-/// TLS channel credentials based on Rustls.
+/// gRPC TLS [`ChannelCredentials`] based on [`rustls`].
 #[derive(Clone)]
 pub struct RustlsChannelCredendials {
     connector: TlsConnector,
@@ -191,11 +193,12 @@ impl RustlsChannelCredendials {
     }
 }
 
-pub struct ClientTlsSecContext {
+/// Security context for [`rustls`]-based gRPC [`ChannelCredentials`].
+pub struct ClientTlsSecurityContext {
     verified_peer_cert: Option<CertificateDer<'static>>,
 }
 
-impl ClientConnectionSecurityContext for ClientTlsSecContext {
+impl ClientConnectionSecurityContext for ClientTlsSecurityContext {
     fn validate_authority(&self, authority: &Authority) -> bool {
         let server_name = match ServerName::try_from(authority.host()) {
             Ok(n) => n,
@@ -217,7 +220,7 @@ impl ClientConnectionSecurityContext for ClientTlsSecContext {
 }
 
 impl ChannelCredentials for RustlsChannelCredendials {
-    type ContextType = ClientTlsSecContext;
+    type ContextType = ClientTlsSecurityContext;
     type Output<I> = TlsStream<I>;
 
     async fn connect<Input: GrpcEndpoint>(
@@ -227,7 +230,7 @@ impl ChannelCredentials for RustlsChannelCredendials {
         _info: &ClientHandshakeInfo,
         _rt: &GrpcRuntime,
         _token: private::Internal,
-    ) -> Result<HandshakeOutput<TlsStream<Input>, ClientTlsSecContext>, String> {
+    ) -> Result<HandshakeOutput<TlsStream<Input>, ClientTlsSecurityContext>, String> {
         let server_name = ServerName::try_from(authority.host())
             .map_err(|e| format!("invalid authority: {}", e))?
             .to_owned();
@@ -256,7 +259,7 @@ impl ChannelCredentials for RustlsChannelCredendials {
         let cs_info = ClientConnectionSecurityInfo::new(
             "tls",
             SecurityLevel::PrivacyAndIntegrity,
-            ClientTlsSecContext {
+            ClientTlsSecurityContext {
                 verified_peer_cert: peer_cert,
             },
             Attributes::new(),

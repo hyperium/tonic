@@ -22,6 +22,9 @@
  *
  */
 
+//! Definitions and implementations for client and server credentials (e.g.
+//! TLS or OAuth2).
+
 pub mod call;
 pub(crate) mod client;
 pub(crate) mod dyn_wrapper;
@@ -34,8 +37,10 @@ pub(crate) mod server;
 use std::sync::Arc;
 
 pub use client::CompositeChannelCredentials;
-pub use insecure::InsecureChannelCredentials;
-pub use insecure::InsecureServerCredentials;
+#[allow(unused_imports)]
+pub(crate) use insecure::InsecureChannelCredentials;
+#[allow(unused_imports)]
+pub(crate) use insecure::InsecureServerCredentials;
 pub use local::LocalChannelCredentials;
 pub use local::LocalServerCredentials;
 
@@ -48,8 +53,11 @@ use crate::private;
 use crate::rt::GrpcEndpoint;
 use crate::rt::GrpcRuntime;
 
-/// Defines the common interface for all live gRPC wire protocols and supported
-/// transport security protocols (e.g., TLS, ALTS).
+/// Client-side trait for all live gRPC wire protocols and supported transport
+/// security protocols (e.g., TLS, ALTS).
+///
+/// Also includes the ability to attach [`CallCredentials`] when used with the
+/// [`CompositeChannelCredentials`].
 #[trait_variant::make(Send)]
 pub trait ChannelCredentials: Sync + 'static {
     #[doc(hidden)]
@@ -89,6 +97,8 @@ pub trait ChannelCredentials: Sync + 'static {
     ) -> Result<HandshakeOutput<Self::Output<Input>, Self::ContextType>, String>;
 }
 
+/// Server-side trait for all live gRPC wire protocols and supported
+/// transport security protocols (e.g., TLS, ALTS).
 #[trait_variant::make(Send)]
 pub trait ServerCredentials: Sync + 'static {
     #[doc(hidden)]
@@ -168,6 +178,8 @@ pub(crate) mod common {
     }
 }
 
+/// Contains information about a [`ChannelCredentials`] or
+/// [`ServerCredentials`].
 pub struct ProtocolInfo {
     security_protocol: &'static str,
 }
@@ -177,6 +189,7 @@ impl ProtocolInfo {
         Self { security_protocol }
     }
 
+    /// Returns the security protocol name currently in use, e.g. "tls".
     pub fn security_protocol(&self) -> &'static str {
         self.security_protocol
     }

@@ -22,6 +22,9 @@
  *
  */
 
+//! gRPC [`ChannelCredentials`](super::ChannelCredentials) implemented for
+//! [`rustls`](https://docs.rs/rustls).
+
 use std::io::BufReader;
 
 use rustls::crypto::CryptoProvider;
@@ -83,15 +86,15 @@ impl Identity {
 /// A source of configuration or state of type `T` that allows for dynamic
 /// updates.
 ///
-/// This trait abstracts over the source of the data (e.g., static memory,
-/// file system, network) and provides a uniform interface for consumers to
-/// access the current value and subscribe to changes.
+/// This trait abstracts over the source of the data (e.g., static memory, file
+/// system, network) and provides a uniform interface for consumers to access
+/// the current value and subscribe to changes.
 ///
 /// # Sealed Trait
 ///
 /// This trait is **sealed**. It cannot be implemented by downstream crates.
 /// Users should rely on the provided implementations (e.g.,
-/// `StaticIdentityProvider`, `StaticRootsProvider`).
+/// [`StaticIdentityProvider`], [`StaticRootCertificatesProvider`]).
 pub trait Provider<T> {
     /// Returns a clone of the underlying watch receiver.
     ///

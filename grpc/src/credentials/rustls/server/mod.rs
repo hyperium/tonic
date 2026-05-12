@@ -22,6 +22,8 @@
  *
  */
 
+//! Server-side gRPC [`rustls`] [`ServerCredentials`] implementation.
+
 use std::path::PathBuf;
 use std::sync::Arc;
 
@@ -95,6 +97,8 @@ impl ResolvesServerCert for SniResolver {
     }
 }
 
+/// Settings for client certificate requests which may be made by
+/// [`RustlsServerCredendials`].
 #[non_exhaustive]
 pub enum TlsClientCertificateRequestType<R = StaticRootCertificatesProvider> {
     /// Server does not request client certificate.
@@ -160,6 +164,7 @@ impl From<TlsClientCertificateRequestType> for InnerClientCertificateRequestType
     }
 }
 
+/// gRPC TLS [`ServerCredentials`] based on [`rustls`].
 #[derive(Clone)]
 pub struct RustlsServerCredendials {
     acceptor: TlsAcceptor,
@@ -206,6 +211,8 @@ impl ServerTlsConfig {
 }
 
 impl RustlsServerCredendials {
+    /// Constructs a new `RustlsServerCredentials` instance from the provided
+    /// configuration.
     pub fn new(config: ServerTlsConfig) -> Result<RustlsServerCredendials, String> {
         let provider = if let Some(p) = CryptoProvider::get_default() {
             p.as_ref().clone()
