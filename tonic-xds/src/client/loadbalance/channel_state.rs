@@ -207,12 +207,15 @@ impl OutlierChannelState {
     }
 
     /// Decrement the multiplier saturating at zero. Called by the
-    /// actor on healthy intervals.
+    /// actor on healthy intervals and by `note_uneject` on un-ejection.
+    /// Uses `fetch_update` so the load-and-store is atomic against
+    /// concurrent `try_eject` (`fetch_add`) and other decrements.
     pub(crate) fn decrement_multiplier(&self) {
-        let prev = self.ejection_multiplier.load(Ordering::Relaxed);
-        if prev > 0 {
-            self.ejection_multiplier.store(prev - 1, Ordering::Relaxed);
-        }
+        let _ = self
+            .ejection_multiplier
+            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |v| {
+                if v > 0 { Some(v - 1) } else { None }
+            });
     }
 
     /// Test-only setter for the ejection multiplier; lets tests drive
