@@ -89,9 +89,7 @@ where
         self.futures.len()
     }
 
-    /// Returns true if a future is currently tracked for `key`.
-    /// Cancelled-but-not-yet-drained futures still count, since their
-    /// cancellation token entry is removed eagerly by [`Self::cancel`].
+    /// True if a live (non-cancelled) future is tracked for `key`.
     pub(crate) fn contains_key(&self, key: &K) -> bool {
         self.cancellations.contains_key(key)
     }

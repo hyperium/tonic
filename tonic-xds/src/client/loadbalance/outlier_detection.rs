@@ -1,39 +1,31 @@
-//! gRFC A50 outlier detection.
+//! [gRFC A50] outlier detection.
 //!
-//! The algorithm is split between the data path, the load balancer,
-//! and a spawned actor:
+//! Work is split across three sites:
 //!
-//! - **Per-RPC detection** runs inline on each call completion via
-//!   [`OutlierStatsRegistry::record_outcome`]. The wrapper records the
-//!   outcome on the channel's [`OutlierChannelState`], evaluates the
-//!   failure-percentage threshold, and on transition to ejected sends
-//!   the address through an mpsc channel for the LB to consume.
-//!   Cluster-wide gates (`minimum_hosts`, `max_ejection_percent`) are
-//!   enforced via two atomic counters on the registry, kept in sync
-//!   as channels cross thresholds.
-//! - **The load balancer** drains the eject mpsc in `poll_ready`,
+//! - **Data path** ([`OutlierStatsRegistry::record_outcome`]): runs
+//!   inline per RPC. Updates per-channel counters, applies the
+//!   failure-percentage gate, and on transition to ejected sends the
+//!   address through an mpsc channel.
+//! - **Load balancer**: drains the eject mpsc in `poll_ready`,
 //!   consumes the matching [`ReadyChannel`] via
 //!   [`ReadyChannel::eject`], and tracks the resulting
 //!   [`EjectedChannel`] in a `KeyedFutures`. Each ejected channel's
-//!   internal sleep fires at exactly `base × multiplier` (capped by
-//!   `max_ejection_time`) after ejection, yielding
-//!   [`UnejectedChannel::Ready`]; the LB drains it on the next
-//!   `poll_ready` and routes the channel back to the ready set.
-//! - **Interval-based housekeeping** runs in a spawned actor (see
-//!   [`spawn_actor`]). It resets per-channel counters at the
-//!   `config.interval` boundary and decrements multipliers for
-//!   non-ejected channels. Un-ejection is timer-driven by
-//!   [`EjectedChannel`] — the actor never un-ejects.
+//!   sleep fires at `base × multiplier` (capped by
+//!   `max_ejection_time`); the LB then routes the resolved
+//!   [`UnejectedChannel`] back into the ready set.
+//! - **Housekeeping actor** ([`spawn_actor`]): on each
+//!   `config.interval` tick, resets counters and decrements
+//!   multipliers for non-ejected channels. The actor never ejects or
+//!   un-ejects.
 //!
-//! Only the failure-percentage algorithm is dispatched. The
-//! success-rate algorithm (cross-endpoint mean/stdev) is left to a
-//! follow-up.
+//! Only the failure-percentage algorithm is implemented; success-rate
+//! (cross-endpoint mean/stdev) is left to a follow-up.
 //!
 //! [gRFC A50]: https://github.com/grpc/proposal/blob/master/A50-xds-outlier-detection.md
 //! [`ReadyChannel`]: crate::client::loadbalance::channel_state::ReadyChannel
 //! [`ReadyChannel::eject`]: crate::client::loadbalance::channel_state::ReadyChannel::eject
 //! [`EjectedChannel`]: crate::client::loadbalance::channel_state::EjectedChannel
-//! [`UnejectedChannel::Ready`]: crate::client::loadbalance::channel_state::UnejectedChannel::Ready
+//! [`UnejectedChannel`]: crate::client::loadbalance::channel_state::UnejectedChannel
 
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -49,10 +41,8 @@ use crate::client::loadbalance::channel_state::OutlierChannelState;
 use crate::common::async_util::AbortOnDrop;
 use crate::xds::resource::outlier_detection::OutlierDetectionConfig;
 
-/// Construction-time error returned when a single
-/// [`OutlierStatsRegistry`] is wired to more than one load balancer.
-/// The registry's eject-signal receiver is one-shot; reuse is not
-/// supported.
+/// Returned when an [`OutlierStatsRegistry`] is handed to a second
+/// load balancer. The eject-signal receiver is one-shot.
 #[derive(Debug, thiserror::Error)]
 #[error("OutlierStatsRegistry is already wired to a LoadBalancer")]
 pub(crate) struct RegistryAlreadyWired;
@@ -73,34 +63,23 @@ impl Rng for FastRandRng {
 }
 
 /// Shared outlier-detection state, owned by `Arc` and accessed
-/// concurrently by:
-/// - The load balancer's call wrapper, which calls
-///   [`Self::record_outcome`] after each RPC completion.
-/// - The spawned actor task, which calls [`Self::run_housekeeping`]
-///   on every `config.interval` tick.
-/// - The load balancer's `poll_ready`, which drains the eject mpsc
-///   (via [`OutlierDetector::poll_eject_request`]) and calls
-///   [`Self::note_uneject`] when an `EjectedChannel`'s timer fires.
+/// concurrently by the data path ([`Self::record_outcome`]), the
+/// housekeeping actor ([`Self::run_housekeeping`]), and the load
+/// balancer ([`Self::note_uneject`], [`Self::remaining_ejection`]).
 pub(crate) struct OutlierStatsRegistry {
-    /// Per-endpoint state, keyed by address. Inserted by the LB on
-    /// channel creation and removed on disconnect.
     channels: DashMap<EndpointAddress, Arc<OutlierChannelState>>,
-    /// Number of channels currently with `total >= request_volume` in
-    /// the active interval. Drives the `minimum_hosts` gate.
+    /// Channels with `total >= request_volume` in the active
+    /// interval. Drives the `minimum_hosts` gate.
     qualifying_count: AtomicU64,
-    /// Number of channels currently ejected. Drives the
+    /// Channels currently ejected. Drives the
     /// `max_ejection_percent` cap.
     ejected_count: AtomicU64,
     config: OutlierDetectionConfig,
     rng: Box<dyn Rng>,
-    /// Sender half of the eject signal. `record_outcome` pushes an
-    /// address through on transition to ejected; the LB's
-    /// [`OutlierDetector`] drains the receiver in `poll_ready` and
-    /// consumes the matching `ReadyChannel`.
+    /// Sender half of the eject signal. The receiver is owned by the
+    /// LB's [`OutlierDetector`].
     eject_tx: mpsc::UnboundedSender<EndpointAddress>,
-    /// Receiver half, handed to the LB at construction time. Wrapped
-    /// in a `Mutex<Option<_>>` so [`Self::take_eject_rx`] can move it
-    /// out exactly once. Outside that hand-off there is no contention.
+    /// Receiver moved out exactly once by [`Self::take_eject_rx`].
     eject_rx: Mutex<Option<mpsc::UnboundedReceiver<EndpointAddress>>>,
 }
 
@@ -124,10 +103,9 @@ impl OutlierStatsRegistry {
         })
     }
 
-    /// Take the eject-signal receiver. Called exactly once by
-    /// [`OutlierDetector::new`]. Returns
-    /// [`RegistryAlreadyWired`] if a previous call has already taken
-    /// the receiver — a registry can drive at most one load balancer.
+    /// Take the eject-signal receiver. Returns
+    /// [`RegistryAlreadyWired`] on a second call — a registry can
+    /// drive at most one load balancer.
     fn take_eject_rx(
         &self,
     ) -> Result<mpsc::UnboundedReceiver<EndpointAddress>, RegistryAlreadyWired> {
@@ -138,11 +116,8 @@ impl OutlierStatsRegistry {
             .ok_or(RegistryAlreadyWired)
     }
 
-    /// Register a channel and return the `Arc<OutlierChannelState>`
-    /// the load balancer wires into the channel; the same `Arc` is
-    /// retained in the registry so the actor can iterate it. If a
-    /// state for this address already exists, returns it untouched —
-    /// state continuity across reconnect cycles is preserved.
+    /// Get or create the state for `addr`. Idempotent — existing
+    /// state is preserved across reconnect.
     pub(crate) fn add_channel(&self, addr: EndpointAddress) -> Arc<OutlierChannelState> {
         self.channels
             .entry(addr.clone())
@@ -150,9 +125,8 @@ impl OutlierStatsRegistry {
             .clone()
     }
 
-    /// Forget a channel. Drops the registry's reference; cluster-wide
-    /// counters are decremented if the channel was qualifying or
-    /// ejected.
+    /// Drop the state for `addr`, decrementing cluster-wide counters
+    /// (`qualifying_count`, `ejected_count`) if it was contributing.
     pub(crate) fn remove_channel(&self, addr: &EndpointAddress) {
         if let Some((_, state)) = self.channels.remove(addr) {
             if state.clear_qualifying() {
@@ -169,12 +143,9 @@ impl OutlierStatsRegistry {
         self.channels.len()
     }
 
-    /// Per-RPC entry point. Called by the load balancer's call wrapper
-    /// after each RPC completion. Increments the channel's success or
-    /// failure counter and then evaluates the failure-percentage
-    /// threshold; if all gates pass and the channel was not already
-    /// ejected, marks it ejected and sends the address through the
-    /// eject mpsc for the LB to consume.
+    /// Per-RPC entry point. Records the outcome and, if all gates
+    /// pass, transitions the channel to ejected and dispatches the
+    /// address on the eject mpsc.
     pub(crate) fn record_outcome(&self, state: &OutlierChannelState, success: bool) {
         if success {
             state.record_success();
@@ -190,9 +161,8 @@ impl OutlierStatsRegistry {
         let total = s + f;
         let request_volume = u64::from(fp.request_volume);
 
-        // Track when each channel first qualifies in the current
-        // interval, so the `minimum_hosts` gate can be checked with a
-        // single atomic load.
+        // Bump `qualifying_count` exactly once per channel per
+        // interval so the `minimum_hosts` gate is a single atomic load.
         if total >= request_volume && state.mark_qualifying() {
             self.qualifying_count.fetch_add(1, Ordering::Relaxed);
         }
@@ -221,32 +191,19 @@ impl OutlierStatsRegistry {
 
         if state.try_eject(Instant::now()) {
             self.ejected_count.fetch_add(1, Ordering::Relaxed);
-            // The LB drains this in `poll_ready` and consumes the
-            // `ReadyChannel` via `ReadyChannel::eject`. If the LB has
-            // dropped its receiver (shutdown), the send fails silently
-            // — the channel will be cleaned up by `forget`.
+            // Send failure (LB receiver dropped during shutdown) is
+            // ignored; the registry will be torn down momentarily.
             let _ = self.eject_tx.send(state.addr().clone());
         }
     }
 
-    /// Clear the ejection on `state`, decrement the cluster-wide
-    /// `ejected_count`, and decrement the channel's ejection
-    /// multiplier (matching gRFC A50 step 6.b, which decrements
-    /// multiplier in the same sweep that un-ejects). Returns whether
-    /// the transition fired (so callers can guard against
-    /// double-counting). Called by the LB when an `EjectedChannel`'s
-    /// timer fires and yields `UnejectedChannel::Ready`.
+    /// Clear the ejection: flip the state, decrement
+    /// `ejected_count`, and decrement the multiplier (gRFC A50
+    /// step 6.b: same sweep that un-ejects also decrements). Returns
+    /// `true` on the ejected → not-ejected transition.
     pub(crate) fn note_uneject(&self, state: &OutlierChannelState) -> bool {
         if state.try_uneject() {
             self.ejected_count.fetch_sub(1, Ordering::Relaxed);
-            // Per A50, the same sweep that un-ejects also decrements
-            // the multiplier. Since our un-ejection is timer-driven
-            // (decoupled from the housekeeping sweep), we apply the
-            // decrement here to avoid a window where a re-eject would
-            // see a stale (one-higher) multiplier and back off too
-            // aggressively. The actor's housekeeping decrement still
-            // runs at each interval; saturating arithmetic ensures
-            // the eventual decrement to zero stays correct.
             state.decrement_multiplier();
             true
         } else {
@@ -254,12 +211,10 @@ impl OutlierStatsRegistry {
         }
     }
 
-    /// Compute how long `state` still has to remain ejected, or
-    /// `None` if it is not currently ejected. Returns
-    /// `Some(Duration::ZERO)` if the deadline has already passed
-    /// (caller should un-eject immediately rather than starting a
-    /// fresh sleep). Used by the LB on initial ejection and on
-    /// re-discovery to size the `EjectionConfig::timeout`.
+    /// Time remaining on `state`'s ejection (capped by
+    /// `max_ejection_time`). `None` if not ejected;
+    /// `Some(Duration::ZERO)` if the deadline has passed (caller
+    /// should un-eject rather than start a fresh sleep).
     pub(crate) fn remaining_ejection(
         &self,
         state: &OutlierChannelState,
@@ -280,39 +235,31 @@ impl OutlierStatsRegistry {
         Some(target.checked_sub(elapsed).unwrap_or_default())
     }
 
-    /// Interval-boundary housekeeping. Called by the spawned actor on
-    /// each `config.interval` tick. Resets counters and decrements
-    /// multipliers for non-ejected channels. Does **not** un-eject —
-    /// un-ejection is timer-driven by each `EjectedChannel` and
-    /// handled by the LB when the channel resolves.
+    /// Interval-boundary housekeeping. Resets counters and
+    /// decrements multipliers for non-ejected channels. Does not
+    /// un-eject — that is driven by each `EjectedChannel`'s timer.
     pub(crate) fn run_housekeeping(&self) {
         for entry in self.channels.iter() {
             let state = entry.value();
-
-            // Reset counters; clear `is_qualifying` and adjust the
-            // registry-level counter in lockstep.
             state.snapshot_and_reset();
             if state.clear_qualifying() {
                 self.qualifying_count.fetch_sub(1, Ordering::Relaxed);
             }
-
             if !state.is_ejected() {
                 state.decrement_multiplier();
             }
         }
     }
 
-    /// `max_ejection_percent` resolved against the current channel
-    /// count. Updated as channels come and go.
+    /// Resolve `max_ejection_percent` against the current channel count.
     fn max_ejections(&self) -> u64 {
         self.channels.len() as u64 * u64::from(self.config.max_ejection_percent.get()) / 100
     }
 }
 
-/// Spawn the housekeeping actor. The task ticks every
-/// `config.interval` and calls
-/// [`OutlierStatsRegistry::run_housekeeping`]. Dropping the returned
-/// [`AbortOnDrop`] stops the task.
+/// Spawn the housekeeping actor. Ticks every `config.interval` and
+/// calls [`OutlierStatsRegistry::run_housekeeping`]. Dropping the
+/// returned [`AbortOnDrop`] stops the task.
 pub(crate) fn spawn_actor(registry: Arc<OutlierStatsRegistry>) -> AbortOnDrop {
     let interval = registry.config.interval;
     let task = tokio::spawn(async move {
@@ -326,17 +273,9 @@ pub(crate) fn spawn_actor(registry: Arc<OutlierStatsRegistry>) -> AbortOnDrop {
     AbortOnDrop(task)
 }
 
-/// Per-LB outlier-detection plumbing: the shared registry, the
-/// receiver half of the eject signal mpsc, and the handle to the
-/// housekeeping actor (dropped with the LB).
-///
-/// `LoadBalancer` holds this as `Option<OutlierDetector>`: `None`
-/// when outlier detection is disabled, `Some` when enabled. The
-/// pool of ejected channels themselves lives directly on the LB in a
-/// `KeyedFutures<_, UnejectedChannel<_>>` — see the channel state
-/// machine in [`channel_state`] for the type-state transitions.
-///
-/// [`channel_state`]: crate::client::loadbalance::channel_state
+/// Per-LB outlier-detection plumbing: shared registry, eject-signal
+/// receiver, and the housekeeping actor handle (aborted on drop). The
+/// LB holds this as `Option<OutlierDetector>`.
 pub(crate) struct OutlierDetector {
     registry: Arc<OutlierStatsRegistry>,
     eject_rx: mpsc::UnboundedReceiver<EndpointAddress>,
@@ -344,11 +283,10 @@ pub(crate) struct OutlierDetector {
 }
 
 impl OutlierDetector {
-    /// Build from a registry, spawning the housekeeping actor and
-    /// taking ownership of the eject-signal receiver. Returns
-    /// [`RegistryAlreadyWired`] if the registry's receiver has
-    /// already been taken (i.e. this registry is already driving
-    /// another load balancer); a registry can drive at most one LB.
+    /// Take ownership of the registry's eject-signal receiver and
+    /// spawn the housekeeping actor. Returns
+    /// [`RegistryAlreadyWired`] if the registry is already wired to
+    /// another LB.
     pub(crate) fn new(registry: Arc<OutlierStatsRegistry>) -> Result<Self, RegistryAlreadyWired> {
         let eject_rx = registry.take_eject_rx()?;
         let _actor = spawn_actor(registry.clone());
@@ -364,11 +302,7 @@ impl OutlierDetector {
         &self.registry
     }
 
-    /// Poll for the next address whose data path has decided to
-    /// eject. Returns `Poll::Pending` when no eject decision is
-    /// queued; returns `Poll::Ready(None)` only if the registry has
-    /// been dropped (which can't happen while this detector holds an
-    /// `Arc<OutlierStatsRegistry>`).
+    /// Poll for the next address the data path has decided to eject.
     pub(crate) fn poll_eject_request(
         &mut self,
         cx: &mut Context<'_>,
@@ -749,12 +683,9 @@ mod tests {
         assert_eq!(s.ejection_multiplier(), 0);
     }
 
-    /// Re-ejecting a channel immediately after un-ejection should
-    /// produce a backoff sized for multiplier=1, not multiplier=2 —
-    /// i.e. it should *not* punish the channel for the previous
-    /// ejection that has just finished serving its cooldown. This is
-    /// what gRFC A50 prescribes and what Envoy does (un-eject and
-    /// decrement happen at the same sweep).
+    /// A50 step 6.b: un-eject and multiplier decrement happen at the
+    /// same sweep. Re-eject right after un-eject must size the
+    /// backoff with the *decremented* multiplier.
     #[test]
     fn re_eject_after_uneject_uses_fresh_multiplier() {
         let mut config = fp_config(50, 10, 3);

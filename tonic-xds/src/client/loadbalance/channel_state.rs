@@ -60,9 +60,8 @@ impl EndpointCounters {
     }
 
     /// Read and zero both counters. The two swaps are not atomic against
-    /// each other — RPCs landing between them may bias the snapshot by
-    /// a small number of events, well below the precision of the
-    /// failure-percentage threshold.
+    /// each other; bias from in-flight RPCs is bounded and well below
+    /// the precision of the failure-percentage threshold.
     pub(crate) fn snapshot_and_reset(&self) -> (u64, u64) {
         let s = self.success.swap(0, Ordering::Relaxed);
         let f = self.failure.swap(0, Ordering::Relaxed);
@@ -70,44 +69,29 @@ impl EndpointCounters {
     }
 }
 
-/// Per-channel outlier-detection state, shared (via `Arc`) between
-/// the data path (per-RPC outcome recording + threshold-based ejection),
-/// the outlier-detection actor (interval-based housekeeping), and the
-/// load balancer (consults `is_ejected` / `ejected_duration` on
-/// reconnect).
+/// Per-channel outlier-detection state, shared via `Arc` between the
+/// data path (per-RPC outcome recording + threshold-based ejection),
+/// the housekeeping actor, and the load balancer.
 ///
-/// All mutable fields are atomics so the data path can mutate them
-/// without locking. Ejection state is encoded in
-/// [`Self::ejected_at_nanos`]: zero means not ejected, non-zero is the
-/// nanos-since-epoch of the ejection's start. [`Self::try_eject`] /
-/// [`Self::try_uneject`] use CAS to flip the field atomically and
-/// report whether the transition fired (so callers can update
-/// registry-level counters exactly once per transition).
-///
-/// The `addr` field is set at construction and never changes, so
-/// downstream callers (the registry's eject-mpsc dispatch in
-/// particular) can recover the address from the state alone — no
-/// need to thread `(addr, state)` pairs through the data path.
+/// Ejection state is encoded in [`Self::ejected_at_nanos`]: zero means
+/// not ejected, non-zero is the nanos-since-epoch of the ejection's
+/// start. [`Self::try_eject`] / [`Self::try_uneject`] use CAS so callers
+/// can update registry-level counters exactly once per transition.
 #[derive(Debug)]
 pub(crate) struct OutlierChannelState {
-    /// Endpoint address this state belongs to. Immutable for the
-    /// lifetime of the state object.
     addr: EndpointAddress,
     counters: EndpointCounters,
-    /// Whether this channel currently contributes to the registry's
-    /// `qualifying_count`. Set when `total` first reaches
-    /// `request_volume` in the current interval; cleared on counter
-    /// reset.
+    /// `true` while this channel is counted in the registry's
+    /// `qualifying_count` (i.e. has hit `request_volume` in the
+    /// current interval).
     is_qualifying: AtomicBool,
-    /// Number of times this channel has been ejected. Bumped on each
-    /// ejection; decremented (saturating) on each healthy interval.
+    /// Bumped on each ejection; decremented (saturating) on each
+    /// healthy interval.
     ejection_multiplier: AtomicU32,
-    /// `0` when not ejected. Otherwise nanos since [`Self::epoch`] of
-    /// the current ejection's start. Single source of truth for
-    /// "is this channel ejected right now?".
+    /// `0` when not ejected; otherwise nanos since [`Self::epoch`] of
+    /// the current ejection's start.
     ejected_at_nanos: AtomicU64,
-    /// Reference instant used as the origin for `ejected_at_nanos`.
-    /// Established at construction and never changes.
+    /// Origin for `ejected_at_nanos`. Set at construction.
     epoch: Instant,
 }
 
@@ -136,10 +120,8 @@ impl OutlierChannelState {
         self.counters.record_failure();
     }
 
-    /// Read the current counter values without resetting. Returns
-    /// `(success, failure)`. The two reads are not atomic against
-    /// each other but the difference is bounded by concurrent in-flight
-    /// RPCs and is below the precision of the failure-percentage check.
+    /// Returns `(success, failure)` without resetting. The two reads
+    /// are not atomic together; bias is bounded by in-flight RPCs.
     pub(crate) fn counters(&self) -> (u64, u64) {
         let s = self.counters.success.load(Ordering::Relaxed);
         let f = self.counters.failure.load(Ordering::Relaxed);
@@ -151,9 +133,9 @@ impl OutlierChannelState {
         self.counters.snapshot_and_reset()
     }
 
-    /// Try to set `is_qualifying` to `true`. Returns `true` if this
-    /// call performed the false → true transition, so callers can
-    /// increment a registry-level counter exactly once per crossing.
+    /// Set `is_qualifying` to `true`. Returns `true` if this call
+    /// performed the false → true transition (so the caller can bump
+    /// the registry counter exactly once per crossing).
     pub(crate) fn mark_qualifying(&self) -> bool {
         !self.is_qualifying.swap(true, Ordering::AcqRel)
     }
@@ -164,10 +146,8 @@ impl OutlierChannelState {
     }
 
     /// Atomically mark this channel as ejected starting at `now`.
-    /// Returns `true` if this call performed the not-ejected →
-    /// ejected transition (so callers can update registry-level
-    /// counters exactly once per ejection). Bumps the multiplier on
-    /// transition.
+    /// Returns `true` on the not-ejected → ejected transition and
+    /// bumps the multiplier; `false` if already ejected.
     pub(crate) fn try_eject(&self, now: Instant) -> bool {
         let nanos = now
             .saturating_duration_since(self.epoch)
@@ -187,8 +167,8 @@ impl OutlierChannelState {
         true
     }
 
-    /// Atomically clear the ejection. Returns `true` if this call
-    /// performed the ejected → not-ejected transition.
+    /// Atomically clear the ejection. Returns `true` on the
+    /// ejected → not-ejected transition.
     pub(crate) fn try_uneject(&self) -> bool {
         self.ejected_at_nanos.swap(0, Ordering::AcqRel) != 0
     }
@@ -214,10 +194,8 @@ impl OutlierChannelState {
         self.ejection_multiplier.load(Ordering::Relaxed)
     }
 
-    /// Decrement the multiplier saturating at zero. Called by the
-    /// actor on healthy intervals and by `note_uneject` on un-ejection.
-    /// Uses `fetch_update` so the load-and-store is atomic against
-    /// concurrent `try_eject` (`fetch_add`) and other decrements.
+    /// Decrement the multiplier, saturating at zero. Atomic against
+    /// concurrent `try_eject` and other decrements.
     pub(crate) fn decrement_multiplier(&self) {
         let _ = self
             .ejection_multiplier
@@ -226,8 +204,8 @@ impl OutlierChannelState {
             });
     }
 
-    /// Test-only setter for the ejection multiplier; lets tests drive
-    /// housekeeping behavior without going through `try_eject`.
+    /// Test-only multiplier setter for driving housekeeping without
+    /// going through `try_eject`.
     #[cfg(test)]
     pub(crate) fn set_ejection_multiplier(&self, value: u32) {
         self.ejection_multiplier.store(value, Ordering::Relaxed);
@@ -245,10 +223,8 @@ pub(crate) struct EjectionConfig {
 
 /// Result of an ejection expiring.
 pub(crate) enum UnejectedChannel<S> {
-    /// The channel is ready to serve again (ejection expired, no
-    /// reconnect needed). The consumer wraps the bare service into a
-    /// [`ReadyChannel`] using the registry-supplied
-    /// [`OutlierChannelState`].
+    /// Connection reused; the caller wraps the service back into a
+    /// [`ReadyChannel`].
     Ready(S),
     /// A fresh connection has been started.
     Connecting(ConnectingChannel<S>),
@@ -284,14 +260,10 @@ impl IdleChannel {
 
 /// A channel that is in the process of connecting.
 ///
-/// Implements [`Future`] -- resolves to the connected service `S`
-/// when the connection completes. The consumer wraps that into a
-/// [`ReadyChannel`] (attaching its [`OutlierChannelState`]).
-/// Cancellation is handled externally via [`KeyedFutures::cancel`].
-///
-/// `ConnectingChannel` deliberately does not carry an
-/// [`OutlierChannelState`]: it does not serve traffic, so it has
-/// nothing to count or signal.
+/// `impl Future<Output = S>` — resolves to the connected service when
+/// the connection completes. The caller wraps the resolved service
+/// into a [`ReadyChannel`]. Cancellation is handled externally via
+/// [`KeyedFutures::cancel`].
 ///
 /// [`KeyedFutures::cancel`]: crate::client::loadbalance::keyed_futures::KeyedFutures::cancel
 pub(crate) struct ConnectingChannel<S> {
@@ -299,9 +271,6 @@ pub(crate) struct ConnectingChannel<S> {
 }
 
 impl<S: Send + 'static> ConnectingChannel<S> {
-    /// Start a connection. The address is kept by the caller (it is
-    /// typically the key in a `KeyedFutures` map); only the future is
-    /// stored here.
     pub(crate) fn new(fut: BoxFuture<S>, _addr: EndpointAddress) -> Self {
         Self { inner: fut }
     }
@@ -322,11 +291,8 @@ impl<S: Send + 'static> Future for ConnectingChannel<S> {
 /// A channel that is connected and ready to serve requests.
 ///
 /// Holds the raw service `S` and delegates [`Service`] calls directly,
-/// preserving `S::Future` and `S::Error` with no wrapping or type
-/// erasure. The `Arc<OutlierChannelState>` is shared with the outlier-
-/// detection actor for stats accumulation and edge-triggered ejection;
-/// because only `ReadyChannel` serves traffic, only `ReadyChannel`
-/// carries this state.
+/// preserving `S::Future` and `S::Error`. Shares
+/// [`OutlierChannelState`] with the outlier-detection actor via `Arc`.
 #[derive(Clone)]
 pub(crate) struct ReadyChannel<S> {
     addr: EndpointAddress,
@@ -335,8 +301,6 @@ pub(crate) struct ReadyChannel<S> {
 }
 
 impl<S> ReadyChannel<S> {
-    /// Wrap a connected service `S` into a [`ReadyChannel`] using the
-    /// caller-supplied outlier state.
     pub(crate) fn new(addr: EndpointAddress, inner: S, outlier: Arc<OutlierChannelState>) -> Self {
         Self {
             addr,
@@ -350,10 +314,8 @@ impl<S> ReadyChannel<S> {
         &self.outlier
     }
 
-    /// Eject this channel (e.g., due to outlier detection). Consumes
-    /// self. The outlier state remains in the registry; only the
-    /// service and address are passed into [`EjectedChannel`] (which
-    /// just times the cooldown).
+    /// Eject this channel. Consumes self; the outlier state remains
+    /// in the registry.
     pub(crate) fn eject<C>(self, config: EjectionConfig, connector: Arc<C>) -> EjectedChannel<S>
     where
         C: Connector<Service = S> + Send + Sync + 'static,
@@ -368,9 +330,8 @@ impl<S> ReadyChannel<S> {
         }
     }
 
-    /// Start reconnecting. Consumes self, dropping the old connection.
-    /// The outlier state remains in the registry; the consumer
-    /// re-attaches it when the new [`ReadyChannel`] is constructed.
+    /// Drop the connection and start a fresh connect for the same
+    /// address. The outlier state remains in the registry.
     pub(crate) fn reconnect<C: Connector<Service = S>>(
         self,
         connector: Arc<C>,
@@ -412,18 +373,13 @@ impl<S: Load> Load for ReadyChannel<S> {
 // ---------------------------------------------------------------------------
 
 pin_project! {
-    /// A channel that has been ejected and is cooling down.
+    /// A channel that has been ejected and is cooling down. The
+    /// underlying connection is kept alive but cannot serve requests.
     ///
-    /// The underlying connection is kept alive but cannot serve
-    /// requests. Implements [`Future`] -- resolves once the ejection
-    /// timer expires to either:
-    /// - [`UnejectedChannel::Ready`] if no reconnect is needed
-    /// - [`UnejectedChannel::Connecting`] if a fresh connection is required
-    ///
-    /// `EjectedChannel` deliberately does not carry an
-    /// [`OutlierChannelState`]: the state lives in the registry, keyed
-    /// by address, and the consumer re-attaches it when the channel
-    /// transitions back to [`ReadyChannel`].
+    /// `impl Future<Output = UnejectedChannel<S>>` — resolves when
+    /// `config.timeout` elapses, to [`UnejectedChannel::Ready`] if
+    /// `needs_reconnect` is false, otherwise
+    /// [`UnejectedChannel::Connecting`].
     pub(crate) struct EjectedChannel<S> {
         addr: EndpointAddress,
         inner: S,
