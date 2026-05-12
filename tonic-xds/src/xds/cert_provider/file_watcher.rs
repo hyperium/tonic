@@ -24,10 +24,16 @@ use std::time::Duration;
 use arc_swap::ArcSwap;
 use serde::Deserialize;
 
+use crate::common::async_util::AbortOnDrop;
+
 use super::{CertProviderError, CertificateData, CertificateProvider, Identity};
 
 /// Plugin name used in the bootstrap `certificate_providers` JSON.
 pub(crate) const PLUGIN_NAME: &str = "file_watcher";
+
+/// Refresh interval used when `FileWatcherConfig::refresh_interval` is unset.
+/// Matches grpc-go's `defaultCertRefreshDuration`-equivalent for proxyless gRPC.
+const DEFAULT_REFRESH_INTERVAL: Duration = Duration::from_secs(600);
 
 /// Configuration for the `file_watcher` certificate provider.
 #[derive(Debug, Clone, Default, Deserialize)]
@@ -71,38 +77,51 @@ where
 
 /// A certificate provider that reads PEM files from disk.
 ///
-/// On construction, reads all configured files and caches the results.
-/// The `fetch()` method returns the cached data.
-// TODO(PR3/A29): Spawn a background task that calls `refresh()` on a timer
-// driven by `config.refresh_interval` (default 600s). The task should be
-// started in `new()` and cancelled on drop (e.g., via a JoinHandle +
-// AbortHandle or a CancellationToken).
+/// On construction, reads all configured files synchronously and spawns a
+/// background task that re-reads them on `config.refresh_interval`.
+/// Read or parse failures during refresh are logged;
+/// the previously cached data is kept.
 pub(crate) struct FileWatcherProvider {
-    config: FileWatcherConfig,
-    cached: ArcSwap<CertificateData>,
+    cached: Arc<ArcSwap<CertificateData>>,
+    _refresh_task: AbortOnDrop,
 }
 
 impl FileWatcherProvider {
     /// Create a new provider from a parsed `FileWatcherConfig`.
     pub(crate) fn new(config: FileWatcherConfig) -> Result<Self, CertProviderError> {
         let data = read_certificate_data(&config)?;
-
+        let cached = Arc::new(ArcSwap::from_pointee(data));
+        let task = tokio::spawn(refresh_loop(config, Arc::clone(&cached)));
         Ok(Self {
-            config,
-            cached: ArcSwap::from_pointee(data),
+            cached,
+            _refresh_task: AbortOnDrop(task),
         })
     }
+}
 
-    /// Re-read files from disk and update the cache.
-    ///
-    /// Returns `Ok(())` if the files were successfully read, or an error
-    /// if any configured file could not be read. On error the cache retains
-    /// the previous good data.
-    #[allow(dead_code)] // Used when background refresh is added.
-    pub(crate) fn refresh(&self) -> Result<(), CertProviderError> {
-        let data = read_certificate_data(&self.config)?;
-        self.cached.store(Arc::new(data));
-        Ok(())
+/// Background task: periodically re-read the configured files and update
+/// the shared cache.
+async fn refresh_loop(config: FileWatcherConfig, cached: Arc<ArcSwap<CertificateData>>) {
+    let period = config.refresh_interval.unwrap_or(DEFAULT_REFRESH_INTERVAL);
+    let mut ticker = tokio::time::interval(period);
+    // `interval` fires immediately on the first `tick()`. The initial data was
+    // already loaded synchronously in `new()`, so discard that first tick.
+    ticker.tick().await;
+    loop {
+        ticker.tick().await;
+        refresh_once(&config, &cached);
+    }
+}
+
+/// Re-read the configured files once and update the cache. On failure,
+/// log and leave the cache unchanged.
+fn refresh_once(config: &FileWatcherConfig, cached: &ArcSwap<CertificateData>) {
+    match read_certificate_data(config) {
+        Ok(data) => cached.store(Arc::new(data)),
+        Err(e) => tracing::warn!(
+            error = ?e,
+            "file_watcher cert refresh failed; keeping last good data",
+        ),
     }
 }
 
@@ -171,8 +190,8 @@ mod tests {
         }
     }
 
-    #[test]
-    fn reads_ca_certificate() {
+    #[tokio::test]
+    async fn reads_ca_certificate() {
         let ca_file =
             write_temp_file(b"-----BEGIN CERTIFICATE-----\ntest-ca\n-----END CERTIFICATE-----\n");
 
@@ -189,8 +208,8 @@ mod tests {
         assert!(data.identity().is_none());
     }
 
-    #[test]
-    fn reads_identity_cert_and_key() {
+    #[tokio::test]
+    async fn reads_identity_cert_and_key() {
         let cert_file = write_temp_file(b"cert-chain-pem");
         let key_file = write_temp_file(b"private-key-pem");
 
@@ -209,8 +228,8 @@ mod tests {
         assert!(data.roots().is_none());
     }
 
-    #[test]
-    fn reads_all_files() {
+    #[tokio::test]
+    async fn reads_all_files() {
         let ca_file = write_temp_file(b"ca-pem");
         let cert_file = write_temp_file(b"cert-pem");
         let key_file = write_temp_file(b"key-pem");
@@ -271,45 +290,29 @@ mod tests {
     }
 
     #[test]
-    fn refresh_updates_cached_data() {
-        let mut ca_file = NamedTempFile::new().unwrap();
-        ca_file.write_all(b"old-ca").unwrap();
-
-        let provider =
-            FileWatcherProvider::new(make_config(ca_file.path().to_str(), None, None)).unwrap();
-        assert_eq!(
-            provider.fetch().unwrap().roots(),
-            Some(b"old-ca".as_slice())
-        );
+    fn refresh_once_updates_cache() {
+        let ca_file = write_temp_file(b"old-ca");
+        let config = make_config(ca_file.path().to_str(), None, None);
+        let cached = ArcSwap::from_pointee(read_certificate_data(&config).unwrap());
+        assert_eq!(cached.load_full().roots(), Some(b"old-ca".as_slice()));
 
         std::fs::write(ca_file.path(), b"new-ca").unwrap();
-        provider.refresh().unwrap();
-        assert_eq!(
-            provider.fetch().unwrap().roots(),
-            Some(b"new-ca".as_slice())
-        );
+        refresh_once(&config, &cached);
+
+        assert_eq!(cached.load_full().roots(), Some(b"new-ca".as_slice()));
     }
 
     #[test]
-    fn refresh_keeps_old_data_on_failure() {
+    fn refresh_once_keeps_old_data_on_failure() {
         let ca_file = write_temp_file(b"good-ca");
-        let path = ca_file.path().to_str().unwrap().to_string();
+        let config = make_config(ca_file.path().to_str(), None, None);
+        let cached = ArcSwap::from_pointee(read_certificate_data(&config).unwrap());
+        assert_eq!(cached.load_full().roots(), Some(b"good-ca".as_slice()));
 
-        let provider = FileWatcherProvider::new(make_config(Some(&path), None, None)).unwrap();
-        assert_eq!(
-            provider.fetch().unwrap().roots(),
-            Some(b"good-ca".as_slice())
-        );
-
-        // Delete the file — refresh should fail.
         drop(ca_file);
-        assert!(provider.refresh().is_err());
+        refresh_once(&config, &cached);
 
-        // Cached data should still be the old value.
-        assert_eq!(
-            provider.fetch().unwrap().roots(),
-            Some(b"good-ca".as_slice())
-        );
+        assert_eq!(cached.load_full().roots(), Some(b"good-ca".as_slice()));
     }
 
     #[test]
@@ -367,8 +370,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn registry_integration() {
+    #[tokio::test]
+    async fn registry_integration() {
         use crate::xds::bootstrap::CertProviderPluginConfig;
         use crate::xds::cert_provider::CertProviderRegistry;
         use std::collections::HashMap;
